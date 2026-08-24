@@ -455,7 +455,7 @@ html.loggia-sky .o-sky-full { z-index: 0 !important; }
      de laisser un bout de chiffre rogne */
   .o-sunmark { display: none; }
   /* Zones de l'aspirateur : 4 colonnes tombent a 98 px sur un telephone, trop court pour
-     « Chambre Liam » ou « Salle de bain » avec leur icone. */
+     « Chambre enfant » ou « Salle de bain » avec leur icone. */
   .grid-vac-rooms { grid-template-columns: 1fr 1fr !important; }
   .o-en-house { top: 50% !important; height: auto !important; width: 55.56% !important; transform: translate(-50%, -50%) !important; }
   /* Chiffres sous le schema : plus compacts */

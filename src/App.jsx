@@ -807,7 +807,7 @@ const PIECES = [
   { name: 'Séjour', bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13, icon: <Ico name="couch" color="var(--o-accent)" size={22} />, status: { kind: 'active', n: 2 }, temp: '18.1°', tc: 'var(--o-accent-soft)', hum: '63%', badge: '412 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
   { name: 'Cuisine', bg: 'rgba(255,157,60,.16)', box: 44, rad: 13, icon: <Ico name="utensils" color="#ff9d3c" size={22} />, status: { kind: 'active', n: 1 }, temp: '22.0°', tc: '#ff9d3c', hum: '53%', badge: '486 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
   { name: 'Chambre', bg: 'rgba(167,139,250,.16)', box: 44, rad: 13, icon: <Ico name="bed-alt" color="var(--o-purple)" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: 'var(--o-purple)', hum: '60%', badge: '529 ppm', bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' },
-  { name: 'Chambre Liam', bg: 'rgba(244,114,182,.16)', box: 44, rad: 13, icon: <Ico name="teddy-bear" color="#f472b6" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: '#f472b6', hum: '61%', badge: '641 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
+  { name: 'Chambre enfant', bg: 'rgba(244,114,182,.16)', box: 44, rad: 13, icon: <Ico name="teddy-bear" color="#f472b6" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: '#f472b6', hum: '61%', badge: '641 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
   { name: 'Bureau', bg: 'rgba(255,157,60,.16)', box: 44, rad: 13, icon: <Ico name="briefcase" color="#ff9d3c" size={22} />, status: { kind: 'repos' }, temp: '17.8°', tc: '#ff9d3c', hum: '64%', badge: '712 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
   { name: 'Salle de bain', bg: 'rgba(84,200,240,.16)', box: 44, rad: 13, icon: <Ico name="hot-tub" color="var(--o-cyan)" size={22} />, status: { kind: 'repos' }, temp: '15.5°', tc: 'var(--o-cyan)', hum: '80%', badge: '498 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
   { name: 'Extérieur', bg: 'rgba(52,211,153,.16)', box: 36, rad: 11, icon: <Ico name="tree" color="var(--o-ok)" size={22} />, status: { kind: 'ext' }, temp: '6.2°', tc: 'var(--o-accent-soft)', hum: '84%', badge: 'Vent 12', bc: 'var(--o-text2)', bbg: 'var(--o-bd3)' },
@@ -1132,7 +1132,7 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
 
 /* ════════════ VUE PIÈCE (navigable depuis l'Accueil) ════════════
    Rassemble les appareils d'une pièce en matchant le nom de la pièce dans l'entity_id / friendly_name.
-   Une pièce plus spécifique gagne : « Chambre Liam » n'atterrit pas dans « Chambre ». */
+   Une pièce plus spécifique gagne : « Chambre enfant » n'atterrit pas dans « Chambre ». */
 const rmNorm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 // Cartes masquées par l'utilisateur (croix en mode édition), persistées.
 const roomHidden = () => { const v = readLS('loggia_roomhidden', []); return Array.isArray(v) ? v : []; };
@@ -3611,7 +3611,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
 }
 
 /* ════════════ VUE LUMIÈRES (reproduction fidèle de "Loggia Lumières.dc.html") ════════════ */
-const L_ROOMS = ['Séjour', 'Cuisine', 'Chambre', 'Chambre Liam', 'Bureau', 'Salle de bain', 'Extérieur'];
+const L_ROOMS = ['Séjour', 'Cuisine', 'Chambre', 'Chambre enfant', 'Bureau', 'Salle de bain', 'Extérieur'];
 const L_PALETTE = ['#ffce73', '#ff6b6b', 'var(--o-accent)', 'var(--o-ok)', 'var(--o-purple)', 'var(--o-cyan)'];
 // Formateur puissance UNIQUE (harmonisation 20/08) : virgule FR, kW à 2 décimales, « — » si valeur absente
 const fmtWatts = (w) => w == null || isNaN(w) ? '—' : Math.abs(w) >= 1000 ? (w / 1000).toFixed(2).replace('.', ',') + ' kW' : Math.round(w) + ' W';
@@ -3647,7 +3647,7 @@ const LIGHT_ROOM = (id) => {
   const area = LOGGIA_INDEX && LOGGIA_INDEX.areaNameOf ? LOGGIA_INDEX.areaNameOf(id) : null;
   if (area) return area;
   const s = id.toLowerCase();
-  if (/liam/.test(s)) return 'Chambre Liam';
+  if (/enfant|kid|child/.test(s)) return 'Chambre enfant';
   if (/chambre/.test(s)) return 'Chambre';
   if (/sejour|salon|lampadaire|_s\d/.test(s)) return 'Séjour';
   if (/cuisine/.test(s)) return 'Cuisine';
@@ -3680,7 +3680,7 @@ function discoverLights(hass) {
 }
 // Pièces mises en avant quand elles existent ; toutes les autres zones trouvées
 // viennent ensuite, par ordre alphabétique, « Autres » fermant la marche.
-const LIGHT_ROOM_ORDER = ['Séjour', 'Cuisine', 'Chambre', 'Chambre Liam', 'Bureau', 'Salle de bain', 'Extérieur', 'Autres'];
+const LIGHT_ROOM_ORDER = ['Séjour', 'Cuisine', 'Chambre', 'Chambre enfant', 'Bureau', 'Salle de bain', 'Extérieur', 'Autres'];
 function lightRooms(lights) {
   const present = [];
   lights.forEach(l => { if (l.room && present.indexOf(l.room) < 0) present.push(l.room); });
@@ -3991,7 +3991,8 @@ function LumieresView({ hass, edit = false, onEnt }) {
 }
 
 /* ════════════ VUE SCÈNES — bibliothèque de scènes colorées ════════════ */
-// Catalogue copié de l'install Hue de Guillaume. Chaque scène : 5 RGB + luminosité + uuid (thumbnail).
+// Catalogue de scènes Hue, relevé sur une installation type. Chaque scène :
+// 5 RGB + luminosité + uuid (thumbnail).
 const HUE_SCENES = {
   classics: { label: 'Classiques', scenes: [
     { name: 'Rest', uuid: 'e03267e7-9914-4f47-97fe-63c0bd317fe7', colors: [[215,134,30],[215,134,30],[215,134,30],[215,134,30],[215,134,30]], brightness: 35 },
@@ -4100,7 +4101,7 @@ function mowerKeys() {
 
 const HUE_ROOMS = [
   { id: 'Séjour', label: 'Séjour', icon: 'couch' }, { id: 'Chambre', label: 'Chambre', icon: 'bed' },
-  { id: 'Chambre Liam', label: 'Liam', icon: 'teddy-bear' }, { id: 'Toute la maison', label: 'Tout', icon: 'home' },
+  { id: 'Chambre enfant', label: 'Enfant', icon: 'teddy-bear' }, { id: 'Toute la maison', label: 'Tout', icon: 'home' },
 ];
 const HUE_CATS = Object.entries(HUE_SCENES).map(([id, c]) => ({ id, label: c.label }));
 const rgbHex = (c) => '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
@@ -4466,7 +4467,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   const hPos = airHum == null ? 0.5 : Math.max(0.04, Math.min(0.96, (airHum - 20) / 60));
   const hCat = airHum == null ? { l: '—', c: '#5f6c87' } : airHum < 40 ? { l: 'Trop sec', c: '#ffb347' } : airHum <= 60 ? { l: 'Confort', c: 'var(--o-ok)' } : { l: 'À surveiller', c: '#ffb347' };
   const fmt1 = (v) => v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1);
-  const ZONE_LABEL = { poele: 'Séjour', chambre: 'Chambre', liam: 'Chambre Liam' };
+  const ZONE_LABEL = { poele: 'Séjour', chambre: 'Chambre', enfant: 'Chambre enfant' };
   const bars = CL_TEMPS.map((v, i) => {
     const lo = 16, hi = 22, now = 23;
     const h = Math.max(8, ((v - lo) / (hi - lo)) * 100);
@@ -5952,10 +5953,10 @@ const MED_INITIAL_SPK = [
   { id: 'atv', name: 'Apple TV', vol: 0, muted: true },
   { id: 'atv-s', name: 'Apple TV Séjour', vol: 0, muted: true },
   { id: 'echo-sejour', name: 'Echo Séjour', vol: 30, color: 'var(--o-purple)' },
-  { id: 'echo-chambre', name: 'Echo Chambre', vol: 0, muted: true },
-  { id: 'echo-bureau', name: 'Echo Bureau', vol: 0, muted: true },
-  { id: 'echo-salon', name: 'Echo Salon', vol: 30, color: 'var(--o-purple)' },
-  { id: 'echo-liam', name: 'Echo Dot · Chambre Liam', vol: 16, color: 'var(--o-cyan)' },
+  { id: 'enceinte-chambre', name: 'Enceinte Chambre', vol: 0, muted: true },
+  { id: 'enceinte-bureau', name: 'Enceinte Bureau', vol: 0, muted: true },
+  { id: 'enceinte-salon', name: 'Enceinte Salon', vol: 30, color: 'var(--o-purple)' },
+  { id: 'echo-enfant', name: 'Enceinte · Chambre enfant', vol: 16, color: 'var(--o-cyan)' },
 ];
 
 /**
@@ -7209,7 +7210,7 @@ const usersSig = (a) => JSON.stringify((a || []).map(u => [u.name, u.role, u.sub
  * prenom, et un profil renomme ne doit pas se detacher de son compte. Le nom
  * ne sert qu'a etablir le lien la premiere fois ; `haId` le fige ensuite.
  *
- * Rend -1 plutot qu'un profil approchant : se connecter en tant que Guillaume
+ * Rend -1 plutot qu'un profil approchant : se connecter sous un compte donne
  * et se retrouver sur un autre profil est pire que de rester sur place.
  */
 const matchHaUser = (haUser, list) => {

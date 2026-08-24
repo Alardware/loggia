@@ -7,6 +7,18 @@ en déduit ce qu'il peut afficher. Aucun identifiant d'entité n'est écrit dans
 code : ce qui n'existe pas chez vous n'apparaît pas, et ce que vous ajoutez plus
 tard apparaît sans rien toucher.
 
+![L'accueil : pièces, températures, qualité de l'air, état de la maison](docs/accueil.png)
+
+Les réglages, où chaque section indique ce qu'elle a trouvé et ce qui manque :
+
+![Les réglages](docs/parametres.png)
+
+> Ces captures viennent d'une maison de démonstration — `scripts/demo.js` —, pas
+> d'une installation réelle. Six pièces, quelques capteurs, aucune caméra : de
+> quoi montrer le rendu sans exposer le domicile de qui que ce soit. Le script
+> s'injecte dans la page avant le chargement, ce qui permet de refaire les
+> captures à l'identique à chaque version.
+
 ## Installation
 
 ### Par HACS

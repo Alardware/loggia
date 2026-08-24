@@ -376,7 +376,7 @@ function vacScore(cle, txt) {
 /**
  * Appariement glouton : on prend d'abord les rapprochements les plus sûrs, et
  * chaque candidat ne sert qu'une fois. Sans cela « Chambre » attraperait
- * « chambre_liam » avant que « Chambre Liam » ait sa chance.
+ * « chambre_enfant » avant que « Chambre enfant » ait sa chance.
  * @returns {Object} indice de pièce → indice de candidat
  */
 function vacApparier(pieces, cands, prisP, prisC) {
