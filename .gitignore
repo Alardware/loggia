@@ -1,0 +1,13 @@
+node_modules/
+dist/
+backups/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Notes de travail : contiennent l'adresse du serveur, des noms d'entites et
+# des prenoms. Rien de tout cela n'a sa place dans un depot public.
+HANDOFF.md
+
+# Sauvegardes de travail
+src/*.avant-*

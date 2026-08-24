@@ -1,0 +1,18 @@
+{
+  "domain": "loggia",
+  "name": "Loggia Dashboard",
+  "version": "2.0.0",
+  "documentation": "https://github.com/Alardware/loggia",
+  "issue_tracker": "https://github.com/Alardware/loggia/issues",
+  "config_flow": true,
+  "integration_type": "service",
+  "dependencies": [
+    "http",
+    "websocket_api",
+    "frontend"
+  ],
+  "codeowners": [
+    "@Alardware"
+  ],
+  "iot_class": "local_push"
+}
