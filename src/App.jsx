@@ -282,7 +282,20 @@ function useCountUp(target, { duration = 700 } = {}) {
     // démarre au 1er frame peint (double rAF) et, au boot, seulement une fois l'iframe réellement affichée
     let alive = true;
     onPaintReady(() => { if (!alive) return; rafRef.current = requestAnimationFrame(() => { rafRef.current = requestAnimationFrame(step); }); });
-    return () => { alive = false; cancelAnimationFrame(rafRef.current); };
+    // Filet : `requestAnimationFrame` ne s'execute pas tant que la surface n'est
+    // pas peinte. Une iframe montee avant d'etre affichee — le cas du panneau —
+    // ne recoit donc jamais le premier frame, l'animation ne demarre pas, et le
+    // compteur reste sur son point de depart : zero. Toutes les temperatures
+    // s'affichaient a 0,0°, puis se corrigeaient une a une, chaque capteur qui
+    // CHANGE de valeur repassant par la branche qui pose la valeur directement.
+    //
+    // Passe le temps de l'animation, on affiche donc la valeur, animee ou non.
+    const secours = setTimeout(() => {
+      if (!alive) return;
+      cancelAnimationFrame(rafRef.current);
+      setVal(n); fromRef.current = n;
+    }, duration + 300);
+    return () => { alive = false; clearTimeout(secours); cancelAnimationFrame(rafRef.current); };
   }, [n, duration]);
   return val;
 }

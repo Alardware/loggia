@@ -79,7 +79,15 @@ class LoggiaPanel extends HTMLElement {
     if (this._veille.addEventListener) this._veille.addEventListener('change', this._surChangement);
     else this._veille.addListener(this._surChangement);   // Safari ancien
     const cadre = document.createElement('iframe');
-    cadre.src = url;
+    // Le jeton que pose le composant est fige au demarrage de Home Assistant :
+    // entre deux redemarrages, l'adresse ne bouge pas et les navigateurs
+    // continuent de servir leur copie de `index.html` — donc l'ancien code, quoi
+    // qu'on deploie. On rend donc l'adresse unique a chaque ouverture.
+    //
+    // Seul `index.html` est concerne : il pese quelques dizaines de kilooctets,
+    // et les fichiers qu'il appelle portent une empreinte dans leur nom, donc
+    // eux restent en cache tant qu'ils ne changent pas.
+    cadre.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
     cadre.title = 'Loggia';
     cadre.setAttribute('allow', 'fullscreen; autoplay; encrypted-media');
     cadre.style.cssText = 'display:block;width:100%;height:100%;border:0;';
