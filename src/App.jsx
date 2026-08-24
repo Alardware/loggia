@@ -3334,10 +3334,33 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   // l'accueil restait vide chez qui ne reprend pas ces noms-là. `PIECES` ne
   // fournit plus qu'un habillage : icône, couleur, teinte de fond. Un nom
   // inconnu reçoit un habillage neutre plutôt que d'être ignoré.
-  const habillage = (nom) => PIECES.find(x => x.name === nom) || {
-    name: nom, bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13,
-    icon: <Ico name="home" color="var(--o-accent)" size={22} />,
-    status: { kind: 'repos' },
+  // Reconnaissance par mots, quand le nom ne tombe pas juste. « Chambre Liam »,
+  // « Ma cuisine », « Bathroom » doivent garder leur icône : n'exiger qu'une
+  // égalité exacte rendait toute pièce nommée librement anonyme. Même
+  // vocabulaire que `LIGHT_ROOM`, qui range déjà les luminaires ainsi — la
+  // règle de la chambre d'enfant passe avant celle de la chambre, sans quoi
+  // elle ne serait jamais atteinte.
+  const PARENTE = [
+    [/enfant|kid|child|bebe|bébé|nursery/, 'Chambre enfant'],
+    [/chambre|bedroom/, 'Chambre'],
+    [/sejour|séjour|salon|living/, 'Séjour'],
+    [/cuisine|kitchen/, 'Cuisine'],
+    [/bureau|office|atelier/, 'Bureau'],
+    [/sdb|bain|douche|bathroom|salle d ?'?eau/, 'Salle de bain'],
+    [/exter|extér|jardin|terrasse|balcon|outdoor/, 'Extérieur'],
+  ];
+  const habillage = (nom) => {
+    const exact = PIECES.find(x => x.name === nom);
+    if (exact) return exact;
+    const s = String(nom).toLowerCase();
+    const parent = PARENTE.find(([re]) => re.test(s));
+    const modele = parent && PIECES.find(x => x.name === parent[1]);
+    if (modele) return { ...modele, name: nom };
+    return {
+      name: nom, bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13,
+      icon: <Ico name="home" color="var(--o-accent)" size={22} />,
+      status: { kind: 'repos' },
+    };
   };
   // Sans données live, on montre les pièces d'exemple : c'est l'écran d'avant
   // la première connexion, pas une installation vide.
