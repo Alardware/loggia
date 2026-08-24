@@ -3327,8 +3327,24 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   useEffect(() => { const iv = setInterval(() => setWxHour(wxHourEq()), 60000); return () => clearInterval(iv); }, []);
   const modes = [['sun', '☀️', 'Soleil'], ['partly', '⛅', 'Éclaircies'], ['clouds', '☁️', 'Nuageux'], ['wind', '🌬️', 'Vent'], ['rain', '🌧️', 'Pluie'], ['snow', '❄️', 'Neige'], ['storm', '⛈️', 'Orage'], ['night', '🌙', 'Nuit']];
   const a = accueil; // données live (null → démo)
-  const pieces = PIECES.map(p => {
-    const r = a && a.rooms && a.rooms.find(x => x.name === p.name);
+  // Les pièces affichées sont CELLES DE LA CONFIGURATION.
+  //
+  // La liste partait de `PIECES`, sept noms écrits dans le code : une pièce
+  // nommée autrement — « Véranda », « Atelier » — n'apparaissait nulle part, et
+  // l'accueil restait vide chez qui ne reprend pas ces noms-là. `PIECES` ne
+  // fournit plus qu'un habillage : icône, couleur, teinte de fond. Un nom
+  // inconnu reçoit un habillage neutre plutôt que d'être ignoré.
+  const habillage = (nom) => PIECES.find(x => x.name === nom) || {
+    name: nom, bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13,
+    icon: <Ico name="home" color="var(--o-accent)" size={22} />,
+    status: { kind: 'repos' },
+  };
+  // Sans données live, on montre les pièces d'exemple : c'est l'écran d'avant
+  // la première connexion, pas une installation vide.
+  const noms = (a && a.rooms && a.rooms.length) ? a.rooms.map(r => r.name) : PIECES.map(p => p.name);
+  const pieces = noms.map(nom => {
+    const p = habillage(nom);
+    const r = a && a.rooms && a.rooms.find(x => x.name === nom);
     if (!r) return (a && a.rooms && a.rooms.length) ? { ...p, live: { temp: null, hum: null, co2: null } } : p; // pièce sans capteurs → tirets ; pas de hass → démo
     const out = { ...p };
     out.temp = r.temp != null ? r.temp.toFixed(1) + '°' : '—';
