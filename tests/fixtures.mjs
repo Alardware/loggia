@@ -15,7 +15,14 @@ import { buildIndex, capabilities } from '../src/discovery.js';
 // ── Fabriques elementaires ───────────────────────────────────────────────────
 
 export const area = (id, name, floor = null) => ({ area_id: id, name, floor_id: floor, icon: null });
-export const device = (id, name, areaId = null) => ({ id, name, name_by_user: null, area_id: areaId });
+// `meta` porte ce que les registres savent de l'appareil : fabricant, modele,
+// integration. C'est ce qui distingue deux appareils d'un meme domaine.
+export const device = (id, name, areaId = null, meta = {}) => ({
+  id, name, name_by_user: null, area_id: areaId,
+  manufacturer: null, model: null, sw_version: null,
+  integration: null, via_device_id: null, entry_type: null,
+  ...meta,
+});
 
 export const entity = (entity_id, opt = {}) => ({
   entity_id,

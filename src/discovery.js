@@ -14,6 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { buildDevices } from './devices.js';
 
 export const DISCOVERY_VERSION = 1;
 
@@ -155,11 +156,26 @@ export async function fetchRegistries(hass) {
  */
 export function buildIndex({ areas = [], devices = [], entities = [], floors = [], states = {} }) {
   const deviceArea = new Map();
+  const deviceMeta = new Map();   // device_id -> fabricant, modele, integration
   const deviceName = new Map();
   devices.forEach(d => {
     if (!d || !d.id) return;
     deviceArea.set(d.id, d.area_id || null);
     deviceName.set(d.id, d.name_by_user || d.name || null);
+    // Fabricant, modele, integration : jetes jusqu'ici, alors que ce sont eux
+    // qui distinguent deux appareils du meme domaine. Deux robots sont tous
+    // deux des `vacuum` ; seul le modele dit lequel accepte quelle commande.
+    deviceMeta.set(d.id, {
+      id: d.id,
+      name: d.name_by_user || d.name || null,
+      manufacturer: d.manufacturer || null,
+      model: d.model || null,
+      firmware: d.sw_version || null,
+      integration: d.integration || null,
+      area: d.area_id || null,
+      via: d.via_device_id || null,
+      entryType: d.entry_type || null,
+    });
   });
 
   const areaById = new Map();
@@ -215,6 +231,7 @@ export function buildIndex({ areas = [], devices = [], entities = [], floors = [
     areaById,
     entityArea,
     entityMeta,
+    deviceMeta,
     byArea,
     orphans,
     live,
@@ -282,18 +299,6 @@ export function pickSibling(index, states, entityId, { domain, deviceClass, unit
     return !m || !m.category;
   });
   return principal || matches[0];
-}
-
-/** Regroupe les entites par appareil : device_id → { name, area, entities[] }. */
-export function deviceIndex(index) {
-  const out = new Map();
-  if (!index) return out;
-  index.entityMeta.forEach((m, id) => {
-    if (!m.deviceId) return;
-    if (!out.has(m.deviceId)) out.set(m.deviceId, { name: m.device, area: index.areaOf(id), entities: [] });
-    out.get(m.deviceId).entities.push(id);
-  });
-  return out;
 }
 
 /** Un capteur compte comme « énergie » d'après sa device_class, jamais son nom. */
@@ -377,7 +382,7 @@ export function capabilities({ states = {}, index = null }) {
  * session, ils sont lus une seule fois ; `refresh()` force une relecture.
  */
 export function useDiscovery(hass) {
-  const [data, setData] = useState({ ready: false, errors: null, index: null, caps: null, raw: null });
+  const [data, setData] = useState({ ready: false, errors: null, index: null, caps: null, devices: null, raw: null });
   const startedRef = useRef(false);
   const aliveRef = useRef(true);
   useEffect(() => () => { aliveRef.current = false; }, []);
@@ -388,7 +393,10 @@ export function useDiscovery(hass) {
       const states = hass.states || {};
       const index = buildIndex({ ...reg, states });
       const caps = capabilities({ states, index });
-      const next = { ready: true, errors: reg.errors.length ? reg.errors : null, index, caps, raw: reg };
+      // Les appareils sont construits une fois, ici : ils ne changent qu'avec
+      // les registres, pas avec les états, qui eux bougent en permanence.
+      const devices = buildDevices(index, states);
+      const next = { ready: true, errors: reg.errors.length ? reg.errors : null, index, caps, devices, raw: reg };
       if (aliveRef.current) setData(next);
       return next;
     }).catch(() => null);
@@ -416,6 +424,13 @@ export function report(d) {
   L.push(`${t.areas} zones (${t.areasUsed} utilisées) · ${t.entities} entités · ${t.domains} domaines`);
   L.push(`${t.unavailable} entités indisponibles · ${t.orphans} sans zone`);
   if (d.errors) L.push('Registres en échec : ' + d.errors.map(e => e.type + ' (' + e.message + ')').join(', '));
+  if (d.devices && d.devices.size) {
+    const dv = [...d.devices.values()];
+    const marques = new Set(dv.map(x => x.manufacturer).filter(Boolean));
+    const integrations = new Set(dv.map(x => x.integration).filter(Boolean));
+    L.push(`${dv.length} appareils (${dv.filter(x => !x.available).length} hors ligne)`
+      + ` · ${marques.size} fabricants · ${integrations.size} intégrations`);
+  }
   L.push('');
   L.push('Capacités :');
   Object.keys(c.counts).sort((a, b) => c.counts[b] - c.counts[a]).forEach(k => {

@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildIndex, capabilities, siblingsOf, pickSibling, deviceIndex } from '../src/discovery.js';
+import { buildIndex, capabilities, siblingsOf, pickSibling } from '../src/discovery.js';
 import {
   emptyHome, simpleHome, inheritedArea, threeVacuums, hiddenDisabled,
   energyHome, systemHome, cameraHome, indexOf, capsOf,
@@ -181,17 +181,6 @@ test('une entite principale est preferee a une entite de diagnostic', () => {
     states: st,
   });
   assert.equal(pickSibling(ix, st, 'vacuum.x', { domain: 'sensor', deviceClass: 'battery' }), 'sensor.normal');
-});
-
-test('regroupement par appareil : un appareil, ses entites', () => {
-  // deviceIndex rend une Map device_id → { name, area, entities }.
-  const di = deviceIndex(indexOf(cameraHome()));
-  const cam = di.get('d_cam');
-  assert.ok(cam, 'l’appareil camera doit apparaitre');
-  assert.equal(cam.name, 'Caméra entrée');
-  assert.equal(cam.area, 'entree');
-  assert.equal(cam.entities.filter(id => id.indexOf('camera.') === 0).length, 3);
-  assert.deepEqual(deviceIndex(null).size, 0);
 });
 
 // ── Machines supervisees ─────────────────────────────────────────────────────
