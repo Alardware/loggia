@@ -15,6 +15,7 @@ const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ de
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling } from './discovery.js';
 import { planAction as actionsPlan, availableActions as actionsAvailable,
   planAction, runPlan } from './actions.js';
+import { entityCaps } from './capabilities.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
 import { deviceCard, presentableDevices, presentationSummary } from './present.js';
 import { healthReport, healthText } from './health.js';
@@ -1307,6 +1308,24 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
 function actionCtx(h) {
   const hs = h || getHass();
   return { states: (hs && hs.states) || {}, services: (hs && hs.services) || null };
+}
+
+/**
+ * L'entite accepte-t-elle cette capacite ?
+ *
+ * Sert a ne PAS dessiner un bouton inerte. Home Assistant refuse explicitement
+ * un service qu'une entite ne declare pas — « does not support action » — donc
+ * un bouton de pause sur une enceinte qui n'a pas le bit PAUSE ne fait rien
+ * d'autre que promettre. Mieux vaut ne rien montrer que montrer un mensonge.
+ *
+ * On interroge la CAPACITE seule, sans valeur : une commande a liste comme le
+ * choix d'un mode serait refusee faute de valeur d'essai, alors qu'elle est
+ * bien offerte.
+ */
+function peut(hass, id, capability) {
+  if (!id) return false;
+  const ctx = actionCtx(hass);
+  return entityCaps(id, ctx.states[id], ctx.services).can.has(capability);
 }
 
 /**
@@ -6135,10 +6154,14 @@ function MedRemote({ hass, sel, tvs, onPick }) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 9, marginTop: 9 }}>
-        <button onClick={() => mp('volume_mute')} style={touche({ cursor: 'pointer', opacity: 1 })}><Fi i="volume-slash" size={14} /></button>
-        <button onClick={() => mp('media_previous_track')} style={touche({ cursor: 'pointer', opacity: 1 })}><Fi i="rewind" size={14} /></button>
-        <button onClick={() => mp('media_play_pause')} style={touche({ cursor: 'pointer', opacity: 1, background: 'rgba(var(--o-accent-rgb),.16)', border: '1px solid rgba(var(--o-accent-rgb),.45)', color: 'var(--o-accent-soft)' })}><Fi i="play" size={14} color="var(--o-accent-soft)" /></button>
-        <button onClick={() => mp('media_next_track')} style={touche({ cursor: 'pointer', opacity: 1 })}><Fi i="forward" size={14} /></button>
+        {peut(hass, haid, 'mute') && (
+          <button onClick={() => commander(hass, haid, 'mute', true)} style={touche({ cursor: 'pointer', opacity: 1 })}><Fi i="volume-slash" size={14} /></button>)}
+        {peut(hass, haid, 'previous_track') && (
+          <button onClick={() => commander(hass, haid, 'previous_track')} style={touche({ cursor: 'pointer', opacity: 1 })}><Fi i="rewind" size={14} /></button>)}
+        {peut(hass, haid, 'play_pause') && (
+          <button onClick={() => commander(hass, haid, 'play_pause')} style={touche({ cursor: 'pointer', opacity: 1, background: 'rgba(var(--o-accent-rgb),.16)', border: '1px solid rgba(var(--o-accent-rgb),.45)', color: 'var(--o-accent-soft)' })}><Fi i="play" size={14} color="var(--o-accent-soft)" /></button>)}
+        {peut(hass, haid, 'next_track') && (
+          <button onClick={() => commander(hass, haid, 'next_track')} style={touche({ cursor: 'pointer', opacity: 1 })}><Fi i="forward" size={14} /></button>)}
       </div>
 
       {!rid && (
@@ -6234,6 +6257,21 @@ function MediasContent({ hass, edit = false, onEnt }) {
     el.onpointercancel = end;
   };
   const playPause = () => commander(hass, np.ctl, 'play_pause');
+  /**
+   * Monter ou baisser le volume d'un cran.
+   *
+   * `volume_up` et `volume_set` sont deux bits distincts : huit lecteurs de
+   * l'installation d'essai acceptent un volume absolu sans accepter les crans.
+   * Plutot que de retirer les boutons, on calcule le pas nous-memes.
+   */
+  const volPas = (delta) => {
+    const id = sel && sel.haid;
+    if (peut(hass, id, delta > 0 ? 'volume_up' : 'volume_down')) {
+      commander(hass, id, delta > 0 ? 'volume_up' : 'volume_down');
+    } else {
+      commander(hass, id, 'set_volume', ((np.vol || 0) + delta) / 100);
+    }
+  };
   const next = () => commander(hass, np.ctl, 'next_track');
   const prev = () => commander(hass, np.ctl, 'previous_track');
   const muteAll = () => { setVols(o => Object.fromEntries(lecteurs.map(p => [p.id, 0]))); lecteurs.forEach(p => commander(hass, p.haid, 'set_volume', 0)); };
@@ -6307,15 +6345,18 @@ function MediasContent({ hass, edit = false, onEnt }) {
 
       <ViewBar panel={panel} onPanel={togglePanel}>
         <BarGroup label="Lecture" sous={sel ? sel.name : null}>
-          <button onClick={() => commander(hass, sel && sel.haid, 'previous_track')} style={barBtn(false)}>Précédent</button>
-          <button onClick={() => commander(hass, sel && sel.haid, 'play_pause')} style={barBtn(np.playing)}>{np.playing ? 'Pause' : 'Lecture'}</button>
-          <button onClick={() => commander(hass, sel && sel.haid, 'next_track')} style={barBtn(false)}>Suivant</button>
+          {peut(hass, sel && sel.haid, 'previous_track') && (
+            <button onClick={() => commander(hass, sel && sel.haid, 'previous_track')} style={barBtn(false)}>Précédent</button>)}
+          {peut(hass, sel && sel.haid, 'play_pause') && (
+            <button onClick={() => commander(hass, sel && sel.haid, 'play_pause')} style={barBtn(np.playing)}>{np.playing ? 'Pause' : 'Lecture'}</button>)}
+          {peut(hass, sel && sel.haid, 'next_track') && (
+            <button onClick={() => commander(hass, sel && sel.haid, 'next_track')} style={barBtn(false)}>Suivant</button>)}
         </BarGroup>
-        {np.hasVol && (
+        {(peut(hass, sel && sel.haid, 'volume_up') || peut(hass, sel && sel.haid, 'set_volume')) && (
           <BarGroup label="Volume" sous={sel ? sel.name : null}>
-            <button onClick={() => commander(hass, sel && sel.haid, 'volume_down')} style={barBtn(false)}>−</button>
+            <button onClick={() => volPas(-5)} style={barBtn(false)}>−</button>
             <span style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--o-accent-soft)', minWidth: 44, textAlign: 'center' }}>{Math.round(np.vol)} %</span>
-            <button onClick={() => commander(hass, sel && sel.haid, 'volume_up')} style={barBtn(false)}>+</button>
+            <button onClick={() => volPas(5)} style={barBtn(false)}>+</button>
           </BarGroup>
         )}
         {sel && S[sel.haid] && S[sel.haid].attributes && S[sel.haid].attributes.shuffle != null && (
