@@ -17,14 +17,14 @@ jobs:
     name: hassfest (Home Assistant)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: home-assistant/actions/hassfest@master
 
   hacs:
     name: HACS
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hacs/action@main
         with:
           category: integration
@@ -33,8 +33,8 @@ jobs:
     name: Composant Python (pytest)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       # Les tests posent leurs propres doublures de Home Assistant : inutile de
@@ -46,8 +46,8 @@ jobs:
     name: Frontend (lint, tests, donnees personnelles)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # Node 20 est deprecie, et surtout : il ne developpe pas les motifs
           # glob de `--test`. La suite est desormais lancee par decouverte
