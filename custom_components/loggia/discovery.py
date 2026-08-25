@@ -33,6 +33,24 @@ _LOGGER = logging.getLogger(__name__)
 INDEX_VERSION = 1
 
 
+@callback
+def _version_du_composant() -> str | None:
+    """La version REELLEMENT installee, lue dans le manifeste.
+
+    Le dashboard affichait un numero ecrit en dur dans son code, qui ne
+    correspondait a rien : il annoncait « v3.0 » alors que le composant
+    installe etait en 2.1.0. La seule source qui ne mente pas est le manifeste
+    du composant qui tourne — c'est lui que HACS met a jour.
+    """
+    try:
+        import json
+        from pathlib import Path as _P
+        m = json.loads((_P(__file__).parent / "manifest.json").read_text(encoding="utf-8"))
+        return m.get("version")
+    except Exception:  # noqa: BLE001 — un manifeste illisible ne prive de rien
+        return None
+
+
 def _valeur(x: Any) -> Any:
     """Rend une valeur transportable : les registres melent enums et objets."""
     if x is None or isinstance(x, (str, int, float, bool)):
@@ -151,6 +169,9 @@ def async_index(hass: HomeAssistant) -> dict[str, Any]:
     try:
         return {
             "version": INDEX_VERSION,
+            # La version du composant, distincte de celle de l'index : l'une dit
+            # la forme des donnees, l'autre ce qui est installe.
+            "component_version": _version_du_composant(),
             "areas": _zones(hass),
             "floors": _etages(hass),
             "devices": _appareils(hass),
@@ -159,5 +180,5 @@ def async_index(hass: HomeAssistant) -> dict[str, Any]:
         }
     except Exception:  # noqa: BLE001 — un registre illisible ne doit pas priver
         _LOGGER.exception("Loggia : lecture des registres impossible")
-        return {"version": INDEX_VERSION, "areas": [], "floors": [],
-                "devices": [], "entities": [], "services": {}}
+        return {"version": INDEX_VERSION, "component_version": _version_du_composant(),
+                "areas": [], "floors": [], "devices": [], "entities": [], "services": {}}

@@ -136,6 +136,9 @@ async function registresDuComposant(hass) {
     // Ce que l'installation sait réellement faire. Une capacité déduite du seul
     // domaine reste une supposition ; cette liste, non.
     services: index.services || {},
+    // La version du composant qui tourne. Le dashboard affichait un numero
+    // ecrit en dur dans son propre code, sans rapport avec l'installe.
+    componentVersion: index.component_version || null,
   };
 }
 
@@ -162,7 +165,7 @@ export async function fetchRegistries(hass) {
  * Rattachement d'une entité à une zone, dans l'ordre de priorité de Home
  * Assistant : la zone posée sur l'entité l'emporte sur celle de son appareil.
  */
-export function buildIndex({ areas = [], devices = [], entities = [], floors = [], states = {}, services = null }) {
+export function buildIndex({ areas = [], devices = [], entities = [], floors = [], states = {}, services = null, componentVersion = null }) {
   const deviceArea = new Map();
   const deviceMeta = new Map();   // device_id -> fabricant, modele, integration
   const deviceName = new Map();
@@ -250,6 +253,7 @@ export function buildIndex({ areas = [], devices = [], entities = [], floors = [
     // `set_cover_tilt_position` meme quand aucun volet n'a d'inclinaison. Ils
     // servent donc a savoir si un domaine est charge, pas ce qu'il accepte.
     services,
+    componentVersion,
     byArea,
     orphans,
     live,

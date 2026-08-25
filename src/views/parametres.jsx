@@ -17,6 +17,36 @@ import { useLoggia } from '../runtime.js';
 import { viewReason } from '../views.js';
 import { weatherEntity } from '../wxutil.jsx';
 
+/**
+ * Ce que l'installation est REELLEMENT.
+ *
+ * La carte affichait « v3.0 » et « A JOUR » ecrits en dur : deux affirmations
+ * qui ne venaient d'aucune source et se sont retrouvees fausses des la
+ * publication de la 2.1.0.
+ *
+ * La version se lit dans le manifeste du composant qui tourne — c'est lui que
+ * HACS remplace. L'etat de mise a jour, lui, ne peut pas se deviner sans
+ * interroger GitHub, ce que ce dashboard s'interdit (aucune ressource
+ * externe) : quand HACS suit l'integration, il cree une entite `update` qui
+ * porte deja la reponse. Sans elle, on n'affirme rien.
+ */
+function installationReelle() {
+  const version = (LOGGIA_INDEX && LOGGIA_INDEX.componentVersion) || null;
+  const S = (getHass() || {}).states || {};
+  const suivi = Object.keys(S).find(id => id.startsWith('update.')
+    && /loggia/i.test(id + ' ' + ((S[id].attributes && S[id].attributes.friendly_name) || '')));
+  const st = suivi ? S[suivi] : null;
+  const at = (st && st.attributes) || {};
+  return {
+    version: version ? 'v' + version : null,
+    // `on` = une version plus recente existe. Sans entite de suivi, `null` :
+    // on ne sait pas, et le dire vaut mieux que de rassurer a tort.
+    aJour: st ? (st.state === 'off' ? true : (st.state === 'on' ? false : null)) : null,
+    disponible: at.latest_version || null,
+    suiviPar: suivi ? 'HACS' : null,
+  };
+}
+
 // Cartes du sélecteur de thème Loggia ('' = défaut). cols = [accent, fond, accent2] pour l'aperçu.
 const PRESET_META = [
   { id: '', name: 'Loggia', desc: 'Thème par défaut', cols: ['#4f8cff', '#0b101b', '#6ea8ff'] },
@@ -587,7 +617,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     { id: 'entites', name: 'Entités', ico: 'list', col: entMissing.length ? 'var(--o-bad)' : 'var(--o-text2)', bg: entMissing.length ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)',
       sub: 'Capteurs reliés aux cartes', big: String(entMissing.length || entIds.length), unit: entMissing.length ? 'introuvables' : 'configurées', admin: true, dot: entMissing.length > 0 },
     { id: 'about', name: 'À propos', ico: 'info', col: 'var(--o-text2)', bg: 'var(--o-s1)',
-      sub: 'React + Vite · installation locale', big: 'v3.0', unit: 'à jour', admin: false, small: true },
+      sub: 'React + Vite · servi par l’intégration',
+      big: (LOGGIA_INDEX && LOGGIA_INDEX.componentVersion) ? 'v' + LOGGIA_INDEX.componentVersion : '—',
+      unit: 'version installée', admin: false, small: true },
   ].filter(x => !x.admin || isAdmin);
   // Interrupteur du bandeau (Tgl n'existe que dans la portée d'Apparence)
   const curSection = SECTIONS.find(x => x.id === tab);
@@ -1326,11 +1358,32 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ fontSize: 16, fontWeight: 700 }}>Installation</div>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: 'rgba(var(--o-ok-rgb),.14)', color: 'var(--o-ok)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-ok)' }} />À JOUR</span>
+                {(() => {
+                  const inst = installationReelle();
+                  // Sans entite de suivi, aucun badge : mieux vaut ne rien dire
+                  // que d'annoncer « a jour » sans l'avoir verifie.
+                  if (inst.aJour === null) return null;
+                  const bon = inst.aJour;
+                  const col = bon ? 'var(--o-ok)' : 'var(--o-warn2)';
+                  const rgb = bon ? 'var(--o-ok-rgb)' : 'var(--o-warn2-rgb)';
+                  return (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: 'rgba(' + rgb + ',.14)', color: col }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: col }} />
+                      {bon ? 'À JOUR' : (inst.disponible ? 'v' + inst.disponible + ' DISPONIBLE' : 'MISE À JOUR')}
+                    </span>
+                  );
+                })()}
               </div>
               <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>Tableau de bord domotique auto-hébergé pour Home Assistant</div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <EnRow label="Version" desc="Canal stable"><EnVal v="v3.0" col="var(--o-ok)" /></EnRow>
+                {(() => {
+                  const inst = installationReelle();
+                  return (
+                    <EnRow label="Version" desc={inst.suiviPar ? 'Suivie par ' + inst.suiviPar : 'Lue dans le composant installé'}>
+                      <EnVal v={inst.version || '—'} col={inst.version ? 'var(--o-ok)' : 'var(--o-text3)'} />
+                    </EnRow>
+                  );
+                })()}
                 <EnRow label="Socle technique" desc="Construit et servi depuis Home Assistant"><EnVal v="React + Vite" col="var(--o-text)" /></EnRow>
                 <EnRow label="Typographie" desc="Auto-hébergée, sans CDN"><EnVal v="Manrope / Newsreader" col="var(--o-text)" /></EnRow>
                 <EnRow label="Entités suivies" desc={entIds.length + ' configurées sur ' + entCount + ' disponibles'}><EnVal v={String(entCount)} col="var(--o-accent-soft)" /></EnRow>
