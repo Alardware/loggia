@@ -1875,13 +1875,13 @@ function RoomNav({ room, onNav, hass }) {
   // egalite EXACTE avec la table des pieces : « Chambre Liam » n'y figurant
   // pas, elle retombait sur une maison, la ou la carte montrait un lit. La
   // meme piece portait deux icones selon l'endroit.
-  const zones = (LOGGIA_INDEX() && LOGGIA_INDEX().areaList) || [];
+  const zones = (LOGGIA_INDEX && LOGGIA_INDEX.areaList) || [];
   const list = normRooms(cfgVal('loggia_rooms', null)).map(r => {
     const st = r.haid && r.haid.temp ? S[r.haid.temp] : null;
     const v = st ? parseFloat(st.state) : NaN;
     // L'icone de la zone Home Assistant, retrouvee par le nom ou par le
     // capteur que la piece utilise deja — comme pour les cartes.
-    const ix = LOGGIA_INDEX();
+    const ix = LOGGIA_INDEX;
     const zone = zones.find(z => rmNorm(z.name) === rmNorm(r.room))
       || (ix && ix.areaOf && r.haid ? zones.find(z => z.id === [r.haid.temp, r.haid.humidity]
           .filter(Boolean).map(ix.areaOf).find(Boolean)) : null);
