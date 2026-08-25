@@ -300,7 +300,7 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10, fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', flexWrap: 'wrap' }}>
-        <span>{regions.length ? regions.length + ' pièce' + (regions.length > 1 ? 's' : '') + ' détectée' + (regions.length > 1 ? 's' : '') : 'Analyse de la carte…'}</span>
+        <span>{regions.length ? (regions.length > 1 ? tr('{n} pièces détectées', { n: regions.length }) : tr('{n} pièce détectée', { n: regions.length })) : 'Analyse de la carte…'}</span>
         {regions.some(r => !zoneDe(r.couleur)) && <span style={{ color: 'var(--o-warn2)' }}>{tr('Clique une zone « ? » pour la nommer')}</span>}
         <span style={{ flex: 1 }} />
         <button onClick={pivoter} title={tr('Pivoter la carte d’un quart de tour')}
@@ -309,9 +309,7 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
         </button>
         {Object.keys(assoc).length > 0 && (
           <button onClick={() => { setAssoc({}); cfgSet({ [CLE_ASSOC]: null }); }}
-            style={{ padding: '5px 11px', borderRadius: 9, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)' }}>
-            Réassocier les pièces
-          </button>
+            style={{ padding: '5px 11px', borderRadius: 9, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)' }}>{tr('Réassocier les pièces')}</button>
         )}
       </div>
 

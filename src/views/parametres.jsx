@@ -126,8 +126,8 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginBottom: 9 }}>
           {tile(temp, rooms[0] ? rooms[0].room : tr('Pièce'), '#ffb347')}
           {tile(lightsOn + ' on', 'Lumières', 'var(--o-gold)')}
-          {tile(conso, 'Consommation', 'var(--o-ok)')}
-          {tile(alTxt, 'Alarme', 'var(--o-accent)')}
+          {tile(conso, tr('Consommation'), 'var(--o-ok)')}
+          {tile(alTxt, tr('Alarme'), 'var(--o-accent)')}
         </div>
         <div style={{ display: 'flex', gap: 5 }}>
           <span style={{ flex: 1.4, height: 14, borderRadius: RAD[3], background: 'var(--o-accent)', opacity: .85 }} />
@@ -469,7 +469,7 @@ export function ViewEntSheet({ view, hass, onClose }) {
     <BottomSheet onClose={onClose}>
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-          <button onClick={close} aria-label="Fermer" title="Fermer" style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ fontSize: 18, fontWeight: 700 }}>{tr('Entités de cette vue')}</span>
         </div>
         <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 14 }}>{tr('Autocomplétion en tapant. « Enregistrer » recharge le dashboard pour appliquer.')}</div>
@@ -670,7 +670,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
       {children}
       <span style={{ flex: 1 }} />
-      <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : 'Réglages de la vue'}</span></button>
+      <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : tr('Réglages de la vue')}</span></button>
     </div>
   );
   const SecGroup = ({ label, children }) => (
@@ -722,7 +722,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               </div>
             </div>
             <span style={{ flex: 1 }} />
-            <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : 'Réglages de la vue'}</span></button>
+            <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : tr('Réglages de la vue')}</span></button>
           </div>
 
           {panel && (
@@ -788,7 +788,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
 
       {tab === 'apparence' && (<>
         <SecBar>
-          <SecGroup label="Mode">
+          <SecGroup label={tr('Mode')}>
             <div style={{ display: 'flex', gap: 4 }}>
               {[['dark', 'Foncé'], ['light', 'Clair']].map(([id, lb]) => (
                 <button key={id} onClick={() => onMode(id)} disabled={haTheme === 'FOLLOW'} style={{ ...secBtn(haTheme !== 'FOLLOW' && themeMode === id), opacity: haTheme === 'FOLLOW' ? .5 : 1, cursor: haTheme === 'FOLLOW' ? 'not-allowed' : 'pointer' }}>{lb}</button>
@@ -871,7 +871,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         const tabBtn = (on) => ({ padding: '6px 13px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: on ? 'var(--o-surfA)' : 'transparent', color: on ? 'var(--o-text)' : 'var(--o-text2)', boxShadow: on ? '0 1px 3px rgba(0,0,0,.25)' : 'none' });
         return (<>
           <AppCard title="Affichage">
-            <OptRow title="Mode" desc={tr('Appliqué au thème choisi.')}>
+            <OptRow title={tr('Mode')} desc={tr('Appliqué au thème choisi.')}>
               <Seg value={themeMode} opts={[['dark', 'Foncé'], ['light', 'Clair']]} onPick={onMode} disabled={!notFollow} />
             </OptRow>
             <OptRow title={tr('Langue')} desc={tr('« Suivre Home Assistant » prend la langue du compte HA. Les noms de pièces et d’appareils viennent de Home Assistant : ils ne sont pas traduits ici.')}>
@@ -1420,7 +1420,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               </div>
             </div>
             <span style={{ flex: 1 }} />
-            <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : 'Réglages de la vue'}</span></button>
+            <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : tr('Réglages de la vue')}</span></button>
           </div>
 
           {panel && (
