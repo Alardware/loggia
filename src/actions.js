@@ -86,10 +86,13 @@ const PLANS = {
   media_player: {
     play: { service: 'media_play' },
     pause: { service: 'media_pause' },
+    play_pause: { service: 'media_play_pause' },
     stop: { service: 'media_stop' },
     next_track: { service: 'media_next_track' },
     previous_track: { service: 'media_previous_track' },
     set_volume: { service: 'volume_set', field: 'volume_level', kind: 'ratio' },
+    volume_up: { service: 'volume_up' },
+    volume_down: { service: 'volume_down' },
     mute: { service: 'volume_mute', field: 'is_volume_muted', kind: 'raw' },
     select_source: { service: 'select_source', field: 'source', kind: 'option', list: 'source_list' },
     select_sound_mode: {
@@ -313,6 +316,19 @@ export function planAction(entityId, capability, value, ctx = {}) {
 export async function runAction(hass, entityId, capability, value, ctx = {}) {
   const plan = planAction(entityId, capability, value, ctx);
   if (!plan.ok) return plan;
+  return runPlan(hass, plan);
+}
+
+/**
+ * Exécute un plan déjà établi.
+ *
+ * Une interface a souvent besoin du plan AVANT de l'envoyer : pour afficher la
+ * valeur réellement appliquée plutôt que celle demandée, quand l'entité a ses
+ * propres bornes. Elle appelle alors `planAction`, lit `data`, et envoie ce
+ * même plan — sans le recalculer.
+ */
+export async function runPlan(hass, plan) {
+  if (!plan || !plan.ok) return plan || { ok: false, reason: 'aucun plan' };
   if (!hass || typeof hass.callService !== 'function') {
     return { ok: false, reason: 'Home Assistant indisponible', plan };
   }

@@ -13,7 +13,8 @@ const MeteoContent = lazy(() => import('./views/meteo.jsx'));
 const ParametresContent = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ParametresContent })));
 const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling } from './discovery.js';
-import { planAction as actionsPlan, availableActions as actionsAvailable } from './actions.js';
+import { planAction as actionsPlan, availableActions as actionsAvailable,
+  planAction, runPlan } from './actions.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
 import { deviceCard, presentableDevices, presentationSummary } from './present.js';
 import { healthReport, healthText } from './health.js';
@@ -1264,7 +1265,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
     paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch (er) {}
     el.onpointermove = ev => { v = calc(ev.clientX); paint(); };
     const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (kn) kn.style.transition = ''; };
-    el.onpointerup = () => { end(); setOv(v); call('set_cover_position', { position: v }); };
+    el.onpointerup = () => { end(); setOv(v); commander(hass, id, 'set_position', v); };
     el.onpointercancel = () => { end(); if (fill) fill.style.width = pos + '%'; };
   };
   return (
@@ -1279,23 +1280,58 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
       <div>
         <div style={RM_NAME}>{titre || a.friendly_name || id}</div>
         <div style={RM_SUB}>{label}</div>
-        <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => { e.stopPropagation(); drag(e); }} {...kbSlider('Position ' + (a.friendly_name || id), pos, (nv) => { setOv(nv); call('set_cover_position', { position: nv }); })} style={{ padding: '10px 0 12px', cursor: 'pointer', touchAction: 'none' }}>
+        <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => { e.stopPropagation(); drag(e); }} {...kbSlider('Position ' + (a.friendly_name || id), pos, (nv) => { setOv(nv); commander(hass, id, 'set_position', nv); })} style={{ padding: '10px 0 12px', cursor: 'pointer', touchAction: 'none' }}>
           <div style={{ position: 'relative', height: 6, borderRadius: 4, background: 'var(--o-bd1)' }}>
             <div data-fill style={{ position: 'absolute', inset: '0 auto 0 0', width: pos + '%', background: 'linear-gradient(90deg,var(--o-accent),var(--o-accent-soft))', borderRadius: 4, transition: 'width .25s' }} />
             <span data-knob style={{ position: 'absolute', top: '50%', left: `calc(${pos}% - 8px)`, transform: 'translateY(-50%)', width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,.4)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
           </div>
         </div>
         <div style={{ display: 'flex', gap: 7 }}>
-          <button onClick={(e) => { e.stopPropagation(); setOv(0); call('close_cover'); }} className="o-rmbtn" style={RM_BTN}>Fermer</button>
-          <button onClick={(e) => { e.stopPropagation(); setOv(50); call('set_cover_position', { position: 50 }); }} className="o-rmbtn" style={RM_BTN}>50 %</button>
-          <button onClick={(e) => { e.stopPropagation(); setOv(100); call('open_cover'); }} className="o-rmbtn" style={RM_BTN}>Ouvrir</button>
+          <button onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }} className="o-rmbtn" style={RM_BTN}>Fermer</button>
+          <button onClick={(e) => { e.stopPropagation(); setOv(50); commander(hass, id, 'set_position', 50); }} className="o-rmbtn" style={RM_BTN}>50 %</button>
+          <button onClick={(e) => { e.stopPropagation(); setOv(100); commander(hass, id, 'open'); }} className="o-rmbtn" style={RM_BTN}>Ouvrir</button>
         </div>
       </div>
     </div>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Le pont vers le moteur d'actions.
+//
+// `hass` porte a la fois les etats et la liste des services : de quoi bâtir le
+// contexte que le moteur attend, partout ou une vue a deja `hass` sous la main.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Le contexte du moteur d'actions, depuis le pont Home Assistant. */
+function actionCtx(h) {
+  const hs = h || getHass();
+  return { states: (hs && hs.states) || {}, services: (hs && hs.services) || null };
+}
+
+/**
+ * Commande une entite par sa CAPACITE, et rend la valeur reellement envoyee.
+ *
+ * Elle peut differer de celle demandee : les bornes appartiennent a l'entite,
+ * et une consigne de 34° passe sur une climatisation qui monte a 35 mais serait
+ * ramenee a 24 sur un plancher chauffant. L'interface affiche donc ce qui a ete
+ * envoye, jamais ce qui a ete demande.
+ *
+ * Rend `null` si l'entite ne declare pas la capacite — la vue ne doit alors
+ * afficher aucun changement, puisqu'il n'y en aura pas.
+ */
+function commander(hass, id, capability, value, champ) {
+  const ctx = actionCtx(hass);
+  const p = planAction(id, capability, value, ctx);
+  if (!p.ok) return null;
+  runPlan(hass, p);
+  return champ ? p.data[champ] : (p.data || {});
+}
+
 // Thermostat compact (maquette) : badge de mode, grande consigne, actuel, − / +.
+// Bornes de REPLI seulement : une entite qui publie les siennes fait foi, et
+// c'est `planAction` qui les applique. Elles ne servent qu'a dessiner une jauge
+// avant meme d'avoir lu l'entite.
 const RM_TMIN = 5, RM_TMAX = 30;
 function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
@@ -1311,8 +1347,12 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const MODE_FR = { off: 'ARRÊT', heat: 'CONFORT', cool: 'FROID', auto: 'AUTO', heat_cool: 'AUTO', dry: 'SEC', fan_only: 'VENTIL' };
   const all = a.hvac_modes || ['off', 'heat'];
   const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('climate', svc, { entity_id: id, ...(data || {}) }); } catch (e) {} };
-  const setT = (d) => { const v = Math.max(RM_TMIN, Math.min(RM_TMAX, Math.round((target + d) * 2) / 2)); setOv(v); call('set_temperature', { temperature: v }); };
-  const nextMode = () => { const i = all.indexOf(mode); call('set_hvac_mode', { hvac_mode: all[(i + 1) % all.length] }); };
+  // Les bornes viennent de l'entite, pas d'une constante : la climatisation de
+  // l'installation d'essai monte a 35, la ou le code plafonnait a 30. Le pas
+  // aussi lui appartient. On affiche ce qui a ete envoye, pas ce qui a ete
+  // demande — sinon la consigne affichee mentirait des qu'elle est bornee.
+  const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
+  const nextMode = () => { const i = all.indexOf(mode); commander(hass, id, 'set_hvac_mode', all[(i + 1) % all.length]); };
   return (
     <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -1500,32 +1540,32 @@ function RoomMediaSheet({ id, hass, onClose }) {
             {/* progression */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 14 }}>
               <span style={{ fontSize: 11.5, fontWeight: 700, color: tDim, minWidth: 32 }}>{fmtT(showPos)}</span>
-              <div onPointerDown={np.dur ? bar((v) => { const secs = v / 100 * np.dur; setSeekOv(secs); call('media_seek', { entity_id: np.ctl, seek_position: Math.round(secs) }); clearTimeout(seekT.current); seekT.current = setTimeout(() => setSeekOv(null), 3000); }, pct, 'data-sk') : undefined} style={{ flex: 1, padding: '10px 0', cursor: np.dur ? 'pointer' : 'default', touchAction: 'none' }}>
+              <div onPointerDown={np.dur ? bar((v) => { const secs = v / 100 * np.dur; setSeekOv(secs); commander(hass, np.ctl, 'seek', Math.round(secs)); clearTimeout(seekT.current); seekT.current = setTimeout(() => setSeekOv(null), 3000); }, pct, 'data-sk') : undefined} style={{ flex: 1, padding: '10px 0', cursor: np.dur ? 'pointer' : 'default', touchAction: 'none' }}>
                 <div style={{ height: 8, borderRadius: 999, background: onArt ? 'rgba(255,255,255,.18)' : 'var(--o-bd1)', overflow: 'hidden' }}><div data-sk style={{ height: '100%', width: pct + '%', background: `linear-gradient(90deg, ${A}, ${ALight})`, borderRadius: 999, transition: 'width .5s linear' }} /></div>
               </div>
               <span style={{ fontSize: 11.5, fontWeight: 700, color: tDim, minWidth: 32, textAlign: 'right' }}>{fmtT(np.dur)}</span>
             </div>
             {/* contrôles */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11, marginTop: 4 }}>
-              <button onClick={() => call('shuffle_set', { entity_id: np.ctl, shuffle: !np.shuffle })} title="Aléatoire" style={{ ...glass(40, 14), color: np.shuffle ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg></button>
-              <button onClick={() => call('media_previous_track', { entity_id: np.ctl })} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8zM7 4v16H5V4z" /></svg></button>
-              <button onClick={() => call('media_play_pause', { entity_id: np.ctl })} style={{ ...glass(76, '50%'), background: onArt ? 'linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.07))' : 'var(--o-s1)' }}>
+              <button onClick={() => commander(hass, np.ctl, 'set_shuffle', !np.shuffle)} title="Aléatoire" style={{ ...glass(40, 14), color: np.shuffle ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg></button>
+              <button onClick={() => commander(hass, np.ctl, 'previous_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8zM7 4v16H5V4z" /></svg></button>
+              <button onClick={() => commander(hass, np.ctl, 'play_pause')} style={{ ...glass(76, '50%'), background: onArt ? 'linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.07))' : 'var(--o-s1)' }}>
                 {np.playing && <span aria-hidden style={{ position: 'absolute', inset: -6, borderRadius: 'inherit', border: '1px solid rgba(255,255,255,.22)', animation: 'np-pulse 2.4s ease-out infinite', pointerEvents: 'none' }} />}
                 {np.playing ? <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> : <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 3 }}><path d="M7 5l12 7-12 7z" /></svg>}
               </button>
-              <button onClick={() => call('media_next_track', { entity_id: np.ctl })} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4l10 8-10 8zM17 4h2v16h-2z" /></svg></button>
-              <button onClick={() => { const o = ['off', 'all', 'one'], i = o.indexOf(np.repeat); call('repeat_set', { entity_id: np.ctl, repeat: o[(i + 1) % 3] }); }} title="Répéter" style={{ ...glass(40, 14), color: np.repeat !== 'off' ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" /></svg>{np.repeat === 'one' && <span style={{ position: 'absolute', top: 3, right: 6, fontSize: 8.5, fontWeight: 800 }}>1</span>}</button>
+              <button onClick={() => commander(hass, np.ctl, 'next_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4l10 8-10 8zM17 4h2v16h-2z" /></svg></button>
+              <button onClick={() => { const o = ['off', 'all', 'one'], i = o.indexOf(np.repeat); commander(hass, np.ctl, 'set_repeat', o[(i + 1) % 3]); }} title="Répéter" style={{ ...glass(40, 14), color: np.repeat !== 'off' ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" /></svg>{np.repeat === 'one' && <span style={{ position: 'absolute', top: 3, right: 6, fontSize: 8.5, fontWeight: 800 }}>1</span>}</button>
             </div>
             {/* volume */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
               <span style={{ fontSize: 12.5, fontWeight: 800, color: tSub, minWidth: 38 }}>{vol}%</span>
-              <div onPointerDown={bar((v) => { setVolOv(Math.round(v)); call('volume_set', { entity_id: id, volume_level: v / 100 }); }, vol, 'data-vol')} {...kbSlider('Volume', vol, (nv) => { setVolOv(Math.round(nv)); call('volume_set', { entity_id: id, volume_level: nv / 100 }); })} style={{ flex: 1, padding: '11px 0', cursor: 'pointer', touchAction: 'none' }}>
+              <div onPointerDown={bar((v) => { setVolOv(Math.round(v)); commander(hass, id, 'set_volume', v / 100); }, vol, 'data-vol')} {...kbSlider('Volume', vol, (nv) => { setVolOv(Math.round(nv)); commander(hass, id, 'set_volume', nv / 100); })} style={{ flex: 1, padding: '11px 0', cursor: 'pointer', touchAction: 'none' }}>
                 <div style={{ position: 'relative', height: 8, borderRadius: 999, background: onArt ? 'rgba(255,255,255,.18)' : 'var(--o-bd1)' }}>
                   <div data-vol style={{ position: 'absolute', inset: '0 auto 0 0', width: vol + '%', background: `linear-gradient(90deg, ${A}, ${ALight})`, borderRadius: 999, transition: 'width .1s' }} />
                   <span style={{ position: 'absolute', top: '50%', left: `calc(${vol}% - 7px)`, transform: 'translateY(-50%)', width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,.4)', transition: 'left .1s' }} />
                 </div>
               </div>
-              <button onClick={() => call('volume_mute', { entity_id: id, is_volume_muted: !np.muted })} title="Couper le son" style={{ ...glass(38, 13), ...(np.muted ? { background: 'rgba(239,68,68,.3)', border: '1px solid rgba(239,68,68,.5)', color: '#fff' } : {}) }}><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M11 5L6 9H2v6h4l5 4z" />{np.muted ? <path d="M22 9l-6 6M16 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />}</svg></button>
+              <button onClick={() => commander(hass, id, 'mute', !np.muted)} title="Couper le son" style={{ ...glass(38, 13), ...(np.muted ? { background: 'rgba(239,68,68,.3)', border: '1px solid rgba(239,68,68,.5)', color: '#fff' } : {}) }}><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M11 5L6 9H2v6h4l5 4z" />{np.muted ? <path d="M22 9l-6 6M16 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />}</svg></button>
             </div>
           </div>
         </div>
@@ -1663,7 +1703,11 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const MODE_FR = { off: 'Arrêt', heat: 'Confort', cool: 'Froid', auto: 'Auto', heat_cool: 'Auto', dry: 'Sec', fan_only: 'Ventil' };
   const all = a.hvac_modes || ['off', 'heat'];
   const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('climate', svc, { entity_id: id, ...(data || {}) }); } catch (e) {} };
-  const setT = (d) => { const v = Math.max(RM_TMIN, Math.min(RM_TMAX, Math.round((target + d) * 2) / 2)); setOv(v); call('set_temperature', { temperature: v }); };
+  // Les bornes viennent de l'entite, pas d'une constante : la climatisation de
+  // l'installation d'essai monte a 35, la ou le code plafonnait a 30. Le pas
+  // aussi lui appartient. On affiche ce qui a ete envoye, pas ce qui a ete
+  // demande — sinon la consigne affichee mentirait des qu'elle est bornee.
+  const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
   const pct = Math.max(0, Math.min(1, (target - RM_TMIN) / (RM_TMAX - RM_TMIN)));
   const R = 54, ARC = 2 * Math.PI * R * 0.75; // arc 270°
   const col = off ? 'var(--o-text3)' : 'var(--o-warn)';
@@ -1692,7 +1736,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {all.map(m => { const on = mode === m; return (
-            <button key={m} onClick={() => call('set_hvac_mode', { hvac_mode: m })} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 13, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-text)' : 'var(--o-s1)', color: on ? 'var(--o-bg)' : 'var(--o-text1)' }}>{MODE_FR[m] || m}</button>
+            <button key={m} onClick={() => commander(hass, id, 'set_hvac_mode', m)} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 13, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-text)' : 'var(--o-s1)', color: on ? 'var(--o-bg)' : 'var(--o-text1)' }}>{MODE_FR[m] || m}</button>
           ); })}
         </div>
       </>)}
@@ -1726,7 +1770,7 @@ function RoomLightSheet({ light, hass, onClose }) {
     paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch (er) {}
     el.onpointermove = ev => { v = calc(ev.clientY); paint(); };
     const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (handle) handle.style.transition = ''; dragRef.current = false; };
-    el.onpointerup = () => { end(); setBri(v); setOn(true); call('turn_on', { brightness_pct: v }); };
+    el.onpointerup = () => { end(); setBri(v); setOn(true); commander(hass, light.id, 'set_brightness', v); };
     el.onpointercancel = () => { end(); setBri(realBri); };
   };
   return (
@@ -1742,19 +1786,19 @@ function RoomLightSheet({ light, hass, onClose }) {
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{relTime(st && st.last_changed) || (on ? 'Allumé' : 'Éteint')}</div>
         </div>
         {light.dimmable !== false && (
-          <div onPointerDown={dragVert} {...kbSlider('Luminosité ' + light.name, shown, (nv) => { setBri(nv); setOn(true); call('turn_on', { brightness_pct: nv }); })} style={{ position: 'relative', width: 148, height: 300, margin: '0 auto', borderRadius: 'var(--o-radius,26px)', overflow: 'hidden', cursor: 'grab', touchAction: 'none', background: 'var(--o-s1)' }}>
+          <div onPointerDown={dragVert} {...kbSlider('Luminosité ' + light.name, shown, (nv) => { setBri(nv); setOn(true); commander(hass, light.id, 'set_brightness', nv); })} style={{ position: 'relative', width: 148, height: 300, margin: '0 auto', borderRadius: 'var(--o-radius,26px)', overflow: 'hidden', cursor: 'grab', touchAction: 'none', background: 'var(--o-s1)' }}>
             <div data-fill style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: shown + '%', background: `linear-gradient(0deg,${acc},${hx(acc, .78)})`, opacity: on ? 1 : .3, transition: 'height .12s' }} />
             <div data-handle style={{ position: 'absolute', left: 0, right: 0, bottom: `calc(${shown}% - 26px)`, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', opacity: on ? 1 : 0, transition: 'bottom .12s,opacity .2s' }}><span style={{ width: 40, height: 4, borderRadius: 3, background: 'rgba(255,255,255,.95)' }} /></div>
           </div>
         )}
         {on && light.rgb && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, maxWidth: 280, margin: '22px auto 0' }}>
-            {LIGHT_PALETTE.map(c => { const sel = (color || '').toLowerCase() === c.toLowerCase(); return <button key={c} onClick={() => { const n = parseInt(c.slice(1), 16); call('turn_on', { rgb_color: [(n >> 16) & 255, (n >> 8) & 255, n & 255] }); }} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: sel ? '3px solid #fff' : '3px solid transparent', boxShadow: sel ? `0 0 0 2px ${c}` : 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />; })}
+            {LIGHT_PALETTE.map(c => { const sel = (color || '').toLowerCase() === c.toLowerCase(); return <button key={c} onClick={() => { const n = parseInt(c.slice(1), 16); commander(hass, light.id, 'set_color', [(n >> 16) & 255, (n >> 8) & 255, n & 255]); }} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: sel ? '3px solid #fff' : '3px solid transparent', boxShadow: sel ? `0 0 0 2px ${c}` : 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />; })}
           </div>
         )}
         {on && light.ct && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, maxWidth: 280, margin: '22px auto 0' }}>
-            {WHITE_TEMPS.map(([n, k, c]) => <button key={k} title={n + ' · ' + k + 'K'} onClick={() => call('turn_on', { color_temp_kelvin: k })} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
+            {WHITE_TEMPS.map(([n, k, c]) => <button key={k} title={n + ' · ' + k + 'K'} onClick={() => commander(hass, light.id, 'set_color_temp', k)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
           </div>
         )}
       </>)}
@@ -3058,7 +3102,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
                 statusColor={np.playing ? 'var(--o-accent-soft)' : 'var(--o-text3)'}
                 toggleOn={!!np.on} onToggle={() => call('media_player', np.on ? 'turn_off' : 'turn_on', { entity_id: p.haid })}
                 actionLabel={np.playing ? 'Pause' : null}
-                onAction={() => call('media_player', 'media_pause', { entity_id: np.ctl || p.haid })}
+                onAction={() => commander(hass, np.ctl || p.haid, 'pause')}
                 onOpen={() => setSheet({ type: 'media', id: p.haid })} />;
             } else if (k.indexOf('plant:') === 0) {
               const pl = plantDe(k);
@@ -3777,7 +3821,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
   const callHa = (svc, data) => { try { if (hass && hass.callService) hass.callService('homeassistant', svc, data); } catch (e) {} };
   const toggle = (l) => { markPending([l.id], !l.on); setLights(ls => ls.map(x => x.id === l.id ? { ...x, on: !x.on, bri: !x.on ? (x.bri || 100) : x.bri } : x)); callHa(l.on ? 'turn_off' : 'turn_on', { entity_id: l.id }); };
   const setAll = (on) => { const ids = lights.map(x => x.id); markPending(ids, on); setLights(ls => ls.map(x => ({ ...x, on, bri: on ? (x.bri || 100) : x.bri }))); if (ids.length) callHa(on ? 'turn_on' : 'turn_off', { entity_id: ids }); };
-  const pick = (id, c) => { setLights(ls => ls.map(l => l.id === id ? { ...l, color: c, on: true } : l)); const n = parseInt(c.slice(1), 16); call('turn_on', { entity_id: id, rgb_color: [(n >> 16) & 255, (n >> 8) & 255, n & 255] }); };
+  const pick = (id, c) => { setLights(ls => ls.map(l => l.id === id ? { ...l, color: c, on: true } : l)); const n = parseInt(c.slice(1), 16); commander(hass, id, 'set_color', [(n >> 16) & 255, (n >> 8) & 255, n & 255]); };
   const [popupId, setPopupId] = useState(null);
   const [popMode, setPopMode] = useState('color');
   const [popClosing, setPopClosing] = useState(false);
@@ -3808,11 +3852,11 @@ function LumieresContent({ hass, edit = false, onEnt }) {
     try { el.setPointerCapture(e.pointerId); } catch (er) {}
     el.onpointermove = ev => { v = calc(ev.clientY); paint(); };
     const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (handle) handle.style.transition = ''; dragRef.current = false; };
-    el.onpointerup = () => { end(); setBri(id, v); call('turn_on', { entity_id: id, brightness_pct: v }); };
+    el.onpointerup = () => { end(); setBri(id, v); commander(hass, id, 'set_brightness', v); };
     el.onpointercancel = () => { end(); setLights(ls => ls.map(x => ({ ...x }))); }; // abandon → re-render resynchronise le visuel
   };
   const openPop = (l) => { setPopupId(l.id); setPopMode(l.rgb ? 'color' : 'white'); };
-  const setWhite = (id, k) => { setLights(ls => ls.map(l => l.id === id ? { ...l, color: null, on: true } : l)); call('turn_on', { entity_id: id, color_temp_kelvin: k }); };
+  const setWhite = (id, k) => { setLights(ls => ls.map(l => l.id === id ? { ...l, color: null, on: true } : l)); commander(hass, id, 'set_color_temp', k); };
   const onCount = lights.filter(l => l.on).length;
   const knob = (on) => ({ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' });
   const presentRooms = lightRooms(lights);
@@ -3966,7 +4010,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
               </div>
               {/* slider vertical type fader (peint en DOM direct pendant le drag) */}
               {pl.dimmable !== false && (
-                <div onPointerDown={(e) => dragVert(pl.id, e)} {...kbSlider('Luminosité ' + pl.name, pl.bri || 0, (nv) => { setBri(pl.id, nv); call('turn_on', { entity_id: pl.id, brightness_pct: nv }); })} style={{ position: 'relative', width: 148, height: 300, margin: '0 auto', borderRadius: 'var(--o-radius,26px)', overflow: 'hidden', cursor: 'grab', touchAction: 'none', background: 'var(--o-s1)' }}>
+                <div onPointerDown={(e) => dragVert(pl.id, e)} {...kbSlider('Luminosité ' + pl.name, pl.bri || 0, (nv) => { setBri(pl.id, nv); commander(hass, pl.id, 'set_brightness', nv); })} style={{ position: 'relative', width: 148, height: 300, margin: '0 auto', borderRadius: 'var(--o-radius,26px)', overflow: 'hidden', cursor: 'grab', touchAction: 'none', background: 'var(--o-s1)' }}>
                   <div data-fill style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: briBig + '%', background: `linear-gradient(0deg,${acc},${hx(acc, .78)})`, opacity: pl.on ? 1 : .3, transition: 'height .12s' }} />
                   <div data-handle style={{ position: 'absolute', left: 0, right: 0, bottom: `calc(${briBig}% - 26px)`, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', opacity: pl.on ? 1 : 0, transition: 'bottom .12s,opacity .2s' }}><span style={{ width: 40, height: 4, borderRadius: 3, background: 'rgba(255,255,255,.95)' }} /></div>
                 </div>
@@ -4432,7 +4476,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   const commitTarget = (id, v) => { v = Math.max(5, Math.min(30, Math.round(v * 2) / 2)); upLocal(id, { target: v }); call('input_number', 'set_value', { entity_id: zoneOf(id).tempCible, value: v }); };
   const inc = (id) => { const t = thermos.find(x => x.id === id); commitTarget(id, (t ? t.target : 18) + 0.5); };
   const dec = (id) => { const t = thermos.find(x => x.id === id); commitTarget(id, (t ? t.target : 18) - 0.5); };
-  const setMode = (id, m) => { const z = zoneOf(id); upLocal(id, { mode: m }); if (z.type === 'stove') call('climate', 'set_hvac_mode', { entity_id: z.haid, hvac_mode: m === 'off' ? 'off' : 'heat' }); else call('input_select', 'select_option', { entity_id: z.modeEnt, option: PILOT_FR[m] || 'Arrêt' }); };
+  const setMode = (id, m) => { const z = zoneOf(id); upLocal(id, { mode: m }); if (z.type === 'stove') commander(hass, z.haid, 'set_hvac_mode', m === 'off' ? 'off' : 'heat'); else call('input_select', 'select_option', { entity_id: z.modeEnt, option: PILOT_FR[m] || 'Arrêt' }); };
   const setAuto = (id, a) => { const z = zoneOf(id); upLocal(id, { auto: a }); if (z.autoEnt) call('input_boolean', a ? 'turn_on' : 'turn_off', { entity_id: z.autoEnt }); };
   const dragDial = (id, e) => {
     e.preventDefault();
@@ -4741,10 +4785,10 @@ function VoletsContent({ hass, edit = false, onEnt }) {
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
   const haidOf = (id) => (voletCovers(S).find(c => c.id === id) || {}).haid;
   const upCover = (id, pos) => setCovers(cs => cs.map(c => c.id === id ? { ...c, pos: Math.max(0, Math.min(100, Math.round(pos))) } : c));
-  const commitPos = (id, pos) => { pos = Math.max(0, Math.min(100, Math.round(pos))); upCover(id, pos); call('cover', 'set_cover_position', { entity_id: haidOf(id), position: pos }); };
-  const coverOpen = (id) => { upCover(id, 100); call('cover', 'open_cover', { entity_id: haidOf(id) }); };
-  const coverClose = (id) => { upCover(id, 0); call('cover', 'close_cover', { entity_id: haidOf(id) }); };
-  const coverStop = (id) => { call('cover', 'stop_cover', { entity_id: haidOf(id) }); };
+  const commitPos = (id, pos) => { pos = Math.max(0, Math.min(100, Math.round(pos))); upCover(id, pos); commander(hass, haidOf(id), 'set_position', pos); };
+  const coverOpen = (id) => { upCover(id, 100); commander(hass, haidOf(id), 'open'); };
+  const coverClose = (id) => { upCover(id, 0); commander(hass, haidOf(id), 'close'); };
+  const coverStop = (id) => { commander(hass, haidOf(id), 'stop'); };
   const allOpen = () => { setCovers(cs => cs.map(c => ({ ...c, pos: 100 }))); call('cover', 'open_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
   const allClose = () => { setCovers(cs => cs.map(c => ({ ...c, pos: 0 }))); call('cover', 'close_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
   const pickMode = (m) => { setModeLocal(m); call('input_select', 'select_option', { entity_id: voletMode(), option: m }); };
@@ -6186,20 +6230,20 @@ function MediasContent({ hass, edit = false, onEnt }) {
     try { el.setPointerCapture(e.pointerId); } catch (x) {}
     const end = () => { el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; };
     el.onpointermove = ev => { v = calc(ev.clientX); setVols(o => ({ ...o, [p.id]: v })); };
-    el.onpointerup = () => { call('volume_set', { entity_id: p.haid, volume_level: v / 100 }); end(); };
+    el.onpointerup = () => { commander(hass, p.haid, 'set_volume', v / 100); end(); };
     el.onpointercancel = end;
   };
-  const playPause = () => call('media_play_pause', { entity_id: np.ctl });
-  const next = () => call('media_next_track', { entity_id: np.ctl });
-  const prev = () => call('media_previous_track', { entity_id: np.ctl });
-  const muteAll = () => { setVols(o => Object.fromEntries(lecteurs.map(p => [p.id, 0]))); lecteurs.forEach(p => call('volume_set', { entity_id: p.haid, volume_level: 0 })); };
+  const playPause = () => commander(hass, np.ctl, 'play_pause');
+  const next = () => commander(hass, np.ctl, 'next_track');
+  const prev = () => commander(hass, np.ctl, 'previous_track');
+  const muteAll = () => { setVols(o => Object.fromEntries(lecteurs.map(p => [p.id, 0]))); lecteurs.forEach(p => commander(hass, p.haid, 'set_volume', 0)); };
   const fmtT = (s) => { if (s == null || isNaN(s)) return '0:00'; const m = Math.floor(s / 60), ss = Math.floor(s % 60); return m + ':' + (ss < 10 ? '0' : '') + ss; };
   const progPct = (np.pos != null && np.dur) ? Math.min(100, np.pos / np.dur * 100) : 0;
   const playTitle = np.title || (np.playing ? 'En lecture' : np.on ? 'En pause' : 'Rien en lecture');
   const playSub = [np.artist, np.album].filter(Boolean).join(' · ') || (np.on ? sel.name : '—');
   const eqBar = (delay) => ({ width: 3, background: 'var(--o-purple)', borderRadius: 2, height: '100%', transformOrigin: 'bottom', animation: `eq .8s ease-in-out infinite ${delay}`, animationPlayState: np.playing ? 'running' : 'paused' });
-  const setShuffle = () => call('shuffle_set', { entity_id: np.ctl, shuffle: !np.shuffle });
-  const cycleRepeat = () => { const o = ['off', 'all', 'one'], i = o.indexOf(np.repeat); call('repeat_set', { entity_id: np.ctl, repeat: o[(i + 1) % 3] }); };
+  const setShuffle = () => commander(hass, np.ctl, 'set_shuffle', !np.shuffle);
+  const cycleRepeat = () => { const o = ['off', 'all', 'one'], i = o.indexOf(np.repeat); commander(hass, np.ctl, 'set_repeat', o[(i + 1) % 3]); };
   // Seek sur la barre de progression (pointer capture + peinture DOM directe, commit media_seek au relâcher).
   // seekOv = override optimiste le temps que HA confirme la nouvelle position.
   const [seekOv, setSeekOv] = useState(null);
@@ -6218,7 +6262,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
     try { el.setPointerCapture(e.pointerId); } catch (er) {}
     el.onpointermove = ev => { v = calc(ev.clientX); paint(); };
     const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; };
-    el.onpointerup = () => { end(); const secs = v / 100 * np.dur; setSeekOv(secs); call('media_seek', { entity_id: np.ctl, seek_position: Math.round(secs) }); clearTimeout(seekTimer.current); seekTimer.current = setTimeout(() => setSeekOv(null), 3000); };
+    el.onpointerup = () => { end(); const secs = v / 100 * np.dur; setSeekOv(secs); commander(hass, np.ctl, 'seek', Math.round(secs)); clearTimeout(seekTimer.current); seekTimer.current = setTimeout(() => setSeekOv(null), 3000); };
     el.onpointercancel = () => { end(); if (fill) fill.style.width = progPct + '%'; };
   };
   const showPos = seekOv != null ? seekOv : np.pos;
@@ -6263,20 +6307,20 @@ function MediasContent({ hass, edit = false, onEnt }) {
 
       <ViewBar panel={panel} onPanel={togglePanel}>
         <BarGroup label="Lecture" sous={sel ? sel.name : null}>
-          <button onClick={() => call('media_previous_track', { entity_id: sel && sel.haid })} style={barBtn(false)}>Précédent</button>
-          <button onClick={() => call('media_play_pause', { entity_id: sel && sel.haid })} style={barBtn(np.playing)}>{np.playing ? 'Pause' : 'Lecture'}</button>
-          <button onClick={() => call('media_next_track', { entity_id: sel && sel.haid })} style={barBtn(false)}>Suivant</button>
+          <button onClick={() => commander(hass, sel && sel.haid, 'previous_track')} style={barBtn(false)}>Précédent</button>
+          <button onClick={() => commander(hass, sel && sel.haid, 'play_pause')} style={barBtn(np.playing)}>{np.playing ? 'Pause' : 'Lecture'}</button>
+          <button onClick={() => commander(hass, sel && sel.haid, 'next_track')} style={barBtn(false)}>Suivant</button>
         </BarGroup>
         {np.hasVol && (
           <BarGroup label="Volume" sous={sel ? sel.name : null}>
-            <button onClick={() => call('volume_down', { entity_id: sel && sel.haid })} style={barBtn(false)}>−</button>
+            <button onClick={() => commander(hass, sel && sel.haid, 'volume_down')} style={barBtn(false)}>−</button>
             <span style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--o-accent-soft)', minWidth: 44, textAlign: 'center' }}>{Math.round(np.vol)} %</span>
-            <button onClick={() => call('volume_up', { entity_id: sel && sel.haid })} style={barBtn(false)}>+</button>
+            <button onClick={() => commander(hass, sel && sel.haid, 'volume_up')} style={barBtn(false)}>+</button>
           </BarGroup>
         )}
         {sel && S[sel.haid] && S[sel.haid].attributes && S[sel.haid].attributes.shuffle != null && (
           <BarGroup label="Aléatoire">
-            <button onClick={() => call('shuffle_set', { entity_id: sel.haid, shuffle: !S[sel.haid].attributes.shuffle })}
+            <button onClick={() => commander(hass, sel.haid, 'set_shuffle', !S[sel.haid].attributes.shuffle)}
               style={barBtn(!!S[sel.haid].attributes.shuffle)}>{S[sel.haid].attributes.shuffle ? 'Activé' : 'Désactivé'}</button>
           </BarGroup>
         )}
@@ -7016,9 +7060,9 @@ function CvCard({ id, hass, label = null }) {
       </div>
       {dom === 'climate' && !dead && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-          <button onClick={() => a.temperature != null && call('climate', 'set_temperature', { temperature: Math.round((a.temperature - .5) * 2) / 2 })} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>−</button>
+          <button onClick={() => a.temperature != null && commander(hass, id, 'set_temperature', a.temperature - .5)} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>−</button>
           <span style={{ fontSize: 15, fontWeight: 800, minWidth: 52, textAlign: 'center' }}>{a.temperature != null ? a.temperature + '°' : '—'}</span>
-          <button onClick={() => a.temperature != null && call('climate', 'set_temperature', { temperature: Math.round((a.temperature + .5) * 2) / 2 })} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>+</button>
+          <button onClick={() => a.temperature != null && commander(hass, id, 'set_temperature', a.temperature + .5)} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>+</button>
         </div>
       )}
       {dom === 'cover' && !dead && (
@@ -7030,7 +7074,7 @@ function CvCard({ id, hass, label = null }) {
       )}
       {dom === 'media_player' && !dead && s !== 'off' && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button onClick={() => call('media_player', 'media_play_pause')} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 12 }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={13} />{s === 'playing' ? 'Pause' : 'Lecture'}</button>
+          <button onClick={() => commander(hass, id, 'play_pause')} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 12 }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={13} />{s === 'playing' ? 'Pause' : 'Lecture'}</button>
         </div>
       )}
     </div>

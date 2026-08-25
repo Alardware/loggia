@@ -236,6 +236,11 @@ export function entityCaps(entityId, st, services = null) {
   // Changer de mode n'a pas de bit : `climate.set_hvac_mode` vaut pour toute
   // entité du domaine, et c'est la liste `hvac_modes` qui dit lesquels.
   if (domain === 'climate') can.add('set_hvac_mode');
+  // Basculer lecture/pause suppose de savoir faire l'un OU l'autre : le service
+  // `media_play_pause` n'a pas de bit propre, il s'appuie sur ceux-la.
+  if (domain === 'media_player' && (can.has('pause') || can.has('play'))) can.add('play_pause');
+  // Monter et baisser le volume par crans : un seul bit, deux services.
+  if (can.has('step_volume')) { can.add('volume_up'); can.add('volume_down'); }
 
   if (domain === 'light') {
     const modes = Array.isArray(attrs.supported_color_modes) ? attrs.supported_color_modes : [];
