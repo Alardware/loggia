@@ -3532,12 +3532,30 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   };
   // L'INTERRUPTEUR de la carte ne pilote QUE le(s) plafonnier(s) de la pièce (règle user).
   // Le compteur « X lampes allumées », lui, compte tous les luminaires non-« Ampoule ».
-  // Les lumieres qu'un appui sur la carte allume ou eteint : TOUTES celles de
-  // la piece. Ce filtre ne retenait auparavant que celles dont le nom contenait
-  // « plafonnier » — une convention d'une seule installation, qui n'est vraie
-  // sur aucune autre : sur celle de developpement, AUCUNE lumiere ne porte ce
-  // mot, et le bouton avait donc disparu de toutes les pieces.
-  const roomMainsOf = (name) => roomLightsOf(name);
+  /**
+   * Les lumieres qu'un appui sur la carte allume ou eteint.
+   *
+   * Par defaut toutes celles de la piece — ce filtre ne retenait auparavant que
+   * celles dont le nom contenait « plafonnier », une convention d'une seule
+   * installation : ailleurs, aucune lumiere ne porte ce mot et le bouton
+   * disparaissait de toutes les cartes.
+   *
+   * L'utilisateur peut en designer un sous-ensemble dans Parametres → Entites,
+   * colonne « Lampes du bouton » : allumer la piece entiere n'est pas toujours
+   * ce qu'on veut d'un appui rapide. Le COMPTAGE, lui, continue de porter sur
+   * toutes les lumieres — « 4 lampes allumees » doit rester vrai.
+   */
+  const roomMainsOf = (name) => {
+    const toutes = roomLightsOf(name);
+    if (!toutes || !toutes.length) return toutes;
+    const r = a && a.rooms && a.rooms.find(x => (x.name || x.room) === name);
+    const choisies = (r && r.lights) || [];
+    if (!choisies.length) return toutes;
+    const retenues = toutes.filter(l => choisies.indexOf(l.id) >= 0);
+    // Un choix qui ne correspond a rien (entite renommee, retiree) ne doit pas
+    // faire disparaitre le bouton : on retombe sur la piece entiere.
+    return retenues.length ? retenues : toutes;
+  };
   const toggleRoomLights = (name) => {
     const ms = roomMainsOf(name);
     if (!ms || !ms.length || !dashHass || !dashHass.callService) return;
@@ -7432,7 +7450,7 @@ function deriveAccueil(hass, cfg, resolved) {
   // Conso maison estimée = net + prod connue (sera exacte quand l'onduleur toit sera intégré)
   const consoW = (netW != null) ? Math.max(0, netW + (solarW || 0)) : null;
   const autoPct = (consoW != null && consoW > 0) ? Math.min(100, Math.round((solarW || 0) / consoW * 100)) : ((solarW || 0) > 0 ? 100 : 0);
-  const rooms = (cfg.rooms || []).map(r => ({ name: r.room, area: r.area || null, icon: r.icon || null, temp: num(r.haid && r.haid.temp), hum: num(r.haid && r.haid.humidity), co2: num(r.haid && r.haid.co2), tempId: r.haid && r.haid.temp, humId: r.haid && r.haid.humidity, co2Id: r.haid && r.haid.co2 }));
+  const rooms = (cfg.rooms || []).map(r => ({ name: r.room, area: r.area || null, icon: r.icon || null, lights: (r.haid && r.haid.lights) || [], temp: num(r.haid && r.haid.temp), hum: num(r.haid && r.haid.humidity), co2: num(r.haid && r.haid.co2), tempId: r.haid && r.haid.temp, humId: r.haid && r.haid.humidity, co2Id: r.haid && r.haid.co2 }));
   const indoor = rooms.filter(r => r.name !== 'Extérieur');
   const avg = arr => { const x = arr.filter(v => v != null); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : null; };
   const inTemp = avg(indoor.map(r => r.temp)), inHum = avg(indoor.map(r => r.hum));

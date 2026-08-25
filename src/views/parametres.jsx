@@ -275,7 +275,8 @@ function useEntConfig(hass) {
   const avecCle = (a) => a.map((r, i) => ({ ...r, _k: r._k || 'k' + i + '_' + Math.random().toString(36).slice(2, 6) }));
   // Lecture de la configuration courante, telle que le formulaire l'affiche.
   const readEnt = () => ({
-    rooms: avecCle(normRooms(cfgVal('loggia_rooms', null)).map(r => ({ room: r.room || '', temp: (r.haid && r.haid.temp) || '', humidity: (r.haid && r.haid.humidity) || '', co2: (r.haid && r.haid.co2) || '' }))),
+    rooms: avecCle(normRooms(cfgVal('loggia_rooms', null)).map(r => ({ room: r.room || '', temp: (r.haid && r.haid.temp) || '', humidity: (r.haid && r.haid.humidity) || '', co2: (r.haid && r.haid.co2) || '',
+      lights: Array.isArray(r.haid && r.haid.lights) ? r.haid.lights.join(', ') : ((r.haid && r.haid.lights) || '') }))),
     energy: { ...enHaids(), ...(cfgVal('loggia_energyHaids', null) || {}) },
     alarm: secAlarm() || '',
     weather: weatherEntity(getHass()) || '',
@@ -296,7 +297,10 @@ function useEntConfig(hass) {
   const saveEnt = () => {
     try {
       cfgSet({
-        loggia_rooms: ent.rooms.filter(r => r.room).map(r => ({ room: r.room, haid: { temp: r.temp || null, humidity: r.humidity || null, co2: r.co2 || null } })),
+        loggia_rooms: ent.rooms.filter(r => r.room).map(r => ({ room: r.room, haid: { temp: r.temp || null, humidity: r.humidity || null, co2: r.co2 || null,
+          // Vide = toutes les lumieres de la piece. Une liste explicite ne
+          // vaut que pour le bouton de la carte, pas pour le comptage.
+          lights: String(r.lights || '').split(',').map(s => s.trim()).filter(Boolean) } })),
         loggia_energyHaids: ent.energy,
         loggia_alarm: ent.alarm || '',
         loggia_weather: ent.weather || '',
@@ -337,7 +341,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
   return (
     <>
       {Object.keys(dlists).map(d => <datalist key={d} id={'o-dl-' + d}>{dlists[d].map(id => <option key={id} value={id} />)}</datalist>)}
-      {has('rooms') && <EntSection title="Pièces (Accueil)" desc="Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel)." cols={[{ k: 'room', label: 'Pièce', ph: 'Séjour', flex: .8 }, { k: 'temp', label: 'Température', ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: 'Humidité', ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
+      {has('rooms') && <EntSection title="Pièces (Accueil)" desc="Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce." cols={[{ k: 'room', label: 'Pièce', ph: 'Séjour', flex: .8 }, { k: 'temp', label: 'Température', ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: 'Humidité', ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }, { k: 'lights', label: 'Lampes du bouton', ph: 'toutes (light.a, light.b)', domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
       {has('energy') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13.5, fontWeight: 800, marginBottom: 3 }}>Énergie</div>

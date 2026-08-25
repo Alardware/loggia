@@ -277,10 +277,10 @@ export function normRooms(raw) {
   const byName = {};
   (discoveredRooms() || []).forEach(d => { byName[d.room] = d; });
   const out = raw.map(x => {
-    if (typeof x === 'string') return byName[x] || { room: x, haid: { temp: null, humidity: null, co2: null } };
+    if (typeof x === 'string') return byName[x] || { room: x, haid: { temp: null, humidity: null, co2: null, lights: [] } };
     if (!x || !x.room) return null;
     const d = byName[x.room], h = x.haid || {};
-    return { ...x, haid: { temp: h.temp || (d && d.haid.temp) || null, humidity: h.humidity || (d && d.haid.humidity) || null, co2: h.co2 || (d && d.haid.co2) || null } };
+    return { ...x, haid: { temp: h.temp || (d && d.haid.temp) || null, humidity: h.humidity || (d && d.haid.humidity) || null, co2: h.co2 || (d && d.haid.co2) || null, lights: Array.isArray(h.lights) ? h.lights : [] } };
   }).filter(Boolean);
   return out.length ? out : (discoveredRooms() || []);
 }
