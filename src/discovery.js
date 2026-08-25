@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { buildDevices } from './devices.js';
+import { capsSummary } from './capabilities.js';
 
 export const DISCOVERY_VERSION = 1;
 
@@ -154,7 +155,7 @@ export async function fetchRegistries(hass) {
  * Rattachement d'une entité à une zone, dans l'ordre de priorité de Home
  * Assistant : la zone posée sur l'entité l'emporte sur celle de son appareil.
  */
-export function buildIndex({ areas = [], devices = [], entities = [], floors = [], states = {} }) {
+export function buildIndex({ areas = [], devices = [], entities = [], floors = [], states = {}, services = null }) {
   const deviceArea = new Map();
   const deviceMeta = new Map();   // device_id -> fabricant, modele, integration
   const deviceName = new Map();
@@ -232,6 +233,10 @@ export function buildIndex({ areas = [], devices = [], entities = [], floors = [
     entityArea,
     entityMeta,
     deviceMeta,
+    // Les services appartiennent au DOMAINE, pas a l'entite : `cover` publie
+    // `set_cover_tilt_position` meme quand aucun volet n'a d'inclinaison. Ils
+    // servent donc a savoir si un domaine est charge, pas ce qu'il accepte.
+    services,
     byArea,
     orphans,
     live,
@@ -382,7 +387,8 @@ export function capabilities({ states = {}, index = null }) {
  * session, ils sont lus une seule fois ; `refresh()` force une relecture.
  */
 export function useDiscovery(hass) {
-  const [data, setData] = useState({ ready: false, errors: null, index: null, caps: null, devices: null, raw: null });
+  const [data, setData] = useState({ ready: false, errors: null, index: null,
+    caps: null, devices: null, abilities: null, raw: null });
   const startedRef = useRef(false);
   const aliveRef = useRef(true);
   useEffect(() => () => { aliveRef.current = false; }, []);
@@ -396,7 +402,10 @@ export function useDiscovery(hass) {
       // Les appareils sont construits une fois, ici : ils ne changent qu'avec
       // les registres, pas avec les états, qui eux bougent en permanence.
       const devices = buildDevices(index, states);
-      const next = { ready: true, errors: reg.errors.length ? reg.errors : null, index, caps, devices, raw: reg };
+      // Ce que chaque appareil sait faire, d'après ce qu'il déclare lui-même.
+      const abilities = capsSummary(devices, states, index.services, index.entityMeta);
+      const next = { ready: true, errors: reg.errors.length ? reg.errors : null,
+        index, caps, devices, abilities, raw: reg };
       if (aliveRef.current) setData(next);
       return next;
     }).catch(() => null);
@@ -431,8 +440,15 @@ export function report(d) {
     L.push(`${dv.length} appareils (${dv.filter(x => !x.available).length} hors ligne)`
       + ` · ${marques.size} fabricants · ${integrations.size} intégrations`);
   }
+  if (d.abilities && d.abilities.parCapacite.size) {
+    L.push('');
+    L.push('Ce que les appareils savent faire (nombre d’appareils) :');
+    [...d.abilities.parCapacite.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([k, n]) => L.push('  ' + k.padEnd(24) + n));
+  }
   L.push('');
-  L.push('Capacités :');
+  L.push('Entités par domaine :');
   Object.keys(c.counts).sort((a, b) => c.counts[b] - c.counts[a]).forEach(k => {
     L.push('  ' + k.padEnd(22) + c.counts[k]);
   });
