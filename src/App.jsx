@@ -258,50 +258,13 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
 const srNorm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); // insensible accents/casse
 const IS_MAC = (() => { try { return srNorm(navigator.platform || '').indexOf('mac') >= 0 || /iphone|ipad/.test(srNorm(navigator.platform || '')); } catch (e) { return false; } })();
 // Nombre qui « roule » vers sa valeur (rAF, easeOutCubic). Re-anime à chaque changement de cible.
-function useCountUp(target, { duration = 700 } = {}) {
-  const n = (typeof target === 'number' && isFinite(target)) ? target : null;
-  // 1er rendu : part de 0 (sinon la cible est déjà affichée et rien ne roule)
-  const [val, setVal] = useState(n == null ? null : (REDUCE_MOTION ? n : 0));
-  const fromRef = useRef(null), rafRef = useRef(0), doneRef = useRef(false);
-  useEffect(() => {
-    if (n == null) { setVal(null); fromRef.current = null; return; }
-    const from = fromRef.current == null ? 0 : fromRef.current;
-    // une seule animation (à l'apparition) : ensuite les nouvelles valeurs s'affichent directement,
-    // sinon les capteurs bruités (poll 2 s) font rouler les chiffres en continu
-    if (REDUCE_MOTION || from === n || doneRef.current) { setVal(n); fromRef.current = n; doneRef.current = true; return; }
-    doneRef.current = true;
-    cancelAnimationFrame(rafRef.current);
-    let t0 = 0;
-    const step = (t) => {
-      if (!t0) t0 = t; // t0 = 1er frame réellement peint (pas le montage React, qui peut précéder l'affichage)
-      const k = Math.min(1, (t - t0) / duration), e = 1 - Math.pow(1 - k, 3);
-      const v = from + (n - from) * e;
-      setVal(v); fromRef.current = v;
-      if (k < 1) rafRef.current = requestAnimationFrame(step); else fromRef.current = n;
-    };
-    // démarre au 1er frame peint (double rAF) et, au boot, seulement une fois l'iframe réellement affichée
-    let alive = true;
-    onPaintReady(() => { if (!alive) return; rafRef.current = requestAnimationFrame(() => { rafRef.current = requestAnimationFrame(step); }); });
-    // Filet : `requestAnimationFrame` ne s'execute pas tant que la surface n'est
-    // pas peinte. Une iframe montee avant d'etre affichee — le cas du panneau —
-    // ne recoit donc jamais le premier frame, l'animation ne demarre pas, et le
-    // compteur reste sur son point de depart : zero. Toutes les temperatures
-    // s'affichaient a 0,0°, puis se corrigeaient une a une, chaque capteur qui
-    // CHANGE de valeur repassant par la branche qui pose la valeur directement.
-    //
-    // Passe le temps de l'animation, on affiche donc la valeur, animee ou non.
-    const secours = setTimeout(() => {
-      if (!alive) return;
-      cancelAnimationFrame(rafRef.current);
-      setVal(n); fromRef.current = n;
-    }, duration + 300);
-    return () => { alive = false; clearTimeout(secours); cancelAnimationFrame(rafRef.current); };
-  }, [n, duration]);
-  return val;
-}
 // <Num v={23.4} d={1} suffix="°" /> : chiffre animé, tabular-nums pour éviter le tremblement de largeur.
 function Num({ v, d = 0, prefix = '', suffix = '', fallback = '—', fmt }) {
-  const a = useCountUp(v);
+  // Valeur affichee telle quelle. Les chiffres roulaient de zero vers leur
+  // valeur a l'ouverture : joli une fois, penible a chaque chargement, et
+  // trompeur quand l'animation ne demarrait pas — la page restait alors sur des
+  // zeros qui passaient pour des mesures.
+  const a = (typeof v === 'number' && isFinite(v)) ? v : null;
   if (a == null) return <>{fallback}</>;
   const txt = fmt ? fmt(a) : (d > 0 ? a.toFixed(d).replace('.', ',') : String(Math.round(a)));
   return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{prefix}{txt}{suffix}</span>;
@@ -830,7 +793,17 @@ function PieceCard({ p, onOpen, compact = false, lights = null, mains = null, on
     const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
     const canToggle = !!(mains && mains.length && onToggleLights);
     return (
-      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-stag o-hov ' + (tilt.className || '')} onClick={onOpen} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', borderRadius: 15, padding: '14px 15px 12px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))', cursor: 'pointer', ...stag(idx) }}>
+      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-stag o-hov ' + (tilt.className || '')} onClick={onOpen} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', borderRadius: 15, padding: '14px 15px 12px',
+        // Halo d'une pièce éclairée. Les cartes de luminaires en ont un, pas
+        // celles de l'accueil : d'un coup d'œil, on ne voyait pas quelles pièces
+        // étaient allumées, alors que c'est ce qu'on y cherche. Même teinte que
+        // l'interrupteur allumé, et l'ombre habituelle reste dessous pour ne pas
+        // aplatir la carte.
+        boxShadow: on
+          ? '0 0 0 1px rgba(var(--o-gold-rgb),.34), 0 0 20px 2px rgba(var(--o-gold-rgb),.18), var(--o-shadow,0 14px 36px rgba(0,0,0,.36))'
+          : 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))',
+        transition: 'box-shadow .3s ease',
+        cursor: 'pointer', ...stag(idx) }}>
         {/* calque de flash séparé : ne touche ni au transform du tilt ni au box-shadow de la carte */}
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 15, pointerEvents: 'none' }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
