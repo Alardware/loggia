@@ -129,12 +129,17 @@ test('une entité muette garde ses capacités mais se signale', () => {
   assert.equal(c.can.has('open'), true);
 });
 
-test('une entité sans état ne fait rien deviner', () => {
+test('une entité sans état ne laisse que ce que son domaine garantit', () => {
+  // Sans état, aucun masque ni aucun attribut à lire : il ne reste que ce qui
+  // vaut pour tout le domaine. Savoir si l'entité existe vraiment n'est pas la
+  // question d'ici — c'est `planAction` qui refuse de commander un fantôme.
   const c = entityCaps('climate.x', undefined);
   assert.equal(c.available, false);
   assert.equal(c.features, null);
-  assert.equal(c.can.size, 0);
   assert.equal(c.reads.size, 0);
+  assert.deepEqual([...c.can], ['set_hvac_mode']);
+  // Un capteur, lui, ne garantit rien du tout.
+  assert.equal(entityCaps('sensor.x', undefined).can.size, 0);
 });
 
 test('un domaine non chargé ne commande rien', () => {

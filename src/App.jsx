@@ -13,6 +13,7 @@ const MeteoContent = lazy(() => import('./views/meteo.jsx'));
 const ParametresContent = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ParametresContent })));
 const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling } from './discovery.js';
+import { planAction as actionsPlan, availableActions as actionsAvailable } from './actions.js';
 import { probe as configProbe, reportLive as configReportLive, migrateFromLocalStorage, completerDepuisLocal, collectLocal, createConfig, CONFIG_VERSION } from './config.js';
 import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
@@ -7542,9 +7543,16 @@ export default function App() {
         get errors() { return discovery.errors; },
         refresh: discovery.refresh,
         report: () => { const t = discoveryReport(discovery); console.log(t); return t; },
+        // Le contexte que le moteur d'actions attend, prêt à l'emploi.
+        get ctx() {
+          const h = getHass();
+          return { states: (h && h.states) || {}, services: discovery.index && discovery.index.services };
+        },
         // fonctions pures : utilisables sur des installations fictives
         buildIndex: discoveryBuildIndex,
         capabilities: discoveryCapabilities,
+        planAction: actionsPlan,
+        availableActions: actionsAvailable,
       };
     } catch (e) {}
   }, [discovery.ready, discovery.caps]);

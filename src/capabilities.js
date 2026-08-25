@@ -233,6 +233,9 @@ export function entityCaps(entityId, st, services = null) {
   if (ALLUMABLES.has(domain)) { can.add('turn_on'); can.add('turn_off'); can.add('toggle'); }
   if (domain === 'cover' || domain === 'valve') can.add('toggle');
   if (domain === 'lock') { can.add('lock'); can.add('unlock'); }
+  // Changer de mode n'a pas de bit : `climate.set_hvac_mode` vaut pour toute
+  // entité du domaine, et c'est la liste `hvac_modes` qui dit lesquels.
+  if (domain === 'climate') can.add('set_hvac_mode');
 
   if (domain === 'light') {
     const modes = Array.isArray(attrs.supported_color_modes) ? attrs.supported_color_modes : [];
