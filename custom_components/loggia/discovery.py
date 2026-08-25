@@ -44,7 +44,16 @@ def _valeur(x: Any) -> Any:
 def _zones(hass: HomeAssistant) -> list[dict[str, Any]]:
     reg = ar.async_get(hass)
     return [
-        {"id": a.id, "name": a.name, "floor": getattr(a, "floor_id", None)}
+        {
+            "id": a.id,
+            "name": a.name,
+            "floor": getattr(a, "floor_id", None),
+            # L'icone que l'utilisateur a choisie pour sa piece dans Home
+            # Assistant, sous la forme « mdi:sofa ». Elle etait jetee, et le
+            # dashboard en deduisait une des mots du nom — ce qui obligeait a
+            # nommer ses pieces comme il l'attendait.
+            "icon": getattr(a, "icon", None),
+        }
         for a in reg.async_list_areas()
     ]
 

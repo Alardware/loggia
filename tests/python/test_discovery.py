@@ -35,8 +35,8 @@ def objet(**champs):
     return types.SimpleNamespace(**champs)
 
 
-def zone(id_, nom, etage=None):
-    return objet(id=id_, name=nom, floor_id=etage)
+def zone(id_, nom, etage=None, icone=None):
+    return objet(id=id_, name=nom, floor_id=etage, icon=icone)
 
 
 def appareil(id_, **reste):
@@ -86,7 +86,8 @@ def test_index_complet(decouverte):
     )
     index = decouverte.async_index(hass)
     assert index["version"] == decouverte.INDEX_VERSION
-    assert index["areas"] == [{"id": "salon", "name": "Salon", "floor": "rdc"}]
+    assert index["areas"] == [
+        {"id": "salon", "name": "Salon", "floor": "rdc", "icon": None}]
     assert index["devices"][0]["manufacturer"] == "Exemple"
     # L'integration se lit dans `identifiers`, pas ailleurs : c'est elle qui
     # permettra plus tard de choisir un profil de connaissances.
@@ -163,3 +164,13 @@ def test_etages_absents_sur_ancienne_version(decouverte, monkeypatch):
     hass = poser(decouverte)
     monkeypatch.setitem(sys.modules, "homeassistant.helpers.floor_registry", None)
     assert decouverte.async_index(hass)["floors"] == []
+
+
+def test_icone_de_zone_transportee(decouverte):
+    """L'icone choisie dans Home Assistant doit arriver jusqu'au dashboard.
+
+    Sans elle, l'icone d'une piece se deduisait des mots de son nom, ce qui
+    obligeait a nommer ses pieces comme le dashboard l'attendait.
+    """
+    hass = poser(decouverte, zones=[zone("chambre", "Chambre Enfant", icone="mdi:teddy-bear")])
+    assert decouverte.async_index(hass)["areas"][0]["icon"] == "mdi:teddy-bear"

@@ -112,7 +112,12 @@ async function registresDuComposant(hass) {
   const index = r && r.index;
   if (!index || index.version !== 1) return null;
   return {
-    areas: (index.areas || []).map(a => ({ area_id: a.id, name: a.name, floor_id: a.floor })),
+    // `icon` traverse jusqu'a `areaList`, qui la conservait deja : c'est ici
+    // qu'elle etait perdue, et le dashboard devait deviner l'icone d'une piece
+    // a partir des mots de son nom.
+    areas: (index.areas || []).map(a => ({
+      area_id: a.id, name: a.name, floor_id: a.floor, icon: a.icon || null,
+    })),
     devices: (index.devices || []).map(d => ({
       id: d.id, name: d.name, name_by_user: null,
       manufacturer: d.manufacturer, model: d.model, sw_version: d.firmware,

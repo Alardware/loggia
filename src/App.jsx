@@ -772,8 +772,47 @@ function applyTheme(opts, hass) {
   return !light;
 }
 
+/**
+ * Les icones de Home Assistant, traduites vers la police du dashboard.
+ *
+ * Une zone de Home Assistant porte l'icone que l'utilisateur lui a choisie,
+ * sous la forme « mdi:sofa ». Le dashboard, lui, dessine avec UICons. Cette
+ * table fait le pont : elle permet de NOMMER SES PIECES COMME ON VEUT, puisque
+ * l'icone ne se deduit plus des mots du nom.
+ *
+ * Chaque glyphe a ete verifie dans `uicons-solid-rounded.css` : un nom absent
+ * n'afficherait rien du tout. C'est le cas de `couch`, qui n'existe pas dans la
+ * police et laissait le Sejour sans icone.
+ */
+const MDI_VERS_UICON = {
+  sofa: 'chair', 'sofa-outline': 'chair', 'seat-outline': 'chair',
+  'silverware-fork-knife': 'utensils', 'countertop': 'utensils', stove: 'utensils',
+  'fridge': 'utensils', 'coffee': 'coffee', 'food': 'restaurant',
+  bed: 'bed-alt', 'bed-king': 'bed-alt', 'bed-queen': 'bed-alt', 'sleep': 'bed-alt',
+  'teddy-bear': 'teddy-bear', 'baby-carriage': 'baby-carriage', 'baby': 'baby-carriage',
+  'shower-head': 'hot-tub', shower: 'hot-tub', bathtub: 'hot-tub', 'toilet': 'hot-tub',
+  desk: 'briefcase', 'desktop-tower-monitor': 'computer', 'laptop': 'computer',
+  monitor: 'computer', briefcase: 'briefcase',
+  tree: 'tree', flower: 'flower-tulip', 'flower-outline': 'flower-tulip',
+  'grass': 'leaf', leaf: 'leaf', 'weather-sunny': 'sun',
+  garage: 'garage', 'garage-variant': 'garage', car: 'car',
+  'home-outline': 'home', home: 'home', 'door': 'door-open', 'door-open': 'door-open',
+  'lan': 'network-cloud', 'router-network': 'network-cloud', 'wifi': 'network-cloud',
+  'shield-home': 'shield-check', 'shield': 'shield-check', 'cctv': 'shield-check',
+  'flash': 'bolt', 'lightning-bolt': 'bolt', 'transmission-tower': 'bolt',
+  orbit: 'settings-sliders', cog: 'settings-sliders', 'tools': 'settings-sliders',
+  'bookshelf': 'book', book: 'book',
+};
+
+/** « mdi:teddy-bear » → « teddy-bear », si la police sait le dessiner. */
+function uiconDeMdi(mdi) {
+  if (!mdi || typeof mdi !== 'string') return null;
+  const cle = mdi.replace(/^mdi:/, '').trim();
+  return MDI_VERS_UICON[cle] || null;
+}
+
 const PIECES = [
-  { name: 'Séjour', bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13, icon: <Ico name="couch" color="var(--o-accent)" size={22} />, status: { kind: 'active', n: 2 }, temp: '18.1°', tc: 'var(--o-accent-soft)', hum: '63%', badge: '412 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
+  { name: 'Séjour', bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13, icon: <Ico name="chair" color="var(--o-accent)" size={22} />, status: { kind: 'active', n: 2 }, temp: '18.1°', tc: 'var(--o-accent-soft)', hum: '63%', badge: '412 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
   { name: 'Cuisine', bg: 'rgba(255,157,60,.16)', box: 44, rad: 13, icon: <Ico name="utensils" color="#ff9d3c" size={22} />, status: { kind: 'active', n: 1 }, temp: '22.0°', tc: '#ff9d3c', hum: '53%', badge: '486 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
   { name: 'Chambre', bg: 'rgba(167,139,250,.16)', box: 44, rad: 13, icon: <Ico name="bed-alt" color="var(--o-purple)" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: 'var(--o-purple)', hum: '60%', badge: '529 ppm', bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' },
   { name: 'Chambre enfant', bg: 'rgba(244,114,182,.16)', box: 44, rad: 13, icon: <Ico name="teddy-bear" color="#f472b6" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: '#f472b6', hum: '61%', badge: '641 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
@@ -3389,8 +3428,21 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     [/sdb|bain|douche|bathroom|salle d ?'?eau/, 'Salle de bain'],
     [/exter|extér|jardin|terrasse|balcon|outdoor/, 'Extérieur'],
   ];
-  const habillage = (nom) => {
+  const habillage = (nom, mdi) => {
+    // L'icone de la zone Home Assistant l'emporte : c'est ce qui permet de
+    // nommer ses pieces librement, sans que l'icone se deduise du nom.
+    const glyphe = uiconDeMdi(mdi);
     const exact = PIECES.find(x => x.name === nom);
+    if (glyphe) {
+      const modele = exact || PIECES.find(x => x.name === (PARENTE.find(([re]) => re.test(String(nom).toLowerCase())) || [])[1]);
+      const couleur = (modele && modele.tc) || 'var(--o-accent)';
+      return {
+        ...(modele || { box: 44, rad: 13, status: { kind: 'repos' } }),
+        name: nom,
+        bg: (modele && modele.bg) || 'rgba(var(--o-accent-rgb),.16)',
+        icon: <Ico name={glyphe} color={couleur} size={22} />,
+      };
+    }
     if (exact) return exact;
     const s = String(nom).toLowerCase();
     const parent = PARENTE.find(([re]) => re.test(s));
@@ -3406,8 +3458,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   // la première connexion, pas une installation vide.
   const noms = (a && a.rooms && a.rooms.length) ? a.rooms.map(r => r.name) : PIECES.map(p => p.name);
   const pieces = noms.map(nom => {
-    const p = habillage(nom);
     const r = a && a.rooms && a.rooms.find(x => x.name === nom);
+    const p = habillage(nom, r && r.icon);
     if (!r) return (a && a.rooms && a.rooms.length) ? { ...p, live: { temp: null, hum: null, co2: null } } : p; // pièce sans capteurs → tirets ; pas de hass → démo
     const out = { ...p };
     out.temp = r.temp != null ? r.temp.toFixed(1) + '°' : '—';
@@ -3455,17 +3507,37 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     if (!dashHass) return null;
     try {
       const m = {};
-      for (const l of discoverLights(dashHass)) {
-        if (/ampoule/i.test(l.name || '')) continue;
+      // Aucune lumiere n'est ecartee sur son nom : ce filtre retirait celles
+      // dont le nom contient « ampoule », soit plus de la moitie du parc.
+      for (const l of discoverLights(dashHass, a && a.index)) {
         const k = rmNorm(l.room); (m[k] || (m[k] = [])).push(l);
       }
       return m;
     } catch (e) { return null; }
-  }, [lightsSig]);
-  const roomLightsOf = (name) => roomLightMap ? (roomLightMap[rmNorm(name)] || []) : null;
+    // L'index doit figurer parmi les dependances : il arrive APRES le premier
+    // rendu, et sans lui la piece d'une lumiere se deduit encore de son nom.
+  }, [lightsSig, a && a.index]);
+  const roomLightsOf = (name) => {
+    if (!roomLightMap) return null;
+    // La zone Home Assistant fait foi quand la piece en a une : c'est ainsi
+    // qu'une piece nommee « Chambre Enfant » retrouve les lumieres de sa zone,
+    // quel que soit le nom de celle-ci.
+    const r = a && a.rooms && a.rooms.find(x => (x.name || x.room) === name);
+    const zone = r && r.area && a.index && a.index.areaById && a.index.areaById.get(r.area);
+    if (zone && zone.name) {
+      const parZone = roomLightMap[rmNorm(zone.name)];
+      if (parZone && parZone.length) return parZone;
+    }
+    return roomLightMap[rmNorm(name)] || [];
+  };
   // L'INTERRUPTEUR de la carte ne pilote QUE le(s) plafonnier(s) de la pièce (règle user).
   // Le compteur « X lampes allumées », lui, compte tous les luminaires non-« Ampoule ».
-  const roomMainsOf = (name) => { const ls = roomLightsOf(name); return ls ? ls.filter(l => /plafonnier/i.test(l.name || '')) : null; };
+  // Les lumieres qu'un appui sur la carte allume ou eteint : TOUTES celles de
+  // la piece. Ce filtre ne retenait auparavant que celles dont le nom contenait
+  // « plafonnier » — une convention d'une seule installation, qui n'est vraie
+  // sur aucune autre : sur celle de developpement, AUCUNE lumiere ne porte ce
+  // mot, et le bouton avait donc disparu de toutes les pieces.
+  const roomMainsOf = (name) => roomLightsOf(name);
   const toggleRoomLights = (name) => {
     const ms = roomMainsOf(name);
     if (!ms || !ms.length || !dashHass || !dashHass.callService) return;
@@ -3737,8 +3809,16 @@ const LIGHT_ROOM = (id) => {
 };
 const switchLights = () => { const c = loggiaEnt('switchLights', null); return (Array.isArray(c) && c.length) ? c : switchLightsCfg(); };
 // Découvre les vraies lumières HA (light.*), groupées par pièce. Exclut LED réseau/caméra (UniFi…). Ajoute les interrupteurs choisis (on/off).
-function discoverLights(hass) {
+function discoverLights(hass, index) {
   const S = hass.states;
+  // La PIECE d'une lumiere est celle que Home Assistant lui donne. Le nom ne
+  // sert que de repli, pour les entites qui n'ont pas encore ete rangees dans
+  // une zone : deduire la piece des mots de l'identifiant obligeait a nommer
+  // ses lumieres selon une convention qui n'existe que sur une installation.
+  const pieceDe = (id) => {
+    const zone = index && index.areaNameOf ? index.areaNameOf(id) : null;
+    return zone || LIGHT_ROOM(id);
+  };
   const lights = Object.keys(S).filter(e => e.indexOf('light.') === 0 && !/^light\.(u6|g6|unifi|udm|usw|uap)/.test(e)).map(id => {
     const st = S[id], at = st.attributes || {};
     const on = st.state === 'on';
@@ -3749,11 +3829,11 @@ function discoverLights(hass) {
     const bri = (on && at.brightness != null) ? Math.max(1, Math.round(at.brightness / 255 * 100)) : (on ? 100 : 0);
     const rgb = at.rgb_color || null;
     const color = rgb ? ('#' + rgb.map(x => Math.max(0, Math.min(255, x)).toString(16).padStart(2, '0')).join('')) : null;
-    return { id, domain: 'light', name: at.friendly_name || id.replace('light.', '').replace(/_/g, ' '), room: LIGHT_ROOM(id), on, bri, dimmable, rgb: rgbCap, ct, color, lc: st.last_changed };
+    return { id, domain: 'light', name: at.friendly_name || id.replace('light.', '').replace(/_/g, ' '), room: pieceDe(id), on, bri, dimmable, rgb: rgbCap, ct, color, lc: st.last_changed };
   });
   const switches = switchLights().filter(id => S[id]).map(id => {
     const st = S[id], at = st.attributes || {}, on = st.state === 'on';
-    return { id, domain: 'switch', name: at.friendly_name || id.replace('switch.', '').replace(/_/g, ' '), room: LIGHT_ROOM(id), on, bri: on ? 100 : 0, dimmable: false, rgb: false, ct: false, color: null, lc: st.last_changed };
+    return { id, domain: 'switch', name: at.friendly_name || id.replace('switch.', '').replace(/_/g, ' '), room: pieceDe(id), on, bri: on ? 100 : 0, dimmable: false, rgb: false, ct: false, color: null, lc: st.last_changed };
   });
   return [...lights, ...switches];
 }
@@ -7352,7 +7432,7 @@ function deriveAccueil(hass, cfg, resolved) {
   // Conso maison estimée = net + prod connue (sera exacte quand l'onduleur toit sera intégré)
   const consoW = (netW != null) ? Math.max(0, netW + (solarW || 0)) : null;
   const autoPct = (consoW != null && consoW > 0) ? Math.min(100, Math.round((solarW || 0) / consoW * 100)) : ((solarW || 0) > 0 ? 100 : 0);
-  const rooms = (cfg.rooms || []).map(r => ({ name: r.room, temp: num(r.haid && r.haid.temp), hum: num(r.haid && r.haid.humidity), co2: num(r.haid && r.haid.co2), tempId: r.haid && r.haid.temp, humId: r.haid && r.haid.humidity, co2Id: r.haid && r.haid.co2 }));
+  const rooms = (cfg.rooms || []).map(r => ({ name: r.room, area: r.area || null, icon: r.icon || null, temp: num(r.haid && r.haid.temp), hum: num(r.haid && r.haid.humidity), co2: num(r.haid && r.haid.co2), tempId: r.haid && r.haid.temp, humId: r.haid && r.haid.humidity, co2Id: r.haid && r.haid.co2 }));
   const indoor = rooms.filter(r => r.name !== 'Extérieur');
   const avg = arr => { const x = arr.filter(v => v != null); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : null; };
   const inTemp = avg(indoor.map(r => r.temp)), inHum = avg(indoor.map(r => r.hum));
@@ -7629,6 +7709,9 @@ export default function App() {
         get devices() { return discovery.devices; },
         get abilities() { return discovery.abilities; },
         get knowledge() { return discovery.knowledge; },
+        // Les pieces telles que la configuration et les zones les donnent :
+        // sans elles, impossible de voir ou l'appariement piece/zone echoue.
+        get rooms() { try { return cfgRef.current; } catch (e) { return null; } },
         get health() { return discovery.health; },
         healthText: () => { const t = healthText(discovery.health); console.log(t); return t; },
         get errors() { return discovery.errors; },
@@ -7760,12 +7843,32 @@ export default function App() {
     const cm = cfgVal('loggia_cameras', null);
     return {
       energy: { ...enHaids(), ...(e && typeof e === 'object' ? e : {}) },
-      rooms: normRooms(cfgVal('loggia_rooms', null)),
+      // Chaque piece recoit l'icone de la zone Home Assistant qui porte le
+      // meme nom. C'est ce qui rend le nom LIBRE : renommer une piece ne
+      // change plus son icone, puisque celle-ci vient de Home Assistant.
+      rooms: (() => {
+        const zones = (loggiaRuntime.index && loggiaRuntime.index.areaList) || [];
+        const parNom = new Map(zones.map(z => [rmNorm(z.name), z]));
+        const ix = loggiaRuntime.index;
+        return normRooms(cfgVal('loggia_rooms', null)).map(r => {
+          // Le nom d'abord, puis la zone du capteur que la piece utilise deja.
+          // Une piece peut porter un autre nom que sa zone — c'est le droit de
+          // l'utilisateur — et ses capteurs, eux, la designent sans ambiguite.
+          let z = parNom.get(rmNorm(r.name || r.room));
+          if (!z && ix && ix.areaOf && r.haid) {
+            const parCapteur = [r.haid.temp, r.haid.humidity, r.haid.co2]
+              .filter(Boolean).map(ix.areaOf).find(Boolean);
+            if (parCapteur) z = zones.find(x => x.id === parCapteur);
+          }
+          return z ? { ...r, icon: z.icon || null, area: z.id } : r;
+        });
+      })(),
       lights: cfgVal('loggia_lights', []) || [],
       cams: (Array.isArray(cm) && cm.length) ? cm : [],
       entities: (serverCfg && serverCfg.loggia_entities) || {},
     };
   }, [serverCfg, loggiaRuntime.ready]);
+  const cfgRef = useRef(null); cfgRef.current = cfg.rooms;
   // Clés de poll issues de la configuration utilisateur : chez un tiers les
   // constantes du code ne correspondent a rien, seuls comptent le prefixe de
   // domaine et les entites que la decouverte a resolues.
@@ -7859,7 +7962,7 @@ export default function App() {
   const weatherTemp = wEnt && wEnt.attributes ? wEnt.attributes.temperature : null;
   const weatherLabel = wEnt ? haWeatherLabel(wEnt.state) : null;
   let accueil = null; // Dashboard + vue Pièce (capteurs de la pièce) — pas calculé ailleurs
-  if (view === 'accueil' || activeRoom) { try { accueil = deriveAccueil(hass, cfg, loggiaRuntime.resolved); } catch (e) { console.error('deriveAccueil', e); accueil = null; } }
+  if (view === 'accueil' || activeRoom) { try { accueil = deriveAccueil(hass, cfg, loggiaRuntime.resolved); if (accueil) accueil.index = loggiaRuntime.index; } catch (e) { console.error('deriveAccueil', e); accueil = null; } }
   let notifs; try { notifs = deriveNotifs(hass); } catch (e) { console.error('deriveNotifs', e); notifs = []; }
   useEffect(() => {
     try {
