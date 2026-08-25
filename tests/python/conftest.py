@@ -36,11 +36,19 @@ def _poser_doublures() -> None:
         ("homeassistant.core", ("HomeAssistant",)),
         ("homeassistant.helpers", ()),
         ("homeassistant.helpers.storage", ("Store",)),
+        # `discovery.py` lit les registres. Les doublures ci-dessous portent
+        # juste `async_get`, que les tests remplacent par leurs propres donnees.
+        ("homeassistant.helpers.area_registry", ("async_get",)),
+        ("homeassistant.helpers.device_registry", ("async_get",)),
+        ("homeassistant.helpers.entity_registry", ("async_get",)),
+        ("homeassistant.helpers.floor_registry", ("async_get",)),
     ):
         module = types.ModuleType(nom)
         for attr in attrs:
             setattr(module, attr, type(attr, (), {}))
         sys.modules[nom] = module
+    # `@callback` decore les fonctions du composant : sans lui, l'import echoue.
+    sys.modules["homeassistant.core"].callback = lambda f: f
 
 
 _poser_doublures()

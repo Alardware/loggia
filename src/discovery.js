@@ -84,8 +84,59 @@ async function safeWSObj(hass, type, errors) {
  * production solaire, quels appareils suivis. Toute installation qui a configuré
  * l'Énergie de Home Assistant nous la donne sans rien avoir à saisir.
  */
+/**
+ * Registres vus par le composant Loggia.
+ *
+ * Les quatre commandes de Home Assistant utilisées plus bas sont RÉSERVÉES AUX
+ * ADMINISTRATEURS. Sur un compte ordinaire, la découverte ne rendait rien : ni
+ * pièces, ni zones, ni appareils — le dashboard retombait sur ce qu'il pouvait
+ * deviner des seuls états. Le composant, lui, tourne dans Home Assistant et lit
+ * ces registres pour tout le monde.
+ *
+ * Il nomme ses champs `id` là où Home Assistant dit `area_id`, `device_id` ou
+ * `entity_id` : la conversion se fait ici, pour que le reste du fichier ne
+ * connaisse qu'une seule forme.
+ */
+async function registresDuComposant(hass) {
+  if (!hass || typeof hass.callWS !== 'function') return null;
+  let r;
+  try {
+    r = await hass.callWS({ type: 'loggia/discovery' });
+  } catch (e) {
+    return null;   // composant absent ou trop ancien : on se rabat plus bas
+  }
+  const index = r && r.index;
+  if (!index || index.version !== 1) return null;
+  return {
+    areas: (index.areas || []).map(a => ({ area_id: a.id, name: a.name, floor_id: a.floor })),
+    devices: (index.devices || []).map(d => ({
+      id: d.id, name: d.name, name_by_user: null,
+      manufacturer: d.manufacturer, model: d.model, sw_version: d.firmware,
+      area_id: d.area, via_device_id: d.via, entry_type: d.entry_type,
+      // Le domaine de l'intégration, que les registres n'exposent qu'au travers
+      // de `identifiers` : le composant l'a déjà extrait.
+      integration: d.integration,
+    })),
+    entities: (index.entities || []).map(e => ({
+      entity_id: e.id, name: e.name, device_id: e.device, area_id: e.area,
+      platform: e.platform, entity_category: e.category,
+      device_class: e.device_class, original_device_class: e.device_class,
+      unit_of_measurement: e.unit, hidden_by: e.hidden ? 'user' : null,
+    })),
+    floors: (index.floors || []).map(f => ({ floor_id: f.id, name: f.name, level: f.level })),
+    // Ce que l'installation sait réellement faire. Une capacité déduite du seul
+    // domaine reste une supposition ; cette liste, non.
+    services: index.services || {},
+  };
+}
+
 export async function fetchRegistries(hass) {
   const errors = [];
+  const duComposant = await registresDuComposant(hass);
+  if (duComposant) {
+    const energyPrefs = await safeWSObj(hass, 'energy/get_prefs', errors);
+    return { ...duComposant, energyPrefs, errors, source: 'composant' };
+  }
   const [areas, devices, entities, floors, energyPrefs] = await Promise.all([
     safeWS(hass, REG.areas, errors),
     safeWS(hass, REG.devices, errors),
@@ -93,7 +144,7 @@ export async function fetchRegistries(hass) {
     safeWS(hass, REG.floors, errors),
     safeWSObj(hass, 'energy/get_prefs', errors),
   ]);
-  return { areas, devices, entities, floors, energyPrefs, errors };
+  return { areas, devices, entities, floors, energyPrefs, errors, services: {}, source: 'home-assistant' };
 }
 
 /**

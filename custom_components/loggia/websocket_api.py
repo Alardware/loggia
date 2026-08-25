@@ -11,6 +11,14 @@ Commandes :
   loggia/config/set     -> fusionne un patch, renvoie la config resultante
   loggia/config/delete  -> efface la configuration de l'utilisateur
   loggia/config/stats   -> chiffres de diagnostic (admin uniquement)
+  loggia/discovery      -> ce que Home Assistant sait de l'installation
+
+`loggia/discovery` est ouverte a tout compte authentifie, a dessein. Les
+commandes equivalentes de Home Assistant — `config/area_registry/list` et ses
+voisines — exigent un administrateur : le dashboard n'avait donc ni pieces ni
+appareils sur un compte ordinaire. Ce qui transite ici ne contient ni jeton, ni
+option de configuration : des noms, des rattachements, de quoi reconnaitre un
+appareil.
 """
 from __future__ import annotations
 
@@ -22,7 +30,9 @@ import voluptuous as vol
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.util import dt as dt_util
 
+from .discovery import async_index
 from .store import MAX_TOTAL_BYTES, MAX_VALUE_BYTES, LoggiaStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,6 +41,7 @@ WS_GET = "loggia/config/get"
 WS_SET = "loggia/config/set"
 WS_DELETE = "loggia/config/delete"
 WS_STATS = "loggia/config/stats"
+WS_DISCOVERY = "loggia/discovery"
 
 
 def _user_info(connection: websocket_api.ActiveConnection) -> dict[str, Any]:
@@ -107,12 +118,30 @@ def async_register(hass: HomeAssistant, store: LoggiaStore) -> None:
         await store.async_delete_user(connection.user.id)
         connection.send_result(msg["id"], {"config": {}})
 
+    # Qui a obtenu l'index, et quand. Tenu en memoire seulement : c'est un
+    # diagnostic, pas une trace a conserver. Il repond a une question qu'on ne
+    # peut pas poser autrement — la decouverte arrive-t-elle vraiment aux
+    # comptes ordinaires, pour qui les commandes de Home Assistant sont fermees.
+    servis: dict[str, dict[str, Any]] = {}
+
     @websocket_api.websocket_command({vol.Required("type"): WS_STATS})
     @websocket_api.require_admin
     @websocket_api.async_response
     async def handle_stats(hass, connection, msg):
-        connection.send_result(msg["id"], await store.async_stats())
+        stats = await store.async_stats()
+        stats["discovery"] = servis
+        connection.send_result(msg["id"], stats)
 
+    @websocket_api.websocket_command({vol.Required("type"): WS_DISCOVERY})
+    @callback
+    def handle_discovery(hass, connection, msg):
+        user = connection.user
+        vu = servis.setdefault(user.id, {"name": user.name, "admin": user.is_admin, "count": 0})
+        vu["count"] += 1
+        vu["last"] = dt_util.utcnow().isoformat(timespec="seconds")
+        connection.send_result(msg["id"], {"index": async_index(hass)})
+
+    websocket_api.async_register_command(hass, handle_discovery)
     websocket_api.async_register_command(hass, handle_get)
     websocket_api.async_register_command(hass, handle_set)
     websocket_api.async_register_command(hass, handle_delete)
