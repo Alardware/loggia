@@ -45,7 +45,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # Node 20 est deprecie, et surtout : il ne developpe pas les motifs
+          # glob de `--test`. La suite est desormais lancee par decouverte
+          # automatique, mais autant tourner sur une version soutenue.
+          node-version: "22"
       - run: npm ci
       - run: npm run lint
       - run: npm test
