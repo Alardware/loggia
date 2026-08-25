@@ -7729,7 +7729,16 @@ export default function App() {
   const roomKeys = activeRoom ? ['light.', 'switch.', 'cover.', 'climate.', 'media_player.', 'fan.', 'lock.', ...climateKeys(), ...(cfg.rooms || []).flatMap(r => [r.haid && r.haid.temp, r.haid && r.haid.humidity, r.haid && r.haid.co2])] : [];
   const haKeys = [...GLOBAL_KEYS, ...(activeCv ? activeCv.ents : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
   // Capteurs de puissance au jitter continu : signature arrondie à 10 W → pas de re-render global à chaque tick.
-  const noisyKeys = [cfg.energy.consoNow, cfg.energy.surplusNow, cfg.energy.solarOutput, 'sensor.prise_lv_power',
+  // Un capteur de puissance jitter en continu chez N'IMPORTE QUI : c'est sa
+  // `device_class` qui le dit, pas son nom. Cette liste portait un identifiant
+  // d'entite ecrit en dur, qui n'existait que sur une seule installation.
+  const noisyDiscovered = (() => {
+    const st = (getHass() || {}).states || {};
+    return ((discovery.caps && discovery.caps.energySensors) || [])
+      .filter(id => st[id] && st[id].attributes && st[id].attributes.device_class === 'power');
+  })();
+  const noisyKeys = [cfg.energy.consoNow, cfg.energy.surplusNow, cfg.energy.solarOutput,
+    ...noisyDiscovered,
     ...(() => { const E = enHaids(); return [E.consoMaison, E.gridNow, E.solarNow, E.injectionNow, E.appTotal]; })(),
     ...enDevices(null).map(d => d.power)].filter(Boolean);
   const hass = useHass(haKeys, noisyKeys);
