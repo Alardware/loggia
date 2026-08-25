@@ -12,6 +12,7 @@
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { cfgVal, cfgSet } from './state.js';
+import { t } from './i18n.js';
 
 /** Cle de configuration : { "<couleur hex>": "<id de zone>" }. */
 const CLE_ASSOC = 'loggia_vacplan';
@@ -300,9 +301,9 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10, fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', flexWrap: 'wrap' }}>
         <span>{regions.length ? regions.length + ' pièce' + (regions.length > 1 ? 's' : '') + ' détectée' + (regions.length > 1 ? 's' : '') : 'Analyse de la carte…'}</span>
-        {regions.some(r => !zoneDe(r.couleur)) && <span style={{ color: 'var(--o-warn2)' }}>Clique une zone « ? » pour la nommer</span>}
+        {regions.some(r => !zoneDe(r.couleur)) && <span style={{ color: 'var(--o-warn2)' }}>{t('Clique une zone « ? » pour la nommer')}</span>}
         <span style={{ flex: 1 }} />
-        <button onClick={pivoter} title="Pivoter la carte d’un quart de tour"
+        <button onClick={pivoter} title={t('Pivoter la carte d’un quart de tour')}
           style={{ padding: '5px 11px', borderRadius: 9, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)' }}>
           Pivoter
         </button>
@@ -318,7 +319,7 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
         <div style={{ marginTop: 12, padding: '13px 14px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
             <span style={{ width: 15, height: 15, borderRadius: 4, background: '#' + aAssocier, border: '1px solid rgba(255,255,255,.35)' }} />
-            <span style={{ fontSize: 12.5, fontWeight: 700 }}>Quelle pièce est-ce ?</span>
+            <span style={{ fontSize: 12.5, fontWeight: 700 }}>{t('Quelle pièce est-ce ?')}</span>
             <button onClick={() => setAAssocier(null)} aria-label="Annuler"
               style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'transparent', border: 'none', color: 'var(--o-text3)' }}>Annuler</button>
           </div>
@@ -328,7 +329,7 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
                 style={{ padding: '7px 13px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', border: '1px solid ' + (z.color || 'var(--o-bd2)'), color: z.color || 'var(--o-text1)' }}>
                 {z.name}
               </button>
-            )) : <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>Toutes les pièces configurées sont déjà associées.</span>}
+            )) : <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{t('Toutes les pièces configurées sont déjà associées.')}</span>}
           </div>
         </div>
       )}

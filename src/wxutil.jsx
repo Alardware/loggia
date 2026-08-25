@@ -13,6 +13,7 @@ import wxSnow from '@bybas/weather-icons/production/fill/all/snow.svg';
 import wxStorm from '@bybas/weather-icons/production/fill/all/thunderstorms.svg';
 import wxWind from '@bybas/weather-icons/production/fill/all/wind.svg';
 import { loggiaEnt, LOGGIA_RESOLVED } from './state.js';
+import { t } from './i18n.js';
 
 // Entité météo : le choix de l'utilisateur, sinon celle qu'a retenue la
 // résolution, sinon la première du domaine `weather`. Null si l'installation
@@ -38,7 +39,7 @@ export const WX_ICOLOR = { sun: 'var(--o-gold)', partly: '#9fb4d6', clouds: '#9f
 const WX_METEO = { sun: wxClearDay, partly: wxPartly, clouds: wxCloudy, wind: wxWind, rain: wxRain, snow: wxSnow, storm: wxStorm, night: wxClearNight };
 
 export function WeatherIco({ wx, size = 42 }) {
-  return <object type="image/svg+xml" data={WX_METEO[wx] || wxCloudy} width={size} height={size} tabIndex={-1} aria-label="météo" style={{ pointerEvents: 'none', display: 'block' }} />;
+  return <object type="image/svg+xml" data={WX_METEO[wx] || wxCloudy} width={size} height={size} tabIndex={-1} aria-label={t('météo')} style={{ pointerEvents: 'none', display: 'block' }} />;
 }
 
 // Mappe une condition météo HA → mode d'effet WeatherFx (suit l'entité).

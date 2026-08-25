@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react';
+import { t } from './i18n.js';
 
 // Meme rendu que dans App.jsx, redefini ici : trois lignes pures, contre un
 // cycle d'import entre les deux fichiers.
@@ -131,8 +132,8 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
               </div>
             </div>
             <div style={{ ...card, padding: '20px 22px', display: 'flex', gap: 30, flexWrap: 'wrap' }}>
-              <Stat v={totals.entities != null ? totals.entities : '—'} label="ENTITÉS" />
-              <Stat v={totals.areasUsed != null ? totals.areasUsed : '—'} label="ZONES UTILISÉES" />
+              <Stat v={totals.entities != null ? totals.entities : '—'} label={t('ENTITÉS')} />
+              <Stat v={totals.areasUsed != null ? totals.areasUsed : '—'} label={t('ZONES UTILISÉES')} />
               <Stat v={totals.domains != null ? totals.domains : '—'} label="DOMAINES" />
               <Stat v={present.length} label="VUES DISPONIBLES" />
             </div>
@@ -145,7 +146,7 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
         {step === 1 && (
           <>
             <div>
-              <h1 style={title}>Vos pièces</h1>
+              <h1 style={title}>{t('Vos pièces')}</h1>
               <div style={lead}>
                 {suggested.length
                   ? 'Ces zones Home Assistant contiennent des équipements d’ambiance. Décochez celles qui ne sont pas des pièces.'
@@ -186,7 +187,7 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
         {step === 2 && (
           <>
             <div>
-              <h1 style={title}>C'est prêt</h1>
+              <h1 style={title}>{t("C'est prêt")}</h1>
               <div style={lead}>
                 {present.length} vue{present.length > 1 ? 's' : ''} se remplissent avec votre installation.
                 {missing.length > 0 && ' Les autres restent masquées tant qu’il n’y a rien à y montrer — elles réapparaîtront d’elles-mêmes.'}
@@ -194,7 +195,7 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
             </div>
             {missing.length > 0 && (
               <div style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 11 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>MASQUÉES POUR L'INSTANT</div>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{t("MASQUÉES POUR L'INSTANT")}</div>
                 {missing.map(v => (
                   <div key={v} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, fontWeight: 700, minWidth: 96, flexShrink: 0 }}>{VIEW_TITLES[v]}</span>
