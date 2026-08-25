@@ -172,7 +172,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
         </div>
         <span style={{ flex: 1 }} />
         <button onClick={() => setPanel(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>
-          <Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : 'Réglages de la vue'}</span>
+          <Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : tr('Réglages de la vue')}</span>
         </button>
       </div>
 
@@ -186,10 +186,10 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
           {ressenti != null && <Ligne titre="Ressenti" sous="Température apparente, vent et humidité inclus" valeur={deg(ressenti) + ' C'} couleur="#ff8a4c" />}
           {hum != null && <Ligne titre={tr('Humidité')} sous="Confortable entre 40 et 60 %" valeur={Math.round(hum) + ' %'} couleur="var(--o-ok)" part={hum} />}
           {vent != null && <Ligne titre="Vent" sous={rafales != null ? 'Rafales à ' + Math.round(rafales) + ' km/h' : 'Vitesse moyenne'} valeur={Math.round(vent) + ' km/h'} />}
-          {pression != null && <Ligne titre="Pression" sous="Au niveau de la mer" valeur={Math.round(pression) + ' hPa'} />}
+          {pression != null && <Ligne titre="Pression" sous={tr('Au niveau de la mer')} valeur={Math.round(pression) + ' hPa'} />}
           {uv != null && <Ligne titre="Indice UV" sous="Protection conseillée au-delà de 6" valeur={Math.round(uv) + (uv >= 6 ? ' · élevé' : ' · modéré')} couleur={uv >= 6 ? 'var(--o-warn2)' : 'var(--o-ok)'} part={Math.min(100, uv * 9)} />}
           {sun && sun.attributes && sun.attributes.next_rising && (
-            <Ligne titre="Lever · coucher" sous={isNight ? 'Nuit en cours' : 'Journée en cours'}
+            <Ligne titre="Lever · coucher" sous={isNight ? 'Nuit en cours' : tr('Journée en cours')}
               valeur={hm(sun.attributes.next_rising) + ' · ' + hm(sun.attributes.next_setting)} couleur="var(--o-gold)" />
           )}
           {visi != null && <Ligne titre="Visibilité" sous="Portée de vue au sol" valeur={Math.round(visi) + ' km'} />}
@@ -197,7 +197,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
       )}
 
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
-        {portee === '24h' ? 'Prochaines heures' : 'Prévision 7 jours'}
+        {portee === '24h' ? 'Prochaines heures' : tr('Prévision 7 jours')}
       </div>
       {portee === '24h' ? (
         (hourly && hourly.length)
