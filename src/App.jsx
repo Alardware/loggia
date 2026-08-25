@@ -42,6 +42,7 @@ import energyHomeImg from './assets/energy/home.webp';
 import energySolarImg from './assets/energy/solar.webp';
 import energyEvImg from './assets/energy/ev-car-home.webp';
 import energyBatImg from './assets/energy/battery.webp';
+import { t, preparerLangue } from './i18n.js';
 
 // Contexte barre du haut : expose les actions globales (sidebar, thème, édition, nav) au Header partagé.
 const HeaderCtx = createContext(null);
@@ -201,14 +202,14 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
   // liste : les vues d'abord, les reglages tout en bas.
   const groupeNav = (g) => (
     <div key={g.group}>
-      <div className="o-side-text" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: g.group === 'MAISON' ? '8px 8px 5px' : '12px 8px 5px' }}>{g.group}</div>
+      <div className="o-side-text" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: g.group === 'MAISON' ? '8px 8px 5px' : '12px 8px 5px' }}>{t(g.group)}</div>
       {g.items.filter(it => !viewsCfg.hidden.has(LABEL_VIEW[it.label]) && isViewAvailable(avail, LABEL_VIEW[it.label])).map(it => {
         const vid = LABEL_VIEW[it.label];
         const active = vid === view || (vid === 'pieces' && view.indexOf('room:') === 0);
         const built = BUILT.has(vid);
         return (
           <div key={it.label} className="o-nav-item" data-active={active ? '1' : undefined} role="button" tabIndex={built ? 0 : -1} onClick={built ? () => onNav(vid) : undefined} onKeyDown={built ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(vid); } } : undefined} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13.5, cursor: built ? 'pointer' : 'default', transition: 'color .25s, font-weight .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
-            {it.svg}<span className="o-side-text">{it.label}</span>
+            {it.svg}<span className="o-side-text">{t(it.label)}</span>
           </div>
         );
       })}
@@ -222,14 +223,14 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
             reste apres le renommage. Servi depuis le meme dossier que le reste
             du frontend, donc sans requete vers l'exterieur. */}
         <img src="./logo.png" alt="" width={38} height={38} style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: 'block' }} />
-        <div className="o-side-text" style={{ lineHeight: 1.15 }}><div style={{ fontSize: 15, fontWeight: 800 }}>Loggia</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', color: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)' }}>{ha ? (ha.online ? ha.devCount + ' APPAREILS EN LIGNE' : 'HORS LIGNE') : 'CONNEXION…'}</div></div>
+        <div className="o-side-text" style={{ lineHeight: 1.15 }}><div style={{ fontSize: 15, fontWeight: 800 }}>Loggia</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', color: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)' }}>{ha ? (ha.online ? ha.devCount + ' ' + t('APPAREILS EN LIGNE') : t('HORS LIGNE')) : t('CONNEXION…')}</div></div>
       </div>
       {/* Les vues passent avant les reglages : « Système » et « Paramètres »
           ferment la liste, comme tout ce qui ne sert pas au quotidien. */}
       {NAV.filter(g => g.group !== NAV_REGLAGES).map(groupeNav)}
       {secondaires.length > 0 && (
         <div>
-          <div className="o-side-text" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: '12px 8px 5px' }}>VUES SECONDAIRES</div>
+          <div className="o-side-text" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: '12px 8px 5px' }}>{t('VUES SECONDAIRES')}</div>
           {secondaires.map(h => {
             const active = h.vid === view;
             return (
@@ -393,8 +394,8 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [] }) {
   const match = (label) => !nq || srNorm(label).indexOf(nq) >= 0;
   const results = [];
   rooms.forEach(r => { if (!match(r)) return; const p = PIECES.find(x => x.name === r); results.push({ group: 'Pièces', label: r, icon: p ? p.icon : <Fi i="home" color="var(--o-accent)" size={20} />, act: (close) => { onNav('room:' + r); close(); } }); });
-  NAV.forEach(g => g.items.forEach(it => { const vid = LABEL_VIEW[it.label]; if (BUILT.has(vid) && isViewAvailable(avail, vid) && match(it.label)) results.push({ group: 'Vues', label: it.label, icon: it.svg, act: (close) => { onNav(vid); close(); } }); }));
-  HIDDEN_VIEWS.forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: 'Vues', label: h.label, icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
+  NAV.forEach(g => g.items.forEach(it => { const vid = LABEL_VIEW[it.label]; if (BUILT.has(vid) && isViewAvailable(avail, vid) && match(it.label)) results.push({ group: 'Vues', label: t(it.label), icon: it.svg, act: (close) => { onNav(vid); close(); } }); }));
+  HIDDEN_VIEWS.forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: 'Vues', label: t(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
   customViews.forEach(cv => { if (match(cv.name)) results.push({ group: 'Vues', label: cv.name, icon: <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" />, act: (close) => { onNav('cv:' + cv.id); close(); } }); });
   quickScenes().forEach(s => { if (!match(s.name)) return; results.push({ group: 'Scènes', label: s.name, sub: s.sub, icon: <Fi i={s.icon} color="var(--o-purple)" />, run: true, act: (close) => { try { const h = getHass(); if (h && h.callService) h.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); } catch (e) {} close(); } }); });
   const selIdx = results.length ? Math.min(sel, results.length - 1) : -1;
@@ -408,7 +409,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [] }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 12, padding: '11px 14px', marginBottom: 12 }}>
             <Ico name="search" size={16} color="var(--o-text2)" />
             <input
-              autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Pièce, vue, scène…" aria-label="Rechercher"
+              autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Pièce, vue, scène…')} aria-label="Rechercher"
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') { e.preventDefault(); setSel(i => Math.min(i + 1, results.length - 1)); }
                 else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(i => Math.max(i - 1, 0)); }
@@ -435,7 +436,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [] }) {
                       {r.sub && <div style={{ fontSize: 12, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.sub}</div>}
                     </div>
                     {r.run
-                      ? <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', borderRadius: 999, padding: '3px 10px', flexShrink: 0 }}>Exécuter</span>
+                      ? <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', borderRadius: 999, padding: '3px 10px', flexShrink: 0 }}>{t('Exécuter')}</span>
                       : <Fi i="angle-right" size={13} color="var(--o-text3)" />}
                   </div>
                 </div>
@@ -508,10 +509,10 @@ function Header() {
     {/* hors du <header> : son transform (auto-hide) ferait de lui le containing block du position:fixed du sheet */}
     {searchOpen && <SearchSheet onClose={() => setSearchOpen(false)} onNav={onNav} customViews={customViews} rooms={rooms} />}
     <header className="loggia-hdr" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 'calc(14px + var(--o-safe-top,0px)) 28px 14px', borderBottom: '1px solid var(--o-s1)', position: 'sticky', top: 0, background: 'var(--o-header)', backdropFilter: 'blur(12px)', zIndex: 40, transform: hidden ? 'translateY(-100%)' : 'translateY(0)', transition: 'transform .3s ease', willChange: 'transform' }}>
-      <button onClick={onToggleNav} title="Afficher / masquer le menu" style={{ width: 42, height: 42, borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 }}><Ico name="menu-burger" size={20} /></button>
+      <button onClick={onToggleNav} title={t('Afficher / masquer le menu')} style={{ width: 42, height: 42, borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 }}><Ico name="menu-burger" size={20} /></button>
       <div className="o-hdr-search" role="button" tabIndex={0} aria-label="Rechercher (Ctrl+K)" onClick={() => setSearchOpen(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSearchOpen(true); } }} style={{ flex: 1, maxWidth: 420, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 12, padding: '10px 14px', cursor: 'pointer' }}>
         <Ico name="search" size={16} color="var(--o-text2)" />
-        <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--o-text2)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Rechercher une pièce, une scène…</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--o-text2)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t('Rechercher une pièce, une scène…')}</span>
         <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', background: 'var(--o-bd2)', border: '1px solid var(--o-bd2)', borderRadius: 6, padding: '2px 7px' }}>{IS_MAC ? '⌘K' : 'Ctrl K'}</span>
       </div>
       <div style={{ flex: 1 }} />
@@ -519,7 +520,7 @@ function Header() {
       <div className="o-hdr-div" style={{ width: 1, height: 30, background: 'var(--o-bd1)' }} />
       <div data-hdr-menu style={{ display: 'flex', alignItems: 'center', gap: 9, position: 'relative' }}>
         {isAdmin && <button onClick={onToggleEdit} title={editMode ? 'Quitter le mode édition' : 'Mode édition'} style={editBtn}><Ico name="edit" size={17} /></button>}
-        <button onClick={onToggleTheme} title="Changer de thème" style={hbtn}><Ico name="brightness" size={18} /></button>
+        <button onClick={onToggleTheme} title={t('Changer de thème')} style={hbtn}><Ico name="brightness" size={18} /></button>
         <button onClick={() => { setNotifOpen(o => !o); setUserOpen(false); }} title="Notifications" style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{hasNotif && !notifSeen && <span className="o-livedot" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: '#f87171', border: '2px solid var(--o-bg2)' }} />}</button>
         <button onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }} title="Profil" style={{ width: 44, height: 44, borderRadius: '50%', marginLeft: 4, background: curBg, border: '2px solid rgba(255,255,255,.15)', cursor: 'pointer', flexShrink: 0 }} />
         {notifOpen && (
@@ -546,7 +547,7 @@ function Header() {
               ))}
             </div>
             <div style={{ padding: 6, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-              <button onClick={() => { onNav && onNav('parametres'); setUserOpen(false); }} style={mItem}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>Paramètres</button>
+              <button onClick={() => { onNav && onNav('parametres'); setUserOpen(false); }} style={mItem}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>{t('Paramètres')}</button>
             </div>
           </div>
         )}
@@ -883,7 +884,7 @@ function PieceCard({ p, onOpen, compact = false, lights = null, mains = null, on
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7 }}>
           {p.status.kind === 'active' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-warn)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-warn)', boxShadow: '0 0 7px rgba(var(--o-warn-rgb),.8)' }} />{p.status.n} actif{p.status.n > 1 ? 's' : ''}</span>}
           {p.status.kind === 'repos' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-text3)' }} />Repos</span>}
-          {p.status.kind === 'ext' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)' }}>Extérieur</span>}
+          {p.status.kind === 'ext' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{t('Extérieur')}</span>}
           {p.badge && <span className="o-piece-badge-top" style={{ fontSize: 11, fontWeight: 700, color: p.bc, background: p.bbg, padding: '3px 9px', borderRadius: 999 }}>{p.badge}</span>}
         </div>
       </div>
@@ -901,13 +902,13 @@ function PieceCard({ p, onOpen, compact = false, lights = null, mains = null, on
 // Échelles de confort : min/max de la barre, dégradé traffic-light, ticks chiffrés, verdict(valeur).
 const COMFORT = {
   temp: {
-    key: 'temp', label: 'Température', ico: 'thermometer-half', min: 14, max: 30,
+    key: 'temp', label: t('Température'), ico: 'thermometer-half', min: 14, max: 30,
     grad: 'linear-gradient(90deg,#ef4444 0%,#f59e0b 11%,#fbbf24 19%,#34d399 33%,#34d399 62%,#fbbf24 75%,#f59e0b 87%,#ef4444 100%)',
     ticks: ['15°', '19°', '24°', '29°'], tickV: [15, 19, 24, 29],
     verdict: v => v < 16 ? { t: 'Trop froid', c: 'var(--o-cold)' } : v < 18 ? { t: 'Frais', c: 'var(--o-accent-soft)' } : v <= 24 ? { t: 'Idéal', c: 'var(--o-ok)' } : v <= 26 ? { t: 'Un peu chaud', c: 'var(--o-warn)' } : v <= 28 ? { t: 'Trop chaud', c: 'var(--o-warn2)' } : { t: 'Très chaud', c: 'var(--o-bad)' },
   },
   hum: {
-    key: 'hum', label: 'Humidité', ico: 'humidity', min: 20, max: 80,
+    key: 'hum', label: t('Humidité'), ico: 'humidity', min: 20, max: 80,
     grad: 'linear-gradient(90deg,#ef4444 0%,#f59e0b 12%,#fbbf24 22%,#34d399 33%,#34d399 67%,#fbbf24 78%,#f59e0b 88%,#ef4444 100%)',
     ticks: ['30%', '40%', '50%', '60%', '70%'], tickV: [30, 40, 50, 60, 70],
     verdict: v => v < 30 ? { t: 'Trop sec', c: 'var(--o-warn2)' } : v < 40 ? { t: 'Correct', c: 'var(--o-warn)' } : v <= 60 ? { t: 'Bon', c: 'var(--o-ok)' } : v <= 70 ? { t: 'Humide', c: 'var(--o-warn)' } : { t: 'Trop humide', c: 'var(--o-bad)' },
@@ -1020,7 +1021,7 @@ function RoomComfortModal({ piece, hass, onClose }) {
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.45, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto' }}>{advice}</div>
         </div>
         {!metrics.length
-          ? <div style={{ padding: '28px 0 10px', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>Pas de capteur configuré pour cette pièce.</div>
+          ? <div style={{ padding: '28px 0 10px', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{t('Pas de capteur configuré pour cette pièce.')}</div>
           : <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 18 }}>
               {metrics.map(m => { const v = vals[m.key], vd = m.verdict(v); return (
                 <div key={m.key} style={{ background: 'var(--o-s3)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: 16, padding: '15px 16px 13px' }}>
@@ -1121,7 +1122,7 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label="Fermer" title="Fermer" style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ width: 38, height: 38, borderRadius: 12, background: piece.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{piece.icon}</span>
-          <span style={{ flex: 1, fontSize: 19, fontWeight: 700, color: 'var(--o-text)' }}>Extérieur</span>
+          <span style={{ flex: 1, fontSize: 19, fontWeight: 700, color: 'var(--o-text)' }}>{t('Extérieur')}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '8px 0 2px' }}>
           <WeatherIco wx={mode || 'clouds'} size={64} />
@@ -1144,7 +1145,7 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
         </div>
         {hs === 'done' && pts && (
           <div style={{ marginTop: 20 }}>
-            <div style={{ ...hd, marginBottom: 8 }}>TEMPÉRATURE · 24 H</div>
+            <div style={{ ...hd, marginBottom: 8 }}>{t('TEMPÉRATURE · 24 H')}</div>
             <Sparkline points={pts} color="var(--o-accent-soft)" />
           </div>
         )}
@@ -1610,14 +1611,14 @@ function RoomMediaSheet({ id, hass, onClose }) {
             </div>
             {/* contrôles */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11, marginTop: 4 }}>
-              <button onClick={() => commander(hass, np.ctl, 'set_shuffle', !np.shuffle)} title="Aléatoire" style={{ ...glass(40, 14), color: np.shuffle ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg></button>
+              <button onClick={() => commander(hass, np.ctl, 'set_shuffle', !np.shuffle)} title={t('Aléatoire')} style={{ ...glass(40, 14), color: np.shuffle ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg></button>
               <button onClick={() => commander(hass, np.ctl, 'previous_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8zM7 4v16H5V4z" /></svg></button>
               <button onClick={() => commander(hass, np.ctl, 'play_pause')} style={{ ...glass(76, '50%'), background: onArt ? 'linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.07))' : 'var(--o-s1)' }}>
                 {np.playing && <span aria-hidden style={{ position: 'absolute', inset: -6, borderRadius: 'inherit', border: '1px solid rgba(255,255,255,.22)', animation: 'np-pulse 2.4s ease-out infinite', pointerEvents: 'none' }} />}
                 {np.playing ? <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> : <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 3 }}><path d="M7 5l12 7-12 7z" /></svg>}
               </button>
               <button onClick={() => commander(hass, np.ctl, 'next_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4l10 8-10 8zM17 4h2v16h-2z" /></svg></button>
-              <button onClick={() => { const o = ['off', 'all', 'one'], i = o.indexOf(np.repeat); commander(hass, np.ctl, 'set_repeat', o[(i + 1) % 3]); }} title="Répéter" style={{ ...glass(40, 14), color: np.repeat !== 'off' ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" /></svg>{np.repeat === 'one' && <span style={{ position: 'absolute', top: 3, right: 6, fontSize: 8.5, fontWeight: 800 }}>1</span>}</button>
+              <button onClick={() => { const o = ['off', 'all', 'one'], i = o.indexOf(np.repeat); commander(hass, np.ctl, 'set_repeat', o[(i + 1) % 3]); }} title={t('Répéter')} style={{ ...glass(40, 14), color: np.repeat !== 'off' ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" /></svg>{np.repeat === 'one' && <span style={{ position: 'absolute', top: 3, right: 6, fontSize: 8.5, fontWeight: 800 }}>1</span>}</button>
             </div>
             {/* volume */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
@@ -1628,7 +1629,7 @@ function RoomMediaSheet({ id, hass, onClose }) {
                   <span style={{ position: 'absolute', top: '50%', left: `calc(${vol}% - 7px)`, transform: 'translateY(-50%)', width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,.4)', transition: 'left .1s' }} />
                 </div>
               </div>
-              <button onClick={() => commander(hass, id, 'mute', !np.muted)} title="Couper le son" style={{ ...glass(38, 13), ...(np.muted ? { background: 'rgba(239,68,68,.3)', border: '1px solid rgba(239,68,68,.5)', color: '#fff' } : {}) }}><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M11 5L6 9H2v6h4l5 4z" />{np.muted ? <path d="M22 9l-6 6M16 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />}</svg></button>
+              <button onClick={() => commander(hass, id, 'mute', !np.muted)} title={t('Couper le son')} style={{ ...glass(38, 13), ...(np.muted ? { background: 'rgba(239,68,68,.3)', border: '1px solid rgba(239,68,68,.5)', color: '#fff' } : {}) }}><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M11 5L6 9H2v6h4l5 4z" />{np.muted ? <path d="M22 9l-6 6M16 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />}</svg></button>
             </div>
           </div>
         </div>
@@ -2152,7 +2153,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
 
           {estEntite && (
             <>
-              <div style={etiquette}>ENTITÉ</div>
+              <div style={etiquette}>{t('ENTITÉ')}</div>
               <datalist id={dlId}>{options.map(k => <option key={k} value={k} />)}</datalist>
               <input value={ent} onChange={(e) => setEnt(e.target.value)} list={dlId} spellCheck={false}
                 placeholder={dom + '.…'} onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} />
@@ -2205,7 +2206,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, children }) {
           else if (e.key === 'ArrowRight') { e.preventDefault(); ed.move(id, 1); }
           else if ((e.key === 'Enter' || e.key === ' ') && onEdit) { e.preventDefault(); onEdit(id); }
         }}
-        title="Cliquer pour modifier · glisser pour déplacer (flèches ← →)"
+        title={t('Cliquer pour modifier · glisser pour déplacer (flèches ← →)')}
         aria-label={'Modifier ou déplacer ' + (nom || id)}
         style={{ position: 'absolute', inset: 0, zIndex: 2, borderRadius: 'var(--o-radius,20px)', touchAction: 'none', cursor: saisie ? 'grabbing' : 'grab' }} />
       <button data-drag-ui="1" onClick={() => ed.remove(id)} title="Retirer" aria-label={'Retirer ' + (nom || id)}
@@ -2287,7 +2288,7 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
             Coche pour ajouter, décoche pour retirer. Les modifications s'appliquent tout de suite.
           </div>
 
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher une entité…"
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Rechercher une entité…')}
             style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
 
           {!terme && zoneIds.length > 0 && (
@@ -2312,7 +2313,7 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
             </>
           )}
 
-          <button onClick={close} style={{ marginTop: 18, width: '100%', padding: '11px 0', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700, background: 'var(--o-accent)', color: '#06121f' }}>Terminé</button>
+          <button onClick={close} style={{ marginTop: 18, width: '100%', padding: '11px 0', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700, background: 'var(--o-accent)', color: '#06121f' }}>{t('Terminé')}</button>
         </div>
       )}
     </BottomSheet>
@@ -2497,7 +2498,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
           <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
             {lightIds.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 6px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Luminosité</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{t('Luminosité')}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }} {...kbSlider('Luminosité de ' + room, bri, setGroupBri, { min: 0, max: 100, step: 5 })}>
                   <button onClick={() => setGroupBri(bri - 5)} aria-label="Baisser" style={{ width: 22, height: 22, borderRadius: 7, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
                   <span style={{ minWidth: 44, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: bri > 0 ? 'var(--o-warn)' : 'var(--o-text3)' }}>{bri} %</span>
@@ -2546,27 +2547,27 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                   ligne. Sans cela, une integration en panne — un jeton cloud
                   expire, par exemple — ressemble a une piece sans capteur. */}
               {live && live.temp == null && live.tempId && (
-                <AmbRow label="Température" desc={'Capteur ' + room + ' — aucune valeur reçue'}>
+                <AmbRow label={t('Température')} desc={'Capteur ' + room + ' — aucune valeur reçue'}>
                   <AmbVal v="indisponible" col="var(--o-warn2)" />
                 </AmbRow>
               )}
               {live && live.hum == null && live.humId && (
-                <AmbRow label="Humidité" desc="Le capteur ne répond pas">
+                <AmbRow label={t('Humidité')} desc={t('Le capteur ne répond pas')}>
                   <AmbVal v="indisponible" col="var(--o-warn2)" />
                 </AmbRow>
               )}
               {live && live.temp != null && (
-                <AmbRow label="Température" desc={'Capteur ' + room + (heatOn && (heatOn.attributes || {}).temperature != null ? ' · cible ' + Math.round(heatOn.attributes.temperature) + ' °C' : '')}>
+                <AmbRow label={t('Température')} desc={'Capteur ' + room + (heatOn && (heatOn.attributes || {}).temperature != null ? ' · cible ' + Math.round(heatOn.attributes.temperature) + ' °C' : '')}>
                   <AmbVal v={live.temp.toFixed(1).replace('.', ',') + ' °C'} col={live.temp < 17 ? 'var(--o-cold)' : live.temp > 26 ? 'var(--o-warn2)' : 'var(--o-text)'} />
                 </AmbRow>
               )}
               {live && live.hum != null && (
-                <AmbRow label="Humidité" desc="Confortable entre 40 et 60 %">
+                <AmbRow label={t('Humidité')} desc="Confortable entre 40 et 60 %">
                   <AmbGauge v={Math.round(live.hum) + ' %'} pct={Math.min(100, live.hum)} col={live.hum < 30 || live.hum > 65 ? 'var(--o-warn2)' : 'var(--o-ok)'} />
                 </AmbRow>
               )}
               {live && live.co2 != null && (
-                <AmbRow label="CO₂" desc="Aérer au-delà de 1 000 ppm">
+                <AmbRow label="CO₂" desc={t('Aérer au-delà de 1 000 ppm')}>
                   <AmbGauge v={Math.round(live.co2) + ' ppm'} pct={Math.min(100, live.co2 / 2000 * 100)} col={live.co2 > 1000 ? 'var(--o-bad)' : live.co2 > 800 ? 'var(--o-warn2)' : 'var(--o-ok)'} />
                 </AmbRow>
               )}
@@ -2576,12 +2577,12 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                 </AmbRow>
               )}
               {mediaAct && (
-                <AmbRow label="Média" desc={mediaSub}>
+                <AmbRow label={t('Média')} desc={mediaSub}>
                   <AmbVal v={mediaTitle} col="var(--o-accent-soft)" />
                 </AmbRow>
               )}
               {live && (live.temp != null || live.hum != null || live.co2 != null) && (
-                <AmbRow label="Historique du confort" desc="Courbes sur 24 h : température, humidité et CO₂">
+                <AmbRow label="Historique du confort" desc={t('Courbes sur 24 h : température, humidité et CO₂')}>
                   <button onClick={onOpenComfort} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd1)', color: 'var(--o-text1)' }}><Fi i="chart-line-up" size={13} />Ouvrir</button>
                 </AmbRow>
               )}
@@ -2589,7 +2590,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
           </div>
         )}
 
-        {ents.length > 0 && <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>Appareils de la pièce</div>}
+        {ents.length > 0 && <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{t('Appareils de la pièce')}</div>}
         {/* appareils de la pièce — mêmes cartes que les vues dédiées */}
         {ents.length
           ? <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -2618,7 +2619,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
               </div>)
             ))}
             </div>
-          : <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--o-text3)', fontWeight: 600 }}>Aucun appareil détecté pour cette pièce.<br /><span style={{ fontSize: 12 }}>Loggia regroupe les entités dont le nom contient « {room} ».</span></div>}
+          : <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--o-text3)', fontWeight: 600 }}>{t('Aucun appareil détecté pour cette pièce.')}<br /><span style={{ fontSize: 12 }}>Loggia regroupe les entités dont le nom contient « {room} ».</span></div>}
         {edit && (() => {
           const btn = (accent) => ({ padding: '7px 12px', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0,
             background: accent ? 'var(--o-accent)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
@@ -2630,10 +2631,10 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                 Mode édition : clique une carte pour la modifier, glisse-la pour la déplacer.
                 {ed.edits ? ' Cette pièce est personnalisée.' : ' Cette pièce suit la détection automatique.'}
               </span>
-              <button onClick={() => setAddSheet(true)} style={btn(true)}>Ajouter un appareil</button>
-              <button onClick={addSection} style={btn(false)}>Ajouter un titre</button>
-              {ed.edits > 0 && <button onClick={ed.reset} style={btn(false)}>Rétablir l'automatique</button>}
-              {hidden.length > 0 && <button onClick={unhideAll} style={btn(false)}>Tout réafficher</button>}
+              <button onClick={() => setAddSheet(true)} style={btn(true)}>{t('Ajouter un appareil')}</button>
+              <button onClick={addSection} style={btn(false)}>{t('Ajouter un titre')}</button>
+              {ed.edits > 0 && <button onClick={ed.reset} style={btn(false)}>{t("Rétablir l'automatique")}</button>}
+              {hidden.length > 0 && <button onClick={unhideAll} style={btn(false)}>{t('Tout réafficher')}</button>}
             </div>
           );
         })()}
@@ -2671,7 +2672,7 @@ function QuickScenes({ hass }) {
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={sectionTitle}>Scènes rapides</div>
+        <div style={sectionTitle}>{t('Scènes rapides')}</div>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{quickScenes().length} raccourcis</span>
       </div>
       <div className="grid-qscenes" style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12 }}>
@@ -2698,8 +2699,8 @@ function QuickScenes({ hass }) {
 }
 
 const CAMERAS = [
-  { label: 'Entrée', tag: 'LIVE · ENTRÉE', grad: 'linear-gradient(180deg,#6ba8d8 0%,#9cc4e0 42%,#7a8a5c 60%,#56683f 100%)', glow: 'radial-gradient(120% 80% at 50% 18%,rgba(255,255,255,.18),transparent 55%)', sub: <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffce73" strokeWidth="2.4" strokeLinecap="round"><path d="M13 2L3 14h7l-1 8 11-13h-7z" /></svg>Mouvement il y a 3 min</> },
-  { label: 'Façade', tag: 'LIVE · FAÇADE', grad: 'linear-gradient(180deg,#5e94c4 0%,#86b06f 38%,#6f7e4a 62%,#4a5a36 100%)', glow: 'radial-gradient(120% 80% at 60% 22%,rgba(255,255,255,.16),transparent 55%)', sub: <><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-ok)' }} />RAS · véhicule présent</> },
+  { label: t('Entrée'), tag: 'LIVE · ENTRÉE', grad: 'linear-gradient(180deg,#6ba8d8 0%,#9cc4e0 42%,#7a8a5c 60%,#56683f 100%)', glow: 'radial-gradient(120% 80% at 50% 18%,rgba(255,255,255,.18),transparent 55%)', sub: <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffce73" strokeWidth="2.4" strokeLinecap="round"><path d="M13 2L3 14h7l-1 8 11-13h-7z" /></svg>Mouvement il y a 3 min</> },
+  { label: t('Façade'), tag: 'LIVE · FAÇADE', grad: 'linear-gradient(180deg,#5e94c4 0%,#86b06f 38%,#6f7e4a 62%,#4a5a36 100%)', glow: 'radial-gradient(120% 80% at 60% 22%,rgba(255,255,255,.16),transparent 55%)', sub: <><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-ok)' }} />{t('RAS · véhicule présent')}</> },
 ];
 
 // ── Snapshot proxy authentifié (repli) ──
@@ -2936,7 +2937,7 @@ function PlantObjCard({ pl, pi, v, batCol, fmtV, onOpen }) {
       </div>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ fontSize: 30, fontWeight: 800, color: v.c, fontVariantNumeric: 'tabular-nums', letterSpacing: '-.01em' }}><Num v={pl.hum} suffix="%" /></span>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>humidité du sol</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{t('humidité du sol')}</span>
       </div>
       <Gauge pct={pl.hum || 0} color={v.c} h={6} style={{ position: 'relative', margin: '11px 0 9px' }} />
       <div style={{ position: 'relative', fontSize: 12, fontWeight: 700, color: v.c, borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', paddingBottom: 12, marginBottom: 11 }}><FlipText text={v.t} /></div>
@@ -3063,7 +3064,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>Objets connectés</h1>
+          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{t('Objets connectés')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>Aspirateur, tondeuse, lave-vaisselle, distributeur, plantes</div>
           </div>
           <span style={{ flex: 1 }} />
@@ -3110,7 +3111,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
           </div>
         )}
 
-        <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>État des appareils</div>
+        <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{t('État des appareils')}</div>
 
         <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {blocs.map((bloc, bi) => (
@@ -3200,9 +3201,9 @@ function ObjetsView({ hass, onNav, edit = false }) {
                 Mode édition : clique une carte pour la modifier, glisse-la pour la déplacer.
                 {ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.'}
               </span>
-              <button onClick={() => setObjAdd(true)} style={btn(true)}>Ajouter un appareil</button>
-              <button onClick={addSection} style={btn(false)}>Ajouter un titre</button>
-              {ed.edits > 0 && <button onClick={ed.reset} style={btn(false)}>Rétablir l'automatique</button>}
+              <button onClick={() => setObjAdd(true)} style={btn(true)}>{t('Ajouter un appareil')}</button>
+              <button onClick={addSection} style={btn(false)}>{t('Ajouter un titre')}</button>
+              {ed.edits > 0 && <button onClick={ed.reset} style={btn(false)}>{t("Rétablir l'automatique")}</button>}
             </div>
           );
         })()}
@@ -3213,7 +3214,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
         {sheet && sheet.type === 'media' && <RoomMediaSheet id={sheet.id} hass={hass} onClose={() => setSheet(null)} />}
         {sheet && sheet.type === 'vac' && <ObjSheet title="Aspirateur robot" accent="var(--o-ok)"
           rows={[['État', vacEtat], ['Batterie', vacBat != null ? Math.round(vacBat) + ' %' : '—', batCol(vacBat)], ['Surface nettoyée', vacSurf], ['Durée', vacDuree], ['Entretien', vacMaint]]}
-          actions={[{ label: vacCleaning ? 'Renvoyer au dock' : 'Démarrer', primary: true, run: () => objVacRun(vacCleaning ? 'retour_base' : 'nettoyer_tout', vacCleaning ? 'return_to_base' : 'start') }, { label: 'Vue complète', run: () => onNav && onNav('aspirateur') }]}
+          actions={[{ label: vacCleaning ? 'Renvoyer au dock' : 'Démarrer', primary: true, run: () => objVacRun(vacCleaning ? 'retour_base' : 'nettoyer_tout', vacCleaning ? 'return_to_base' : 'start') }, { label: t('Vue complète'), run: () => onNav && onNav('aspirateur') }]}
           onClose={() => setSheet(null)} />}
         {sheet && sheet.type === 'luba' && <ObjSheet title="Robot tondeuse" accent="#a3e635"
           rows={[['État', lubaTxt], ['Batterie', lubaBat != null ? Math.round(lubaBat) + ' %' : '—', batCol(lubaBat)], ['Progression', Math.round(lubaProg) + ' %'], ['Charge', isOn(mowerSensor(S, 'charging')) ? 'En charge' : '—']]}
@@ -3221,7 +3222,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
           onClose={() => setSheet(null)} />}
         {sheet && sheet.type === 'croq' && <ObjSheet title="Distributeur de croquettes" accent="#f59e0b"
           rows={[['Réservoir', croqPct + ' %', croqPct < 25 ? '#f87171' : 'var(--o-text)'], ['Prochaine ration', nextMeal ? (nextMeal.time + ' · ' + nextMeal.g + ' g') : '—'], ['Distribué aujourd\'hui', (num(croqHaids().distribuees, 0) || 0) + ' g']]}
-          actions={[...(((loggiaEnt('feeder', null) || {}).script) ? [{ label: 'Distribuer 1 ration', primary: true, run: () => call('script', 'turn_on', { entity_id: (loggiaEnt('feeder', null) || {}).script }) }] : []), { label: 'Vue complète', run: () => onNav && onNav('croquettes') }]}
+          actions={[...(((loggiaEnt('feeder', null) || {}).script) ? [{ label: 'Distribuer 1 ration', primary: true, run: () => call('script', 'turn_on', { entity_id: (loggiaEnt('feeder', null) || {}).script }) }] : []), { label: t('Vue complète'), run: () => onNav && onNav('croquettes') }]}
           onClose={() => setSheet(null)} />}
         {sheet && sheet.type === 'plant' && (() => { const pl = sheet.pl; const v = plantVerdict(pl.hum); return <ObjSheet title={pl.name} img={pl.img && PLANT_ART[pl.img]} accent="var(--o-ok)"
           rows={[['Humidité du sol', pl.hum != null ? Math.round(pl.hum) + ' %' : '—', v.c], ['Verdict', v.t, v.c], ['Éclairement', fmtV(pl.lux, ' lx')], ['Conductivité (engrais)', fmtV(pl.cond, ' µS/cm')], ['Température', pl.temp != null ? pl.temp.toFixed(1) + ' °C' : '—'], ['Pile capteur', pl.bat != null ? Math.round(pl.bat) + ' %' : '—', batCol(pl.bat)]]}
@@ -3651,7 +3652,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           )}
           <div className="o-banner-row" style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'nowrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>Bon après-midi</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{t('Bon après-midi')}</span>
               <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 34, fontWeight: 500, lineHeight: 1 }}>{userName}</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-ok)', boxShadow: '0 0 8px var(--o-ok)', animation: 'pulse 2.4s infinite' }} />Maison · Calme · {a ? (a.inTemp != null ? a.inTemp.toFixed(1) + '°C' : '—') : <Skel w={44} h={12} />}</span>
             </div>
@@ -3679,7 +3680,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           <div style={{ position: 'relative', display: 'flex', gap: 10, marginTop: 38, overflowX: 'auto', paddingBottom: 4 }}>
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
               <Ico name="bolt" color="var(--o-ok)" size={17} />
-              <div><div style={{ fontSize: 16, fontWeight: 800, color: a && a.metricExport ? a.metricExport.color : 'var(--o-ok)', lineHeight: 1.1 }}>{a && a.metricExport ? <Num v={a.metricExport.raw} prefix={a.metricExport.sign} fmt={fmtWatts} /> : <Skel w={64} h={16} />}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a && a.metricExport ? a.metricExport.label : 'EXPORT RÉSEAU'}</div></div>
+              <div><div style={{ fontSize: 16, fontWeight: 800, color: a && a.metricExport ? a.metricExport.color : 'var(--o-ok)', lineHeight: 1.1 }}>{a && a.metricExport ? <Num v={a.metricExport.raw} prefix={a.metricExport.sign} fmt={fmtWatts} /> : <Skel w={64} h={16} />}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a && a.metricExport ? a.metricExport.label: t('EXPORT RÉSEAU')}</div></div>
             </div>
             <div style={metricDiv} />
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
@@ -3688,11 +3689,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             </div>
             <div style={metricDiv} />
             <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
-              <div style={{ fontSize: 15, fontWeight: 800 }}>{a ? (a.inTemp != null ? <><Num v={a.inTemp} d={1} />°</> : '—') : <Skel w={42} h={15} />}<span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}> · {a ? (a.inHum != null ? <><Num v={a.inHum} />%</> : '—') : <Skel w={26} h={11} />}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>INTÉRIEUR · HUMIDITÉ</div>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>{a ? (a.inTemp != null ? <><Num v={a.inTemp} d={1} />°</> : '—') : <Skel w={42} h={15} />}<span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}> · {a ? (a.inHum != null ? <><Num v={a.inHum} />%</> : '—') : <Skel w={26} h={11} />}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{t('INTÉRIEUR · HUMIDITÉ')}</div>
             </div>
             <div style={metricDiv} />
             <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
-              <div style={{ fontSize: 15, fontWeight: 800 }}>{a ? <Num v={a.lightsOn} /> : <Skel w={18} h={15} />} <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {a ? a.lightsTotal : <Skel w={14} h={11} />} prés.</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>LUMIÈRES ALLUMÉES</div>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>{a ? <Num v={a.lightsOn} /> : <Skel w={18} h={15} />} <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {a ? a.lightsTotal : <Skel w={14} h={11} />} prés.</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{t('LUMIÈRES ALLUMÉES')}</div>
             </div>
           </div>
         </div>
@@ -3706,7 +3707,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           const inner = pieces;
           const piecesHeader = (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <div style={sectionTitle}>Pièces</div>
+              <div style={sectionTitle}>{t('Pièces')}</div>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{inner.length} pièces</span>
             </div>
           );
@@ -3775,7 +3776,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           const railRappels = railPanel('Rappels', 'Repas du chat et ramassage', null, AMBRGB, rappelsRows);
           const camsHeader = (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <div style={sectionTitle}>Caméras</div>
+              <div style={sectionTitle}>{t('Caméras')}</div>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{a ? a.camOnline + ' en ligne' : cams.length + ' caméras'}</span>
             </div>
           );
@@ -4089,12 +4090,12 @@ function LumieresContent({ hass, edit = false, onEnt }) {
         rgb={onCount ? '255,206,115' : '140,152,180'} />
 
       <ViewBar panel={panel} onPanel={togglePanel}>
-        <BarGroup label="Lumières" sous={lights.length + ' luminaires'}>
-          <button onClick={() => setAll(false)} style={barBtn(false)}>Tout éteindre</button>
+        <BarGroup label={t('Lumières')} sous={lights.length + ' luminaires'}>
+          <button onClick={() => setAll(false)} style={barBtn(false)}>{t('Tout éteindre')}</button>
           <button onClick={() => setAll(true)} style={barBtn(false)}>Tout allumer</button>
         </BarGroup>
         {presentRooms.length > 1 && (
-          <BarGroup label="Pièce">
+          <BarGroup label={t('Pièce')}>
             {['Toutes', ...presentRooms].map(n => (
               <button key={n} onClick={() => setFilter(n)} style={barBtn(n === filter)}>{n}</button>
             ))}
@@ -4124,9 +4125,9 @@ function LumieresContent({ hass, edit = false, onEnt }) {
         <ViewEditBar onEnt={onEnt}
           texte={'Mode édition : clique une lumière pour la modifier, glisse-la pour la déplacer.'
             + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
-          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>Ajouter une lumière</button>
-          <button onClick={addSection} style={editBtn(false)}>Ajouter un titre</button>
-          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>Rétablir l'automatique</button>}
+          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{t('Ajouter une lumière')}</button>
+          <button onClick={addSection} style={editBtn(false)}>{t('Ajouter un titre')}</button>
+          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{t("Rétablir l'automatique")}</button>}
         </ViewEditBar>
       )}
 
@@ -4257,7 +4258,7 @@ const HUE_SCENES = {
     { name: 'Ruby glow', uuid: '454176dd-7d24-43de-86c4-ee73f8febbec', colors: [[199,155,164],[255,99,142],[230,134,154],[215,145,160],[246,119,151]], brightness: 40 },
     { name: 'Tropical twilight', uuid: 'ffbf7ff8-dc4a-4c56-b157-7a59113be7b7', colors: [[213,156,199],[221,157,111],[254,132,63],[222,116,255],[225,136,255]], brightness: 44 },
   ] },
-  party: { label: 'Ambiance fête', scenes: [
+  party: { label: t('Ambiance fête'), scenes: [
     { name: 'Miami', uuid: 'd0b4b2d2-570f-4325-9475-098e3e0501f0', colors: [[69,255,255],[255,166,123],[255,188,104],[163,235,255],[255,129,189]], brightness: 75 },
     { name: 'Cancun', uuid: 'c321d848-51a8-4d09-9ad0-5e6b44bc7f2c', colors: [[255,212,60],[255,86,147],[255,109,16],[255,139,190],[255,164,32]], brightness: 79 },
     { name: 'Rio', uuid: '94fc428e-2855-4f67-877e-3d1e1dd95b7d', colors: [[255,223,81],[255,148,180],[255,117,191],[255,150,255],[255,187,102]], brightness: 79 },
@@ -4342,7 +4343,7 @@ function mowerKeys() {
 }
 
 const HUE_ROOMS = [
-  { id: 'Séjour', label: 'Séjour', icon: 'couch' }, { id: 'Chambre', label: 'Chambre', icon: 'bed' },
+  { id: 'Séjour', label: t('Séjour'), icon: 'couch' }, { id: 'Chambre', label: 'Chambre', icon: 'bed' },
   { id: 'Chambre enfant', label: 'Enfant', icon: 'teddy-bear' }, { id: 'Toute la maison', label: 'Tout', icon: 'home' },
 ];
 const HUE_CATS = Object.entries(HUE_SCENES).map(([id, c]) => ({ id, label: c.label }));
@@ -4505,7 +4506,7 @@ function ScenesContent({ hass }) {
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>Scènes</h1>
+          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{t('Scènes')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>Bibliothèque Hue · {HUE_CATS.length} collections · {totalScenes} scènes</div>
         </div>
         <span style={{ flex: 1 }} />
@@ -4517,18 +4518,18 @@ function ScenesContent({ hass }) {
         <QuickBox label="Direct">
           <div style={{ display: 'flex', gap: 4 }}>
             <button onClick={warmWhite} style={miniBtn(false)}>Blanc chaud</button>
-            <button onClick={allOff} style={miniBtn(false)}>Éteindre</button>
+            <button onClick={allOff} style={miniBtn(false)}>{t('Éteindre')}</button>
           </div>
         </QuickBox>
-        <QuickBox label="Pièce">
+        <QuickBox label={t('Pièce')}>
           <div style={{ display: 'flex', gap: 4 }}>
             {HUE_ROOMS.map(r => <button key={r.id} onClick={() => pickRoom(r.id)} style={miniBtn(room === r.id)}>{r.label}</button>)}
           </div>
         </QuickBox>
         <QuickBox label="Collection">
-          <Dropdown value={cat} options={HUE_CATS} onChange={setCat} label="Collection de scènes" />
+          <Dropdown value={cat} options={HUE_CATS} onChange={setCat} label={t('Collection de scènes')} />
         </QuickBox>
-        <QuickBox label="Luminosité">
+        <QuickBox label={t('Luminosité')}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }} {...kbSlider('Luminosité des scènes', bri, setBri, { min: 5, max: 100, step: 5 })}>
             <button onClick={() => setBri(bri - 5)} aria-label="Baisser" style={{ width: 22, height: 22, borderRadius: 7, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
             <span style={{ minWidth: 44, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: 'var(--o-warn)' }}>{bri} %</span>
@@ -4543,10 +4544,10 @@ function ScenesContent({ hass }) {
       {panel && (
         <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>Appliquer une scène</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>{t('Appliquer une scène')}</div>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontSize: 11, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent)' }} />{(HUE_ROOMS.find(r => r.id === room) || { label: room }).label.toUpperCase()}</span>
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>La scène s'applique au groupe de la pièce sélectionnée</div>
+          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{t("La scène s'applique au groupe de la pièce sélectionnée")}</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 190px', minWidth: 0 }}>
@@ -4846,9 +4847,9 @@ function ClimatContent({ hass, edit = false, onEnt }) {
       {edit && (
         <ViewEditBar
           texte={ed.edits ? 'Ces zones sont personnalisées.' : 'Ces zones suivent la détection automatique.'}>
-          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>Ajouter un thermostat</button>
-          <button onClick={addSection} style={editBtn(false)}>Ajouter un titre</button>
-          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>Rétablir l'automatique</button>}
+          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{t('Ajouter un thermostat')}</button>
+          <button onClick={addSection} style={editBtn(false)}>{t('Ajouter un titre')}</button>
+          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{t("Rétablir l'automatique")}</button>}
         </ViewEditBar>
       )}
       {(edit || ed.ids.length > 0) && (
@@ -4900,9 +4901,9 @@ function ClimatView({ hass, edit = false, onEnt }) {
 
 /* ════════════ VUE VOLETS (reproduction fidèle de "Loggia Volets.dc.html") ════════════ */
 const VOLET_MODES = [
-  { id: 'Manuel', label: 'Manuel', desc: 'Pilotage à la main', icon: 'hand', color: 'var(--o-text2)' },
+  { id: 'Manuel', label: 'Manuel', desc: t('Pilotage à la main'), icon: 'hand', color: 'var(--o-text2)' },
   { id: 'Auto lever/coucher', label: 'Auto soleil', desc: 'Suit lever / coucher', icon: 'sun', color: '#ffce73' },
-  { id: 'Fermeture nuit', label: 'Nuit', desc: 'Fermeture au crépuscule', icon: 'moon', color: 'var(--o-purple)' },
+  { id: 'Fermeture nuit', label: 'Nuit', desc: t('Fermeture au crépuscule'), icon: 'moon', color: 'var(--o-purple)' },
 ];
 const voletKeys = () => [...voletCovers(null).map(c => c.haid), voletMode(), ...voletDays().map(d => d.haid)].filter(Boolean);
 // Volets pilotés : configuration de l'utilisateur, sinon tout le domaine `cover`
@@ -5034,13 +5035,13 @@ function VoletsContent({ hass, edit = false, onEnt }) {
         <ViewEditBar onEnt={onEnt}
           texte={'Mode édition : clique une carte pour la modifier, glisse-la pour la déplacer.'
             + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
-          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>Ajouter un volet</button>
-          <button onClick={addSection} style={editBtn(false)}>Ajouter un titre</button>
-          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>Rétablir l'automatique</button>}
+          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{t('Ajouter un volet')}</button>
+          <button onClick={addSection} style={editBtn(false)}>{t('Ajouter un titre')}</button>
+          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{t("Rétablir l'automatique")}</button>}
         </ViewEditBar>
       )}
       {(edit || ed.ids.length > 0) && (
-        <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>Volet par volet</div>
+        <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{t('Volet par volet')}</div>
       )}
       <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {blocs.map((bloc, bi) => {
@@ -5419,12 +5420,12 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const maxBar = Math.max(solarW, gridNetW, surplusW, 1500);
   const tiles = [
     { label: 'Solaire', tag: prodJour != null ? prodJour.toFixed(1).replace('.', ',') + ' kWh jour' : (solarActive ? 'ACTIF' : 'INACTIF'), tagCol: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', val: fmtW(solarW), num: solarW, fmt: fmtW, valCol: 'var(--o-gold)', col: 'var(--o-gold)', bar: Math.min(100, solarW / maxBar * 100) + '%', bd: 'rgba(255,209,102,.18)', icon: 'sun', ic: 'var(--o-gold)', art: VIEW_ART.solar },
-    { label: 'Réseau', tag: (exporting ? 'VENTE' : 'ACHAT') + (tarifTxt ? ' · ' + tarifTxt + (prixActuel != null ? ' ' + prixActuel.toFixed(4).replace('.', ',') + '€' : '') : ''), tagCol: exporting ? 'var(--o-ok)' : '#f87171', val: fmtW(gridNetW), num: gridNetW, fmt: fmtW, valCol: exporting ? 'var(--o-ok)' : '#f87171', col: exporting ? 'var(--o-ok)' : '#f87171', bar: Math.min(100, gridNetW / maxBar * 100) + '%', bd: exporting ? 'rgba(52,211,153,.18)' : 'rgba(248,113,113,.18)', icon: 'bolt', ic: exporting ? 'var(--o-ok)' : '#f87171', art: VIEW_ART.pylon },
+    { label: t('Réseau'), tag: (exporting ? 'VENTE' : 'ACHAT') + (tarifTxt ? ' · ' + tarifTxt + (prixActuel != null ? ' ' + prixActuel.toFixed(4).replace('.', ',') + '€' : '') : ''), tagCol: exporting ? 'var(--o-ok)' : '#f87171', val: fmtW(gridNetW), num: gridNetW, fmt: fmtW, valCol: exporting ? 'var(--o-ok)' : '#f87171', col: exporting ? 'var(--o-ok)' : '#f87171', bar: Math.min(100, gridNetW / maxBar * 100) + '%', bd: exporting ? 'rgba(52,211,153,.18)' : 'rgba(248,113,113,.18)', icon: 'bolt', ic: exporting ? 'var(--o-ok)' : '#f87171', art: VIEW_ART.pylon },
     autosuff != null
       ? { label: 'Autosuffisance', tag: tauxAutoconso != null ? 'AUTO. ' + tauxAutoconso + '%' : 'JOUR', tagCol: 'var(--o-ok)', val: autosuff + ' %', num: autosuff, unit: ' %', valCol: 'var(--o-ok)', col: 'var(--o-ok)', bar: Math.min(100, autosuff) + '%', bd: 'rgba(52,211,153,.18)', icon: 'leaf', ic: 'var(--o-ok)', art: VIEW_ART.leafart }
       : { label: 'Injection', tag: surplusW > 5 ? 'VENTE' : '—', tagCol: 'var(--o-ok)', val: fmtW(surplusW), valCol: 'var(--o-accent)', col: 'var(--o-accent)', bar: Math.min(100, surplusW / maxBar * 100) + '%', bd: 'rgba(var(--o-accent-rgb),.18)', icon: 'chart-line-up', ic: 'var(--o-accent)', art: VIEW_ART.meter },
     coutJour != null
-      ? { label: 'Coût', tag: coutMois != null ? eur(coutMois) + ' MOIS' : 'JOUR', tagCol: 'var(--o-text2)', val: eur(coutJour), num: coutJour, d: 2, unit: ' €', valCol: 'var(--o-purple)', col: 'var(--o-purple)', bar: Math.min(100, coutJour / 5 * 100) + '%', bd: 'rgba(167,139,250,.18)', icon: 'piggy-bank', ic: 'var(--o-purple)', art: VIEW_ART.piggy }
+      ? { label: t('Coût'), tag: coutMois != null ? eur(coutMois) + ' MOIS' : 'JOUR', tagCol: 'var(--o-text2)', val: eur(coutJour), num: coutJour, d: 2, unit: ' €', valCol: 'var(--o-purple)', col: 'var(--o-purple)', bar: Math.min(100, coutJour / 5 * 100) + '%', bd: 'rgba(167,139,250,.18)', icon: 'piggy-bank', ic: 'var(--o-purple)', art: VIEW_ART.piggy }
       : { label: 'Facture', tag: 'MOIS', tagCol: 'var(--o-text2)', val: eur(bill), valCol: 'var(--o-purple)', col: 'var(--o-purple)', bar: '60%', bd: 'rgba(167,139,250,.18)', icon: 'piggy-bank', ic: 'var(--o-purple)', art: VIEW_ART.piggy },
   ];
   // Bandeau de réglages repliable (patron Atrium) — ne masque QUE la carte de bilan.
@@ -5443,7 +5444,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 22 }}>
       <div className="o-en-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-        <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>Énergie</h1>
+        <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{t('Énergie')}</h1>
         <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{'Consommation ' + fmtW(consoW) + ' · production solaire ' + fmtW(solarW) + ' · réseau ' + fmtW(gridNetW)}</div>
         </div>
         <span style={{ flex: 1 }} />
@@ -5453,7 +5454,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       <div className="grid-ehero" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 18, alignItems: 'stretch' }}>
         <Anim i={0}><div style={{ position: 'relative', overflow: 'hidden', height: '100%', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div><div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>Maison · Temps réel</div><div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 24, fontWeight: 500, marginTop: 2 }}>{solarActive ? 'Production solaire active' : 'Consommation réseau'}</div></div>
+            <div><div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{t('Maison · Temps réel')}</div><div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 24, fontWeight: 500, marginTop: 2 }}>{solarActive ? 'Production solaire active' : 'Consommation réseau'}</div></div>
             <span style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 13px', borderRadius: 999, border: '1px solid ' + (solarActive ? 'rgba(52,211,153,.3)' : 'var(--o-bd2)'), color: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', fontSize: 12, fontWeight: 700, flexShrink: 0 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', animation: solarActive ? 'pulse 2s infinite' : 'none' }} /><Shiny on={solarActive}>{solarActive ? 'Solaire actif' : 'Solaire inactif'}</Shiny></span>
           </div>
           <div className="o-en-well" style={{ position: 'relative', borderRadius: 'var(--o-radius,16px)', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 30%,var(--o-well0),var(--o-well2))', border: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10 }}>
@@ -5466,7 +5467,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           <div className="o-en-kpis" style={{ display: 'flex', gap: 24, marginTop: 16, flexWrap: 'wrap' }}>
             <div><div style={{ fontSize: 24, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{consoAvail ? <Num v={consoW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-accent)' }} />Conso maison</div></div>
             <div><div style={{ fontSize: 24, fontWeight: 800, color: 'var(--o-gold)' }}>{solarAvail ? <Num v={solarW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-gold)' }} />Production</div></div>
-            {ecoJour != null && <div><div style={{ fontSize: 24, fontWeight: 800, color: 'var(--o-ok)' }}><Num v={ecoJour} d={2} suffix=" €" /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-ok)' }} />Économie du jour</div></div>}
+            {ecoJour != null && <div><div style={{ fontSize: 24, fontWeight: 800, color: 'var(--o-ok)' }}><Num v={ecoJour} d={2} suffix=" €" /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-ok)' }} />{t('Économie du jour')}</div></div>}
             <div style={{ marginLeft: 'auto', textAlign: 'right' }}><div style={{ fontSize: 24, fontWeight: 800, color: exporting ? 'var(--o-ok)' : '#f87171' }}>{(surplusAvail || consoAvail) ? <Num v={exporting ? surplusW : importW} suffix=" W" /> : '—'}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><FlipText text={exporting ? '↑ Vente réseau' : '↓ Achat réseau'} /></div></div>
           </div>
         </div></Anim>
@@ -5476,7 +5477,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       {/* réglages rapides : période d'analyse et tarif courant */}
       <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Période</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{t('Période')}</span>
           <div style={{ display: 'flex', gap: 4 }}>
             {RANGES.map(([id, lb]) => <button key={id} onClick={() => setRange(id)} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, background: range === id ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: range === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</button>)}
           </div>
@@ -5493,33 +5494,33 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       {panel && (
         <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>Bilan instantané</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>{t('Bilan instantané')}</div>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: (tarifTxt === 'HC' || hcActive) ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.14)', color: (tarifTxt === 'HC' || hcActive) ? 'var(--o-ok)' : 'var(--o-warn2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: (tarifTxt === 'HC' || hcActive) ? 'var(--o-ok)' : 'var(--o-warn2)' }} />{(tarifTxt === 'HC' || hcActive) ? 'TARIF CREUX' : 'TARIF PLEIN'}</span>
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>Relevé temps réel du compteur et de l'onduleur{aboPct != null ? ' · ' + aboPct + ' % du 7 kVA souscrit' : ''}</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <EnRow label="Consommation" desc="Compteur électrique · temps réel">
+            <EnRow label="Consommation" desc={t('Compteur électrique · temps réel')}>
               <EnVal v={consoAvail ? fmtW(consoW) : '—'} col="var(--o-text)" />
             </EnRow>
             <EnRow label="Production solaire" desc={solarActive ? 'Onduleur · en production' : 'Onduleur · nuit ou capteur indisponible'}>
               <EnVal v={solarAvail ? fmtW(solarW) : '—'} col={solarActive ? 'var(--o-gold)' : 'var(--o-text3)'} />
             </EnRow>
             {(tauxAutoconso != null || autosuff != null) && (
-              <EnRow label="Autoconsommation" desc="Part de la production consommée sur place">
+              <EnRow label="Autoconsommation" desc={t('Part de la production consommée sur place')}>
                 <EnGauge v={(tauxAutoconso != null ? tauxAutoconso : autosuff) + ' %'} pct={tauxAutoconso != null ? tauxAutoconso : autosuff} col={(tauxAutoconso != null ? tauxAutoconso : autosuff) > 0 ? 'var(--o-ok)' : 'var(--o-text3)'} />
               </EnRow>
             )}
-            <EnRow label="Réseau" desc={exporting ? 'Injection vers le réseau' : 'Soutirage depuis le réseau'}>
+            <EnRow label={t('Réseau')} desc={exporting ? 'Injection vers le réseau' : 'Soutirage depuis le réseau'}>
               <EnVal v={fmtW(gridNetW)} col={exporting ? 'var(--o-ok)' : 'var(--o-bad)'} />
             </EnRow>
             <EnRow label="Aujourd'hui" desc={(impToday != null ? 'Importé ' + kwhFmt(impToday) : 'Import inconnu') + (expToday != null ? ' · exporté ' + kwhFmt(expToday) : '')}>
               <EnVal v={impToday != null ? kwhFmt(impToday) : '—'} col="var(--o-accent-soft)" />
             </EnRow>
-            <EnRow label="Coût estimé" desc={coutMois != null ? 'Mois en cours : ' + eur(coutMois) : 'Journée en cours'}>
+            <EnRow label={t('Coût estimé')} desc={coutMois != null ? 'Mois en cours : ' + eur(coutMois) : 'Journée en cours'}>
               <EnVal v={eur(coutJour != null ? coutJour : (hcCost + hpCost))} col="var(--o-warn)" />
             </EnRow>
             {ecoJour != null && (
-              <EnRow label="Économie solaire" desc="Estimation du jour, production autoconsommée">
+              <EnRow label={t('Économie solaire')} desc={t('Estimation du jour, production autoconsommée')}>
                 <EnVal v={eur(ecoJour)} col="var(--o-ok)" />
               </EnRow>
             )}
@@ -5532,8 +5533,8 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           <ViewEditBar onEnt={onEnt} entLabel="Entités du schéma"
             texte={'Mode édition : clique un poste pour le modifier, glisse-le pour le déplacer.'
               + (ed.edits ? ' Ces postes sont personnalisés.' : ' Ces postes suivent la détection automatique.')}>
-            <button onClick={() => setEnAdd(true)} style={editBtn(true)}>Ajouter un poste</button>
-            {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>Rétablir l'automatique</button>}
+            <button onClick={() => setEnAdd(true)} style={editBtn(true)}>{t('Ajouter un poste')}</button>
+            {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{t("Rétablir l'automatique")}</button>}
           </ViewEditBar>
         )}
         <div ref={ed.gridRef} className="grid-edevices" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12 }}>
@@ -5607,11 +5608,11 @@ function AspirateurContent({ hass }) {
   // Usure des consommables. Une ligne n'apparait que si son capteur existe ET
   // repond — pas de pourcentage invente.
   const CONSOMMABLES = [
-    { cle: 'brushMain', nom: 'Brosse principale', desc: 'Usure · à remplacer sous 20 %', col: 'var(--o-ok)' },
-    { cle: 'brushSide', nom: 'Brosse latérale', desc: 'Usure · à remplacer sous 20 %', col: 'var(--o-ok)' },
-    { cle: 'mop', nom: 'Serpillière', desc: 'Usure du tampon · à remplacer sous 20 %', col: 'var(--o-cyan)' },
-    { cle: 'filter', nom: 'Filtre HEPA', desc: 'Usure · à changer sous 20 %', col: '#ffb347' },
-    { cle: 'care', nom: 'Entretien de l’appareil', desc: 'Usure · révision sous 20 %', col: 'var(--o-purple)' },
+    { cle: 'brushMain', nom: 'Brosse principale', desc: t('Usure · à remplacer sous 20 %'), col: 'var(--o-ok)' },
+    { cle: 'brushSide', nom: 'Brosse latérale', desc: t('Usure · à remplacer sous 20 %'), col: 'var(--o-ok)' },
+    { cle: 'mop', nom: 'Serpillière', desc: t('Usure du tampon · à remplacer sous 20 %'), col: 'var(--o-cyan)' },
+    { cle: 'filter', nom: 'Filtre HEPA', desc: t('Usure · à changer sous 20 %'), col: '#ffb347' },
+    { cle: 'care', nom: 'Entretien de l’appareil', desc: t('Usure · révision sous 20 %'), col: 'var(--o-purple)' },
   ].map(c => {
     const id = role(c.cle);
     const v = id ? sNum(id) : null;
@@ -5768,7 +5769,7 @@ function AspirateurContent({ hass }) {
         </div>
         <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{sousTitre}</div>
         <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
-          <VacRow label="État" desc={etat}>
+          <VacRow label={t('État')} desc={etat}>
             <span style={{ fontSize: 15, fontWeight: 800, color: stateCol }}><FlipText live text={onBlue ? 'En cours' : paused ? 'En pause' : onBase ? 'Sur la base' : 'Au repos'} /></span>
           </VacRow>
           <VacRow label="Batterie" desc={battery == null ? 'Capteur indisponible' : battery > 40 ? 'Autonomie confortable' : battery > 15 ? 'À surveiller' : 'Recharge nécessaire'}>
@@ -5777,10 +5778,10 @@ function AspirateurContent({ hass }) {
               <Gauge pct={battery || 0} color={batColor} h={3} style={{ width: 160 }} />
             </div>
           </VacRow>
-          <SelRow id={auto.workMode} label="Mode de travail" desc="Ce que le robot fait pendant son passage" />
-          <SelRow id={auto.waterFlow} label="Débit d’eau" desc="Quantité d’eau envoyée à la serpillière" />
+          <SelRow id={auto.workMode} label="Mode de travail" desc={t('Ce que le robot fait pendant son passage')} />
+          <SelRow id={auto.waterFlow} label={t('Débit d’eau')} desc={t('Quantité d’eau envoyée à la serpillière')} />
           {mopPose != null && (
-            <VacRow label="Serpillière" desc={mopPose === 'on' ? 'Module posé sur le robot' : 'Module retiré — aspiration seule'}>
+            <VacRow label={t('Serpillière')} desc={mopPose === 'on' ? 'Module posé sur le robot' : 'Module retiré — aspiration seule'}>
               <span style={{ fontSize: 15, fontWeight: 800, color: mopPose === 'on' ? 'var(--o-cyan)' : 'var(--o-text3)' }}>{mopPose === 'on' ? 'Fixée' : 'Retirée'}</span>
             </VacRow>
           )}
@@ -5794,7 +5795,7 @@ function AspirateurContent({ hass }) {
               </div>
             </VacRow>
           ))}
-          <VacRow label="Session du jour" desc="Surface parcourue et durée du dernier passage">
+          <VacRow label="Session du jour" desc={t('Surface parcourue et durée du dernier passage')}>
             <span style={{ fontSize: 15, fontWeight: 800 }}>{(surface != null ? surface + ' m²' : '—') + ' · ' + (duree || '—')}</span>
           </VacRow>
           {derniere && (
@@ -5803,18 +5804,18 @@ function AspirateurContent({ hass }) {
             </VacRow>
           )}
           {(auto.areaTotal || auto.count || auto.durTotal) && (
-            <VacRow label="Depuis la mise en service" desc="Totaux tenus par le robot">
+            <VacRow label={t('Depuis la mise en service')} desc={t('Totaux tenus par le robot')}>
               <span style={{ fontSize: 15, fontWeight: 800 }}>
                 {[valUnite(auto.areaTotal), auto.count && sNum(auto.count) != null ? sNum(auto.count) + ' passages' : null, valUnite(auto.durTotal)].filter(Boolean).join(' · ') || '—'}
               </span>
             </VacRow>
           )}
           {enPanne && (
-            <VacRow label="Erreur" desc="Signalée par le robot">
+            <VacRow label="Erreur" desc={t('Signalée par le robot')}>
               <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-bad)' }}>{vacOption(erreur)}</span>
             </VacRow>
           )}
-          <VacRow label="Zones ciblées" desc={picked.length ? picked.map(r => r.name).join(' · ') : 'Aucune zone sélectionnée — le robot nettoie tout'}>
+          <VacRow label={t('Zones ciblées')} desc={picked.length ? picked.map(r => r.name).join(' · ') : 'Aucune zone sélectionnée — le robot nettoie tout'}>
             <span style={{ fontSize: 15, fontWeight: 800, color: picked.length ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>{picked.length ? picked.length + ' / ' + rooms.length : 'toutes'}</span>
           </VacRow>
         </div>
@@ -5828,16 +5829,16 @@ function AspirateurContent({ hass }) {
       </div>
 
 
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>Nettoyage ciblé</div>
+      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{t('Nettoyage ciblé')}</div>
       <div className="grid-vac-map" style={{ display: 'grid', gridTemplateColumns: idCam ? 'minmax(0,1.3fr) minmax(260px,1fr)' : '1fr', gap: 18, alignItems: 'start' }}>
         <div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,22px)', padding: 20, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>Zones à nettoyer</div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{t('Zones à nettoyer')}</div>
             <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>
               {picked.length ? picked.length + ' pièce' + (picked.length > 1 ? 's' : '') + ' sélectionnée' + (picked.length > 1 ? 's' : '') : 'passage complet'}
             </div>
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 16 }}>Sur la carte ou dans la liste — laisse vide pour un passage complet</div>
+          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 16 }}>{t('Sur la carte ou dans la liste — laisse vide pour un passage complet')}</div>
           <div className="grid-vac-rooms" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
             {rooms.map(r => {
               const on = !!sel[r.id];
@@ -5861,7 +5862,7 @@ function AspirateurContent({ hass }) {
         {idCam && (
           <div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '18px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>Caméra</div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>{t('Caméra')}</div>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, fontSize: 11, fontWeight: 800, background: 'rgba(var(--o-ok-rgb),.14)', color: 'var(--o-ok)' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-ok)' }} />EN DIRECT
               </span>
@@ -5892,7 +5893,7 @@ function ViewEmpty({ vid, reason, onNav }) {
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div>
           <h1 style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontWeight: 400, fontSize: 36, margin: 0, letterSpacing: '-.01em' }}>{VIEW_TITLES[vid] || 'Vue'}</h1>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>rien à afficher pour cette installation</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{t('rien à afficher pour cette installation')}</div>
         </div>
         <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,16px)', padding: '26px 24px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14, boxShadow: 'var(--o-shadow)' }}>
           <span style={{ width: 44, height: 44, borderRadius: 13, background: 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -5906,8 +5907,8 @@ function ViewEmpty({ vid, reason, onNav }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
-            <button onClick={() => onNav('accueil')} style={{ padding: '9px 15px', borderRadius: 11, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'rgba(var(--o-accent-rgb),.16)', color: 'var(--o-accent-soft)' }}>Retour à l'accueil</button>
-            <button onClick={() => onNav('parametres')} style={{ padding: '9px 15px', borderRadius: 11, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)' }}>Ouvrir les paramètres</button>
+            <button onClick={() => onNav('accueil')} style={{ padding: '9px 15px', borderRadius: 11, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'rgba(var(--o-accent-rgb),.16)', color: 'var(--o-accent-soft)' }}>{t("Retour à l'accueil")}</button>
+            <button onClick={() => onNav('parametres')} style={{ padding: '9px 15px', borderRadius: 11, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)' }}>{t('Ouvrir les paramètres')}</button>
           </div>
         </div>
       </div>
@@ -6025,7 +6026,7 @@ function CroquettesContent({ hass }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Réservoir</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{t('Réservoir')}</span>
           <button onClick={refill} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', background: 'var(--o-s1)', color: 'var(--o-text1)' }}>Marquer rempli</button>
         </div>
         <span style={{ flex: 1 }} />
@@ -6041,13 +6042,13 @@ function CroquettesContent({ hass }) {
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{upcoming ? upcoming.label + ' à ' + upcoming.time + ' · ' + upcoming.g + ' g' : 'Programme terminé'} · {onCount} repas par jour</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <EnRow label="Réservoir" desc={autonomy != null ? 'Environ ' + autonomy + ' jour' + (autonomy > 1 ? 's' : '') + ' d’autonomie' : 'Niveau estimé, remis à 100 % au remplissage'}>
+            <EnRow label={t('Réservoir')} desc={autonomy != null ? 'Environ ' + autonomy + ' jour' + (autonomy > 1 ? 's' : '') + ' d’autonomie' : 'Niveau estimé, remis à 100 % au remplissage'}>
               <EnGauge v={reservoirG != null ? level + ' %' : '—'} pct={level} col={level < 20 ? 'var(--o-bad)' : level < 40 ? 'var(--o-warn2)' : 'var(--o-ok)'} />
             </EnRow>
             <EnRow label="Distribué aujourd'hui" desc={done.length + ' repas sur ' + onCount + (distribuees ? ' · compteur ' + distribuees + ' g' : '')}>
               <EnVal v={doneG + ' g'} col="var(--o-text)" />
             </EnRow>
-            <EnRow label="Prochain repas" desc={upcoming ? upcoming.label : 'Aucun repas restant aujourd’hui'}>
+            <EnRow label="Prochain repas" desc={upcoming ? upcoming.label: t('Aucun repas restant aujourd’hui')}>
               <EnVal v={upcoming ? relTo(upcoming.time) : '—'} col={upcoming ? 'var(--o-warn2)' : 'var(--o-text3)'} />
             </EnRow>
             <EnRow label="Ration quotidienne" desc={'Somme des ' + onCount + ' repas activés'}>
@@ -6251,7 +6252,7 @@ function MedRemote({ hass, sel, tvs, onPick }) {
 
   const entete = (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
-      <div style={{ fontSize: 16, fontWeight: 700 }}>Télécommande</div>
+      <div style={{ fontSize: 16, fontWeight: 700 }}>{t('Télécommande')}</div>
       <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {sel ? sel.name : '—'}{att.source ? ' · ' + att.source : ''}
       </div>
@@ -6311,7 +6312,7 @@ function MedRemote({ hass, sel, tvs, onPick }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '7px 10px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
           <button onClick={() => cmd('CHANNEL_DOWN')} style={{ ...petit, cursor: rid ? 'pointer' : 'not-allowed', opacity: rid ? 1 : .4 }}>−</button>
-          <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--o-text3)', letterSpacing: '.06em' }}>CHAÎNE</span>
+          <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--o-text3)', letterSpacing: '.06em' }}>{t('CHAÎNE')}</span>
           <button onClick={() => cmd('CHANNEL_UP')} style={{ ...petit, cursor: rid ? 'pointer' : 'not-allowed', opacity: rid ? 1 : .4 }}>+</button>
         </div>
       </div>
@@ -6509,7 +6510,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
       <ViewBar panel={panel} onPanel={togglePanel}>
         <BarGroup label="Lecture" sous={sel ? sel.name : null}>
           {peut(hass, sel && sel.haid, 'previous_track') && (
-            <button onClick={() => commander(hass, sel && sel.haid, 'previous_track')} style={barBtn(false)}>Précédent</button>)}
+            <button onClick={() => commander(hass, sel && sel.haid, 'previous_track')} style={barBtn(false)}>{t('Précédent')}</button>)}
           {peut(hass, sel && sel.haid, 'play_pause') && (
             <button onClick={() => commander(hass, sel && sel.haid, 'play_pause')} style={barBtn(np.playing)}>{np.playing ? 'Pause' : 'Lecture'}</button>)}
           {peut(hass, sel && sel.haid, 'next_track') && (
@@ -6523,7 +6524,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
           </BarGroup>
         )}
         {sel && S[sel.haid] && S[sel.haid].attributes && S[sel.haid].attributes.shuffle != null && (
-          <BarGroup label="Aléatoire">
+          <BarGroup label={t('Aléatoire')}>
             <button onClick={() => commander(hass, sel.haid, 'set_shuffle', !S[sel.haid].attributes.shuffle)}
               style={barBtn(!!S[sel.haid].attributes.shuffle)}>{S[sel.haid].attributes.shuffle ? 'Activé' : 'Désactivé'}</button>
           </BarGroup>
@@ -6559,7 +6560,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
       <div className="grid-medlaunch" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) minmax(260px,1fr)', gap: 18, alignItems: 'start' }}>
         <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '16px 18px 14px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap' }}>Lancer sur</span>
+            <span style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap' }}>{t('Lancer sur')}</span>
             {lecteurs.map(x => (
               <button key={x.id} onClick={() => setDevice(x.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
                 background: sel && x.id === sel.id ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)',
@@ -6595,9 +6596,9 @@ function MediasContent({ hass, edit = false, onEnt }) {
         <ViewEditBar onEnt={onEnt}
           texte={'Mode édition : clique un lecteur pour le modifier, glisse-le pour le déplacer.'
             + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
-          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>Ajouter un lecteur</button>
-          <button onClick={addSection} style={editBtn(false)}>Ajouter un titre</button>
-          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>Rétablir l'automatique</button>}
+          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{t('Ajouter un lecteur')}</button>
+          <button onClick={addSection} style={editBtn(false)}>{t('Ajouter un titre')}</button>
+          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{t("Rétablir l'automatique")}</button>}
         </ViewEditBar>
       )}
       {(edit || ed.ids.length > 0) && (
@@ -6764,7 +6765,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
       {edit && <ViewEditBar texte="Mode édition : choisis le panneau d’alarme et les caméras de cette vue." onEnt={onEnt} />}
       <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>Sécurité</h1>
+          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{t('Sécurité')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{camOnline} caméra{camOnline > 1 ? 's' : ''} en ligne · {homeCount} présent{homeCount > 1 ? 's' : ''} sur {people.length} · alarme {alarmWord}</div>
         </div>
         <span style={{ flex: 1 }} />
@@ -6776,9 +6777,9 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Alarme <span style={{ color: 'var(--o-text3)' }}>{alarmShort}</span></span>
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={() => callAlarm('alarm_disarm', 'off')} style={armBtn(alarm === 'off', [52, 211, 153])}>Désarmer</button>
+            <button onClick={() => callAlarm('alarm_disarm', 'off')} style={armBtn(alarm === 'off', [52, 211, 153])}>{t('Désarmer')}</button>
             <button onClick={() => callAlarm('alarm_arm_away', 'away')} style={armBtn(alarm === 'away', [248, 113, 113])}>Absent</button>
-            <button onClick={() => callAlarm('alarm_arm_home', 'home')} style={armBtn(alarm === 'home', [255, 179, 71])}>Présent</button>
+            <button onClick={() => callAlarm('alarm_arm_home', 'home')} style={armBtn(alarm === 'home', [255, 179, 71])}>{t('Présent')}</button>
           </div>
         </div>
         {canNight && (
@@ -6805,7 +6806,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
           <SecRow label="Alarme" desc={alarmDesc}>
             <span style={{ fontSize: 15, fontWeight: 800, color: cs(statusCol) }}><FlipText live text={alarmShort} /></span>
           </SecRow>
-          <SecRow label="Caméras" desc={cams.map(c => c.label).join(' · ') || 'Aucune caméra configurée'}>
+          <SecRow label={t('Caméras')} desc={cams.map(c => c.label).join(' · ') || 'Aucune caméra configurée'}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
               <span style={{ fontSize: 15, fontWeight: 800, color: camOnline === camTotal ? 'var(--o-text)' : '#ffb347' }}><FlipText live text={camOnline + '/' + camTotal + ' en ligne'} /></span>
               <Gauge pct={camPct} color={camOnline === camTotal ? 'var(--o-ok)' : '#ffb347'} h={3} style={{ width: 160 }} />
@@ -6814,10 +6815,10 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
           <SecRow label="Mouvement" desc={anyMotion ? 'Détection en cours sur une caméra' : 'Toutes les zones sont calmes'}>
             <span style={{ fontSize: 15, fontWeight: 800, color: anyMotion ? '#ffb347' : 'var(--o-text)' }}><FlipText live text={anyMotion ? 'Détecté' : 'Aucun'} /></span>
           </SecRow>
-          <SecRow label="Présence" desc={homeCount ? presentNames + (homeCount > 1 ? ' sont à la maison' : ' est à la maison') : 'Personne à la maison'}>
+          <SecRow label={t('Présence')} desc={homeCount ? presentNames + (homeCount > 1 ? ' sont à la maison' : ' est à la maison') : 'Personne à la maison'}>
             <span style={{ fontSize: 15, fontWeight: 800 }}><FlipText live text={homeCount ? homeCount + ' présent' + (homeCount > 1 ? 's' : '') : 'Personne'} /></span>
           </SecRow>
-          <SecRow label="Activité · 24 h" desc="Détections caméra par heure, heure courante en vert">
+          <SecRow label={t('Activité · 24 h')} desc={t('Détections caméra par heure, heure courante en vert')}>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, width: 210, height: 34 }}>
               {SEC_SPARK.map((c, h) => { const cur = h === 23; return <div key={h} title={`${String(h).padStart(2, '0')}h`} style={{ flex: 1, height: (c === 0 ? 12 : 26 + (c / maxC) * 74) + '%', minHeight: 3, borderRadius: 2, background: c === 0 ? 'var(--o-bd3)' : (cur ? 'var(--o-ok)' : (c >= 4 ? '#ffb347' : 'rgba(52,211,153,.55)')) }} />; })}
             </div>
@@ -6825,7 +6826,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
         </div>
       </div></Anim>}
 
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>Caméras en direct</div>
+      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{t('Caméras en direct')}</div>
       <div className="grid-sec-cams" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         {cams.map((c, i) => <Anim key={c.haid || c.id} i={i} base={140}><CameraTile c={c} /></Anim>)}
       </div>
@@ -6912,9 +6913,9 @@ function fmtUptime(raw) {
 }
 // Bases machines (icônes + identité ; données dynamiques calculées dans SystemeContent)
 const SYS_MACHINES = [
-  { key: 'host', name: 'Serveur Home Assistant', sub: 'Hôte principal', iconBg: 'rgba(52,211,153,.16)', iconCol: 'var(--o-ok)', icon: <Fi i="home" size={16} />, barCol: 'var(--o-ok)', art: 'serverart' },
+  { key: 'host', name: 'Serveur Home Assistant', sub: t('Hôte principal'), iconBg: 'rgba(52,211,153,.16)', iconCol: 'var(--o-ok)', icon: <Fi i="home" size={16} />, barCol: 'var(--o-ok)', art: 'serverart' },
   { key: 'nebula', name: 'Deuxième machine', sub: 'Serveur de stockage', iconBg: 'rgba(255,179,71,.16)', iconCol: '#ffb347', icon: <Fi i="database" size={16} />, barCol: '#ffb347', art: 'nas' },
-  { key: 'ucg', name: 'Troisième machine', sub: 'Passerelle réseau', iconBg: 'rgba(var(--o-accent-rgb),.16)', iconCol: 'var(--o-accent-soft)', icon: <Fi i="wifi" size={16} />, barCol: 'var(--o-accent)', art: 'routerart' },
+  { key: 'ucg', name: 'Troisième machine', sub: t('Passerelle réseau'), iconBg: 'rgba(var(--o-accent-rgb),.16)', iconCol: 'var(--o-accent-soft)', icon: <Fi i="wifi" size={16} />, barCol: 'var(--o-accent)', art: 'routerart' },
 ];
 
 // History HA pour la vue Système : points {t,v} par entité, période en heures, refresh manuel.
@@ -7092,7 +7093,7 @@ function SystemeContent({ hass }) {
         ['Stockage', 'Grappe de disques', nDisk != null ? Math.round(nDisk) + ' %' : 'non exposée', nDisk, 85],
       ],
       spark: hist[SYS.nebula.cpu], sparkLbl: 'charge', fallback: SYS_SPARKS[0], level: Math.max(nCpu || 0, nMem || 0) },
-    { key: 'ucg', logo: BRAND_ICONS.unifi, name: SYSN.ucg, sub: 'Passerelle réseau' + (uUp && uUp !== '—' ? ' · ' + uUp : ''), online: uOnline,
+    { key: 'ucg', logo: BRAND_ICONS.unifi, name: SYSN.ucg, sub: t('Passerelle réseau') + (uUp && uUp !== '—' ? ' · ' + uUp : ''), online: uOnline,
       ico: 'wifi', icoBg: 'rgba(5,89,201,.16)', icoCol: 'var(--o-cyan)',
       barLabel: 'Mémoire', barPct: uMem, barText: uMem != null ? Math.round(uMem) + ' %' : '—',
       status: (uCpu != null && uCpu >= 85) || (uMem != null && uMem >= 85) ? 'Ressources sous tension' : 'Fonctionnement normal',
@@ -7106,16 +7107,16 @@ function SystemeContent({ hass }) {
   ];
   const sel = MACH.find(m => m.key === detail) || MACH[0];
   const powerActions = [
-    { id: 'ha', label: 'Redémarrer HA', desc: 'Relance le cœur sans toucher à la machine · ~40 s', col: '255,179,71', run: () => power('ha', 'homeassistant', 'restart') },
-    { id: 'reboot', label: 'Redémarrer', desc: 'Reboot complet de HAOS Nova · 2 à 3 min hors ligne', col: '255,179,71', run: () => power('reboot', 'hassio', 'host_reboot') },
-    { id: 'shutdown', label: 'Éteindre', desc: 'Arrêt complet · rallumage physique requis', col: '248,113,113', run: () => power('shutdown', 'hassio', 'host_shutdown') },
+    { id: 'ha', label: t('Redémarrer HA'), desc: t('Relance le cœur sans toucher à la machine · ~40 s'), col: '255,179,71', run: () => power('ha', 'homeassistant', 'restart') },
+    { id: 'reboot', label: t('Redémarrer'), desc: t('Reboot complet de HAOS Nova · 2 à 3 min hors ligne'), col: '255,179,71', run: () => power('reboot', 'hassio', 'host_reboot') },
+    { id: 'shutdown', label: t('Éteindre'), desc: t('Arrêt complet · rallumage physique requis'), col: '248,113,113', run: () => power('shutdown', 'hassio', 'host_shutdown') },
   ];
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>Système</h1>
+          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{t('Système')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{machinesOnline} machine{machinesOnline > 1 ? 's' : ''} en ligne · relevé {relFetch}</div>
         </div>
         <span style={{ flex: 1 }} />
@@ -7140,7 +7141,7 @@ function SystemeContent({ hass }) {
             ))}
           </div>
         </div>
-        <button onClick={doRefresh} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}><Fi i="refresh" size={13} />Rafraîchir</button>
+        <button onClick={doRefresh} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}><Fi i="refresh" size={13} />{t('Rafraîchir')}</button>
         <span style={{ flex: 1 }} />
         <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : 'Réglages de la vue'}</span></button>
       </div>
@@ -7160,7 +7161,7 @@ function SystemeContent({ hass }) {
                   : <EnVal v={val} col={lb.indexOf('Temp') === 0 && parseFloat(val) >= 75 ? 'var(--o-warn2)' : 'var(--o-text)'} />}
               </EnRow>
             ))}
-            <EnRow label={sel.sparkLbl.charAt(0).toUpperCase() + sel.sparkLbl.slice(1) + ' · ' + perLbl} desc="Relevé Home Assistant sur la période choisie">
+            <EnRow label={sel.sparkLbl.charAt(0).toUpperCase() + sel.sparkLbl.slice(1) + ' · ' + perLbl} desc={t('Relevé Home Assistant sur la période choisie')}>
               <div style={{ width: 210 }}><SysArea pts={sel.spark} fallback={sel.fallback} color={lvlCol(sel.level)} fill={sel.level != null && sel.level >= 70 ? 'rgba(248,113,113,.09)' : 'rgba(var(--o-ok-rgb),.08)'} h={34} /></div>
             </EnRow>
           </div>
@@ -7186,7 +7187,7 @@ function SystemeContent({ hass }) {
         ))}
       </div>
 
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>Journal système</div>
+      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{t('Journal système')}</div>
       <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '18px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
         {logbook && logbook.length
           ? <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -7302,8 +7303,8 @@ function CustomView({ cv, hass, edit = false, onSave }) {
         {edit && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderRadius: 14, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
             <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-accent-soft)' }}>Mode édition</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1 }}>Retire (×), réordonne (‹ ›) ou ajoute des cartes. Quitte avec le crayon du haut.</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{t('Mode édition')}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1 }}>{t('Retire (×), réordonne (‹ ›) ou ajoute des cartes. Quitte avec le crayon du haut.')}</span>
           </div>
         )}
         <div>
@@ -7336,16 +7337,16 @@ function CustomView({ cv, hass, edit = false, onSave }) {
             </button>
           )}
         </div>
-        {!edit && !cv.ents.length && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--o-text3)', fontWeight: 600 }}>Vue vide — active le crayon (en haut) pour ajouter des cartes.</div>}
+        {!edit && !cv.ents.length && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--o-text3)', fontWeight: 600 }}>{t('Vue vide — active le crayon (en haut) pour ajouter des cartes.')}</div>}
         {adding && (
           <BottomSheet onClose={() => setAdding(false)}>
             {close => (<>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                 <button onClick={close} aria-label="Fermer" title="Fermer" style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-                <span style={{ fontSize: 18, fontWeight: 700 }}>Ajouter une carte</span>
+                <span style={{ fontSize: 18, fontWeight: 700 }}>{t('Ajouter une carte')}</span>
               </div>
               <EntPicker hass={hass} exclude={cv.ents} onPick={(id) => setEnts([...cv.ents, id])} autoFocus />
-              <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>Chaque entité choisie s'ajoute immédiatement à la vue.</div>
+              <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{t("Chaque entité choisie s'ajoute immédiatement à la vue.")}</div>
             </>)}
           </BottomSheet>
         )}
@@ -7452,7 +7453,7 @@ function peopleList() {
     img: personPicture(S, p.haid) || null,
   }));
 }
-const FIRST_USER = [{ name: 'Administrateur', role: 'Admin', sub: 'Profil par défaut', c: 'var(--o-accent)' }];
+const FIRST_USER = [{ name: 'Administrateur', role: 'Admin', sub: t('Profil par défaut'), c: 'var(--o-accent)' }];
 /**
  * Image d'un profil : l'avatar choisi dans Loggia d'abord, sinon la photo du
  * profil Home Assistant.
@@ -7666,7 +7667,7 @@ function PinModal({ expected, onClose, onSuccess }) {
         onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}
         onClick={e => e.stopPropagation()} style={{ width: 296, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 'var(--o-radius,22px)', padding: 24, boxShadow: '0 30px 70px rgba(0,0,0,.6)', animation: error ? 'm-shake .45s' : 'none' }}>
         <div style={{ textAlign: 'center', fontSize: 16, fontWeight: 700 }}>Code administrateur</div>
-        <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--o-text2)', marginTop: 4 }}>Requis pour ce profil</div>
+        <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--o-text2)', marginTop: 4 }}>{t('Requis pour ce profil')}</div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 13, margin: '22px 0' }}>{[0, 1, 2, 3].map(i => <span key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: i < pin.length ? (error ? '#ef4444' : 'var(--o-accent-soft)') : 'transparent', border: `1px solid ${error ? '#ef4444' : 'var(--o-bd2)'}`, transition: 'background .15s' }} />)}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => <button key={n} onClick={() => add(String(n))} style={padBtn}>{n}</button>)}
@@ -7686,10 +7687,10 @@ function MobileNav({ view, onNav, onMenu }) {
   // Alignée sur la sidebar épurée — sans Pièces (accessibles via cartes Accueil), avec Énergie + Sécurité (demande user).
   const items = [
     { id: 'accueil', label: 'Accueil', icon: 'home' },
-    { id: 'scenes', label: 'Scènes', icon: 'sparkles' },
+    { id: 'scenes', label: t('Scènes'), icon: 'sparkles' },
     { id: 'objets', label: 'Objets', icon: 'apps' },
-    { id: 'energie', label: 'Énergie', icon: 'bolt' },
-    { id: 'securite', label: 'Sécurité', icon: 'shield-check' },
+    { id: 'energie', label: t('Énergie'), icon: 'bolt' },
+    { id: 'securite', label: t('Sécurité'), icon: 'shield-check' },
   ].filter(it => isViewAvailable(avail, it.id));
   const cell = (on) => ({ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '9px 4px 7px', background: 'none', border: 'none', cursor: 'pointer', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)', fontSize: 10.5, fontWeight: 700, WebkitTapHighlightColor: 'transparent' });
   return (
@@ -7753,6 +7754,11 @@ export default function App() {
     // source. Des qu'il repond, c'est lui qui fait foi.
     server: serverOk,
   });
+  // La langue se resout ICI, apres `setLoggiaState` : « suivre Home Assistant »
+  // lit le compte HA, et le choix explicite vit dans la configuration qu'on vient
+  // de poser. Resolue pendant le rendu, elle est juste des le meme tour pour tous
+  // les `t()` en dessous.
+  preparerLangue(getHass());
   // Resolution memoisee : le parcours des entites ne doit pas tourner a chaque rendu.
   const loggiaRuntime = useMemo(
     () => buildRuntime({ discovery, userCfg: serverCfg, states: (getHass() || {}).states || {} }),
@@ -8204,7 +8210,7 @@ export default function App() {
     {showOnboarding && <Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} />}
     <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, isAdmin, notifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => r !== 'Extérieur') }}>
     <div className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)' }}>
-      {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12.5, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>Connexion Home Assistant perdue — les données affichées peuvent être obsolètes</div>}
+      {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12.5, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{t('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 12, padding: '10px 16px', fontSize: 12.5, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
       <Sidebar view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} open={navOpen} customViews={customViews} ha={(() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
@@ -8214,7 +8220,7 @@ export default function App() {
         const aid = (secAlarm() && ok && hass.states[secAlarm()]) ? secAlarm() : rAl;
         const ast = (ok && aid && hass.states[aid]) ? hass.states[aid].state : null;
         const al = ast == null ? { t: 'Alarme · état inconnu', c: '140,152,180' }
-          : ast === 'disarmed' ? { t: 'Alarme désarmée', c: '52,211,153' }
+          : ast === 'disarmed' ? { t: t('Alarme désarmée'), c: '52,211,153' }
             : ast === 'triggered' ? { t: 'ALARME DÉCLENCHÉE', c: '248,113,113' }
               : (ast === 'arming' || ast === 'pending') ? { t: 'Alarme · activation…', c: '255,179,71' }
                 : { t: ast === 'armed_away' || ast === 'armed_vacation' ? 'Alarme armée · Absent' : 'Alarme armée · Présent', c: '255,179,71' };

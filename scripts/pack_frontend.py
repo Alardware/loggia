@@ -1,0 +1,120 @@
+"""Porte le build Vite dans le composant, sans jeter ce que des clients lisent encore.
+
+Le frontend est servi depuis `custom_components/loggia/frontend/`. Deux regles
+tiennent tout ce fichier :
+
+1. Le CSS est INLINE dans `index.html`. Les caches iOS gardent volontiers un
+   vieux html ; s'il pointe une feuille de style supprimee, le dashboard s'affiche
+   nu. Inline, le html est autonome.
+
+2. La copie est ADDITIVE, jamais un miroir. Un navigateur au cache perime demande
+   encore l'ancien `index-<hash>.js` : l'effacer lui donne un ecran blanc. Les
+   trois derniers de chaque famille restent.
+
+Ce script vivait dans le dossier temporaire du build, que Windows nettoie. Il est
+au depot maintenant.
+"""
+from __future__ import annotations
+
+import os
+import re
+import shutil
+import sys
+
+DIST = os.environ.get('LOGGIA_DIST', 'C:/Users/micro/AppData/Local/Temp/orion_v2/dist')
+CIBLE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                     'custom_components', 'loggia', 'frontend')
+GARDE = 3
+
+
+def inliner_css(html, dossier_assets):
+    """Remplace la feuille de style par son contenu."""
+    m = re.search(r'\s*<link rel="stylesheet"[^>]*href="\./assets/(index-[^"]+\.css)"[^>]*>', html)
+    if not m:
+        return html
+    chemin = os.path.join(dossier_assets, m.group(1))
+    with open(chemin, encoding='utf-8') as f:
+        css = f.read()
+    return html[:m.start()] + '\n  <style>' + css + '</style>' + html[m.end():]
+
+
+def retenir(dossier, prefixe, suffixe, proteges=()):
+    """Supprime les bundles au-dela des `GARDE` plus recents. Rend les effaces.
+
+    `proteges` liste ce que l'`index.html` courant reference. Sans cette garde, la
+    rentention a efface le bundle du jour : `shutil.copyfile` ne reporte pas les
+    dates, tous les fichiers venaient d'etre ecrits a la meme seconde, et « les
+    trois plus recents » ne voulait plus rien dire.
+    """
+    def famille(f):
+        return f.startswith(prefixe) and f.endswith(suffixe)
+
+    fichiers = [f for f in os.listdir(dossier) if famille(f) and f not in proteges]
+    fichiers.sort(key=lambda f: os.path.getmtime(os.path.join(dossier, f)), reverse=True)
+    # Les proteges comptent dans le quota, mais SEULS ceux de cette famille : sinon
+    # `vendor` et les images, proteges eux aussi, epuiseraient le quota des `index-*`.
+    deja = sum(1 for f in proteges if famille(f))
+    efface = []
+    for f in fichiers[max(GARDE - deja, 0):]:
+        os.remove(os.path.join(dossier, f))
+        efface.append(f)
+    return efface
+
+
+def copier_arbre(src, dst):
+    n = 0
+    for racine, _, fichiers in os.walk(src):
+        rel = os.path.relpath(racine, src)
+        cible = dst if rel == '.' else os.path.join(dst, rel)
+        os.makedirs(cible, exist_ok=True)
+        for f in fichiers:
+            # `copy2` et non `copyfile` : la date de chaque fichier sert a decider
+            # quels bundles garder.
+            shutil.copy2(os.path.join(racine, f), os.path.join(cible, f))
+            n += 1
+    return n
+
+
+def main():
+    if not os.path.isdir(DIST):
+        print('build introuvable :', DIST)
+        return 1
+    assets_src = os.path.join(DIST, 'assets')
+    assets_dst = os.path.join(CIBLE, 'assets')
+    os.makedirs(assets_dst, exist_ok=True)
+
+    n = copier_arbre(assets_src, assets_dst)
+
+    # Tout ce que Vite a copie depuis `public/` : polices, logo, images.
+    autres = 0
+    for f in os.listdir(DIST):
+        chemin = os.path.join(DIST, f)
+        if f in ('assets', 'index.html'):
+            continue
+        if os.path.isdir(chemin):
+            autres += copier_arbre(chemin, os.path.join(CIBLE, f))
+        else:
+            shutil.copyfile(chemin, os.path.join(CIBLE, f))
+            autres += 1
+
+    with open(os.path.join(DIST, 'index.html'), encoding='utf-8') as f:
+        html = f.read()
+    html = inliner_css(html, assets_src)
+    if '<style>' not in html:
+        print('ATTENTION : le CSS n a pas ete inline — feuille de style introuvable')
+    with open(os.path.join(CIBLE, 'index.html'), 'w', encoding='utf-8') as f:
+        f.write(html)
+
+    # Ce que le html qu'on vient d'ecrire demande : intouchable.
+    reference = set(re.findall(r'\./assets/([A-Za-z0-9_.-]+)', html))
+    efface = (retenir(assets_dst, 'index-', '.js', reference)
+              + retenir(assets_dst, 'index-', '.css', reference))
+    print('assets copies       :', n)
+    print('fichiers publics    :', autres)
+    print('anciens bundles otes:', len(efface), efface if efface else '')
+    print('cible               :', CIBLE)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

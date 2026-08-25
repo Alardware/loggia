@@ -1,0 +1,374 @@
+/* English.
+ *
+ * Les cles sont les textes francais tels qu'ils sont ecrits dans les sources.
+ * Un texte absent d'ici s'affiche en francais : mieux vaut une ligne manquante
+ * qu'une cle technique a l'ecran. Voir `src/i18n.js`.
+ *
+ * Ne PAS traduire : les noms de pieces, d'appareils et d'entites — ils viennent
+ * de Home Assistant, deja dans la langue de l'installation.
+ */
+export default {
+  // Navigation et vues
+  'MAISON': 'HOME',
+  'SYSTÈME': 'SYSTEM',
+  'VUES SECONDAIRES': 'SECONDARY VIEWS',
+  'APPAREILS EN LIGNE': 'DEVICES ONLINE',
+  'HORS LIGNE': 'OFFLINE',
+  'CONNEXION…': 'CONNECTING…',
+  'Objets': 'Devices',
+  'Climat': 'Climate',
+  'Volets': 'Blinds',
+  'Aspirateur': 'Vacuum',
+  'Croquettes': 'Kibble',
+  'Alarme désarmée': 'Alarm disarmed',
+  'Alarme armée': 'Alarm armed',
+  'Alarme déclenchée': 'Alarm triggered',
+  'En ligne': 'Online',
+  'Vues secondaires': 'Secondary views',
+  'Accueil': 'Home',
+  'Pièces': 'Rooms',
+  'Pièce': 'Room',
+  'Scènes': 'Scenes',
+  'Scènes rapides': 'Quick scenes',
+  'Objets connectés': 'Connected devices',
+  'Énergie': 'Energy',
+  'Sécurité': 'Security',
+  'Système': 'System',
+  'Météo': 'Weather',
+  'Lumières': 'Lights',
+  'Médias': 'Media',
+  'Média': 'Media',
+  'Caméras': 'Cameras',
+  'Caméra': 'Camera',
+  'Paramètres': 'Settings',
+  'Réseau': 'Network',
+  'Identité': 'Identity',
+  'Présence': 'Presence',
+  'Extérieur': 'Outdoors',
+  'Séjour': 'Living room',
+  'Entrée': 'Entrance',
+  'Façade': 'Front',
+
+  // Actions
+  'Rafraîchir': 'Refresh',
+  'Redémarrer': 'Restart',
+  'Redémarrer HA': 'Restart HA',
+  'Exécuter': 'Run',
+  'Exécuter maintenant': 'Run now',
+  'Vérifier': 'Check',
+  'Terminé': 'Done',
+  'Précédent': 'Previous',
+  'Répéter': 'Repeat',
+  'Aléatoire': 'Shuffle',
+  'Couper le son': 'Mute',
+  'Éteindre': 'Turn off',
+  'Tout éteindre': 'Turn everything off',
+  'Tout réafficher': 'Show all again',
+  'Désarmer': 'Disarm',
+  'Rétablir': 'Restore',
+  "Rétablir l'automatique": 'Restore automatic',
+  'Rétablir les défauts': 'Restore defaults',
+  'Revenir à auto': 'Back to auto',
+  'Changer de thème': 'Change theme',
+  'Appliquer une scène': 'Apply a scene',
+  'Ouvrir les paramètres': 'Open settings',
+  "Retour à l'accueil": 'Back to home',
+  'Copier la config': 'Copy config',
+  'Importer une config': 'Import a config',
+  'Enregistrer le code': 'Save code',
+  'Créer une vue': 'Create a view',
+  'Réassocier les pièces': 'Re-link rooms',
+  'Détecter automatiquement': 'Detect automatically',
+  'Lancer sur': 'Play on',
+  'Télécommande': 'Remote',
+  'Pilotage à la main': 'Manual control',
+  'Volet par volet': 'Blind by blind',
+  'Afficher / masquer le menu': 'Show / hide the menu',
+  'Pivoter la carte d’un quart de tour': 'Rotate the card a quarter turn',
+
+  // Ajouts
+  'Ajouter un appareil': 'Add a device',
+  'Ajouter un lecteur': 'Add a player',
+  'Ajouter un poste': 'Add a station',
+  'Ajouter un profil': 'Add a profile',
+  'Ajouter un thermostat': 'Add a thermostat',
+  'Ajouter un titre': 'Add a heading',
+  'Ajouter un volet': 'Add a blind',
+  'Ajouter une carte': 'Add a card',
+  'Ajouter une lumière': 'Add a light',
+
+  // Recherche et filtres
+  'Filtrer par nom…': 'Filter by name…',
+  'Rechercher une entité (nom ou id)…': 'Search an entity (name or id)…',
+  'Rechercher une entité…': 'Search an entity…',
+  'Rechercher une pièce, une scène…': 'Search a room, a scene…',
+  'Pièce, vue, scène…': 'Room, view, scene…',
+  'Toutes les sections': 'All sections',
+  'Période': 'Period',
+  'Vue complète': 'Full view',
+
+  // Mesures
+  'Température': 'Temperature',
+  'Humidité': 'Humidity',
+  'Luminosité': 'Brightness',
+  'Coût': 'Cost',
+  'Coût estimé': 'Estimated cost',
+  'État': 'State',
+  'Prévision': 'Forecast',
+  'Réservoir': 'Tank',
+  'Serpillière': 'Mop',
+  'Brosse latérale': 'Side brush',
+  'Débit d’eau': 'Water flow',
+  'Présent': 'Home',
+  'Prénom': 'First name',
+  'Nom affiché': 'Display name',
+  'À jour': 'Up to date',
+  'Masquées': 'Hidden',
+  'masquée': 'hidden',
+  'météo': 'weather',
+  'humidité du sol': 'soil moisture',
+
+  // Titres de sections
+  'APERÇU': 'OVERVIEW',
+  'CHAÎNE': 'CHANNEL',
+  'ENTITÉ': 'ENTITY',
+  'ENTITÉS': 'ENTITIES',
+  'EXPORT RÉSEAU': 'NETWORK EXPORT',
+  'ICÔNE': 'ICON',
+  'RÔLE': 'ROLE',
+  'VOUS': 'YOU',
+  'ZONES UTILISÉES': 'AREAS USED',
+  'LUMIÈRES ALLUMÉES': 'LIGHTS ON',
+  "MASQUÉES POUR L'INSTANT": 'HIDDEN FOR NOW',
+  'INTERVALLE DE RAFRAÎCHISSEMENT': 'REFRESH INTERVAL',
+  'INTÉRIEUR · HUMIDITÉ': 'INDOOR · HUMIDITY',
+  'TEMPÉRATURE · 24 H': 'TEMPERATURE · 24 H',
+  'Activité · 24 h': 'Activity · 24 h',
+  'Maison · Temps réel': 'Home · Real time',
+  'Bilan instantané': 'Live summary',
+  'Journal système': 'System log',
+  'Mises à jour': 'Updates',
+  'Entités': 'Entities',
+  'Entités suivies': 'Tracked entities',
+  'Entités synchronisées': 'Synchronised entities',
+  'Entités du dashboard': 'Dashboard entities',
+  'Entités de cette vue': 'Entities in this view',
+  'Aucune entité': 'No entity',
+  'Entité native': 'Native entity',
+  'Entité camera': 'camera entity',
+  'Entité person': 'person entity',
+  'Entité switch': 'switch entity',
+  'Lecteurs médias': 'Media players',
+  'Caméras en direct': 'Live cameras',
+  'Caméras (Accueil)': 'Cameras (Home)',
+  'Pièces (Accueil)': 'Rooms (Home)',
+  'Vos pièces': 'Your rooms',
+  'Appareils de la pièce': 'Devices in the room',
+  'Collection de scènes': 'Scene collection',
+  'Gestion des vues': 'View management',
+  'Vues intégrées': 'Built-in views',
+  'Vue personnalisée': 'Custom view',
+  'Menu latéral et vues perso': 'Sidebar and custom views',
+  'Liaison des capteurs': 'Sensor linking',
+  'Capteurs reliés aux cartes': 'Sensors linked to the cards',
+  'Zones ciblées': 'Targeted areas',
+  'Zones à nettoyer': 'Areas to clean',
+  'Nettoyage ciblé': 'Targeted cleaning',
+  'Profil par défaut': 'Default profile',
+  'Profil actif sur cet appareil — reconnu depuis la session Home Assistant':
+    'Active profile on this device — recognised from the Home Assistant session',
+  'Communauté': 'Community',
+  'Hôte principal': 'Main host',
+  'Passerelle réseau': 'Network gateway',
+  'Sans token': 'No token',
+  'Auto-hébergée, sans CDN': 'Self-hosted, no CDN',
+  'Interrupteurs traités comme lumières': 'Switches treated as lights',
+  'Synchronisation entre accès': 'Sync across access methods',
+  'Bascule automatique pour Nabu Casa': 'Automatic switch for Nabu Casa',
+  'Proposer la bascule Nabu Casa': 'Offer the Nabu Casa switch',
+  'hors du réseau local': 'outside the local network',
+  'Réseau local muet': 'Local network silent',
+  "État de l'installation": 'Installation status',
+  'État des appareils': 'Device status',
+  'État des mises à jour': 'Update status',
+  'Tout est à jour': 'Everything is up to date',
+  'Dernière exécution': 'Last run',
+  'Dernière vérification': 'Last check',
+  'Depuis la mise en service': 'Since commissioning',
+  'Économie du jour': "Today's saving",
+  'Économie solaire': 'Solar saving',
+  'Thème': 'Theme',
+  'Thème actif': 'Active theme',
+  'Thème par défaut': 'Default theme',
+  'Thème, mode, effets': 'Theme, mode, effects',
+  'Matière & formes': 'Material & shapes',
+  'Matière des cartes': 'Card material',
+  'Ombres portées': 'Drop shadows',
+  'Liserés': 'Hairlines',
+  'Contraste renforcé': 'Increased contrast',
+  'Effets animés': 'Animated effects',
+  'Effets météo animés': 'Animated weather effects',
+  'Mode édition': 'Edit mode',
+  'Suivre le thème Home Assistant': 'Follow the Home Assistant theme',
+  'Langue': 'Language',
+  'Suivre HA': 'Follow HA',
+  '« Suivre Home Assistant » prend la langue du compte HA. Les noms de pièces et d’appareils viennent de Home Assistant : ils ne sont pas traduits ici.':
+    '“Follow Home Assistant” uses the language of the HA account. Room and device names come from Home Assistant: they are not translated here.',
+
+  // Themes
+  'A plat, sans ombre': 'Flat, no shadow',
+  'Verre dépoli, flou': 'Frosted glass, blurred',
+  'Néon nocturne': 'Night neon',
+  'Material épuré': 'Clean Material',
+  'Océan Material': 'Material ocean',
+  'Sobre, façon GitHub': 'Understated, GitHub style',
+  'Prune, rose poudré': 'Plum, powder pink',
+  'Ambiance fête': 'Party mood',
+
+  // Phrases d'aide
+  'Appliqué au thème choisi.': 'Applied to the chosen theme.',
+  'Aucun appareil détecté pour cette pièce.': 'No device found for this room.',
+  'Pas de capteur configuré pour cette pièce.': 'No sensor configured for this room.',
+  'Toutes les pièces configurées sont déjà associées.': 'All configured rooms are already linked.',
+  'Aucune vue personnalisée. « + Nouvelle vue » pour commencer.':
+    'No custom view. “+ New view” to get started.',
+  'Aucune entité météo dans Home Assistant. Cette vue n’a rien à afficher.':
+    'No weather entity in Home Assistant. This view has nothing to show.',
+  'Prévision horaire indisponible pour cette entité.': 'Hourly forecast unavailable for this entity.',
+  'Prévision journalière indisponible pour cette entité.': 'Daily forecast unavailable for this entity.',
+  'Vue vide — active le crayon (en haut) pour ajouter des cartes.':
+    'Empty view — use the pencil (top) to add cards.',
+  "Chaque entité choisie s'ajoute immédiatement à la vue.":
+    'Each entity you pick is added to the view straight away.',
+  "Coche pour ajouter, décoche pour retirer. Les modifications s'appliquent tout de suite.":
+    'Tick to add, untick to remove. Changes apply immediately.',
+  "Les modifications s'appliquent immédiatement à cet appareil":
+    'Changes apply immediately to this device',
+  'Retire (×), réordonne (‹ ›) ou ajoute des cartes. Quitte avec le crayon du haut.':
+    'Remove (×), reorder (‹ ›) or add cards. Leave with the pencil at the top.',
+  'Crée tes propres vues avec tes entités — elles apparaissent dans le menu latéral.':
+    'Build your own views from your entities — they appear in the sidebar.',
+  'Créées avec tes entités, éditables à tout moment': 'Built from your entities, editable at any time',
+  'Ce qui apparaît dans le menu latéral, et ce que tu as créé toi-même':
+    'What appears in the sidebar, and what you built yourself',
+  'Gérées dans Home Assistant': 'Managed in Home Assistant',
+  'Les automatisations restent créées et modifiées dans Home Assistant':
+    'Automations are still created and edited in Home Assistant',
+  'Autocomplétion en tapant. « Enregistrer » recharge le dashboard pour appliquer.':
+    'Autocomplete as you type. “Save” reloads the dashboard to apply.',
+  'Une entité vide masque simplement la donnée sur les cartes concernées':
+    'An empty entity simply hides that data on the cards concerned',
+  'Plus court = plus de requêtes vers Home Assistant.':
+    'Shorter = more requests to Home Assistant.',
+  'Calque le thème actif de Home Assistant et désactive les choix ci-dessous.':
+    'Mirrors the active Home Assistant theme and disables the choices below.',
+  'Thème suivi depuis Home Assistant — coupe « Suivre » pour choisir manuellement.':
+    'Theme followed from Home Assistant — turn “Follow” off to choose manually.',
+  'Le verre rend les cartes translucides et floute ce qui passe dessous.':
+    'Glass makes the cards translucent and blurs whatever passes underneath.',
+  'Détache les cartes du fond. À couper pour un rendu plat.':
+    'Lifts the cards off the background. Turn off for a flat look.',
+  'Trait de 1 px autour des cartes et des tableaux.': '1 px line around cards and tables.',
+  'Rayon des cartes, des champs et des boutons.': 'Radius of cards, fields and buttons.',
+  'Éclaircit les textes secondaires et marque les séparateurs.':
+    'Lightens secondary text and strengthens separators.',
+  'Éléments actifs, jauges et liens.': 'Active elements, gauges and links.',
+  "l'aperçu suit le thème choisi": 'the preview follows the chosen theme',
+  'Seul un administrateur peut ajouter, modifier ou supprimer un utilisateur.':
+    'Only an administrator can add, edit or delete a user.',
+  'Requis pour basculer vers un profil Admin. Reste local à cet appareil (jamais synchronisé).':
+    'Required to switch to an Admin profile. Stays local to this device (never synchronised).',
+  'Requis pour ce profil': 'Required for this profile',
+  'Ce que le profil affiche sous son nom': 'What the profile shows under its name',
+  'Ce que le robot fait pendant son passage': 'What the robot does during its run',
+  'Totaux tenus par le robot': 'Totals kept by the robot',
+  'Signalée par le robot': 'Reported by the robot',
+  'Surface parcourue et durée du dernier passage': 'Area covered and duration of the last run',
+  'Sur la carte ou dans la liste — laisse vide pour un passage complet':
+    'On the map or in the list — leave empty for a full run',
+  'Quantité d’eau envoyée à la serpillière': 'Amount of water fed to the mop',
+  'Suit le passage du robot. Choisis la caméra dans Paramètres → Entités.':
+    'Follows the robot as it runs. Pick the camera in Settings → Entities.',
+  'Usure du tampon · à remplacer sous 20 %': 'Pad wear · replace below 20 %',
+  'Usure · révision sous 20 %': 'Wear · service below 20 %',
+  'Usure · à changer sous 20 %': 'Wear · change below 20 %',
+  'Usure · à remplacer sous 20 %': 'Wear · replace below 20 %',
+  'RAS · véhicule présent': 'All clear · vehicle present',
+  'Aérer au-delà de 1 000 ppm': 'Ventilate above 1,000 ppm',
+  'Courbes sur 24 h : température, humidité et CO₂':
+    '24 h curves: temperature, humidity and CO₂',
+  'Température, humidité et CO₂ par pièce': 'Temperature, humidity and CO₂ per room',
+  'Détections caméra par heure, heure courante en vert':
+    'Camera detections per hour, current hour in green',
+  'Compteur électrique · temps réel': 'Electricity meter · real time',
+  'Estimation du jour, production autoconsommée':
+    "Today's estimate, self-consumed production",
+  'Part de la production consommée sur place': 'Share of production consumed on site',
+  'Part des automatisations activées': 'Share of automations enabled',
+  'Automatisation déclenchée le plus récemment': 'Most recently triggered automation',
+  'Modules suivis dont la version est la plus récente':
+    'Tracked add-ons running the latest version',
+  'Relevé Home Assistant sur la période choisie':
+    'Home Assistant reading over the chosen period',
+  'Relevés de l’entité météo': 'Readings from the weather entity',
+  'Mesurée sur le dernier appel': 'Measured on the last call',
+  'Adresse utilisée sur le réseau domestique': 'Address used on the home network',
+  'Le capteur ne répond pas': 'The sensor is not responding',
+  'Connexion Home Assistant perdue — les données affichées peuvent être obsolètes':
+    'Home Assistant connection lost — the data shown may be stale',
+  'Demande de rafraîchissement envoyée à Home Assistant':
+    'Refresh request sent to Home Assistant',
+  'Une erreur est survenue pendant le rendu. Le détail ci-dessous permet de la corriger.':
+    'Something went wrong while rendering. The details below help fix it.',
+  'rien à afficher pour cette installation': 'nothing to show for this installation',
+  'Aucun repas restant aujourd’hui': 'No meal left today',
+  'Aucune carte : désigne l’entité': 'No map: point at the entity',
+  'Relance le cœur sans toucher à la machine · ~40 s':
+    'Restarts the core without touching the machine · ~40 s',
+  'Reboot complet de HAOS Nova · 2 à 3 min hors ligne':
+    'Full HAOS Nova reboot · 2 to 3 min offline',
+  'Arrêt complet · rallumage physique requis':
+    'Full shutdown · physical power-on required',
+  'Fermeture au crépuscule': 'Close at dusk',
+  "La scène s'applique au groupe de la pièce sélectionnée":
+    'The scene applies to the group of the selected room',
+  'La télécommande n’apparaît que pour les téléviseurs. Choisis-en un pour la retrouver.':
+    'The remote only appears for televisions. Pick one to bring it back.',
+  'pour ce lecteur : seules les commandes de lecture et de volume répondent.':
+    'for this player: only playback and volume controls respond.',
+  'Sans équipement d’ambiance — réseau, énergie, serveurs. Rarement des pièces.':
+    'No ambient equipment — network, energy, servers. Rarely rooms.',
+  'Cliquer pour modifier · glisser pour déplacer (flèches ← →)':
+    'Click to edit · drag to move (arrows ← →)',
+  'Clique une zone « ? » pour la nommer': 'Click a “?” area to name it',
+  'Quelle pièce est-ce ?': 'Which room is this?',
+  'Mode édition : choisis le panneau d’alarme et les caméras de cette vue.':
+    'Edit mode: pick the alarm panel and the cameras for this view.',
+  'Mode édition : choisis l’entité météo de cette vue.':
+    'Edit mode: pick the weather entity for this view.',
+  'Mode édition : clique un volet pour le modifier, glisse-le pour le déplacer.':
+    'Edit mode: click a blind to edit it, drag it to move it.',
+  'Mode édition : clique une zone pour la modifier, glisse-la pour la déplacer.':
+    'Edit mode: click an area to edit it, drag it to move it.',
+  "Entité météo (vue Météo, bannière de l'Accueil, conseils extérieur).":
+    'Weather entity (Weather view, Home banner, outdoor tips).',
+  "Panneau d'alarme (vue Sécurité, bannière, notifications).":
+    'Alarm panel (Security view, banner, notifications).',
+  'Entités switch affichées dans la vue Lumières.':
+    'switch entities shown in the Lights view.',
+  'États des entités et réglages de cet appareil':
+    'Entity states and settings for this device',
+  'Tableau de bord domotique auto-hébergé pour Home Assistant':
+    'Self-hosted smart-home dashboard for Home Assistant',
+  'React + Vite · servi par l’intégration': 'React + Vite · served by the integration',
+  "testées à l'enregistrement": 'tested on save',
+  'toutes (light.a, light.b)': 'all (light.a, light.b)',
+  'Accueil, Pièces, Scènes, Objets, Énergie, Sécurité, Système':
+    'Home, Rooms, Scenes, Devices, Energy, Security, System',
+  'Lumières, Climat, Volets, Aspirateur, Croquettes, Médias':
+    'Lights, Climate, Blinds, Vacuum, Kibble, Media',
+  'Présence, caméras, médias': 'Presence, cameras, media',
+  "C'est prêt": 'All set',
+  'Bon à savoir': 'Good to know',
+  'Bon après-midi': 'Good afternoon',
+};

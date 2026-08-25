@@ -249,7 +249,7 @@ export function loggiaEnt(domain, fallback = null) {
   return (v == null) ? fallback : v;
 }
 
-export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_weather', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_customviews', 'loggia_users', 'loggia_lights', 'loggia-theme', 'loggia-mode', 'loggia-ha', 'loggia-navbar', 'loggia-navoffset', 'loggia-topoffset', 'loggia-wxfx', 'loggia-ciel'];
+export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_weather', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_customviews', 'loggia_users', 'loggia_lights', 'loggia-theme', 'loggia-mode', 'loggia-ha', 'loggia-navbar', 'loggia-navoffset', 'loggia-topoffset', 'loggia-wxfx', 'loggia-ciel', 'loggia-langue'];
 
 export const importLoggiaConfig = (txt) => {
   const o = JSON.parse(String(txt).trim());

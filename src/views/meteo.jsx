@@ -13,6 +13,7 @@ const WeatherGL = lazy(() => import('../wx3d.jsx'));
 import { REDUCE_MOTION, Fi, Anim, ViewEditBar } from '../ui.jsx';
 import { WX_PRESETS } from '../wxpresets.js';
 import { WX_ICON, WX_ICOLOR, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from '../wxutil.jsx';
+import { t } from '../i18n.js';
 
 export default /* ══════ VUE MÉTÉO ══════ */
 function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
@@ -92,7 +93,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
   if (!wId) {
     return (
       <div className="loggia-content" style={{ padding: '26px 28px 56px' }}>
-        <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>Météo</h1>
+        <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{t('Météo')}</h1>
         <div style={{ ...carte, marginTop: 20, color: 'var(--o-text2)', fontWeight: 600, fontSize: 13.5 }}>
           Aucune entité météo dans Home Assistant. Cette vue n’a rien à afficher.
         </div>
@@ -113,7 +114,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
       {edit && <ViewEditBar texte="Mode édition : choisis l’entité météo de cette vue." onEnt={onEnt} />}
 
       <div>
-        <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>Météo</h1>
+        <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{t('Météo')}</h1>
         <div style={{ fontSize: 13.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>
           {(wa.friendly_name || wId)}{depuis ? ' · relevé ' + depuis : ''} · Home Assistant
         </div>
@@ -162,7 +163,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
 
       <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Prévision</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{t('Prévision')}</span>
           <div style={{ display: 'flex', gap: 4 }}>
             {[['24h', '24 h'], ['7j', '7 jours']].map(([id, lb]) => (
               <button key={id} onClick={() => setPortee(id)} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, background: portee === id ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: portee === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</button>
@@ -181,7 +182,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
             <div style={{ fontSize: 16, fontWeight: 700 }}>Conditions</div>
             <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 11px', borderRadius: 999, background: 'var(--o-s2)', color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{wId}</span>
           </div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 8 }}>Relevés de l’entité météo</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 8 }}>{t('Relevés de l’entité météo')}</div>
           {ressenti != null && <Ligne titre="Ressenti" sous="Température apparente, vent et humidité inclus" valeur={deg(ressenti) + ' C'} couleur="#ff8a4c" />}
           {hum != null && <Ligne titre="Humidité" sous="Confortable entre 40 et 60 %" valeur={Math.round(hum) + ' %'} couleur="var(--o-ok)" part={hum} />}
           {vent != null && <Ligne titre="Vent" sous={rafales != null ? 'Rafales à ' + Math.round(rafales) + ' km/h' : 'Vitesse moyenne'} valeur={Math.round(vent) + ' km/h'} />}
@@ -214,7 +215,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
                 </div></Anim>
               ))}
             </div>
-          : <div style={{ ...carte, fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>Prévision horaire indisponible pour cette entité.</div>
+          : <div style={{ ...carte, fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{t('Prévision horaire indisponible pour cette entité.')}</div>
       ) : (
         (jours.length)
           ? <div className="grid-wxdays" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 12 }}>
@@ -236,7 +237,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
                 </div></Anim>
               ))}
             </div>
-          : <div style={{ ...carte, fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>Prévision journalière indisponible pour cette entité.</div>
+          : <div style={{ ...carte, fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{t('Prévision journalière indisponible pour cette entité.')}</div>
       )}
     </div>
   );
