@@ -33,6 +33,8 @@
  * pas dater une panne — mais la SIMULTANÉITÉ, elle, reste un signal solide.
  */
 
+import { locale } from './i18n.js';
+
 const domaineDe = (id) => (typeof id === 'string' ? id.slice(0, id.indexOf('.')) : '');
 
 /** Les domaines qui vivent dans la configuration, sans matériel derrière. */
@@ -331,7 +333,7 @@ export function healthText(rapport) {
     } else if (i.kind === 'simultane') {
       const quoi = Object.entries(i.domains).sort((a, b) => b[1] - a[1])
         .slice(0, 4).map(([d, n]) => `${n} ${d}`).join(', ');
-      const heure = new Date(i.at).toLocaleTimeString('fr-FR',
+      const heure = new Date(i.at).toLocaleTimeString(locale(),
         { hour: '2-digit', minute: '2-digit' });
       L.push(`  · ${i.count} entités tombées ensemble à ${heure}`
         + (i.core ? ` — dont ${i.coreCount} locales, donc Home Assistant lui-même` : ''));

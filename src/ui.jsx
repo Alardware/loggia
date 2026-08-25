@@ -10,7 +10,7 @@
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { getHass } from './state.js';
-import { t } from './i18n.js';
+import { tr } from './i18n.js';
 
 // Suit un min-width en live (layout PC : rail Accueil ≥ 1180 px)
 // ── Animations lot 1 : count-up, stagger d'entrée, jauges qui se remplissent ──
@@ -62,13 +62,13 @@ export const HX_TOKENS = { 'var(--o-accent)': '--o-accent-rgb', 'var(--o-accent-
 export const cl_hexRgb = (c) => HX_TOKENS[c] ? `var(${HX_TOKENS[c]})` : (typeof c !== 'string' || c[0] !== '#') ? '140,152,180' : `${parseInt(c.slice(1, 3), 16)},${parseInt(c.slice(3, 5), 16)},${parseInt(c.slice(5, 7), 16)}`;
 
 export const HIDDEN_VIEWS = [
-  { label: t('Lumières'), vid: 'lumieres', icon: 'bulb', c: '#ffce73' },
-  { label: t('Climat'), vid: 'climat', icon: 'thermometer-half', c: '#ff8a4c' },
-  { label: t('Volets'), vid: 'volets', icon: 'blinds', c: 'var(--o-accent-soft)' },
-  { label: t('Aspirateur'), vid: 'aspirateur', icon: 'broom', c: 'var(--o-accent-soft)' },
-  { label: t('Croquettes'), vid: 'croquettes', icon: 'paw', c: '#ffce73' },
-  { label: t('Médias'), vid: 'medias', icon: 'tv-music', c: 'var(--o-purple)' },
-  { label: t('Météo'), vid: 'meteo', icon: 'cloud-sun', c: 'var(--o-cyan)' },
+  { label: tr('Lumières'), vid: 'lumieres', icon: 'bulb', c: '#ffce73' },
+  { label: tr('Climat'), vid: 'climat', icon: 'thermometer-half', c: '#ff8a4c' },
+  { label: tr('Volets'), vid: 'volets', icon: 'blinds', c: 'var(--o-accent-soft)' },
+  { label: tr('Aspirateur'), vid: 'aspirateur', icon: 'broom', c: 'var(--o-accent-soft)' },
+  { label: tr('Croquettes'), vid: 'croquettes', icon: 'paw', c: '#ffce73' },
+  { label: tr('Médias'), vid: 'medias', icon: 'tv-music', c: 'var(--o-purple)' },
+  { label: tr('Météo'), vid: 'meteo', icon: 'cloud-sun', c: 'var(--o-cyan)' },
 ];
 
 // Vues retirées de la sidebar mais toujours routables (Pièces/Objets les couvrent) — exposées dans la recherche ⌘K.
@@ -283,7 +283,7 @@ export function EntPicker({ hass, exclude = [], onPick, autoFocus = false }) {
   const results = ql ? all.filter(e => (e.id.toLowerCase().indexOf(ql) >= 0 || e.name.toLowerCase().indexOf(ql) >= 0) && exclude.indexOf(e.id) < 0).slice(0, 30) : [];
   return (
     <>
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder={t('Rechercher une entité (nom ou id)…')} spellCheck={false} autoFocus={autoFocus} style={cvInp} />
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder={tr('Rechercher une entité (nom ou id)…')} spellCheck={false} autoFocus={autoFocus} style={cvInp} />
       {results.length > 0 && (
         <div style={{ maxHeight: 240, overflowY: 'auto', marginTop: 8, border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: 12 }}>
           {results.map(e => (
