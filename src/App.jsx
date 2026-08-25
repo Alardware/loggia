@@ -16,6 +16,7 @@ import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex 
 import { planAction as actionsPlan, availableActions as actionsAvailable } from './actions.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
 import { deviceCard, presentableDevices, presentationSummary } from './present.js';
+import { healthReport, healthText } from './health.js';
 import { probe as configProbe, reportLive as configReportLive, migrateFromLocalStorage, completerDepuisLocal, collectLocal, createConfig, CONFIG_VERSION } from './config.js';
 import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
@@ -7543,6 +7544,8 @@ export default function App() {
         get devices() { return discovery.devices; },
         get abilities() { return discovery.abilities; },
         get knowledge() { return discovery.knowledge; },
+        get health() { return discovery.health; },
+        healthText: () => { const t = healthText(discovery.health); console.log(t); return t; },
         get errors() { return discovery.errors; },
         refresh: discovery.refresh,
         report: () => { const t = discoveryReport(discovery); console.log(t); return t; },
@@ -7559,6 +7562,7 @@ export default function App() {
         profileOf,
         profileTable,
         deviceCard,
+        healthReport,
         presentableDevices,
         presentationSummary,
       };

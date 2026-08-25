@@ -17,6 +17,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { buildDevices } from './devices.js';
 import { capsSummary, deviceCaps } from './capabilities.js';
 import { profilesSummary } from './profiles.js';
+import { healthReport } from './health.js';
 
 export const DISCOVERY_VERSION = 1;
 
@@ -395,7 +396,7 @@ export function capabilities({ states = {}, index = null }) {
  */
 export function useDiscovery(hass) {
   const [data, setData] = useState({ ready: false, errors: null, index: null,
-    caps: null, devices: null, abilities: null, knowledge: null, raw: null });
+    caps: null, devices: null, abilities: null, knowledge: null, health: null, raw: null });
   const startedRef = useRef(false);
   const aliveRef = useRef(true);
   useEffect(() => () => { aliveRef.current = false; }, []);
@@ -415,8 +416,11 @@ export function useDiscovery(hass) {
       // qui ne savent qu'une moitié de ce qu'il faut afficher, appareils sans
       // matériel derrière.
       const knowledge = profilesSummary(devices, (d) => deviceCaps(d, states, index.services));
+      // Des incidents, pas des symptomes : une installation ordinaire a en
+      // permanence des centaines d'entites muettes sans que rien n'aille mal.
+      const health = healthReport(devices, { states, meta: index.entityMeta });
       const next = { ready: true, errors: reg.errors.length ? reg.errors : null,
-        index, caps, devices, abilities, knowledge, raw: reg };
+        index, caps, devices, abilities, knowledge, health, raw: reg };
       if (aliveRef.current) setData(next);
       return next;
     }).catch(() => null);
