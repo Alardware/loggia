@@ -168,6 +168,26 @@ Quatre distinctions :
   démarrage de Home Assistant : « indisponible depuis deux heures » peut vouloir
   dire « n'a jamais répondu ». On ne date donc pas une panne — mais l'heure
   commune, elle, ne ment pas.
+- **Un démarrage n'est pas une panne.** Au démarrage, *tout* bascule à la même
+  seconde — 2040 entités sur 2442 sur l'installation d'essai. `bootMinute()`
+  reconnaît la minute qui concentre la majorité des changements, et ce qui a
+  basculé à ce moment-là n'est plus présenté comme une chute. Sans cette règle,
+  chaque redémarrage annonçait une catastrophe.
+- **Un résidu n'est pas une entité en panne.** Une automatisation, un script,
+  une case à cocher ne dépendent d'aucun réseau : ils sont créés au démarrage à
+  partir de la configuration. Muets *depuis* le démarrage, ils n'ont plus de
+  définition — seule leur entrée de registre a survécu à une suppression ou à un
+  renommage. 112 entités de l'installation d'essai sont dans ce cas. La preuve
+  est arithmétique : le nombre d'entités vivantes égale exactement le nombre
+  déclaré dans les YAML (40 `input_boolean` vivants pour 40 déclarés, 32
+  `input_number` pour 32, 13 `input_select` pour 13, 3 `timer` pour 3).
+
+> Ces deux règles ont été écrites après une erreur de diagnostic : le moteur
+> annonçait « 859 entités tombées ensemble, donc Home Assistant lui-même », et
+> j'en ai conclu deux fois à un plantage. Le fichier `home-assistant.log.fault`
+> que j'avais pris pour la trace d'un crash est créé et vidé par le
+> `faulthandler` de Python **à chaque démarrage** ; sa taille de zéro octet le
+> disait déjà, et la machine tournait depuis vingt-deux jours.
 
 **`core` et `local`.** Une chute qui ne touche *que* des entités de
 configuration est `local`. Mais il suffit qu'**une seule** entité locale soit
