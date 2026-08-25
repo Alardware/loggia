@@ -3533,6 +3533,25 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   // L'INTERRUPTEUR de la carte ne pilote QUE le(s) plafonnier(s) de la pièce (règle user).
   // Le compteur « X lampes allumées », lui, compte tous les luminaires non-« Ampoule ».
   /**
+   * Une entite designee a la main, mise a la forme d'une lumiere.
+   *
+   * L'applique du jardin est souvent un `switch` sans zone : la decouverte ne
+   * la classe dans aucune piece, et elle ne serait donc jamais commandable
+   * depuis une carte. Des lors que l'utilisateur l'a DESIGNEE, on la prend
+   * telle quelle.
+   */
+  const entiteBrute = (id) => {
+    const st = dashHass && dashHass.states && dashHass.states[id];
+    if (!st) return null;
+    const at = st.attributes || {};
+    const on = st.state === 'on';
+    return {
+      id, domain: id.split('.')[0], name: at.friendly_name || id.split('.')[1].replace(/_/g, ' '),
+      on, bri: on ? 100 : 0, dimmable: false, rgb: false, ct: false, color: null,
+    };
+  };
+
+  /**
    * Les lumieres qu'un appui sur la carte allume ou eteint.
    *
    * Par defaut toutes celles de la piece — ce filtre ne retenait auparavant que
@@ -3547,11 +3566,15 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
    */
   const roomMainsOf = (name) => {
     const toutes = roomLightsOf(name);
-    if (!toutes || !toutes.length) return toutes;
     const r = a && a.rooms && a.rooms.find(x => (x.name || x.room) === name);
     const choisies = (r && r.lights) || [];
+    // Les entites designees passent AVANT : une piece peut n'avoir aucune
+    // lumiere decouverte et pourtant en commander une. C'est le cas de
+    // l'exterieur, dont l'applique est un `switch` sans zone — le seul chemin
+    // qui l'atteigne est celui que l'utilisateur a indique lui-meme.
     if (!choisies.length) return toutes;
-    const retenues = toutes.filter(l => choisies.indexOf(l.id) >= 0);
+    const parId = new Map((toutes || []).map(l => [l.id, l]));
+    const retenues = choisies.map(id => parId.get(id) || entiteBrute(id)).filter(Boolean);
     // Un choix qui ne correspond a rien (entite renommee, retiree) ne doit pas
     // faire disparaitre le bouton : on retombe sur la piece entiere.
     return retenues.length ? retenues : toutes;
@@ -3638,7 +3661,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
         {/* PIECES + CAMÉRAS + À VENIR — PC ≥1180 : rail « En cours / Rappels » accolé à droite,
             caméras poussées en bas (alignées avec le bas du rail). Mobile/tablette : empilement historique. */}
         {(() => {
-          const inner = pieces.filter(p => !(p.status && p.status.kind === 'ext'));
+          const inner = pieces;
           const piecesHeader = (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <div style={sectionTitle}>Pièces</div>
