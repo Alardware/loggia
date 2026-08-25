@@ -60,6 +60,10 @@ export function buildDevices(index, states = {}) {
         entryType: info.entryType || null,
         entities: [],
         domains: [],
+        // Les intégrations qui ont créé ses entités. Un même appareil peut en
+        // avoir plusieurs : un enregistreur vidéo apparaît sous l'intégration
+        // réseau du fabricant et sous celle de ses caméras.
+        platforms: [],
         // Compte des entités qui ne répondent pas, pour le moteur de santé.
         unavailable: 0,
       };
@@ -68,12 +72,31 @@ export function buildDevices(index, states = {}) {
     d.entities.push(entityId);
     const dom = domaineDe(entityId);
     if (dom && d.domains.indexOf(dom) < 0) d.domains.push(dom);
+    if (m.platform && d.platforms.indexOf(m.platform) < 0) d.platforms.push(m.platform);
     if (!repond(states[entityId])) d.unavailable += 1;
   });
 
   out.forEach(d => {
     d.entities.sort();
     d.domains.sort();
+    // L'intégration manque au registre pour un appareil sur dix — il a été créé
+    // sans `identifiers`, ou par une intégration qui n'en pose pas. Ses entités,
+    // elles, portent toujours leur plateforme. Sans ce rattrapage, aucun profil
+    // ne peut s'appliquer à ces appareils.
+    if (!d.integration && d.platforms.length) {
+      // Plusieurs plateformes : celle qui a créé le plus d'entités décrit le
+      // mieux l'appareil. À égalité, l'ordre de rencontre tranche, ce qui est
+      // stable puisque les entités sont triées.
+      const compte = new Map();
+      d.entities.forEach(id => {
+        const p = index.entityMeta.get(id);
+        if (p && p.platform) compte.set(p.platform, (compte.get(p.platform) || 0) + 1);
+      });
+      let meilleure = null, n = 0;
+      compte.forEach((c, p) => { if (c > n) { n = c; meilleure = p; } });
+      d.integration = meilleure;
+      d.integrationDeduite = true;   // pour qui veut savoir d'où vient la valeur
+    }
     // Disponible dès qu'une entité répond : un appareil dont seul le capteur de
     // signal est muet n'est pas hors ligne. Aucune n'ayant répondu, il l'est.
     d.available = d.entities.length > d.unavailable;

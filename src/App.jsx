@@ -14,6 +14,7 @@ const ParametresContent = lazy(() => import('./views/parametres.jsx').then(m => 
 const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling } from './discovery.js';
 import { planAction as actionsPlan, availableActions as actionsAvailable } from './actions.js';
+import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
 import { probe as configProbe, reportLive as configReportLive, migrateFromLocalStorage, completerDepuisLocal, collectLocal, createConfig, CONFIG_VERSION } from './config.js';
 import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
@@ -7540,6 +7541,7 @@ export default function App() {
         get index() { return discovery.index; },
         get devices() { return discovery.devices; },
         get abilities() { return discovery.abilities; },
+        get knowledge() { return discovery.knowledge; },
         get errors() { return discovery.errors; },
         refresh: discovery.refresh,
         report: () => { const t = discoveryReport(discovery); console.log(t); return t; },
@@ -7553,6 +7555,8 @@ export default function App() {
         capabilities: discoveryCapabilities,
         planAction: actionsPlan,
         availableActions: actionsAvailable,
+        profileOf,
+        profileTable,
       };
     } catch (e) {}
   }, [discovery.ready, discovery.caps]);

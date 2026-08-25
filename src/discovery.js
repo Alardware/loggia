@@ -15,7 +15,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { buildDevices } from './devices.js';
-import { capsSummary } from './capabilities.js';
+import { capsSummary, deviceCaps } from './capabilities.js';
+import { profilesSummary } from './profiles.js';
 
 export const DISCOVERY_VERSION = 1;
 
@@ -195,6 +196,12 @@ export function buildIndex({ areas = [], devices = [], entities = [], floors = [
       hidden: !!e.hidden_by,
       disabled: !!e.disabled_by,
       name: e.name || e.original_name || null,
+      // La plateforme est le domaine de l'integration qui a cree l'entite. Elle
+      // etait jetee, alors que c'est la seule cle sure pour reconnaitre a quoi
+      // on a affaire : 21 appareils de l'installation d'essai n'ont aucune
+      // integration dans le registre, mais leurs entites, elles, en ont une.
+      platform: e.platform || null,
+      deviceClass: e.device_class || e.original_device_class || null,
     });
   });
 
@@ -388,7 +395,7 @@ export function capabilities({ states = {}, index = null }) {
  */
 export function useDiscovery(hass) {
   const [data, setData] = useState({ ready: false, errors: null, index: null,
-    caps: null, devices: null, abilities: null, raw: null });
+    caps: null, devices: null, abilities: null, knowledge: null, raw: null });
   const startedRef = useRef(false);
   const aliveRef = useRef(true);
   useEffect(() => () => { aliveRef.current = false; }, []);
@@ -404,8 +411,12 @@ export function useDiscovery(hass) {
       const devices = buildDevices(index, states);
       // Ce que chaque appareil sait faire, d'après ce qu'il déclare lui-même.
       const abilities = capsSummary(devices, states, index.services, index.entityMeta);
+      // Ce que les attributs ne disent pas : caméras à plusieurs flux, lecteurs
+      // qui ne savent qu'une moitié de ce qu'il faut afficher, appareils sans
+      // matériel derrière.
+      const knowledge = profilesSummary(devices, (d) => deviceCaps(d, states, index.services));
       const next = { ready: true, errors: reg.errors.length ? reg.errors : null,
-        index, caps, devices, abilities, raw: reg };
+        index, caps, devices, abilities, knowledge, raw: reg };
       if (aliveRef.current) setData(next);
       return next;
     }).catch(() => null);
