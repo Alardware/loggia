@@ -3,6 +3,10 @@ name: Validation
 on:
   push:
   pull_request:
+  # Relance a la demande : les controles HACS interrogent GitHub au moment du
+  # run — topics, description, marque. Corriger un reglage du depot ne suffit
+  # donc pas, il faut refaire tourner la validation.
+  workflow_dispatch:
   schedule:
     # Une fois par semaine : hassfest et HACS evoluent, un depot qui passait
     # hier peut ne plus passer demain sans qu'on y ait touche.
