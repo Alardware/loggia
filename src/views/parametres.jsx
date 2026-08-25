@@ -11,6 +11,7 @@ import { Fi, Ico, Anim, REDUCE_MOTION, EnRow, EnVal, EnGauge, LOOK_DEF, HIDDEN_V
 import { cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_ENT, LOGGIA_RESOLVED, LOGGIA_INDEX, readLS,
   enHaids, medCompanion, medPlayers, normRooms, secAlarm, switchLightsCfg,
   exportLoggiaConfig, importLoggiaConfig,
+  exportConfigComplete, importConfigComplete, resetLoggiaComplet,
   cheminPanneau, lirePageAccueil, definirPageAccueil } from '../state.js';
 import { CV_ICONS, cvInp, cvName, USER_COLORS, BottomSheet, EntPicker, CV_DOM_ICON, cvDomain } from '../ui.jsx';
 import { useLoggia } from '../runtime.js';
@@ -139,14 +140,53 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
   );
 }
 
+/**
+ * Propose un fichier au telechargement.
+ *
+ * Le presse-papier ne suffit pas pour une configuration complete : elle peut
+ * peser plusieurs dizaines de kilo-octets, et surtout on veut pouvoir la garder.
+ */
+function telechargerConfig(texte, base) {
+  try {
+    const jour = new Date().toISOString().slice(0, 10);
+    const blob = new Blob([texte], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = base + '-' + jour + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    return true;
+  } catch (e) { return false; }
+}
+
 function ResetLoggiaBtn({ compact = false }) {
   const [arm, setArm] = useState(false);
   useEffect(() => { if (!arm) return undefined; const t = setTimeout(() => setArm(false), 4000); return () => clearTimeout(t); }, [arm]);
-  const doReset = () => {
-    try { const keys = []; for (let k = 0; k < localStorage.length; k++) { const key = localStorage.key(k); if (/^loggia[_-]/.test(key)) keys.push(key); } keys.forEach(k => localStorage.removeItem(k)); } catch (e) {}
+  const [enCours, setEnCours] = useState(false);
+  /**
+   * Remise a zero REELLE : la configuration du serveur comprise.
+   *
+   * L'ancienne version ne vidait que le stockage de ce navigateur. La
+   * configuration etant partagee entre appareils depuis, tout redescendait du
+   * serveur au rechargement : le bouton promettait une remise a zero qu'il ne
+   * faisait pas.
+   *
+   * Une sauvegarde part AVANT, automatiquement. L'operation ne se rattrape pas
+   * autrement, et personne ne pense a exporter avant d'effacer.
+   */
+  const doReset = async () => {
+    setEnCours(true);
+    try {
+      const j = await exportConfigComplete();
+      telechargerConfig(j, 'loggia-avant-remise-a-zero');
+    } catch (e) { /* une sauvegarde impossible ne doit pas bloquer la remise a zero demandee */ }
+    try { await resetLoggiaComplet(); } catch (e) { /* on recharge quand meme */ }
     window.location.reload();
   };
-  return <button onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ padding: compact ? '5px 10px' : '9px 16px', borderRadius: compact ? 8 : 11, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: arm ? '#fff' : 'var(--o-bad)', fontWeight: 700, fontSize: compact ? 11.5 : 12.5, cursor: 'pointer', transition: 'all .2s' }}>{arm ? 'Confirmer ?' : (compact ? 'Réinitialiser Loggia' : 'Réinitialiser')}</button>;
+  return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ padding: compact ? '5px 10px' : '9px 16px', borderRadius: compact ? 8 : 11, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: arm ? '#fff' : 'var(--o-bad)', fontWeight: 700, fontSize: compact ? 11.5 : 12.5, cursor: 'pointer', transition: 'all .2s' }}>{arm ? 'Confirmer ?' : (compact ? 'Réinitialiser Loggia' : 'Réinitialiser')}</button>;
 }
 
 function AdminPinEditor() {
@@ -1344,10 +1384,34 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <>
           <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Données locales</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Configuration</span>
               <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                 <button onClick={() => window.location.reload()} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)' }}>Recharger</button>
-                {isAdmin && <ResetLoggiaBtn compact />}
+                {/* Sauvegarder et restaurer la configuration COMPLETE : celle
+                    du serveur, partagee entre tous les appareils, et non le
+                    seul stockage de ce navigateur. */}
+                <button onClick={async () => {
+                  const j = await exportConfigComplete();
+                  telechargerConfig(j, 'loggia-config');
+                }} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text)' }}>Exporter</button>
+                {isAdmin && (
+                  <>
+                    <input type="file" accept="application/json,.json" style={{ display: 'none' }} id="o-import-cfg"
+                      onChange={async (e) => {
+                        const f = e.target.files && e.target.files[0];
+                        if (!f) return;
+                        try {
+                          await importConfigComplete(await f.text());
+                          window.location.reload();
+                        } catch (err) {
+                          alert('Import impossible : ' + ((err && err.message) || err));
+                        } finally { e.target.value = ''; }
+                      }} />
+                    <button onClick={() => { const el = document.getElementById('o-import-cfg'); if (el) el.click(); }}
+                      style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text)' }}>Importer</button>
+                    <ResetLoggiaBtn compact />
+                  </>
+                )}
               </div>
             </div>
             <span style={{ flex: 1 }} />

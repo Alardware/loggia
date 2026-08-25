@@ -218,7 +218,10 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
     <aside ref={navRef} className={'loggia-aside ' + (open ? 'is-open' : 'is-closed')} style={{ width: 264, flexShrink: 0, position: 'sticky', top: 0, alignSelf: 'flex-start', height: '100vh', overflowY: 'auto', background: 'linear-gradient(180deg,var(--o-side1),var(--o-side2))', borderRight: 'var(--o-bw,1px) solid var(--o-bd3)', padding: 'calc(18px + var(--o-safe-top,0px)) 12px 18px', display: 'flex', flexDirection: 'column' }}>
       {pill && <div aria-hidden="true" className="o-navpill" style={{ position: 'absolute', left: 12, right: 12, top: 0, height: pill.h, transform: `translateY(${pill.top}px)`, borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', pointerEvents: 'none', zIndex: 0 }}><span style={{ position: 'absolute', left: 0, top: 9, bottom: 9, width: 3, borderRadius: 3, background: 'var(--o-accent)' }} /></div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '4px 8px 14px' }}>
-        <span style={{ width: 38, height: 38, borderRadius: 11, background: 'linear-gradient(135deg,var(--o-ok),var(--o-accent))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#06121f', fontSize: 18 }}>O</span>
+        {/* Le logo du projet. C'etait un « O » sur un degrade — le O d'Orion,
+            reste apres le renommage. Servi depuis le meme dossier que le reste
+            du frontend, donc sans requete vers l'exterieur. */}
+        <img src="./logo.png" alt="" width={38} height={38} style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: 'block' }} />
         <div className="o-side-text" style={{ lineHeight: 1.15 }}><div style={{ fontSize: 15, fontWeight: 800 }}>Loggia</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', color: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)' }}>{ha ? (ha.online ? ha.devCount + ' APPAREILS EN LIGNE' : 'HORS LIGNE') : 'CONNEXION…'}</div></div>
       </div>
       {/* Les vues passent avant les reglages : « Système » et « Paramètres »

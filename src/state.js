@@ -263,6 +263,124 @@ export const importLoggiaConfig = (txt) => {
 
 export const exportLoggiaConfig = () => { const o = {}; LOGGIA_SYNC_KEYS.forEach(k => { try { const v = localStorage.getItem(k); if (v != null) o[k] = v; } catch (e) {} }); return JSON.stringify(o); };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// La configuration COMPLETE : celle du serveur, pas seulement du navigateur.
+//
+// Les trois fonctions ci-dessus travaillent sur le `localStorage`. C'etait la
+// verite avant que la configuration soit partagee entre appareils ; depuis, la
+// source est le composant, et `cfgVal` lui donne la priorite. Vider le seul
+// stockage local ne reinitialisait donc rien : tout redescendait du serveur au
+// rechargement suivant.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Le pont vers le composant, ou null s'il n'est pas installe. */
+const pont = () => {
+  const h = getHass();
+  return (h && typeof h.callWS === 'function') ? h : null;
+};
+
+/**
+ * Toute la configuration, telle que le serveur la connait pour cet utilisateur.
+ *
+ * Le format porte sa version : un fichier exporte aujourd'hui doit rester
+ * lisible quand la structure aura change.
+ */
+export async function exportConfigComplete() {
+  const h = pont();
+  let serveur = {};
+  if (h) {
+    try {
+      const r = await h.callWS({ type: 'loggia/config/get' });
+      serveur = (r && r.config) || {};
+    } catch (e) { serveur = {}; }
+  }
+  // Le stockage local complete : une cle jamais synchronisee n'existe que la.
+  const local = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (/^loggia[_-]/.test(k) && serveur[k] === undefined) local[k] = localStorage.getItem(k);
+    }
+  } catch (e) { /* stockage indisponible : l'export reste valable */ }
+  return JSON.stringify({
+    format: 'loggia-config',
+    version: 1,
+    exporte_le: new Date().toISOString(),
+    source: h ? 'serveur' : 'appareil',
+    config: { ...local, ...serveur },
+  }, null, 2);
+}
+
+/**
+ * Restaure une configuration exportee.
+ *
+ * L'ancien format — un objet plat de cles — reste accepte : un fichier
+ * enregistre avant cette version doit pouvoir revenir.
+ */
+export async function importConfigComplete(txt) {
+  const brut = JSON.parse(String(txt).trim());
+  if (!brut || typeof brut !== 'object' || Array.isArray(brut)) throw new Error('fichier invalide');
+  const config = (brut.format === 'loggia-config' && brut.config) ? brut.config : brut;
+  if (!config || typeof config !== 'object') throw new Error('aucune configuration dans ce fichier');
+
+  const h = pont();
+  if (h) {
+    // On efface d'abord ce qui existe, sinon une cle absente de l'export
+    // survivrait a la restauration — l'import doit etre un MIROIR.
+    const actuelle = await h.callWS({ type: 'loggia/config/get' }).catch(() => null);
+    const purge = {};
+    Object.keys((actuelle && actuelle.config) || {}).forEach(k => { purge[k] = null; });
+    if (Object.keys(purge).length) await h.callWS({ type: 'loggia/config/set', config: purge });
+    const aEcrire = {};
+    Object.keys(config).forEach(k => { if (config[k] != null) aEcrire[k] = config[k]; });
+    if (Object.keys(aEcrire).length) await h.callWS({ type: 'loggia/config/set', config: aEcrire });
+  }
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (/^loggia[_-]/.test(k)) localStorage.removeItem(k);
+    }
+    Object.keys(config).forEach(k => {
+      const v = config[k];
+      if (typeof v === 'string') localStorage.setItem(k, v);
+    });
+  } catch (e) { /* le serveur fait foi de toute facon */ }
+}
+
+/**
+ * Remise a zero : le dashboard redevient ce qu'il est sur une installation
+ * neuve, decouverte comprise.
+ *
+ * Une cle mise a `null` est supprimee par le composant DES DEUX COTES — la
+ * partie commune et la partie personnelle. On lit donc ce qui existe pour le
+ * demander explicitement, plutot que de se fier a une liste ecrite ici, qui
+ * oublierait les cles ajoutees depuis.
+ *
+ * L'appelant est cense avoir propose un export d'abord : cette operation ne se
+ * rattrape pas autrement.
+ */
+export async function resetLoggiaComplet() {
+  const h = pont();
+  if (h) {
+    try {
+      const r = await h.callWS({ type: 'loggia/config/get' });
+      const patch = {};
+      Object.keys((r && r.config) || {}).forEach(k => { patch[k] = null; });
+      if (Object.keys(patch).length) await h.callWS({ type: 'loggia/config/set', config: patch });
+      // Les reglages personnels de ce compte, que le patch ci-dessus ne couvre
+      // que si l'utilisateur est administrateur.
+      await h.callWS({ type: 'loggia/config/delete' }).catch(() => null);
+    } catch (e) { /* on vide au moins l'appareil */ }
+  }
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (/^loggia[_-]/.test(k)) localStorage.removeItem(k);
+    }
+  } catch (e) { /* rien de plus a faire */ }
+}
+
+
 // Interrupteurs (domaine switch) à traiter comme des lumières on/off dans la vue Lumières.
 // Interrupteurs traités comme des lumières — choix de l'utilisateur, sans
 // défaut : une installation neuve n'en déclare aucun.
