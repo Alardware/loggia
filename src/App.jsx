@@ -7537,6 +7537,7 @@ export default function App() {
         get ready() { return discovery.ready; },
         get caps() { return discovery.caps; },
         get index() { return discovery.index; },
+        get devices() { return discovery.devices; },
         get errors() { return discovery.errors; },
         refresh: discovery.refresh,
         report: () => { const t = discoveryReport(discovery); console.log(t); return t; },
