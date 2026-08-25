@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { healthReport, healthText } from '../src/health.js';
+import { healthReport, healthText, bootMinute } from '../src/health.js';
 
 /** Un état, daté : la minute compte, c'est tout le sujet. */
 const et = (state, minutesAgo = 0, attributes = {}) => ({
@@ -126,6 +126,78 @@ test('une chute mixte met quand meme Home Assistant en cause', () => {
   assert.equal(i.local, false, 'elle ne touche pas QUE des entites locales');
   assert.equal(i.core, true, 'mais des entites locales sont tombees');
   assert.equal(i.coreCount, 3);
+});
+
+// ── Le démarrage n'est pas une panne ────────────────────────────────────────
+
+/** Un parc où presque tout a basculé à la même minute : un démarrage. */
+function auDemarrage({ muettes = [], saines = 60, ilYA = 40 }) {
+  const states = {};
+  for (let i = 0; i < saines; i++) states['sensor.ok' + i] = et(String(i), ilYA);
+  muettes.forEach(id => { states[id] = et('unavailable', ilYA); });
+  return states;
+}
+
+test('un démarrage de Home Assistant n’est pas un incident', () => {
+  // Relevé réel : 2040 entités sur 2442 basculent à la même seconde au
+  // démarrage. Le présenter comme une chute annonçait une catastrophe à chaque
+  // redémarrage.
+  const states = auDemarrage({ muettes: ['light.a', 'light.b', 'sensor.x', 'switch.y', 'cover.z'] });
+  const r = healthReport(new Map(), { states });
+  assert.equal(kinds(r).indexOf('simultane'), -1, 'aucune chute ne doit être annoncée');
+});
+
+test('… mais une chute APRÈS le démarrage en reste une', () => {
+  const states = auDemarrage({ saines: 60, ilYA: 300 });
+  for (let i = 0; i < 6; i++) states['light.tombee' + i] = et('unavailable', 12);
+  const r = healthReport(new Map(), { states });
+  assert.deepEqual(kinds(r).filter(k => k === 'simultane'), ['simultane']);
+  assert.equal(r.incidents.find(i => i.kind === 'simultane').count, 6);
+});
+
+test('sur une installation qui tourne depuis longtemps, aucun démarrage reconnu', () => {
+  // Les changements sont étalés : rien ne se détache, et on ne doit pas
+  // désigner une minute au hasard comme étant le démarrage.
+  const states = {};
+  for (let i = 0; i < 60; i++) states['sensor.ok' + i] = et(String(i), i * 7);
+  assert.equal(bootMinute(states), null);
+});
+
+// ── Les résidus ─────────────────────────────────────────────────────────────
+
+test('une entité locale muette depuis le démarrage n’a plus de définition', () => {
+  // Une automatisation ne dépend d'aucun réseau : si elle est muette DEPUIS le
+  // démarrage, sa définition n'existe plus. 89 entités de l'installation
+  // d'essai sont dans ce cas, et les compter comme des pannes annonçait une
+  // centaine de problèmes permanents dont aucun n'en était un.
+  const states = auDemarrage({
+    muettes: ['automation.ancienne', 'automation.renommee', 'script.disparu',
+      'input_boolean.oublie', 'timer.retire'],
+  });
+  const r = healthReport(new Map(), { states });
+  const res = r.incidents.find(i => i.kind === 'residus');
+  assert.ok(res, 'les orphelines doivent être nommées');
+  assert.equal(res.count, 5);
+  assert.deepEqual(res.domains, { automation: 2, script: 1, input_boolean: 1, timer: 1 });
+  assert.match(healthText(r), /sans définition/);
+  assert.match(healthText(r), /Paramètres → Entités/);
+});
+
+test('une entité de matériel muette au démarrage n’est pas un résidu', () => {
+  // Une lampe peut très bien être injoignable au démarrage : c'est une panne
+  // possible, pas une définition manquante.
+  const states = auDemarrage({ muettes: ['light.injoignable', 'sensor.injoignable'] });
+  const r = healthReport(new Map(), { states });
+  assert.equal(kinds(r).indexOf('residus'), -1);
+});
+
+test('une entité locale tombée APRÈS le démarrage n’est pas un résidu', () => {
+  // Elle a répondu, puis s'est tue : c'est un événement, pas un vestige.
+  const states = auDemarrage({ saines: 60, ilYA: 300 });
+  for (let i = 0; i < 6; i++) states['automation.tombee' + i] = et('unavailable', 12);
+  const r = healthReport(new Map(), { states });
+  assert.equal(kinds(r).indexOf('residus'), -1);
+  assert.equal(kinds(r).indexOf('simultane') >= 0, true);
 });
 
 // ── La passerelle ───────────────────────────────────────────────────────────

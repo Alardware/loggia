@@ -55,6 +55,32 @@ function minuteDe(st) {
 }
 
 /**
+ * La minute où Home Assistant a démarré, si elle se laisse reconnaître.
+ *
+ * Au démarrage, TOUT bascule à la même seconde — sur l'installation d'essai,
+ * 2040 entités sur 2442. Aucune panne ne ressemble à cela : une intégration qui
+ * tombe emporte ses entités, pas celles des autres. La minute qui concentre la
+ * majorité des changements est donc le démarrage, et la confondre avec un
+ * incident revient à annoncer une catastrophe à chaque redémarrage.
+ *
+ * Rend `null` si rien ne se détache : sur une installation qui tourne depuis
+ * longtemps, les changements sont étalés et il n'y a plus de démarrage récent à
+ * reconnaître.
+ */
+export function bootMinute(states, part = 0.5) {
+  const total = Object.keys(states).length;
+  if (total < 20) return null;   // trop peu pour qu'une proportion signifie quoi que ce soit
+  const parMinute = new Map();
+  Object.keys(states).forEach(id => {
+    const m = minuteDe(states[id]);
+    if (m != null) parMinute.set(m, (parMinute.get(m) || 0) + 1);
+  });
+  let minute = null, n = 0;
+  parMinute.forEach((c, m) => { if (c > n) { n = c; minute = m; } });
+  return n >= total * part ? minute : null;
+}
+
+/**
  * Les entités qui ne répondent pas, écartant ce qui n'a rien à dire.
  *
  * Les entités de diagnostic et de configuration sont exclues : elles sont
@@ -154,6 +180,29 @@ function chutesSimultanees(states, ids, seuil = 5) {
 }
 
 /**
+ * Résidus : des entités qui n'ont plus de définition.
+ *
+ * Une automatisation, un script, une case à cocher ne dépendent d'aucun réseau
+ * ni d'aucun matériel : ils sont créés au démarrage à partir de la
+ * configuration. Si l'un d'eux est muet DEPUIS le démarrage, ce n'est pas qu'il
+ * est tombé — c'est que sa définition n'existe plus, et que seule son entrée de
+ * registre a survécu à une suppression ou à un renommage.
+ *
+ * Sur l'installation d'essai, 89 entités sont dans ce cas. Les compter comme
+ * des pannes revenait à annoncer une centaine de problèmes permanents, dont
+ * aucun n'en était un. Elles ne reviendront jamais : la seule issue est de
+ * supprimer leur entrée dans le registre des entités.
+ */
+function residus(states, ids, boot) {
+  if (boot == null) return null;
+  const liste = ids.filter(id => DOMAINES_LOCAUX.has(domaineDe(id)) && minuteDe(states[id]) === boot);
+  if (!liste.length) return null;
+  const domaines = {};
+  liste.forEach(id => { const d = domaineDe(id); domaines[d] = (domaines[d] || 0) + 1; });
+  return { kind: 'residus', count: liste.length, domains: domaines, entities: liste };
+}
+
+/**
  * Passerelles tombées : un appareil muet dont d'autres dépendent.
  *
  * Le lien `via` vient du registre. Quand il est renseigné, un pont hors service
@@ -214,7 +263,24 @@ export function healthReport(devices, ctx = {}) {
     i.entities.forEach(e => expliquees.add(e));
   });
 
+  // Le démarrage, reconnu avant tout le reste : ce qui a basculé à cette
+  // minute-là a basculé parce que Home Assistant démarrait, pas parce qu'une
+  // panne survenait.
+  const boot = bootMinute(states);
+
+  const orphelines = residus(states, listeMuettes.filter(e => !expliquees.has(e)), boot);
+  if (orphelines) {
+    incidents.push(orphelines);
+    orphelines.entities.forEach(e => expliquees.add(e));
+  }
+
   chutesSimultanees(states, listeMuettes.filter(e => !expliquees.has(e))).forEach(i => {
+    // Une chute à la minute du démarrage n'est pas une chute : tout bascule au
+    // démarrage, y compris ce qui va très bien.
+    if (boot != null && Math.abs(new Date(i.at).getTime() / 60000 - boot) <= SIMULTANE_MIN) {
+      i.entities.forEach(e => expliquees.add(e));
+      return;
+    }
     incidents.push(i);
     i.entities.forEach(e => expliquees.add(e));
   });
@@ -269,6 +335,13 @@ export function healthText(rapport) {
         { hour: '2-digit', minute: '2-digit' });
       L.push(`  · ${i.count} entités tombées ensemble à ${heure}`
         + (i.core ? ` — dont ${i.coreCount} locales, donc Home Assistant lui-même` : ''));
+      L.push(`      ${quoi}`);
+    } else if (i.kind === 'residus') {
+      const quoi = Object.entries(i.domains).sort((a, b) => b[1] - a[1])
+        .map(([d, n]) => `${n} ${d}`).join(', ');
+      L.push(`  · ${i.count} entités sans définition — anciennes configurations `
+        + 'dont seule l’entrée de registre subsiste, à supprimer dans '
+        + 'Paramètres → Entités');
       L.push(`      ${quoi}`);
     } else if (i.kind === 'appareils') {
       L.push(`  · ${i.count} appareil(s) hors ligne sans cause commune`);
