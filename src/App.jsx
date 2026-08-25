@@ -1871,14 +1871,22 @@ function RoomLightSheet({ light, hass, onClose }) {
 function RoomNav({ room, onNav, hass }) {
   const wrapRef = useRef(null);
   const S = (hass && hass.states) || {};
+  // Meme habillage que les cartes de l'accueil. Cette barre exigeait une
+  // egalite EXACTE avec la table des pieces : « Chambre Liam » n'y figurant
+  // pas, elle retombait sur une maison, la ou la carte montrait un lit. La
+  // meme piece portait deux icones selon l'endroit.
+  const zones = (LOGGIA_INDEX() && LOGGIA_INDEX().areaList) || [];
   const list = normRooms(cfgVal('loggia_rooms', null)).map(r => {
     const st = r.haid && r.haid.temp ? S[r.haid.temp] : null;
     const v = st ? parseFloat(st.state) : NaN;
-    const base = PIECES.find(x => x.name === r.room);
-    // Couleur attribuee a la piece : celle de son icone dans PIECES, repli sur la couleur
-    // de temperature, puis sur l'accent pour une piece ajoutee par l'utilisateur.
-    const col = base ? ((base.icon && base.icon.props && base.icon.props.color) || base.tc || 'var(--o-accent-soft)') : 'var(--o-accent-soft)';
-    return { name: r.room, temp: isNaN(v) ? null : v, icon: base ? base.icon : null, col };
+    // L'icone de la zone Home Assistant, retrouvee par le nom ou par le
+    // capteur que la piece utilise deja — comme pour les cartes.
+    const ix = LOGGIA_INDEX();
+    const zone = zones.find(z => rmNorm(z.name) === rmNorm(r.room))
+      || (ix && ix.areaOf && r.haid ? zones.find(z => z.id === [r.haid.temp, r.haid.humidity]
+          .filter(Boolean).map(ix.areaOf).find(Boolean)) : null);
+    const p = habillagePiece(r.room, zone && zone.icon);
+    return { name: r.room, temp: isNaN(v) ? null : v, icon: p.icon, col: couleurDePiece(modeleDePiece(r.room)) };
   });
   useEffect(() => {
     const w = wrapRef.current; if (!w) return;
@@ -3396,6 +3404,70 @@ function PresCard({ titre, lead, badge, rgb = '52,211,153', style, children }) {
 }
 
 
+/**
+ * Habillage d'une piece : icone, couleur, teinte de fond.
+ *
+ * Trois sources, dans l'ordre : l'icone que Home Assistant porte sur la ZONE,
+ * puis la table des pieces connues, puis une reconnaissance par mots. Un nom
+ * inconnu recoit un habillage neutre plutot que d'etre ignore.
+ *
+ * Cette fonction vit au niveau du module parce que DEUX vues en ont besoin —
+ * les cartes de l'accueil et la barre de navigation entre pieces. Chacune
+ * avait sa propre regle : la carte reconnaissait « Chambre Liam » par le mot
+ * « chambre », la barre exigeait une egalite exacte et retombait sur une
+ * maison. La meme piece portait donc deux icones selon l'endroit.
+ */
+const PARENTE = [
+  // La chambre d'enfant passe avant la chambre, sans quoi elle ne serait
+  // jamais atteinte. Meme vocabulaire que `LIGHT_ROOM`, qui range deja les
+  // luminaires ainsi.
+  [/enfant|kid|child|bebe|bébé|nursery/, 'Chambre enfant'],
+  [/chambre|bedroom/, 'Chambre'],
+  [/sejour|séjour|salon|living/, 'Séjour'],
+  [/cuisine|kitchen/, 'Cuisine'],
+  [/bureau|office|atelier/, 'Bureau'],
+  [/sdb|bain|douche|bathroom|salle d ?'?eau/, 'Salle de bain'],
+  [/exter|extér|jardin|terrasse|balcon|outdoor/, 'Extérieur'],
+];
+
+/** Le modele de piece le plus proche d'un nom, ou null. */
+function modeleDePiece(nom) {
+  const exact = PIECES.find(x => x.name === nom);
+  if (exact) return exact;
+  const parent = PARENTE.find(([re]) => re.test(String(nom).toLowerCase()));
+  return (parent && PIECES.find(x => x.name === parent[1])) || null;
+}
+
+/**
+ * La couleur d'une piece.
+ *
+ * Elle se lit sur l'icone du modele, PAS sur `tc` : pour le Sejour et
+ * l'Exterieur les deux different — un arbre vert devenait bleu clair.
+ */
+function couleurDePiece(modele) {
+  return (modele && modele.icon && modele.icon.props && modele.icon.props.color)
+    || (modele && modele.tc) || 'var(--o-accent)';
+}
+
+function habillagePiece(nom, mdi) {
+  const modele = modeleDePiece(nom);
+  const glyphe = uiconDeMdi(mdi);
+  if (glyphe) {
+    return {
+      ...(modele || { box: 44, rad: 13, status: { kind: 'repos' } }),
+      name: nom,
+      bg: (modele && modele.bg) || 'rgba(var(--o-accent-rgb),.16)',
+      icon: <Ico name={glyphe} color={couleurDePiece(modele)} size={22} />,
+    };
+  }
+  if (modele) return { ...modele, name: nom };
+  return {
+    name: nom, bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13,
+    icon: <Ico name="home" color="var(--o-accent)" size={22} />,
+    status: { kind: 'repos' },
+  };
+}
+
 function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onOpenMeteo }) {
   const [override, setOverride] = useState(null);
   const [roomPop, setRoomPop] = useState(null);
@@ -3421,47 +3493,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   // vocabulaire que `LIGHT_ROOM`, qui range déjà les luminaires ainsi — la
   // règle de la chambre d'enfant passe avant celle de la chambre, sans quoi
   // elle ne serait jamais atteinte.
-  const PARENTE = [
-    [/enfant|kid|child|bebe|bébé|nursery/, 'Chambre enfant'],
-    [/chambre|bedroom/, 'Chambre'],
-    [/sejour|séjour|salon|living/, 'Séjour'],
-    [/cuisine|kitchen/, 'Cuisine'],
-    [/bureau|office|atelier/, 'Bureau'],
-    [/sdb|bain|douche|bathroom|salle d ?'?eau/, 'Salle de bain'],
-    [/exter|extér|jardin|terrasse|balcon|outdoor/, 'Extérieur'],
-  ];
-  const habillage = (nom, mdi) => {
-    // L'icone de la zone Home Assistant l'emporte : c'est ce qui permet de
-    // nommer ses pieces librement, sans que l'icone se deduise du nom.
-    const glyphe = uiconDeMdi(mdi);
-    const exact = PIECES.find(x => x.name === nom);
-    if (glyphe) {
-      const modele = exact || PIECES.find(x => x.name === (PARENTE.find(([re]) => re.test(String(nom).toLowerCase())) || [])[1]);
-      const couleur = (modele && modele.tc) || 'var(--o-accent)';
-      return {
-        ...(modele || { box: 44, rad: 13, status: { kind: 'repos' } }),
-        name: nom,
-        bg: (modele && modele.bg) || 'rgba(var(--o-accent-rgb),.16)',
-        icon: <Ico name={glyphe} color={couleur} size={22} />,
-      };
-    }
-    if (exact) return exact;
-    const s = String(nom).toLowerCase();
-    const parent = PARENTE.find(([re]) => re.test(s));
-    const modele = parent && PIECES.find(x => x.name === parent[1]);
-    if (modele) return { ...modele, name: nom };
-    return {
-      name: nom, bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13,
-      icon: <Ico name="home" color="var(--o-accent)" size={22} />,
-      status: { kind: 'repos' },
-    };
-  };
   // Sans données live, on montre les pièces d'exemple : c'est l'écran d'avant
   // la première connexion, pas une installation vide.
   const noms = (a && a.rooms && a.rooms.length) ? a.rooms.map(r => r.name) : PIECES.map(p => p.name);
   const pieces = noms.map(nom => {
     const r = a && a.rooms && a.rooms.find(x => x.name === nom);
-    const p = habillage(nom, r && r.icon);
+    const p = habillagePiece(nom, r && r.icon);
     if (!r) return (a && a.rooms && a.rooms.length) ? { ...p, live: { temp: null, hum: null, co2: null } } : p; // pièce sans capteurs → tirets ; pas de hass → démo
     const out = { ...p };
     out.temp = r.temp != null ? r.temp.toFixed(1) + '°' : '—';
