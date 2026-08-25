@@ -172,18 +172,32 @@ export function mergedProfile(device, caps = null) {
  * Rien n'est supprimé : les autres restent accessibles à qui les demande. Le
  * choix se fait sur les noms, jamais sur un identifiant écrit ici.
  */
-export function primaryEntity(device, merge, names = null) {
+export function primaryEntity(device, merge, opts = null) {
   if (!device || !merge || !merge.domain) return null;
   const candidates = (device.entities || []).filter(id => domaineDe(id) === merge.domain);
   if (!candidates.length) return null;
   if (candidates.length === 1) return candidates[0];
 
-  const nomDe = (id) => String((names && names(id)) || id);
+  // Compatibilité : l'appelant peut ne passer qu'une fonction de nommage.
+  const o = typeof opts === 'function' ? { names: opts } : (opts || {});
+  const nomDe = (id) => String((o.names && o.names(id)) || id);
   const evite = (id) => (merge.avoid || []).some(r => r.test(nomDe(id)));
   const prefere = (id) => (merge.prefer || []).some(r => r.test(nomDe(id)));
 
-  const retenus = candidates.filter(id => !evite(id));
-  const pool = retenus.length ? retenus : candidates;
+  // La disponibilité passe AVANT la préférence de nom. Une caméra de
+  // l'installation d'essai publie trois flux dont le seul « haute définition »
+  // est hors service : présenter le plus beau des flux morts serait absurde.
+  let pool = candidates;
+  if (o.states) {
+    const repondent = candidates.filter(id => {
+      const st = o.states[id];
+      return st && st.state !== 'unavailable' && st.state !== 'unknown';
+    });
+    if (repondent.length) pool = repondent;
+  }
+
+  const retenus = pool.filter(id => !evite(id));
+  if (retenus.length) pool = retenus;
   return pool.find(prefere) || pool[0];
 }
 

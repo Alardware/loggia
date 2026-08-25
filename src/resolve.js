@@ -14,6 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { siblingsOf, pickSibling } from './discovery.js';
+import { mergedProfile, primaryEntity } from './profiles.js';
 
 /** Choix de l'utilisateur pour ce domaine, s'il en a fait un. */
 function userPick(userCfg, key) {
@@ -156,14 +157,37 @@ export function resolveCameras({ index, caps, states = {}, userCfg = {} } = {}) 
     };
   }
 
-  const seen = new Set();
-  const unique = [];
+  // Une camera publie souvent plusieurs flux — haute definition, basse
+  // definition, cliche — qui decrivent un seul objectif au mur. On n'en presente
+  // qu'un, et le choix n'est pas indifferent : sur l'installation d'essai, le
+  // seul flux « haute definition » est hors service tandis que deux autres
+  // enregistrent. Prendre le premier venu pouvait donc afficher une image morte.
+  const parAppareil = new Map();
   list.forEach(c => {
     const meta = index && index.entityMeta.get(c.id);
     const key = (meta && meta.deviceId) || c.id;
-    if (seen.has(key)) return;
-    seen.add(key);
-    unique.push({ id: c.id, name: c.name, area: c.area, available: c.available, ...camDetections(index, states, c.id) });
+    if (!parAppareil.has(key)) parAppareil.set(key, []);
+    parAppareil.get(key).push(c);
+  });
+
+  const unique = [];
+  parAppareil.forEach(flux => {
+    let choisi = flux[0];
+    if (flux.length > 1) {
+      const pseudo = { entities: flux.map(f => f.id), domains: ['camera'] };
+      const profil = mergedProfile(pseudo);
+      const noms = new Map(flux.map(f => [f.id, f.name || f.id]));
+      const retenu = profil && profil.merge
+        ? primaryEntity(pseudo, profil.merge, { states, names: (id) => noms.get(id) })
+        : null;
+      choisi = flux.find(f => f.id === retenu) || choisi;
+    }
+    unique.push({
+      id: choisi.id, name: choisi.name, area: choisi.area, available: choisi.available,
+      // Les autres flux ne sont pas perdus : une vue de detail peut les proposer.
+      streams: flux.map(f => f.id),
+      ...camDetections(index, states, choisi.id),
+    });
   });
   return { available: true, source: 'decouverte', list: unique };
 }

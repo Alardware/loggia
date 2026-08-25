@@ -98,6 +98,21 @@ test('cameras : un appareil, trois flux, une seule fiche', () => {
   assert.equal(c.list[0].name, 'Caméra entrée');
 });
 
+test('cameras : un flux hors service n est pas celui qu on presente', () => {
+  // Releve sur une installation reelle : des trois flux d'une camera, le seul
+  // « haute definition » etait indisponible pendant que les deux autres
+  // enregistraient. Retenir le premier venu affichait donc une image morte.
+  const maison = cameraHome();
+  maison.states['camera.entree_high'] = {
+    entity_id: 'camera.entree_high', state: 'unavailable',
+    attributes: { friendly_name: 'Caméra entrée haute définition' },
+  };
+  const c = resolveCameras(ctxOf(maison));
+  assert.equal(c.list.length, 1);
+  assert.notEqual(c.list[0].id, 'camera.entree_high', 'un flux muet ne doit pas etre retenu');
+  assert.equal(c.list[0].streams.length, 3, 'les autres flux restent accessibles');
+});
+
 test('cameras : les detecteurs viennent des binary_sensor du meme appareil', () => {
   const cam = resolveCameras(ctxOf(cameraHome())).list[0];
   assert.equal(cam.motion, 'binary_sensor.entree_motion');

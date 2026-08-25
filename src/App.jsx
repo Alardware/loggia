@@ -15,6 +15,7 @@ const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ de
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling } from './discovery.js';
 import { planAction as actionsPlan, availableActions as actionsAvailable } from './actions.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
+import { deviceCard, presentableDevices, presentationSummary } from './present.js';
 import { probe as configProbe, reportLive as configReportLive, migrateFromLocalStorage, completerDepuisLocal, collectLocal, createConfig, CONFIG_VERSION } from './config.js';
 import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
@@ -7557,6 +7558,9 @@ export default function App() {
         availableActions: actionsAvailable,
         profileOf,
         profileTable,
+        deviceCard,
+        presentableDevices,
+        presentationSummary,
       };
     } catch (e) {}
   }, [discovery.ready, discovery.caps]);
