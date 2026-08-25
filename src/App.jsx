@@ -780,12 +780,14 @@ function applyTheme(opts, hass) {
  * table fait le pont : elle permet de NOMMER SES PIECES COMME ON VEUT, puisque
  * l'icone ne se deduit plus des mots du nom.
  *
- * Chaque glyphe a ete verifie dans `uicons-solid-rounded.css` : un nom absent
- * n'afficherait rien du tout. C'est le cas de `couch`, qui n'existe pas dans la
- * police et laissait le Sejour sans icone.
+ * Chaque cible a ete verifiee contre les TROIS sources que `Ico` consulte, et
+ * dans cet ordre : `CUSTOM_SVG` (des dessins maison, dont `couch`, `teddy-bear`
+ * et `bed-alt`), `FI_MAP` (des alias), puis la police REGULAR — `fi-rr-`, et
+ * non `fi-sr-`. Chercher un nom dans le seul CSS de la police solide fait
+ * conclure a tort qu'il n'existe pas.
  */
 const MDI_VERS_UICON = {
-  sofa: 'chair', 'sofa-outline': 'chair', 'seat-outline': 'chair',
+  sofa: 'couch', 'sofa-outline': 'couch', 'seat-outline': 'couch', 'sofa-single': 'couch',
   'silverware-fork-knife': 'utensils', 'countertop': 'utensils', stove: 'utensils',
   'fridge': 'utensils', 'coffee': 'coffee', 'food': 'restaurant',
   bed: 'bed-alt', 'bed-king': 'bed-alt', 'bed-queen': 'bed-alt', 'sleep': 'bed-alt',
@@ -812,7 +814,7 @@ function uiconDeMdi(mdi) {
 }
 
 const PIECES = [
-  { name: 'Séjour', bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13, icon: <Ico name="chair" color="var(--o-accent)" size={22} />, status: { kind: 'active', n: 2 }, temp: '18.1°', tc: 'var(--o-accent-soft)', hum: '63%', badge: '412 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
+  { name: 'Séjour', bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13, icon: <Ico name="couch" color="var(--o-accent)" size={22} />, status: { kind: 'active', n: 2 }, temp: '18.1°', tc: 'var(--o-accent-soft)', hum: '63%', badge: '412 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
   { name: 'Cuisine', bg: 'rgba(255,157,60,.16)', box: 44, rad: 13, icon: <Ico name="utensils" color="#ff9d3c" size={22} />, status: { kind: 'active', n: 1 }, temp: '22.0°', tc: '#ff9d3c', hum: '53%', badge: '486 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
   { name: 'Chambre', bg: 'rgba(167,139,250,.16)', box: 44, rad: 13, icon: <Ico name="bed-alt" color="var(--o-purple)" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: 'var(--o-purple)', hum: '60%', badge: '529 ppm', bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' },
   { name: 'Chambre enfant', bg: 'rgba(244,114,182,.16)', box: 44, rad: 13, icon: <Ico name="teddy-bear" color="#f472b6" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: '#f472b6', hum: '61%', badge: '641 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
