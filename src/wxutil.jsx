@@ -13,7 +13,7 @@ import wxSnow from '@bybas/weather-icons/production/fill/all/snow.svg';
 import wxStorm from '@bybas/weather-icons/production/fill/all/thunderstorms.svg';
 import wxWind from '@bybas/weather-icons/production/fill/all/wind.svg';
 import { loggiaEnt, LOGGIA_RESOLVED } from './state.js';
-import { tr } from './i18n.js';
+import { tr, trHA } from './i18n.js';
 
 // Entité météo : le choix de l'utilisateur, sinon celle qu'a retenue la
 // résolution, sinon la première du domaine `weather`. Null si l'installation
@@ -56,6 +56,11 @@ export function haWeatherMode(cond, isNight) {
 }
 
 export function haWeatherLabel(cond) {
+  /* Home Assistant nomme deja ces etats, dans ses 64 langues : `partlycloudy`
+   * devient « Partiellement nuageux », « Teilweise bewolkt », « Parcialmente
+   * nublado ». La table francaise ci-dessous ne sert que s'il ne repond pas. */
+  const viaHA = trHA('component.weather.entity_component._.state.' + String(cond || '').toLowerCase());
+  if (viaHA) return viaHA;
   const m = { 'clear-night': 'Nuit claire', sunny: 'Ensoleillé', partlycloudy: 'Partiellement nuageux', cloudy: 'Nuageux', rainy: tr('Pluie'), pouring: 'Forte pluie', snowy: 'Neige', 'snowy-rainy': 'Neige fondue', fog: 'Brouillard', windy: 'Venteux', 'windy-variant': 'Venteux', hail: 'Grêle', lightning: 'Orage', 'lightning-rainy': 'Orage', exceptional: 'Exceptionnel' };
   return m[(cond || '').toLowerCase()] || 'Nuageux';
 }
