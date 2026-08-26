@@ -334,6 +334,15 @@ export default {
   'Écart de': 'Abweichung von',
   'batterie': 'Akku',
 
+  // Ecran Entites — chauffage
+  'Chauffage': 'Heizung',
+  'Un thermostat (climate.…) est trouvé tout seul : rien à saisir. Cette liste sert aux radiateurs fil pilote — un interrupteur entouré de ses aides, que rien ne permet de deviner.':
+    'Ein Thermostat (climate.…) wird von allein gefunden — hier ist nichts einzutragen. Diese Liste ist fuer Pilotdraht-Heizkoerper: ein Schalter mit seinen Hilfselementen, die sich nicht erraten lassen.',
+  'Interrupteur': 'Schalter',
+  'Consigne': 'Sollwert',
+  'Auto': 'Auto',
+  'Chambre': 'Schlafzimmer',
+
   // Parametres
   '{n} thèmes': '{n} Themes',
   'actives sur {n}': 'aktiv von {n}',

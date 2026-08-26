@@ -334,6 +334,15 @@ export default {
   'Écart de': 'Desviación de',
   'batterie': 'batería',
 
+  // Ecran Entites — chauffage
+  'Chauffage': 'Calefacción',
+  'Un thermostat (climate.…) est trouvé tout seul : rien à saisir. Cette liste sert aux radiateurs fil pilote — un interrupteur entouré de ses aides, que rien ne permet de deviner.':
+    'Un termostato (climate.…) se detecta solo: aquí no hay nada que introducir. Esta lista es para radiadores de hilo piloto: un interruptor rodeado de sus ayudas, que nada permite adivinar.',
+  'Interrupteur': 'Interruptor',
+  'Consigne': 'Consigna',
+  'Auto': 'Auto',
+  'Chambre': 'Dormitorio',
+
   // Parametres
   '{n} thèmes': '{n} temas',
   'actives sur {n}': 'activas de {n}',

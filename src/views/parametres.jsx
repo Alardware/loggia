@@ -355,6 +355,14 @@ function useEntConfig(hass) {
     switches: avecCle(switchLightsCfg().map(id => ({ haid: id }))),
     cams: avecCle((cfgVal('loggia_cameras', null) || []).map(c => ({ name: c.name || '', haid: c.haid || '' }))),
     medias: avecCle(medPlayers().map(m => ({ name: m.name || '', haid: m.haid || '', ma: m.ma || medCompanion(m.haid) || '' }))),
+    /* Chauffage : les thermostats `climate.*` se decouvrent seuls, mais un
+     * radiateur fil pilote est un `switch` entoure d'aides — seule une
+     * configuration peut dire lesquelles. Elle n'avait aucun ecran jusqu'ici. */
+    climate: avecCle((cfgVal('loggia_climate', null) || []).map(z => ({
+      name: z.name || '', room: z.room || '', haid: z.haid || '',
+      tempCible: z.tempCible || '', modeEnt: z.modeEnt || '',
+      autoEnt: z.autoEnt || '', tempSensor: z.tempSensor || '',
+    }))),
   });
   const [ent, setEnt] = useState(readEnt);
   // La configuration serveur arrive APRES le premier rendu. Sans cette
@@ -364,7 +372,7 @@ function useEntConfig(hass) {
   const cfgSig = JSON.stringify(LOGGIA_CFG || {});
   useEffect(() => { if (!entTouched) setEnt(readEnt()); }, [cfgSig]);
   const entSet = (k) => (rows) => { setEntTouched(true); setEnt(o => ({ ...o, [k]: rows })); };
-  const ENT_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias'];
+  const ENT_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_climate'];
   const saveEnt = () => {
     try {
       cfgSet({
@@ -379,6 +387,17 @@ function useEntConfig(hass) {
         loggia_switchlights: ent.switches.map(s => s.haid).filter(Boolean),
         loggia_cameras: ent.cams.filter(c => c.haid).map((c, i) => ({ id: 'cam_' + i, name: c.name || ('Caméra ' + (i + 1)), online: true, haid: c.haid })),
         loggia_medias: ent.medias.filter(m => m.haid),
+        /* Une zone n'a de sens qu'avec l'entite qu'elle pilote. `id` sert de
+         * cle interne : il est derive du nom, faute de mieux, mais reste stable
+         * tant que le nom ne bouge pas. */
+        loggia_climate: ent.climate.filter(z => z.haid).map((z, i) => ({
+          id: (z.name || ('zone' + i)).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || ('zone' + i),
+          name: z.name || z.haid, room: z.room || null, haid: z.haid,
+          type: z.haid.indexOf('climate.') === 0 ? 'thermostat' : 'pilote',
+          tempCible: z.tempCible || null, modeEnt: z.modeEnt || null,
+          autoEnt: z.autoEnt || null, hasAuto: !!z.autoEnt,
+          tempSensor: z.tempSensor || null,
+        })),
       });
     } catch (e) { alert('Enregistrement impossible — la configuration n’a pas été appliquée.'); return; }
     // L'écriture serveur part en arrière-plan : on lui laisse le temps d'aboutir
@@ -394,7 +413,8 @@ function useEntConfig(hass) {
     setTimeout(() => window.location.reload(), 700);
   };
   const dlists = useMemo(() => {
-    const doms = ['sensor', 'person', 'switch', 'camera', 'media_player', 'alarm_control_panel', 'weather'];
+    const doms = ['sensor', 'person', 'switch', 'camera', 'media_player', 'alarm_control_panel', 'weather',
+      'climate', 'input_number', 'input_select', 'input_boolean'];
     const m = {}; doms.forEach(d => { m[d] = []; });
     if (hass && hass.states) Object.keys(hass.states).forEach(id => { const d = id.slice(0, id.indexOf('.')); if (m[d]) m[d].push(id); });
     Object.keys(m).forEach(d => m[d].sort());
@@ -445,6 +465,18 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
       {has('switches') && <EntSection title={tr('Interrupteurs traités comme lumières')} desc={tr('Entités switch affichées dans la vue Lumières.')} cols={[{ k: 'haid', label: tr('Entité switch'), ph: 'switch.…', domain: 'switch' }]} rows={ent.switches} onRows={entSet('switches')} />}
       {has('cams') && <EntSection title={tr('Caméras (Accueil)')} desc="Tuiles caméras de l'Accueil (flux live)." cols={[{ k: 'name', label: 'Nom', ph: tr('Entrée'), flex: .7 }, { k: 'haid', label: tr('Entité camera'), ph: 'camera.…', domain: 'camera' }]} rows={ent.cams} onRows={entSet('cams')} />}
       {has('medias') && <EntSection title={tr('Lecteurs médias')} desc="Vue Médias. « Compagnon MA » optionnel : entité Music Assistant qui porte titre/pochette (métadonnées + transport)." cols={[{ k: 'name', label: 'Nom', ph: 'Echo Salon', flex: .8 }, { k: 'haid', label: tr('Entité native'), ph: 'media_player.…', domain: 'media_player' }, { k: 'ma', label: 'Compagnon MA', ph: 'media_player.… (optionnel)', domain: 'media_player' }]} rows={ent.medias} onRows={entSet('medias')} />}
+      {has('climate') && <EntSection title={tr('Chauffage')}
+        desc={tr('Un thermostat (climate.…) est trouvé tout seul : rien à saisir. Cette liste sert aux radiateurs fil pilote — un interrupteur entouré de ses aides, que rien ne permet de deviner.')}
+        cols={[
+          { k: 'name', label: tr('Nom affiché'), ph: tr('Chambre'), flex: .8 },
+          { k: 'room', label: tr('Pièce'), ph: tr('Chambre'), flex: .7 },
+          { k: 'haid', label: tr('Interrupteur'), ph: 'switch.… / climate.…', flex: 1.1, check: true },
+          { k: 'tempCible', label: tr('Consigne'), ph: 'input_number.…', domain: 'input_number', flex: 1.1 },
+          { k: 'modeEnt', label: tr('Mode'), ph: 'input_select.…', domain: 'input_select', flex: 1.1 },
+          { k: 'autoEnt', label: tr('Auto'), ph: 'input_boolean.…', domain: 'input_boolean', flex: 1.1 },
+          { k: 'tempSensor', label: tr('Température'), ph: 'sensor.…', domain: 'sensor', flex: 1.1 },
+        ]}
+        rows={ent.climate} onRows={entSet('climate')} check={check} />}
     </>
   );
 }
@@ -459,6 +491,7 @@ const VIEW_ENT_SECTIONS = {
   securite: ['alarm', 'cams'],
   medias: ['medias'],
   meteo: ['weather'],
+  climat: ['climate'],
 };
 
 
