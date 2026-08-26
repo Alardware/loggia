@@ -6858,11 +6858,66 @@ const secBaseKeys = () => {
     ...(Array.isArray(cams) ? cams.flatMap(c => [c.haid, c.motion, c.person, c.vehicle, c.sonnette, c.colis]) : []),
     ...gens.map(x => x.haid)].filter(Boolean);
 };
-const SEC_SPARK = [0, 0, 0, 0, 0, 1, 0, 2, 4, 1, 0, 0, 1, 0, 0, 2, 3, 1, 0, 2, 5, 3, 1, 2]; // profil d'activité illustratif
+// Les etats qui valent « quelque chose se passe » : ceux d'un binary_sensor,
+// plus `home` pour une personne. Partages entre la lecture du direct et le
+// comptage de l'historique, qui doivent s'accorder.
+const ACTIFS = ['on', 'true', 'True', 'detected', 'Detected', 'home'];
+
+/**
+ * Detections par heure sur les 24 dernieres heures, comptees dans l'historique
+ * de Home Assistant.
+ *
+ * Ces 24 valeurs etaient auparavant ecrites en dur — un « profil illustratif »
+ * affiche sous la legende « Detections camera par heure ». Le graphique
+ * montrait donc la meme journee inventee a tout le monde, et personne ne
+ * pouvait le deviner.
+ *
+ * Seules les transitions vers l'etat actif comptent : une presence qui dure une
+ * heure est un evenement, pas soixante. `null` tant que la reponse n'est pas la,
+ * ou si l'historique n'est pas accessible — la ligne disparait alors, plutot que
+ * de montrer une journee vide qu'on prendrait pour du calme.
+ */
+function useCamHist(hass, ids) {
+  const [data, setData] = useState(null);
+  const cle = ids.filter(Boolean).join('|');
+  useEffect(() => {
+    let vivant = true;
+    if (!hass || !hass.callApi || !cle) { setData(null); return undefined; }
+    const debut = new Date(Date.now() - 24 * 3600 * 1000);
+    hass.callApi('GET', 'history/period/' + debut.toISOString()
+      + '?filter_entity_id=' + encodeURIComponent(cle.split('|').join(','))
+      + '&minimal_response&no_attributes')
+      .then(res => {
+        if (!vivant) return;
+        if (!Array.isArray(res)) { setData(null); return; }
+        const actif = e => ACTIFS.indexOf(String(e && e.state)) >= 0;
+        // Case 23 = heure courante ; case 0 = la meme heure hier.
+        const heures = new Array(24).fill(0);
+        const base = debut.getTime();
+        res.forEach(serie => {
+          if (!Array.isArray(serie)) return;
+          let precedent = false;
+          serie.forEach(e => {
+            const maintenant = actif(e);
+            if (maintenant && !precedent) {
+              const t = new Date(e.last_changed || e.last_updated || 0).getTime();
+              const i = Math.floor((t - base) / 3600000);
+              if (i >= 0 && i < 24) heures[i]++;
+            }
+            precedent = maintenant;
+          });
+        });
+        setData(heures);
+      })
+      .catch(() => { if (vivant) setData(null); });
+    return () => { vivant = false; };
+  }, [hass ? 1 : 0, cle]);
+  return data;
+}
 
 function SecuriteContent({ hass, edit = false, onEnt }) {
   const S = (hass && hass.states) || {};
-  const isOn = id => { const s = id && S[id]; return !!(s && ['on', 'true', 'True', 'detected', 'Detected', 'home'].indexOf(s.state) >= 0); };
+  const isOn = id => { const s = id && S[id]; return !!(s && ACTIFS.indexOf(s.state) >= 0); };
   // ── Sources : configuration utilisateur d'abord, découverte ensuite ──
   const { resolved } = useLoggia();
   const alarmCfg = useEntities('alarm', null);
@@ -6905,18 +6960,18 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
     const online = s ? (s.state !== 'unavailable' && s.state !== 'unknown') : false;
     const person = isOn(c.person), vehicle = isOn(c.vehicle), motion = isOn(c.motion), sonnette = isOn(c.sonnette), colis = isOn(c.colis);
     const active = person || vehicle || motion || sonnette || colis;
-    let subTxt = 'RAS', dot = 'var(--o-ok)';
-    if (sonnette) { subTxt = 'Sonnette'; dot = '#f87171'; }
-    else if (person) { subTxt = 'Personne détectée'; dot = '#ffb347'; }
-    else if (vehicle) { subTxt = 'Véhicule présent'; dot = '#ffb347'; }
-    else if (colis) { subTxt = 'Colis livré'; dot = 'var(--o-accent)'; }
+    let subTxt = tr('RAS'), dot = 'var(--o-ok)';
+    if (sonnette) { subTxt = tr('Sonnette'); dot = '#f87171'; }
+    else if (person) { subTxt = tr('Personne détectée'); dot = '#ffb347'; }
+    else if (vehicle) { subTxt = tr('Véhicule présent'); dot = '#ffb347'; }
+    else if (colis) { subTxt = tr('Colis livré'); dot = 'var(--o-accent)'; }
     else if (motion) { subTxt = tr('Mouvement'); dot = '#ffb347'; }
     const preset = CAMERAS[(c.preset != null ? c.preset : ci) % CAMERAS.length];
     return {
       haid: c.haid, hass, online, label: c.label || '', active,
-      tag: online ? 'LIVE · ' + String(c.label || '').toUpperCase() : 'HORS LIGNE',
+      tag: online ? 'LIVE · ' + String(c.label || '').toUpperCase() : tr('HORS LIGNE'),
       grad: preset.grad, glow: preset.glow,
-      sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: online ? dot : '#f87171' }} />{online ? subTxt : 'Hors ligne'}</>),
+      sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: online ? dot : '#f87171' }} />{online ? subTxt : tr('Hors ligne')}</>),
     };
   });
   const camOnline = cams.filter(c => c.online).length, camTotal = cams.length;
@@ -6933,7 +6988,11 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   const statusCol = unknownState ? [140, 152, 180] : triggered ? [248, 113, 113] : alarm !== 'off' ? [255, 179, 71] : [52, 211, 153];
   const statusTxt = unknownState ? tr('CONNEXION ?') : triggered ? tr('ALERTE') : alarm === 'away' ? tr('ARMÉE · ABSENT') : alarm === 'home' ? tr('ARMÉE · PRÉSENT') : alarm === 'night' ? tr('ARMÉE · NUIT') : tr('SURVEILLÉE');
 
-  const maxC = Math.max(...SEC_SPARK, 1);
+  // Toutes les entites de detection des cameras : c'est leur historique qui
+  // remplit le graphique d'activite.
+  const detecteurs = camList.flatMap(c => [c.motion, c.person, c.vehicle, c.sonnette, c.colis]).filter(Boolean);
+  const activite = useCamHist(hass, detecteurs);
+  const maxC = Math.max(...(activite || [0]), 1);
   const cs = a => `rgb(${a.join(',')})`;
   const ca = (a, al) => `rgba(${a.join(',')},${al})`;
   // Bouton d'armement compact (ligne dense)
@@ -6959,7 +7018,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
     : alarm === 'away' ? tr('armée · absent') : alarm === 'home' ? tr('armée · présent') : alarm === 'night' ? tr('armée · nuit') : tr('désarmée');
   const alarmShort = arming ? tr('activation…') : triggered ? tr('déclenchée') : alarm === 'unknown' ? tr('inconnue')
     : alarm === 'away' ? tr('absent') : alarm === 'home' ? tr('présent') : alarm === 'night' ? tr('nuit') : tr('prête');
-  const alarmDesc = arming ? tr('Activation en cours…') : triggered ? tr('Intrusion détectée — vérifier immédiatement') : alarm === 'unknown' ? tr('État inconnu — connexion à vérifier') : alarm === 'off' ? tr('Prête · tous les capteurs au repos') : alarm === 'away' ? tr('Surveillance totale active') : alarm === 'night' ? tr('Mode nuit — périmètre et zones de repos') : 'Périmètre surveillé';
+  const alarmDesc = arming ? tr('Activation en cours…') : triggered ? tr('Intrusion détectée — vérifier immédiatement') : alarm === 'unknown' ? tr('État inconnu — connexion à vérifier') : alarm === 'off' ? tr('Prête · tous les capteurs au repos') : alarm === 'away' ? tr('Surveillance totale active') : alarm === 'night' ? tr('Mode nuit — périmètre et zones de repos') : tr('Périmètre surveillé');
   const presentNames = people.filter(p => p.home).map(p => p.name).join(', ');
 
   return (
@@ -6968,7 +7027,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
       <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Sécurité')}</h1>
-          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{camOnline} caméra{camOnline > 1 ? 's' : ''} en ligne · {homeCount} présent{homeCount > 1 ? 's' : ''} sur {people.length} · alarme {alarmWord}</div>
+          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{camOnline > 1 ? tr('{n} caméras en ligne', { n: camOnline }) : tr('{n} caméra en ligne', { n: camOnline })} · {homeCount > 1 ? tr('{n} présents sur {t}', { n: homeCount, t: people.length }) : tr('{n} présent sur {t}', { n: homeCount, t: people.length })} · {tr('alarme {etat}', { etat: alarmWord })}</div>
         </div>
         <span style={{ flex: 1 }} />
         <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: ca(statusCol, .14), color: cs(statusCol) }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: cs(statusCol), animation: triggered ? 'pulse 1.2s infinite' : 'none' }} />{heroTitle.toUpperCase()}</span>
@@ -6977,17 +7036,17 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
       {/* réglages rapides : armement + mode nuit */}
       <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Alarme <span style={{ color: 'var(--o-text3)' }}>{alarmShort}</span></span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Alarme')} <span style={{ color: 'var(--o-text3)' }}>{alarmShort}</span></span>
           <div style={{ display: 'flex', gap: 4 }}>
             <button onClick={() => callAlarm('alarm_disarm', 'off')} style={armBtn(alarm === 'off', [52, 211, 153])}>{tr('Désarmer')}</button>
-            <button onClick={() => callAlarm('alarm_arm_away', 'away')} style={armBtn(alarm === 'away', [248, 113, 113])}>Absent</button>
+            <button onClick={() => callAlarm('alarm_arm_away', 'away')} style={armBtn(alarm === 'away', [248, 113, 113])}>{tr('Absent')}</button>
             <button onClick={() => callAlarm('alarm_arm_home', 'home')} style={armBtn(alarm === 'home', [255, 179, 71])}>{tr('Présent')}</button>
           </div>
         </div>
         {canNight && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Nuit</span>
-            <span onClick={() => callAlarm(alarm === 'night' ? 'alarm_disarm' : 'alarm_arm_night', alarm === 'night' ? 'off' : 'night')} role="switch" aria-checked={alarm === 'night'} aria-label="Mode nuit" tabIndex={0}
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Nuit')}</span>
+            <span onClick={() => callAlarm(alarm === 'night' ? 'alarm_disarm' : 'alarm_arm_night', alarm === 'night' ? 'off' : 'night')} role="switch" aria-checked={alarm === 'night'} aria-label={tr('Mode nuit')} tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); callAlarm(alarm === 'night' ? 'alarm_disarm' : 'alarm_arm_night', alarm === 'night' ? 'off' : 'night'); } }}
               style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 11, cursor: 'pointer', background: alarm === 'night' ? 'var(--o-accent)' : 'var(--o-s4)', border: alarm === 'night' ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}>
               <span style={{ position: 'absolute', top: 2, left: alarm === 'night' ? 19 : 2, width: 17, height: 17, borderRadius: '50%', background: '#fff', transition: 'left .2s cubic-bezier(.4,1.3,.5,1)' }} />
@@ -7020,11 +7079,17 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
           <SecRow label={tr('Présence')} desc={homeCount ? tr(homeCount > 1 ? '{noms} sont à la maison' : '{noms} est à la maison', { noms: presentNames }) : tr('Personne à la maison')}>
             <span style={{ fontSize: 15, fontWeight: 800 }}><FlipText live text={homeCount ? (homeCount > 1 ? tr('{n} présents', { n: homeCount }) : tr('{n} présent', { n: homeCount })) : tr('Personne')} /></span>
           </SecRow>
-          <SecRow label={tr('Activité · 24 h')} desc={tr('Détections caméra par heure, heure courante en vert')}>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, width: 210, height: 34 }}>
-              {SEC_SPARK.map((c, h) => { const cur = h === 23; return <div key={h} title={`${String(h).padStart(2, '0')}h`} style={{ flex: 1, height: (c === 0 ? 12 : 26 + (c / maxC) * 74) + '%', minHeight: 3, borderRadius: 2, background: c === 0 ? 'var(--o-bd3)' : (cur ? 'var(--o-ok)' : (c >= 4 ? '#ffb347' : 'rgba(52,211,153,.55)')) }} />; })}
-            </div>
-          </SecRow>
+          {activite && (
+            <SecRow label={tr('Activité · 24 h')} desc={tr('Détections caméra par heure, heure courante en vert')}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, width: 210, height: 34 }}>
+                {activite.map((c, h) => {
+                  const cur = h === 23;
+                  const quand = new Date(Date.now() - (23 - h) * 3600000);
+                  return <div key={h} title={String(quand.getHours()).padStart(2, '0') + 'h · ' + c} style={{ flex: 1, height: (c === 0 ? 12 : 26 + (c / maxC) * 74) + '%', minHeight: 3, borderRadius: 2, background: c === 0 ? 'var(--o-bd3)' : (cur ? 'var(--o-ok)' : (c >= 4 ? '#ffb347' : 'rgba(52,211,153,.55)')) }} />;
+                })}
+              </div>
+            </SecRow>
+          )}
         </div>
       </div></Anim>}
 
@@ -7057,12 +7122,6 @@ function SecuriteView({ hass, edit = false, onEnt }) {
 }
 
 /* ════════════ VUE SYSTÈME (reproduction fidèle de "Loggia Système.dc.html") ════════════ */
-const sysSpark = (pts) => {
-  const w = 120, h = 36, max = 100;
-  const step = w / (pts.length - 1);
-  const d = pts.map((p, i) => (i ? 'L' : 'M') + (i * step).toFixed(1) + ' ' + (h - (p / max) * h * 0.9 - 2).toFixed(1)).join(' ');
-  return { line: d, area: d + ' L' + w + ' ' + h + ' L0 ' + h + ' Z' };
-};
 // Logos officiels des machines (source : dashboardicons.com / homarr-labs).
 // Inlines en data-URI : le projet interdit tout appel CDN.
 const BRAND_ICONS = {
@@ -7103,21 +7162,37 @@ function sysNames() {
   }
   return out;
 }
-const SYS_SPARKS = [[18, 22, 19, 24, 21, 17, 28, 20, 23, 19, 26, 20], [40, 43, 41, 46, 44, 42, 48, 45, 43, 47, 49, 43], [36, 37, 38, 38, 38, 38, 37, 38, 38, 38, 38, 38], [10, 40, 22, 55, 30, 18, 60, 35, 24, 48, 28, 30]];
+/* Duree de fonctionnement, quelle que soit la forme sous laquelle l'integration
+ * la publie : « 5 days, 03:12 », un nombre de secondes, ou un horodatage de
+ * demarrage.
+ *
+ * Le mot du jour se lit dans plusieurs langues — un capteur allemand ecrit
+ * « Tag », un espagnol « dia ». Auparavant seuls `day` et `jour` etaient
+ * reconnus : ailleurs, la duree tombait dans le dernier cas et s'affichait
+ * telle quelle, brute. Et les unites de sortie passent par le catalogue : le
+ * « j » de jour n'est un jour qu'en francais. */
+const UPT_JOUR = /(\d+)\s*(?:days?|jours?|tage?|d[ií]as?|giorni?|dias?)/i;
 function fmtUptime(raw) {
   if (raw == null || raw === '' || raw === 'unknown' || raw === 'unavailable') return '—';
   const s = String(raw);
-  const dm = s.match(/(\d+)\s*(?:day|jour)/i), tm = s.match(/(\d+):(\d+)/);
-  if (dm || tm) { const d = dm ? +dm[1] : 0, h = tm ? +tm[1] : 0; return d > 0 ? `${d}j ${String(h).padStart(2, '0')}h` : `${h}h`; }
-  if (/^\s*[\d.]+\s*$/.test(s)) { const n = parseFloat(s); if (!isNaN(n) && n > 600) { const d = Math.floor(n / 86400), h = Math.floor((n % 86400) / 3600); return `${d}j ${String(h).padStart(2, '0')}h`; } }
-  const t = Date.parse(s); if (!isNaN(t)) { let sec = (Date.now() - t) / 1000; if (sec < 0) sec = 0; const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600); return `${d}j ${String(h).padStart(2, '0')}h`; }
+  const jh = (d, h) => (d > 0 ? tr('{n} j', { n: d }) + ' ' + tr('{n} h', { n: String(h).padStart(2, '0') }) : tr('{n} h', { n: h }));
+  const dm = s.match(UPT_JOUR), tm = s.match(/(\d+):(\d+)/);
+  if (dm || tm) return jh(dm ? +dm[1] : 0, tm ? +tm[1] : 0);
+  if (/^\s*[\d.]+\s*$/.test(s)) { const n = parseFloat(s); if (!isNaN(n) && n > 600) return jh(Math.floor(n / 86400), Math.floor((n % 86400) / 3600)); }
+  const t = Date.parse(s); if (!isNaN(t)) { let sec = (Date.now() - t) / 1000; if (sec < 0) sec = 0; return jh(Math.floor(sec / 86400), Math.floor((sec % 86400) / 3600)); }
   return s;
 }
-// Bases machines (icônes + identité ; données dynamiques calculées dans SystemeContent)
-const SYS_MACHINES = [
-  { key: 'host', name: 'Serveur Home Assistant', sub: tr('Hôte principal'), iconBg: 'rgba(52,211,153,.16)', iconCol: 'var(--o-ok)', icon: <Fi i="home" size={16} />, barCol: 'var(--o-ok)', art: 'serverart' },
-  { key: 'nebula', name: 'Deuxième machine', sub: tr('Serveur de stockage'), iconBg: 'rgba(255,179,71,.16)', iconCol: '#ffb347', icon: <Fi i="database" size={16} />, barCol: '#ffb347', art: 'nas' },
-  { key: 'ucg', name: 'Troisième machine', sub: tr('Passerelle réseau'), iconBg: 'rgba(var(--o-accent-rgb),.16)', iconCol: 'var(--o-accent-soft)', icon: <Fi i="wifi" size={16} />, barCol: 'var(--o-accent)', art: 'routerart' },
+/* Bases machines (icones + identite ; donnees dynamiques calculees dans
+ * SystemeContent).
+ *
+ * Une fonction, et non une table : un `tr()` au niveau d'un module s'evalue a
+ * l'import. Cela fonctionne — `resoudreTot()` fixe la langue avant tout import
+ * et le selecteur recharge la page — mais l'evaluer au rendu ne depend d'aucune
+ * de ces deux conditions. */
+const sysMachines = () => [
+  { key: 'host', name: tr('Serveur Home Assistant'), sub: tr('Hôte principal'), iconBg: 'rgba(52,211,153,.16)', iconCol: 'var(--o-ok)', icon: <Fi i="home" size={16} />, barCol: 'var(--o-ok)', art: 'serverart' },
+  { key: 'nebula', name: tr('Deuxième machine'), sub: tr('Serveur de stockage'), iconBg: 'rgba(255,179,71,.16)', iconCol: '#ffb347', icon: <Fi i="database" size={16} />, barCol: '#ffb347', art: 'nas' },
+  { key: 'ucg', name: tr('Troisième machine'), sub: tr('Passerelle réseau'), iconBg: 'rgba(var(--o-accent-rgb),.16)', iconCol: 'var(--o-accent-soft)', icon: <Fi i="wifi" size={16} />, barCol: 'var(--o-accent)', art: 'routerart' },
 ];
 
 // History HA pour la vue Système : points {t,v} par entité, période en heures, refresh manuel.
@@ -7159,11 +7234,15 @@ function SysRing({ pct, label, warn = 70, bad = 86 }) {
     </div>
   );
 }
-// Aire + ligne sur points history {t,v} — échelle auto ; fallback = série mock si pas d'historique.
-function SysArea({ pts, color, fill, h = 64, fallback = null }) {
+// Aire + ligne sur points d'historique {t,v}, echelle automatique.
+//
+// Une serie inventee servait autrefois de repli quand l'historique manquait :
+// la courbe s'affichait sous le libelle « Releve Home Assistant » sans que rien
+// ne distingue le vrai du decor. Faute d'historique, on le dit maintenant.
+function SysArea({ pts, color, fill, h = 64 }) {
   const data = pts && pts.length >= 2 ? pts : null;
-  if (!data && !fallback) return <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>historique indisponible</div>;
-  const vals = data ? data.map(pt => pt.v) : fallback;
+  if (!data) return <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('historique indisponible')}</div>;
+  const vals = data.map(pt => pt.v);
   const min = Math.min(...vals), max = Math.max(...vals);
   const span = max - min || 1;
   const W = 240;
@@ -7193,7 +7272,7 @@ function SystemeContent({ hass }) {
   useEffect(() => () => { if (armRef.current) clearTimeout(armRef.current); }, []);
   const pct = v => v == null ? null : Math.max(0, Math.min(100, Math.round(v)));
   const fmtPct = v => v == null ? '—' : pct(v) + '%';
-  // HAOS Nova (Glances)
+  // Hote principal (Glances ou System Monitor)
   const SYS = sysSensors();
   const SYSN = sysNames();
   const hCpu = num(SYS.host.cpu) != null ? num(SYS.host.cpu) : num(SYS.host.cpuAlt);
@@ -7204,7 +7283,9 @@ function SystemeContent({ hass }) {
   const hMemPct = num(SYS.host.memPct) != null ? Math.round(num(SYS.host.memPct))
     : num(SYS.host.memPctAlt) != null ? Math.round(num(SYS.host.memPctAlt))
       : ((hUsed != null && hFree != null && (hUsed + hFree) > 0) ? Math.round(hUsed / (hUsed + hFree) * 100) : null);
-  const hMemUnit = unitOf(SYS.host.memUsed) || 'Go';
+  // L'unite vient du capteur ; sans capteur il n'y a pas de valeur a habiller,
+  // et un repli « Go » francais s'afficherait a cote de chiffres anglais.
+  const hMemUnit = unitOf(SYS.host.memUsed) || '';
   const hDisk = num(SYS.host.disk) != null ? num(SYS.host.disk) : num(SYS.host.diskAlt);
   const hUp = fmtUptime(stateRaw(SYS.host.uptime));
   const hOnline = onl(SYS.host.online) || has(SYS.host.cpu);
@@ -7218,18 +7299,12 @@ function SystemeContent({ hass }) {
   const uUp = fmtUptime(stateRaw(SYS.ucg.uptime));
   const uOnline = has(SYS.ucg.cpu) || uClients != null;
 
-  const metrics = [
-    { name: 'CPU', icon: 'microchip', value: fmtPct(hCpu), sub: hTemp != null ? `Cœurs · ${Math.round(hTemp)}°C` : tr('Processeur'), color: 'var(--o-accent)', sp: sysSpark(SYS_SPARKS[0]), areaFill: 'rgba(var(--o-accent-rgb),.1)', tag: hCpu == null ? '—' : hCpu > 85 ? 'Charge' : 'Normal', tagCol: hCpu != null && hCpu > 85 ? '#ffb347' : 'var(--o-ok)', art: VIEW_ART.cpuart },
-    { name: 'RAM', icon: 'memory', value: fmtPct(hMemPct), sub: (hUsed != null && hFree != null) ? `${hUsed.toFixed(1)} / ${(hUsed + hFree).toFixed(1)} ${hMemUnit}` : 'Mémoire vive', color: '#ffb347', sp: sysSpark(SYS_SPARKS[1]), areaFill: 'rgba(255,179,71,.1)', tag: hMemPct == null ? '—' : hMemPct > 90 ? 'Élevé' : 'Normal', tagCol: hMemPct != null && hMemPct > 90 ? '#ffb347' : 'var(--o-ok)', art: VIEW_ART.ramart },
-    { name: tr('Disque'), icon: 'disk', value: fmtPct(hDisk), sub: 'Partition /data', color: 'var(--o-ok)', sp: sysSpark(SYS_SPARKS[2]), areaFill: 'rgba(52,211,153,.1)', tag: hDisk == null ? '—' : hDisk > 90 ? 'Plein' : 'OK', tagCol: hDisk != null && hDisk > 90 ? '#f87171' : 'var(--o-ok)', art: VIEW_ART.diskart },
-    { name: tr('Réseau'), icon: 'wifi', value: uClients != null ? `${uClients}` : '—', sub: 'Clients UniFi', color: 'var(--o-accent-soft)', sp: sysSpark(SYS_SPARKS[3]), areaFill: 'rgba(var(--o-accent-soft-rgb),.1)', tag: uOnline ? tr('En ligne') : '—', tagCol: uOnline ? 'var(--o-ok)' : '#8c98b2', art: VIEW_ART.routerart },
-  ];
   // Les noms viennent de l'appareil trouvé (ou de la configuration) ; seule
   // l'identité visuelle — icône, couleur — reste écrite ici.
-  const machines = SYS_MACHINES.map(m => ({ ...m, name: sysNames()[m.key] || m.name })).map(m => {
-    if (m.key === 'host') return { ...m, online: hOnline, l: `Uptime ${hUp}`, r: `CPU ${fmtPct(hCpu)} · RAM ${fmtPct(hMemPct)}`, bar: (hMemPct || 0) + '%' };
+  const machines = sysMachines().map(m => ({ ...m, name: sysNames()[m.key] || m.name })).map(m => {
+    if (m.key === 'host') return { ...m, online: hOnline, l: tr('En service') + ' ' + hUp, r: `CPU ${fmtPct(hCpu)} · RAM ${fmtPct(hMemPct)}`, bar: (hMemPct || 0) + '%' };
     if (m.key === 'nebula') return { ...m, online: nOnline, l: `CPU ${fmtPct(nCpu)}`, r: nTemp != null ? `${Math.round(nTemp)}°C · ${nUp}` : `Uptime ${nUp}`, bar: (nCpu || 0) + '%' };
-    return { ...m, online: uOnline, l: uClients != null ? `${uClients} clients` : tr('Réseau'), r: `CPU ${fmtPct(uCpu)} · ${uTemp != null ? Math.round(uTemp) + '°C' : uUp}`, bar: (uMem || 0) + '%' };
+    return { ...m, online: uOnline, l: uClients != null ? tr('{n} clients', { n: uClients }) : tr('Réseau'), r: `CPU ${fmtPct(uCpu)} · ${uTemp != null ? Math.round(uTemp) + '°C' : uUp}`, bar: (uMem || 0) + '%' };
   });
   const machinesOnline = machines.filter(m => m.online).length;
   const allOnline = machinesOnline === machines.length;
@@ -7237,7 +7312,9 @@ function SystemeContent({ hass }) {
   const health = loads.length ? Math.max(0, Math.round(100 - Math.max(...loads))) : (allOnline ? 100 : 50);
   const statusCol = allOnline ? [52, 211, 153] : [255, 179, 71];
   const cs = a => `rgb(${a.join(',')})`, ca = (a, al) => `rgba(${a.join(',')},${al})`;
-  const heroTitle = allOnline ? 'Tous les systèmes opérationnels' : `${machines.length - machinesOnline} système${machines.length - machinesOnline > 1 ? 's' : ''} hors ligne`;
+  const horsLigne = machines.length - machinesOnline;
+  const heroTitle = allOnline ? tr('Tous les systèmes opérationnels')
+    : horsLigne > 1 ? tr('{n} systèmes hors ligne', { n: horsLigne }) : tr('{n} système hors ligne', { n: horsLigne });
   // ── v6 (design Claude Design 21/08) : période, refresh, machine détaillée, history réel, journal ──
   const [period, setPeriod] = useState(1); // heures : 1 | 24 | 168
   const [refreshKey, setRefreshKey] = useState(0);
@@ -7246,14 +7323,14 @@ function SystemeContent({ hass }) {
   const [detail, setDetail] = useState('host');
   const HIST_IDS = [SYS.host.cpu, SYS.host.memUsed, SYS.nebula.cpu, SYS.ucg.cpu, SYS.ucg.mem];
   const hist = useSysHist(hass, HIST_IDS, period, refreshKey);
-  const perLbl = period === 1 ? '1 h' : period === 24 ? '24 h' : '7 j';
+  const perLbl = period === 1 ? tr('{n} h', { n: 1 }) : period === 24 ? tr('{n} h', { n: 24 }) : tr('{n} j', { n: 7 });
   // Alertes calculées sur les seuils réels
   const alerts = [];
-  if (hMemPct != null && hMemPct >= 85) alerts.push({ key: 'hmem', m: sysNames().host, target: 'host', sev: hMemPct >= 92 ? 'bad' : 'warn', txt: `Mémoire à ${hMemPct} %` + (hUsed != null && hFree != null ? ` (${Math.round(hUsed)} / ${Math.round(hUsed + hFree)} ${hMemUnit})` : '') + ' — le cœur risque un redémarrage forcé.' });
-  if (hDisk != null && hDisk >= 85) alerts.push({ key: 'hdisk', m: sysNames().host, target: 'host', sev: hDisk >= 92 ? 'bad' : 'warn', txt: `Partition /data à ${Math.round(hDisk)} % — prévoir une purge de la base ou des sauvegardes.` });
-  if ((uCpu != null && uCpu >= 85) || (uMem != null && uMem >= 85)) alerts.push({ key: 'ucg', m: sysNames().ucg, target: 'ucg', sev: 'warn', txt: `Processeur à ${fmtPct(uCpu)} et mémoire à ${fmtPct(uMem)} — débit du LAN encore nominal.` });
-  if ((nCpu != null && nCpu >= 85) || (nMem != null && nMem >= 85)) alerts.push({ key: 'ncpu', m: sysNames().nebula, target: 'nebula', sev: 'warn', txt: `Processeur à ${fmtPct(nCpu)} et mémoire à ${fmtPct(nMem)} — vérifier les conteneurs actifs.` });
-  machines.forEach(m => { if (!m.online) alerts.push({ key: 'off' + m.key, m: m.name, target: m.key, sev: 'bad', txt: 'Machine hors ligne — dernier état inconnu.' }); });
+  if (hMemPct != null && hMemPct >= 85) alerts.push({ key: 'hmem', m: sysNames().host, target: 'host', sev: hMemPct >= 92 ? 'bad' : 'warn', txt: tr('Mémoire à {n} %', { n: hMemPct }) + (hUsed != null && hFree != null ? ` (${Math.round(hUsed)} / ${Math.round(hUsed + hFree)} ${hMemUnit})` : '') + ' ' + tr('— le cœur risque un redémarrage forcé.') });
+  if (hDisk != null && hDisk >= 85) alerts.push({ key: 'hdisk', m: sysNames().host, target: 'host', sev: hDisk >= 92 ? 'bad' : 'warn', txt: tr('Partition /data à {n} % — prévoir une purge de la base ou des sauvegardes.', { n: Math.round(hDisk) }) });
+  if ((uCpu != null && uCpu >= 85) || (uMem != null && uMem >= 85)) alerts.push({ key: 'ucg', m: sysNames().ucg, target: 'ucg', sev: 'warn', txt: tr('Processeur à {c} et mémoire à {m} — débit du LAN encore nominal.', { c: fmtPct(uCpu), m: fmtPct(uMem) }) });
+  if ((nCpu != null && nCpu >= 85) || (nMem != null && nMem >= 85)) alerts.push({ key: 'ncpu', m: sysNames().nebula, target: 'nebula', sev: 'warn', txt: tr('Processeur à {c} et mémoire à {m} — vérifier les conteneurs actifs.', { c: fmtPct(nCpu), m: fmtPct(nMem) }) });
+  machines.forEach(m => { if (!m.online) alerts.push({ key: 'off' + m.key, m: m.name, target: m.key, sev: 'bad', txt: tr('Machine hors ligne — dernier état inconnu.') }); });
   // Journal : logbook HA sur les entités système suivies (24 h), meilleur effort
   const [logbook, setLogbook] = useState(null);
   useEffect(() => {
@@ -7276,14 +7353,14 @@ function SystemeContent({ hass }) {
     { key: 'host', logo: BRAND_ICONS.haos, name: SYSN.host, sub: 'Home Assistant OS' + (hUp && hUp !== '—' ? ' · ' + hUp : ''), online: hOnline,
       ico: 'home', icoBg: 'rgba(3,169,244,.14)', icoCol: 'var(--o-accent-soft)',
       barLabel: tr('Mémoire'), barPct: hMemPct, barText: hMemPct != null ? hMemPct + ' %' : '—',
-      status: hMemPct != null && hMemPct >= 85 ? 'Mémoire élevée · ' + hMemPct + ' %' : tr('Fonctionnement normal'),
+      status: hMemPct != null && hMemPct >= 85 ? tr('Mémoire élevée') + ' · ' + hMemPct + ' %' : tr('Fonctionnement normal'),
       rows: [
         [tr('Processeur'), tr('Charge moyenne du CPU'), hCpu != null ? Math.round(hCpu) + ' %' : '—', hCpu, 85],
-        [tr('Mémoire'), hUsed != null && hFree != null ? Math.round(hUsed) + ' / ' + Math.round(hUsed + hFree) + ' ' + hMemUnit : 'RAM utilisée', hMemPct != null ? hMemPct + ' %' : '—', hMemPct, 85],
+        [tr('Mémoire'), hUsed != null && hFree != null ? Math.round(hUsed) + ' / ' + Math.round(hUsed + hFree) + ' ' + hMemUnit : tr('RAM utilisée'), hMemPct != null ? hMemPct + ' %' : '—', hMemPct, 85],
         [tr('Disque /data'), tr('Partition de données'), hDisk != null ? Math.round(hDisk) + ' %' : '—', hDisk, 85],
-        [tr('Température CPU'), tr("Seuil d'alerte à 75 °C"), hTemp != null ? Math.round(hTemp) + ' °C' : '—', null, null],
+        [tr('Température CPU'), tr("Seuil d'alerte à 75 °C"), hTemp != null ? Math.round(hTemp) + ' °C' : '—', null, null, hTemp],
       ],
-      spark: hist[SYS.host.memUsed], sparkLbl: tr('mémoire'), fallback: SYS_SPARKS[1], level: hMemPct },
+      spark: hist[SYS.host.memUsed], sparkLbl: tr('mémoire'), level: hMemPct },
     { key: 'nebula', logo: BRAND_ICONS.unraid, name: SYSN.nebula, sub: tr('Serveur de stockage') + (nUp && nUp !== '—' ? ' · ' + nUp : ''), online: nOnline,
       ico: 'database', icoBg: 'rgba(227,41,41,.14)', icoCol: '#ffb347',
       barLabel: nMem != null ? tr('Mémoire') : tr('Processeur'), barPct: nMem != null ? nMem : nCpu, barText: (nMem != null ? Math.round(nMem) : nCpu != null ? Math.round(nCpu) : null) != null ? Math.round(nMem != null ? nMem : nCpu) + ' %' : '—',
@@ -7291,26 +7368,26 @@ function SystemeContent({ hass }) {
       rows: [
         [tr('Processeur'), tr('Charge CPU'), nCpu != null ? Math.round(nCpu) + ' %' : '—', nCpu, 85],
         [tr('Mémoire'), tr('RAM du serveur'), nMem != null ? Math.round(nMem) + ' %' : '—', nMem, 85],
-        [tr('Température CPU'), tr("Seuil d'alerte à 75 °C"), nTemp != null ? Math.round(nTemp) + ' °C' : '—', null, null],
-        [tr('Stockage'), 'Grappe de disques', nDisk != null ? Math.round(nDisk) + ' %' : 'non exposée', nDisk, 85],
+        [tr('Température CPU'), tr("Seuil d'alerte à 75 °C"), nTemp != null ? Math.round(nTemp) + ' °C' : '—', null, null, nTemp],
+        [tr('Stockage'), tr('Grappe de disques'), nDisk != null ? Math.round(nDisk) + ' %' : tr('non exposée'), nDisk, 85],
       ],
-      spark: hist[SYS.nebula.cpu], sparkLbl: 'charge', fallback: SYS_SPARKS[0], level: Math.max(nCpu || 0, nMem || 0) },
+      spark: hist[SYS.nebula.cpu], sparkLbl: tr('charge'), level: Math.max(nCpu || 0, nMem || 0) },
     { key: 'ucg', logo: BRAND_ICONS.unifi, name: SYSN.ucg, sub: tr('Passerelle réseau') + (uUp && uUp !== '—' ? ' · ' + uUp : ''), online: uOnline,
       ico: 'wifi', icoBg: 'rgba(5,89,201,.16)', icoCol: 'var(--o-cyan)',
       barLabel: tr('Mémoire'), barPct: uMem, barText: uMem != null ? Math.round(uMem) + ' %' : '—',
       status: (uCpu != null && uCpu >= 85) || (uMem != null && uMem >= 85) ? tr('Ressources sous tension') : tr('Fonctionnement normal'),
       rows: [
         [tr('Processeur'), tr('Charge CPU'), uCpu != null ? Math.round(uCpu) + ' %' : '—', uCpu, 85],
-        [tr('Mémoire'), 'RAM de la passerelle', uMem != null ? Math.round(uMem) + ' %' : '—', uMem, 85],
-        ['Clients réseau', 'Appareils connectés', uClients != null ? Math.round(uClients) : 'non exposés', null, null],
-        [tr('Température'), tr("Seuil d'alerte à 75 °C"), uTemp != null ? Math.round(uTemp) + ' °C' : 'non exposée', null, null],
+        [tr('Mémoire'), tr('RAM de la passerelle'), uMem != null ? Math.round(uMem) + ' %' : '—', uMem, 85],
+        [tr('Clients réseau'), tr('Appareils connectés'), uClients != null ? Math.round(uClients) : tr('non exposés'), null, null],
+        [tr('Température'), tr("Seuil d'alerte à 75 °C"), uTemp != null ? Math.round(uTemp) + ' °C' : tr('non exposée'), null, null, uTemp],
       ],
-      spark: hist[SYS.ucg.cpu], sparkLbl: 'processeur', fallback: SYS_SPARKS[3], level: Math.max(uCpu || 0, uMem || 0) },
+      spark: hist[SYS.ucg.cpu], sparkLbl: tr('processeur'), level: Math.max(uCpu || 0, uMem || 0) },
   ];
   const sel = MACH.find(m => m.key === detail) || MACH[0];
   const powerActions = [
     { id: 'ha', label: tr('Redémarrer HA'), desc: tr('Relance le cœur sans toucher à la machine · ~40 s'), col: '255,179,71', run: () => power('ha', 'homeassistant', 'restart') },
-    { id: 'reboot', label: tr('Redémarrer'), desc: tr('Reboot complet de HAOS Nova · 2 à 3 min hors ligne'), col: '255,179,71', run: () => power('reboot', 'hassio', 'host_reboot') },
+    { id: 'reboot', label: tr('Redémarrer'), desc: tr('Redémarrage complet de la machine · 2 à 3 min hors ligne'), col: '255,179,71', run: () => power('reboot', 'hassio', 'host_reboot') },
     { id: 'shutdown', label: tr('Éteindre'), desc: tr('Arrêt complet · rallumage physique requis'), col: '248,113,113', run: () => power('shutdown', 'hassio', 'host_shutdown') },
   ];
 
@@ -7328,17 +7405,17 @@ function SystemeContent({ hass }) {
       {/* reglages rapides : alimentation (2 temps), periode d'historique, rafraichir */}
       <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Alimentation</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Alimentation')}</span>
           <div style={{ display: 'flex', gap: 4 }}>
             {powerActions.map(ac => (
-              <button key={ac.id} onClick={ac.run} title={ac.desc} style={{ padding: '5px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', border: armed === ac.id ? '1px solid rgba(' + ac.col + ',.65)' : (ac.id === 'shutdown' ? '1px solid rgba(' + ac.col + ',.3)' : 'none'), background: armed === ac.id ? 'rgba(' + ac.col + ',.24)' : (ac.id === 'shutdown' ? 'rgba(' + ac.col + ',.08)' : 'var(--o-s1)'), color: (ac.id === 'shutdown' || armed === ac.id) ? 'rgb(' + ac.col + ')' : 'var(--o-text1)' }}>{armed === ac.id ? 'Confirmer ?' : ac.label}</button>
+              <button key={ac.id} onClick={ac.run} title={ac.desc} style={{ padding: '5px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', border: armed === ac.id ? '1px solid rgba(' + ac.col + ',.65)' : (ac.id === 'shutdown' ? '1px solid rgba(' + ac.col + ',.3)' : 'none'), background: armed === ac.id ? 'rgba(' + ac.col + ',.24)' : (ac.id === 'shutdown' ? 'rgba(' + ac.col + ',.08)' : 'var(--o-s1)'), color: (ac.id === 'shutdown' || armed === ac.id) ? 'rgb(' + ac.col + ')' : 'var(--o-text1)' }}>{armed === ac.id ? tr('Confirmer ?') : ac.label}</button>
             ))}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Historique</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Historique')}</span>
           <div style={{ display: 'flex', gap: 4 }}>
-            {[[1, '1 h'], [24, '24 h'], [168, '7 j']].map(([h, lb]) => (
+            {[[1, tr('{n} h', { n: 1 })], [24, tr('{n} h', { n: 24 })], [168, tr('{n} j', { n: 7 })]].map(([h, lb]) => (
               <button key={h} onClick={() => { setPeriod(h); setLastFetch(new Date()); }} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, background: period === h ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: period === h ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</button>
             ))}
           </div>
@@ -7354,23 +7431,23 @@ function SystemeContent({ hass }) {
             <div style={{ fontSize: 16, fontWeight: 700 }}>{sel.name}</div>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: sel.level != null && sel.level >= 70 ? 'rgba(var(--o-warn2-rgb),.14)' : 'rgba(var(--o-ok-rgb),.14)', color: sel.level != null && sel.level >= 70 ? 'var(--o-warn2)' : 'var(--o-ok)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: sel.level != null && sel.level >= 70 ? 'var(--o-warn2)' : 'var(--o-ok)' }} />{sel.barLabel.toUpperCase()} {sel.barText}</span>
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{sel.sub}{sel.level != null && sel.level >= 85 ? ' · le cœur risque un redémarrage forcé' : ''}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{sel.sub}{sel.level != null && sel.level >= 85 ? ' · ' + tr('le cœur risque un redémarrage forcé') : ''}</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {sel.rows.map(([lb, desc, val, pct, warn]) => (
+            {sel.rows.map(([lb, desc, val, pct, warn, degres]) => (
               <EnRow key={lb} label={lb} desc={desc}>
                 {pct != null
                   ? <EnGauge v={val} pct={pct} col={lvlCol(pct, warn || 70)} />
-                  : <EnVal v={val} col={lb.indexOf('Temp') === 0 && parseFloat(val) >= 75 ? 'var(--o-warn2)' : 'var(--o-text)'} />}
+                  : <EnVal v={val} col={degres != null && degres >= 75 ? 'var(--o-warn2)' : 'var(--o-text)'} />}
               </EnRow>
             ))}
             <EnRow label={sel.sparkLbl.charAt(0).toUpperCase() + sel.sparkLbl.slice(1) + ' · ' + perLbl} desc={tr('Relevé Home Assistant sur la période choisie')}>
-              <div style={{ width: 210 }}><SysArea pts={sel.spark} fallback={sel.fallback} color={lvlCol(sel.level)} fill={sel.level != null && sel.level >= 70 ? 'rgba(248,113,113,.09)' : 'rgba(var(--o-ok-rgb),.08)'} h={34} /></div>
+              <div style={{ width: 210 }}><SysArea pts={sel.spark} color={lvlCol(sel.level)} fill={sel.level != null && sel.level >= 70 ? 'rgba(248,113,113,.09)' : 'rgba(var(--o-ok-rgb),.08)'} h={34} /></div>
             </EnRow>
           </div>
         </div>
       )}
 
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>Machines</div>
+      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Machines')}</div>
       <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 14 }}>
         {MACH.map((m, mi) => (
           <ObjCard key={m.key} idx={mi}
@@ -7380,7 +7457,7 @@ function SystemeContent({ hass }) {
             // ligne de statut, en couleur.
             icon={m.logo ? <img src={m.logo} alt="" draggable={false} style={{ width: 28, height: 24, objectFit: 'contain' }} /> : <Fi i={m.ico} size={19} color={m.icoCol} />} iconBg={m.icoBg}
             name={m.name} sub={m.sub}
-            status={m.online ? m.status : 'Hors ligne'}
+            status={m.online ? m.status : tr('Hors ligne')}
             statusColor={!m.online ? 'var(--o-bad)' : (m.level != null && m.level >= 85 ? 'var(--o-warn2)' : 'var(--o-ok)')}
             barLabel={m.barLabel} barPct={m.barPct} barColor={lvlCol(m.barPct)} barText={m.barText}
             actionLabel={detail === m.key ? tr('Détail affiché') : tr('Voir le détail')}
@@ -7405,7 +7482,7 @@ function SystemeContent({ hass }) {
                 );
               })}
             </div>
-          : <div style={{ padding: '6px 0', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{logbook === null ? 'Journal indisponible sur cet accès.' : 'Aucun événement système sur 24 h.'}</div>}
+          : <div style={{ padding: '6px 0', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{logbook === null ? tr('Journal indisponible sur cet accès.') : tr('Aucun événement système sur 24 h.')}</div>}
       </div>
     </div>
   );
