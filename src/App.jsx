@@ -3056,7 +3056,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
   const lubaProg = num(mowerSensor(S, 'progress'), 0) || 0;
   const lubaMow = lubaSt === 'mowing';
   const lubaTxt = lubaMow ? ('Tonte · ' + Math.round(lubaProg) + '%') : lubaSt === 'returning' ? tr('Retour base') : lubaSt === 'paused' ? tr('En pause') : lubaSt === 'error' ? tr('Erreur') : 'Station de charge';
-  const croqPct = S ? Math.max(0, Math.min(100, Math.round((num(croqHaids().reservoir, 0) || 0) / CROQ_MAX * 100))) : 74;
+  const croqPct = S ? Math.max(0, Math.min(100, Math.round((num(croqHaids().reservoir, 0) || 0) / croqMax(S) * 100))) : 74;
   const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
   const mealMin = (t) => { const p = t.split(':'); return (+p[0]) * 60 + (+p[1]); };
   const nextMeal = croqMeals().filter(m => !S || !S[m.auto] || S[m.auto].state === 'on').filter(m => mealMin(m.time) > nowMin).sort((a, b) => mealMin(a.time) - mealMin(b.time))[0];
@@ -4681,6 +4681,18 @@ const cl_rgbAt = (t) => {
 const climateKeys = () => climateZones(null).flatMap(z => [z.haid, z.tempCible, z.modeEnt, z.autoEnt, z.tempSensor].filter(Boolean));
 // Zones de chauffage : configuration de l'utilisateur (elle seule sait décrire
 // un radiateur fil pilote), sinon les thermostats trouvés par la découverte.
+/** Une piece est-elle dehors ?
+ *
+ * Home Assistant ne le dit nulle part : ni les zones ni les appareils ne portent
+ * cette notion. Le nom est le seul indice, et il etait compare au seul mot
+ * « Exterieur » — chez un anglophone, son jardin entrait dans la moyenne des
+ * temperatures interieures. Le motif couvre les langues de Loggia et les mots
+ * les plus courants. */
+function estDehors(nom) {
+  return /ext[eé]rieur|exterior|outdoor|outside|au[sß]en|jardin|garden|garten|terrasse|terraza|balcon|balkon|patio/i
+    .test(String(nom || ''));
+}
+
 function climateZones(S) {
   /* Trois sources, dans cet ordre.
    *
@@ -5100,7 +5112,10 @@ function VoletsContent({ hass, edit = false, onEnt }) {
 
   const openCount = covers.filter(c => c.pos > 0).length;
   const stateOf = p => p === 0 ? tr('Fermé') : p === 100 ? tr('Ouvert') : 'Entrouvert';
-  const schedActive = mode !== 'Manuel';
+  /* Le planning tourne des que le mode n'est pas le pilotage a la main. Ce
+   * mot-la vient de l'installation : « Manuel », « Manual », « Manuell »… on le
+   * reconnait au motif, pas a une valeur exacte. */
+  const schedActive = !!mode && !/manuel|manual|hand/i.test(mode);
   const activeNights = voletDays().filter(d => days[d.k]).length;
   const sun = S && S['sun.sun'];
   const fmtT = (iso) => { if (!iso) return '—'; try { return new Date(iso).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); } catch (e) { return '—'; } };
@@ -6037,7 +6052,17 @@ function AspirateurView({ hass }) {
 /* ════════════ VUE CROQUETTES (reproduction fidèle de "Loggia Croquettes.dc.html") ════════════ */
 const CROQ_WEEK = [54, 72, 66, 78, 60, 90, 66];
 const CROQ_WD = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-const CROQ_MAX = 1500;
+/* La capacite du reservoir etait ecrite ici : 1 500 g, celle d'un distributeur
+ * precis. Un modele de 3 kg aurait affiche « 100 % » a moitie plein.
+ *
+ * L'aide qui porte le niveau declare son propre maximum — c'est elle qui sait. */
+const CROQ_MAX_DEFAUT = 1500;
+function croqMax(S) {
+  const id = croqHaids().reservoir;
+  const e = S && id && S[id];
+  const m = e && e.attributes && Number(e.attributes.max);
+  return (m > 0) ? m : CROQ_MAX_DEFAUT;
+}
 const croqKeys = () => [...Object.values(croqHaids()), ...croqMeals().map(m => m.auto)].filter(Boolean);
 // Distributeur : purement configuré. Un distributeur de croquettes piloté par
 // automations n'a pas d'équivalent standard dans Home Assistant, il n'y a donc
@@ -6064,13 +6089,13 @@ function CroquettesContent({ hass }) {
   const [portion, setPortion] = useState(1);
   const [levelLocal, setLevelLocal] = useState(null);
   useEffect(() => { setLevelLocal(null); }, [reservoirG]); // toute variation confirmée du capteur reprend la main sur l'optimiste
-  const level = levelLocal != null ? levelLocal : (reservoirG == null ? 0 : Math.max(0, Math.min(100, Math.round(reservoirG / CROQ_MAX * 100))));
-  const shownG = levelLocal != null ? CROQ_MAX : reservoirG;
+  const level = levelLocal != null ? levelLocal : (reservoirG == null ? 0 : Math.max(0, Math.min(100, Math.round(reservoirG / croqMax(S) * 100))));
+  const shownG = levelLocal != null ? croqMax(S) : reservoirG;
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
   // Distribuer demande un script propre a l'installation : rien de standard.
   // Sans lui, le geste ne fait rien plutot que d'appeler un script absent.
   const dispense = (n) => { const sc = (loggiaEnt('feeder', null) || {}).script; if (sc) call('script', 'turn_on', { entity_id: sc, variables: { portions: n } }); };
-  const refill = () => { setLevelLocal(100); call('input_number', 'set_value', { entity_id: croqHaids().reservoir, value: CROQ_MAX }); };
+  const refill = () => { setLevelLocal(100); call('input_number', 'set_value', { entity_id: croqHaids().reservoir, value: croqMax(S) }); };
   const toggleMeal = (m) => { setMeals(ms => ms.map(x => x.id === m.id ? { ...x, on: !x.on } : x)); call('automation', m.on ? 'turn_off' : 'turn_on', { entity_id: m.auto }); };
   const onCount = meals.filter(m => m.on).length;
   const dayG = meals.filter(m => m.on).reduce((s, m) => s + m.g, 0);
@@ -7626,7 +7651,7 @@ function deriveAccueil(hass, cfg, resolved) {
   const consoW = (netW != null) ? Math.max(0, netW + (solarW || 0)) : null;
   const autoPct = (consoW != null && consoW > 0) ? Math.min(100, Math.round((solarW || 0) / consoW * 100)) : ((solarW || 0) > 0 ? 100 : 0);
   const rooms = (cfg.rooms || []).map(r => ({ name: r.room, area: r.area || null, icon: r.icon || null, lights: (r.haid && r.haid.lights) || [], temp: num(r.haid && r.haid.temp), hum: num(r.haid && r.haid.humidity), co2: num(r.haid && r.haid.co2), tempId: r.haid && r.haid.temp, humId: r.haid && r.haid.humidity, co2Id: r.haid && r.haid.co2 }));
-  const indoor = rooms.filter(r => r.name !== 'Extérieur');
+  const indoor = rooms.filter(r => !estDehors(r.name));
   const avg = arr => { const x = arr.filter(v => v != null); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : null; };
   const inTemp = avg(indoor.map(r => r.temp)), inHum = avg(indoor.map(r => r.hum));
   const co2vals = rooms.map(r => r.co2).filter(v => v != null);
@@ -8118,7 +8143,7 @@ export default function App() {
   };
   const activeCv = view.indexOf('cv:') === 0 ? customViews.find(c => 'cv:' + c.id === view) : null;
   // Nav « Pièces » = ouvre la 1re pièce configurée (les chips de RoomView naviguent ensuite entre pièces)
-  const activeRoom = view.indexOf('room:') === 0 ? view.slice(5) : view === 'pieces' ? ((cfg.rooms || []).map(r => r.room).filter(r => r !== 'Extérieur')[0] || null) : null;
+  const activeRoom = view.indexOf('room:') === 0 ? view.slice(5) : view === 'pieces' ? ((cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))[0] || null) : null;
   // Vue pièce : on poll le domaine des appareils pilotables + les capteurs de la pièce (clés-préfixes).
   const roomKeys = activeRoom ? ['light.', 'switch.', 'cover.', 'climate.', 'media_player.', 'fan.', 'lock.', ...climateKeys(), ...(cfg.rooms || []).flatMap(r => [r.haid && r.haid.temp, r.haid && r.haid.humidity, r.haid && r.haid.co2])] : [];
   const haKeys = [...GLOBAL_KEYS, ...(activeCv ? activeCv.ents : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
