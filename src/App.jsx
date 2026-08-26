@@ -7763,6 +7763,14 @@ export default function App() {
   // de poser. Resolue pendant le rendu, elle est juste des le meme tour pour tous
   // les `t()` en dessous.
   preparerLangue(getHass());
+  // Les mots de Home Assistant arrivent apres coup quand la langue choisie n'est
+  // pas celle du compte : ce compteur force un rendu de plus a leur arrivee.
+  const [, setLangueVersion] = useState(0);
+  useEffect(() => {
+    const f = () => setLangueVersion(v => v + 1);
+    window.addEventListener('loggia-langue-prete', f);
+    return () => window.removeEventListener('loggia-langue-prete', f);
+  }, []);
   // Resolution memoisee : le parcours des entites ne doit pas tourner a chaque rendu.
   const loggiaRuntime = useMemo(
     () => buildRuntime({ discovery, userCfg: serverCfg, states: (getHass() || {}).states || {} }),
