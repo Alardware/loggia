@@ -29,35 +29,31 @@
  */
 import { cfgVal, getHass } from './state.js';
 import EN from './langues/en.js';
+import ES from './langues/es.js';
+import DE from './langues/de.js';
 
-/* Ajouter une langue = un fichier dans `langues/`, une entree ici, une dans
- * CATALOGUES. Mais « Suivre Home Assistant » marche deja pour TOUTES les langues
- * que HA connait : ce qu'il traduit passe, le reste reste en francais. */
+/* Quatre langues, traduites en entier — plutot que soixante a moitie.
+ *
+ * Home Assistant en propose 64, et Loggia sait en afficher le vocabulaire dans
+ * toutes. Mais ses propres phrases — « 4 lampes allumees », « Controle general »
+ * — n'ont d'equivalent chez lui dans aucune. Un dashboard polonais aurait donc
+ * garde la moitie de ses textes en anglais.
+ *
+ * Ajouter une langue = un fichier dans `langues/`, une entree ici, une dans
+ * CATALOGUES. Rien d'autre a toucher. */
 export const LANGUES = [
   { code: 'auto', nom: 'Suivre Home Assistant' },
-  { code: 'fr', nom: 'Francais' },
+  { code: 'fr', nom: 'Français' },
   { code: 'en', nom: 'English' },
+  { code: 'es', nom: 'Español' },
+  { code: 'de', nom: 'Deutsch' },
 ];
 
-const CATALOGUES = { en: EN };
+const CATALOGUES = { en: EN, es: ES, de: DE };
 
-/** Toutes les langues proposables : celles que Home Assistant connait.
- *
- * HA en annonce une soixantaine, avec leur nom dans leur propre langue
- * (« Deutsch », « Polski »). Les proposer toutes n'est pas une promesse de
- * traduction complete : c'est HA qui fournit les etats et les commandes, et ce
- * qui lui manque reste en francais. Mieux vaut un dashboard aux trois quarts
- * allemand qu'un dashboard entierement francais chez quelqu'un qui ne le lit pas.
- */
-export function languesDisponibles(hass) {
-  const h = hass || getHass();
-  const meta = h && h.translationMetadata && h.translationMetadata.translations;
-  const liste = [{ code: 'auto', nom: 'Suivre Home Assistant' }];
-  if (!meta) return liste.concat(LANGUES.slice(1));
-  const codes = Object.keys(meta)
-    .map(c => ({ code: c, nom: (meta[c] && meta[c].nativeName) || c }))
-    .sort((a, b) => a.nom.localeCompare(b.nom));
-  return liste.concat(codes);
+/** Les langues proposees dans les reglages. */
+export function languesDisponibles() {
+  return LANGUES;
 }
 
 /* Le francais n'a pas de catalogue : c'est la langue des sources. */
@@ -241,7 +237,9 @@ function resoudre(hass) {
    * fournira les etats et les commandes, le reste restera en francais. Un choix
    * explicite, lui, doit correspondre a une langue que Loggia propose. */
   const c = choix === 'auto' ? langueDeHA(hass) : choix;
-  return valide(c) ? c : LANGUE_SOURCE;
+  /* Une langue sans catalogue sortirait a moitie anglaise : mieux vaut la langue
+   * des sources, entiere. */
+  return (c === LANGUE_SOURCE || CATALOGUES[c]) ? c : LANGUE_SOURCE;
 }
 
 /* Cle ou la derniere langue REELLEMENT servie est notee. Voir `resoudreTot`. */
@@ -447,11 +445,32 @@ export function tr(texte, params) {
   const cle = CLES_HA[texte];
   if (!s && cle) s = localiserHA(cleHA(cle));
   if (!s && _cat) s = _cat[texte] || null;
+  /* Le repli n'est PAS le francais.
+   *
+   * Home Assistant ne traduit que SON vocabulaire ; les phrases propres a Loggia
+   * — « 4 lampes allumees », « Controle general », « Luminosite moyenne » — n'ont
+   * aucun equivalent chez lui. Sur une installation allemande, elles restaient
+   * donc en francais au milieu de l'allemand.
+   *
+   * L'anglais est la deuxieme langue de a peu pres tout le monde ; le francais ne
+   * l'est de personne. Un dashboard allemand aux trois quarts, complete en
+   * anglais, se lit. Complete en francais, il se ferme. */
+  if (!s && _code !== LANGUE_SOURCE) s = EN[texte] || null;
   if (!s) s = texte;
   if (params) {
     for (const k in params) s = s.split('{' + k + '}').join(String(params[k]));
   }
   return s;
+}
+
+/** Le mot de Home Assistant pour une cle DONNEE, ou `null`.
+ *
+ * Utile quand Loggia possede deja l'identifiant que HA emploie — les etats de la
+ * meteo, par exemple : `partlycloudy` se traduit dans les 64 langues sans qu'on
+ * ait a passer par le texte francais. */
+export function trHA(cle) {
+  if (_haMemo && _haMemo[cle]) return _haMemo[cle];
+  return localiserHA(cle);
 }
 
 /* Le tri alphabetique depend de la langue : en suedois « a trema » vient apres

@@ -3738,7 +3738,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: sm ? 11 : 12, fontWeight: 700, color: statusColor }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor, animation: pulse ? 'pulse 2s infinite' : 'none' }} />{statusText}</div>
             </div>
           );
-          const voletsCard = (sm) => infoCard(sm, 'rgba(var(--o-accent-rgb),.16)', (s) => <Ico name="blinds" color="var(--o-accent)" size={s} />, 'Mode volets', 'Auto lever/coucher', 'var(--o-accent)', <>Fermeture à {a && a.sunsetHM ? a.sunsetHM : '21:42'}</>, false);
+          const voletsCard = (sm) => infoCard(sm, 'rgba(var(--o-accent-rgb),.16)', (s) => <Ico name="blinds" color="var(--o-accent)" size={s} />, tr('Mode volets'), tr('Auto lever/coucher'), 'var(--o-accent)', <>Fermeture à {a && a.sunsetHM ? a.sunsetHM : '21:42'}</>, false);
           const secuCard = (sm) => infoCard(sm, 'rgba(52,211,153,.16)', (s) => <Ico name="shield-check" color="var(--o-ok)" size={s} />, tr('Sécurité'), a ? a.camOnline + '/' + a.camTotal + ' caméras OK' : '3/3 caméras OK', 'var(--o-ok)', a && a.alarmArmed ? tr('Alarme armée') : 'Système opérationnel', true);
           const etatsCards = (sm) => <>{voletsCard(sm)}{mWallE && <MachineCard m={mWallE} small={sm} />}{mLuba && <MachineCard m={mLuba} small={sm} />}{mLv && <MachineCard m={mLv} small={sm} />}{secuCard(sm)}</>;
           const rappelsCards = (sm) => <>{repasCard(sm)}{mPb && <MachineCard m={mPb} small={sm} />}</>;
@@ -3767,7 +3767,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           ) : null;
           const OKRGB = '52,211,153', AMBRGB = '251,191,36';
           const etatsRows = [];
-          etatsRows.push(railRow('vol', 'Mode volets', 'Auto lever/coucher', (a && a.sunsetHM) ? a.sunsetHM : '21:42', 'var(--o-accent-soft)'));
+          etatsRows.push(railRow('vol', tr('Mode volets'), tr('Auto lever/coucher'), (a && a.sunsetHM) ? a.sunsetHM : '21:42', 'var(--o-accent-soft)'));
           if (mWallE && (!a || hasEnt((loggiaEnt('vacuum', {}) || {}).etat))) etatsRows.push(railRow('we', mWallE.label, mWallE.phase, mWallE.valueText, mWallE.barColor || mWallE.color));
           if (mLuba && (!a || hasEnt(mowerId(a && a.states)))) etatsRows.push(railRow('lu', mLuba.label, mLuba.phase, mLuba.valueText, mLuba.barColor || mLuba.color));
           if (mLv && (!a || hasEnt(notifIds().dishwasher))) etatsRows.push(railRow('lv', mLv.label, mLv.phase, mLv.valueText, mLv.color));
@@ -4906,7 +4906,7 @@ function ClimatView({ hass, edit = false, onEnt }) {
 /* ════════════ VUE VOLETS (reproduction fidèle de "Loggia Volets.dc.html") ════════════ */
 const VOLET_MODES = [
   { id: 'Manuel', label: 'Manuel', desc: tr('Pilotage à la main'), icon: 'hand', color: 'var(--o-text2)' },
-  { id: 'Auto lever/coucher', label: 'Auto soleil', desc: 'Suit lever / coucher', icon: 'sun', color: '#ffce73' },
+  { id: 'Auto lever/coucher', label: tr('Auto soleil'), desc: tr('Suit lever / coucher'), icon: 'sun', color: '#ffce73' },
   { id: 'Fermeture nuit', label: 'Nuit', desc: tr('Fermeture au crépuscule'), icon: 'moon', color: 'var(--o-purple)' },
 ];
 const voletKeys = () => [...voletCovers(null).map(c => c.haid), voletMode(), ...voletDays().map(d => d.haid)].filter(Boolean);
@@ -5449,10 +5449,10 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       <div className="o-en-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
         <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Énergie')}</h1>
-        <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Consommation') + ' ' + fmtW(consoW) + ' · ' + tr('production solaire') + ' ' + fmtW(solarW) + ' · réseau ' + fmtW(gridNetW)}</div>
+        <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Consommation') + ' ' + fmtW(consoW) + ' · ' + tr('production solaire') + ' ' + fmtW(solarW) + ' · ' + tr('réseau') + ' ' + fmtW(gridNetW)}</div>
         </div>
         <span style={{ flex: 1 }} />
-        <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: exporting ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s2)', color: exporting ? 'var(--o-ok)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: exporting ? 'var(--o-ok)' : 'var(--o-text3)' }} />{exporting ? 'SURPLUS ' + fmtW(surplusW) : 'PAS DE SURPLUS'}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: exporting ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s2)', color: exporting ? 'var(--o-ok)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: exporting ? 'var(--o-ok)' : 'var(--o-text3)' }} />{exporting ? tr('SURPLUS') + ' ' + fmtW(surplusW) : tr('PAS DE SURPLUS')}</span>
       </div>
 
       <div className="grid-ehero" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 18, alignItems: 'stretch' }}>
@@ -5510,7 +5510,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
               <EnVal v={solarAvail ? fmtW(solarW) : '—'} col={solarActive ? 'var(--o-gold)' : 'var(--o-text3)'} />
             </EnRow>
             {(tauxAutoconso != null || autosuff != null) && (
-              <EnRow label="Autoconsommation" desc={tr('Part de la production consommée sur place')}>
+              <EnRow label={tr('Autoconsommation')} desc={tr('Part de la production consommée sur place')}>
                 <EnGauge v={(tauxAutoconso != null ? tauxAutoconso : autosuff) + ' %'} pct={tauxAutoconso != null ? tauxAutoconso : autosuff} col={(tauxAutoconso != null ? tauxAutoconso : autosuff) > 0 ? 'var(--o-ok)' : 'var(--o-text3)'} />
               </EnRow>
             )}
