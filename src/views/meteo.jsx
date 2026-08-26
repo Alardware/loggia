@@ -116,7 +116,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
       <div>
         <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Météo')}</h1>
         <div style={{ fontSize: 13.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>
-          {(wa.friendly_name || wId)}{depuis ? ' · relevé ' + depuis : ''} · Home Assistant
+          {(wa.friendly_name || wId)}{depuis ? ' · ' + tr('relevé') + ' ' + depuis : ''} · Home Assistant
         </div>
       </div>
 
@@ -137,7 +137,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
             <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>{label}</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
               {ressenti != null && chip('thermometer-half', 'Ressenti ' + deg(ressenti), '#ff8a4c')}
-              {vent != null && chip('wind', 'Vent ' + Math.round(vent) + ' km/h', '#9fb4d6')}
+              {vent != null && chip('wind', tr('Vent {n} km/h', { n: Math.round(vent) }), '#9fb4d6')}
               {hum != null && chip('raindrops', 'Humidité ' + Math.round(hum) + ' %', 'var(--o-cyan)')}
               {uv != null && chip('sun', 'UV ' + Math.round(uv), 'var(--o-gold)')}
             </div>
@@ -172,7 +172,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
         </div>
         <span style={{ flex: 1 }} />
         <button onClick={() => setPanel(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>
-          <Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : tr('Réglages de la vue')}</span>
+          <Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span>
         </button>
       </div>
 
@@ -183,16 +183,16 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
             <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 11px', borderRadius: 999, background: 'var(--o-s2)', color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{wId}</span>
           </div>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 8 }}>{tr('Relevés de l’entité météo')}</div>
-          {ressenti != null && <Ligne titre="Ressenti" sous="Température apparente, vent et humidité inclus" valeur={deg(ressenti) + ' C'} couleur="#ff8a4c" />}
+          {ressenti != null && <Ligne titre={tr('Ressenti')} sous="Température apparente, vent et humidité inclus" valeur={deg(ressenti) + ' C'} couleur="#ff8a4c" />}
           {hum != null && <Ligne titre={tr('Humidité')} sous="Confortable entre 40 et 60 %" valeur={Math.round(hum) + ' %'} couleur="var(--o-ok)" part={hum} />}
-          {vent != null && <Ligne titre="Vent" sous={rafales != null ? 'Rafales à ' + Math.round(rafales) + ' km/h' : 'Vitesse moyenne'} valeur={Math.round(vent) + ' km/h'} />}
-          {pression != null && <Ligne titre="Pression" sous={tr('Au niveau de la mer')} valeur={Math.round(pression) + ' hPa'} />}
-          {uv != null && <Ligne titre="Indice UV" sous="Protection conseillée au-delà de 6" valeur={Math.round(uv) + (uv >= 6 ? ' · élevé' : ' · modéré')} couleur={uv >= 6 ? 'var(--o-warn2)' : 'var(--o-ok)'} part={Math.min(100, uv * 9)} />}
+          {vent != null && <Ligne titre={tr('Vent')} sous={rafales != null ? 'Rafales à ' + Math.round(rafales) + ' km/h' : 'Vitesse moyenne'} valeur={Math.round(vent) + ' km/h'} />}
+          {pression != null && <Ligne titre={tr('Pression')} sous={tr('Au niveau de la mer')} valeur={Math.round(pression) + ' hPa'} />}
+          {uv != null && <Ligne titre={tr('Indice UV')} sous={tr('Protection conseillée au-delà de 6')} valeur={Math.round(uv) + (uv >= 6 ? ' · ' + tr('élevé') : ' · ' + tr('modéré'))} couleur={uv >= 6 ? 'var(--o-warn2)' : 'var(--o-ok)'} part={Math.min(100, uv * 9)} />}
           {sun && sun.attributes && sun.attributes.next_rising && (
             <Ligne titre="Lever · coucher" sous={isNight ? 'Nuit en cours' : tr('Journée en cours')}
               valeur={hm(sun.attributes.next_rising) + ' · ' + hm(sun.attributes.next_setting)} couleur="var(--o-gold)" />
           )}
-          {visi != null && <Ligne titre="Visibilité" sous="Portée de vue au sol" valeur={Math.round(visi) + ' km'} />}
+          {visi != null && <Ligne titre={tr('Visibilité')} sous="Portée de vue au sol" valeur={Math.round(visi) + ' km'} />}
         </div>
       )}
 
