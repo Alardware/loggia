@@ -1,7 +1,14 @@
 name: Validation
 
 on:
+  # Les branches seulement. Sans ce filtre, `push` se declenche AUSSI sur les
+  # tags : chaque `git push` d'un tag relancait les quatre travaux sur un commit
+  # valide quelques minutes plus tot, en pure perte. Le doublon du tag v2.5.5
+  # n'a jamais demarre — quatre travaux restes en file d'attente, puis le run
+  # marque en echec — et laissait une croix rouge dans l'historique sous un code
+  # dont la validation, elle, etait verte.
   push:
+    branches: ['**']
   pull_request:
   # Relance a la demande : les controles HACS interrogent GitHub au moment du
   # run — topics, description, marque. Corriger un reglage du depot ne suffit
