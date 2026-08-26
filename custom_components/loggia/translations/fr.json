@@ -3,11 +3,11 @@
     "step": {
       "user": {
         "title": "Loggia Dashboard",
-        "description": "Loggia lit votre installation Home Assistant tout seul — il n'y a rien a configurer. Il apparaitra sous le nom **Loggia** dans le menu lateral."
+        "description": "Loggia lit votre installation Home Assistant tout seul — il n'y a rien à configurer. Il apparaîtra sous le nom **Loggia** dans le menu latéral."
       }
     },
     "abort": {
-      "already_configured": "Loggia est deja installe."
+      "already_configured": "Loggia est déjà installé."
     }
   }
 }

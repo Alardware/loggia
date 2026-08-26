@@ -17,7 +17,7 @@ import { CV_ICONS, cvInp, cvName, USER_COLORS, BottomSheet, EntPicker, CV_DOM_IC
 import { useLoggia } from '../runtime.js';
 import { viewReason } from '../views.js';
 import { weatherEntity } from '../wxutil.jsx';
-import { tr, LANGUES, choixLangue } from '../i18n.js';
+import { tr, choixLangue, languesDisponibles } from '../i18n.js';
 
 /**
  * Ce que l'installation est REELLEMENT.
@@ -874,9 +874,16 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <OptRow title={tr('Mode')} desc={tr('Appliqué au thème choisi.')}>
               <Seg value={themeMode} opts={[['dark', 'Foncé'], ['light', 'Clair']]} onPick={onMode} disabled={!notFollow} />
             </OptRow>
-            <OptRow title={tr('Langue')} desc={tr('« Suivre Home Assistant » prend la langue du compte HA. Les noms de pièces et d’appareils viennent de Home Assistant : ils ne sont pas traduits ici.')}>
-              <Seg value={choixLangue()} opts={LANGUES.map(l => [l.code, l.code === 'auto' ? tr('Suivre HA') : l.nom])}
-                onPick={v => { cfgSet({ 'loggia-langue': v }); setTimeout(() => window.location.reload(), 200); }} />
+            <OptRow title={tr('Langue')} desc={tr('Les états et les commandes viennent de Home Assistant, dans toutes les langues qu’il connaît. Les noms de pièces et d’appareils aussi : ils ne sont pas traduits ici.')}>
+              {/* Une soixantaine de langues : un segmente serait illisible. */}
+              <select value={choixLangue()}
+                onChange={e => { cfgSet({ 'loggia-langue': e.target.value }); setTimeout(() => window.location.reload(), 200); }}
+                style={{ padding: '8px 12px', borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                  border: '1px solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text)', maxWidth: 200 }}>
+                {languesDisponibles(hass).map(l => (
+                  <option key={l.code} value={l.code}>{l.code === 'auto' ? tr('Suivre Home Assistant') : l.nom}</option>
+                ))}
+              </select>
             </OptRow>
             <OptRow title="Suivre Home Assistant" desc={tr('Calque le thème actif de Home Assistant et désactive les choix ci-dessous.')}>
               <Tgl on={haTheme === 'FOLLOW'} cb={onFollowHa} label={tr('Suivre le thème Home Assistant')} />
