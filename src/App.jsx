@@ -168,13 +168,17 @@ const NAV = [
     { label: 'Énergie', svg: <Fi i="bolt" color="var(--o-ok)" /> },
     { label: 'Sécurité', svg: <Fi i="shield-check" color="var(--o-ok)" /> },
   ] },
-  { group: 'SYSTÈME', items: [
+  { group: 'SYSTÈME', reglages: true, items: [
     { label: 'Système', svg: <Fi i="microchip" color="var(--o-text2)" /> },
     { label: 'Paramètres', svg: <Fi i="settings-sliders" color="var(--o-text2)" /> },
   ] },
 ];
-/** Groupe rendu en dernier dans la nav, apres toutes les vues. */
-const NAV_REGLAGES = tr('SYSTÈME');
+/* Le groupe des reglages se reconnait a un DRAPEAU, pas a son titre.
+ *
+ * Il etait repere par `g.group === NAV_REGLAGES`, une comparaison de texte. Des
+ * que le titre est passe par la traduction, elle a echoue : en anglais, le
+ * groupe Systeme remontait au-dessus des vues secondaires au lieu de rester en
+ * bas — l'ordre du menu changeait avec la langue. Un drapeau ne se traduit pas. */
 
 const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scènes': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Aspirateur': 'aspirateur', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Caméras': 'cameras', 'Système': 'systeme', 'Paramètres': 'parametres' };
 const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'aspirateur', 'croquettes', 'medias', 'meteo', 'objets', 'securite', 'systeme', 'parametres']);
@@ -227,7 +231,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
       </div>
       {/* Les vues passent avant les reglages : « Système » et « Paramètres »
           ferment la liste, comme tout ce qui ne sert pas au quotidien. */}
-      {NAV.filter(g => g.group !== NAV_REGLAGES).map(groupeNav)}
+      {NAV.filter(g => !g.reglages).map(groupeNav)}
       {secondaires.length > 0 && (
         <div>
           <div className="o-side-text" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: '12px 8px 5px' }}>{tr('VUES SECONDAIRES')}</div>
@@ -255,7 +259,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
           })}
         </div>
       )}
-      {NAV.filter(g => g.group === NAV_REGLAGES).map(groupeNav)}
+      {NAV.filter(g => g.reglages).map(groupeNav)}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto', paddingTop: 14, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', borderRadius: 11, background: `rgba(${ha ? ha.alarmRgb : '140,152,180'},.1)`, border: `1px solid rgba(${ha ? ha.alarmRgb : '140,152,180'},.22)` }}><svg width="16" height="16" viewBox="0 0 24 24" fill={`rgb(${ha ? ha.alarmRgb : '140,152,180'})`}><path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5z" /></svg><span className="o-side-text" style={{ fontSize: 12.5, fontWeight: 700, color: `rgb(${ha ? ha.alarmRgb : '140,152,180'})` }}><FlipText text={ha ? ha.alarmTxt : 'Alarme · …'} /></span></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 4px 0' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: ha && !ha.online ? '0 0 7px var(--o-bad)' : '0 0 7px var(--o-ok)', animation: ha && !ha.online ? 'pulse 1.2s infinite' : 'none' }} /><div className="o-side-text" style={{ lineHeight: 1.2 }}><div style={{ fontSize: 12, fontWeight: 700, color: ha && !ha.online ? 'var(--o-bad)' : undefined }}>{ha && !ha.online ? tr('Home Assistant · Hors ligne') : tr('Home Assistant · En ligne')}</div><div style={{ fontSize: 10, color: 'var(--o-text3)', fontWeight: 600 }}>{haHost()}</div></div></div>
