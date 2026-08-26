@@ -881,7 +881,13 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 style={{ padding: '8px 12px', borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
                   border: '1px solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text)', maxWidth: 200 }}>
                 {languesDisponibles(hass).map(l => (
-                  <option key={l.code} value={l.code}>{l.code === 'auto' ? tr('Suivre Home Assistant') : l.nom}</option>
+                  /* La liste deroulante est peinte par le systeme, pas par le
+                     theme : sans ces deux couleurs, elle sortait blanche sur
+                     blanc en mode sombre. */
+                  <option key={l.code} value={l.code}
+                    style={{ background: 'var(--o-s2)', color: 'var(--o-text)' }}>
+                    {l.code === 'auto' ? tr('Suivre Home Assistant') : l.nom}
+                  </option>
                 ))}
               </select>
             </OptRow>

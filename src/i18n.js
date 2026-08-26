@@ -65,47 +65,159 @@ export const LANGUE_SOURCE = 'fr';
 
 /* Les textes de Loggia qui existent DEJA dans Home Assistant, et sous quelle cle.
  *
- * N'y figure que ce dont le sens est exactement le meme. Les choix de vocabulaire
- * propres a Loggia n'y sont pas : HA nomme « Zones » ce que Loggia appelle
- * « Pieces », et prendre sa cle renommerait la vue jusqu'en francais.
+ * Cette table n'a pas ete ecrite a la main : chaque entree a ete trouvee en
+ * cherchant, parmi les 4 900 traductions francaises de HA, celles dont la valeur
+ * est EXACTEMENT le texte de Loggia. Une cle n'est donc jamais une approximation
+ * — en francais elle rend le mot deja affiche, et dans les 63 autres langues elle
+ * rend celui que Home Assistant emploie.
+ *
+ * C'est ce qui permet d'adopter le vocabulaire de HA sans rien changer au
+ * francais : « Pieces » reste « Pieces » ici, et devient « Areas » en anglais,
+ * « Bereiche » en allemand — les mots que l'utilisateur lit deja dans le reste de
+ * son installation. Un dashboard a moitie francais chez un anglophone, il le
+ * ferme.
+ *
+ * Deux correspondances ont ete ecartees a la relecture : HA traduit « Personne »
+ * par « Person » (nous voulons « Nobody ») et « Retablir » par « Redo ». Un
+ * rapprochement automatique ne dispense pas de verifier le sens.
+ *
+ * Les prefixes sont abreges pour rester lisibles ; `cleHA` les developpe. Seuls
+ * les espaces de noms du CŒUR de HA sont retenus : une cle venant d'une
+ * integration tierce disparaitrait avec elle.
  */
+const ABREGES = {
+  'K:': 'ui.common.',
+  'D:': 'ui.card.',
+  'M:': 'ui.components.',
+  'P:': 'panel.',
+};
+
+function cleHA(court) {
+  const c = String(court);
+  if (c.charAt(0) === 'C') {
+    // « C:vacuum:state.docked » → domaine, puis le reste du chemin.
+    const p = c.split(':');
+    return 'component.' + p[1] + '.entity_component._.' + p.slice(2).join(':');
+  }
+  const pre = c.slice(0, 2);
+  return ABREGES[pre] ? ABREGES[pre] + c.slice(2) : c;
+}
+
 const CLES_HA = {
-  // Etats d'appareils
-  'Allumé': 'component.light.entity_component._.state.on',
-  'Éteint': 'component.light.entity_component._.state.off',
-  'Ouvert': 'component.cover.entity_component._.state.open',
-  'Fermé': 'component.cover.entity_component._.state.closed',
-  'En pause': 'component.media_player.entity_component._.state.paused',
-  'Lecture en cours': 'component.media_player.entity_component._.state.playing',
-  'Inactif': 'component.media_player.entity_component._.state.idle',
-  'Nettoyage': 'component.vacuum.entity_component._.state.cleaning',
-  'Sur la base': 'component.vacuum.entity_component._.state.docked',
-  'Retour base': 'component.vacuum.entity_component._.state.returning',
+  // Vues et domaines
+  'MAISON': 'C:group:state.home',
+  'Pièces': 'M:area-filter.title',
+  'Pièce': 'M:area-picker.area',
+  'Énergie': 'P:energy',
+  'Sécurité': 'P:security',
+  'Météo': 'C:weather:name',
+  'météo': 'C:weather:name',
+  'Lumières': 'P:light',
+  'Médias': 'P:media_browser',
+  'Caméra': 'C:camera:name',
+  'caméra': 'C:camera:name',
+  'Aspirateur': 'C:vacuum:name',
+  'Télécommande': 'C:remote:name',
+  'Paramètres': 'P:config',
+  'APERÇU': 'P:home',
+  'ENTITÉ': 'M:entity.entity-picker.entity',
+  'CHAÎNE': 'M:media-browser.class.channel',
+  'Langue': 'M:media-browser.tts.language',
+  'Mises à jour': 'D:updates.title',
+  /* Ces quatre-la changent aussi le mot FRANCAIS : Home Assistant dit
+   * « Appareils » la ou Loggia disait « Objets », « Ouverture » la ou il disait
+   * « Volets ». C'est le but — un dashboard qui parle comme l'installation qui
+   * l'heberge, dans toutes les langues. */
+  'Scènes': 'M:navigation-picker.route.scenes',
+  'Objets': 'M:navigation-picker.route.devices',
+  'Climat': 'P:climate',
+  'Volets': 'C:cover:name',
+  'Vues': 'M:navigation-picker.views',
+  'Automatisations': 'M:navigation-picker.route.automations',
+  'Caméras': 'C:camera:name',
+
+  // Etats
+  'Allumé': 'C:fan:state.on',
+  'Éteint': 'C:fan:state.off',
+  'Ouvert': 'C:lock:state.open',
+  'Fermé': 'C:group:state.closed',
+  'En pause': 'C:timer:state.paused',
+  'EN PAUSE': 'C:timer:state.paused',
+  'En veille': 'C:media_player:state.standby',
+  'Inactif': 'C:timer:state.idle',
+  'Lecture en cours': 'C:media_player:state.playing',
+  'Nettoyage': 'C:vacuum:state.cleaning',
+  'Sur la base': 'C:lawn_mower:state.docked',
+  'SUR LA BASE': 'C:lawn_mower:state.docked',
+  "À la station d'accueil": 'C:vacuum:state.docked',
+  'Erreur': 'C:vacuum:state.error',
+  'Inconnu': 'C:light:state_attributes.color_mode.state.unknown',
+  'ACTIF': 'C:timer:state.active',
+  'En cours': 'C:update:state_attributes.in_progress.name',
+  'Terminé': 'C:timer:state_attributes.last_transition.state.finished',
+  'À jour': 'C:update:state.off',
+  'À JOUR': 'C:update:state.off',
+  'version installée': 'C:update:state_attributes.installed_version.name',
+  'déclenchée': 'C:alarm_control_panel:state.triggered',
+  'absent': 'C:group:state.not_home',
+  'présent': 'D:alarm_control_panel.modes.armed_home',
+  'Présent': 'D:alarm_control_panel.modes.armed_home',
+  'nuit': 'D:weather.night',
+  'Personne à la maison': 'D:home-summary.nobody_home',
+  'personne à la maison': 'D:home-summary.nobody_home',
+  'TOUT VA BIEN': 'D:home-summary.all_maintenance_good',
+  'Séchage': 'C:humidifier:state_attributes.action.state.drying',
+
+  // Modes
+  'Mode': 'D:climate.mode',
+  'ARRÊT': 'C:water_heater:state_attributes.operation_mode.state.off',
+  'Arrêt': 'C:water_heater:state_attributes.operation_mode.state.off',
+  'CONFORT': 'C:humidifier:state_attributes.mode.state.comfort',
+  'Confort': 'C:humidifier:state_attributes.mode.state.comfort',
+  'confort': 'C:humidifier:state_attributes.mode.state.comfort',
+  'faible': 'D:fan.speed.low',
 
   // Commandes
-  'Fermer': 'ui.common.close',
-  'Ouvrir': 'ui.card.cover.open_cover',
-  'Arrêter': 'ui.card.cover.stop_cover',
-  'Annuler': 'ui.common.cancel',
-  'Enregistrer': 'ui.common.save',
-  'Supprimer': 'ui.common.delete',
-  'Modifier': 'ui.common.edit',
-  'Ajouter': 'ui.common.add',
-  'Renommer': 'ui.common.rename',
-  'Copier': 'ui.common.copy',
-  'Rafraîchir': 'ui.common.refresh',
-  'Rechercher': 'ui.common.search',
-  'Précédent': 'ui.common.previous',
-  'Masquer': 'ui.common.hide',
-  'Afficher': 'ui.common.show',
-  'Réinitialiser': 'ui.common.reset',
-  'Retour': 'ui.common.back',
-  'Chargement': 'ui.common.loading',
+  'Fermer': 'K:close',
+  'Ouvrir': 'D:lock.open',
+  'Annuler': 'K:cancel',
+  'Enregistrer': 'K:save',
+  'Supprimer': 'K:delete',
+  'Modifier': 'K:edit',
+  'Ajouter': 'K:add',
+  'Renommer': 'K:rename',
+  'Copier': 'K:copy',
+  'Rafraîchir': 'K:refresh',
+  'Rechercher': 'K:search',
+  'Précédent': 'K:previous',
+  'Masquer': 'K:hide',
+  'Afficher': 'K:show',
+  'Réinitialiser': 'K:reset',
+  'Retour': 'K:back',
+  'Chargement': 'K:loading',
+  'Aucun': 'K:none',
+  'Nom': 'K:name',
+  'Exécuter': 'D:script.run',
+  'Éteindre': 'D:common.turn_off',
+  'Mettre en pause': 'D:timer.actions.pause',
+  'Lecture': 'D:media_player.media_play',
+  'Couper le son': 'D:media_player.media_volume_mute',
+  'Répéter': 'C:media_player:state_attributes.repeat.name',
+  'Aléatoire': 'C:media_player:state_attributes.shuffle.name',
+  'Connexion': 'C:device_tracker:state_attributes.tracking_type.state.connection',
 
   // Mesures
-  'Luminosité': 'ui.card.light.brightness',
-  'Position': 'ui.card.cover.position',
-  'Nom': 'ui.common.name',
+  'Température': 'D:weather.attributes.temperature',
+  'Humidité': 'D:weather.attributes.humidity',
+  'Luminosité': 'D:light.brightness',
+  'Position': 'D:cover.position',
+  'Pression': 'C:weather:state_attributes.pressure.name',
+  'Visibilité': 'D:weather.attributes.visibility',
+  'Indice UV': 'C:weather:state_attributes.uv_index.name',
+  'Point de rosée': 'D:weather.attributes.dew_point',
+  'Prévision': 'C:weather:state_attributes.forecast.name',
+  'État': 'D:humidifier.state',
+  'batterie': 'C:device_tracker:state_attributes.battery.name',
 };
 
 export function langueDeHA(hass) {
@@ -175,6 +287,45 @@ let _cat = CATALOGUES[_code] || null;
 let _ressourcesHA = null;
 let _ressourcesPour = null;
 
+/* Les mots de Home Assistant, gardes d'une visite a l'autre.
+ *
+ * Le chargement est asynchrone, mais plusieurs modules construisent leurs
+ * libelles A L'IMPORT — la navigation, les vues secondaires. Au premier
+ * affichage dans une nouvelle langue, ces libelles sont donc figes en francais
+ * meme si HA sait les traduire : constate en espagnol, ou « Areas » passait mais
+ * « Lumieres » restait.
+ *
+ * Seules les valeurs des cles de `CLES_HA` sont gardees — quelques centaines
+ * d'octets, contre 300 Ko pour tout le catalogue de HA. Indexees par le texte
+ * francais, elles se lisent sans rien developper.
+ */
+const MEMO_HA = 'loggia-ha-';
+/* Lu tout de suite : c'est ce qui rend les libelles justes des le premier rendu
+ * des visites suivantes. */
+let _haMemo = lireLS(MEMO_HA + _code);
+
+function memoriserHA(code, tout) {
+  const utile = {};
+  Object.keys(CLES_HA).forEach(t => {
+    const v = tout[cleHA(CLES_HA[t])];
+    if (v) utile[t] = v;
+  });
+  if (!Object.keys(utile).length) return;
+  const neuf = !_haMemo;
+  _haMemo = utile;
+  try { localStorage.setItem(MEMO_HA + code, JSON.stringify(utile)); } catch (e) { /* stockage plein : on repartira du reseau */ }
+  /* Rien de garde jusqu'ici : les libelles construits a l'import sont restes en
+   * francais. Un rechargement — le seul — les reconstruit avec ces mots. */
+  if (neuf) {
+    try {
+      if (sessionStorage.getItem(MEMO_HA + code) !== '1') {
+        sessionStorage.setItem(MEMO_HA + code, '1');
+        location.reload();
+      }
+    } catch (e) { /* pas de navigateur : rien a recharger */ }
+  }
+}
+
 /** Le mot de Home Assistant pour cette cle, ou `null` s'il n'en a pas. */
 function localiserHA(cle, hass) {
   const h = hass || getHass();
@@ -224,6 +375,7 @@ function chargerRessourcesHA(hass, code) {
       });
       if (!Object.keys(tout).length) return;
       _ressourcesHA = tout;
+      memoriserHA(code, tout);
       /* Les libelles deja rendus datent d'avant : on previent l'application. */
       try {
         window.dispatchEvent(new CustomEvent('loggia-langue-prete', { detail: { langue: code } }));
@@ -287,15 +439,14 @@ export function langue() {
  * d'une langue a l'autre. */
 export function tr(texte, params) {
   if (texte == null) return texte;
-  let s = null;
-  if (_code !== LANGUE_SOURCE) {
-    /* Home Assistant d'abord : son vocabulaire est celui que l'utilisateur lit
-     * dans le reste de son installation, et il couvre des langues pour
-     * lesquelles Loggia n'a aucun catalogue. */
-    const cle = CLES_HA[texte];
-    if (cle) s = localiserHA(cle);
-    if (!s && _cat) s = _cat[texte] || null;
-  }
+  /* Home Assistant est consulte DANS TOUTES LES LANGUES, francais compris. La
+   * table ayant ete batie sur des correspondances exactes en francais, cela n'y
+   * change presque rien — sauf les quelques mots ou Loggia s'ecartait du
+   * vocabulaire de HA, et qui s'y rangent desormais. */
+  let s = _haMemo ? (_haMemo[texte] || null) : null;
+  const cle = CLES_HA[texte];
+  if (!s && cle) s = localiserHA(cleHA(cle));
+  if (!s && _cat) s = _cat[texte] || null;
   if (!s) s = texte;
   if (params) {
     for (const k in params) s = s.split('{' + k + '}').join(String(params[k]));
