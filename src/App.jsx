@@ -1234,7 +1234,7 @@ function roomEntitiesBrutes(hass, roomName) {
   // 2) chauffage : toutes les zones de la pièce — poêle (climate.*) ET radiateurs fil pilote (switch + input_*),
   //    ces derniers référencés par « zone:<id> » car ils n'ont pas d'entité climate unique.
   climateZones(hass && hass.states).filter(z => rmNorm(z.room) === target).forEach(z => {
-    if (z.type === 'stove' && z.haid && hass.states[z.haid]) out.push(z.haid);
+    if (estClimate(z) && z.haid && hass.states[z.haid]) out.push(z.haid);
     else if (hass.states[z.haid] || hass.states[z.tempCible]) out.push('zone:' + z.id);
   });
   // 3) volets (mappés par leur nom de config, ex. « Volet Séjour » → cover.volet_salon)
@@ -1795,8 +1795,8 @@ function RoomCoverSheet({ id, hass, onClose }) {
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 9px' }}>MODE AUTOMATIQUE</div>
         {/* Trois colonnes : les trois modes tiennent d'un regard, sans faire
             descendre le reste de la feuille sous la ligne de flottaison. */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-          {VOLET_MODES.map(m => {
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: 8 }}>
+          {voletModes(S).map(m => {
             const on = mode === m.id;
             return (
               <button key={m.id} className="o-volet-mode" onClick={() => call('input_select', 'select_option', { entity_id: voletMode(), option: m.id })} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 7, padding: '13px 8px', borderRadius: 13, cursor: 'pointer', textAlign: 'center', border: '1px solid ' + (on ? hx(m.color, .4) : 'var(--o-bd3)'), background: on ? hx(m.color, .13) : 'var(--o-s2)', color: on ? m.color : 'var(--o-text1)' }}>
@@ -4682,7 +4682,15 @@ const climateKeys = () => climateZones(null).flatMap(z => [z.haid, z.tempCible, 
 // Zones de chauffage : configuration de l'utilisateur (elle seule sait décrire
 // un radiateur fil pilote), sinon les thermostats trouvés par la découverte.
 function climateZones(S) {
-  const c = loggiaEnt('climate', null);
+  /* Trois sources, dans cet ordre.
+   *
+   * `loggia_climate` est ce que l'ecran Parametres → Entites enregistre : il
+   * doit primer, sinon une saisie resterait sans effet, masquee par une
+   * configuration plus ancienne. `loggia_entities.climate` est justement cette
+   * configuration heritee, gardee tant que personne n'a touche a l'ecran.
+   * La decouverte ferme la marche : elle ne trouve que les `climate.*`. */
+  const saisi = cfgVal('loggia_climate', null);
+  const c = (Array.isArray(saisi) && saisi.length) ? saisi : loggiaEnt('climate', null);
   if (Array.isArray(c) && c.length) return c.filter(z => z && z.haid && (!S || S[z.haid]));
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.climate;
   if (r && r.available) return r.list;
@@ -4694,7 +4702,7 @@ const readZone = (S, z) => {
   const out = { ...z };
   const cur = climNum(S, z.tempSensor); if (cur != null) out.current = Math.round(cur * 10) / 10;
   const tgt = climNum(S, z.tempCible); if (tgt != null) out.target = Math.round(tgt * 2) / 2;
-  if (z.type === 'stove') {
+  if (estClimate(z)) {
     const st = S && S[z.haid];
     if (st) {
       out.modeBrut = st.state;
@@ -4983,11 +4991,29 @@ function ClimatView({ hass, edit = false, onEnt }) {
 }
 
 /* ════════════ VUE VOLETS (reproduction fidèle de "Loggia Volets.dc.html") ════════════ */
-const VOLET_MODES = [
-  { id: 'Manuel', label: 'Manuel', desc: tr('Pilotage à la main'), icon: 'hand', color: 'var(--o-text2)' },
-  { id: 'Auto lever/coucher', label: tr('Auto soleil'), desc: tr('Suit lever / coucher'), icon: 'sun', color: '#ffce73' },
-  { id: 'Fermeture nuit', label: 'Nuit', desc: tr('Fermeture au crépuscule'), icon: 'moon', color: 'var(--o-purple)' },
+/* Les modes d'automatisme des volets sont LUS SUR L'ENTITE, comme ceux du
+ * chauffage. Ils etaient ecrits en dur — « Manuel », « Auto lever/coucher »,
+ * « Fermeture nuit » — soit les options de l'`input_select` d'une installation.
+ *
+ * L'icone et la description restent devinees sur le nom : elles n'ont aucune
+ * incidence sur la commande, qui renvoie l'option telle quelle. Un mode non
+ * reconnu s'affiche avec une icone neutre et sans sous-titre. */
+const VOLET_ALLURE = [
+  { motif: /manuel|manual|hand/i, icon: 'hand', color: 'var(--o-text2)', desc: 'Pilotage à la main' },
+  { motif: /lever|coucher|soleil|sun|sonne/i, icon: 'sun', color: '#ffce73', desc: 'Suit lever / coucher' },
+  { motif: /nuit|night|nacht|noche/i, icon: 'moon', color: 'var(--o-purple)', desc: 'Fermeture au crépuscule' },
 ];
+
+function voletModes(S) {
+  const id = voletMode();
+  const st = S && id && S[id];
+  const opts = st && st.attributes && st.attributes.options;
+  if (!Array.isArray(opts)) return [];
+  return opts.filter(o => typeof o === 'string' && o).map(o => {
+    const a = VOLET_ALLURE.find(x => x.motif.test(o));
+    return { id: o, label: o, desc: a ? tr(a.desc) : '', icon: a ? a.icon : 'sliders', color: a ? a.color : 'var(--o-text2)' };
+  });
+}
 const voletKeys = () => [...voletCovers(null).map(c => c.haid), voletMode(), ...voletDays().map(d => d.haid)].filter(Boolean);
 // Volets pilotés : configuration de l'utilisateur, sinon tout le domaine `cover`
 // tel que la découverte l'a trouvé — les noms viennent de Home Assistant.
@@ -5098,9 +5124,9 @@ function VoletsContent({ hass, edit = false, onEnt }) {
           <button onClick={() => { const ids = voletCovers(S).map(c => c.haid).filter(Boolean); if (ids.length) call('cover', 'stop_cover', { entity_id: ids }); }} style={barBtn(false)}>{tr('Stop')}</button>
           <button onClick={allClose} style={barBtn(false)}>{tr('Fermer')}</button>
         </BarGroup>
-        {VOLET_MODES.length > 0 && voletMode() && (
+        {voletModes(S).length > 0 && voletMode() && (
           <BarGroup label={tr('Mode')}>
-            {VOLET_MODES.map(m => <button key={m.id} onClick={() => pickMode(m.id)} style={barBtn(mode === m.id)}>{m.label}</button>)}
+            {voletModes(S).map(m => <button key={m.id} onClick={() => pickMode(m.id)} style={barBtn(mode === m.id)}>{m.label}</button>)}
           </BarGroup>
         )}
       </ViewBar>
@@ -5110,7 +5136,7 @@ function VoletsContent({ hass, edit = false, onEnt }) {
         <PresLigne titre={tr('Position moyenne')} sous={covers.length > 1 ? tr('{n} volets suivis', { n: covers.length }) : tr('{n} volet suivi', { n: covers.length })}
           valeur={Math.round(covers.reduce((n, c) => n + (c.pos || 0), 0) / Math.max(1, covers.length)) + ' %'}
           part={Math.round(covers.reduce((n, c) => n + (c.pos || 0), 0) / Math.max(1, covers.length))} couleur="var(--o-accent)" />
-        {mode && <PresLigne titre={tr('Mode')} sous={(VOLET_MODES.find(m => m.id === mode) || {}).desc || 'Pilotage courant'} valeur={mode} couleur="var(--o-accent-soft)" />}
+        {mode && <PresLigne titre={tr('Mode')} sous={(voletModes(S).find(m => m.id === mode) || {}).desc || tr('Pilotage courant')} valeur={mode} couleur="var(--o-accent-soft)" />}
       </PresCard>}
 
 
