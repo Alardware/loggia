@@ -42,7 +42,7 @@ import energyHomeImg from './assets/energy/home.webp';
 import energySolarImg from './assets/energy/solar.webp';
 import energyEvImg from './assets/energy/ev-car-home.webp';
 import energyBatImg from './assets/energy/battery.webp';
-import { tr, preparerLangue, locale } from './i18n.js';
+import { tr, trHA, preparerLangue, locale } from './i18n.js';
 
 // Contexte barre du haut : expose les actions globales (sidebar, thème, édition, nav) au Header partagé.
 const HeaderCtx = createContext(null);
@@ -1454,6 +1454,35 @@ function pilotOptions(S, modeEnt) {
   return Array.isArray(o) ? o.filter(x => typeof x === 'string' && x) : [];
 }
 
+/** Les modes d'une zone, quelle que soit sa famille.
+ *
+ * Un vrai thermostat porte ses modes dans `hvac_modes` — c'est l'equivalent
+ * standard des options d'un `input_select`. Les avoir oublies avait vide la
+ * barre de modes du poele : il ne restait plus que la consigne. */
+function zoneModes(S, zone) {
+  if (!zone) return [];
+  if (estClimate(zone)) {
+    const st = S && S[zone.haid];
+    const m = st && st.attributes && st.attributes.hvac_modes;
+    return Array.isArray(m) ? m.filter(x => typeof x === 'string' && x) : [];
+  }
+  return pilotOptions(S, zone.modeEnt);
+}
+
+/** Un `climate` se pilote par ses modes HVAC ; le reste par son `input_select`. */
+function estClimate(zone) {
+  return !!zone && (zone.type === 'thermostat' || zone.type === 'stove'
+    || String(zone.haid || '').indexOf('climate.') === 0);
+}
+
+/** Le mot affiche pour un mode. Home Assistant traduit les modes HVAC dans
+ * toutes ses langues ; les options d'un `input_select` sont deja des mots
+ * choisis par l'utilisateur, on ne les touche pas. */
+function zoneModeLabel(zone, mode) {
+  if (!estClimate(zone)) return mode;
+  return trHA('component.climate.entity_component._.state.' + mode) || mode;
+}
+
 /* La FAMILLE d'un mode, devinee sur son nom, pour choisir une couleur et une
  * icone. Jamais pour commander : un mode non reconnu reste pilotable, il sort
  * seulement dans la teinte neutre. */
@@ -1475,13 +1504,15 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const heating = !off && z.current != null && z.current < target;
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
   const setT = (d) => { const v = Math.max(5, Math.min(30, Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
-  const options = pilotOptions(S, zone.modeEnt);
+  const options = zoneModes(S, zone);
   const nextMode = () => {
     if (!options.length) return;
     const i = options.indexOf(z.modeBrut);
-    call('input_select', 'select_option', { entity_id: zone.modeEnt, option: options[(i + 1) % options.length] });
+    const suivant = options[(i + 1) % options.length];
+    if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', suivant);
+    else call('input_select', 'select_option', { entity_id: zone.modeEnt, option: suivant });
   };
-  const label = String(z.modeBrut || options[0] || '').toUpperCase();
+  const label = String(zoneModeLabel(zone, z.modeBrut || options[0] || '')).toUpperCase();
   return (
     <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (titre || zone.name)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(zone.id); } }} onClick={() => onOpen && onOpen(zone.id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -1541,8 +1572,8 @@ function RoomPilotSheet({ zone, hass, onClose }) {
           <button onClick={() => setT(0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>+</button>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {pilotOptions(S, zone.modeEnt).map((opt) => { const on = z.modeBrut === opt; return (
-            <button key={opt} onClick={() => call('input_select', 'select_option', { entity_id: zone.modeEnt, option: opt })} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-warn2-rgb),.5)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-warn2-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-warn2)' : 'var(--o-text1)' }}>{opt}</button>
+          {zoneModes(S, zone).map((opt) => { const on = z.modeBrut === opt; return (
+            <button key={opt} onClick={() => { if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', opt); else call('input_select', 'select_option', { entity_id: zone.modeEnt, option: opt }); }} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-warn2-rgb),.5)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-warn2-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-warn2)' : 'var(--o-text1)' }}>{zoneModeLabel(zone, opt)}</button>
           ); })}
         </div>
       </>)}
@@ -4666,6 +4697,7 @@ const readZone = (S, z) => {
   if (z.type === 'stove') {
     const st = S && S[z.haid];
     if (st) {
+      out.modeBrut = st.state;
       out.mode = st.state === 'off' ? 'off' : (st.state === 'heat' || st.state === 'auto' || st.state === 'heat_cool') ? 'confort' : out.mode;
       const a = st.attributes || {};
       if (cur == null && a.current_temperature != null) out.current = a.current_temperature;
@@ -4702,7 +4734,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   const dec = (id) => { const t = thermos.find(x => x.id === id); commitTarget(id, (t ? t.target : 18) - 0.5); };
   /* `m` est l'OPTION telle que Home Assistant la nomme : elle part sans
    * traduction. Seul le poele, un vrai `climate`, garde ses modes standards. */
-  const setMode = (id, m) => { const z = zoneOf(id); upLocal(id, { mode: pilotFamille(m) || m, modeBrut: m }); if (z.type === 'stove') commander(hass, z.haid, 'set_hvac_mode', pilotFamille(m) === 'off' ? 'off' : 'heat'); else call('input_select', 'select_option', { entity_id: z.modeEnt, option: m }); };
+  const setMode = (id, m) => { const z = zoneOf(id); upLocal(id, { mode: pilotFamille(m) || m, modeBrut: m }); if (estClimate(z)) commander(hass, z.haid, 'set_hvac_mode', m); else call('input_select', 'select_option', { entity_id: z.modeEnt, option: m }); };
   const setAuto = (id, a) => { const z = zoneOf(id); upLocal(id, { auto: a }); if (z.autoEnt) call('input_boolean', a ? 'turn_on' : 'turn_off', { entity_id: z.autoEnt }); };
   const dragDial = (id, e) => {
     e.preventDefault();
@@ -4832,7 +4864,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   /* La barre de modes suit l'entite, pas une liste ecrite d'avance. Un poele
    * est un vrai `climate` : ses modes restent ceux du domaine. */
   const zoneSel = zoneOf(selZone);
-  const CL_OPTIONS = (zoneSel && zoneSel.type !== 'stove') ? pilotOptions(S, zoneSel.modeEnt) : [];
+  const CL_OPTIONS = zoneModes(S, zoneSel);
   const CL_TEINTE = { confort: '#ff8a4c', eco: 'var(--o-ok)', horsgel: 'var(--o-accent-soft)', off: 'var(--o-text3)' };
   const modeBtn = (on, c, d) => ({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, flex: 1, padding: '11px 4px', borderRadius: 13, border: '1px solid ' + (on ? c + '66' : 'var(--o-bd3)'), fontWeight: 700, fontSize: 11.5, cursor: d ? 'default' : 'pointer', transition: 'all .2s', background: on ? hx(c, .16) : 'var(--o-s2)', color: on ? c : 'var(--o-text2)', boxShadow: on ? '0 4px 14px ' + hx(c, .25) : 'none', opacity: d ? .45 : 1 });
   const topBtn = (on, c) => ({ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 10px', borderRadius: 13, border: '1px solid ' + (on ? c + '66' : 'var(--o-bd2)'), background: on ? hx(c, .16) : 'var(--o-surfA)', color: on ? c : 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all .2s' });
@@ -4854,7 +4886,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
           </BarGroup>
           <BarGroup label={tr('Mode')}>
             {CL_OPTIONS.map(opt => (
-              <button key={opt} onClick={() => setMode(t.id, opt)} style={barBtn(t.modeBrut === opt)}>{opt}</button>
+              <button key={opt} onClick={() => setMode(t.id, opt)} style={barBtn(t.modeBrut === opt)}>{zoneModeLabel(zone, opt)}</button>
             ))}
           </BarGroup>
           {thermos.length > 1 && (
