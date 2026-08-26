@@ -358,7 +358,7 @@ function useEntConfig(hass) {
     /* Chauffage : les thermostats `climate.*` se decouvrent seuls, mais un
      * radiateur fil pilote est un `switch` entoure d'aides — seule une
      * configuration peut dire lesquelles. Elle n'avait aucun ecran jusqu'ici. */
-    climate: avecCle((cfgVal('loggia_climate', null) || []).map(z => ({
+    climate: avecCle((cfgVal('loggia_climate', null) || loggiaEnt('climate', null) || []).map(z => ({
       name: z.name || '', room: z.room || '', haid: z.haid || '',
       tempCible: z.tempCible || '', modeEnt: z.modeEnt || '',
       autoEnt: z.autoEnt || '', tempSensor: z.tempSensor || '',
@@ -393,7 +393,7 @@ function useEntConfig(hass) {
         loggia_climate: ent.climate.filter(z => z.haid).map((z, i) => ({
           id: (z.name || ('zone' + i)).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || ('zone' + i),
           name: z.name || z.haid, room: z.room || null, haid: z.haid,
-          type: z.haid.indexOf('climate.') === 0 ? 'thermostat' : 'pilote',
+          type: z.haid.indexOf('climate.') === 0 ? 'thermostat' : 'pilot_wire',
           tempCible: z.tempCible || null, modeEnt: z.modeEnt || null,
           autoEnt: z.autoEnt || null, hasAuto: !!z.autoEnt,
           tempSensor: z.tempSensor || null,
