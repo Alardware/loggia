@@ -344,6 +344,15 @@ export default {
   'Disque': 'Disk',
   'Stockage': 'Storage',
 
+  // Ecran Entites — chauffage
+  'Chauffage': 'Heating',
+  'Un thermostat (climate.…) est trouvé tout seul : rien à saisir. Cette liste sert aux radiateurs fil pilote — un interrupteur entouré de ses aides, que rien ne permet de deviner.':
+    'A thermostat (climate.…) is found on its own — nothing to enter here. This list is for pilot-wire radiators: a switch surrounded by helpers, which nothing can guess.',
+  'Interrupteur': 'Switch',
+  'Consigne': 'Target',
+  'Auto': 'Auto',
+  'Chambre': 'Bedroom',
+
   // Parametres
   '{n} thèmes': '{n} themes',
   'actives sur {n}': 'active of {n}',
