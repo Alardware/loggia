@@ -3063,9 +3063,11 @@ function ObjetsView({ hass, onNav, edit = false }) {
   const plants = plantsCfg().map(p => ({
     // `base` sert de cle : sans lui, toutes les plantes en partagent une seule.
     base: p.base, name: p.name || p.base, img: p.img || null, room: p.room || 'Intérieur',
-    hum: S ? num(p.base + '_humidite') : (p.img === 'dracaena' ? 12 : 41),
-    cond: S ? num(p.base + '_conductivite') : 500, lux: S ? num(p.base + '_eclairement') : 1000,
-    temp: S ? num(p.base + '_temperature') : 22, bat: S ? num(p.base + '_batterie') : 80,
+    hum: S ? num(plantCapteur(S, p.base, 'moisture')) : (p.img === 'dracaena' ? 12 : 41),
+    cond: S ? num(plantCapteur(S, p.base, 'conductivity', 'µS/cm')) : 500,
+    lux: S ? num(plantCapteur(S, p.base, 'illuminance', 'lx')) : 1000,
+    temp: S ? num(plantCapteur(S, p.base, 'temperature')) : 22,
+    bat: S ? num(plantCapteur(S, p.base, 'battery', '%')) : 80,
   }));
   const plantsDry = plants.filter(p => p.hum != null && p.hum < 15).length;
   const medias = medPlayers().map(p => ({ p, np: mpRead(S || {}, p.haid) }));
@@ -4691,6 +4693,40 @@ const climateKeys = () => climateZones(null).flatMap(z => [z.haid, z.tempCible, 
 function estDehors(nom) {
   return /ext[eé]rieur|exterior|outdoor|outside|au[sß]en|jardin|garden|garten|terrasse|terraza|balcon|balkon|patio/i
     .test(String(nom || ''));
+}
+
+/** Le capteur d'une plante, reconnu a sa CLASSE plutot qu'a son nom.
+ *
+ * Les identifiants etaient composes en collant des suffixes francais au prefixe
+ * de la plante — `_humidite`, `_conductivite`, `_eclairement`, `_batterie`. Sur
+ * une installation qui ne nomme pas ses capteurs ainsi, la vue ne trouvait
+ * strictement rien : ni humidite, ni lumiere, ni batterie.
+ *
+ * Home Assistant classe ces capteurs, et ces classes ne changent pas d'une
+ * langue a l'autre. `moisture` designe l'humidite du SOL — a ne pas confondre
+ * avec `humidity`, celle de l'air, qu'une plante ne mesure pas.
+ *
+ * L'unite sert de second recours : toutes les integrations ne renseignent pas
+ * `device_class`, mais des µS/cm ne sont jamais autre chose qu'une conductivite.
+ */
+function plantCapteur(S, base, classe, unite) {
+  if (!S || !base) return null;
+  const debut = String(base);
+  const candidats = Object.keys(S).filter(k => {
+    if (k.indexOf(debut) !== 0) return false;
+    const reste = k.slice(debut.length);
+    return reste === '' || reste.charAt(0) === '_';
+  });
+  const parClasse = candidats.find(k => {
+    const a = S[k].attributes;
+    return a && a.device_class === classe;
+  });
+  if (parClasse) return parClasse;
+  if (!unite) return null;
+  return candidats.find(k => {
+    const a = S[k].attributes;
+    return a && a.unit_of_measurement === unite;
+  }) || null;
 }
 
 function climateZones(S) {
@@ -7562,7 +7598,19 @@ const PLANT_ART = {
 // Les capteurs de plante (humidité, conductivité, luminosité) n'ont pas de
 // regroupement standard : sans configuration, il n'y a rien à montrer.
 const plantsCfg = () => { const raw = cfgVal('loggia_plants', null); return (Array.isArray(raw) && raw.length) ? raw.filter(p => p && p.base) : []; };
-const plantKeys = () => plantsCfg().flatMap(p => ['_humidite', '_conductivite', '_eclairement', '_temperature', '_batterie'].map(s => p.base + s));
+/* Les entites a suivre : celles que `plantCapteur` retiendra, pas une liste de
+ * suffixes ecrite d'avance. */
+const plantKeys = () => {
+  const S = (getHass() || {}).states || null;
+  if (!S) return [];
+  return plantsCfg().flatMap(p => [
+    plantCapteur(S, p.base, 'moisture'),
+    plantCapteur(S, p.base, 'conductivity', 'µS/cm'),
+    plantCapteur(S, p.base, 'illuminance', 'lx'),
+    plantCapteur(S, p.base, 'temperature'),
+    plantCapteur(S, p.base, 'battery', '%'),
+  ].filter(Boolean));
+};
 // Configurable (Paramètres → Entités) : {name, haid} → la photo vient de
 // la personne Home Assistant correspondante.
 // Personnes suivies : choix de l'utilisateur, sinon celles que Home Assistant
@@ -7752,8 +7800,9 @@ function deriveAccueil(hass, cfg, resolved) {
   // Plantes (MiFlora) : null si capteur indispo → la ligne affiche « — »
   const plants = plantsCfg().map(p => ({
     name: p.name || p.base, img: p.img || null,
-    hum: num(p.base + '_humidite'), cond: num(p.base + '_conductivite'),
-    lux: num(p.base + '_eclairement'), temp: num(p.base + '_temperature'), bat: num(p.base + '_batterie'),
+    hum: num(plantCapteur(S, p.base, 'moisture')), cond: num(plantCapteur(S, p.base, 'conductivity', 'µS/cm')),
+    lux: num(plantCapteur(S, p.base, 'illuminance', 'lx')), temp: num(plantCapteur(S, p.base, 'temperature')),
+    bat: num(plantCapteur(S, p.base, 'battery', '%')),
   }));
   return {
     flux: { solar: fmtW(solarW), home: fmtW(consoW), grid: (exporting ? '↑ ' : '↓ ') + fmtW(gridVal), exporting },
