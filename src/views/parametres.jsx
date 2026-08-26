@@ -68,7 +68,7 @@ const PRESET_META = [
 ];
 // Luminance 0..1 d'une couleur (hex/rgb) → choix sombre/clair
 
-const PAR_TABS = [['connexion', 'Connexion HA'], ['users', 'Utilisateurs'], ['vues', 'Vues'], ['entites', 'Entités'], ['auto', 'Automatisations'], ['maj', 'Mises à jour'], ['apparence', 'Apparence'], ['about', 'À propos']];
+const PAR_TABS = [['connexion', tr('Connexion HA')], ['users', tr('Utilisateurs')], ['vues', tr('Vues')], ['entites', tr('Entités')], ['auto', tr('Automatisations')], ['maj', tr('Mises à jour')], ['apparence', tr('Apparence')], ['about', tr('À propos')]];
 // Nav latérale des Paramètres, groupée façon Atrium (réf. user 20/08) : { grp, items: [id, label, glyphe UICons] }
 
 const PAR_HELPS = [
@@ -101,9 +101,9 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
   const conso = !isNaN(cw) ? (Math.abs(cw) >= 995 ? (Math.abs(cw) / 1000).toFixed(1).replace('.', ',') + ' kW' : Math.round(Math.abs(cw)) + ' W') : '—';
   const pvAlarm = (pvRes && pvRes.alarm && pvRes.alarm.available) ? pvRes.alarm.main : null;
   const al = (secAlarm() && S[secAlarm()]) ? S[secAlarm()] : (pvAlarm ? S[pvAlarm] : null);
-  const alTxt = al ? (al.state === 'disarmed' ? 'désarmée' : al.state.indexOf('armed') === 0 ? 'armée' : al.state) : '—';
+  const alTxt = al ? (al.state === 'disarmed' ? tr('désarmée') : al.state.indexOf('armed') === 0 ? 'armée' : al.state) : '—';
   const h = now.getHours();
-  const greet = h < 6 ? 'Bonne nuit' : h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
+  const greet = h < 6 ? 'Bonne nuit' : h < 12 ? 'Bonjour' : h < 18 ? tr('Bon après-midi') : 'Bonsoir';
   const tile = (v, l, c) => (
     <div key={l} style={{ background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: RAD[2], padding: '9px 11px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 3, background: c, flexShrink: 0 }} /><span style={{ fontSize: 12.5, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span></div>
@@ -125,7 +125,7 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginBottom: 9 }}>
           {tile(temp, rooms[0] ? rooms[0].room : tr('Pièce'), '#ffb347')}
-          {tile(lightsOn + ' on', 'Lumières', 'var(--o-gold)')}
+          {tile(lightsOn + ' on', tr('Lumières'), 'var(--o-gold)')}
           {tile(conso, tr('Consommation'), 'var(--o-ok)')}
           {tile(alTxt, tr('Alarme'), 'var(--o-accent)')}
         </div>
@@ -420,7 +420,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
           {/* Deux colonnes : a trois, le champ tronquait les noms d'entites,
               qui depassent souvent trente caracteres. */}
           <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
-            {[['consoNow', 'Consommation'], ['surplusNow', 'Surplus'], ['solarOutput', 'Production solaire'],
+            {[['consoNow', tr('Consommation')], ['surplusNow', 'Surplus'], ['solarOutput', 'Production solaire'],
               ['evNow', 'Véhicule · charge'], ['batNow', 'Batterie · puissance'], ['batSoc', 'Batterie · niveau']].map(([k, l]) => (
               <div key={k}><div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)', marginBottom: 4 }}>{l.toUpperCase()}</div><input value={ent.energy[k] || ''} onChange={e => setEnt(o => ({ ...o, energy: { ...o.energy, [k]: e.target.value } }))} placeholder="sensor.…" list="o-dl-sensor" spellCheck={false} style={entInp} /></div>
             ))}
@@ -517,13 +517,13 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   };
   useEffect(() => { if (tab === 'connexion' && lat == null) ping(); }, [tab]);
   const accessOrigin = (() => { try { return (window.top && window.top.location.origin) || window.location.origin; } catch (e) { return window.location.origin; } })();
-  const accessKind = /nabu\.casa/.test(accessOrigin) ? 'Nabu Casa' : /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|localhost|127\.)/.test(accessOrigin) ? 'réseau local' : 'accès distant';
+  const accessKind = /nabu\.casa/.test(accessOrigin) ? 'Nabu Casa' : /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|localhost|127\.)/.test(accessOrigin) ? tr('réseau local') : 'accès distant';
   // Adresses du serveur : locales a cet appareil. Loggia n'ouvre PAS de session par ces URL
   // (il emprunte celle du navigateur) — elles servent au test de joignabilite, au repli
   // Nabu Casa et a l'intervalle de rafraichissement du pont hass.
   const [haDraft, setHaDraft] = useState(() => {
     const c = { ...HA_CFG_DEF, ...(cfgVal('loggia_haCfg', null) || {}) };
-    if (!c.local && accessKind === 'réseau local') c.local = accessOrigin;
+    if (!c.local && accessKind === tr('réseau local')) c.local = accessOrigin;
     if (!c.remote && accessKind === 'Nabu Casa') c.remote = accessOrigin;
     return c;
   });
@@ -553,7 +553,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   };
   const saveHaCfg = () => { writeHaCfg(haDraft); location.reload(); };
   const resetHaCfg = () => {
-    setHaDraft({ ...HA_CFG_DEF, local: accessKind === 'réseau local' ? accessOrigin : '', remote: accessKind === 'Nabu Casa' ? accessOrigin : '' });
+    setHaDraft({ ...HA_CFG_DEF, local: accessKind === tr('réseau local') ? accessOrigin : '', remote: accessKind === 'Nabu Casa' ? accessOrigin : '' });
     setUrlTest({});
   };
   const POLL_CHOICES = [[2000, '2 s'], [5000, '5 s'], [10000, '10 s'], [30000, '30 s']];
@@ -644,23 +644,23 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const SECTIONS = [
     { id: 'users', name: 'Profils', ico: 'users', col: 'var(--o-accent-soft)', bg: 'rgba(var(--o-accent-rgb),.14)',
       sub: (users[userIdx] || {}).name ? (users[userIdx] || {}).name + ' · ' + String((users[userIdx] || {}).role || '').toLowerCase() : 'Profils locaux et code admin',
-      big: String(users.length), unit: 'profils du foyer', admin: false },
-    { id: 'apparence', name: 'Apparence', ico: 'palette', col: 'var(--o-purple)', bg: 'rgba(var(--o-purple-rgb),.14)',
-      sub: tr('Thème, mode, effets'), big: (PRESET_META.find(x => x.id === loggiaTheme) || PRESET_META[0]).name, unit: PRESET_META.length + ' thèmes', admin: false, small: true },
-    { id: 'connexion', name: 'Connexion HA', long: 'Connexion à Home Assistant', ico: 'link', col: 'var(--o-ok)', bg: 'rgba(var(--o-ok-rgb),.14)',
+      big: String(users.length), unit: tr('profils du foyer'), admin: false },
+    { id: 'apparence', name: tr('Apparence'), ico: 'palette', col: 'var(--o-purple)', bg: 'rgba(var(--o-purple-rgb),.14)',
+      sub: tr('Thème, mode, effets'), big: (PRESET_META.find(x => x.id === loggiaTheme) || PRESET_META[0]).name, unit: tr('{n} thèmes', { n: PRESET_META.length }), admin: false, small: true },
+    { id: 'connexion', name: tr('Connexion HA'), long: 'Connexion à Home Assistant', ico: 'link', col: 'var(--o-ok)', bg: 'rgba(var(--o-ok-rgb),.14)',
       sub: accessKind, pageSub: 'Session empruntée au navigateur · ' + accessKind, big: (lat != null && lat >= 0) ? lat + ' ms' : (hass ? 'active' : 'hors ligne'), unit: hass ? 'session active' : 'session absente', admin: false, small: true },
-    { id: 'auto', name: 'Automatisations', ico: 'bolt', col: 'var(--o-warn)', bg: 'rgba(var(--o-warn-rgb),.14)',
-      sub: tr('Gérées dans Home Assistant'), big: String(autos.filter(a => a.on).length), unit: 'actives sur ' + autos.length, admin: true },
+    { id: 'auto', name: tr('Automatisations'), ico: 'bolt', col: 'var(--o-warn)', bg: 'rgba(var(--o-warn-rgb),.14)',
+      sub: tr('Gérées dans Home Assistant'), big: String(autos.filter(a => a.on).length), unit: tr('actives sur {n}', { n: autos.length }), admin: true },
     { id: 'maj', name: tr('Mises à jour'), ico: 'refresh', col: 'var(--o-warn2)', bg: 'rgba(var(--o-warn2-rgb),.14)',
       sub: upsAvail ? 'Firmwares et modules' : tr('Tout est à jour'), big: String(upsAvail || 0), unit: upsAvail ? 'en attente' : 'à jour', admin: true, dot: upsAvail > 0 },
-    { id: 'vues', name: 'Vues', ico: 'layout-fluid', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
-      sub: tr('Menu latéral et vues perso'), big: String(11 + customViews.length), unit: 'vues disponibles', admin: true },
+    { id: 'vues', name: tr('Vues'), ico: 'layout-fluid', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
+      sub: tr('Menu latéral et vues perso'), big: String(11 + customViews.length), unit: tr('vues disponibles'), admin: true },
     { id: 'entites', name: tr('Entités'), ico: 'list', col: entMissing.length ? 'var(--o-bad)' : 'var(--o-text2)', bg: entMissing.length ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)',
-      sub: tr('Capteurs reliés aux cartes'), big: String(entMissing.length || entIds.length), unit: entMissing.length ? 'introuvables' : 'configurées', admin: true, dot: entMissing.length > 0 },
-    { id: 'about', name: 'À propos', ico: 'info', col: 'var(--o-text2)', bg: 'var(--o-s1)',
+      sub: tr('Capteurs reliés aux cartes'), big: String(entMissing.length || entIds.length), unit: entMissing.length ? 'introuvables' : tr('configurées'), admin: true, dot: entMissing.length > 0 },
+    { id: 'about', name: tr('À propos'), ico: 'info', col: 'var(--o-text2)', bg: 'var(--o-s1)',
       sub: tr('React + Vite · servi par l’intégration'),
       big: (LOGGIA_INDEX && LOGGIA_INDEX.componentVersion) ? 'v' + LOGGIA_INDEX.componentVersion : '—',
-      unit: 'version installée', admin: false, small: true },
+      unit: tr('version installée'), admin: false, small: true },
   ].filter(x => !x.admin || isAdmin);
   // Interrupteur du bandeau (Tgl n'existe que dans la portée d'Apparence)
   const curSection = SECTIONS.find(x => x.id === tab);
@@ -670,7 +670,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
       {children}
       <span style={{ flex: 1 }} />
-      <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : tr('Réglages de la vue')}</span></button>
+      <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
     </div>
   );
   const SecGroup = ({ label, children }) => (
@@ -706,10 +706,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Paramètres')}</h1>
-              <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>Réglages propres à cet appareil · {users.length} profils</div>
+              <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Réglages propres à cet appareil')} · {tr('{n} profils', { n: users.length })}</div>
             </div>
             <span style={{ flex: 1 }} />
-            {upsAvail > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(var(--o-warn2-rgb),.14)', color: 'var(--o-warn2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-warn2)' }} />{upsAvail} MISE{upsAvail > 1 ? 'S' : ''} À JOUR</span>}
+            {upsAvail > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(var(--o-warn2-rgb),.14)', color: 'var(--o-warn2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-warn2)' }} />{upsAvail > 1 ? tr('{n} MISES À JOUR', { n: upsAvail }) : tr('{n} MISE À JOUR', { n: upsAvail })}</span>}
           </div>
 
           <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
@@ -722,28 +722,28 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               </div>
             </div>
             <span style={{ flex: 1 }} />
-            <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : tr('Réglages de la vue')}</span></button>
+            <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
           </div>
 
           {panel && (
             <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{tr("État de l'installation")}</div>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent)' }} />THÈME {(PRESET_META.find(x => x.id === loggiaTheme) || PRESET_META[0]).name.toUpperCase()}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent)' }} />{tr('THÈME')} {(PRESET_META.find(x => x.id === loggiaTheme) || PRESET_META[0]).name.toUpperCase()}</span>
               </div>
               <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{tr("Les modifications s'appliquent immédiatement à cet appareil")}</div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <EnRow label="Connexion" desc={hass ? 'Session empruntée à Home Assistant · ' + Object.keys(hass.states || {}).length + ' entités' : 'Session Home Assistant introuvable'}>
+                <EnRow label={tr('Connexion')} desc={hass ? 'Session empruntée à Home Assistant · ' + Object.keys(hass.states || {}).length + ' entités' : 'Session Home Assistant introuvable'}>
                   <EnVal v={(lat != null && lat >= 0) ? lat + ' ms' : (hass ? 'active' : 'absente')} col={hass ? 'var(--o-ok)' : 'var(--o-bad)'} />
                 </EnRow>
                 {isAdmin && (
-                  <EnRow label="Automatisations" desc={autos.length + ' automatisations Home Assistant'}>
+                  <EnRow label={tr('Automatisations')} desc={autos.length + ' automatisations Home Assistant'}>
                     <EnVal v={autos.filter(a => a.on).length + ' / ' + autos.length} col="var(--o-text)" />
                   </EnRow>
                 )}
                 {isAdmin && (
-                  <EnRow label={tr('Entités du dashboard')} desc={entMissing.length ? entMissing.length + ' introuvable' + (entMissing.length > 1 ? 's' : '') + ' sur ' + entIds.length + ' configurées' : entIds.length + ' entités configurées, toutes résolues'}>
-                    <EnVal v={entMissing.length ? entMissing.length + ' en erreur' : 'toutes résolues'} col={entMissing.length ? 'var(--o-bad)' : 'var(--o-ok)'} />
+                  <EnRow label={tr('Entités du dashboard')} desc={entMissing.length ? entMissing.length + ' introuvable' + (entMissing.length > 1 ? 's' : '') + ' sur ' + tr('{n} configurées', { n: entIds.length }) : tr('{n} entités configurées, toutes résolues', { n: entIds.length })}>
+                    <EnVal v={entMissing.length ? entMissing.length + ' en erreur' : tr('toutes résolues')} col={entMissing.length ? 'var(--o-bad)' : 'var(--o-ok)'} />
                   </EnRow>
                 )}
                 {isAdmin && (
@@ -804,7 +804,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               sub="Réglages visuels, propres à cet appareil. L'aperçu à droite suit vos choix.">
               <EnRow label="Palette" desc={pm.desc}><EnVal v={pm.name} col="var(--o-accent-soft)" /></EnRow>
               <EnRow label="Mode d'affichage" desc={haTheme === 'FOLLOW' ? 'Imposé par le thème actif de Home Assistant' : 'Clair ou foncé, appliqué au thème choisi'}><EnVal v={themeMode === 'light' ? 'Clair' : 'Foncé'} col="var(--o-text)" /></EnRow>
-              <EnRow label={tr('Effets animés')} desc={wxFx ? 'Ciel météo suivant la condition et l’heure réelles' : 'Bannière fixe, aucun rendu animé'}><EnVal v={wxFx ? 'Météo' : 'Désactivés'} col={wxFx ? 'var(--o-ok)' : 'var(--o-text3)'} /></EnRow>
+              <EnRow label={tr('Effets animés')} desc={wxFx ? 'Ciel météo suivant la condition et l’heure réelles' : 'Bannière fixe, aucun rendu animé'}><EnVal v={wxFx ? tr('Météo') : 'Désactivés'} col={wxFx ? 'var(--o-ok)' : 'var(--o-text3)'} /></EnRow>
               <EnRow label={tr('Matière & formes')} desc={formes}><EnVal v={look.contrast ? 'contraste renforcé' : 'contraste normal'} col="var(--o-text)" /></EnRow>
               <EnRow label="Interface mobile" desc={'Marge du haut ' + (topAuto ? 'auto' : Math.round(topMargin) + ' px') + (navbar ? ' · marge du bas ' + (navAuto ? 'auto' : Math.round(navMargin) + ' px') : '')}><EnVal v={navbar ? 'Barre de navigation' : 'Sans barre'} col={navbar ? 'var(--o-text)' : 'var(--o-text3)'} /></EnRow>
             </SecCard>
@@ -1102,13 +1102,13 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
 
       {tab === 'vues' && isAdmin && (() => {
         const BUILTIN_VIEWS = [
-          ['accueil', 'Accueil', 'home', 'vue principale', true],
-          ['pieces', 'Pièces', 'door-open', 'toutes les pièces', false],
-          ['scenes', 'Scènes', 'sparkles', 'raccourcis', false],
-          ['objets', 'Objets', 'apps', 'appareils par familles', false],
-          ['energie', 'Énergie', 'bolt', 'production et consommation', false],
-          ['securite', 'Sécurité', 'shield-check', 'alarme et caméras', false],
-          ['systeme', 'Système', 'microchip', 'machines et maintenance', false],
+          ['accueil', tr('Accueil'), 'home', 'vue principale', true],
+          ['pieces', tr('Pièces'), 'door-open', 'toutes les pièces', false],
+          ['scenes', tr('Scènes'), 'sparkles', 'raccourcis', false],
+          ['objets', tr('Objets'), 'apps', 'appareils par familles', false],
+          ['energie', tr('Énergie'), 'bolt', 'production et consommation', false],
+          ['securite', tr('Sécurité'), 'shield-check', 'alarme et caméras', false],
+          ['systeme', tr('Système'), 'microchip', 'machines et maintenance', false],
         ];
         const cfg = readViewsCfg();
         const bump = () => setAutoOpen(o => ({ ...o }));
@@ -1197,7 +1197,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <SecBar>
           <SecGroup label="Filtre">
             <div style={{ display: 'flex', gap: 4 }}>
-              {[['all', 'Toutes', autos.length], ['on', 'Actives', onCount], ['off', 'Inactives', autos.length - onCount]].map(([k, lb, n]) => (
+              {[['all', tr('Toutes'), autos.length], ['on', 'Actives', onCount], ['off', 'Inactives', autos.length - onCount]].map(([k, lb, n]) => (
                 <button key={k} onClick={() => setAutoFilter(k)} style={secBtn(autoFilter === k)}>{lb} <span style={{ opacity: .7, fontVariantNumeric: 'tabular-nums' }}>{n}</span></button>
               ))}
             </div>
@@ -1258,7 +1258,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <EnRow label={tr('Pièces')} desc={tr('Température, humidité et CO₂ par pièce')}><EnVal v={ent.rooms.length + ' pièces'} col="var(--o-text)" /></EnRow>
             <EnRow label={tr('Énergie')} desc="Consommation, production, surplus et batterie"><EnVal v={Object.keys(ent.energy).length + ' capteurs'} col="var(--o-text)" /></EnRow>
             <EnRow label={tr('Présence, caméras, médias')} desc={ent.people.length + ' personnes · ' + ent.cams.length + ' caméras · ' + ent.medias.length + ' lecteurs'}><EnVal v={(ent.people.length + ent.cams.length + ent.medias.length) + ' entités'} col="var(--o-text)" /></EnRow>
-            <EnRow label="Introuvables" desc={entMissing.length ? 'Probablement renommées dans HA : ' + entMissing.slice(0, 3).join(' · ') + (entMissing.length > 3 ? '…' : '') : 'Toutes les entités configurées répondent'}><EnVal v={String(entMissing.length)} col={entMissing.length ? 'var(--o-bad)' : 'var(--o-ok)'} /></EnRow>
+            <EnRow label="Introuvables" desc={entMissing.length ? 'Probablement renommées dans HA : ' + entMissing.slice(0, 3).join(' · ') + (entMissing.length > 3 ? '…' : '') : tr('Toutes les entités configurées répondent')}><EnVal v={String(entMissing.length)} col={entMissing.length ? 'var(--o-bad)' : 'var(--o-ok)'} /></EnRow>
           </SecCard>
         )}
         <div style={cardSt}>
@@ -1339,7 +1339,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </SecGroup>
         </SecBar>
         {panel && (
-          <SecCard title={tr('État des mises à jour')} tag={upsAvail ? upsAvail + ' EN ATTENTE' : 'TOUT EST À JOUR'} tagCol={upsAvail ? 'warn' : 'ok'}
+          <SecCard title={tr('État des mises à jour')} tag={upsAvail ? tr('{n} EN ATTENTE', { n: upsAvail }) : tr('TOUT EST À JOUR')} tagCol={upsAvail ? 'warn' : 'ok'}
             sub="Cœur, modules complémentaires et firmwares — l'installation peut redémarrer le service concerné">
             <EnRow label="En attente" desc={upsAvail ? ups.filter(u => u.avail).map(u => u.name).slice(0, 3).join(' · ') + (upsAvail > 3 ? '…' : '') : 'Aucune mise à jour disponible'}><EnVal v={String(upsAvail)} col={upsAvail ? 'var(--o-warn2)' : 'var(--o-ok)'} /></EnRow>
             <EnRow label={tr('À jour')} desc={tr('Modules suivis dont la version est la plus récente')}>
@@ -1420,7 +1420,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               </div>
             </div>
             <span style={{ flex: 1 }} />
-            <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? 'Masquer les réglages' : tr('Réglages de la vue')}</span></button>
+            <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
           </div>
 
           {panel && (
@@ -1438,7 +1438,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                   return (
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: 'rgba(' + rgb + ',.14)', color: col }}>
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: col }} />
-                      {bon ? 'À JOUR' : (inst.disponible ? 'v' + inst.disponible + ' DISPONIBLE' : 'MISE À JOUR')}
+                      {bon ? tr('À JOUR') : (inst.disponible ? 'v' + inst.disponible + ' DISPONIBLE' : 'MISE À JOUR')}
                     </span>
                   );
                 })()}

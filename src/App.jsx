@@ -394,9 +394,9 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [] }) {
   const match = (label) => !nq || srNorm(label).indexOf(nq) >= 0;
   const results = [];
   rooms.forEach(r => { if (!match(r)) return; const p = PIECES.find(x => x.name === r); results.push({ group: tr('Pièces'), label: r, icon: p ? p.icon : <Fi i="home" color="var(--o-accent)" size={20} />, act: (close) => { onNav('room:' + r); close(); } }); });
-  NAV.forEach(g => g.items.forEach(it => { const vid = LABEL_VIEW[it.label]; if (BUILT.has(vid) && isViewAvailable(avail, vid) && match(it.label)) results.push({ group: 'Vues', label: tr(it.label), icon: it.svg, act: (close) => { onNav(vid); close(); } }); }));
-  HIDDEN_VIEWS.forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: 'Vues', label: tr(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
-  customViews.forEach(cv => { if (match(cv.name)) results.push({ group: 'Vues', label: cv.name, icon: <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" />, act: (close) => { onNav('cv:' + cv.id); close(); } }); });
+  NAV.forEach(g => g.items.forEach(it => { const vid = LABEL_VIEW[it.label]; if (BUILT.has(vid) && isViewAvailable(avail, vid) && match(it.label)) results.push({ group: tr('Vues'), label: tr(it.label), icon: it.svg, act: (close) => { onNav(vid); close(); } }); }));
+  HIDDEN_VIEWS.forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: tr('Vues'), label: tr(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
+  customViews.forEach(cv => { if (match(cv.name)) results.push({ group: tr('Vues'), label: cv.name, icon: <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" />, act: (close) => { onNav('cv:' + cv.id); close(); } }); });
   quickScenes().forEach(s => { if (!match(s.name)) return; results.push({ group: tr('Scènes'), label: s.name, sub: s.sub, icon: <Fi i={s.icon} color="var(--o-purple)" />, run: true, act: (close) => { try { const h = getHass(); if (h && h.callService) h.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); } catch (e) {} close(); } }); });
   const selIdx = results.length ? Math.min(sel, results.length - 1) : -1;
   useEffect(() => { setSel(0); }, [nq]);
@@ -1436,7 +1436,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
 }
 
 // Radiateur fil pilote (chambres) : consigne = input_number, mode = input_select, auto = input_boolean.
-const RM_PILOT_MODES = [['confort', 'Confort'], ['eco', 'Éco'], ['horsgel', 'Hors-gel'], ['off', 'Arrêt']];
+const RM_PILOT_MODES = [['confort', tr('Confort')], ['eco', 'Éco'], ['horsgel', 'Hors-gel'], ['off', tr('Arrêt')]];
 function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const S = (hass && hass.states) || null;
   const z = readZone(S, zone);
@@ -1657,7 +1657,7 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
         <span style={RM_ICO(np.on ? 'rgba(167,139,250,.16)' : 'var(--o-s1)', np.on ? 'var(--o-purple)' : 'var(--o-text3)')}>
           {np.art ? <img src={np.art} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Fi i="tv-music" size={17} />}
         </span>
-        <button aria-label={np.playing ? 'Mettre en pause' : tr('Lecture')} onClick={(e) => { e.stopPropagation(); call('media_play_pause', null, np.ctl); }} style={{ width: 34, height: 34, borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={np.playing ? 'pause' : 'play'} size={13} /></button>
+        <button aria-label={np.playing ? tr('Mettre en pause') : tr('Lecture')} onClick={(e) => { e.stopPropagation(); call('media_play_pause', null, np.ctl); }} style={{ width: 34, height: 34, borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={np.playing ? 'pause' : 'play'} size={13} /></button>
       </div>
       <div style={{ position: 'relative' }}>
         <div style={RM_NAME}>{label || a.friendly_name || id}</div>
@@ -1764,7 +1764,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const mode = st ? st.state : 'off';
   const off = mode === 'off';
   const heating = a.hvac_action === 'heating';
-  const MODE_FR = { off: 'Arrêt', heat: 'Confort', cool: 'Froid', auto: 'Auto', heat_cool: 'Auto', dry: 'Sec', fan_only: 'Ventil' };
+  const MODE_FR = { off: tr('Arrêt'), heat: tr('Confort'), cool: tr('Froid'), auto: 'Auto', heat_cool: 'Auto', dry: tr('Sec'), fan_only: tr('Ventil') };
   const all = a.hvac_modes || ['off', 'heat'];
   const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('climate', svc, { entity_id: id, ...(data || {}) }); } catch (e) {} };
   // Les bornes viennent de l'entite, pas d'une constante : la climatisation de
@@ -2437,7 +2437,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   // média en cours
   const mediaAct = mediaIds.map(id => S[id]).find(st => st && ['playing', 'paused'].indexOf(st.state) >= 0);
   const mediaTitle = mediaAct ? ((mediaAct.attributes || {}).media_title || (mediaAct.attributes || {}).app_name || tr('En lecture')) : null;
-  const mediaSub = mediaAct ? (((mediaAct.attributes || {}).friendly_name || '').replace(room, '').trim() || 'Lecteur') + ' · ' + (mediaAct.state === 'playing' ? 'en lecture' : 'en pause') : null;
+  const mediaSub = mediaAct ? (((mediaAct.attributes || {}).friendly_name || '').replace(room, '').trim() || 'Lecteur') + ' · ' + (mediaAct.state === 'playing' ? tr('en lecture') : 'en pause') : null;
   // chauffage actif dans la pièce → badge de la carte
   const heatOn = climIds.map(id => S[id]).find(st => st && st.state !== 'off' && st.state !== 'unavailable')
     || switchIds.map(id => S[id]).find(st => st && st.state === 'on' && /po[eê]le|chauff|radiateur|granul/i.test((st.attributes || {}).friendly_name || ''));
@@ -2576,7 +2576,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                 </AmbRow>
               )}
               {coverIds.length > 0 && (
-                <AmbRow label={coverIds.length > 1 ? tr('Volets') : tr('Volet')} desc={coverPct != null ? (covOn ? 'Ouvert à ' + coverPct + ' %' : tr('Fermé')) + ' · ' + (coverIds.length > 1 ? tr('{n} volets', { n: coverIds.length }) : tr('{n} volet', { n: coverIds.length })) : (covOn ? 'Ouvert' : tr('Fermé'))}>
+                <AmbRow label={coverIds.length > 1 ? tr('Volets') : tr('Volet')} desc={coverPct != null ? (covOn ? 'Ouvert à ' + coverPct + ' %' : tr('Fermé')) + ' · ' + (coverIds.length > 1 ? tr('{n} volets', { n: coverIds.length }) : tr('{n} volet', { n: coverIds.length })) : (covOn ? tr('Ouvert') : tr('Fermé'))}>
                   <AmbVal v={covOn ? (coverPct != null ? coverPct + ' %' : tr('Ouvert')) : tr('Fermé')} col={covOn ? 'var(--o-accent-soft)' : 'var(--o-text3)'} />
                 </AmbRow>
               )}
@@ -2991,7 +2991,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
   const lubaBat = S ? num(mowerSensor(S, 'battery')) : 88;
   const lubaProg = num(mowerSensor(S, 'progress'), 0) || 0;
   const lubaMow = lubaSt === 'mowing';
-  const lubaTxt = lubaMow ? ('Tonte · ' + Math.round(lubaProg) + '%') : lubaSt === 'returning' ? 'Retour base' : lubaSt === 'paused' ? 'En pause' : lubaSt === 'error' ? 'Erreur' : 'Station de charge';
+  const lubaTxt = lubaMow ? ('Tonte · ' + Math.round(lubaProg) + '%') : lubaSt === 'returning' ? tr('Retour base') : lubaSt === 'paused' ? tr('En pause') : lubaSt === 'error' ? tr('Erreur') : 'Station de charge';
   const croqPct = S ? Math.max(0, Math.min(100, Math.round((num(croqHaids().reservoir, 0) || 0) / CROQ_MAX * 100))) : 74;
   const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
   const mealMin = (t) => { const p = t.split(':'); return (+p[0]) * 60 + (+p[1]); };
@@ -3218,7 +3218,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
         {sheet && sheet.type === 'media' && <RoomMediaSheet id={sheet.id} hass={hass} onClose={() => setSheet(null)} />}
         {sheet && sheet.type === 'vac' && <ObjSheet title="Aspirateur robot" accent="var(--o-ok)"
           rows={[[tr('État'), vacEtat], ['Batterie', vacBat != null ? Math.round(vacBat) + ' %' : '—', batCol(vacBat)], ['Surface nettoyée', vacSurf], ['Durée', vacDuree], ['Entretien', vacMaint]]}
-          actions={[{ label: vacCleaning ? 'Renvoyer au dock' : 'Démarrer', primary: true, run: () => objVacRun(vacCleaning ? 'retour_base' : 'nettoyer_tout', vacCleaning ? 'return_to_base' : 'start') }, { label: tr('Vue complète'), run: () => onNav && onNav('aspirateur') }]}
+          actions={[{ label: vacCleaning ? tr('Renvoyer au dock') : 'Démarrer', primary: true, run: () => objVacRun(vacCleaning ? 'retour_base' : 'nettoyer_tout', vacCleaning ? 'return_to_base' : 'start') }, { label: tr('Vue complète'), run: () => onNav && onNav('aspirateur') }]}
           onClose={() => setSheet(null)} />}
         {sheet && sheet.type === 'luba' && <ObjSheet title="Robot tondeuse" accent="#a3e635"
           rows={[[tr('État'), lubaTxt], ['Batterie', lubaBat != null ? Math.round(lubaBat) + ' %' : '—', batCol(lubaBat)], ['Progression', Math.round(lubaProg) + ' %'], ['Charge', isOn(mowerSensor(S, 'charging')) ? 'En charge' : '—']]}
@@ -3486,7 +3486,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     : (weatherRaw && WX_PRESETS[weatherRaw] ? weatherRaw : (WX3D_FROM_MODE[weatherMode] || 'partlycloudy'));
   const [wxHour, setWxHour] = useState(wxHourEq);
   useEffect(() => { const iv = setInterval(() => setWxHour(wxHourEq()), 60000); return () => clearInterval(iv); }, []);
-  const modes = [['sun', '☀️', 'Soleil'], ['partly', '⛅', 'Éclaircies'], ['clouds', '☁️', 'Nuageux'], ['wind', '🌬️', 'Vent'], ['rain', '🌧️', 'Pluie'], ['snow', '❄️', 'Neige'], ['storm', '⛈️', 'Orage'], ['night', '🌙', 'Nuit']];
+  const modes = [['sun', '☀️', 'Soleil'], ['partly', '⛅', 'Éclaircies'], ['clouds', '☁️', 'Nuageux'], ['wind', '🌬️', tr('Vent')], ['rain', '🌧️', tr('Pluie')], ['snow', '❄️', 'Neige'], ['storm', '⛈️', 'Orage'], ['night', '🌙', 'Nuit']];
   const a = accueil; // données live (null → démo)
   // Les pièces affichées sont CELLES DE LA CONFIGURATION.
   //
@@ -3517,7 +3517,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     return out;
   });
   const extPiece = pieces.find(p => p.status && p.status.kind === 'ext'); // Extérieur → ouvert via la chip météo
-  const avatars = (a && a.people) ? a.people.map(p => ({ img: p.img, title: `${p.name} · ${p.home ? 'Présent' : 'Absent'}`, dim: !p.home })) : [{ grad: 'linear-gradient(135deg,#f472b6,var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,#ffb347,#f87171)' }];
+  const avatars = (a && a.people) ? a.people.map(p => ({ img: p.img, title: `${p.name} · ${p.home ? tr('Présent') : 'Absent'}`, dim: !p.home })) : [{ grad: 'linear-gradient(135deg,#f472b6,var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,#ffb347,#f87171)' }];
   // HA absent → vitrine de demo ; HA present sans camera → aucune camera, pas d'exemple
   const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => ({ label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: CAMERAS[i % CAMERAS.length].grad, glow: CAMERAS[i % CAMERAS.length].glow, sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: cam.online ? 'var(--o-ok)' : '#f87171' }} />{cam.online ? 'Direct' : 'Hors ligne'}</>), haid: cam.haid, online: cam.online, hass: a.hass })) : CAMERAS;
   const _dWallE = { label: tr('Aspirateur'), iconKey: 'vacuum', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
@@ -3728,7 +3728,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           const repasCard = (sm) => (
             <div style={{ display: 'flex', alignItems: 'center', gap: sm ? 9 : 11, ...stateCard, ...(sm ? { padding: '8px 10px' } : {}) }}>
               <div style={{ width: sm ? 30 : 36, height: sm ? 30 : 36, borderRadius: sm ? 9 : 11, background: 'rgba(255,179,71,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico name="bowl-rice" color="#ffb347" size={sm ? 17 : 22} /></div>
-              <div style={{ flex: 1, minWidth: 0 }}><div style={{ display: 'flex', alignItems: 'center', gap: sm ? 6 : 8, flexWrap: 'wrap' }}><span style={{ fontSize: sm ? 12.5 : 15, fontWeight: 700 }}>{sm ? 'Repas chat' : 'Prochain repas (chat)'}</span><span style={{ fontSize: sm ? 9.5 : 11, fontWeight: 800, color: 'var(--o-warn2)', background: 'rgba(var(--o-warn2-rgb),.16)', padding: '1px 8px', borderRadius: 999 }}>{a && a.repasIn ? a.repasIn : 'DANS 1H38'}</span></div><div style={{ fontSize: sm ? 11 : 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2, whiteSpace: sm ? 'nowrap' : 'normal', overflow: sm ? 'hidden' : 'visible', textOverflow: 'ellipsis' }}>{a && a.repasLabel ? a.repasLabel : 'Collation après-midi · 18g'}</div></div>
+              <div style={{ flex: 1, minWidth: 0 }}><div style={{ display: 'flex', alignItems: 'center', gap: sm ? 6 : 8, flexWrap: 'wrap' }}><span style={{ fontSize: sm ? 12.5 : 15, fontWeight: 700 }}>{sm ? tr('Repas chat') : 'Prochain repas (chat)'}</span><span style={{ fontSize: sm ? 9.5 : 11, fontWeight: 800, color: 'var(--o-warn2)', background: 'rgba(var(--o-warn2-rgb),.16)', padding: '1px 8px', borderRadius: 999 }}>{a && a.repasIn ? a.repasIn : 'DANS 1H38'}</span></div><div style={{ fontSize: sm ? 11 : 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2, whiteSpace: sm ? 'nowrap' : 'normal', overflow: sm ? 'hidden' : 'visible', textOverflow: 'ellipsis' }}>{a && a.repasLabel ? a.repasLabel : 'Collation après-midi · 18g'}</div></div>
               {!sm && <span style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text2)', flexShrink: 0 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></span>}
             </div>
           );
@@ -3739,7 +3739,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             </div>
           );
           const voletsCard = (sm) => infoCard(sm, 'rgba(var(--o-accent-rgb),.16)', (s) => <Ico name="blinds" color="var(--o-accent)" size={s} />, 'Mode volets', 'Auto lever/coucher', 'var(--o-accent)', <>Fermeture à {a && a.sunsetHM ? a.sunsetHM : '21:42'}</>, false);
-          const secuCard = (sm) => infoCard(sm, 'rgba(52,211,153,.16)', (s) => <Ico name="shield-check" color="var(--o-ok)" size={s} />, tr('Sécurité'), a ? a.camOnline + '/' + a.camTotal + ' caméras OK' : '3/3 caméras OK', 'var(--o-ok)', a && a.alarmArmed ? 'Alarme armée' : 'Système opérationnel', true);
+          const secuCard = (sm) => infoCard(sm, 'rgba(52,211,153,.16)', (s) => <Ico name="shield-check" color="var(--o-ok)" size={s} />, tr('Sécurité'), a ? a.camOnline + '/' + a.camTotal + ' caméras OK' : '3/3 caméras OK', 'var(--o-ok)', a && a.alarmArmed ? tr('Alarme armée') : 'Système opérationnel', true);
           const etatsCards = (sm) => <>{voletsCard(sm)}{mWallE && <MachineCard m={mWallE} small={sm} />}{mLuba && <MachineCard m={mLuba} small={sm} />}{mLv && <MachineCard m={mLv} small={sm} />}{secuCard(sm)}</>;
           const rappelsCards = (sm) => <>{repasCard(sm)}{mPb && <MachineCard m={mPb} small={sm} />}</>;
           // ── Rail en lignes denses : meme vocabulaire que les cartes de synthese des
@@ -3980,7 +3980,7 @@ const LIGHT_COLORS = [
 ];
 // Palette popup (design "Light Cards Styles" — 8 teintes, blanc inclus).
 const LIGHT_PALETTE = ['#ffce73', '#ff8a4c', '#f472b6', 'var(--o-purple)', 'var(--o-accent)', 'var(--o-cyan)', 'var(--o-ok)', '#ffffff'];
-const WHITE_TEMPS = [['Bougie', 2200, '#ffb46b'], ['Chaud', 2700, '#ffd9a0'], ['Neutre', 4000, '#fff1dd'], ['Froid', 6500, '#eaf2ff']];
+const WHITE_TEMPS = [['Bougie', 2200, '#ffb46b'], ['Chaud', 2700, '#ffd9a0'], ['Neutre', 4000, '#fff1dd'], [tr('Froid'), 6500, '#eaf2ff']];
 const relTime = (iso) => { if (!iso) return ''; const d = (Date.now() - new Date(iso).getTime()) / 1000; if (d < 60) return "À l'instant"; if (d < 3600) return 'Il y a ' + Math.floor(d / 60) + ' min'; if (d < 86400) return 'Il y a ' + Math.floor(d / 3600) + ' h'; return 'Il y a ' + Math.floor(d / 86400) + ' j'; };
 
 function LumieresContent({ hass, edit = false, onEnt }) {
@@ -4663,7 +4663,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   const commitTarget = (id, v) => { v = Math.max(5, Math.min(30, Math.round(v * 2) / 2)); upLocal(id, { target: v }); call('input_number', 'set_value', { entity_id: zoneOf(id).tempCible, value: v }); };
   const inc = (id) => { const t = thermos.find(x => x.id === id); commitTarget(id, (t ? t.target : 18) + 0.5); };
   const dec = (id) => { const t = thermos.find(x => x.id === id); commitTarget(id, (t ? t.target : 18) - 0.5); };
-  const setMode = (id, m) => { const z = zoneOf(id); upLocal(id, { mode: m }); if (z.type === 'stove') commander(hass, z.haid, 'set_hvac_mode', m === 'off' ? 'off' : 'heat'); else call('input_select', 'select_option', { entity_id: z.modeEnt, option: PILOT_FR[m] || 'Arrêt' }); };
+  const setMode = (id, m) => { const z = zoneOf(id); upLocal(id, { mode: m }); if (z.type === 'stove') commander(hass, z.haid, 'set_hvac_mode', m === 'off' ? 'off' : 'heat'); else call('input_select', 'select_option', { entity_id: z.modeEnt, option: PILOT_FR[m] || tr('Arrêt') }); };
   const setAuto = (id, a) => { const z = zoneOf(id); upLocal(id, { auto: a }); if (z.autoEnt) call('input_boolean', a ? 'turn_on' : 'turn_off', { entity_id: z.autoEnt }); };
   const dragDial = (id, e) => {
     e.preventDefault();
@@ -4710,9 +4710,9 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   const outTemp = wEnt && wEnt.attributes && wEnt.attributes.temperature != null ? wEnt.attributes.temperature : null;
   const outLabel = wEnt ? haWeatherLabel(wEnt.state) : null;
   const tPos = airTemp == null ? 0.5 : Math.max(0.04, Math.min(0.96, (airTemp - 15) / 13));
-  const tCat = airTemp == null ? { l: '—', c: '#5f6c87' } : airTemp < 19 ? { l: 'Un peu frais', c: 'var(--o-cyan)' } : airTemp <= 23 ? { l: 'Confort', c: 'var(--o-ok)' } : { l: 'Chaud', c: '#ff8a4c' };
+  const tCat = airTemp == null ? { l: '—', c: '#5f6c87' } : airTemp < 19 ? { l: 'Un peu frais', c: 'var(--o-cyan)' } : airTemp <= 23 ? { l: tr('Confort'), c: 'var(--o-ok)' } : { l: 'Chaud', c: '#ff8a4c' };
   const hPos = airHum == null ? 0.5 : Math.max(0.04, Math.min(0.96, (airHum - 20) / 60));
-  const hCat = airHum == null ? { l: '—', c: '#5f6c87' } : airHum < 40 ? { l: 'Trop sec', c: '#ffb347' } : airHum <= 60 ? { l: 'Confort', c: 'var(--o-ok)' } : { l: tr('À surveiller'), c: '#ffb347' };
+  const hCat = airHum == null ? { l: '—', c: '#5f6c87' } : airHum < 40 ? { l: 'Trop sec', c: '#ffb347' } : airHum <= 60 ? { l: tr('Confort'), c: 'var(--o-ok)' } : { l: tr('À surveiller'), c: '#ffb347' };
   const fmt1 = (v) => v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1);
   const ZONE_LABEL = { poele: 'Séjour', chambre: 'Chambre', enfant: 'Chambre enfant' };
   const bars = CL_TEMPS.map((v, i) => {
@@ -4786,7 +4786,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   const svgHist = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" /><path d="M12 7.5v5l3.5 2" /></svg>;
   const svgChev = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: devOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}><path d="M6 9l6 6 6-6" /></svg>;
   // 4 boutons de mode (confort/éco/hors-gel/off)
-  const CL_MODES = [{ k: 'confort', l: 'Confort', c: '#ff8a4c', icon: 'temperature-high' }, { k: 'eco', l: 'Éco', c: 'var(--o-ok)', icon: 'leaf' }, { k: 'horsgel', l: 'Hors-gel', c: 'var(--o-accent)', icon: 'snowflake' }, { k: 'off', l: 'Off', c: '#8c98b2', icon: 'power' }];
+  const CL_MODES = [{ k: 'confort', l: tr('Confort'), c: '#ff8a4c', icon: 'temperature-high' }, { k: 'eco', l: 'Éco', c: 'var(--o-ok)', icon: 'leaf' }, { k: 'horsgel', l: 'Hors-gel', c: 'var(--o-accent)', icon: 'snowflake' }, { k: 'off', l: 'Off', c: '#8c98b2', icon: 'power' }];
   const modeBtn = (on, c, d) => ({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, flex: 1, padding: '11px 4px', borderRadius: 13, border: '1px solid ' + (on ? c + '66' : 'var(--o-bd3)'), fontWeight: 700, fontSize: 11.5, cursor: d ? 'default' : 'pointer', transition: 'all .2s', background: on ? hx(c, .16) : 'var(--o-s2)', color: on ? c : 'var(--o-text2)', boxShadow: on ? '0 4px 14px ' + hx(c, .25) : 'none', opacity: d ? .45 : 1 });
   const topBtn = (on, c) => ({ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 10px', borderRadius: 13, border: '1px solid ' + (on ? c + '66' : 'var(--o-bd2)'), background: on ? hx(c, .16) : 'var(--o-surfA)', color: on ? c : 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all .2s' });
 
@@ -4795,7 +4795,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
       {edit && <ViewEditBar onEnt={onEnt} texte={tr('Mode édition : clique une zone pour la modifier, glisse-la pour la déplacer.')} />}
       <ViewHead titre={tr('Climat')}
         sous={(thermos.length > 1 ? tr('{n} zones', { n: thermos.length }) : tr('{n} zone', { n: thermos.length })) + (zone ? ' · ' + t.name + (t.current != null ? ' à ' + String(t.current).replace('.', ',') + ' °C' : '') : '')}
-        badge={zone ? (t.mode === 'off' ? 'à l’arrêt' : t.mode) : 'aucune zone'}
+        badge={zone ? (t.mode === 'off' ? tr('à l’arrêt') : tr(t.mode)) : tr('aucune zone')}
         rgb={zone && t.mode === 'confort' ? '255,138,76' : zone && t.mode === 'eco' ? '52,211,153' : '140,152,180'} />
 
       {zone && (
@@ -4811,7 +4811,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
             ))}
           </BarGroup>
           {thermos.length > 1 && (
-            <BarGroup label="Zone">
+            <BarGroup label={tr('Zone')}>
               {thermos.map(z => <button key={z.id} onClick={() => setSelZone(z.id)} style={barBtn(z.id === t.id)}>{z.name}</button>)}
             </BarGroup>
           )}
@@ -4820,7 +4820,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
 
       {panel && zone && (
         <PresCard titre={t.name} lead={tr('Réglage détaillé en cliquant la carte de la zone')}
-          badge={t.mode === 'off' ? 'à l’arrêt' : t.mode}
+          badge={t.mode === 'off' ? tr('à l’arrêt') : tr(t.mode)}
           rgb={t.mode === 'confort' ? '255,138,76' : t.mode === 'eco' ? '52,211,153' : '140,152,180'}>
           {t.current != null && (
             <PresLigne titre="Température actuelle"
@@ -4839,7 +4839,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
               barre={<JaugeGrad pct={(airHum - 20) * 100 / 60} grad="linear-gradient(90deg,#ff8a4c 0%,var(--o-ok) 35%,var(--o-ok) 65%,var(--o-cyan) 100%)" />} />
           )}
           {thermos.length > 1 && (
-            <PresLigne titre="Autres zones" sous={thermos.filter(z => z.id !== t.id).map(z => z.name).join(', ')} valeur={tr('{n} zones', { n: thermos.length })} />
+            <PresLigne titre={tr('Autres zones')} sous={thermos.filter(z => z.id !== t.id).map(z => z.name).join(', ')} valeur={tr('{n} zones', { n: thermos.length })} />
           )}
         </PresCard>
       )}
@@ -4994,7 +4994,7 @@ function VoletsContent({ hass, edit = false, onEnt }) {
   };
 
   const openCount = covers.filter(c => c.pos > 0).length;
-  const stateOf = p => p === 0 ? 'Fermé' : p === 100 ? 'Ouvert' : 'Entrouvert';
+  const stateOf = p => p === 0 ? tr('Fermé') : p === 100 ? tr('Ouvert') : 'Entrouvert';
   const schedActive = mode !== 'Manuel';
   const activeNights = voletDays().filter(d => days[d.k]).length;
   const sun = S && S['sun.sun'];
@@ -5423,7 +5423,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const fmtW = fmtWatts;
   const maxBar = Math.max(solarW, gridNetW, surplusW, 1500);
   const tiles = [
-    { label: 'Solaire', tag: prodJour != null ? prodJour.toFixed(1).replace('.', ',') + ' kWh jour' : (solarActive ? 'ACTIF' : 'INACTIF'), tagCol: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', val: fmtW(solarW), num: solarW, fmt: fmtW, valCol: 'var(--o-gold)', col: 'var(--o-gold)', bar: Math.min(100, solarW / maxBar * 100) + '%', bd: 'rgba(255,209,102,.18)', icon: 'sun', ic: 'var(--o-gold)', art: VIEW_ART.solar },
+    { label: 'Solaire', tag: prodJour != null ? prodJour.toFixed(1).replace('.', ',') + ' kWh jour' : (solarActive ? tr('ACTIF') : 'INACTIF'), tagCol: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', val: fmtW(solarW), num: solarW, fmt: fmtW, valCol: 'var(--o-gold)', col: 'var(--o-gold)', bar: Math.min(100, solarW / maxBar * 100) + '%', bd: 'rgba(255,209,102,.18)', icon: 'sun', ic: 'var(--o-gold)', art: VIEW_ART.solar },
     { label: tr('Réseau'), tag: (exporting ? 'VENTE' : 'ACHAT') + (tarifTxt ? ' · ' + tarifTxt + (prixActuel != null ? ' ' + prixActuel.toFixed(4).replace('.', ',') + '€' : '') : ''), tagCol: exporting ? 'var(--o-ok)' : '#f87171', val: fmtW(gridNetW), num: gridNetW, fmt: fmtW, valCol: exporting ? 'var(--o-ok)' : '#f87171', col: exporting ? 'var(--o-ok)' : '#f87171', bar: Math.min(100, gridNetW / maxBar * 100) + '%', bd: exporting ? 'rgba(52,211,153,.18)' : 'rgba(248,113,113,.18)', icon: 'bolt', ic: exporting ? 'var(--o-ok)' : '#f87171', art: VIEW_ART.pylon },
     autosuff != null
       ? { label: 'Autosuffisance', tag: tauxAutoconso != null ? 'AUTO. ' + tauxAutoconso + '%' : 'JOUR', tagCol: 'var(--o-ok)', val: autosuff + ' %', num: autosuff, unit: ' %', valCol: 'var(--o-ok)', col: 'var(--o-ok)', bar: Math.min(100, autosuff) + '%', bd: 'rgba(52,211,153,.18)', icon: 'leaf', ic: 'var(--o-ok)', art: VIEW_ART.leafart }
@@ -5774,9 +5774,9 @@ function AspirateurContent({ hass }) {
         <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{sousTitre}</div>
         <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
           <VacRow label={tr('État')} desc={etat}>
-            <span style={{ fontSize: 15, fontWeight: 800, color: stateCol }}><FlipText live text={onBlue ? 'En cours' : paused ? tr('En pause') : onBase ? tr('Sur la base') : tr('Au repos')} /></span>
+            <span style={{ fontSize: 15, fontWeight: 800, color: stateCol }}><FlipText live text={onBlue ? tr('En cours') : paused ? tr('En pause') : onBase ? tr('Sur la base') : tr('Au repos')} /></span>
           </VacRow>
-          <VacRow label="Batterie" desc={battery == null ? 'Capteur indisponible' : battery > 40 ? 'Autonomie confortable' : battery > 15 ? 'À surveiller' : 'Recharge nécessaire'}>
+          <VacRow label="Batterie" desc={battery == null ? 'Capteur indisponible' : battery > 40 ? 'Autonomie confortable' : battery > 15 ? tr('À surveiller') : 'Recharge nécessaire'}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
               <span style={{ fontSize: 15, fontWeight: 800, color: batColor }}><FlipText live text={battery != null ? battery + ' %' : '—'} /></span>
               <Gauge pct={battery || 0} color={batColor} h={3} style={{ width: 160 }} />
@@ -6081,7 +6081,7 @@ function CroquettesContent({ hass }) {
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 10 }}>
                 <span style={{ fontSize: 17, fontWeight: 800, color: !m.on ? 'var(--o-text3)' : passed ? 'var(--o-ok)' : next ? 'var(--o-warn2)' : 'var(--o-text)' }}>{m.g} g</span>
-                <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)' }}>{!m.on ? 'désactivé' : passed ? 'distribué' : next ? relTo(m.time) : 'programmé'}</span>
+                <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)' }}>{!m.on ? 'désactivé' : passed ? tr('distribué') : next ? relTo(m.time) : 'programmé'}</span>
               </div>
             </button>
           );
@@ -6549,7 +6549,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
             badge={np.playing ? tr('en lecture') : tr('au repos')} rgb={np.playing ? '52,211,153' : '140,152,180'}>
             <PresLigne titre="Progression"
               sous={np.title ? (np.artist ? np.title + ' · ' + np.artist : np.title) : tr('Aucun média en cours sur ce lecteur')}
-              valeur={np.title ? (np.playing ? 'en lecture' : 'en pause') : '—'}
+              valeur={np.title ? (np.playing ? tr('en lecture') : 'en pause') : '—'}
               couleur={np.title ? 'var(--o-accent-soft)' : 'var(--o-text3)'} />
             <PresLigne titre="Source" sous={source ? 'Entrée active du lecteur' : 'Aucune source active'}
               valeur={source || '—'} couleur={source ? 'var(--o-gold)' : 'var(--o-text3)'} />
@@ -6918,7 +6918,7 @@ function fmtUptime(raw) {
 // Bases machines (icônes + identité ; données dynamiques calculées dans SystemeContent)
 const SYS_MACHINES = [
   { key: 'host', name: 'Serveur Home Assistant', sub: tr('Hôte principal'), iconBg: 'rgba(52,211,153,.16)', iconCol: 'var(--o-ok)', icon: <Fi i="home" size={16} />, barCol: 'var(--o-ok)', art: 'serverart' },
-  { key: 'nebula', name: 'Deuxième machine', sub: 'Serveur de stockage', iconBg: 'rgba(255,179,71,.16)', iconCol: '#ffb347', icon: <Fi i="database" size={16} />, barCol: '#ffb347', art: 'nas' },
+  { key: 'nebula', name: 'Deuxième machine', sub: tr('Serveur de stockage'), iconBg: 'rgba(255,179,71,.16)', iconCol: '#ffb347', icon: <Fi i="database" size={16} />, barCol: '#ffb347', art: 'nas' },
   { key: 'ucg', name: 'Troisième machine', sub: tr('Passerelle réseau'), iconBg: 'rgba(var(--o-accent-rgb),.16)', iconCol: 'var(--o-accent-soft)', icon: <Fi i="wifi" size={16} />, barCol: 'var(--o-accent)', art: 'routerart' },
 ];
 
@@ -7021,10 +7021,10 @@ function SystemeContent({ hass }) {
   const uOnline = has(SYS.ucg.cpu) || uClients != null;
 
   const metrics = [
-    { name: 'CPU', icon: 'microchip', value: fmtPct(hCpu), sub: hTemp != null ? `Cœurs · ${Math.round(hTemp)}°C` : 'Processeur', color: 'var(--o-accent)', sp: sysSpark(SYS_SPARKS[0]), areaFill: 'rgba(var(--o-accent-rgb),.1)', tag: hCpu == null ? '—' : hCpu > 85 ? 'Charge' : 'Normal', tagCol: hCpu != null && hCpu > 85 ? '#ffb347' : 'var(--o-ok)', art: VIEW_ART.cpuart },
+    { name: 'CPU', icon: 'microchip', value: fmtPct(hCpu), sub: hTemp != null ? `Cœurs · ${Math.round(hTemp)}°C` : tr('Processeur'), color: 'var(--o-accent)', sp: sysSpark(SYS_SPARKS[0]), areaFill: 'rgba(var(--o-accent-rgb),.1)', tag: hCpu == null ? '—' : hCpu > 85 ? 'Charge' : 'Normal', tagCol: hCpu != null && hCpu > 85 ? '#ffb347' : 'var(--o-ok)', art: VIEW_ART.cpuart },
     { name: 'RAM', icon: 'memory', value: fmtPct(hMemPct), sub: (hUsed != null && hFree != null) ? `${hUsed.toFixed(1)} / ${(hUsed + hFree).toFixed(1)} ${hMemUnit}` : 'Mémoire vive', color: '#ffb347', sp: sysSpark(SYS_SPARKS[1]), areaFill: 'rgba(255,179,71,.1)', tag: hMemPct == null ? '—' : hMemPct > 90 ? 'Élevé' : 'Normal', tagCol: hMemPct != null && hMemPct > 90 ? '#ffb347' : 'var(--o-ok)', art: VIEW_ART.ramart },
-    { name: 'Disque', icon: 'disk', value: fmtPct(hDisk), sub: 'Partition /data', color: 'var(--o-ok)', sp: sysSpark(SYS_SPARKS[2]), areaFill: 'rgba(52,211,153,.1)', tag: hDisk == null ? '—' : hDisk > 90 ? 'Plein' : 'OK', tagCol: hDisk != null && hDisk > 90 ? '#f87171' : 'var(--o-ok)', art: VIEW_ART.diskart },
-    { name: tr('Réseau'), icon: 'wifi', value: uClients != null ? `${uClients}` : '—', sub: 'Clients UniFi', color: 'var(--o-accent-soft)', sp: sysSpark(SYS_SPARKS[3]), areaFill: 'rgba(var(--o-accent-soft-rgb),.1)', tag: uOnline ? 'En ligne' : '—', tagCol: uOnline ? 'var(--o-ok)' : '#8c98b2', art: VIEW_ART.routerart },
+    { name: tr('Disque'), icon: 'disk', value: fmtPct(hDisk), sub: 'Partition /data', color: 'var(--o-ok)', sp: sysSpark(SYS_SPARKS[2]), areaFill: 'rgba(52,211,153,.1)', tag: hDisk == null ? '—' : hDisk > 90 ? 'Plein' : 'OK', tagCol: hDisk != null && hDisk > 90 ? '#f87171' : 'var(--o-ok)', art: VIEW_ART.diskart },
+    { name: tr('Réseau'), icon: 'wifi', value: uClients != null ? `${uClients}` : '—', sub: 'Clients UniFi', color: 'var(--o-accent-soft)', sp: sysSpark(SYS_SPARKS[3]), areaFill: 'rgba(var(--o-accent-soft-rgb),.1)', tag: uOnline ? tr('En ligne') : '—', tagCol: uOnline ? 'var(--o-ok)' : '#8c98b2', art: VIEW_ART.routerart },
   ];
   // Les noms viennent de l'appareil trouvé (ou de la configuration) ; seule
   // l'identité visuelle — icône, couleur — reste écrite ici.
@@ -7072,40 +7072,40 @@ function SystemeContent({ hass }) {
   // ── Patron Atrium (22/08) : bandeau Alimentation + carte machine detaillee + cartes facon Objets ──
   const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-syspanel') !== '0'; } catch (e) { return true; } });
   const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-syspanel', nv ? '1' : '0'); } catch (e) {} return nv; });
-  const relFetch = (() => { const sec = Math.round((Date.now() - lastFetch.getTime()) / 1000); if (sec < 60) return 'il y a ' + sec + ' s'; const mn = Math.round(sec / 60); return mn < 60 ? 'il y a ' + mn + ' min' : 'il y a ' + Math.round(mn / 60) + ' h'; })();
+  const relFetch = (() => { const sec = Math.round((Date.now() - lastFetch.getTime()) / 1000); if (sec < 60) return tr('il y a {n} s', { n: sec }); const mn = Math.round(sec / 60); return mn < 60 ? tr('il y a {n} min', { n: mn }) : tr('il y a {n} h', { n: Math.round(mn / 60) }); })();
   const lvlCol = (v, warn = 70, bad = 86) => v == null ? 'var(--o-text3)' : v >= bad ? 'var(--o-bad)' : v >= warn ? 'var(--o-warn2)' : 'var(--o-ok)';
   const MACH = [
     { key: 'host', logo: BRAND_ICONS.haos, name: SYSN.host, sub: 'Home Assistant OS' + (hUp && hUp !== '—' ? ' · ' + hUp : ''), online: hOnline,
       ico: 'home', icoBg: 'rgba(3,169,244,.14)', icoCol: 'var(--o-accent-soft)',
       barLabel: tr('Mémoire'), barPct: hMemPct, barText: hMemPct != null ? hMemPct + ' %' : '—',
-      status: hMemPct != null && hMemPct >= 85 ? 'Mémoire élevée · ' + hMemPct + ' %' : 'Fonctionnement normal',
+      status: hMemPct != null && hMemPct >= 85 ? 'Mémoire élevée · ' + hMemPct + ' %' : tr('Fonctionnement normal'),
       rows: [
-        ['Processeur', 'Charge moyenne du CPU', hCpu != null ? Math.round(hCpu) + ' %' : '—', hCpu, 85],
+        [tr('Processeur'), tr('Charge moyenne du CPU'), hCpu != null ? Math.round(hCpu) + ' %' : '—', hCpu, 85],
         [tr('Mémoire'), hUsed != null && hFree != null ? Math.round(hUsed) + ' / ' + Math.round(hUsed + hFree) + ' ' + hMemUnit : 'RAM utilisée', hMemPct != null ? hMemPct + ' %' : '—', hMemPct, 85],
-        ['Disque /data', 'Partition de données', hDisk != null ? Math.round(hDisk) + ' %' : '—', hDisk, 85],
-        [tr('Température CPU'), "Seuil d'alerte à 75 °C", hTemp != null ? Math.round(hTemp) + ' °C' : '—', null, null],
+        [tr('Disque /data'), tr('Partition de données'), hDisk != null ? Math.round(hDisk) + ' %' : '—', hDisk, 85],
+        [tr('Température CPU'), tr("Seuil d'alerte à 75 °C"), hTemp != null ? Math.round(hTemp) + ' °C' : '—', null, null],
       ],
-      spark: hist[SYS.host.memUsed], sparkLbl: 'mémoire', fallback: SYS_SPARKS[1], level: hMemPct },
-    { key: 'nebula', logo: BRAND_ICONS.unraid, name: SYSN.nebula, sub: 'Serveur de stockage' + (nUp && nUp !== '—' ? ' · ' + nUp : ''), online: nOnline,
+      spark: hist[SYS.host.memUsed], sparkLbl: tr('mémoire'), fallback: SYS_SPARKS[1], level: hMemPct },
+    { key: 'nebula', logo: BRAND_ICONS.unraid, name: SYSN.nebula, sub: tr('Serveur de stockage') + (nUp && nUp !== '—' ? ' · ' + nUp : ''), online: nOnline,
       ico: 'database', icoBg: 'rgba(227,41,41,.14)', icoCol: '#ffb347',
-      barLabel: nMem != null ? 'Mémoire' : 'Processeur', barPct: nMem != null ? nMem : nCpu, barText: (nMem != null ? Math.round(nMem) : nCpu != null ? Math.round(nCpu) : null) != null ? Math.round(nMem != null ? nMem : nCpu) + ' %' : '—',
-      status: Math.max(nCpu || 0, nMem || 0) >= 85 ? 'Ressources sous tension' : 'Fonctionnement normal',
+      barLabel: nMem != null ? tr('Mémoire') : tr('Processeur'), barPct: nMem != null ? nMem : nCpu, barText: (nMem != null ? Math.round(nMem) : nCpu != null ? Math.round(nCpu) : null) != null ? Math.round(nMem != null ? nMem : nCpu) + ' %' : '—',
+      status: Math.max(nCpu || 0, nMem || 0) >= 85 ? tr('Ressources sous tension') : tr('Fonctionnement normal'),
       rows: [
-        ['Processeur', 'Charge CPU', nCpu != null ? Math.round(nCpu) + ' %' : '—', nCpu, 85],
-        [tr('Mémoire'), 'RAM du serveur', nMem != null ? Math.round(nMem) + ' %' : '—', nMem, 85],
-        [tr('Température CPU'), "Seuil d'alerte à 75 °C", nTemp != null ? Math.round(nTemp) + ' °C' : '—', null, null],
-        ['Stockage', 'Grappe de disques', nDisk != null ? Math.round(nDisk) + ' %' : 'non exposée', nDisk, 85],
+        [tr('Processeur'), tr('Charge CPU'), nCpu != null ? Math.round(nCpu) + ' %' : '—', nCpu, 85],
+        [tr('Mémoire'), tr('RAM du serveur'), nMem != null ? Math.round(nMem) + ' %' : '—', nMem, 85],
+        [tr('Température CPU'), tr("Seuil d'alerte à 75 °C"), nTemp != null ? Math.round(nTemp) + ' °C' : '—', null, null],
+        [tr('Stockage'), 'Grappe de disques', nDisk != null ? Math.round(nDisk) + ' %' : 'non exposée', nDisk, 85],
       ],
       spark: hist[SYS.nebula.cpu], sparkLbl: 'charge', fallback: SYS_SPARKS[0], level: Math.max(nCpu || 0, nMem || 0) },
     { key: 'ucg', logo: BRAND_ICONS.unifi, name: SYSN.ucg, sub: tr('Passerelle réseau') + (uUp && uUp !== '—' ? ' · ' + uUp : ''), online: uOnline,
       ico: 'wifi', icoBg: 'rgba(5,89,201,.16)', icoCol: 'var(--o-cyan)',
       barLabel: tr('Mémoire'), barPct: uMem, barText: uMem != null ? Math.round(uMem) + ' %' : '—',
-      status: (uCpu != null && uCpu >= 85) || (uMem != null && uMem >= 85) ? 'Ressources sous tension' : 'Fonctionnement normal',
+      status: (uCpu != null && uCpu >= 85) || (uMem != null && uMem >= 85) ? tr('Ressources sous tension') : tr('Fonctionnement normal'),
       rows: [
-        ['Processeur', 'Charge CPU', uCpu != null ? Math.round(uCpu) + ' %' : '—', uCpu, 85],
+        [tr('Processeur'), tr('Charge CPU'), uCpu != null ? Math.round(uCpu) + ' %' : '—', uCpu, 85],
         [tr('Mémoire'), 'RAM de la passerelle', uMem != null ? Math.round(uMem) + ' %' : '—', uMem, 85],
         ['Clients réseau', 'Appareils connectés', uClients != null ? Math.round(uClients) : 'non exposés', null, null],
-        [tr('Température'), "Seuil d'alerte à 75 °C", uTemp != null ? Math.round(uTemp) + ' °C' : 'non exposée', null, null],
+        [tr('Température'), tr("Seuil d'alerte à 75 °C"), uTemp != null ? Math.round(uTemp) + ' °C' : 'non exposée', null, null],
       ],
       spark: hist[SYS.ucg.cpu], sparkLbl: 'processeur', fallback: SYS_SPARKS[3], level: Math.max(uCpu || 0, uMem || 0) },
   ];
@@ -7121,10 +7121,10 @@ function SystemeContent({ hass }) {
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Système')}</h1>
-          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{machinesOnline} machine{machinesOnline > 1 ? 's' : ''} en ligne · relevé {relFetch}</div>
+          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{machinesOnline > 1 ? tr('{n} machines en ligne', { n: machinesOnline }) : tr('{n} machine en ligne', { n: machinesOnline })} · {tr('relevé')} {relFetch}</div>
         </div>
         <span style={{ flex: 1 }} />
-        <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: alerts.length ? 'rgba(var(--o-warn2-rgb),.14)' : 'rgba(var(--o-ok-rgb),.14)', color: alerts.length ? 'var(--o-warn2)' : 'var(--o-ok)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: alerts.length ? 'var(--o-warn2)' : 'var(--o-ok)' }} />{alerts.length ? alerts.length + ' À SURVEILLER' : 'TOUT VA BIEN'}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: alerts.length ? 'rgba(var(--o-warn2-rgb),.14)' : 'rgba(var(--o-ok-rgb),.14)', color: alerts.length ? 'var(--o-warn2)' : 'var(--o-ok)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: alerts.length ? 'var(--o-warn2)' : 'var(--o-ok)' }} />{alerts.length ? tr('{n} À SURVEILLER', { n: alerts.length }) : tr('TOUT VA BIEN')}</span>
       </div>
 
       {/* reglages rapides : alimentation (2 temps), periode d'historique, rafraichir */}
@@ -7185,7 +7185,7 @@ function SystemeContent({ hass }) {
             status={m.online ? m.status : 'Hors ligne'}
             statusColor={!m.online ? 'var(--o-bad)' : (m.level != null && m.level >= 85 ? 'var(--o-warn2)' : 'var(--o-ok)')}
             barLabel={m.barLabel} barPct={m.barPct} barColor={lvlCol(m.barPct)} barText={m.barText}
-            actionLabel={detail === m.key ? 'Détail affiché' : tr('Voir le détail')}
+            actionLabel={detail === m.key ? tr('Détail affiché') : tr('Voir le détail')}
             onAction={() => { setDetail(m.key); setPanel(true); }}
           />
         ))}
@@ -7224,10 +7224,10 @@ function SystemeView({ hass }) {
 
 /* ════════════ VUE PARAMÈTRES (reproduction fidèle de "Loggia Paramètres.dc.html") ════════════ */
 const PAR_NAV = [
-  { grp: 'Compte', items: [['users', 'Utilisateurs', 'users']] },
-  { grp: 'Application', items: [['apparence', 'Apparence', 'palette'], ['connexion', 'Connexion HA', 'link'], ['auto', 'Automatisations', 'bolt'], ['maj', 'Mises à jour', 'refresh']] },
-  { grp: 'Dashboard', items: [['vues', 'Vues', 'layout-fluid'], ['entites', 'Entités', 'list']] },
-  { grp: tr('Système'), items: [['about', 'À propos', 'info']] },
+  { grp: 'Compte', items: [['users', tr('Utilisateurs'), 'users']] },
+  { grp: 'Application', items: [['apparence', tr('Apparence'), 'palette'], ['connexion', tr('Connexion HA'), 'link'], ['auto', tr('Automatisations'), 'bolt'], ['maj', tr('Mises à jour'), 'refresh']] },
+  { grp: 'Dashboard', items: [['vues', tr('Vues'), 'layout-fluid'], ['entites', tr('Entités'), 'list']] },
+  { grp: tr('Système'), items: [['about', tr('À propos'), 'info']] },
 ];
 function CvCard({ id, hass, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
@@ -7250,8 +7250,8 @@ function CvCard({ id, hass, label = null }) {
   else if (dom === 'cover') stateTxt = s === 'opening' ? 'Ouverture…' : s === 'closing' ? 'Fermeture…' : on ? (tr('Ouvert') + (a.current_position != null && a.current_position < 100 ? ' · ' + a.current_position + '%' : '')) : tr('Fermé');
   else if (dom === 'lock') stateTxt = s === 'locked' ? 'Verrouillée' : s === 'unlocked' ? 'Déverrouillée' : s;
   else if (dom === 'media_player') stateTxt = s === 'playing' ? (a.media_title || tr('Lecture')) : s === 'paused' ? tr('En pause') : s === 'off' ? tr('Éteint') : tr('Inactif');
-  else if (dom === 'binary_sensor') stateTxt = s === 'on' ? 'Détecté' : 'RAS';
-  else if (dom === 'person') stateTxt = s === 'home' ? 'Présent' : 'Absent';
+  else if (dom === 'binary_sensor') stateTxt = s === 'on' ? tr('Détecté') : 'RAS';
+  else if (dom === 'person') stateTxt = s === 'home' ? tr('Présent') : 'Absent';
   else if (dom === 'sensor') stateTxt = (isNaN(parseFloat(s)) ? s : parseFloat(s)) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
   else if (runnable || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—'; // scene/script/button : état = date de dernière exécution
   else stateTxt = String(s);
@@ -7499,7 +7499,7 @@ const matchHaUser = (haUser, list) => {
   return -1;
 };
 const VAC_STATE_FR = { docked: 'À la base', cleaning: tr('Nettoyage'), returning: tr('Retour base'), paused: tr('En pause'), idle: tr('En veille'), error: tr('Erreur') };
-function airLabel(co2) { return co2 == null || co2 < 800 ? 'BON' : co2 < 1200 ? 'MOYEN' : tr('ÉLEVÉ'); }
+function airLabel(co2) { return co2 == null || co2 < 800 ? tr('BON') : co2 < 1200 ? tr('MOYEN') : tr('ÉLEVÉ'); }
 function co2Style(co2) { return co2 < 600 ? { bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' } : co2 < 900 ? { bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' } : { bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' }; }
 // Dérive les données live de l'Accueil depuis hass + config. null si pas de hass (→ démo).
 // `resolved` vient de la resolution (App) : cette fonction n'a pas de hooks,
@@ -7721,18 +7721,18 @@ function deriveNotifs(hass) {
   const rel = (id) => { try { const e = S[id]; const t = e && (e.last_changed || e.last_updated); if (!t) return ''; const m = (now - new Date(t).getTime()) / 60000; if (m < 1) return "à l'instant"; if (m < 60) return 'Il y a ' + Math.round(m) + ' min'; if (m < 1440) return 'Il y a ' + Math.round(m / 60) + ' h'; return 'Il y a ' + Math.round(m / 1440) + ' j'; } catch (e) { return ''; } };
   const stOf = (id) => (S[id] && S[id].state) || null;
   const numOf = (id) => { const v = parseFloat(stOf(id)); return isNaN(v) ? null : v; };
-  for (const id in S) { if (id.indexOf('alarm_control_panel.') === 0 && S[id].state === 'triggered') { out.push(['#f87171', 'Alarme', 'Intrusion détectée', rel(id)]); break; } }
+  for (const id in S) { if (id.indexOf('alarm_control_panel.') === 0 && S[id].state === 'triggered') { out.push(['#f87171', tr('Alarme'), 'Intrusion détectée', rel(id)]); break; } }
   const mid = mowerId(S), mchg = mowerSensor(S, 'charging');
   const mow = mid ? stOf(mid) : null;
-  if (mow === 'returning') out.push(['var(--o-accent-soft)', 'Tondeuse', 'Retour à la base', rel(mid)]);
-  else if (mchg && stOf(mchg) === 'on') out.push(['var(--o-ok)', 'Tondeuse', 'En charge', rel(mchg)]);
+  if (mow === 'returning') out.push(['var(--o-accent-soft)', tr('Tondeuse'), 'Retour à la base', rel(mid)]);
+  else if (mchg && stOf(mchg) === 'on') out.push(['var(--o-ok)', tr('Tondeuse'), 'En charge', rel(mchg)]);
   const surId = enHaids().surplusNow || enHaids().injectionJour;
   const sur = surId ? numOf(surId) : null;
-  if (sur != null && sur > 100) out.push(['var(--o-accent-soft)', 'Énergie', 'Surplus solaire — export réseau', rel(surId)]);
+  if (sur != null && sur > 100) out.push(['var(--o-accent-soft)', tr('Énergie'), 'Surplus solaire — export réseau', rel(surId)]);
   const lv = numOf(notifIds().dishwasher);
-  if (lv != null && lv > 100) out.push(['var(--o-accent)', 'Lave-vaisselle', 'Cycle en cours', rel(notifIds().dishwasher)]);
+  if (lv != null && lv > 100) out.push(['var(--o-accent)', tr('Lave-vaisselle'), 'Cycle en cours', rel(notifIds().dishwasher)]);
   const tr = stOf(notifIds().bins);
-  if (tr && tr !== 'unknown' && tr !== 'unavailable') out.push(['#ffb347', 'Poubelles', 'Prochain ramassage : ' + tr, rel(notifIds().bins)]);
+  if (tr && tr !== 'unknown' && tr !== 'unavailable') out.push(['#ffb347', tr('Poubelles'), 'Prochain ramassage : ' + tr, rel(notifIds().bins)]);
   return out.slice(0, 8);
 }
 

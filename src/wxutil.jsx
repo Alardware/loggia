@@ -56,6 +56,6 @@ export function haWeatherMode(cond, isNight) {
 }
 
 export function haWeatherLabel(cond) {
-  const m = { 'clear-night': 'Nuit claire', sunny: 'Ensoleillé', partlycloudy: 'Partiellement nuageux', cloudy: 'Nuageux', rainy: 'Pluie', pouring: 'Forte pluie', snowy: 'Neige', 'snowy-rainy': 'Neige fondue', fog: 'Brouillard', windy: 'Venteux', 'windy-variant': 'Venteux', hail: 'Grêle', lightning: 'Orage', 'lightning-rainy': 'Orage', exceptional: 'Exceptionnel' };
+  const m = { 'clear-night': 'Nuit claire', sunny: 'Ensoleillé', partlycloudy: 'Partiellement nuageux', cloudy: 'Nuageux', rainy: tr('Pluie'), pouring: 'Forte pluie', snowy: 'Neige', 'snowy-rainy': 'Neige fondue', fog: 'Brouillard', windy: 'Venteux', 'windy-variant': 'Venteux', hail: 'Grêle', lightning: 'Orage', 'lightning-rainy': 'Orage', exceptional: 'Exceptionnel' };
   return m[(cond || '').toLowerCase()] || 'Nuageux';
 }
