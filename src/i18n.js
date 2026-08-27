@@ -387,6 +387,25 @@ function chargerRessourcesHA(hass, code) {
 const LANGUE_IMPORT = _code;
 const RECHARGE = 'loggia-langue-recharge';
 
+/**
+ * Annonce qu'on recharge SOI-MEME pour passer a `code`.
+ *
+ * Changer de langue provoquait DEUX rechargements coup sur coup : celui du
+ * reglage, puis celui que ce module declenche en constatant que les libelles
+ * construits a l'import sont restes dans l'ancienne langue. L'ecran clignotait
+ * deux fois, et la seconde interruption pouvait tomber au mauvais moment.
+ *
+ * En posant les deux drapeaux avant de recharger, on dit a `preparerLangue` que
+ * le travail est deja fait : un seul rechargement suffit. Ce sont les drapeaux
+ * que ce module lit de toute facon — rien de nouveau a tenir a jour.
+ */
+export function marquerLangueRechargee(code) {
+  try {
+    sessionStorage.setItem(RECHARGE, code);
+    sessionStorage.setItem(MEMO_HA + code, '1');
+  } catch (e) { /* pas de stockage : le second rechargement fera le travail */ }
+}
+
 export function preparerLangue(hass) {
   const avant = _code;
   _code = resoudre(hass);

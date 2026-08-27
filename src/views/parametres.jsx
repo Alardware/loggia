@@ -17,7 +17,7 @@ import { CV_ICONS, cvInp, cvName, USER_COLORS, BottomSheet, EntPicker, CV_DOM_IC
 import { useLoggia } from '../runtime.js';
 import { viewReason } from '../views.js';
 import { weatherEntity } from '../wxutil.jsx';
-import { tr, choixLangue, languesDisponibles } from '../i18n.js';
+import { tr, choixLangue, languesDisponibles, marquerLangueRechargee } from '../i18n.js';
 
 /**
  * Ce que l'installation est REELLEMENT.
@@ -934,7 +934,17 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 * les affiche tres bien et suit le theme comme le reste. */}
               <Seg value={choixLangue()}
                 opts={languesDisponibles(hass).map(l => [l.code, l.code === 'auto' ? tr('Auto') : l.code.toUpperCase()])}
-                onPick={v => { cfgSet({ 'loggia-langue': v }); setTimeout(() => window.location.reload(), 200); }} />
+                onPick={v => {
+                  cfgSet({ 'loggia-langue': v });
+                  /* Un seul rechargement : sans ce marquage, i18n en declenche un
+                   * second en trouvant les libelles figes dans l'ancienne langue.
+                   *
+                   * Pas pour « Auto » : la langue effective est celle du compte Home
+                   * Assistant, qu'on ne connait pas encore ici. C'est i18n qui la
+                   * resoudra, et lui seul peut alors juger s'il faut recharger. */
+                  if (v !== 'auto') marquerLangueRechargee(v);
+                  setTimeout(() => window.location.reload(), 200);
+                }} />
             </OptRow>
             <OptRow title="Suivre Home Assistant" desc={tr('Calque le thème actif de Home Assistant et désactive les choix ci-dessous.')}>
               <Tgl on={haTheme === 'FOLLOW'} cb={onFollowHa} label={tr('Suivre le thème Home Assistant')} />
