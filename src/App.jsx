@@ -8406,15 +8406,28 @@ export default function App() {
    * Attendre reproduit exactement ce trajet : on repasse par l'accueil pendant
    * un instant, puis on revient ou l'on etait. */
   const repriseRef = useRef(false);
+  /* La valeur memorisee est saisie MAINTENANT, au premier rendu.
+   *
+   * L'effet de reprise attend que les donnees soient la ; celui qui note la vue,
+   * lui, part des le montage et ecrivait « accueil » — l'etat initial — par
+   * dessus la vue enregistree. Quand la reprise arrivait enfin, elle ne trouvait
+   * plus que « accueil ». Changer de langue ramenait donc a l'accueil malgre
+   * tout. Un `useRef` s'initialise avant tout effet : la valeur est en main
+   * avant que quiconque puisse l'ecraser. */
+  const vueMemoRef = useRef((() => {
+    try { return window.sessionStorage.getItem('loggia-vue'); } catch (e) { return null; }
+  })());
   useEffect(() => {
     if (repriseRef.current || !loggiaRuntime.ready) return;
     repriseRef.current = true;
-    try {
-      const v = window.sessionStorage.getItem('loggia-vue');
-      if (v && v !== 'accueil') setView(v);
-    } catch (e) { /* stockage indisponible : on reste sur l'accueil */ }
-  }, [loggiaRuntime.ready]);
+    // Deja parti ailleurs pendant le chargement ? Son geste prime sur la memoire.
+    if (view !== 'accueil') return;
+    const v = vueMemoRef.current;
+    if (v && v !== 'accueil') setView(v);
+  }, [loggiaRuntime.ready, view]);
   useEffect(() => {
+    // Rien avant la reprise : sinon l'etat initial ecraserait la vue enregistree.
+    if (!repriseRef.current) return;
     try { window.sessionStorage.setItem('loggia-vue', view); } catch (e) { /* stockage indisponible */ }
   }, [view]);
   /* Et la position dans la page.
