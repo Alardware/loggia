@@ -635,7 +635,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const lastSeen = (() => { try { return JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); } catch (e) { return {}; } })();
   const seenRel = (name, isCur) => { if (isCur) return 'actif maintenant'; const t = lastSeen[name]; if (!t) return ''; const m = (Date.now() - t) / 60000; if (m < 60) return 'vu il y a ' + Math.max(1, Math.round(m)) + ' min'; if (m < 1440) return 'vu il y a ' + Math.round(m / 60) + ' h'; if (m < 2880) return 'vu hier'; return 'vu il y a ' + Math.round(m / 1440) + ' j'; };
   const [editing, setEditing] = useState(null); // { i, u } pour éditer, { i:null } pour ajouter
-  const visTabs = isAdmin ? PAR_TABS : PAR_TABS().filter(([id]) => id !== 'vues' && id !== 'auto' && id !== 'maj' && id !== 'entites');
+  const visTabs = isAdmin ? PAR_TABS() : PAR_TABS().filter(([id]) => id !== 'vues' && id !== 'auto' && id !== 'maj' && id !== 'entites');
   // Automatisations : état optimiste local (id → on/off) au-dessus de hass.
   const [autoOv, setAutoOv] = useState({});
   // Signature des états automation.* → purge l'override optimiste dès que HA confirme (ou change depuis un autre appareil).

@@ -3711,7 +3711,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   const extPiece = pieces.find(p => p.status && p.status.kind === 'ext'); // Extérieur → ouvert via la chip météo
   const avatars = (a && a.people) ? a.people.map(p => ({ img: p.img, title: `${p.name} · ${p.home ? tr('Présent') : 'Absent'}`, dim: !p.home })) : [{ grad: 'linear-gradient(135deg,#f472b6,var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,#ffb347,#f87171)' }];
   // HA absent → vitrine de demo ; HA present sans camera → aucune camera, pas d'exemple
-  const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => ({ label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: CAMERAS()[i % CAMERAS().length].grad, glow: CAMERAS()[i % CAMERAS().length].glow, sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: cam.online ? 'var(--o-ok)' : '#f87171' }} />{cam.online ? 'Direct' : 'Hors ligne'}</>), haid: cam.haid, online: cam.online, hass: a.hass })) : CAMERAS;
+  const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => ({ label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: CAMERAS()[i % CAMERAS().length].grad, glow: CAMERAS()[i % CAMERAS().length].glow, sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: cam.online ? 'var(--o-ok)' : '#f87171' }} />{cam.online ? 'Direct' : 'Hors ligne'}</>), haid: cam.haid, online: cam.online, hass: a.hass })) : CAMERAS();
   const _dWallE = { label: tr('Aspirateur'), iconKey: 'vacuum', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
   const _dLuba = { label: tr('Tondeuse'), iconKey: 'mower', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
   const _dLv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase: tr('Éteint'), color: '#94a3b8', active: false, valueIcon: 'timer', valueText: '--:--', bar: null };
@@ -8699,7 +8699,7 @@ export default function App() {
   const onTopOffset = (d) => setTopOffset(v => { const base = v != null ? v : safeTopAuto; const nv = Math.max(0, Math.min(100, base + d)); try { localStorage.setItem('loggia-topoffset', String(nv)); } catch (e) {} return nv; });
   const onTopSet = (px) => setTopOffset(() => { const nv = Math.max(0, Math.min(100, Math.round(px))); try { localStorage.setItem('loggia-topoffset', String(nv)); } catch (e) {} return nv; });
   const onTopOffsetReset = () => { setTopOffset(null); try { localStorage.removeItem('loggia-topoffset'); } catch (e) {} };
-  const [users, setUsers] = useState(() => { const withK = withUserKeys; try { const s = localStorage.getItem('loggia_users'); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length) return withK(a); } } catch (e) {} return withK(FIRST_USER); });
+  const [users, setUsers] = useState(() => { const withK = withUserKeys; try { const s = localStorage.getItem('loggia_users'); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length) return withK(a); } } catch (e) {} return withK(FIRST_USER()); });
   // `cfgSet` ecrit le serveur ET le localStorage. Avec le seul localStorage,
   // les profils restaient prisonniers de l'appareil qui les avait crees.
   const persistUsers = (a) => { try { cfgSet({ loggia_users: a }); } catch (e) {} setUsers(a); };
