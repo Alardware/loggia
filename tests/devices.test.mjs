@@ -160,3 +160,24 @@ test('sans index, aucune supposition', () => {
   assert.equal(buildDevices(null).size, 0);
   assert.equal(buildDevices({}).size, 0);
 });
+
+test('une entité sans valeur publiée n’est pas une panne', () => {
+  /* `unknown` dit qu'aucune valeur n'a encore été publiée — un bouton jamais
+   * pressé, un événement qui n'a pas tiré. Le confondre avec `unavailable`
+   * rendait « hors ligne » des appareils qui vont très bien, et déclarait la
+   * moitié de l'installation en panne juste après un redémarrage. */
+  const { index, states } = maison({
+    devices: [device('d1', 'Sonnette')],
+    entities: [
+      entity('button.sonnette', { device: 'd1' }),
+      entity('event.appui', { device: 'd1' }),
+    ],
+    states: etats(
+      state('button.sonnette', 'unknown'),
+      state('event.appui', 'unknown'),
+    ),
+  });
+  const d = buildDevices(index, states).get('d1');
+  assert.equal(d.unavailable, 0, 'aucune de ces entités n’est muette');
+  assert.equal(d.available, true, 'l’appareil répond');
+});

@@ -18,8 +18,21 @@
 
 const domaineDe = (id) => (typeof id === 'string' ? id.slice(0, id.indexOf('.')) : '');
 
-/** Une entité absente, indisponible ou d'état inconnu ne prouve rien. */
-const repond = (st) => !!(st && st.state != null && st.state !== 'unavailable' && st.state !== 'unknown');
+/* Une entité muette, c'est `unavailable` — et rien d'autre.
+ *
+ * `unknown` dit seulement qu'aucune valeur n'a encore été publiée : un bouton
+ * jamais pressé, une scène jamais activée, un événement qui n'a pas tiré. Le
+ * compter comme une panne rendait « hors ligne » des appareils qui vont très
+ * bien — une télécommande, une sonnette — et, juste après un redémarrage de Home
+ * Assistant, une bonne part de l'installation.
+ *
+ * `health.js` fait déjà cette distinction (`estMuette` / `estSansValeur`) tout
+ * en consommant `d.available` : les deux se contredisaient, et le diagnostic
+ * annonçait des pannes qui n'existaient pas.
+ *
+ * Une entité absente du tout ne prouve toujours rien.
+ */
+const repond = (st) => !!(st && st.state != null && st.state !== 'unavailable');
 
 /**
  * Les appareils de l'installation, chacun avec ce qui lui appartient.
