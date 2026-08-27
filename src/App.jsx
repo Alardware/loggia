@@ -2780,14 +2780,18 @@ function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = 'cover' 
   const token = hass && hass.auth && hass.auth.data ? hass.auth.data.access_token : null;
   useEffect(() => {
     if (!haid || !token) { setSrc(null); return; }
-    let alive = true, last = null;
+    let alive = true, last = null, tour = 0;
     const endpoint = kind === 'image' ? 'image_proxy' : 'camera_proxy';
     const fetchSnap = async () => {
+      /* Chaque appel porte son numero. Sur une camera lente, la reponse d'un
+       * tour ancien arrivait apres une plus recente et remontait une image
+       * perimee a l'ecran ; les vignettes semblaient reculer dans le temps. */
+      const mien = ++tour;
       try {
         const res = await fetch(`/api/${endpoint}/${haid}`, { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const blob = await res.blob();
-        if (!alive) return;
+        if (!alive || mien !== tour) return;
         const url = URL.createObjectURL(blob);
         if (last) URL.revokeObjectURL(last);
         last = url; setSrc(url);
@@ -2870,8 +2874,16 @@ function CamLive({ hass, haid, online = true }) {
     const startRtc = async () => {
       if (typeof RTCPeerConnection === 'undefined') return false;
       let sessionId = null, gotTrack = false, unsub = null;
-      const pc = new RTCPeerConnection({ iceServers: await iceServers(conn, haid) });
+      /* La configuration ICE arrive du serveur : entre la demande et la reponse,
+       * le composant peut avoir ete demonte. Sans cette garde, le nettoyage
+       * passait alors que `cleanupRtc` valait encore `null`, puis l'execution
+       * reprenait ici et ouvrait une connexion que plus personne ne fermait.
+       * Changer de vue rapidement accumulait sessions et sockets. */
+      const glacons = await iceServers(conn, haid);
+      if (cancelled) return false;
+      const pc = new RTCPeerConnection({ iceServers: glacons });
       cleanupRtc = () => { try { unsub && unsub(); } catch {} try { pc.close(); } catch {} };
+      if (cancelled) { cleanupRtc(); cleanupRtc = null; return false; }
       try { pc.addTransceiver('video', { direction: 'recvonly' }); pc.addTransceiver('audio', { direction: 'recvonly' }); } catch {}
       pc.addEventListener('track', (e) => { if (cancelled) return; gotTrack = true; if (vidRef.current && e.streams && e.streams[0]) { vidRef.current.srcObject = e.streams[0]; setMode('video'); vidRef.current.play && vidRef.current.play().catch(() => {}); } });
       pc.addEventListener('icecandidate', (e) => { if (cancelled || !sessionId || !e.candidate) return; conn.sendMessagePromise({ type: 'camera/webrtc/candidate', entity_id: haid, session_id: sessionId, candidate: { candidate: e.candidate.candidate, sdpMLineIndex: e.candidate.sdpMLineIndex, sdpMid: e.candidate.sdpMid } }).catch(() => {}); });
@@ -8112,10 +8124,28 @@ export default function App() {
     window.addEventListener('loggia-langue-prete', f);
     return () => window.removeEventListener('loggia-langue-prete', f);
   }, []);
-  // Resolution memoisee : le parcours des entites ne doit pas tourner a chaque rendu.
+  /* Resolution memoisee : le parcours des entites ne doit pas tourner a chaque
+   * rendu. Mais il LIT `hass.states`, et n'en dependait pas : une entite
+   * devenue `unavailable`, supprimee ou revenue laissait la resolution — donc
+   * la disponibilite des vues — figee sur l'etat du premier rendu.
+   *
+   * La signature ne retient que ce qui compte ici : quelles entites existent et
+   * lesquelles repondent. Elle ignore les valeurs, qui changent sans arret et
+   * relanceraient le calcul pour rien. */
+  const S_RT = (hass && hass.states) || null;
+  const sigEntites = useMemo(() => {
+    if (!S_RT) return '';
+    const cles = Object.keys(S_RT).sort();
+    let vivantes = 0;
+    for (let i = 0; i < cles.length; i++) {
+      const e = S_RT[cles[i]];
+      if (e && e.state !== 'unavailable' && e.state !== 'unknown') vivantes++;
+    }
+    return cles.length + ':' + vivantes + ':' + sigHash(cles.join(','));
+  }, [S_RT]);
   const loggiaRuntime = useMemo(
     () => buildRuntime({ discovery, userCfg: serverCfg, states: (getHass() || {}).states || {} }),
-    [discovery.ready, discovery.caps, serverCfg]
+    [discovery.ready, discovery.caps, serverCfg, sigEntites]
   );
   setLoggiaState({ resolved: loggiaRuntime.resolved || null });
   // Ecriture d'un reglage : serveur si le composant repond, localStorage sinon.
@@ -8449,6 +8479,15 @@ export default function App() {
   const onFollowHa = () => setHaTheme(h => h === 'FOLLOW' ? '' : 'FOLLOW');
   const toggle = () => { setHaTheme(''); setThemeMode(m => m === 'light' ? 'dark' : 'light'); }; // bouton flottant = bascule clair/foncé Loggia
   const [navOpen, setNavOpen] = useState(() => { try { return (typeof window !== 'undefined' ? window.innerWidth : 1000) > 820; } catch (e) { return true; } });
+  /* Le menu mobile se fermait au clic sur le voile, mais rien au clavier :
+   * qui l'ouvre sans souris y restait enferme. Trois autres panneaux geraient
+   * deja Echap, celui-ci avait ete oublie. */
+  useEffect(() => {
+    if (!navOpen) return undefined;
+    const surTouche = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setNavOpen(false); } };
+    window.addEventListener('keydown', surTouche);
+    return () => window.removeEventListener('keydown', surTouche);
+  }, [navOpen]);
   const [navbar, setNavbar] = useState(() => { try { return localStorage.getItem('loggia-navbar') !== '0'; } catch (e) { return true; } }); // barre du bas mobile (défaut activée)
   // Fonds animés de l'Accueil : effets météo (défaut activés) et ciel étoilé en remplacement de « nuit claire » (défaut activé)
   const [wxFx, setWxFx] = useState(() => { try { return localStorage.getItem('loggia-wxfx') !== '0'; } catch (e) { return true; } });

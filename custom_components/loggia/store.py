@@ -17,6 +17,7 @@ Voir websocket_api.py.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -69,6 +70,19 @@ def est_personnelle(key: str) -> bool:
 MAX_KEYS_PER_USER = 128
 MAX_VALUE_BYTES = 256 * 1024
 MAX_TOTAL_BYTES = 1024 * 1024
+
+
+def _taille(contenu: dict) -> int:
+    """Poids JSON d'un dictionnaire de reglages, en octets.
+
+    Sert a mesurer ce qui est CONSERVE, pas ce qui arrive : une suite de petites
+    requetes acceptees une a une peut laisser un fichier enorme.
+    """
+    try:
+        return len(json.dumps(contenu, ensure_ascii=False).encode("utf-8"))
+    except (TypeError, ValueError):
+        # Non serialisable : la sauvegarde echouera de toute facon plus loin.
+        return 0
 
 
 class LoggiaStore:
@@ -264,6 +278,18 @@ class LoggiaStore:
             raise ValueError(
                 f"trop de cles ({max(len(perso), len(commun))} > {MAX_KEYS_PER_USER})"
             )
+
+        # Le plafond de taille ne portait que sur la requete recue. Apres fusion,
+        # seul le NOMBRE de cles etait verifie : 128 cles de 256 Kio ecrites en
+        # requetes separees passaient une a une et laissaient un fichier de
+        # 32 Mio, resserialise et reecrit a chaque reglage modifie. Le volume
+        # conserve se mesure donc ici, apres fusion, et non a l'entree.
+        for nom, contenu in (("compte", perso), ("commun", commun)):
+            taille = _taille(contenu)
+            if taille > MAX_TOTAL_BYTES:
+                raise ValueError(
+                    f"stockage {nom} trop volumineux ({taille} > {MAX_TOTAL_BYTES} octets)"
+                )
 
         data["users"][user_id] = perso
         data["shared"] = commun
