@@ -69,8 +69,11 @@ export function resolveVacuum({ index, caps, states = {}, userCfg = {} } = {}) {
     map: pick('map', { domain: 'image' }) || pickSibling(index, states, main.id, { domain: 'camera' }),
     // Capteurs sans device_class : unite d'abord, motif generique en dernier
     // recours (aucun nom d'appareil dans le motif).
-    area_cleaned: pick('area_cleaned', { domain: 'sensor', unit: 'm²' }),
-    duration: pick('duration', { domain: 'sensor', unit: 'min' }),
+    /* Les unites observees sur un robot ne sont pas les seules possibles : une
+     * installation en mesures imperiales publie des pieds carres, et plus d'une
+     * integration donne la duree en heures ou en secondes. */
+    area_cleaned: pick('area_cleaned', { domain: 'sensor', unit: ['m²', 'm2', 'ft²', 'sq ft'] }),
+    duration: pick('duration', { domain: 'sensor', unit: ['min', 'h', 's'] }),
     status: pick('status', { domain: 'sensor', match: /_(status|state|etat)$/ }),
   };
 }
@@ -383,9 +386,19 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
  * Fonctionne avec System Monitor (integre a Home Assistant), Glances, Unraid,
  * UniFi ou tout autre integration qui publie ces capteurs.
  */
-const CPU_RE = /(processor_use|utilisation_cpu|cpu_utilization|cpu_use|_cpu$|_cpu_)/;
-const MEM_RE = /(memory_use_percent|utilisation_de_la_memoire|memory_utilization|_memoire|_memory)/;
-const DISK_RE = /(disk_use_percent|utilisation_disque|utilisation_du_disque|storage_utilization|_disk|_disque)/;
+/* Home Assistant fabrique l'identifiant d'une entite a partir de son nom
+ * TRADUIT : System Monitor installe en allemand publie `_speicher`, en
+ * espagnol `_memoria`. Le processeur s'en tire — le sigle CPU ne se traduit
+ * nulle part, et `_cpu` suffit a retrouver l'appareil. La memoire et le disque,
+ * eux, ne repondaient qu'en anglais et en francais : la machine apparaissait,
+ * ses deux jauges restaient vides.
+ *
+ * Ces motifs resteront toujours un pis-aller : Home Assistant ne publie aucune
+ * `device_class` pour « occupation memoire ». On couvre donc les racines des
+ * langues les plus repandues, en gardant des morceaux courts et distinctifs. */
+const CPU_RE = /(processor_use|utilisation_cpu|cpu_utilization|cpu_use|_cpu$|_cpu_|prozessor)/;
+const MEM_RE = /(memory_use_percent|utilisation_de_la_memoire|memory_utilization|_memoire|_memory|_speicher|_memoria|_geheugen|_minne)/;
+const DISK_RE = /(disk_use_percent|utilisation_disque|utilisation_du_disque|storage_utilization|_disk|_disque|_festplatte|_speicherplatz|_disco|_schijf)/;
 
 export function resolveSystem({ index, states = {}, userCfg = {} } = {}) {
   const cfg = (userCfg && typeof userCfg.loggia_system === 'object' && userCfg.loggia_system) || null;

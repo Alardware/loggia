@@ -308,7 +308,12 @@ export function pickSibling(index, states, entityId, { domain, deviceClass, unit
     if (domain && domainOf(id) !== domain) return false;
     const a = (states[id] && states[id].attributes) || {};
     if (deviceClass && a.device_class !== deviceClass) return false;
-    if (unit && a.unit_of_measurement !== unit) return false;
+    // `unit` accepte une liste : la meme grandeur se publie sous plusieurs
+    // unites selon l'installation — des pieds carres en mesures imperiales, une
+    // duree en heures ou en secondes selon l'integration.
+    if (unit && (Array.isArray(unit)
+      ? unit.indexOf(a.unit_of_measurement) < 0
+      : a.unit_of_measurement !== unit)) return false;
     if (match && !match.test(id)) return false;
     return true;
   };

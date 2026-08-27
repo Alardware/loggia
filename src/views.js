@@ -87,8 +87,10 @@ export function viewAvailability(ctx) {
   const cfg = (d) => configLive(userCfg, d, states);
   const out = {};
 
-  out.accueil = OK;
-  out.parametres = OK;
+  // `VIEW_ALWAYS` existait, exportee, et personne ne la lisait : ces deux vues
+  // etaient recopiees ici a la main. Deux endroits pour une meme verite, dont
+  // l'un pouvait derive sans que l'autre le sache.
+  VIEW_ALWAYS.forEach(v => { out[v] = OK; });
 
   const rooms = res.rooms || {};
   const nRooms = (rooms.rooms || []).length || (rooms.suggested || []).length;
