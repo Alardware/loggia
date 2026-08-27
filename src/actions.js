@@ -71,7 +71,14 @@ const PLANS = {
     set_preset_mode: { service: 'set_preset_mode', field: 'preset_mode', kind: 'option', list: 'preset_modes' },
     set_fan_mode: { service: 'set_fan_mode', field: 'fan_mode', kind: 'option', list: 'fan_modes' },
     set_swing_mode: { service: 'set_swing_mode', field: 'swing_mode', kind: 'option', list: 'swing_modes' },
-    set_humidity: { service: 'set_humidity', field: 'humidity', kind: 'pct' },
+    // `pct` bornait a 0-100 en dur, alors qu'un deshumidificateur accepte
+    // typiquement 30 a 99 : une consigne sous le minimum partait quand meme,
+    // pour se faire refuser par l'appareil, et `bounds` revenait vide — une
+    // interface qui dessine son curseur d'apres lui proposait donc 0-100.
+    set_humidity: {
+      service: 'set_humidity', field: 'humidity', kind: 'range',
+      bounds: { min: 'min_humidity', max: 'max_humidity' },
+    },
   },
   water_heater: {
     set_temperature: {
@@ -351,9 +358,19 @@ export function availableActions(entityId, ctx = {}) {
   const caps = entityCaps(entityId, st, ctx.services || null);
   const out = new Map();
   caps.can.forEach(c => {
-    // Une valeur d'essai plausible : elle ne sert qu'à valider la traduction,
-    // pas à être envoyée. Les commandes à option restent testées à vide, et
-    // leur refus est légitime — c'est bien qu'aucune option n'est publiée.
+    /* Valeur d'essai neutre : elle ne sert qu'a valider la traduction, pas a
+     * etre envoyee.
+     *
+     * Les commandes a option et a couleur sont donc absentes de cette carte —
+     * `0` n'appartient a aucune liste et n'est pas un triplet. C'est VOULU et
+     * verifie par les tests : choisir un mode a la place de l'utilisateur ne
+     * regarde pas le moteur, c'est a la vue de proposer la liste que l'entite
+     * publie. Cette carte repond « ce geste aboutirait tel quel », pas « cette
+     * capacite existe » — `entityCaps` est la pour cela.
+     *
+     * A ne pas relire comme un defaut : le commentaire precedent attribuait
+     * cette absence a une entite muette, ce qui etait faux et invitait a
+     * « corriger » une intention. */
     const p = planAction(entityId, c, 0, ctx);
     if (p.ok) out.set(c, p);
   });
