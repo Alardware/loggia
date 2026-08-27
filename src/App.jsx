@@ -8131,18 +8131,28 @@ export default function App() {
    *
    * La signature ne retient que ce qui compte ici : quelles entites existent et
    * lesquelles repondent. Elle ignore les valeurs, qui changent sans arret et
-   * relanceraient le calcul pour rien. */
-  const S_RT = (hass && hass.states) || null;
-  const sigEntites = useMemo(() => {
-    if (!S_RT) return '';
-    const cles = Object.keys(S_RT).sort();
+   * relanceraient le calcul pour rien.
+   *
+   * `getHass()` et non `hass` : la variable locale n'est declaree que 270 lignes
+   * plus bas, parce que les cles a surveiller dependent justement du runtime
+   * calcule ici. La lire d'en haut tombait dans sa zone morte et le dashboard
+   * ne s'affichait plus du tout.
+   *
+   * Deux comptes suffisent : combien d'entites existent, combien repondent. Un
+   * echange exact dans la meme synchronisation — une entite part, une autre
+   * arrive — passerait inapercu jusqu'au changement suivant ; trier ou hacher
+   * les cles a chaque rendu couterait plus cher que ce cas ne le merite. */
+  const sigEntites = (() => {
+    const S = (getHass() || {}).states;
+    if (!S) return '';
+    const cles = Object.keys(S);
     let vivantes = 0;
     for (let i = 0; i < cles.length; i++) {
-      const e = S_RT[cles[i]];
+      const e = S[cles[i]];
       if (e && e.state !== 'unavailable' && e.state !== 'unknown') vivantes++;
     }
-    return cles.length + ':' + vivantes + ':' + sigHash(cles.join(','));
-  }, [S_RT]);
+    return cles.length + ':' + vivantes;
+  })();
   const loggiaRuntime = useMemo(
     () => buildRuntime({ discovery, userCfg: serverCfg, states: (getHass() || {}).states || {} }),
     [discovery.ready, discovery.caps, serverCfg, sigEntites]

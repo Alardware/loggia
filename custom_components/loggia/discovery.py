@@ -105,9 +105,13 @@ def _appareils(hass: HomeAssistant) -> list[dict[str, Any]]:
         sortie.append({
             "id": d.id,
             "name": d.name_by_user or d.name,
+            # Fabricant et modele restent : ils servent a reconnaitre l'appareil
+            # (voir profiles.js). La VERSION DE FIRMWARE, elle, ne servait a
+            # personne — recopiee, jamais relue — et c'etait le champ le plus
+            # exploitable de la reponse : une version exacte designe les failles
+            # publiees qui s'y appliquent. Elle ne sort plus d'ici.
             "manufacturer": d.manufacturer,
             "model": d.model,
-            "firmware": d.sw_version,
             "integration": integration,
             "area": d.area_id,
             "via": d.via_device_id,
@@ -116,12 +120,35 @@ def _appareils(hass: HomeAssistant) -> list[dict[str, Any]]:
     return sortie
 
 
+def _lecture_autorisee(user: Any) -> Any:
+    """Renvoie un test `(entity_id) -> bool`, ou None si tout est permis.
+
+    Home Assistant sait restreindre un compte a certaines entites. Cette
+    decouverte l'ignorait : un administrateur pouvait limiter quelqu'un, Loggia
+    lui renvoyait quand meme le registre entier. Le filtre s'appuie sur la
+    politique du compte, jamais sur un champ envoye par le client.
+
+    Sans restriction configuree — le cas de presque toutes les installations —
+    `permissions` autorise tout et l'on renvoie None : aucun parcours
+    supplementaire, aucun changement de comportement.
+    """
+    if user is None or getattr(user, "is_admin", False):
+        return None
+    perms = getattr(user, "permissions", None)
+    verif = getattr(perms, "check_entity", None)
+    if verif is None:
+        return None
+    return lambda entity_id: bool(verif(entity_id, "read"))
+
+
 @callback
-def _entites(hass: HomeAssistant) -> list[dict[str, Any]]:
+def _entites(hass: HomeAssistant, autorise: Any = None) -> list[dict[str, Any]]:
     reg = er.async_get(hass)
     sortie = []
     for e in reg.entities.values():
         if e.disabled_by is not None:
+            continue
+        if autorise is not None and not autorise(e.entity_id):
             continue
         sortie.append({
             "id": e.entity_id,
@@ -164,8 +191,15 @@ def _services(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
 
 
 @callback
-def async_index(hass: HomeAssistant) -> dict[str, Any]:
-    """Tout ce dont le dashboard a besoin pour se construire, en un envoi."""
+def async_index(hass: HomeAssistant, user: Any = None) -> dict[str, Any]:
+    """Tout ce dont le dashboard a besoin pour se construire, en un envoi.
+
+    `user` est le compte de la connexion WebSocket, quand l'appelant le connait.
+    Il ne sert qu'a retirer ce que ce compte n'a pas le droit de lire ; il n'est
+    jamais lu depuis un message du client. Omis, la reponse est complete — c'est
+    ce que font les tests et ce qui se passait avant.
+    """
+    autorise = _lecture_autorisee(user)
     try:
         return {
             "version": INDEX_VERSION,
@@ -175,7 +209,7 @@ def async_index(hass: HomeAssistant) -> dict[str, Any]:
             "areas": _zones(hass),
             "floors": _etages(hass),
             "devices": _appareils(hass),
-            "entities": _entites(hass),
+            "entities": _entites(hass, autorise),
             "services": _services(hass),
         }
     except Exception:  # noqa: BLE001 — un registre illisible ne doit pas priver
