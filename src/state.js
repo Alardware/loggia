@@ -9,6 +9,8 @@
  * App reste seul a les ECRIRE, via `setLoggiaState`. Les vues ne font que lire.
  */
 
+import { LOCAL_ONLY_KEYS } from './config.js';
+
 /** Index de la decouverte : zones, appareils, entites. */
 export let LOGGIA_INDEX = null;
 /** `loggia_entities` de l'utilisateur courant. */
@@ -294,12 +296,28 @@ export async function exportConfigComplete() {
       serveur = (r && r.config) || {};
     } catch (e) { serveur = {}; }
   }
-  // Le stockage local complete : une cle jamais synchronisee n'existe que la.
+  /* Le stockage local complete : une cle jamais synchronisee n'existe que la.
+   *
+   * Sauf les cles purement locales. Le code PIN administrateur repond au motif
+   * `loggia_`, le serveur ne l'a jamais — donc `serveur[k] === undefined` — et il
+   * atterrissait en clair dans le fichier exporte : celui que l'on envoie au
+   * support ou que l'on passe a un autre appareil. `config.js` fait ce filtre
+   * depuis toujours, il manquait ici. Le composant Python refusait bien la cle a
+   * l'enregistrement, mais le mal etait fait : lue, ecrite, transmise.
+   *
+   * Les valeurs locales sont aussi decodees : elles sortent de `localStorage`
+   * sous forme de chaine, alors que celles du serveur arrivent deja converties.
+   * Melangees telles quelles, un `loggia_rooms` local revenait a l'import en JSON
+   * double-encode — `normRooms` n'y voyait plus un tableau et rendait la main a
+   * la decouverte. Pieces, lecteurs et vues personnalisees disparaissaient.
+   */
   const local = {};
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (/^loggia[_-]/.test(k) && serveur[k] === undefined) local[k] = localStorage.getItem(k);
+      if (!/^loggia[_-]/.test(k) || LOCAL_ONLY_KEYS.has(k) || serveur[k] !== undefined) continue;
+      const brut = localStorage.getItem(k);
+      try { local[k] = JSON.parse(brut); } catch (e) { local[k] = brut; }
     }
   } catch (e) { /* stockage indisponible : l'export reste valable */ }
   return JSON.stringify({
@@ -331,8 +349,12 @@ export async function importConfigComplete(txt) {
     const purge = {};
     Object.keys((actuelle && actuelle.config) || {}).forEach(k => { purge[k] = null; });
     if (Object.keys(purge).length) await h.callWS({ type: 'loggia/config/set', config: purge });
+    // Une cle purement locale ne remonte jamais au serveur, meme si un
+    // fichier ancien — ou bricole a la main — en contient une.
     const aEcrire = {};
-    Object.keys(config).forEach(k => { if (config[k] != null) aEcrire[k] = config[k]; });
+    Object.keys(config).forEach(k => {
+      if (config[k] != null && !LOCAL_ONLY_KEYS.has(k)) aEcrire[k] = config[k];
+    });
     if (Object.keys(aEcrire).length) await h.callWS({ type: 'loggia/config/set', config: aEcrire });
   }
   try {
