@@ -1998,7 +1998,19 @@ function RoomNav({ room, onNav, hass }) {
   useEffect(() => {
     const w = wrapRef.current; if (!w) return;
     const el = w.querySelector('[data-room-active="1"]');
-    if (el) { try { el.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: REDUCE_MOTION ? 'auto' : 'smooth' }); } catch (e) {} }
+    if (!el) return;
+    /* Defiler la BARRE, jamais la page.
+     *
+     * `scrollIntoView` fait defiler TOUS les ancetres scrollables, y compris
+     * le document — et `block: 'nearest'` n'y change rien des que l'element
+     * sort du champ. Cette barre etant en haut de la vue, tout redeclenchement
+     * de l'effet ramenait l'utilisateur en haut de page. Or il se redeclenche
+     * a chaque changement de configuration, `rooms` etant reconstruit.
+     *
+     * On pose donc `scrollLeft` a la main : la barre bouge, la page reste. */
+    const cible = el.offsetLeft - (w.clientWidth - el.offsetWidth) / 2;
+    try { w.scrollTo({ left: Math.max(0, cible), behavior: REDUCE_MOTION ? 'auto' : 'smooth' }); }
+    catch (e) { w.scrollLeft = Math.max(0, cible); }
   }, [room]);
   return (
     <div ref={wrapRef} className="o-room-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, minWidth: 0 }}>
@@ -2024,7 +2036,18 @@ function RoomChips({ rooms, room, onNav }) {
     const el = w.querySelector('[data-room-active="1"]');
     if (!el) { setPill(null); return; }
     setPill({ x: el.offsetLeft, w: el.offsetWidth, h: el.offsetHeight });
-    try { el.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: REDUCE_MOTION ? 'auto' : 'smooth' }); } catch (e) {}
+    /* Defiler la BARRE, jamais la page.
+     *
+     * `scrollIntoView` fait defiler TOUS les ancetres scrollables, y compris
+     * le document — et `block: 'nearest'` n'y change rien des que l'element
+     * sort du champ. Cette barre etant en haut de la vue, tout redeclenchement
+     * de l'effet ramenait l'utilisateur en haut de page. Or il se redeclenche
+     * a chaque changement de configuration, `rooms` etant reconstruit.
+     *
+     * On pose donc `scrollLeft` a la main : la barre bouge, la page reste. */
+    const cible = el.offsetLeft - (w.clientWidth - el.offsetWidth) / 2;
+    try { w.scrollTo({ left: Math.max(0, cible), behavior: REDUCE_MOTION ? 'auto' : 'smooth' }); }
+    catch (e) { w.scrollLeft = Math.max(0, cible); }
   }, [room, rooms.join('|')]);
   return (
     <div ref={wrapRef} className="o-room-scroll" style={{ position: 'relative', display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
@@ -7235,19 +7258,32 @@ const SYS_SLOTS = ['host', 'nebula', 'ucg'];
 // Trois emplacements de machine, remplis par la configuration, sinon par ce que
 // la découverte a trouvé, sinon par les constantes. Un emplacement sans machine
 // reste vide : la vue affiche alors « — » partout et la carte se dit hors ligne.
+/* Les trois emplacements existent TOUJOURS, meme vides.
+ *
+ * On renvoyait `{}` quand rien n'etait connu, et `SYS.host.cpu` levait alors
+ * une exception qui emportait la vue entiere. Le defaut ne se voyait pas tant
+ * qu'on ouvrait forcement sur l'Accueil : le temps d'atteindre Systeme, la
+ * decouverte avait repondu. Depuis que la vue courante survit au rechargement,
+ * on peut arriver ici avant elle — et l'ecran d'erreur remplacait le dashboard.
+ *
+ * Un emplacement vide se lit tres bien : chaque valeur vaut alors `undefined`,
+ * `num()` rend `null`, et la carte affiche des tirets en se disant hors ligne.
+ * C'est exactement ce que le commentaire de `SYS_SLOTS` promet. */
+const SYS_VIDE = () => ({ host: {}, nebula: {}, ucg: {} });
+
 function sysSensors() {
   const cfg = loggiaEnt('system', null);
-  if (cfg && typeof cfg === 'object') return cfg;
+  if (cfg && typeof cfg === 'object') return { ...SYS_VIDE(), ...cfg };
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.system;
   if (r && r.available && r.hosts.length) {
-    const out = {};
+    const out = SYS_VIDE();
     SYS_SLOTS.forEach((k, i) => {
       const h = r.hosts[i];
       out[k] = h ? { cpu: h.cpu, memPct: h.memPct, mem: h.memPct, disk: h.disk, temp: h.temp, uptime: h.uptime, online: h.online, clients: h.clients } : {};
     });
     return out;
   }
-  return {};
+  return SYS_VIDE();
 }
 // Nom affiché de chaque emplacement : celui de l'appareil Home Assistant quand
 // c'est la découverte qui a rempli l'emplacement, sinon le libellé historique.
@@ -8357,9 +8393,27 @@ export default function App() {
    * appartient a cet onglet et a ce moment. Un onglet neuf, ou Loggia rouvert
    * le lendemain, doit s'ouvrir sur l'accueil — pas sur la vue Croquettes
    * quittee l'avant-veille. */
-  const [view, setView] = useState(() => {
-    try { return window.sessionStorage.getItem('loggia-vue') || 'accueil'; } catch (e) { return 'accueil'; }
-  });
+  const [view, setView] = useState('accueil');
+  /* La vue memorisee n'est reprise QU'UNE FOIS LES DONNEES LA.
+   *
+   * L'ouvrir des le premier rendu paraissait plus direct, mais plusieurs vues
+   * lisent leur configuration sans se demander si elle existe deja : Lumieres,
+   * Climat, Ouverture et Medias levaient une exception et l'ecran d'erreur
+   * remplacait le dashboard. Ces vues ne supportaient pas d'etre montees a
+   * froid — on ne s'en apercevait pas parce qu'on arrivait forcement par
+   * l'accueil, le temps que la decouverte reponde.
+   *
+   * Attendre reproduit exactement ce trajet : on repasse par l'accueil pendant
+   * un instant, puis on revient ou l'on etait. */
+  const repriseRef = useRef(false);
+  useEffect(() => {
+    if (repriseRef.current || !loggiaRuntime.ready) return;
+    repriseRef.current = true;
+    try {
+      const v = window.sessionStorage.getItem('loggia-vue');
+      if (v && v !== 'accueil') setView(v);
+    } catch (e) { /* stockage indisponible : on reste sur l'accueil */ }
+  }, [loggiaRuntime.ready]);
   useEffect(() => {
     try { window.sessionStorage.setItem('loggia-vue', view); } catch (e) { /* stockage indisponible */ }
   }, [view]);
