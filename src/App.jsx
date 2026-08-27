@@ -2798,6 +2798,39 @@ function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = 'cover' 
   return <img src={src} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit }} />;
 }
 
+/**
+ * Les serveurs ICE, demandes a Home Assistant.
+ *
+ * Un `stun:stun.l.google.com` etait ecrit ici en dur. Sur le reseau local cela
+ * ne se voyait pas : les deux extremites sont sur le meme reseau, les candidats
+ * « host » suffisent et aucun serveur n'est consulte. Depuis l'exterieur, en
+ * revanche, il faut traverser deux NAT — et un STUN ne sert qu'a decouvrir sa
+ * propre adresse publique, il ne relaie rien. Sans TURN la negociation
+ * echouait, la camera restait noire, et l'interface de Home Assistant affichait
+ * pourtant le flux : elle, elle demande sa configuration.
+ *
+ * `camera/webrtc/get_client_config` repond ce que l'installation a de mieux —
+ * chez l'auteur, les STUN de Home Assistant et de Cloudflare, et surtout deux
+ * TURN avec identifiants, dont un joignable en TLS sur le port 443.
+ *
+ * Le tableau vide est un repli volontaire : une version de Home Assistant qui
+ * ignore cette commande n'a pas de WebRTC non plus, et sur un reseau local on
+ * se connecte tres bien sans aucun serveur. Coder un service public en dur
+ * serait doublement fautif — le projet s'interdit toute ressource externe, et
+ * cela reviendrait a annoncer l'adresse publique de l'utilisateur a un tiers
+ * qu'il n'a pas choisi.
+ */
+async function iceServers(conn, haid) {
+  if (!conn) return [];
+  try {
+    const r = await conn.sendMessagePromise({ type: 'camera/webrtc/get_client_config', entity_id: haid });
+    const s = r && r.configuration && r.configuration.iceServers;
+    return Array.isArray(s) ? s : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 // ── Lecteur caméra LIVE (porté de V1) : WebRTC → HLS natif → MJPEG signé → snapshot ──
 function CamLive({ hass, haid, online = true }) {
   const vidRef = useRef(null);
@@ -2834,7 +2867,7 @@ function CamLive({ hass, haid, online = true }) {
     const startRtc = async () => {
       if (typeof RTCPeerConnection === 'undefined') return false;
       let sessionId = null, gotTrack = false, unsub = null;
-      const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      const pc = new RTCPeerConnection({ iceServers: await iceServers(conn, haid) });
       cleanupRtc = () => { try { unsub && unsub(); } catch {} try { pc.close(); } catch {} };
       try { pc.addTransceiver('video', { direction: 'recvonly' }); pc.addTransceiver('audio', { direction: 'recvonly' }); } catch {}
       pc.addEventListener('track', (e) => { if (cancelled) return; gotTrack = true; if (vidRef.current && e.streams && e.streams[0]) { vidRef.current.srcObject = e.streams[0]; setMode('video'); vidRef.current.play && vidRef.current.play().catch(() => {}); } });
@@ -2849,9 +2882,23 @@ function CamLive({ hass, haid, online = true }) {
           else if (msg.type === 'candidate' && msg.candidate) { try { pc.addIceCandidate(new RTCIceCandidate(typeof msg.candidate === 'string' ? { candidate: msg.candidate, sdpMLineIndex: 0 } : msg.candidate)); } catch {} }
         }, { type: 'camera/webrtc/offer', entity_id: haid, offer: pc.localDescription.sdp });
       } catch (e) { cleanupRtc(); cleanupRtc = null; return false; }
+      /* Quatre secondes suffisent en direct, sur le reseau local. Passer par un
+       * relais TURN en demande davantage : allocation aupres du relais, puis
+       * chaque paquet fait un detour. On accorde donc jusqu'a douze secondes,
+       * mais seulement tant qu'ICE progresse — un etat `failed` ou `closed`
+       * rend la main tout de suite, sans faire attendre le repli. */
       return await new Promise((resolve) => {
-        const t = setTimeout(() => resolve(gotTrack), 4000);
-        const iv = setInterval(() => { if (gotTrack) { clearInterval(iv); clearTimeout(t); resolve(true); } else if (cancelled) { clearInterval(iv); clearTimeout(t); resolve(false); } }, 150);
+        const debut = Date.now();
+        const fini = (v) => { clearInterval(iv); resolve(v); };
+        const iv = setInterval(() => {
+          if (gotTrack) return fini(true);
+          if (cancelled) return fini(false);
+          const et = pc.iceConnectionState;
+          if (et === 'failed' || et === 'closed') return fini(false);
+          const ecoule = Date.now() - debut;
+          const encours = et === 'new' || et === 'checking';
+          if (ecoule > (encours ? 12000 : 4000)) return fini(false);
+        }, 150);
       });
     };
     (async () => { const ok = await startRtc(); if (cancelled) return; if (!ok) { if (cleanupRtc) { try { cleanupRtc(); } catch {} cleanupRtc = null; } await startHls(); } })();
