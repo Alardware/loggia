@@ -12,13 +12,15 @@ import assert from 'node:assert/strict';
 import { viewAvailability, allAvailable, VIEW_IDS } from '../src/views.js';
 
 /** Contexte minimal, de la forme que `buildRuntime` fabrique. */
-function ctx({ has = {}, views = {}, resolved = {}, entities = null, states = {} } = {}) {
+function ctx({ has = {}, views = {}, resolved = {}, entities = null, states = {}, cfg = null } = {}) {
   return {
     ready: true,
     caps: { has, views },
     resolved,
     states,
-    userCfg: entities ? { loggia_entities: entities } : {},
+    // `entities` remplit la forme heritee ; `cfg` pose les cles telles que
+    // l'ecran Parametres les ecrit aujourd'hui.
+    userCfg: { ...(entities ? { loggia_entities: entities } : {}), ...(cfg || {}) },
   };
 }
 
@@ -129,4 +131,32 @@ test('chaque indisponibilite porte un motif lisible', () => {
     assert.equal(typeof r[v].reason, 'string', v + ' : motif manquant');
     assert.ok(r[v].reason.length > 10, v + ' : motif trop court');
   });
+});
+
+test('energie configuree dans Parametres, sans tableau de bord natif', () => {
+  /* La cle que l'ecran Parametres ecrit vraiment est `loggia_energyHaids`.
+   * `configLive` ne regardait que la forme heritee `loggia_entities`, si bien
+   * que designer ses capteurs d'energie dans Loggia ne servait a rien : la vue
+   * restait masquee derriere « le tableau de bord Energie n'est pas configure »
+   * pour qui n'utilise pas celui de Home Assistant. */
+  const r = viewAvailability(ctx({
+    has: { sensor: 4 },
+    views: { energie: true },
+    cfg: { loggia_energyHaids: { grid: 'sensor.compteur', solar: 'sensor.panneaux' } },
+    states: { 'sensor.compteur': {}, 'sensor.panneaux': {} },
+  }));
+  ok(r, 'energie');
+});
+
+test('energie configuree mais entites disparues : la vue reste masquee', () => {
+  /* Une configuration heritee d'une autre installation ne doit pas faire
+   * apparaitre une vue vide : c'est la promesse de `configLive`, et elle vaut
+   * pour la nouvelle forme de cle comme pour l'ancienne. */
+  const r = viewAvailability(ctx({
+    has: { sensor: 4 },
+    views: { energie: true },
+    cfg: { loggia_energyHaids: { grid: 'sensor.parti_ailleurs' } },
+    states: {},
+  }));
+  ko(r, 'energie');
 });
