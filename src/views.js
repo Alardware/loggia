@@ -39,8 +39,35 @@ export function allAvailable() {
  * vraiment : une configuration heritee d'une autre installation ne doit pas
  * faire apparaitre une vue vide.
  */
+/* Les deux endroits ou un domaine peut avoir ete configure.
+ *
+ * `loggia_entities` est la forme heritee : un objet unique portant tous les
+ * domaines. L'ecran Parametres, lui, ecrit une cle par domaine —
+ * `loggia_cameras`, `loggia_energyHaids`… Ne regarder que la premiere revenait a
+ * ignorer tout ce que l'utilisateur saisit aujourd'hui : sa vue Energie restait
+ * annoncee « tableau de bord Energie non configure » alors qu'il venait d'en
+ * designer les capteurs. Miroir de `ENT_ALIAS` dans state.js — les deux doivent
+ * dire la meme chose. */
+const CLES_DOMAINE = {
+  cameras: 'loggia_cameras',
+  people: 'loggia_people',
+  alarm: 'loggia_alarm',
+  switchLights: 'loggia_switchlights',
+  energy: 'loggia_energyHaids',
+  weather: 'loggia_weather',
+  climate: 'loggia_climate',
+  feeder: 'loggia_feeder',
+  system: 'loggia_system',
+  plants: 'loggia_plants',
+  medias: 'loggia_medias',
+  covers: 'loggia_covers',
+  vacuum: 'loggia_vacuum',
+};
+
 function configLive(userCfg, domain, states) {
-  const ent = userCfg && userCfg.loggia_entities && userCfg.loggia_entities[domain];
+  const alias = CLES_DOMAINE[domain];
+  const ent = (alias && userCfg && userCfg[alias])
+    || (userCfg && userCfg.loggia_entities && userCfg.loggia_entities[domain]);
   if (!ent) return false;
   const ids = JSON.stringify(ent).match(/[a-z_]+\.[a-z0-9_]+/g);
   if (!ids || !ids.length) return false;

@@ -328,7 +328,13 @@ export function resolveClimate({ index, caps, states = {}, userCfg = {} } = {}) 
  * restent nulles, et la vue masque simplement ce qu'elle n'a pas.
  */
 export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg = {} } = {}) {
-  const cfg = (userCfg && typeof userCfg.loggia_energy === 'object' && userCfg.loggia_energy) || null;
+  /* `loggia_energyHaids` : le nom que l'ecran Parametres ecrit, et un objet de
+   * la meme forme que celui attendu ici. On lisait `loggia_energy`, jamais
+   * ecrit : la configuration de l'utilisateur ne prenait donc jamais le pas
+   * sur le tableau de bord Energie natif, et son absence masquait la vue
+   * entiere chez qui ne s'en sert pas. */
+  const brut = (userCfg && (userCfg.loggia_energyHaids || userCfg.loggia_energy)) || null;
+  const cfg = (brut && typeof brut === 'object' && Object.keys(brut).length) ? brut : null;
   if (cfg) return { available: true, source: 'utilisateur', haids: cfg, devices: [] };
   const src = (energyPrefs && Array.isArray(energyPrefs.energy_sources)) ? energyPrefs.energy_sources : null;
   if (!src) return { available: false, reason: 'tableau de bord Energie non configure', haids: {}, devices: [] };
@@ -420,7 +426,12 @@ export function resolveSystem({ index, states = {}, userCfg = {} } = {}) {
 export function resolveWeather({ caps, userCfg = {} } = {}) {
   const list = (caps && caps.devices && caps.devices.weather) || [];
   if (!list.length) return { available: false, reason: 'aucune entite meteo' };
-  const chosen = userPick(userCfg, 'loggia_weather_entity');
+  /* `loggia_weather` : c'est le nom que l'ecran Parametres ecrit. On lisait
+   * `loggia_weather_entity`, que personne n'ecrit nulle part — le choix de
+   * l'utilisateur etait donc ignore et `list[0]` s'imposait, ce qui se voit
+   * des qu'une installation declare deux entites meteo. L'ancien nom reste
+   * accepte : une configuration ecrite a la main pourrait le porter. */
+  const chosen = userPick(userCfg, 'loggia_weather') || userPick(userCfg, 'loggia_weather_entity');
   const main = (chosen && list.find(v => v.id === chosen)) || list[0];
   return { available: true, main: main.id, name: main.name, choices: list.map(v => ({ id: v.id, name: v.name })) };
 }
