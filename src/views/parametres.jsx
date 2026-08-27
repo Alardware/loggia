@@ -517,7 +517,20 @@ export function ViewEntSheet({ view, hass, onClose }) {
 }
 
 export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews }) {
-  const [tab, setTab] = useState('hub'); // 'hub' = sommaire des sections (22/08)
+  /* La section ouverte survit au rechargement, comme la vue elle-meme.
+   *
+   * Changer de langue recharge la page : on revenait au sommaire des sections,
+   * alors qu'on venait de regler quelque chose dans Apparence. Retrouver la vue
+   * Parametres ne suffisait pas — il fallait rouvrir la section a la main.
+   *
+   * `hub` reste le point de depart d'un onglet neuf : la memoire est propre a
+   * la session, et on n'ouvre pas Loggia le lendemain au milieu d'un reglage. */
+  const [tab, setTab] = useState(() => {
+    try { return window.sessionStorage.getItem('loggia-par-section') || 'hub'; } catch (e) { return 'hub'; }
+  });
+  useEffect(() => {
+    try { window.sessionStorage.setItem('loggia-par-section', tab); } catch (e) { /* stockage indisponible */ }
+  }, [tab]);
   // Une vue que l'installation ne peut pas remplir se montre ici verrouillée,
   // avec son motif : mieux vaut expliquer que faire disparaître sans un mot.
   const { views: availViews } = useLoggia();
