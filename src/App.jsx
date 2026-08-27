@@ -1392,7 +1392,23 @@ function commander(hass, id, capability, value, champ) {
   const ctx = actionCtx(hass);
   const p = planAction(id, capability, value, ctx);
   if (!p.ok) return null;
-  runPlan(hass, p);
+  /* `runPlan` attrape le rejet pour pouvoir en donner la raison — et l'echec
+   * s'arretait la. L'ecoute globale des rejets, seul canal d'erreur visible du
+   * dashboard, ne voyait donc jamais passer une commande refusee : le toast
+   * « Commande non executee » ne pouvait pas se declencher pour les cinquante et
+   * quelques appels qui passent par ici.
+   *
+   * Le mensonge durait : une carte de volet peint la position demandee, puis
+   * attend que l'etat reel bouge pour se recaler. Refusee, la commande ne fait
+   * bouger personne, et la carte reste sur une position que rien n'a atteinte.
+   *
+   * On relance donc le rejet, sans le traiter, pour que l'ecoute s'en saisisse.
+   * `code` le fait passer le filtre de l'ecouteur. */
+  runPlan(hass, p).then((r) => {
+    if (r && r.ok) return;
+    const motif = (r && r.reason) ? String(r.reason) : 'service';
+    Promise.reject(Object.assign(new Error(motif), { code: 'service_error' }));
+  });
   return champ ? p.data[champ] : (p.data || {});
 }
 
@@ -8421,7 +8437,12 @@ export default function App() {
   const nowOk = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
   if (nowOk) wasConnectedRef.current = true;
   const haLost = wasConnectedRef.current && !nowOk;
-  // Échec de commande : callService rejette sa promesse sans .catch nulle part → écoute globale + toast
+  /* Échec de commande → écoute globale + toast.
+   *
+   * Deux sources aboutissent ici. Les appels directs à `callService`, dont la
+   * promesse rejetée n'est reprise nulle part. Et le moteur d'actions, qui lui
+   * attrape le rejet pour en donner la raison : `commander()` le relance donc à
+   * vide, sinon la moitié des commandes du dashboard échouerait sans un mot. */
   const [toast, setToast] = useState(null);
   const toastTRef = useRef(0);
   useEffect(() => {
