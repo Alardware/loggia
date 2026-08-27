@@ -22,6 +22,14 @@ button { color: inherit; font-family: inherit; }
 button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .o-volet-mode, .grid-sec-tiles > div, .grid-sys-metrics > div, .grid-par-pal button, [role="switch"], [role="button"] {
   transition: transform .16s cubic-bezier(.34, 1.45, .56, 1);
   -webkit-tap-highlight-color: transparent;
+  /* Le navigateur n'attend plus de savoir si le doigt allait faire un double-tap
+   * pour zoomer : le geste part tout de suite. Le viewport declare deja
+   * `width=device-width`, ce qui suffit sur les navigateurs recents — mais cette
+   * ligne le garantit la ou l'on tape en serie, plus / moins d'un thermostat,
+   * fleches de volet. Le zoom du reste de la page n'est pas touche : il n'est
+   * jamais bride ici, et une interface qu'on ne peut pas agrandir est une
+   * interface fermee a qui voit mal. */
+  touch-action: manipulation;
 }
 button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-scene-room:active, .o-volet-mode:active, .grid-sec-tiles > div:active, .grid-sys-metrics > div:active, .grid-par-pal button:active, [role="switch"]:active, [role="button"]:active {
   transform: scale(.955);
