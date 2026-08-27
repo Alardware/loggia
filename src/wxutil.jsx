@@ -61,6 +61,9 @@ export function haWeatherLabel(cond) {
    * nublado ». La table francaise ci-dessous ne sert que s'il ne repond pas. */
   const viaHA = trHA('component.weather.entity_component._.state.' + String(cond || '').toLowerCase());
   if (viaHA) return viaHA;
-  const m = { 'clear-night': 'Nuit claire', sunny: 'Ensoleillé', partlycloudy: 'Partiellement nuageux', cloudy: 'Nuageux', rainy: tr('Pluie'), pouring: 'Forte pluie', snowy: 'Neige', 'snowy-rainy': 'Neige fondue', fog: 'Brouillard', windy: 'Venteux', 'windy-variant': 'Venteux', hail: 'Grêle', lightning: 'Orage', 'lightning-rainy': 'Orage', exceptional: 'Exceptionnel' };
-  return m[(cond || '').toLowerCase()] || 'Nuageux';
+  const m = { 'clear-night': tr('Nuit claire'), sunny: tr('Ensoleillé'), partlycloudy: tr('Partiellement nuageux'), cloudy: tr('Nuageux'), rainy: tr('Pluie'), pouring: tr('Forte pluie'), snowy: tr('Neige'), 'snowy-rainy': tr('Neige fondue'), fog: tr('Brouillard'), windy: tr('Venteux'), 'windy-variant': tr('Venteux'), hail: tr('Grêle'), lightning: tr('Orage'), 'lightning-rainy': tr('Orage'), exceptional: tr('Exceptionnel') };
+  /* Une condition inconnue n'est pas « Nuageux » : c'est une condition inconnue.
+   * Le repli annoncait un ciel couvert alors qu'on ne savait rien du temps.
+   * Les appelants savent deja se passer de reponse — ils affichent « — ». */
+  return m[(cond || '').toLowerCase()] || null;
 }

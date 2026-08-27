@@ -775,7 +775,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                   </EnRow>
                 )}
                 {isAdmin && (
-                  <EnRow label={tr('Entités du dashboard')} desc={entMissing.length ? entMissing.length + ' introuvable' + (entMissing.length > 1 ? 's' : '') + ' sur ' + tr('{n} configurées', { n: entIds.length }) : tr('{n} entités configurées, toutes résolues', { n: entIds.length })}>
+                  <EnRow label={tr('Entités du dashboard')} desc={entMissing.length ? (entMissing.length > 1 ? tr('{n} introuvables sur', { n: entMissing.length }) : tr('{n} introuvable sur', { n: entMissing.length })) + ' ' + tr('{n} configurées', { n: entIds.length }) : tr('{n} entités configurées, toutes résolues', { n: entIds.length })}>
                     <EnVal v={entMissing.length ? entMissing.length + ' en erreur' : tr('toutes résolues')} col={entMissing.length ? 'var(--o-bad)' : 'var(--o-ok)'} />
                   </EnRow>
                 )}
@@ -1123,7 +1123,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <EnRow label={tr('Nom affiché')} desc="Visible sur l'écran de profils et dans l'en-tête"><EnVal v={me.name || '—'} col="var(--o-text)" /></EnRow>
               <EnRow label="Rattachement" desc={tr('Ce que le profil affiche sous son nom')}><EnVal v={me.sub || '—'} col="var(--o-accent-soft)" /></EnRow>
               <EnRow label="Droits" desc={me.role === 'Admin' ? 'Réglages, alimentation et édition des vues' : 'Lecture et commandes courantes seulement'}><EnVal v={me.role === 'Admin' ? 'complets' : 'limités'} col={me.role === 'Admin' ? 'var(--o-warn2)' : 'var(--o-ok)'} /></EnRow>
-              <EnRow label="Profils du foyer" desc={nAdm + ' administrateur' + (nAdm > 1 ? 's' : '') + ' · ' + (users.length - nAdm) + ' famille'}><EnVal v={String(users.length)} col="var(--o-text)" /></EnRow>
+              <EnRow label="Profils du foyer" desc={(nAdm > 1 ? tr('{n} administrateurs', { n: nAdm }) : tr('{n} administrateur', { n: nAdm })) + ' · ' + (users.length - nAdm) + ' famille'}><EnVal v={String(users.length)} col="var(--o-text)" /></EnRow>
             </SecCard>
           );
         })()}
@@ -1207,7 +1207,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             {customViews.map(cv => (
               <div key={cv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
                 <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><Fi i={cv.icon || 'sparkles'} size={15} /></span>
-                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{cv.name}</div><div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600 }}>{cv.ents.length} entité{cv.ents.length > 1 ? 's' : ''}</div></div>
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{cv.name}</div><div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div></div>
                 <button onClick={() => setCvEditing(cv)} title="Modifier" style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="pencil" size={13} /></button>
                 <button onClick={() => onSaveCustomViews(customViews.filter(x => x.id !== cv.id))} title="Supprimer" style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>×</button>
               </div>
@@ -1276,8 +1276,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                   <button onClick={() => setAutoOpen(o => ({ ...o, [gr.g]: !o[gr.g] }))} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '12px 15px', background: 'var(--o-s4)', border: 'none', cursor: 'pointer', color: 'var(--o-text)', textAlign: 'left' }}>
                     <span style={{ display: 'inline-flex', transition: 'transform .22s', transform: isOpen ? 'rotate(90deg)' : 'rotate(0)' }}><Fi i="angle-small-right" size={15} color="var(--o-text3)" /></span>
                     <span style={{ fontSize: 13.5, fontWeight: 800 }}>{gr.g}</span>
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{gr.items.length} automatisation{gr.items.length > 1 ? 's' : ''}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: nOn ? 'rgba(var(--o-ok-rgb),.13)' : 'var(--o-s1)', color: nOn ? 'var(--o-ok)' : 'var(--o-text3)' }}>{nOn ? nOn + ' active' + (nOn > 1 ? 's' : '') : 'toutes inactives'}</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{gr.items.length > 1 ? tr('{n} automatisations', { n: gr.items.length }) : tr('{n} automatisation', { n: gr.items.length })}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: nOn ? 'rgba(var(--o-ok-rgb),.13)' : 'var(--o-s1)', color: nOn ? 'var(--o-ok)' : 'var(--o-text3)' }}>{nOn ? (nOn > 1 ? tr('{n} actives', { n: nOn }) : tr('{n} active', { n: nOn })) : tr('toutes inactives')}</span>
                   </button>
                   {isOpen && <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column', padding: '2px 15px 6px' }}>{gr.items.map(line)}</div>}
                 </div>
@@ -1343,7 +1343,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               });
               entSet('rooms')(next);
               alert(found
-                ? found + ' capteur' + (found > 1 ? 's' : '') + ' détecté' + (found > 1 ? 's' : '')
+                ? (found > 1 ? tr('{n} capteurs détectés', { n: found }) : tr('{n} capteur détecté', { n: found }))
                   + (parZoneN ? ' (' + parZoneN + ' par la zone Home Assistant)' : ' par le nom')
                   + ' — vérifie puis « Enregistrer et recharger ».'
                 : 'Aucun capteur supplémentaire trouvé. Range tes capteurs dans une zone Home Assistant : la détection s’appuie dessus en premier.');
@@ -1399,7 +1399,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             ? <div style={{ padding: '26px 0 14px', textAlign: 'center' }}>
                 <div style={{ width: 52, height: 52, borderRadius: '50%', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-ok-rgb),.14)' }}><Fi i="check" size={22} color="var(--o-ok)" /></div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--o-ok)' }}>{tr('Tout est à jour')}</div>
-                <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 3 }}>{upsTotal} module{upsTotal > 1 ? 's' : ''} suivi{upsTotal > 1 ? 's' : ''}</div>
+                <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 3 }}>{upsTotal > 1 ? tr('{n} modules suivis', { n: upsTotal }) : tr('{n} module suivi', { n: upsTotal })}</div>
               </div>
             : <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
                 {ups.map(u => (

@@ -206,7 +206,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
   // liste : les vues d'abord, les reglages tout en bas.
   const groupeNav = (g) => (
     <div key={g.group}>
-      <div className="o-side-text" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: g.group === tr('MAISON') ? '8px 8px 5px' : '12px 8px 5px' }}>{tr(g.group)}</div>
+      <div className="o-side-text" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: g.group === 'MAISON' ? '8px 8px 5px' : '12px 8px 5px' }}>{tr(g.group)}</div>
       {g.items.filter(it => !viewsCfg.hidden.has(LABEL_VIEW[it.label]) && isViewAvailable(avail, LABEL_VIEW[it.label])).map(it => {
         const vid = LABEL_VIEW[it.label];
         const active = vid === view || (vid === 'pieces' && view.indexOf('room:') === 0);
@@ -886,7 +886,7 @@ function PieceCard({ p, onOpen, compact = false, lights = null, mains = null, on
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div style={{ width: p.box, height: p.box, borderRadius: p.rad, background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{p.icon}</div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7 }}>
-          {p.status.kind === 'active' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-warn)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-warn)', boxShadow: '0 0 7px rgba(var(--o-warn-rgb),.8)' }} />{p.status.n} actif{p.status.n > 1 ? 's' : ''}</span>}
+          {p.status.kind === 'active' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-warn)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-warn)', boxShadow: '0 0 7px rgba(var(--o-warn-rgb),.8)' }} />{p.status.n > 1 ? tr('{n} actifs', { n: p.status.n }) : tr('{n} actif', { n: p.status.n })}</span>}
           {p.status.kind === 'repos' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-text3)' }} />Repos</span>}
           {p.status.kind === 'ext' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{tr('Extérieur')}</span>}
           {p.badge && <span className="o-piece-badge-top" style={{ fontSize: 11, fontWeight: 700, color: p.bc, background: p.bbg, padding: '3px 9px', borderRadius: 999 }}>{p.badge}</span>}
@@ -1131,7 +1131,7 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '8px 0 2px' }}>
           <WeatherIco wx={mode || 'clouds'} size={64} />
           <div style={{ fontSize: 38, fontWeight: 800, letterSpacing: '-.02em', marginTop: 4, color: 'var(--o-text)' }}>{temp != null ? Math.round(temp) : '—'}<span style={{ fontSize: 22, fontWeight: 600, opacity: .8 }}>°C</span></div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--o-text2)' }}>{label || 'Nuageux'}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--o-text2)' }}>{label || '—'}</div>
         </div>
         <div style={{ display: 'flex', gap: 9, justifyContent: 'center', flexWrap: 'wrap', margin: '14px 0 4px' }}>
           {chip('humidity', hum != null ? Math.round(hum) + ' %' : null)}
@@ -1746,7 +1746,10 @@ function RoomCoverSheet({ id, hass, onClose }) {
   const pos = ov != null ? ov : realPos;
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
   const cov = (svc, data) => call('cover', svc, { entity_id: id, ...(data || {}) });
-  const mode = (S && S[voletMode()] && S[voletMode()].state) || 'Manuel';
+  // Pas d'entite de mode : pas de mode. Supposer « Manuel » — un mot francais,
+  // compare plus loin par `schedActive` — declarait le planning inactif en
+  // permanence chez qui n'a pas cette entite.
+  const mode = (S && S[voletMode()] && S[voletMode()].state) || null;
   const dayOn = (h) => !!(S && S[h] && S[h].state === 'on');
   const nights = voletDays().filter(d => dayOn(d.haid)).length;
   const sunA = S && S['sun.sun'] && S['sun.sun'].attributes ? S['sun.sun'].attributes : {};
@@ -2346,7 +2349,7 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
         <div style={{ padding: '4px 2px 8px' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
             <div style={{ fontSize: 17, fontWeight: 800 }}>{entete || ('Ajouter à ' + room)}</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{present.length} appareil{present.length > 1 ? 's' : ''}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{present.length > 1 ? tr('{n} appareils', { n: present.length }) : tr('{n} appareil', { n: present.length })}</div>
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 12 }}>
             Coche pour ajouter, décoche pour retirer. Les modifications s'appliquent tout de suite.
@@ -2501,7 +2504,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   // média en cours
   const mediaAct = mediaIds.map(id => S[id]).find(st => st && ['playing', 'paused'].indexOf(st.state) >= 0);
   const mediaTitle = mediaAct ? ((mediaAct.attributes || {}).media_title || (mediaAct.attributes || {}).app_name || tr('En lecture')) : null;
-  const mediaSub = mediaAct ? (((mediaAct.attributes || {}).friendly_name || '').replace(room, '').trim() || 'Lecteur') + ' · ' + (mediaAct.state === 'playing' ? tr('en lecture') : 'en pause') : null;
+  const mediaSub = mediaAct ? (((mediaAct.attributes || {}).friendly_name || '').replace(room, '').trim() || tr('Lecteur')) + ' · ' + (mediaAct.state === 'playing' ? tr('en lecture') : tr('en pause')) : null;
   // chauffage actif dans la pièce → badge de la carte
   const heatOn = climIds.map(id => S[id]).find(st => st && st.state !== 'off' && st.state !== 'unavailable')
     || switchIds.map(id => S[id]).find(st => st && st.state === 'on' && /po[eê]le|chauff|radiateur|granul/i.test((st.attributes || {}).friendly_name || ''));
@@ -2609,7 +2612,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                 return tag ? <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, background: tag.soft, color: tag.c, fontSize: 11, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: tag.c }} />{tag.t}</span> : null;
               })()}
             </div>
-            <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{ents.length} appareil{ents.length > 1 ? 's' : ''} dans cette pièce{lastChange ? ' · dernier changement ' + lastChange : ''}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{ents.length > 1 ? tr('{n} appareils dans cette pièce', { n: ents.length }) : tr('{n} appareil dans cette pièce', { n: ents.length })}{lastChange ? ' · dernier changement ' + lastChange : ''}</div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {/* Capteur declare mais muet : on le signale au lieu de masquer la
                   ligne. Sans cela, une integration en panne — un jeton cloud
@@ -3185,7 +3188,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>Aspirateur, tondeuse, lave-vaisselle, distributeur, plantes</div>
           </div>
           <span style={{ flex: 1 }} />
-          <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: actifs ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s2)', color: actifs ? 'var(--o-ok)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: actifs ? 'var(--o-ok)' : 'var(--o-text3)' }} />{actifs ? actifs + ' EN ACTIVITÉ' : 'RIEN EN COURS'}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: actifs ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s2)', color: actifs ? 'var(--o-ok)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: actifs ? 'var(--o-ok)' : 'var(--o-text3)' }} />{actifs ? tr('{n} EN ACTIVITÉ', { n: actifs }) : tr('RIEN EN COURS')}</span>
         </div>
 
         {/* réglages rapides : robots */}
@@ -3220,7 +3223,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
                 <EnGauge v={croqPct + ' %'} pct={croqPct} col={croqPct < 20 ? 'var(--o-bad)' : croqPct < 40 ? 'var(--o-warn2)' : 'var(--o-ok)'} />
               </EnRow>
               {plants.length > 0 && (
-                <EnRow label="Plantes" desc={plantsDry ? plantsDry + ' plante' + (plantsDry > 1 ? 's' : '') + ' sous le seuil d’humidite' : 'Toutes au-dessus du seuil d’humidite'}>
+                <EnRow label="Plantes" desc={plantsDry ? (plantsDry > 1 ? tr('{n} plantes sous le seuil d’humidité', { n: plantsDry }) : tr('{n} plante sous le seuil d’humidité', { n: plantsDry })) : 'Toutes au-dessus du seuil d’humidite'}>
                   <EnVal v={plants.length + (plants.length > 1 ? ' suivies' : ' suivie')} col={plantsDry ? 'var(--o-warn2)' : 'var(--o-ok)'} />
                 </EnRow>
               )}
@@ -4097,7 +4100,9 @@ const WHITE_TEMPS = [['Bougie', 2200, '#ffb46b'], ['Chaud', 2700, '#ffd9a0'], ['
 const relTime = (iso) => { if (!iso) return ''; const d = (Date.now() - new Date(iso).getTime()) / 1000; if (d < 60) return "À l'instant"; if (d < 3600) return 'Il y a ' + Math.floor(d / 60) + ' min'; if (d < 86400) return 'Il y a ' + Math.floor(d / 3600) + ' h'; return 'Il y a ' + Math.floor(d / 86400) + ' j'; };
 
 function LumieresContent({ hass, edit = false, onEnt }) {
-  const [filter, setFilter] = useState(tr('Toutes'));
+  // `null` = aucune piece choisie, donc toutes. Un libelle traduit ne peut pas
+  // tenir ce role : il change avec la langue.
+  const [filter, setFilter] = useState(null);
   const [lights, setLights] = useState(() => hass ? discoverLights(hass) : INITIAL_LIGHTS);
   // useMemo : le scan de hass.states ne doit PAS tourner à chaque render local (drags à 60-120 Hz) — seulement quand hass change (tick 2s).
   const sig = useMemo(() => hass ? Object.keys(hass.states).filter(e => e.indexOf('light.') === 0).map(e => { const s = hass.states[e]; return e + s.state + ((s.attributes && s.attributes.brightness) || '') + ((s.attributes && s.attributes.rgb_color) || ''); }).join('|') + '|' + switchLights().map(id => { const s = hass.states[id]; return id + (s ? s.state : '-'); }).join(',') : '', [hass]);
@@ -4179,7 +4184,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
   const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-lumpanel') !== '0'; } catch (e) { return true; } });
   const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-lumpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   const origineDe = (k) => {
-    if (k.indexOf('sect:') === 0) return k.slice(5) || 'Section';
+    if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
     const st = hass && hass.states && hass.states[k];
     return (st && st.attributes && st.attributes.friendly_name) || k;
   };
@@ -4188,7 +4193,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
   // Piece d'origine, pour le filtre. Une carte ajoutee a la main n'en a pas :
   // elle reste visible, on ne cache pas ce que l'utilisateur a voulu.
   const pieceDe = (id) => (lights.find(l => l.id === id) || {}).room || null;
-  const visible = (k) => edit || filter === tr('Toutes') || pieceDe(k) == null || pieceDe(k) === filter;
+  const visible = (k) => edit || filter == null || pieceDe(k) == null || pieceDe(k) === filter;
   const blocs = [];
   ed.ids.forEach(k => {
     if (k.indexOf('sect:') === 0) blocs.push({ titre: k, cartes: [] });
@@ -4203,7 +4208,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
       <ViewHead titre={tr('Lumières')}
         sous={tr('{n} sur {t} allumées', { n: onCount, t: lights.length }) + ' · ' + (presentRooms.length > 1 ? tr('{n} pièces', { n: presentRooms.length }) : tr('{n} pièce', { n: presentRooms.length }))
           + (lights.filter(l => l.rgb).length ? ' · ' + lights.filter(l => l.rgb).length + ' luminaires RGB' : '')}
-        badge={onCount ? onCount + ' allumée' + (onCount > 1 ? 's' : '') : 'tout éteint'}
+        badge={onCount ? (onCount > 1 ? tr('{n} allumées', { n: onCount }) : tr('{n} allumée', { n: onCount })) : tr('tout éteint')}
         rgb={onCount ? '255,206,115' : '140,152,180'} />
 
       <ViewBar panel={panel} onPanel={togglePanel}>
@@ -4213,8 +4218,8 @@ function LumieresContent({ hass, edit = false, onEnt }) {
         </BarGroup>
         {presentRooms.length > 1 && (
           <BarGroup label={tr('Pièce')}>
-            {[tr('Toutes'), ...presentRooms].map(n => (
-              <button key={n} onClick={() => setFilter(n)} style={barBtn(n === filter)}>{n}</button>
+            {[null, ...presentRooms].map(n => (
+              <button key={n == null ? '*' : n} onClick={() => setFilter(n)} style={barBtn(n === filter)}>{n == null ? tr('Toutes') : n}</button>
             ))}
           </BarGroup>
         )}
@@ -4222,7 +4227,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
 
 
       {panel && <PresCard titre={tr('Contrôle général')} lead="Les réglages s’appliquent à toutes les lumières allumées"
-        badge={onCount ? onCount + ' allumée' + (onCount > 1 ? 's' : '') : 'tout éteint'}
+        badge={onCount ? (onCount > 1 ? tr('{n} allumées', { n: onCount }) : tr('{n} allumée', { n: onCount })) : tr('tout éteint')}
         rgb={onCount ? '255,206,115' : '140,152,180'}>
         <PresLigne titre={tr('Luminaires allumés')}
           sous={(() => {
@@ -4548,7 +4553,7 @@ function Dropdown({ value, options, onChange, label, width = 150 }) {
 function ScenesContent({ hass }) {
   const S = (hass && hass.states) || null;
   const haActive = (S && S[hueScripts().active] && S[hueScripts().active].state) || '';
-  const haRoom = (S && S[hueScripts().room] && S[hueScripts().room].state) || 'Toute la maison';
+  const haRoom = (S && S[hueScripts().room] && S[hueScripts().room].state) || tr('Toute la maison');
   // état optimiste : maj instantanée au clic (sinon ça "rame" en attendant le poll HA ~2s)
   const [room, setRoomState] = useState(haRoom);
   const [sel, setSel] = useState(haActive);
@@ -4627,7 +4632,7 @@ function ScenesContent({ hass }) {
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>Bibliothèque Hue · {HUE_CATS.length} collections · {totalScenes} scènes</div>
         </div>
         <span style={{ flex: 1 }} />
-        <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: lit ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: lit ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: lit ? selColor : 'var(--o-text3)' }} />{lit ? sel.toUpperCase() : 'AUCUNE ACTIVE'}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: lit ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: lit ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: lit ? selColor : 'var(--o-text3)' }} />{lit ? sel.toUpperCase() : tr('AUCUNE ACTIVE')}</span>
       </div>
 
       {/* réglages rapides : direct, pièce, collection, luminosité */}
@@ -4671,7 +4676,7 @@ function ScenesContent({ hass }) {
                 <div style={{ fontSize: 13, fontWeight: 700 }}>{lit ? 'Scène active' : 'Dernière appliquée'}</div>
                 <div style={{ fontSize: 11.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{room}{lastRel ? ' · ' + lastRel : ''}</div>
               </div>
-              <span style={{ fontSize: 15, fontWeight: 800, marginLeft: 'auto', color: lit ? 'var(--o-accent-soft)' : 'var(--o-text3)', whiteSpace: 'nowrap' }}><FlipText live text={sel || 'Aucune'} /></span>
+              <span style={{ fontSize: 15, fontWeight: 800, marginLeft: 'auto', color: lit ? 'var(--o-accent-soft)' : 'var(--o-text3)', whiteSpace: 'nowrap' }}><FlipText live text={sel || tr('Aucune')} /></span>
             </div>
           </div>
         </div>
@@ -4970,7 +4975,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   const [addSheet, setAddSheet] = useState(false);
   const zoneDe = (k) => k.indexOf('zone:') === 0 ? climateZones(S).find(z => z.id === k.slice(5)) : null;
   const climOrigine = (k) => {
-    if (k.indexOf('sect:') === 0) return k.slice(5) || 'Section';
+    if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
     const z = zoneDe(k);
     if (z) return z.name || k.slice(5);
     const st = S && S[k];
@@ -5163,7 +5168,8 @@ function VoletsContent({ hass, edit = false, onEnt }) {
   const [covers, setCovers] = useState(derivedCovers);
   const csig = derivedCovers.map(c => c.id + ':' + c.pos).join('|');
   useEffect(() => { setCovers(derivedCovers); }, [csig]);
-  const haMode = (S && S[voletMode()] && S[voletMode()].state) || 'Auto lever/coucher';
+  // Meme raison qu'au volet isole : aucun mode invente.
+  const haMode = (S && S[voletMode()] && S[voletMode()].state) || null;
   const [mode, setModeLocal] = useState(haMode);
   useEffect(() => { setModeLocal(haMode); }, [haMode]);
   const dayOn = (haid) => { const e = S && S[haid]; return e ? e.state === 'on' : false; };
@@ -5184,7 +5190,7 @@ function VoletsContent({ hass, edit = false, onEnt }) {
   const [cardEdit, setCardEdit] = useState(null);
   const [addSheet, setAddSheet] = useState(false);
   const origineDe = (k) => {
-    if (k.indexOf('sect:') === 0) return k.slice(5) || 'Section';
+    if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
     const st = hass && hass.states && hass.states[k];
     return (st && st.attributes && st.attributes.friendly_name) || k;
   };
@@ -5245,7 +5251,7 @@ function VoletsContent({ hass, edit = false, onEnt }) {
       {edit && <ViewEditBar onEnt={onEnt} texte={tr('Mode édition : clique un volet pour le modifier, glisse-le pour le déplacer.')} />}
       <ViewHead titre={tr('Volets')}
         sous={(covers.length > 1 ? tr('{n} volets', { n: covers.length }) : tr('{n} volet', { n: covers.length })) + (mode ? ' · ' + String(mode).toLowerCase() : '')}
-        badge={openCount ? openCount + ' ouvert' + (openCount > 1 ? 's' : '') : 'tous fermés'}
+        badge={openCount ? (openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })) : tr('tous fermés')}
         rgb={openCount ? '52,211,153' : '140,152,180'} />
 
       <ViewBar panel={panel} onPanel={togglePanel}>
@@ -5262,7 +5268,7 @@ function VoletsContent({ hass, edit = false, onEnt }) {
       </ViewBar>
 
       {panel && <PresCard titre="Tous les volets" lead={tr('Vue d’ensemble de la position et du pilotage')}
-        badge={openCount + ' ouvert' + (openCount > 1 ? 's' : '')} rgb="52,211,153">
+        badge={openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })} rgb="52,211,153">
         <PresLigne titre={tr('Position moyenne')} sous={covers.length > 1 ? tr('{n} volets suivis', { n: covers.length }) : tr('{n} volet suivi', { n: covers.length })}
           valeur={Math.round(covers.reduce((n, c) => n + (c.pos || 0), 0) / Math.max(1, covers.length)) + ' %'}
           part={Math.round(covers.reduce((n, c) => n + (c.pos || 0), 0) / Math.max(1, covers.length))} couleur="var(--o-accent)" />
@@ -5973,7 +5979,7 @@ function AspirateurContent({ hass }) {
   const erreur = auto.error ? stTxt(auto.error) : null;
   const enPanne = erreur && !/^(no_error|ok|none|aucun)/i.test(erreur);
   const derniere = auto.lastTask ? quand(stTxt(auto.lastTask)) : null;
-  const sousTitre = [(vac && vac.name) || 'Aspirateur robot', (vac && vac.area) || null, modeTxt,
+  const sousTitre = [(vac && vac.name) || tr('Aspirateur robot'), (vac && vac.area) || null, modeTxt,
     mopPose == null ? null : (mopPose === 'on' ? 'serpillière fixée' : 'serpillière retirée')].filter(Boolean).join(' · ');
 
   return (
@@ -6131,7 +6137,7 @@ function ViewEmpty({ vid, reason, onNav }) {
       <Header />
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div>
-          <h1 style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontWeight: 400, fontSize: 36, margin: 0, letterSpacing: '-.01em' }}>{VIEW_TITLES[vid] || 'Vue'}</h1>
+          <h1 style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontWeight: 400, fontSize: 36, margin: 0, letterSpacing: '-.01em' }}>{VIEW_TITLES[vid] || tr('Vue')}</h1>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{tr('rien à afficher pour cette installation')}</div>
         </div>
         <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,16px)', padding: '26px 24px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14, boxShadow: 'var(--o-shadow)' }}>
@@ -6291,7 +6297,7 @@ function CroquettesContent({ hass }) {
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{upcoming ? upcoming.label + ' à ' + upcoming.time + ' · ' + upcoming.g + ' g' : 'Programme terminé'} · {onCount} repas par jour</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <EnRow label={tr('Réservoir')} desc={autonomy != null ? 'Environ ' + autonomy + ' jour' + (autonomy > 1 ? 's' : '') + ' d’autonomie' : 'Niveau estimé, remis à 100 % au remplissage'}>
+            <EnRow label={tr('Réservoir')} desc={autonomy != null ? (autonomy > 1 ? tr('Environ {n} jours d’autonomie', { n: autonomy }) : tr('Environ {n} jour d’autonomie', { n: autonomy })) : 'Niveau estimé, remis à 100 % au remplissage'}>
               <EnGauge v={reservoirG != null ? level + ' %' : '—'} pct={level} col={level < 20 ? 'var(--o-bad)' : level < 40 ? 'var(--o-warn2)' : 'var(--o-ok)'} />
             </EnRow>
             <EnRow label="Distribué aujourd'hui" desc={done.length + ' repas sur ' + onCount + (distribuees ? ' · compteur ' + distribuees + ' g' : '')}>
@@ -6326,7 +6332,7 @@ function CroquettesContent({ hass }) {
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 10 }}>
                 <span style={{ fontSize: 17, fontWeight: 800, color: !m.on ? 'var(--o-text3)' : passed ? 'var(--o-ok)' : next ? 'var(--o-warn2)' : 'var(--o-text)' }}>{m.g} g</span>
-                <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)' }}>{!m.on ? 'désactivé' : passed ? tr('distribué') : next ? relTo(m.time) : 'programmé'}</span>
+                <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)' }}>{!m.on ? tr('désactivé') : passed ? tr('distribué') : next ? relTo(m.time) : tr('programmé')}</span>
               </div>
             </button>
           );
@@ -6625,7 +6631,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
   const [cardEdit, setCardEdit] = useState(null);
   const [addSheet, setAddSheet] = useState(false);
   const origineDe = (k) => {
-    if (k.indexOf('sect:') === 0) return k.slice(5) || 'Section';
+    if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
     const p = lecteurs.find(x => x.haid === k);
     if (p && p.name) return p.name;
     const st = S && S[k];
@@ -7640,7 +7646,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
                 <button onClick={() => { const n = nameDraft.trim(); if (n) onSave && onSave({ ...cv, name: n }); setRenaming(false); }} style={{ padding: '11px 16px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>OK</button>
               </div>
             : <h1 onClick={edit ? () => setRenaming(true) : undefined} style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, cursor: edit ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: 12 }}>{cv.name}{edit && <Fi i="pencil" size={16} color="var(--o-text3)" />}</h1>}
-          <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cv.ents.length} entité{cv.ents.length > 1 ? 's' : ''}</div>
+          <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
           {cv.ents.map((id, i) => (
@@ -7949,7 +7955,7 @@ function deriveAccueil(hass, cfg, resolved) {
       else if (jours <= 3) { phase = tr('Dans {j}j', { j: jours }); color = '#fbbf24'; }
       else { phase = tr('Dans {j}j', { j: jours }); color = 'var(--o-ok)'; }
       const dateDisp = at.decale_samedi ? ('Sam. ' + (at.date_formatee || '')) : (((at.jour_semaine || '') + ' ' + (at.date_formatee || '')).trim());
-      const mainText = today ? '🚛 Sortir les poubelles !' : demain ? '📦 Préparer ce soir' : (dateDisp || 'Prochain ramassage');
+      const mainText = today ? tr('Sortir les poubelles !') : demain ? tr('Préparer ce soir') : (dateDisp || tr('Prochain ramassage'));
       machines.poubelles = { label: tr('Poubelles'), iconKey: today ? 'trash-full' : 'trash', phase, color, active: today || demain, anim: today ? 'shake' : (jours <= 3 ? 'bounce' : null), valueText: mainText, dotsFilled: Math.max(0, 14 - jours), dotsTotal: 14 };
     }
   }
@@ -8053,21 +8059,21 @@ function MobileNav({ view, onNav, onMenu }) {
 function deriveNotifs(hass) {
   const S = hass && hass.states; if (!S) return [];
   const out = [], now = Date.now();
-  const rel = (id) => { try { const e = S[id]; const t = e && (e.last_changed || e.last_updated); if (!t) return ''; const m = (now - new Date(t).getTime()) / 60000; if (m < 1) return "à l'instant"; if (m < 60) return 'Il y a ' + Math.round(m) + ' min'; if (m < 1440) return 'Il y a ' + Math.round(m / 60) + ' h'; return 'Il y a ' + Math.round(m / 1440) + ' j'; } catch (e) { return ''; } };
+  const rel = (id) => { try { const e = S[id]; const t = e && (e.last_changed || e.last_updated); if (!t) return ''; const m = (now - new Date(t).getTime()) / 60000; if (m < 1) return tr("à l'instant"); if (m < 60) return tr('Il y a {n} min', { n: Math.round(m) }); if (m < 1440) return tr('Il y a {n} h', { n: Math.round(m / 60) }); return tr('Il y a {n} j', { n: Math.round(m / 1440) }); } catch (e) { return ''; } };
   const stOf = (id) => (S[id] && S[id].state) || null;
   const numOf = (id) => { const v = parseFloat(stOf(id)); return isNaN(v) ? null : v; };
-  for (const id in S) { if (id.indexOf('alarm_control_panel.') === 0 && S[id].state === 'triggered') { out.push(['#f87171', tr('Alarme'), 'Intrusion détectée', rel(id)]); break; } }
+  for (const id in S) { if (id.indexOf('alarm_control_panel.') === 0 && S[id].state === 'triggered') { out.push(['#f87171', tr('Alarme'), tr('Intrusion détectée'), rel(id)]); break; } }
   const mid = mowerId(S), mchg = mowerSensor(S, 'charging');
   const mow = mid ? stOf(mid) : null;
-  if (mow === 'returning') out.push(['var(--o-accent-soft)', tr('Tondeuse'), 'Retour à la base', rel(mid)]);
-  else if (mchg && stOf(mchg) === 'on') out.push(['var(--o-ok)', tr('Tondeuse'), 'En charge', rel(mchg)]);
+  if (mow === 'returning') out.push(['var(--o-accent-soft)', tr('Tondeuse'), tr('Retour à la base'), rel(mid)]);
+  else if (mchg && stOf(mchg) === 'on') out.push(['var(--o-ok)', tr('Tondeuse'), tr('En charge'), rel(mchg)]);
   const surId = enHaids().surplusNow || enHaids().injectionJour;
   const sur = surId ? numOf(surId) : null;
-  if (sur != null && sur > 100) out.push(['var(--o-accent-soft)', tr('Énergie'), 'Surplus solaire — export réseau', rel(surId)]);
+  if (sur != null && sur > 100) out.push(['var(--o-accent-soft)', tr('Énergie'), tr('Surplus solaire — export réseau'), rel(surId)]);
   const lv = numOf(notifIds().dishwasher);
-  if (lv != null && lv > 100) out.push(['var(--o-accent)', tr('Lave-vaisselle'), 'Cycle en cours', rel(notifIds().dishwasher)]);
-  const tr = stOf(notifIds().bins);
-  if (tr && tr !== 'unknown' && tr !== 'unavailable') out.push(['#ffb347', tr('Poubelles'), 'Prochain ramassage : ' + tr, rel(notifIds().bins)]);
+  if (lv != null && lv > 100) out.push(['var(--o-accent)', tr('Lave-vaisselle'), tr('Cycle en cours'), rel(notifIds().dishwasher)]);
+  const bins = stOf(notifIds().bins);
+  if (bins && bins !== 'unknown' && bins !== 'unavailable') out.push(['#ffb347', tr('Poubelles'), tr('Prochain ramassage : {d}', { d: bins }), rel(notifIds().bins)]);
   return out.slice(0, 8);
 }
 
