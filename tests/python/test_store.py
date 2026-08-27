@@ -228,6 +228,25 @@ def test_trop_de_cles_est_refuse(creer_store, store_module):
         lancer(magasin.async_set_user("u1", trop, is_admin=True))
 
 
+def test_volume_cumule_est_refuse(creer_store, store_module):
+    """Des ecritures acceptees une a une ne doivent pas gonfler le fichier.
+
+    Le plafond de taille ne portait que sur la requete recue : chaque patch
+    passait sous la limite, mais rien ne mesurait ce qui restait apres fusion.
+    Seul le NOMBRE de cles etait verifie — 128 valeurs de 256 Kio tenaient donc
+    dans les clous tout en laissant 32 Mio sur le disque, resserialises a chaque
+    reglage modifie.
+
+    Ici chaque ecriture est minuscule au regard de MAX_VALUE_BYTES ; c'est leur
+    somme qui doit finir par etre refusee.
+    """
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    gros = "x" * (store_module.MAX_VALUE_BYTES // 2)
+    with pytest.raises(ValueError):
+        for i in range(store_module.MAX_KEYS_PER_USER):
+            lancer(magasin.async_set_user("u1", {f"loggia_g{i}": gros}, is_admin=True))
+
+
 def test_ecritures_concurrentes_ne_se_perdent_pas(creer_store):
     """Vingt ecritures simultanees doivent toutes se retrouver.
 
