@@ -908,28 +908,20 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <Seg value={themeMode} opts={[['dark', 'Foncé'], ['light', 'Clair']]} onPick={onMode} disabled={!notFollow} />
             </OptRow>
             <OptRow title={tr('Langue')} desc={tr('Les états et les commandes viennent de Home Assistant, dans toutes les langues qu’il connaît. Les noms de pièces et d’appareils aussi : ils ne sont pas traduits ici.')}>
-              {/* Une soixantaine de langues : un segmente serait illisible. */}
-              <select value={choixLangue()}
-                onChange={e => { cfgSet({ 'loggia-langue': e.target.value }); setTimeout(() => window.location.reload(), 200); }}
-                style={{ padding: '8px 12px', borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
-                  border: '1px solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text)', maxWidth: 200,
-                  /* La liste deroulante n'est pas peinte par la page : c'est le
-                   * systeme qui la dessine, et il ignore le style pose sur les
-                   * `<option>`. Les colorer ne servait donc a rien — les langues
-                   * restaient pales sur blanc, illisibles en theme sombre.
-                   *
-                   * `color-scheme` est la seule chose que le systeme ecoute : il
-                   * lui dit dans quel registre dessiner ses propres widgets. On
-                   * lit la classe posee sur la racine plutot que `themeMode`,
-                   * parce qu'en mode « Suivre Home Assistant » c'est HA qui
-                   * decide et `themeMode` ne le sait pas. */
-                  colorScheme: document.documentElement.classList.contains('loggia-light') ? 'light' : 'dark' }}>
-                {languesDisponibles(hass).map(l => (
-                  <option key={l.code} value={l.code}>
-                    {l.code === 'auto' ? tr('Suivre Home Assistant') : l.nom}
-                  </option>
-                ))}
-              </select>
+              {/* Plus de liste deroulante.
+                *
+                * Un `<select>` n'est pas peint par la page : le systeme dessine
+                * son menu et ignore le style pose sur les `<option>`. Les
+                * colorer ne pouvait rien changer, et `color-scheme` ne suffit
+                * pas partout — les langues restaient illisibles.
+                *
+                * Le commentaire d'origine justifiait le `<select>` par « une
+                * soixantaine de langues ». Il n'y en a plus que cinq : le
+                * segmente maison, deja utilise partout ailleurs sur cet ecran,
+                * les affiche tres bien et suit le theme comme le reste. */}
+              <Seg value={choixLangue()}
+                opts={languesDisponibles(hass).map(l => [l.code, l.code === 'auto' ? tr('Auto') : l.code.toUpperCase()])}
+                onPick={v => { cfgSet({ 'loggia-langue': v }); setTimeout(() => window.location.reload(), 200); }} />
             </OptRow>
             <OptRow title="Suivre Home Assistant" desc={tr('Calque le thème actif de Home Assistant et désactive les choix ci-dessous.')}>
               <Tgl on={haTheme === 'FOLLOW'} cb={onFollowHa} label={tr('Suivre le thème Home Assistant')} />
