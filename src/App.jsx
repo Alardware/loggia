@@ -8393,41 +8393,21 @@ export default function App() {
    * appartient a cet onglet et a ce moment. Un onglet neuf, ou Loggia rouvert
    * le lendemain, doit s'ouvrir sur l'accueil — pas sur la vue Croquettes
    * quittee l'avant-veille. */
-  const [view, setView] = useState('accueil');
-  /* La vue memorisee n'est reprise QU'UNE FOIS LES DONNEES LA.
+  /* La vue memorisee est reprise DES LE PREMIER RENDU.
    *
-   * L'ouvrir des le premier rendu paraissait plus direct, mais plusieurs vues
-   * lisent leur configuration sans se demander si elle existe deja : Lumieres,
-   * Climat, Ouverture et Medias levaient une exception et l'ecran d'erreur
-   * remplacait le dashboard. Ces vues ne supportaient pas d'etre montees a
-   * froid — on ne s'en apercevait pas parce qu'on arrivait forcement par
-   * l'accueil, le temps que la decouverte reponde.
+   * Elle l'etait auparavant une fois les donnees arrivees, ce qui faisait
+   * apparaitre l'accueil une seconde avant de basculer : un detour visible, et
+   * genant quand on venait justement de regler quelque chose ailleurs.
    *
-   * Attendre reproduit exactement ce trajet : on repasse par l'accueil pendant
-   * un instant, puis on revient ou l'on etait. */
-  const repriseRef = useRef(false);
-  /* La valeur memorisee est saisie MAINTENANT, au premier rendu.
-   *
-   * L'effet de reprise attend que les donnees soient la ; celui qui note la vue,
-   * lui, part des le montage et ecrivait « accueil » — l'etat initial — par
-   * dessus la vue enregistree. Quand la reprise arrivait enfin, elle ne trouvait
-   * plus que « accueil ». Changer de langue ramenait donc a l'accueil malgre
-   * tout. Un `useRef` s'initialise avant tout effet : la valeur est en main
-   * avant que quiconque puisse l'ecraser. */
-  const vueMemoRef = useRef((() => {
-    try { return window.sessionStorage.getItem('loggia-vue'); } catch (e) { return null; }
-  })());
+   * Ce detour existait pour une raison : Lumieres, Climat, Ouverture et Medias
+   * lisent leur configuration sans verifier qu'elle existe, et se brisent si on
+   * les monte avant la decouverte. La garde est donc descendue d'un cran — plus
+   * bas, le rendu attend que les donnees soient la avant de monter la vue, et
+   * montre en attendant une surface vide plutot que l'accueil. */
+  const [view, setView] = useState(() => {
+    try { return window.sessionStorage.getItem('loggia-vue') || 'accueil'; } catch (e) { return 'accueil'; }
+  });
   useEffect(() => {
-    if (repriseRef.current || !loggiaRuntime.ready) return;
-    repriseRef.current = true;
-    // Deja parti ailleurs pendant le chargement ? Son geste prime sur la memoire.
-    if (view !== 'accueil') return;
-    const v = vueMemoRef.current;
-    if (v && v !== 'accueil') setView(v);
-  }, [loggiaRuntime.ready, view]);
-  useEffect(() => {
-    // Rien avant la reprise : sinon l'etat initial ecraserait la vue enregistree.
-    if (!repriseRef.current) return;
     try { window.sessionStorage.setItem('loggia-vue', view); } catch (e) { /* stockage indisponible */ }
   }, [view]);
   /* Et la position dans la page.
@@ -8781,7 +8761,12 @@ export default function App() {
       {navOpen && <div className="loggia-backdrop" onClick={() => setNavOpen(false)} />}
       {pinTarget != null && <PinModal expected={adminPin} onClose={() => setPinTarget(null)} onSuccess={() => { applyUser(pinTarget); setPinTarget(null); }} />}
       <div key={view} className="o-view" style={{ display: 'flex', flex: 1, minWidth: 0 }}>
-      {viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
+      {/* Tant que la decouverte n'a pas repondu, on ne monte aucune vue autre que
+          l'accueil : plusieurs lisent leur configuration sans verifier qu'elle
+          existe. Une surface vide le temps d'un instant, pas l'accueil — sinon
+          l'on verrait la page changer deux fois sous ses yeux. */}
+      {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
+        : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
         : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && isAdmin} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && isAdmin} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && isAdmin} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && isAdmin} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'parametres' ? <ParametresView themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && isAdmin} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && isAdmin} /> : <Dashboard editMode={editMode} onEnt={isAdmin ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} onMenu={() => setNavOpen(o => !o)} />}
