@@ -736,7 +736,27 @@ function readLook() {
   catch (e) { return { ...LOOK_DEF }; }
 }
 function applyLook(root, L, frostedPreset) {
-  root.classList.toggle('loggia-frosted', !!frostedPreset || !!L.glass);
+  const verre = !!frostedPreset || !!L.glass;
+  root.classList.toggle('loggia-frosted', verre);
+  /* « Verre » ne posait qu'un `backdrop-filter`. Or un flou d'arriere-plan ne se
+   * voit qu'a travers ce qui est translucide : les surfaces sont a 90 %
+   * d'opacite, certains themes les donnent carrement opaques, et l'effet
+   * n'apparaissait pas. D'ou l'impression que le reglage ne faisait rien selon
+   * le theme choisi.
+   *
+   * On ouvre donc la surface elle-meme. En JS et non en CSS : les presets posent
+   * ces tokens EN INLINE sur la racine, et une regle de classe ne bat pas un
+   * style inline — c'est ecrit dans index.css, et c'est pourquoi la premiere
+   * tentative ne pouvait pas fonctionner.
+   *
+   * On garde une base solide : sous 55 % d'opacite, le texte des cartes passe
+   * sous le seuil de contraste sur un fond clair. */
+  ['--o-surfA', '--o-surfB'].forEach(token => {
+    root.style.removeProperty(token);
+    if (!verre) return;
+    const rgb = cssToRgb(getComputedStyle(root).getPropertyValue(token).trim());
+    if (rgb) root.style.setProperty(token, 'rgba(' + rgb + ',.62)');
+  });
   root.classList.toggle('loggia-contrast', !!L.contrast);
   if (L.contrast) {
     const cs = getComputedStyle(root);
@@ -8326,7 +8346,49 @@ export default function App() {
   const [loggiaTheme, setLoggiaTheme] = useState('');     // '' = défaut Loggia ; sinon preset natif (neumorphix/google/ios)
   const [haTheme, setHaTheme] = useState('');           // '' = base Loggia ; 'FOLLOW' = suit HA ; sinon nom de thème HA
   const [lightMode, setLightMode] = useState(false);
-  const [view, setView] = useState('accueil');
+  /* La vue courante survit au rechargement.
+   *
+   * Plusieurs reglages doivent recharger la page pour prendre effet — la langue,
+   * les entites, la connexion. On repartait alors de l'accueil, et il fallait
+   * retrouver son chemin a chaque changement. La vue est donc notee, puis
+   * relue au demarrage.
+   *
+   * `sessionStorage` et non `localStorage` : l'endroit ou l'on se trouve
+   * appartient a cet onglet et a ce moment. Un onglet neuf, ou Loggia rouvert
+   * le lendemain, doit s'ouvrir sur l'accueil — pas sur la vue Croquettes
+   * quittee l'avant-veille. */
+  const [view, setView] = useState(() => {
+    try { return window.sessionStorage.getItem('loggia-vue') || 'accueil'; } catch (e) { return 'accueil'; }
+  });
+  useEffect(() => {
+    try { window.sessionStorage.setItem('loggia-vue', view); } catch (e) { /* stockage indisponible */ }
+  }, [view]);
+  /* Et la position dans la page.
+   *
+   * On la note en continu plutot qu'au moment de recharger : `location.reload()`
+   * est appele depuis une dizaine d'endroits, et il aurait fallu penser a chacun
+   * — y compris ceux a venir. `pagehide` ne suffit pas non plus, iOS ne le
+   * declenche pas toujours.
+   *
+   * La restauration attend deux images : la premiere pose la vue, la seconde la
+   * remplit. Sauter a la position avant que le contenu existe ne menerait nulle
+   * part. */
+  useEffect(() => {
+    const cle = 'loggia-defilement';
+    let t = 0;
+    const noter = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        try { window.sessionStorage.setItem(cle, String(document.documentElement.scrollTop || 0)); } catch (e) {}
+      }, 150);
+    };
+    window.addEventListener('scroll', noter, { passive: true });
+    const y = (() => { try { return +window.sessionStorage.getItem(cle) || 0; } catch (e) { return 0; } })();
+    if (y > 0) requestAnimationFrame(() => requestAnimationFrame(() => {
+      try { window.scrollTo({ top: y, behavior: 'auto' }); } catch (e) {}
+    }));
+    return () => { clearTimeout(t); window.removeEventListener('scroll', noter); };
+  }, []);
   // Vues personnalisées (créées dans Paramètres → Vues, admin) — live, persistées.
   const [customViews, setCustomViews] = useState(() => { const v = readLS('loggia_customviews', []); return Array.isArray(v) ? v.filter(x => x && x.id && x.name) : []; });
   const saveCustomViews = (list) => { try { localStorage.setItem('loggia_customviews', JSON.stringify(list)); } catch (e) {} setCustomViews(list); };

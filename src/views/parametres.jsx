@@ -912,13 +912,20 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <select value={choixLangue()}
                 onChange={e => { cfgSet({ 'loggia-langue': e.target.value }); setTimeout(() => window.location.reload(), 200); }}
                 style={{ padding: '8px 12px', borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
-                  border: '1px solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text)', maxWidth: 200 }}>
+                  border: '1px solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text)', maxWidth: 200,
+                  /* La liste deroulante n'est pas peinte par la page : c'est le
+                   * systeme qui la dessine, et il ignore le style pose sur les
+                   * `<option>`. Les colorer ne servait donc a rien — les langues
+                   * restaient pales sur blanc, illisibles en theme sombre.
+                   *
+                   * `color-scheme` est la seule chose que le systeme ecoute : il
+                   * lui dit dans quel registre dessiner ses propres widgets. On
+                   * lit la classe posee sur la racine plutot que `themeMode`,
+                   * parce qu'en mode « Suivre Home Assistant » c'est HA qui
+                   * decide et `themeMode` ne le sait pas. */
+                  colorScheme: document.documentElement.classList.contains('loggia-light') ? 'light' : 'dark' }}>
                 {languesDisponibles(hass).map(l => (
-                  /* La liste deroulante est peinte par le systeme, pas par le
-                     theme : sans ces deux couleurs, elle sortait blanche sur
-                     blanc en mode sombre. */
-                  <option key={l.code} value={l.code}
-                    style={{ background: 'var(--o-s2)', color: 'var(--o-text)' }}>
+                  <option key={l.code} value={l.code}>
                     {l.code === 'auto' ? tr('Suivre Home Assistant') : l.nom}
                   </option>
                 ))}
