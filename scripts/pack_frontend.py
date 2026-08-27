@@ -22,10 +22,43 @@ import re
 import shutil
 import sys
 
-DIST = os.environ.get('LOGGIA_DIST', 'C:/Users/micro/AppData/Local/Temp/orion_v2/dist')
-CIBLE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                     'custom_components', 'loggia', 'frontend')
+RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# `dist` du DEPOT, la ou `npm run build` ecrit. Le defaut a longtemps designe
+# `Temp/orion_v2/dist`, l'ancien atelier : un `npm run build` a la racine puis un
+# pack empaquetait alors un build etranger, parfois vieux de plusieurs heures. Le
+# 27/08/2026 cela a mis en ligne une 2.8.0 dont l'`index.html` reclamait un bundle
+# d'avant les corrections — tableau de bord mort chez l'utilisateur.
+DIST = os.environ.get('LOGGIA_DIST', os.path.join(RACINE, 'dist'))
+CIBLE = os.path.join(RACINE, 'custom_components', 'loggia', 'frontend')
 GARDE = 3
+
+
+def verifier_fraicheur(dist, racine):
+    """Refuse un build plus vieux que les sources. Rend un message, ou None.
+
+    Le pack est silencieux par nature : il copie ce qu'on lui donne. Sans cette
+    garde, un `dist` perime passe toutes les etapes suivantes — lint, tests et CI
+    portent sur les sources, jamais sur le bundle.
+    """
+    index = os.path.join(dist, 'index.html')
+    if not os.path.exists(index):
+        return 'aucun index.html dans ' + dist + ' — lancer `npm run build`'
+
+    bati = os.path.getmtime(index)
+    plus_recent, quand = None, 0
+    for rep, _, fichiers in os.walk(os.path.join(racine, 'src')):
+        for f in fichiers:
+            if not f.endswith(('.js', '.jsx', '.css')):
+                continue
+            t = os.path.getmtime(os.path.join(rep, f))
+            if t > quand:
+                plus_recent, quand = os.path.join(rep, f), t
+
+    if plus_recent and quand > bati:
+        return ('build perime : ' + os.path.relpath(plus_recent, racine) +
+                ' a change apres le dernier `npm run build` — rebatir avant de packer')
+    return None
 
 
 def inliner_css(html, dossier_assets):
@@ -120,6 +153,13 @@ def main():
     if not os.path.isdir(DIST):
         print('build introuvable :', DIST)
         return 1
+
+    souci = verifier_fraicheur(DIST, RACINE)
+    if souci and os.environ.get('LOGGIA_PACK_FORCE') != '1':
+        print('REFUS :', souci)
+        print('        (LOGGIA_PACK_FORCE=1 passe outre)')
+        return 1
+
     assets_src = os.path.join(DIST, 'assets')
     assets_dst = os.path.join(CIBLE, 'assets')
     os.makedirs(assets_dst, exist_ok=True)
@@ -149,8 +189,19 @@ def main():
 
     # Ce que le html qu'on vient d'ecrire demande : intouchable.
     reference = set(re.findall(r'\./assets/([A-Za-z0-9_.-]+)', html))
+
+    # Le html demande-t-il des fichiers qu'on n'a pas poses ? Un paquet qui se
+    # reclame d'un bundle absent donne un ecran blanc, et rien avant cette ligne
+    # ne le voit : lint, tests et CI lisent les sources, pas le paquet.
+    manquants = sorted(f for f in reference
+                       if not os.path.exists(os.path.join(assets_dst, f)))
+    if manquants:
+        print('REFUS : le html reclame des fichiers absents du paquet :', manquants)
+        return 1
+
     efface = (retenir(assets_dst, 'index-', '.js', reference)
               + retenir(assets_dst, 'index-', '.css', reference))
+    print('bundle publie       :', ', '.join(sorted(f for f in reference if f.endswith('.js'))))
     print('assets copies       :', n)
     print('fichiers publics    :', autres)
     print('anciens bundles otes:', len(efface), efface if efface else '')
