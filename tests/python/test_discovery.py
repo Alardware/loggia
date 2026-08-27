@@ -114,6 +114,59 @@ def test_desactives_ecartes(decouverte):
     assert [e["id"] for e in index["entities"]] == ["light.a"]
 
 
+class _Perms:
+    """Politique de lecture minimale, a l'image de celle de Home Assistant."""
+
+    def __init__(self, autorisees):
+        self._ok = set(autorisees)
+
+    def check_entity(self, entity_id, _action):
+        return entity_id in self._ok
+
+
+class _Compte:
+    def __init__(self, is_admin, autorisees=None):
+        self.id = "u1"
+        self.name = "Test"
+        self.is_admin = is_admin
+        self.permissions = _Perms(autorisees or [])
+
+
+def test_compte_restreint_ne_voit_que_ses_entites(decouverte):
+    """Home Assistant sait limiter un compte : la decouverte doit s'y plier.
+
+    Elle renvoyait le registre entier quel que soit le compte. Un administrateur
+    pouvait donc restreindre quelqu'un, Loggia lui montrait tout de meme la
+    maison complete.
+    """
+    hass = poser(decouverte, entites=[entite("light.a"), entite("light.b")])
+    index = decouverte.async_index(hass, _Compte(False, ["light.a"]))
+    assert [e["id"] for e in index["entities"]] == ["light.a"]
+
+
+def test_sans_restriction_rien_ne_change(decouverte):
+    """Le cas de presque toutes les installations : la reponse reste complete.
+
+    Un administrateur, ou l'absence de compte connu, ne declenche aucun filtre —
+    donc aucun parcours supplementaire et aucun changement de comportement.
+    """
+    hass = poser(decouverte, entites=[entite("light.a"), entite("light.b")])
+    for compte in (None, _Compte(True)):
+        index = decouverte.async_index(hass, compte)
+        assert [e["id"] for e in index["entities"]] == ["light.a", "light.b"]
+
+
+def test_version_de_firmware_absente(decouverte):
+    """Une version exacte designe les failles publiees qui s'y appliquent.
+
+    Le champ n'etait lu par personne cote client : il ne sort plus du serveur.
+    """
+    hass = poser(decouverte, appareils=[appareil("d1", sw_version="1.2.3")])
+    appareil_vu = decouverte.async_index(hass)["devices"][0]
+    assert "firmware" not in appareil_vu
+    assert "1.2.3" not in repr(appareil_vu)
+
+
 def test_masquee_signalee_mais_conservee(decouverte):
     """Masquee n'est pas desactivee : l'entite repond, on la marque seulement."""
     hass = poser(decouverte, entites=[entite("light.a", hidden_by="user")])

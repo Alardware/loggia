@@ -139,7 +139,9 @@ def async_register(hass: HomeAssistant, store: LoggiaStore) -> None:
         vu = servis.setdefault(user.id, {"name": user.name, "admin": user.is_admin, "count": 0})
         vu["count"] += 1
         vu["last"] = dt_util.utcnow().isoformat(timespec="seconds")
-        connection.send_result(msg["id"], {"index": async_index(hass)})
+        # Le compte vient de la connexion authentifiee, jamais du message : il
+        # sert a retirer de la reponse ce que ce compte n'a pas le droit de lire.
+        connection.send_result(msg["id"], {"index": async_index(hass, user)})
 
     websocket_api.async_register_command(hass, handle_discovery)
     websocket_api.async_register_command(hass, handle_get)
