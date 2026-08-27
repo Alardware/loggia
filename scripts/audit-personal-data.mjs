@@ -60,6 +60,36 @@ for (const base of SCAN) {
   }
 }
 
+/* Les NOMS des fichiers livres.
+ *
+ * `SKIP` ecarte `frontend/assets`, et c'est justifie pour le CONTENU : un bundle
+ * minifie est un mur de bruit ou toute regle finirait par crier au loup. Mais ce
+ * dossier est justement celui que HACS distribue, et il est servi par un chemin
+ * statique — donc sans authentification, comme `/local`.
+ *
+ * Sept avatars nommes d'apres les prenoms du foyer y ont sejourne, publies a
+ * chaque release, pendant que l'etape appelee « donnees personnelles » regardait
+ * ailleurs. Le contenu binaire reste hors de portee ; les noms, eux, se lisent.
+ */
+const PRENOMS = /\b(guillaume|clara|liam|nova|luna)\b/i;
+{
+  const tous = [];
+  const scan = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      if (/node_modules|__pycache__/.test(p)) continue;
+      if (statSync(p).isDirectory()) scan(p);
+      else tous.push(p);
+    }
+  };
+  try { scan(join(ROOT, 'custom_components')); } catch { /* dossier absent : rien a verifier */ }
+  for (const path of tous) {
+    const rel = relative(ROOT, path);
+    const m = rel.match(PRENOMS);
+    if (m) hits.push({ file: rel, line: 0, why: 'prenom dans un nom de fichier livre', sample: m[0] });
+  }
+}
+
 if (!hits.length) {
   console.log('Aucune donnee personnelle trouvee — le depot peut etre publie.');
   process.exit(0);
