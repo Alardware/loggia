@@ -159,6 +159,23 @@ html.loggia-frosted [style*="--o-surfA"] [style*="--o-surfA"] { -webkit-backdrop
 
 /* responsive (= design @media 820px) */
 @media (max-width: 820px) {
+  /* Zone de touche des interrupteurs.
+   *
+   * Le dessin fait 38x21 px : c'est la taille voulue, elle ne change pas. Mais
+   * un doigt n'est pas un curseur — 21 px de haut, c'est la moitie de ce qu'il
+   * faut viser (un interrupteur iOS mesure 51x31). Le pseudo-element etend la
+   * surface sensible vers le haut et le bas, sans rien deplacer ni agrandir a
+   * l'ecran. Pas d'extension laterale : deux interrupteurs voisins se
+   * voleraient les clics. */
+  [role="switch"] { position: relative; }
+  [role="switch"]::after {
+    content: '';
+    position: absolute;
+    top: -12px;
+    bottom: -12px;
+    left: 0;
+    right: 0;
+  }
   /* Scènes rapides : rangée qui défile (pas d'empilement) — même comportement que les chips de pièces. */
   .grid-qscenes {
     display: flex !important;
