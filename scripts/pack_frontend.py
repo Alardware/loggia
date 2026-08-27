@@ -16,6 +16,7 @@ au depot maintenant.
 """
 from __future__ import annotations
 
+import io
 import os
 import re
 import shutil
@@ -61,13 +62,53 @@ def retenir(dossier, prefixe, suffixe, proteges=()):
     return efface
 
 
-def copier_arbre(src, dst):
+def atteignables(dist):
+    """Les fichiers que `index.html` finit par demander, de proche en proche.
+
+    Vite compile avec `emptyOutDir: false` : le dossier de sortie n'est jamais
+    purge, et les bundles de toutes les compilations passees s'y empilent. La
+    copie etait aveugle — elle emportait ce tas vers le depot, d'ou il partait
+    chez chaque utilisateur par HACS. Sept avatars nommes d'apres les prenoms du
+    foyer ont voyage ainsi, references par aucune page.
+
+    On suit donc les references en cascade : le HTML, puis les js et les css
+    qu'il tire. Ce qui n'est atteignable par aucun chemin ne sert a personne.
+
+    Renvoie None quand `index.html` manque : sans lui on ne peut rien trancher,
+    et mieux vaut trop copier que casser le paquet.
+    """
+    index = os.path.join(dist, 'index.html')
+    if not os.path.exists(index):
+        return None
+    vus, a_voir = set(), []
+    with io.open(index, encoding='utf-8') as fh:
+        a_voir += re.findall(r'assets/([A-Za-z0-9._-]+)', fh.read())
+    while a_voir:
+        f = a_voir.pop()
+        if f in vus:
+            continue
+        vus.add(f)
+        p = os.path.join(dist, 'assets', f)
+        if os.path.exists(p) and f.endswith(('.js', '.css')):
+            try:
+                with io.open(p, encoding='utf-8', errors='ignore') as fh:
+                    a_voir += re.findall(
+                        r'["\'/]([A-Za-z0-9._-]+\.(?:js|css|jpg|jpeg|png|webp|svg|woff2?))',
+                        fh.read())
+            except Exception:
+                pass
+    return vus
+
+
+def copier_arbre(src, dst, garder=None):
     n = 0
     for racine, _, fichiers in os.walk(src):
         rel = os.path.relpath(racine, src)
         cible = dst if rel == '.' else os.path.join(dst, rel)
         os.makedirs(cible, exist_ok=True)
         for f in fichiers:
+            if garder is not None and rel == '.' and f not in garder:
+                continue
             # `copy2` et non `copyfile` : la date de chaque fichier sert a decider
             # quels bundles garder.
             shutil.copy2(os.path.join(racine, f), os.path.join(cible, f))
@@ -83,7 +124,8 @@ def main():
     assets_dst = os.path.join(CIBLE, 'assets')
     os.makedirs(assets_dst, exist_ok=True)
 
-    n = copier_arbre(assets_src, assets_dst)
+    # Ne recopier que ce qui sert : voir `atteignables`.
+    n = copier_arbre(assets_src, assets_dst, atteignables(DIST))
 
     # Tout ce que Vite a copie depuis `public/` : polices, logo, images.
     autres = 0
