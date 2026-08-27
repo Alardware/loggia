@@ -61,7 +61,12 @@ export const HX_TOKENS = { 'var(--o-accent)': '--o-accent-rgb', 'var(--o-accent-
 
 export const cl_hexRgb = (c) => HX_TOKENS[c] ? `var(${HX_TOKENS[c]})` : (typeof c !== 'string' || c[0] !== '#') ? '140,152,180' : `${parseInt(c.slice(1, 3), 16)},${parseInt(c.slice(3, 5), 16)},${parseInt(c.slice(5, 7), 16)}`;
 
-export const HIDDEN_VIEWS = [
+/* Une FONCTION, pas une table.
+ *
+ * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
+ * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
+ * langue. Appelee au rendu, elle se dit dans la langue du moment. */
+export const HIDDEN_VIEWS = () => [
   { label: tr('Lumières'), vid: 'lumieres', icon: 'bulb', c: '#ffce73' },
   { label: tr('Climat'), vid: 'climat', icon: 'thermometer-half', c: '#ff8a4c' },
   { label: tr('Volets'), vid: 'volets', icon: 'blinds', c: 'var(--o-accent-soft)' },

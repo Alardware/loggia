@@ -190,7 +190,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
   // Vues remises au menu depuis Parametres : ce ne sont pas des vues
   // principales, elles ont donc leur propre section plutot que d'etre
   // melangees a MAISON, ou rien ne les distinguait.
-  const secondaires = HIDDEN_VIEWS.filter(h => viewsCfg.shown.has(h.vid) && isViewAvailable(avail, h.vid));
+  const secondaires = HIDDEN_VIEWS().filter(h => viewsCfg.shown.has(h.vid) && isViewAvailable(avail, h.vid));
   useEffect(() => { const f = () => setViewsCfg(readViewsCfg()); window.addEventListener('loggia-views-changed', f); return () => window.removeEventListener('loggia-views-changed', f); }, []);
   // Pill de sélection unique qui GLISSE vers l'item actif (au lieu de réapparaître)
   const navRef = useRef(null);
@@ -399,7 +399,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [] }) {
   const results = [];
   rooms.forEach(r => { if (!match(r)) return; const p = PIECES.find(x => x.name === r); results.push({ group: tr('Pièces'), label: r, icon: p ? p.icon : <Fi i="home" color="var(--o-accent)" size={20} />, act: (close) => { onNav('room:' + r); close(); } }); });
   NAV.forEach(g => g.items.forEach(it => { const vid = LABEL_VIEW[it.label]; if (BUILT.has(vid) && isViewAvailable(avail, vid) && match(it.label)) results.push({ group: tr('Vues'), label: tr(it.label), icon: it.svg, act: (close) => { onNav(vid); close(); } }); }));
-  HIDDEN_VIEWS.forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: tr('Vues'), label: tr(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
+  HIDDEN_VIEWS().forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: tr('Vues'), label: tr(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
   customViews.forEach(cv => { if (match(cv.name)) results.push({ group: tr('Vues'), label: cv.name, icon: <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" />, act: (close) => { onNav('cv:' + cv.id); close(); } }); });
   quickScenes().forEach(s => { if (!match(s.name)) return; results.push({ group: tr('Scènes'), label: s.name, sub: s.sub, icon: <Fi i={s.icon} color="var(--o-purple)" />, run: true, act: (close) => { try { const h = getHass(); if (h && h.callService) h.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); } catch (e) {} close(); } }); });
   const selIdx = results.length ? Math.min(sel, results.length - 1) : -1;
@@ -1965,7 +1965,7 @@ function RoomLightSheet({ light, hass, onClose }) {
         )}
         {on && light.ct && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, maxWidth: 280, margin: '22px auto 0' }}>
-            {WHITE_TEMPS.map(([n, k, c]) => <button key={k} title={n + ' · ' + k + 'K'} onClick={() => commander(hass, light.id, 'set_color_temp', k)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
+            {WHITE_TEMPS().map(([n, k, c]) => <button key={k} title={n + ' · ' + k + 'K'} onClick={() => commander(hass, light.id, 'set_color_temp', k)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
           </div>
         )}
       </>)}
@@ -2828,7 +2828,12 @@ function QuickScenes({ hass }) {
   );
 }
 
-const CAMERAS = [
+/* Une FONCTION, pas une table.
+ *
+ * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
+ * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
+ * langue. Appelee au rendu, elle se dit dans la langue du moment. */
+const CAMERAS = () => [
   { label: tr('Entrée'), tag: 'LIVE · ENTRÉE', grad: 'linear-gradient(180deg,#6ba8d8 0%,#9cc4e0 42%,#7a8a5c 60%,#56683f 100%)', glow: 'radial-gradient(120% 80% at 50% 18%,rgba(255,255,255,.18),transparent 55%)', sub: <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffce73" strokeWidth="2.4" strokeLinecap="round"><path d="M13 2L3 14h7l-1 8 11-13h-7z" /></svg>Mouvement il y a 3 min</> },
   { label: tr('Façade'), tag: 'LIVE · FAÇADE', grad: 'linear-gradient(180deg,#5e94c4 0%,#86b06f 38%,#6f7e4a 62%,#4a5a36 100%)', glow: 'radial-gradient(120% 80% at 60% 22%,rgba(255,255,255,.16),transparent 55%)', sub: <><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('RAS · véhicule présent')}</> },
 ];
@@ -3706,7 +3711,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   const extPiece = pieces.find(p => p.status && p.status.kind === 'ext'); // Extérieur → ouvert via la chip météo
   const avatars = (a && a.people) ? a.people.map(p => ({ img: p.img, title: `${p.name} · ${p.home ? tr('Présent') : 'Absent'}`, dim: !p.home })) : [{ grad: 'linear-gradient(135deg,#f472b6,var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,#ffb347,#f87171)' }];
   // HA absent → vitrine de demo ; HA present sans camera → aucune camera, pas d'exemple
-  const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => ({ label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: CAMERAS[i % CAMERAS.length].grad, glow: CAMERAS[i % CAMERAS.length].glow, sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: cam.online ? 'var(--o-ok)' : '#f87171' }} />{cam.online ? 'Direct' : 'Hors ligne'}</>), haid: cam.haid, online: cam.online, hass: a.hass })) : CAMERAS;
+  const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => ({ label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: CAMERAS()[i % CAMERAS().length].grad, glow: CAMERAS()[i % CAMERAS().length].glow, sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: cam.online ? 'var(--o-ok)' : '#f87171' }} />{cam.online ? 'Direct' : 'Hors ligne'}</>), haid: cam.haid, online: cam.online, hass: a.hass })) : CAMERAS;
   const _dWallE = { label: tr('Aspirateur'), iconKey: 'vacuum', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
   const _dLuba = { label: tr('Tondeuse'), iconKey: 'mower', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
   const _dLv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase: tr('Éteint'), color: '#94a3b8', active: false, valueIcon: 'timer', valueText: '--:--', bar: null };
@@ -4167,7 +4172,12 @@ const LIGHT_COLORS = [
 ];
 // Palette popup (design "Light Cards Styles" — 8 teintes, blanc inclus).
 const LIGHT_PALETTE = ['#ffce73', '#ff8a4c', '#f472b6', 'var(--o-purple)', 'var(--o-accent)', 'var(--o-cyan)', 'var(--o-ok)', '#ffffff'];
-const WHITE_TEMPS = [['Bougie', 2200, '#ffb46b'], ['Chaud', 2700, '#ffd9a0'], ['Neutre', 4000, '#fff1dd'], [tr('Froid'), 6500, '#eaf2ff']];
+/* Une FONCTION, pas une table.
+ *
+ * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
+ * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
+ * langue. Appelee au rendu, elle se dit dans la langue du moment. */
+const WHITE_TEMPS = () => [['Bougie', 2200, '#ffb46b'], ['Chaud', 2700, '#ffd9a0'], ['Neutre', 4000, '#fff1dd'], [tr('Froid'), 6500, '#eaf2ff']];
 const relTime = (iso) => { if (!iso) return ''; const d = (Date.now() - new Date(iso).getTime()) / 1000; if (d < 60) return "À l'instant"; if (d < 3600) return 'Il y a ' + Math.floor(d / 60) + ' min'; if (d < 86400) return 'Il y a ' + Math.floor(d / 3600) + ' h'; return 'Il y a ' + Math.floor(d / 86400) + ' j'; };
 
 function LumieresContent({ hass, edit = false, onEnt }) {
@@ -4406,7 +4416,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
               )}
               {pl.on && popMode === 'white' && pl.ct && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, maxWidth: 280, margin: '22px auto 0' }}>
-                  {WHITE_TEMPS.map(([n, k, c]) => <button key={k} title={n + ' · ' + k + 'K'} onClick={() => setWhite(pl.id, k)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
+                  {WHITE_TEMPS().map(([n, k, c]) => <button key={k} title={n + ' · ' + k + 'K'} onClick={() => setWhite(pl.id, k)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
                 </div>
               )}
             </div>
@@ -4535,7 +4545,12 @@ function mowerKeys() {
   return [mowerId(S), mowerSensor(S, 'battery'), mowerSensor(S, 'charging'), mowerSensor(S, 'progress')].filter(Boolean);
 }
 
-const HUE_ROOMS = [
+/* Une FONCTION, pas une table.
+ *
+ * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
+ * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
+ * langue. Appelee au rendu, elle se dit dans la langue du moment. */
+const HUE_ROOMS = () => [
   { id: 'Séjour', label: tr('Séjour'), icon: 'couch' }, { id: 'Chambre', label: 'Chambre', icon: 'bed' },
   { id: 'Chambre enfant', label: 'Enfant', icon: 'teddy-bear' }, { id: 'Toute la maison', label: 'Tout', icon: 'home' },
 ];
@@ -4716,7 +4731,7 @@ function ScenesContent({ hass }) {
         </QuickBox>
         <QuickBox label={tr('Pièce')}>
           <div style={{ display: 'flex', gap: 4 }}>
-            {HUE_ROOMS.map(r => <button key={r.id} onClick={() => pickRoom(r.id)} style={miniBtn(room === r.id)}>{r.label}</button>)}
+            {HUE_ROOMS().map(r => <button key={r.id} onClick={() => pickRoom(r.id)} style={miniBtn(room === r.id)}>{r.label}</button>)}
           </div>
         </QuickBox>
         <QuickBox label="Collection">
@@ -4738,7 +4753,7 @@ function ScenesContent({ hass }) {
         <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Appliquer une scène')}</div>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontSize: 11, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent)' }} />{(HUE_ROOMS.find(r => r.id === room) || { label: room }).label.toUpperCase()}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontSize: 11, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent)' }} />{(HUE_ROOMS().find(r => r.id === room) || { label: room }).label.toUpperCase()}</span>
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{tr("La scène s'applique au groupe de la pièce sélectionnée")}</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -7090,7 +7105,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
     else if (vehicle) { subTxt = tr('Véhicule présent'); dot = '#ffb347'; }
     else if (colis) { subTxt = tr('Colis livré'); dot = 'var(--o-accent)'; }
     else if (motion) { subTxt = tr('Mouvement'); dot = '#ffb347'; }
-    const preset = CAMERAS[(c.preset != null ? c.preset : ci) % CAMERAS.length];
+    const preset = CAMERAS()[(c.preset != null ? c.preset : ci) % CAMERAS().length];
     return {
       haid: c.haid, hass, online, label: c.label || '', active,
       tag: online ? 'LIVE · ' + String(c.label || '').toUpperCase() : tr('HORS LIGNE'),
@@ -7635,7 +7650,12 @@ function SystemeView({ hass }) {
 }
 
 /* ════════════ VUE PARAMÈTRES (reproduction fidèle de "Loggia Paramètres.dc.html") ════════════ */
-const PAR_NAV = [
+/* Une FONCTION, pas une table.
+ *
+ * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
+ * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
+ * langue. Appelee au rendu, elle se dit dans la langue du moment. */
+const PAR_NAV = () => [
   { grp: 'Compte', items: [['users', tr('Utilisateurs'), 'users']] },
   { grp: 'Application', items: [['apparence', tr('Apparence'), 'palette'], ['connexion', tr('Connexion HA'), 'link'], ['auto', tr('Automatisations'), 'bolt'], ['maj', tr('Mises à jour'), 'refresh']] },
   { grp: 'Dashboard', items: [['vues', tr('Vues'), 'layout-fluid'], ['entites', tr('Entités'), 'list']] },
@@ -7881,7 +7901,12 @@ function peopleList() {
     img: personPicture(S, p.haid) || null,
   }));
 }
-const FIRST_USER = [{ name: 'Administrateur', role: 'Admin', sub: tr('Profil par défaut'), c: 'var(--o-accent)' }];
+/* Une FONCTION, pas une table.
+ *
+ * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
+ * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
+ * langue. Appelee au rendu, elle se dit dans la langue du moment. */
+const FIRST_USER = () => [{ name: 'Administrateur', role: 'Admin', sub: tr('Profil par défaut'), c: 'var(--o-accent)' }];
 /**
  * Image d'un profil : l'avatar choisi dans Loggia d'abord, sinon la photo du
  * profil Home Assistant.
@@ -7922,7 +7947,12 @@ const matchHaUser = (haUser, list) => {
   }
   return -1;
 };
-const VAC_STATE_FR = { docked: 'À la base', cleaning: tr('Nettoyage'), returning: tr('Retour base'), paused: tr('En pause'), idle: tr('En veille'), error: tr('Erreur') };
+/* Une FONCTION, pas une table.
+ *
+ * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
+ * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
+ * langue. Appelee au rendu, elle se dit dans la langue du moment. */
+const VAC_STATE_FR = () => ({ docked: 'À la base', cleaning: tr('Nettoyage'), returning: tr('Retour base'), paused: tr('En pause'), idle: tr('En veille'), error: tr('Erreur') });
 function airLabel(co2) { return co2 == null || co2 < 800 ? tr('BON') : co2 < 1200 ? tr('MOYEN') : tr('ÉLEVÉ'); }
 function co2Style(co2) { return co2 < 600 ? { bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' } : co2 < 900 ? { bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' } : { bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' }; }
 // Dérive les données live de l'Accueil depuis hass + config. null si pas de hass (→ démo).
@@ -8194,7 +8224,13 @@ export default function App() {
   useEffect(() => {
     const f = () => setLangueVersion(v => v + 1);
     window.addEventListener('loggia-langue-prete', f);
-    return () => window.removeEventListener('loggia-langue-prete', f);
+    // Choix explicite d'une langue : plus de rechargement, un redessin suffit.
+    // `preparerLangue` sera rappele au rendu suivant et relira la configuration.
+    window.addEventListener('loggia-langue-changee', f);
+    return () => {
+      window.removeEventListener('loggia-langue-prete', f);
+      window.removeEventListener('loggia-langue-changee', f);
+    };
   }, []);
   /* Resolution memoisee : le parcours des entites ne doit pas tourner a chaque
    * rendu. Mais il LIT `hass.states`, et n'en dependait pas : une entite
