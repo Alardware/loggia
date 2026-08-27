@@ -212,7 +212,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
         const active = vid === view || (vid === 'pieces' && view.indexOf('room:') === 0);
         const built = BUILT.has(vid);
         return (
-          <div key={it.label} className="o-nav-item" data-active={active ? '1' : undefined} role="button" tabIndex={built ? 0 : -1} onClick={built ? () => onNav(vid) : undefined} onKeyDown={built ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(vid); } } : undefined} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13.5, cursor: built ? 'pointer' : 'default', transition: 'color .25s, font-weight .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
+          <div key={it.label} className="o-nav-item" aria-label={tr(it.label)} data-active={active ? '1' : undefined} role="button" tabIndex={built ? 0 : -1} onClick={built ? () => onNav(vid) : undefined} onKeyDown={built ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(vid); } } : undefined} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13.5, cursor: built ? 'pointer' : 'default', transition: 'color .25s, font-weight .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
             {it.svg}<span className="o-side-text">{tr(it.label)}</span>
           </div>
         );
@@ -238,7 +238,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
           {secondaires.map(h => {
             const active = h.vid === view;
             return (
-              <div key={h.vid} className="o-nav-item" data-active={active ? '1' : undefined} role="button" tabIndex={0} onClick={() => onNav(h.vid)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(h.vid); } }} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13.5, cursor: 'pointer', transition: 'color .25s, font-weight .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
+              <div key={h.vid} className="o-nav-item" aria-label={tr(h.label)} data-active={active ? '1' : undefined} role="button" tabIndex={0} onClick={() => onNav(h.vid)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(h.vid); } }} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13.5, cursor: 'pointer', transition: 'color .25s, font-weight .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
                 <Fi i={h.icon} color={h.c} /><span className="o-side-text">{h.label}</span>
               </div>
             );
@@ -252,7 +252,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
             const vid = 'cv:' + cv.id;
             const active = vid === view;
             return (
-              <div key={cv.id} className="o-nav-item" data-active={active ? '1' : undefined} role="button" tabIndex={0} onClick={() => onNav(vid)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(vid); } }} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13.5, cursor: 'pointer', transition: 'color .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
+              <div key={cv.id} className="o-nav-item" aria-label={cv.name} data-active={active ? '1' : undefined} role="button" tabIndex={0} onClick={() => onNav(vid)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(vid); } }} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13.5, cursor: 'pointer', transition: 'color .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
                 <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" /><span className="o-side-text">{cv.name}</span>
               </div>
             );
