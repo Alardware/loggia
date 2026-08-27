@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Loggia Dashboard",
+        "description": "Loggia lee tu instalación de Home Assistant por sí solo: no hay nada que configurar. Aparecerá con el nombre **Loggia** en la barra lateral."
+      }
+    },
+    "abort": {
+      "already_configured": "Loggia ya está instalado."
+    }
+  }
+}
