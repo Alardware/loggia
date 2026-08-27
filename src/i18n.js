@@ -312,15 +312,12 @@ function memoriserHA(code, tout) {
   const neuf = !_haMemo;
   _haMemo = utile;
   try { localStorage.setItem(MEMO_HA + code, JSON.stringify(utile)); } catch (e) { /* stockage plein : on repartira du reseau */ }
-  /* Rien de garde jusqu'ici : les libelles construits a l'import sont restes en
-   * francais. Un rechargement — le seul — les reconstruit avec ces mots. */
+  /* Les mots de Home Assistant viennent d'arriver. Il fallait recharger pour que
+   * les libelles batis a l'import en profitent ; ils sont devenus des fonctions,
+   * un redessin suffit. La racine ecoute cet evenement. */
   if (neuf) {
-    try {
-      if (sessionStorage.getItem(MEMO_HA + code) !== '1') {
-        sessionStorage.setItem(MEMO_HA + code, '1');
-        location.reload();
-      }
-    } catch (e) { /* pas de navigateur : rien a recharger */ }
+    try { window.dispatchEvent(new CustomEvent('loggia-langue-prete', { detail: { langue: code } })); }
+    catch (e) { /* pas de navigateur : rien a annoncer */ }
   }
 }
 
@@ -385,31 +382,19 @@ function chargerRessourcesHA(hass, code) {
 /* La langue avec laquelle les tableaux de libelles ont ete CONSTRUITS. Elle ne
  * bouge plus : c'est le point de comparaison. */
 const LANGUE_IMPORT = _code;
-const RECHARGE = 'loggia-langue-recharge';
 
-/**
- * Annonce qu'on recharge SOI-MEME pour passer a `code`.
- *
- * Changer de langue provoquait DEUX rechargements coup sur coup : celui du
- * reglage, puis celui que ce module declenche en constatant que les libelles
- * construits a l'import sont restes dans l'ancienne langue. L'ecran clignotait
- * deux fois, et la seconde interruption pouvait tomber au mauvais moment.
- *
- * En posant les deux drapeaux avant de recharger, on dit a `preparerLangue` que
- * le travail est deja fait : un seul rechargement suffit. Ce sont les drapeaux
- * que ce module lit de toute facon — rien de nouveau a tenir a jour.
- */
-export function marquerLangueRechargee(code) {
-  try {
-    sessionStorage.setItem(RECHARGE, code);
-    sessionStorage.setItem(MEMO_HA + code, '1');
-  } catch (e) { /* pas de stockage : le second rechargement fera le travail */ }
-}
 
 export function preparerLangue(hass) {
   const avant = _code;
   _code = resoudre(hass);
   _cat = CATALOGUES[_code] || null;
+
+  /* La langue a change : les mots de Home Assistant en memoire sont ceux de la
+   * PRECEDENTE. `tr` les consulte en premier, si bien qu'un retour au francais
+   * laissait « Lights », « Cover », « Settings » dans la navigation — un menu
+   * moitie traduit. On reprend donc ceux de la nouvelle langue, deja gardes d'une
+   * visite anterieure, et `chargerRessourcesHA` complete depuis le serveur. */
+  if (_code !== avant) _haMemo = lireLS(MEMO_HA + _code);
 
   /* Le memo n'est ecrit QUE sur une resolution fiable. Sans `hass`, « suivre Home
    * Assistant » se rabat sur le navigateur : figer cette valeur provisoire ferait
@@ -425,16 +410,12 @@ export function preparerLangue(hass) {
      *
      * Un rechargement les reconstruit juste. Le drapeau porte la langue visee,
      * donc un second passage sur la meme langue ne recharge pas : pas de boucle. */
-    if (_code !== LANGUE_IMPORT) {
-      let deja = null;
-      try { deja = sessionStorage.getItem(RECHARGE); } catch (e) { deja = _code; }
-      if (deja !== _code) {
-        try {
-          sessionStorage.setItem(RECHARGE, _code);
-          location.reload();
-        } catch (e) { /* pas de navigateur : rien a recharger */ }
-      }
-    }
+    /* Plus de rechargement ici.
+     *
+     * Il servait a reconstruire les libelles batis a l'import — navigation,
+     * themes, onglets — restes dans l'ancienne langue. Ces listes sont devenues
+     * des fonctions, appelees au rendu : elles se disent dans la langue du
+     * moment. La racine redessine sur `loggia-langue-changee`, et cela suffit. */
   }
   // `index.html` porte `lang="fr"` en dur : sans cette ligne, un lecteur d'ecran
   // lirait de l'anglais avec la prononciation francaise, et la cesure serait

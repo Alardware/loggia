@@ -17,7 +17,7 @@ import { CV_ICONS, cvInp, cvName, USER_COLORS, BottomSheet, EntPicker, CV_DOM_IC
 import { useLoggia } from '../runtime.js';
 import { viewReason } from '../views.js';
 import { weatherEntity } from '../wxutil.jsx';
-import { tr, choixLangue, languesDisponibles, marquerLangueRechargee } from '../i18n.js';
+import { tr, choixLangue, languesDisponibles } from '../i18n.js';
 
 /**
  * Ce que l'installation est REELLEMENT.
@@ -50,7 +50,12 @@ function installationReelle() {
 }
 
 // Cartes du sélecteur de thème Loggia ('' = défaut). cols = [accent, fond, accent2] pour l'aperçu.
-const PRESET_META = [
+/* Une FONCTION, pas une table.
+ *
+ * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
+ * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
+ * langue. Appelee au rendu, elle se dit dans la langue du moment. */
+const PRESET_META = () => [
   { id: '', name: 'Loggia', desc: tr('Thème par défaut'), cols: ['#4f8cff', '#0b101b', '#6ea8ff'] },
   { id: 'neumorphix', name: 'Neumorphix', desc: 'Doux, en relief', cols: ['#6c7ae0', '#1e2128', '#5de0d8'] },
   { id: 'google', name: 'Google', desc: tr('Material épuré'), cols: ['#1a73e8', '#171717', '#8ab4f8'] },
@@ -68,10 +73,20 @@ const PRESET_META = [
 ];
 // Luminance 0..1 d'une couleur (hex/rgb) → choix sombre/clair
 
-const PAR_TABS = [['connexion', tr('Connexion HA')], ['users', tr('Utilisateurs')], ['vues', tr('Vues')], ['entites', tr('Entités')], ['auto', tr('Automatisations')], ['maj', tr('Mises à jour')], ['apparence', tr('Apparence')], ['about', tr('À propos')]];
+/* Une FONCTION, pas une table.
+ *
+ * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
+ * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
+ * langue. Appelee au rendu, elle se dit dans la langue du moment. */
+const PAR_TABS = () => [['connexion', tr('Connexion HA')], ['users', tr('Utilisateurs')], ['vues', tr('Vues')], ['entites', tr('Entités')], ['auto', tr('Automatisations')], ['maj', tr('Mises à jour')], ['apparence', tr('Apparence')], ['about', tr('À propos')]];
 // Nav latérale des Paramètres, groupée façon Atrium (réf. user 20/08) : { grp, items: [id, label, glyphe UICons] }
 
-const PAR_HELPS = [
+/* Une FONCTION, pas une table.
+ *
+ * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
+ * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
+ * langue. Appelee au rendu, elle se dit dans la langue du moment. */
+const PAR_HELPS = () => [
   { id: 'nabu', title: tr('Bascule automatique pour Nabu Casa'), body: "Si tu ouvres Loggia depuis une URL *.ui.nabu.casa (HTTPS) alors que l'URL stockée est en http://, Loggia détecte le conflit et utilise automatiquement l'origine de la page courante. Aucune intervention nécessaire." },
   { id: 'why', title: 'Pourquoi cette bascule ?', body: 'Les navigateurs bloquent les requêtes HTTP depuis une page HTTPS (protection "mixed content"). Le token n\'est pas en cause — il marche pour les deux URLs.' },
   { id: 'notoken', title: tr('Sans token'), body: 'Loggia fonctionne en mode démo (état local seulement).' },
@@ -136,7 +151,7 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
           <span style={{ flex: 1, height: 14, borderRadius: RAD[3], background: 'var(--o-s3)' }} />
         </div>
       </div>
-      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)', padding: '8px 2px 0' }}>Thème « {(PRESET_META.find(x => x.id === (loggiaTheme || '')) || PRESET_META[0]).name} » · mode {themeMode === 'light' ? 'clair' : 'foncé'}.</div>
+      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)', padding: '8px 2px 0' }}>Thème « {(PRESET_META().find(x => x.id === (loggiaTheme || '')) || PRESET_META()[0]).name} » · mode {themeMode === 'light' ? 'clair' : 'foncé'}.</div>
     </div>
   );
 }
@@ -620,7 +635,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const lastSeen = (() => { try { return JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); } catch (e) { return {}; } })();
   const seenRel = (name, isCur) => { if (isCur) return 'actif maintenant'; const t = lastSeen[name]; if (!t) return ''; const m = (Date.now() - t) / 60000; if (m < 60) return 'vu il y a ' + Math.max(1, Math.round(m)) + ' min'; if (m < 1440) return 'vu il y a ' + Math.round(m / 60) + ' h'; if (m < 2880) return 'vu hier'; return 'vu il y a ' + Math.round(m / 1440) + ' j'; };
   const [editing, setEditing] = useState(null); // { i, u } pour éditer, { i:null } pour ajouter
-  const visTabs = isAdmin ? PAR_TABS : PAR_TABS.filter(([id]) => id !== 'vues' && id !== 'auto' && id !== 'maj' && id !== 'entites');
+  const visTabs = isAdmin ? PAR_TABS : PAR_TABS().filter(([id]) => id !== 'vues' && id !== 'auto' && id !== 'maj' && id !== 'entites');
   // Automatisations : état optimiste local (id → on/off) au-dessus de hass.
   const [autoOv, setAutoOv] = useState({});
   // Signature des états automation.* → purge l'override optimiste dès que HA confirme (ou change depuis un autre appareil).
@@ -692,7 +707,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       sub: (users[userIdx] || {}).name ? (users[userIdx] || {}).name + ' · ' + String((users[userIdx] || {}).role || '').toLowerCase() : 'Profils locaux et code admin',
       big: String(users.length), unit: tr('profils du foyer'), admin: false },
     { id: 'apparence', name: tr('Apparence'), ico: 'palette', col: 'var(--o-purple)', bg: 'rgba(var(--o-purple-rgb),.14)',
-      sub: tr('Thème, mode, effets'), big: (PRESET_META.find(x => x.id === loggiaTheme) || PRESET_META[0]).name, unit: tr('{n} thèmes', { n: PRESET_META.length }), admin: false, small: true },
+      sub: tr('Thème, mode, effets'), big: (PRESET_META().find(x => x.id === loggiaTheme) || PRESET_META()[0]).name, unit: tr('{n} thèmes', { n: PRESET_META().length }), admin: false, small: true },
     { id: 'connexion', name: tr('Connexion HA'), long: 'Connexion à Home Assistant', ico: 'link', col: 'var(--o-ok)', bg: 'rgba(var(--o-ok-rgb),.14)',
       sub: accessKind, pageSub: 'Session empruntée au navigateur · ' + accessKind, big: (lat != null && lat >= 0) ? lat + ' ms' : (hass ? 'active' : 'hors ligne'), unit: hass ? 'session active' : 'session absente', admin: false, small: true },
     { id: 'auto', name: tr('Automatisations'), ico: 'bolt', col: 'var(--o-warn)', bg: 'rgba(var(--o-warn-rgb),.14)',
@@ -775,7 +790,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{tr("État de l'installation")}</div>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent)' }} />{tr('THÈME')} {(PRESET_META.find(x => x.id === loggiaTheme) || PRESET_META[0]).name.toUpperCase()}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent)' }} />{tr('THÈME')} {(PRESET_META().find(x => x.id === loggiaTheme) || PRESET_META()[0]).name.toUpperCase()}</span>
               </div>
               <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{tr("Les modifications s'appliquent immédiatement à cet appareil")}</div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -843,7 +858,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </SecGroup>
         </SecBar>
         {panel && (() => {
-          const pm = PRESET_META.find(x => x.id === loggiaTheme) || PRESET_META[0];
+          const pm = PRESET_META().find(x => x.id === loggiaTheme) || PRESET_META()[0];
           const formes = [look.glass ? 'verre' : 'opaque', look.radius, look.shadow ? 'ombres' : 'à plat', look.hairline ? 'liserés' : 'sans liseré'].join(' · ');
           return (
             <SecCard title={tr('Thème actif')} tag={haTheme === 'FOLLOW' ? 'SUIVI DE HA' : 'CHOIX MANUEL'} tagCol={haTheme === 'FOLLOW' ? 'warn' : 'ok'}
@@ -913,7 +928,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         const NATIFS = ['', 'atrium', 'ios', 'google', 'neumorphix'];
         const COMMU = ['frosted', 'onedark', 'dracula', 'github', 'tokyo', 'nightowl', 'plum', 'material', 'lavande'];
         const ids = themeTab === 'natifs' ? NATIFS : COMMU;
-        const themeList = ids.map(id => PRESET_META.find(x => x.id === id)).filter(Boolean);
+        const themeList = ids.map(id => PRESET_META().find(x => x.id === id)).filter(Boolean);
         const tabBtn = (on) => ({ padding: '6px 13px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: on ? 'var(--o-surfA)' : 'transparent', color: on ? 'var(--o-text)' : 'var(--o-text2)', boxShadow: on ? '0 1px 3px rgba(0,0,0,.25)' : 'none' });
         return (<>
           <AppCard title="Affichage">
@@ -935,15 +950,15 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <Seg value={choixLangue()}
                 opts={languesDisponibles(hass).map(l => [l.code, l.code === 'auto' ? tr('Auto') : l.code.toUpperCase()])}
                 onPick={v => {
-                  cfgSet({ 'loggia-langue': v });
-                  /* Un seul rechargement : sans ce marquage, i18n en declenche un
-                   * second en trouvant les libelles figes dans l'ancienne langue.
+                  /* Plus de rechargement.
                    *
-                   * Pas pour « Auto » : la langue effective est celle du compte Home
-                   * Assistant, qu'on ne connait pas encore ici. C'est i18n qui la
-                   * resoudra, et lui seul peut alors juger s'il faut recharger. */
-                  if (v !== 'auto') marquerLangueRechargee(v);
-                  setTimeout(() => window.location.reload(), 200);
+                   * Il n'existait que pour reconstruire les libelles figes a
+                   * l'import — navigation, themes, onglets. Ces listes sont
+                   * devenues des fonctions : elles se disent dans la langue du
+                   * moment, et un simple redessin suffit. */
+                  cfgSet({ 'loggia-langue': v });
+                  // La racine ecoute : elle rappelle `preparerLangue` puis redessine.
+                  try { window.dispatchEvent(new CustomEvent('loggia-langue-changee')); } catch (e) {}
                 }} />
             </OptRow>
             <OptRow title="Suivre Home Assistant" desc={tr('Calque le thème actif de Home Assistant et désactive les choix ci-dessous.')}>
@@ -1117,7 +1132,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
 
         <div style={cardSt}>
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>{tr('Bon à savoir')}</div>
-          {PAR_HELPS.map(h => {
+          {PAR_HELPS().map(h => {
             const isOpen = !!open[h.id];
             return (
               <div key={h.id} style={{ border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 13, marginBottom: 10, overflow: 'hidden' }}>
@@ -1193,7 +1208,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </div>
         );
         const hiddenNames = BUILTIN_VIEWS.filter(v => cfg.hidden.has(v[0])).map(v => v[1]);
-        const nExtra = HIDDEN_VIEWS.filter(h => cfg.shown.has(h.vid)).length;
+        const nExtra = HIDDEN_VIEWS().filter(h => cfg.shown.has(h.vid)).length;
         return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <SecBar>
@@ -1205,7 +1220,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <EnRow label={tr('Vues intégrées')} desc={tr('Accueil, Pièces, Scènes, Objets, Énergie, Sécurité, Système')}>
               <EnGauge v={(BUILTIN_VIEWS.length - hiddenNames.length) + ' / ' + BUILTIN_VIEWS.length} pct={(BUILTIN_VIEWS.length - hiddenNames.length) / BUILTIN_VIEWS.length * 100} col="var(--o-accent)" />
             </EnRow>
-            <EnRow label={tr('Vues secondaires')} desc={tr('Lumières, Climat, Volets, Aspirateur, Croquettes, Médias')}><EnVal v={nExtra + ' / ' + HIDDEN_VIEWS.length} col={nExtra ? 'var(--o-accent-soft)' : 'var(--o-text3)'} /></EnRow>
+            <EnRow label={tr('Vues secondaires')} desc={tr('Lumières, Climat, Volets, Aspirateur, Croquettes, Médias')}><EnVal v={nExtra + ' / ' + HIDDEN_VIEWS().length} col={nExtra ? 'var(--o-accent-soft)' : 'var(--o-text3)'} /></EnRow>
             <EnRow label={tr('Masquées')} desc={hiddenNames.length ? hiddenNames.join(' · ') : 'Aucune vue retirée du menu'}><EnVal v={String(hiddenNames.length)} col={hiddenNames.length ? 'var(--o-warn2)' : 'var(--o-text3)'} /></EnRow>
             <EnRow label="Mes vues" desc={tr('Créées avec tes entités, éditables à tout moment')}><EnVal v={customViews.length ? String(customViews.length) : 'aucune'} col={customViews.length ? 'var(--o-ok)' : 'var(--o-text3)'} /></EnRow>
           </SecCard>
@@ -1217,7 +1232,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             {BUILTIN_VIEWS.map(([vid, name, icon, sub, locked]) => { const why = viewReason(availViews, vid); return (
               <Row key={vid} icon={icon} name={name} sub={why || sub} locked={locked || !!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)} />
             ); })}
-            {HIDDEN_VIEWS.map(h => { const why = viewReason(availViews, h.vid); return (
+            {HIDDEN_VIEWS().map(h => { const why = viewReason(availViews, h.vid); return (
               <Row key={h.vid} icon={h.icon} c={h.c} name={h.label} sub={why || 'vue retirée, accessible par la recherche'} locked={!!why} on={!why && cfg.shown.has(h.vid)} onT={() => toggleExtra(h.vid)} />
             ); })}
           </div>
