@@ -644,6 +644,11 @@ export default {
   'Boîtier ouvert ou déplacé': 'Casing opened or moved',
   'Vigilance météo': 'Weather warning',
   'Alerte météo en cours': 'Weather alert in progress',
+  'Titre de la carte (optionnel)': 'Card title (optional)',
+  'Jinja, évalué par Home Assistant. La carte se met à jour en direct.':
+    'Jinja, rendered by Home Assistant. The card updates live.',
+  'OU UNE CARTE TEMPLATE': 'OR A TEMPLATE CARD',
+  'Ajouter': 'Add',
   "l'aperçu suit le thème choisi": 'the preview follows the chosen theme',
   'Seul un administrateur peut ajouter, modifier ou supprimer un utilisateur.':
     'Only an administrator can add, edit or delete a user.',
