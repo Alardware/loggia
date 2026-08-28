@@ -520,6 +520,14 @@ function Header() {
         <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', background: 'var(--o-bd2)', border: '1px solid var(--o-bd2)', borderRadius: 6, padding: '2px 7px' }}>{IS_MAC ? '⌘K' : 'Ctrl K'}</span>
       </div>
       <div style={{ flex: 1 }} />
+      {/* Chip « n allumées » : l'état lumineux de la maison, d'un regard, où qu'on soit. */}
+      {ctx.lightsOn > 0 && (
+        <button className="o-hdr-lights" onClick={() => onNav && onNav('lumieres')} title={tr('Voir les lumières')}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 999, cursor: 'pointer', flexShrink: 0, background: 'rgba(var(--o-gold-rgb),.13)', border: '1px solid rgba(var(--o-gold-rgb),.32)', color: 'var(--o-warn)', fontSize: 12.5, fontWeight: 800 }}>
+          <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-warn)', boxShadow: '0 0 8px var(--o-warn)' }} />
+          <FlipText text={ctx.lightsOn > 1 ? tr('{n} allumées', { n: ctx.lightsOn }) : tr('{n} allumée', { n: ctx.lightsOn })} />
+        </button>
+      )}
       <div className="o-hdr-date" style={{ textAlign: 'right', lineHeight: 1.15 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{dateStr}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}><FlipText text={timeStr} /></div></div>
       <div className="o-hdr-div" style={{ width: 1, height: 30, background: 'var(--o-bd1)' }} />
       <div data-hdr-menu style={{ display: 'flex', alignItems: 'center', gap: 9, position: 'relative' }}>
@@ -735,7 +743,44 @@ function readLook() {
   try { return { ...LOOK_DEF, ...(JSON.parse(window.localStorage.getItem('loggia_look') || 'null') || {}) }; }
   catch (e) { return { ...LOOK_DEF }; }
 }
-function applyLook(root, L, frostedPreset) {
+
+/* Teinte d'état : les cartes qui montrent un appareil ACTIF (lampe allumée,
+ * volet ouvert, radiateur qui chauffe) lavent leur surface de leur couleur.
+ * Le réglage module l'intensité de ce lavis. « Douce » = le rendu historique
+ * (les ampoules l'avaient déjà, en dur) ; « Sans » rend les cartes neutres ;
+ * « Pleine » double la présence de la couleur, façon GlassHome.
+ *
+ * `LAVIS` est un facteur module-level et non un état React : il est LU au
+ * rendu (jamais à l'import), et changer le réglage redessine tout l'arbre. */
+const TEINTES = { sans: 0, discrete: .6, douce: 1, pleine: 1.9 };
+let LAVIS = 1;
+/** Alpha de lavis bornée : base × facteur du réglage, plafonnée à .85. */
+const lav = (base) => Math.min(.85, Math.round(base * LAVIS * 1000) / 1000);
+
+/* Fond d'écran : un dégradé discret sous les cartes, décliné dans la palette
+ * du thème sombre et une variante pour le clair. Posé via `--o-bggrad`, le
+ * canal que les presets emploient déjà — donc aucun sélecteur nouveau. */
+const FONDS = {
+  minuit: {
+    dark: 'radial-gradient(85% 65% at 18% 8%, #16233b 0%, rgba(22,35,59,0) 62%), radial-gradient(70% 55% at 88% 90%, #101d30 0%, rgba(16,29,48,0) 58%), var(--o-bg)',
+    light: 'radial-gradient(85% 65% at 18% 8%, #dde7f5 0%, rgba(221,231,245,0) 62%), radial-gradient(70% 55% at 88% 90%, #e7edf6 0%, rgba(231,237,246,0) 58%), var(--o-bg)',
+  },
+  abysse: {
+    dark: 'radial-gradient(60% 48% at 85% 0%, rgba(var(--o-accent-rgb),.14) 0%, rgba(0,0,0,0) 60%), linear-gradient(200deg, #0e1726 0%, var(--o-bg) 70%)',
+    light: 'radial-gradient(60% 48% at 85% 0%, rgba(var(--o-accent-rgb),.12) 0%, rgba(255,255,255,0) 60%), linear-gradient(200deg, #eef3fa 0%, var(--o-bg) 70%)',
+  },
+  ardoise: {
+    dark: 'radial-gradient(120% 100% at 50% -20%, #1a2433 0%, #0e141f 55%, var(--o-bg) 100%)',
+    light: 'radial-gradient(120% 100% at 50% -20%, #f2f5fa 0%, #e9edf4 55%, var(--o-bg) 100%)',
+  },
+};
+function applyLook(root, L, frostedPreset, light) {
+  // Intensité du lavis de teinte, lue par les cartes au rendu (voir TEINTES).
+  LAVIS = TEINTES[L.tint] != null ? TEINTES[L.tint] : 1;
+  // Fond d'écran : après applyVars, donc il bat le bggrad d'un preset — mais
+  // « aucun » ne pose rien et laisse le preset ou le fond uni s'exprimer.
+  const fond = FONDS[L.fond];
+  if (fond) root.style.setProperty('--o-bggrad', light ? fond.light : fond.dark);
   const verre = !!frostedPreset || !!L.glass;
   root.classList.toggle('loggia-frosted', verre);
   /* « Verre » ne posait qu'un `backdrop-filter`. Or un flou d'arriere-plan ne se
@@ -788,7 +833,7 @@ function applyTheme(opts, hass) {
   // Suivre HA : miroir du thème actif de HA (valeurs résolues sur le parent).
   if (opts.haTheme === 'FOLLOW') {
     const v = readComputedHaTheme(hass);
-    if (v) { applyVars(root, v); root.classList.toggle('loggia-light', !v.dark); applyLook(root, L, false); return !!v.dark; }
+    if (v) { applyVars(root, v); root.classList.toggle('loggia-light', !v.dark); applyLook(root, L, false, !v.dark); return !!v.dark; }
     // computed pas prêt → base en attendant (l'effet poll réessaie)
   }
   const light = opts.mode === 'light';
@@ -796,7 +841,7 @@ function applyTheme(opts, hass) {
   // Preset Loggia ('' = défaut → tokens CSS de base, aucune surcharge). Sinon applique la variante claire/sombre.
   const preset = LOGGIA_PRESETS[opts.loggiaTheme];
   if (preset) { const v = preset[light ? 'light' : 'dark']; if (v) applyVars(root, v); }
-  applyLook(root, L, opts.loggiaTheme === 'frosted'); // 'frosted' active aussi le flou backdrop des cartes
+  applyLook(root, L, opts.loggiaTheme === 'frosted', light); // 'frosted' active aussi le flou backdrop des cartes
   return !light;
 }
 
@@ -877,7 +922,9 @@ function PieceCard({ p, onOpen, compact = false, lights = null, mains = null, on
         boxShadow: on
           ? '0 0 0 1px rgba(var(--o-gold-rgb),.34), 0 0 20px 2px rgba(var(--o-gold-rgb),.18), var(--o-shadow,0 14px 36px rgba(0,0,0,.36))'
           : 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))',
-        transition: 'box-shadow .3s ease',
+        // Teinte d'état : au halo s'ajoute un lavis doré sur la surface même.
+        ...(on && LAVIS ? { background: `linear-gradient(160deg,rgba(var(--o-gold-rgb),${lav(.13)}),rgba(var(--o-gold-rgb),0) 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
+        transition: 'box-shadow .3s ease, background .3s ease',
         cursor: 'pointer', ...stag(idx) }}>
         {/* calque de flash séparé : ne touche ni au transform du tilt ni au box-shadow de la carte */}
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 15, pointerEvents: 'none' }} />
@@ -1302,8 +1349,8 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
   return (
     <button ref={flashRef} className="o-light-card o-rmcard" onClick={() => { if (adjustable && onOpen) onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed }); }}
       style={{ ...RM_CARD, alignItems: 'stretch', textAlign: 'left', width: '100%', cursor: adjustable ? 'pointer' : 'default', overflow: 'hidden',
-        background: on ? `linear-gradient(180deg,var(--o-surfA) 28%,${hx(accent, .22)})` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
-        border: on ? `1px solid ${hx(accent, .3)}` : 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+        background: on && LAVIS ? `linear-gradient(180deg,var(--o-surfA) 28%,${hx(accent, lav(.22))})` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
+        border: on && LAVIS ? `1px solid ${hx(accent, lav(.3))}` : 'var(--o-bw,1px) solid var(--o-bd2)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ ...RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accent : 'var(--o-text3)'), boxShadow: on ? `0 0 ${Math.round(6 + bri * 0.22)}px ${Math.round(bri * 0.05)}px ${hx(accent, 0.18 + bri * 0.004)}` : 'none', transition: 'box-shadow .6s ease' }}><LightIcon type={ltype} size={19} /></span>
         <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + (label || a.friendly_name || id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }} onClick={toggle} style={{ width: 46, height: 26, borderRadius: 13, background: on ? '#FF2D78' : 'rgba(150,162,184,.2)', position: 'relative', cursor: 'pointer', flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span>
@@ -1339,7 +1386,12 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
     el.onpointercancel = () => { end(); if (fill) fill.style.width = pos + '%'; };
   };
   return (
-    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (titre || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
+    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (titre || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+      // Teinte d'état : volet ouvert = lavis d'accent, gradué par la position.
+      ...(pos > 0 && LAVIS ? {
+        background: `linear-gradient(180deg,var(--o-surfA) 28%,rgba(var(--o-accent-rgb),${lav(.10 + pos * .0012)}))`,
+        border: `1px solid rgba(var(--o-accent-rgb),${lav(.26)})`,
+      } : null) }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ ...RM_ICO(pos > 0 ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', pos > 0 ? 'var(--o-accent-soft)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden' }}>
           {/* store qui descend dans le chip : hauteur = part fermée, suit la position en douceur */}
@@ -1458,7 +1510,12 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
   const nextMode = () => { const i = all.indexOf(mode); commander(hass, id, 'set_hvac_mode', all[(i + 1) % all.length]); };
   return (
-    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
+    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+      // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
+      ...(heating && LAVIS ? {
+        background: `linear-gradient(180deg,var(--o-surfA) 28%,rgba(var(--o-warn2-rgb),${lav(.16)}))`,
+        border: `1px solid rgba(var(--o-warn2-rgb),${lav(.28)})`,
+      } : null) }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.16)', off ? 'var(--o-text3)' : heating ? 'var(--o-warn2)' : '#ff8a4c')}><Fi i="thermometer-half" size={17} /></span>
         <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title="Changer de mode" style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'var(--o-bw,1px) solid ' + (off ? 'var(--o-bd2)' : 'rgba(var(--o-warn2-rgb),.3)'), background: off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-warn2)' }}>{tr(MODE_FR[mode]) || String(mode).toUpperCase()}</button>
@@ -8473,7 +8530,14 @@ export default function App() {
     return () => { clearTimeout(t); window.removeEventListener('scroll', noter); };
   }, []);
   // Vues personnalisées (créées dans Paramètres → Vues, admin) — live, persistées.
-  const [customViews, setCustomViews] = useState(() => { const v = readLS('loggia_customviews', []); return Array.isArray(v) ? v.filter(x => x && x.id && x.name) : []; });
+  const [customViews, setCustomViews] = useState(() => {
+    // Filet de l'écran d'erreur : « Repartir sans les vues custom » pose ce
+    // drapeau puis recharge. Il est CONSOMMÉ ici — il ne protège que ce
+    // chargement-ci, et la configuration n'est pas touchée : si la vue fautive
+    // replante au retour, l'écran d'erreur revient et on peut recommencer.
+    try { if (sessionStorage.getItem('loggia_safe_nocv')) { sessionStorage.removeItem('loggia_safe_nocv'); return []; } } catch (e) {}
+    const v = readLS('loggia_customviews', []); return Array.isArray(v) ? v.filter(x => x && x.id && x.name) : [];
+  });
   const saveCustomViews = (list) => { try { localStorage.setItem('loggia_customviews', JSON.stringify(list)); } catch (e) {} setCustomViews(list); };
   const [editMode, setEditMode] = useState(false);
   // L'édition est réservée aux admins : si le profil actif n'est plus admin, on coupe le mode édition.
@@ -8727,6 +8791,12 @@ export default function App() {
   }, [serverCfg, users]);
 
   const [pinTarget, setPinTarget] = useState(null);
+  // Chip « n allumées » du header : compte les luminaires HA à l'état on.
+  const lightsOn = useMemo(() => {
+    const S = hass && hass.states; if (!S) return 0;
+    let n = 0; for (const id in S) { if (id.indexOf('light.') === 0 && S[id] && S[id].state === 'on') n++; }
+    return n;
+  }, [hass]);
   const adminPin = (() => { try { return localStorage.getItem('loggia_admin_pin') || '0000'; } catch (e) { return '0000'; } })();
   const applyUser = (i) => { try { localStorage.setItem('loggia_active_user', String(i)); const u = users[i]; if (u && u.name) { const m = JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); m[u.name] = Date.now(); localStorage.setItem('loggia-lastseen', JSON.stringify(m)); } } catch (e) {} setUserIdx(i); };
   const switchUser = (i) => { if (i === userIdx) return; if (users[i] && users[i].role === 'Admin') setPinTarget(i); else applyUser(i); };
@@ -8776,7 +8846,7 @@ export default function App() {
   return (
     <LoggiaContext.Provider value={loggiaRuntime}>
     {showOnboarding && <Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} />}
-    <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, isAdmin, notifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)) }}>
+    <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, isAdmin, notifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn }}>
     <div className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)' }}>
       {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12.5, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 12, padding: '10px 16px', fontSize: 12.5, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}

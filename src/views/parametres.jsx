@@ -1015,6 +1015,26 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <OptRow title={tr('Contraste renforcé')} desc={tr('Éclaircit les textes secondaires et marque les séparateurs.')}>
               <Tgl on={!!look.contrast} cb={() => onLook({ contrast: !look.contrast })} label={tr('Contraste renforcé')} />
             </OptRow>
+            <OptRow title={tr("Teinte d'état")} desc={tr('Les cartes actives — lampe allumée, volet ouvert, chauffage en marche — se lavent de leur couleur.')}>
+              <Seg value={look.tint || 'douce'}
+                opts={[['sans', tr('Sans')], ['discrete', tr('Discrète')], ['douce', tr('Douce')], ['pleine', tr('Pleine')]]}
+                onPick={v => onLook({ tint: v })} />
+            </OptRow>
+            <OptRow title={tr("Fond d'écran")} desc={tr('Un dégradé discret sous les cartes, dans la palette du thème. Donne sa profondeur au verre.')}>
+              {[['aucun', tr('Aucun'), 'var(--o-bg)'],
+                ['minuit', tr('Minuit'), 'radial-gradient(90% 80% at 25% 15%, #16233b 0%, #0b0f16 75%)'],
+                ['abysse', tr('Abysse'), 'radial-gradient(70% 60% at 80% 10%, rgba(var(--o-accent-rgb),.4) 0%, #0e1726 70%)'],
+                ['ardoise', tr('Ardoise'), 'radial-gradient(120% 110% at 50% -10%, #23303f 0%, #0e141f 80%)']].map(([v, lb, ap]) => {
+                const on = (look.fond || 'aucun') === v;
+                return (
+                  <button key={v} onClick={() => onLook({ fond: v })} aria-pressed={on} aria-label={tr("Fond d'écran") + ' ' + lb}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 12, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
+                    <span style={{ width: 34, height: 22, borderRadius: 6, background: ap, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd2)') }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</span>
+                  </button>
+                );
+              })}
+            </OptRow>
             <OptRow title="Couleur d'accent" desc={tr('Éléments actifs, jauges et liens.')}>
               {ACCENTS.map(([c, lb]) => {
                 const on = (look.accent || '') === c;

@@ -53,12 +53,41 @@ class LoggiaErrorBoundary extends React.Component {
             Une erreur est survenue pendant le rendu. Le détail ci-dessous permet de la corriger.
           </div>
           <pre style={pre}>{String((err && err.stack) || (err && err.message) || err)}</pre>
-          <button
-            onClick={() => window.location.reload()}
-            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: '#4f8cff', color: '#06121f' }}
-          >
-            Recharger
-          </button>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            <button
+              onClick={() => window.location.reload()}
+              style={{ padding: '10px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: '#4f8cff', color: '#06121f' }}
+            >
+              Recharger
+            </button>
+            {/* Filet n° 1 : recharger en ignorant les vues custom, seule partie du
+                dashboard dont le contenu est arbitraire. Le drapeau ne vaut que
+                pour UN chargement et ne touche pas à la configuration. */}
+            <button
+              onClick={() => { try { sessionStorage.setItem('loggia_safe_nocv', '1'); } catch (e) {} window.location.reload(); }}
+              style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.16)', color: '#e6ecf5' }}
+            >
+              Repartir sans les vues custom
+            </button>
+            {/* Filet n° 2 : tout effacer. Confirmation native — ici, plus rien du
+                dashboard n'est montable, donc pas de BottomSheet. */}
+            <button
+              onClick={() => {
+                if (!window.confirm('Effacer tous les réglages Loggia de ce navigateur (vues, utilisateurs, thème, entités) et repartir des réglages d’usine ?')) return;
+                try {
+                  const ls = window.localStorage;
+                  for (let i = ls.length - 1; i >= 0; i--) {
+                    const k = ls.key(i);
+                    if (k && (k.indexOf('loggia') === 0 || k.indexOf('orion') === 0)) ls.removeItem(k);
+                  }
+                } catch (e) {}
+                window.location.reload();
+              }}
+              style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(240,100,90,.12)', border: '1px solid rgba(240,100,90,.35)', color: '#f0938c' }}
+            >
+              Réglages d'usine
+            </button>
+          </div>
         </div>
       </div>
     );

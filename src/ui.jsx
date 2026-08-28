@@ -141,7 +141,7 @@ export const ViewEditBar = ({ texte, onEnt, entLabel = 'Entités de la vue', chi
 // Reglages fins de l'utilisateur, appliques PAR-DESSUS le preset (et par-dessus
 // « Suivre HA »). Chaque cle ne surcharge que si elle s'ecarte du defaut, pour laisser
 // le preset decider du reste : Atrium n'a pas d'ombre, iOS est tres arrondi, etc.
-export const LOOK_DEF = { glass: false, radius: 'doux', shadow: true, hairline: true, contrast: false, accent: '' };
+export const LOOK_DEF = { glass: false, radius: 'doux', shadow: true, hairline: true, contrast: false, accent: '', tint: 'douce', fond: 'aucun' };
 
 // Lignes denses de la vue Énergie (même patron que la carte Ambiance des pièces).
 export const EnRow = ({ label, desc, children }) => (

@@ -617,6 +617,20 @@ export default {
   'Éclaircit les textes secondaires et marque les séparateurs.':
     'Lightens secondary text and strengthens separators.',
   'Éléments actifs, jauges et liens.': 'Active elements, gauges and links.',
+  "Teinte d'état": 'State tint',
+  'Les cartes actives — lampe allumée, volet ouvert, chauffage en marche — se lavent de leur couleur.':
+    'Active cards — light on, cover open, heating running — get washed with their colour.',
+  'Sans': 'None',
+  'Discrète': 'Subtle',
+  'Douce': 'Soft',
+  'Pleine': 'Full',
+  "Fond d'écran": 'Background',
+  'Un dégradé discret sous les cartes, dans la palette du thème. Donne sa profondeur au verre.':
+    'A quiet gradient behind the cards, in the theme palette. Gives the glass its depth.',
+  'Minuit': 'Midnight',
+  'Abysse': 'Abyss',
+  'Ardoise': 'Slate',
+  'Voir les lumières': 'See the lights',
   "l'aperçu suit le thème choisi": 'the preview follows the chosen theme',
   'Seul un administrateur peut ajouter, modifier ou supprimer un utilisateur.':
     'Only an administrator can add, edit or delete a user.',
