@@ -8234,6 +8234,48 @@ function deriveNotifs(hass) {
   const stOf = (id) => (S[id] && S[id].state) || null;
   const numOf = (id) => { const v = parseFloat(stOf(id)); return isNaN(v) ? null : v; };
   for (const id in S) { if (id.indexOf('alarm_control_panel.') === 0 && S[id].state === 'triggered') { out.push(['#f87171', tr('Alarme'), tr('Intrusion détectée'), rel(id)]); break; } }
+  /* Alertes sûreté, sans aucune configuration : tout binary_sensor dont la
+   * device_class désigne un danger passe en tête de liste dès qu'il est `on`.
+   * La device_class est un standard HA, multilingue par nature — c'est elle
+   * qui porte le sens, jamais le nom de l'entité. Une notification PAR
+   * capteur : deux fuites = deux lignes, on ne résume pas un danger.
+   *
+   * Deux exclusions, constatées sur l'installation réelle avant d'écrire :
+   * — `moisture` sur un binaire veut dire fuite d'eau, MAIS les plantes de la
+   *   vue Plantes publient des binaires `<base>_besoin_eau` de cette classe :
+   *   une dracaena assoiffée n'est pas un dégât des eaux. Tout binaire dont
+   *   l'id commence par la base d'une plante configurée est écarté.
+   * — `safety` sert aussi à MeteoAlarm, qui reste `on` des jours entiers en
+   *   vigilance jaune. Ce n'est pas un danger domestique : il devient une
+   *   notification de vigilance à part, ambre, portant l'événement réel
+   *   (« Vigilance jaune orages ») — rouge seulement en Severe/Extreme. */
+  const SURETE = {
+    smoke: ['Fumée', 'Fumée détectée'],
+    carbon_monoxide: ['Monoxyde de carbone', 'CO détecté'],
+    gas: ['Gaz', 'Gaz détecté'],
+    moisture: ["Fuite d'eau", 'Fuite détectée'],
+    safety: ['Sécurité', 'Alerte de sécurité'],
+    tamper: ['Sabotage', 'Boîtier ouvert ou déplacé'],
+  };
+  const basesPlantes = plantsCfg().map(p => p.base).filter(Boolean);
+  const estPlante = (id) => basesPlantes.some(b => id.indexOf(b) === 0 && (id.length === b.length || id.charAt(b.length) === '_'));
+  const surete = [];
+  for (const id in S) {
+    if (id.indexOf('binary_sensor.') !== 0) continue;
+    const e = S[id]; if (!e || e.state !== 'on') continue;
+    const a = e.attributes || {};
+    const duo = SURETE[a.device_class];
+    if (!duo) continue;
+    const nom = a.friendly_name || id;
+    if (a.device_class === 'safety' && (a.awareness_level != null || /meteoalarm/i.test(id) || /meteoalarm/i.test(a.attribution || ''))) {
+      const grave = a.severity === 'Severe' || a.severity === 'Extreme';
+      out.push([grave ? '#f87171' : '#ffb347', tr('Vigilance météo'), a.event || a.headline || tr('Alerte météo en cours'), rel(id)]);
+      continue;
+    }
+    if (a.device_class === 'moisture' && estPlante(id)) continue;
+    surete.push(['#f87171', tr(duo[0]), tr(duo[1]) + ' · ' + nom, rel(id)]);
+  }
+  out.unshift(...surete.slice(0, 4)); // les dangers d'abord, avant même l'alarme
   const mid = mowerId(S), mchg = mowerSensor(S, 'charging');
   const mow = mid ? stOf(mid) : null;
   if (mow === 'returning') out.push(['var(--o-accent-soft)', tr('Tondeuse'), tr('Retour à la base'), rel(mid)]);
