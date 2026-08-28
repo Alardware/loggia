@@ -533,7 +533,7 @@ export function ViewEntSheet({ view, hass, onClose }) {
   );
 }
 
-export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews }) {
+export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews }) {
   /* La section ouverte survit au rechargement, comme la vue elle-meme.
    *
    * Changer de langue recharge la page : on revenait au sommaire des sections,
@@ -989,6 +989,11 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <AppCard title="Effets" note="coût GPU modéré">
             <OptRow title={tr('Effets météo animés')} desc="Ciel vivant derrière la bannière d'accueil, suivant la météo réelle.">
               <Tgl on={!!wxFx} cb={onToggleWxFx} label={tr('Effets météo animés')} />
+            </OptRow>
+            <OptRow title={tr('Mode ambiant')} desc={tr("Pour une tablette murale : après ce délai sans toucher, un écran de veille — heure, météo, alertes. Un toucher le retire. Réglage propre à cet appareil.")}>
+              <Seg value={String(ambient || 0)}
+                opts={[['0', 'Off'], ['1', '1 min'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']]}
+                onPick={v => onAmbient && onAmbient(parseInt(v, 10) || 0)} />
             </OptRow>
           </AppCard>
 

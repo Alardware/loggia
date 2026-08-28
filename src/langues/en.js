@@ -650,6 +650,11 @@ export default {
   'OU UNE CARTE TEMPLATE': 'OR A TEMPLATE CARD',
   'Ajouter': 'Add',
   'Les dernières 24 heures, en direct': 'The last 24 hours, live',
+  'Mode ambiant': 'Ambient mode',
+  "Pour une tablette murale : après ce délai sans toucher, un écran de veille — heure, météo, alertes. Un toucher le retire. Réglage propre à cet appareil.":
+    'For a wall tablet: after this idle delay, a standby screen — time, weather, alerts. One touch dismisses it. Per-device setting.',
+  'Toucher pour réveiller': 'Touch to wake',
+  'intérieur': 'indoor',
   'Ouverture…': 'Opening…',
   'Fermeture…': 'Closing…',
   'Verrouillée': 'Locked',

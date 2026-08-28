@@ -3662,6 +3662,48 @@ function WxMini({ wx, on }) {
   return <span aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 14 }}>{scene}</span>;
 }
 
+/* Mode ambiant : l'ecran de veille de la tablette murale. Apres un delai sans
+ * toucher, le dashboard s'efface derriere l'essentiel — l'heure en grand, la
+ * meteo animee, la temperature interieure, et seulement ce qui merite l'oeil
+ * (lumieres allumees, alarme, alertes surete). Un toucher le retire, on
+ * retrouve l'ecran ou on l'avait laisse : c'est le MEME dashboard qui se met
+ * en veille, pas un second a entretenir. Toujours sombre, quel que soit le
+ * theme : c'est une veille. Idee reprise des dashboards ambiants de Madelena. */
+function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn, notifs, ast = null }) {
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => { const iv = setInterval(() => setClock(new Date()), 10000); return () => clearInterval(iv); }, []);
+  const hm = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+  const capit = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  const dateStr = capit(clock.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }));
+  const rouges = (notifs || []).filter(n => n && n[0] === '#f87171').slice(0, 3);
+  const chip = { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)', fontSize: 14.5, fontWeight: 700, color: '#aeb9cc' };
+  const pt = (c) => <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: c, boxShadow: '0 0 8px ' + c }} />;
+  return (
+    <div role="button" aria-label={tr('Toucher pour réveiller')} style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070b', color: '#e8edf5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', animation: REDUCE_MOTION ? 'none' : 'o-ambient-in 1s ease', userSelect: 'none' }}>
+      <div style={{ fontSize: 'clamp(72px, 17vw, 170px)', fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{hm}</div>
+      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 'clamp(17px, 2.6vw, 24px)', color: '#8b95a7' }}>{dateStr}</div>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 22px', borderRadius: 18, background: 'rgba(255,255,255,.035)', marginTop: 18, overflow: 'hidden' }}>
+        <WxMini wx={wx} on={wxFx} />
+        <WeatherIco wx={wx} size={46} />
+        <div style={{ position: 'relative', lineHeight: 1.15 }}>
+          <div style={{ fontSize: 26, fontWeight: 800 }}>{weatherTemp != null ? Math.round(weatherTemp) : '—'}°</div>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#8b95a7' }}>{weatherLabel || ''}</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16, maxWidth: '84vw' }}>
+        {inTemp != null && <span style={chip}>{pt('#54c8f0')}{inTemp.toFixed(1).replace('.', ',')} °C {tr('intérieur')}</span>}
+        {lightsOn > 0 && <span style={{ ...chip, color: '#ffce73' }}>{pt('#ffce73')}{lightsOn > 1 ? tr('{n} allumées', { n: lightsOn }) : tr('{n} allumée', { n: lightsOn })}</span>}
+        {ast != null && <span style={{ ...chip, color: ast === 'triggered' ? '#f87171' : ast === 'disarmed' ? '#34d399' : '#ffb347' }}>{pt(ast === 'triggered' ? '#f87171' : ast === 'disarmed' ? '#34d399' : '#ffb347')}{ast === 'triggered' ? tr('Alarme') : ast === 'disarmed' ? tr('Alarme désarmée') : 'Alarme armée'}</span>}
+      </div>
+      {rouges.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 14, alignItems: 'center' }}>
+          {rouges.map((n, i) => <span key={i} style={{ ...chip, color: '#f87171', borderColor: 'rgba(248,113,113,.3)', background: 'rgba(248,113,113,.08)' }}>{pt('#f87171')}{n[1]} · {n[2]}</span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Presentation des vues metier : en-tete, carte a lignes denses.
  *
@@ -8001,12 +8043,12 @@ function CustomView({ cv, hass, edit = false, onSave }) {
 
 
 
-function ParametresView({ themeMode, loggiaTheme, haTheme, onMode, onPickTheme, onFollowHa, navbar, onToggleNavbar, wxFx, onToggleWxFx, cielEtoile, onToggleCiel, navMargin, navAuto, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin, topAuto, onTopOffset, onTopOffsetReset, hass, users, userIdx, isAdmin, onAddUser, onUpdateUser, onDeleteUser, customViews, onSaveCustomViews }) {
+function ParametresView({ themeMode, loggiaTheme, haTheme, onMode, onPickTheme, onFollowHa, navbar, onToggleNavbar, wxFx, onToggleWxFx, ambient = 0, onAmbient, cielEtoile, onToggleCiel, navMargin, navAuto, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin, topAuto, onTopOffset, onTopOffsetReset, hass, users, userIdx, isAdmin, onAddUser, onUpdateUser, onDeleteUser, customViews, onSaveCustomViews }) {
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <Suspense fallback={<div className="loggia-content" style={{ padding: '26px 28px 56px' }} />}>
-      <ParametresContent onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} wxFx={wxFx} onToggleWxFx={onToggleWxFx} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} customViews={customViews} onSaveCustomViews={onSaveCustomViews} />
+      <ParametresContent onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} customViews={customViews} onSaveCustomViews={onSaveCustomViews} />
       </Suspense>
     </main>
   );
@@ -8924,6 +8966,24 @@ export default function App() {
     return () => window.removeEventListener('keydown', surTouche);
   }, [navOpen]);
   const [navbar, setNavbar] = useState(() => { try { return localStorage.getItem('loggia-navbar') !== '0'; } catch (e) { return true; } }); // barre du bas mobile (défaut activée)
+  // Mode ambiant : minutes d'inactivité avant l'écran de veille, 0 = coupé.
+  // Par APPAREIL (localStorage, hors sync) : on l'active sur la tablette
+  // murale, pas sur le poste de travail.
+  const [ambient, setAmbient] = useState(() => { try { return parseInt(localStorage.getItem('loggia-ambient') || '0', 10) || 0; } catch (e) { return 0; } });
+  const onAmbient = (min) => { setAmbient(min); try { localStorage.setItem('loggia-ambient', String(min)); } catch (e) {} };
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    if (!ambient) { setIdle(false); return; }
+    let t = 0;
+    const arme = () => { clearTimeout(t); t = setTimeout(() => setIdle(true), ambient * 60000); };
+    // Un geste quelconque réveille ET réarme. L'overlay couvre tout l'écran :
+    // le toucher de réveil ne peut rien actionner en dessous.
+    const reveil = () => { setIdle(false); arme(); };
+    const evs = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+    evs.forEach(e => window.addEventListener(e, reveil, { passive: true }));
+    arme();
+    return () => { clearTimeout(t); evs.forEach(e => window.removeEventListener(e, reveil)); };
+  }, [ambient]);
   // Fonds animés de l'Accueil : effets météo (défaut activés) et ciel étoilé en remplacement de « nuit claire » (défaut activé)
   const [wxFx, setWxFx] = useState(() => { try { return localStorage.getItem('loggia-wxfx') !== '0'; } catch (e) { return true; } });
   const onToggleWxFx = () => setWxFx(v => { const nv = !v; try { localStorage.setItem('loggia-wxfx', nv ? '1' : '0'); } catch (e) {} return nv; });
@@ -9043,6 +9103,8 @@ export default function App() {
     {showOnboarding && <Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} />}
     <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, isAdmin, notifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn }}>
     <div className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)' }}>
+      {idle && ambient > 0 && <AmbientOverlay wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} lightsOn={lightsOn} notifs={notifs}
+        ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
       {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12.5, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 12, padding: '10px 16px', fontSize: 12.5, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
       <Sidebar view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} open={navOpen} customViews={customViews} ha={(() => {
@@ -9068,7 +9130,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && isAdmin} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && isAdmin} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && isAdmin} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && isAdmin} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'parametres' ? <ParametresView themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && isAdmin} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && isAdmin} /> : <Dashboard editMode={editMode} onEnt={isAdmin ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} />}
+        : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && isAdmin} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && isAdmin} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && isAdmin} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && isAdmin} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'parametres' ? <ParametresView themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && isAdmin} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && isAdmin} /> : <Dashboard editMode={editMode} onEnt={isAdmin ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} onMenu={() => setNavOpen(o => !o)} />}
       {entSheet && editMode && isAdmin && <Suspense fallback={null}><ViewEntSheet view={view} hass={hass} onClose={() => setEntSheet(false)} /></Suspense>}
