@@ -2540,6 +2540,79 @@ function useDomainCards(hass) {
   return { card, sheets, fermer };
 }
 
+/* ── Journal d'activite d'une piece ──────────────────────────────────────────
+ * Le logbook de Home Assistant, restreint aux entites de la piece.
+ * `logbook/event_stream` est une SOUSCRIPTION : un premier paquet livre les
+ * dernieres 24 h, puis HA pousse chaque evenement nouveau — aucun poll, meme
+ * regime que les cartes template. Le logbook ecarte deja de lui-meme les
+ * capteurs continus (temperatures…) : ce qui arrive est un CHANGEMENT digne
+ * d'etre raconte. Idee reprise de GlassHome. */
+function useRoomLogbook(hass, ids) {
+  const [events, setEvents] = useState([]);
+  const conn = hass && hass.connection;
+  const sig = ids.join('|');
+  useEffect(() => {
+    setEvents([]);
+    if (!conn || !ids.length) return;
+    let unsub = null, mort = false;
+    const debut = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    conn.subscribeMessage((msg) => {
+      if (mort || !msg || !Array.isArray(msg.events) || !msg.events.length) return;
+      setEvents(prev => {
+        const tous = [...prev, ...msg.events.filter(e => e && e.entity_id && e.state !== 'unknown' && e.state !== 'unavailable')];
+        tous.sort((a, b) => (b.when || 0) - (a.when || 0));
+        return tous.slice(0, 30);
+      });
+    }, { type: 'logbook/event_stream', start_time: debut, entity_ids: ids })
+      .then(u => { if (mort) { try { u(); } catch (e) {} } else unsub = u; })
+      .catch(() => {}); // logbook absent ou refuse : la carte ne s'affiche pas, c'est tout
+    return () => { mort = true; if (unsub) { try { unsub(); } catch (e) {} } };
+  }, [conn, sig]);
+  return events;
+}
+
+/** L'etat d'un evenement du journal, dit en un mot. */
+function etatJournal(id, st, S) {
+  const dom = id.slice(0, id.indexOf('.'));
+  const a = (S && S[id] && S[id].attributes) || {};
+  if (['light', 'switch', 'fan', 'input_boolean', 'humidifier'].indexOf(dom) >= 0) return st === 'on' ? tr('Allumé') : tr('Éteint');
+  if (dom === 'cover') return st === 'open' ? tr('Ouvert') : st === 'closed' ? tr('Fermé') : st === 'opening' ? tr('Ouverture…') : st === 'closing' ? tr('Fermeture…') : st;
+  if (dom === 'lock') return st === 'locked' ? tr('Verrouillée') : st === 'unlocked' ? tr('Déverrouillée') : st;
+  if (dom === 'media_player') return st === 'playing' ? tr('Lecture') : st === 'paused' ? tr('En pause') : st === 'off' ? tr('Éteint') : st === 'on' ? tr('Allumé') : tr('Inactif');
+  if (dom === 'binary_sensor') {
+    const porte = ['door', 'window', 'garage_door', 'opening'].indexOf(a.device_class) >= 0;
+    return st === 'on' ? (porte ? tr('Ouvert') : tr('Détecté')) : (porte ? tr('Fermé') : 'RAS');
+  }
+  if (dom === 'climate') return st === 'off' ? tr('Éteint') : st === 'heat' ? tr('CONFORT') : st;
+  if (dom === 'vacuum') return st === 'cleaning' ? tr('Nettoyage') : st === 'docked' ? tr('À la base') : st === 'returning' ? tr('Retour base') : st === 'paused' ? tr('En pause') : st;
+  if (dom === 'person') return st === 'home' ? tr('Présent') : 'Absent';
+  return st + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
+}
+
+function RoomActivityCard({ hass, ids }) {
+  const events = useRoomLogbook(hass, ids);
+  if (!events.length) return null;
+  const S = (hass && hass.states) || {};
+  const heure = (when) => { const ms = when < 1e12 ? when * 1000 : when; const d = new Date(ms); return d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
+  const actif = (e) => ['on', 'open', 'unlocked', 'playing', 'heat', 'cleaning', 'home'].indexOf(e.state) >= 0;
+  return (
+    <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
+      <div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Activité')}</div>
+      <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 10px' }}>{tr('Les dernières 24 heures, en direct')}</div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {events.slice(0, 8).map((e, i) => (
+          <div key={(e.when || 0) + '|' + e.entity_id + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none' }}>
+            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: actif(e) ? 'var(--o-warn)' : 'var(--o-text3)', boxShadow: actif(e) ? '0 0 7px var(--o-warn)' : 'none' }} />
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.name || (S[e.entity_id] && S[e.entity_id].attributes && S[e.entity_id].attributes.friendly_name) || e.entity_id}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: actif(e) ? 'var(--o-warn)' : 'var(--o-text2)', whiteSpace: 'nowrap' }}>{e.state != null ? etatJournal(e.entity_id, e.state, S) : (e.message || '')}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0, minWidth: 38, textAlign: 'right' }}>{heure(e.when)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   const [hidden, setHidden] = useState(roomHidden);
   const [addSheet, setAddSheet] = useState(false);
@@ -2825,6 +2898,8 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
             </div>
           );
         })()}
+        {/* Journal de la pièce : sous les appareils, hors mode édition. */}
+        {!edit && <RoomActivityCard hass={hass} ids={ents.filter(k => k.indexOf('sect:') !== 0 && k.indexOf('zone:') !== 0)} />}
         {addSheet && <RoomAddSheet room={room} hass={hass} present={ents} onToggle={ed.toggle} onClose={() => setAddSheet(false)} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
         {comfort && piece && <RoomComfortModal piece={piece} hass={hass} onClose={() => setComfort(false)} />}
