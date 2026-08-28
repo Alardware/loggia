@@ -292,6 +292,8 @@ html.loggia-frosted body [style*="--o-surfA"] [style*="--o-surfA"] { -webkit-bac
 }
 @media (max-width: 560px) {
   .o-hdr-search, .o-hdr-date, .o-hdr-div { display: none !important; }
+  /* La chip « n allumées » garde sa place : c'est l'info d'un regard du header. */
+  .o-hdr-lights { padding: 6px 10px !important; font-size: 11.5px !important; }
   .o-flux > div { width: auto !important; }
   .o-banner-row { gap: 12px !important; }
   .o-greet-name { font-size: 25px !important; }
