@@ -1,5 +1,9 @@
 # Loggia Dashboard
 
+[![Release](https://img.shields.io/github/v/release/Alardware/loggia?label=version&color=4da3ff)](https://github.com/Alardware/loggia/releases)
+[![CI](https://github.com/Alardware/loggia/actions/workflows/validate.yml/badge.svg)](https://github.com/Alardware/loggia/actions)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-soutenir%20le%20projet-ff5f5f?logo=ko-fi&logoColor=white)](https://ko-fi.com/alardware)
+
 Un tableau de bord Home Assistant qui se remplit tout seul.
 
 Loggia lit les registres de votre installation — zones, appareils, entités — et
@@ -58,6 +62,47 @@ redémarrer, puis ajouter l'intégration depuis l'interface. Le mode historique
 le jour où l'appareil correspondant existe. Paramètres → Vues liste celles qui
 sont masquées, avec le motif.
 
+## Et sans rien configurer non plus
+
+- **Alertes sûreté** — tout capteur binaire dont la classe désigne un danger
+  (fumée, monoxyde de carbone, gaz, fuite d'eau, sabotage) pousse une
+  notification rouge dès qu'il se déclenche, en tête de liste. La vigilance
+  météo (MétéoAlarm) a sa notification ambre à part, portant l'événement réel.
+- **Journal d'activité par pièce** — sous les appareils d'une pièce, les
+  dernières 24 heures : qui s'est allumé, ouvert, verrouillé, à quelle heure.
+  Alimenté par le logbook de Home Assistant, poussé en direct.
+- **Vignette météo animée** — la condition se voit dans la vignette de
+  l'accueil : pluie qui tombe, étoiles, halo de soleil, éclair d'orage.
+- **Mode ambiant** — pour une tablette murale : après un délai sans toucher,
+  un écran de veille sombre — heure en grand, météo, lumières allumées,
+  alarme, alertes. Un toucher le retire, on retrouve l'écran où on l'avait
+  laissé.
+- **Chip « n allumées »** dans l'en-tête, visible de partout ; un clic ouvre
+  la vue Lumières.
+- **Français et anglais** — les états et commandes viennent de Home Assistant
+  dans toutes ses langues ; changer de langue est immédiat, sans rechargement.
+
+## Vues personnalisées et cartes template
+
+Une vue custom se compose depuis l'interface (admin) : des entités — chaque
+domaine a sa carte générique — et des **cartes template**, dont le contenu est
+un template Jinja évalué par Home Assistant et mis à jour en direct dès qu'une
+entité référencée change. N'importe quelle donnée calculable devient
+affichable, sans YAML.
+
+## Apparence
+
+Thèmes clair et sombre, préréglages (dont un rendu « verre » avec flou
+d'arrière-plan), **teinte d'état** réglable — les cartes actives se lavent de
+leur couleur : lampe allumée dorée, volet ouvert à l'accent, chauffage qui
+rougeoie — et **fonds d'écran** discrets dans la palette du thème. Le mode
+« Suivre Home Assistant » calque le thème actif de HA. Tous ces réglages sont
+propres à l'appareil.
+
+Si le pire arrive, l'écran d'erreur propose de **repartir sans les vues
+custom** ou de revenir aux **réglages d'usine** — le dashboard sait se
+réparer.
+
 ## Ce qui demande une configuration
 
 Tout n'a pas d'équivalent standard dans Home Assistant. Ces éléments se
@@ -110,6 +155,14 @@ sans l'installer, et la suite ne se fige pas sur une version.
 Le frontend est du React + Vite, compilé avec `base: './'` — le dossier
 `custom_components/loggia/frontend/` est donc servable sous n'importe quel
 préfixe d'URL.
+
+## Soutenir
+
+Loggia est développé sur mon temps libre, pour ma maison d'abord — et partagé
+parce qu'il peut servir la vôtre. Si le projet vous est utile, un café aide à
+le faire vivre :
+
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alardware)
 
 ## Licence
 
