@@ -169,6 +169,36 @@ export const USER_COLORS = ['#4f8cff', 'var(--o-ok)', 'var(--o-purple)', '#ff8a4
 
 export const cvName = (st, id) => (st && st.attributes && st.attributes.friendly_name) || id.slice(id.indexOf('.') + 1).replace(/_/g, ' ');
 
+/* ── Cartes template des vues custom ─────────────────────────────────────────
+ * `cv.ents` mele deux formes : l'entity_id nu (une chaine, l'historique) et la
+ * carte template `{ t:'tpl', id, name, src }` — `src` est du Jinja, evalue par
+ * Home Assistant lui-meme (websocket `render_template`, qui POUSSE chaque
+ * nouvelle valeur : rien a rafraichir). Ces deux aides sont le seul endroit
+ * qui connaisse la difference ; tout le reste passe par elles. */
+export const cvEstTpl = (x) => !!(x && typeof x === 'object' && x.t === 'tpl');
+export const cvKey = (x) => (cvEstTpl(x) ? x.id : x);
+
+/** Petit formulaire d'ajout d'une carte template (partage entre les deux
+ *  editeurs de vues : celui en place et celui des Parametres). */
+export function TplForm({ onAdd }) {
+  const [nom, setNom] = useState('');
+  const [src, setSrc] = useState('');
+  const ok = src.trim().length > 0;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <input value={nom} onChange={e => setNom(e.target.value)} placeholder={tr('Titre de la carte (optionnel)')} style={cvInp} />
+      <textarea value={src} onChange={e => setSrc(e.target.value)} rows={4} spellCheck={false}
+        placeholder={"{{ now().strftime('%H:%M') }}"}
+        style={{ ...cvInp, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, resize: 'vertical', minHeight: 88 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ flex: 1, fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Jinja, évalué par Home Assistant. La carte se met à jour en direct.')}</span>
+        <button disabled={!ok} onClick={() => { if (!ok) return; onAdd({ t: 'tpl', id: 'tpl_' + Math.random().toString(36).slice(2, 8), name: nom.trim(), src: src.trim() }); setNom(''); setSrc(''); }}
+          style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: ok ? 'pointer' : 'default', opacity: ok ? 1 : .5, flexShrink: 0 }}>{tr('Ajouter')}</button>
+      </div>
+    </div>
+  );
+}
+
 // Carte générique : affichage + action adaptés au domaine de l'entité.
 
 // Recherche + sélection d'entités (réutilisé par l'éditeur de vue et l'ajout de carte en place).

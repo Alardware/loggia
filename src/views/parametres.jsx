@@ -13,7 +13,7 @@ import { cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_ENT, LOGGIA_RESO
   exportLoggiaConfig, importLoggiaConfig,
   exportConfigComplete, importConfigComplete, resetLoggiaComplet,
   cheminPanneau, lirePageAccueil, definirPageAccueil } from '../state.js';
-import { CV_ICONS, cvInp, cvName, USER_COLORS, BottomSheet, EntPicker, CV_DOM_ICON, cvDomain } from '../ui.jsx';
+import { CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS, BottomSheet, EntPicker, CV_DOM_ICON, cvDomain } from '../ui.jsx';
 import { useLoggia } from '../runtime.js';
 import { viewReason } from '../views.js';
 import { weatherEntity } from '../wxutil.jsx';
@@ -293,9 +293,11 @@ function CvEditor({ cv, hass, onSave, onClose }) {
         </div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>ENTITÉS ({ents.length})</div>
         {ents.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-          {ents.map(id => <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', borderRadius: 9, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px solid rgba(var(--o-accent-rgb),.25)', fontSize: 11.5, fontWeight: 700, color: 'var(--o-accent-soft)', maxWidth: '100%' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cvName(hass && hass.states && hass.states[id], id)}</span><span onClick={() => setEnts(prev => prev.filter(x => x !== id))} style={{ cursor: 'pointer', fontWeight: 800, opacity: .8 }}>×</span></span>)}
+          {ents.map((x, i) => <span key={cvKey(x)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', borderRadius: 9, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px solid rgba(var(--o-accent-rgb),.25)', fontSize: 11.5, fontWeight: 700, color: 'var(--o-accent-soft)', maxWidth: '100%' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cvEstTpl(x) ? '{ } ' + (x.name || 'Template') : cvName(hass && hass.states && hass.states[x], x)}</span><span onClick={() => setEnts(prev => prev.filter((_, k) => k !== i))} style={{ cursor: 'pointer', fontWeight: 800, opacity: .8 }}>×</span></span>)}
         </div>}
-        <EntPicker hass={hass} exclude={ents} onPick={(id) => setEnts(prev => prev.indexOf(id) < 0 ? [...prev, id] : prev)} />
+        <EntPicker hass={hass} exclude={ents.filter(x => typeof x === 'string')} onPick={(id) => setEnts(prev => prev.indexOf(id) < 0 ? [...prev, id] : prev)} />
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
+        <TplForm onAdd={(t) => setEnts(prev => [...prev, t])} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
           <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Annuler</button>
           <button onClick={save} style={{ padding: '11px 20px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: name.trim() ? 1 : .5 }}>Enregistrer</button>

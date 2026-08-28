@@ -25,7 +25,7 @@ import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.j
 import { isViewAvailable, viewReason } from './views.js';
 import { REDUCE_MOTION, Fi, Anim, useTilt, editBtn, ViewEditBar,
   HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, HX_TOKENS, userBg, userImg, personPicture,
-  EnRow, EnVal, EnGauge, LOOK_DEF, CV_ICONS, cvInp, cvName, USER_COLORS,
+  EnRow, EnVal, EnGauge, LOOK_DEF, CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS,
   FlipText, Gauge, BottomSheet, onPaintReady, PAINT_READY,
   EntPicker, CV_DOM_ICON, cvDomain } from './ui.jsx';
 import { WX_ICON, WX_ICOLOR, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
@@ -7718,6 +7718,45 @@ const PAR_NAV = () => [
   { grp: 'Dashboard', items: [['vues', tr('Vues'), 'layout-fluid'], ['entites', tr('Entités'), 'list']] },
   { grp: tr('Système'), items: [['about', tr('À propos'), 'info']] },
 ];
+/* Carte template d'une vue custom : le Jinja est evalue par Home Assistant,
+ * jamais ici. `render_template` est une SOUSCRIPTION : HA re-evalue et pousse
+ * une nouvelle valeur des qu'une entite referencee change — le direct est
+ * gratuit, aucun poll. `report_errors` transforme un template invalide en
+ * message d'erreur au lieu d'une souscription silencieusement morte. */
+function CvTemplateCard({ def, hass }) {
+  const [out, setOut] = useState(null);
+  const [err, setErr] = useState(null);
+  const conn = hass && hass.connection;
+  useEffect(() => {
+    setOut(null); setErr(null);
+    if (!conn || !def.src) return;
+    let unsub = null, mort = false;
+    conn.subscribeMessage((msg) => {
+      if (mort || !msg) return;
+      if (msg.error) { setErr(String(msg.error)); return; }
+      setErr(null);
+      setOut(msg.result != null ? String(msg.result) : '');
+    }, { type: 'render_template', template: def.src, report_errors: true })
+      .then(u => { if (mort) { try { u(); } catch (e) {} } else unsub = u; })
+      .catch(e => { if (!mort) setErr(String((e && e.message) || e)); });
+    return () => { mort = true; if (unsub) { try { unsub(); } catch (e) {} } };
+  }, [conn, def.src]);
+  const attente = out == null && !err;
+  return (
+    <div className="o-piece" style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
+        <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text3)' }}><Fi i="brackets-curly" size={16} /></span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{def.name || 'Template'}</div>
+          {err
+            ? <div style={{ fontSize: 11.5, fontWeight: 600, color: '#f87171', marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 96, overflow: 'auto' }}>{err}</div>
+            : <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 132, overflowY: 'auto', lineHeight: 1.45, opacity: attente ? .45 : 1 }}>{attente ? '…' : (out === '' ? '—' : out)}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CvCard({ id, hass, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
@@ -7810,12 +7849,12 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
-          {cv.ents.map((id, i) => (
-            <div key={id} style={{ position: 'relative', ...(edit ? { outline: '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)' } : {}) }}>
-              <CvCard id={id} hass={hass} />
+          {cv.ents.map((x, i) => (
+            <div key={cvKey(x)} style={{ position: 'relative', ...(edit ? { outline: '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)' } : {}) }}>
+              {cvEstTpl(x) ? <CvTemplateCard def={x} hass={hass} /> : <CvCard id={x} hass={hass} />}
               {edit && (
                 <>
-                  <button onClick={() => setEnts(cv.ents.filter(x => x !== id))} title="Retirer" style={{ ...editBtn, position: 'absolute', top: -9, right: -9, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                  <button onClick={() => setEnts(cv.ents.filter((_, k) => k !== i))} title="Retirer" style={{ ...editBtn, position: 'absolute', top: -9, right: -9, background: 'var(--o-bad)', color: '#fff' }}>×</button>
                   <div style={{ position: 'absolute', bottom: -9, right: 6, display: 'flex', gap: 5 }}>
                     <button onClick={() => move(i, -1)} title="Avancer" style={{ ...editBtn, opacity: i === 0 ? .35 : 1 }}>‹</button>
                     <button onClick={() => move(i, 1)} title="Reculer" style={{ ...editBtn, opacity: i === cv.ents.length - 1 ? .35 : 1 }}>›</button>
@@ -7838,8 +7877,10 @@ function CustomView({ cv, hass, edit = false, onSave }) {
                 <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
                 <span style={{ fontSize: 18, fontWeight: 700 }}>{tr('Ajouter une carte')}</span>
               </div>
-              <EntPicker hass={hass} exclude={cv.ents} onPick={(id) => setEnts([...cv.ents, id])} autoFocus />
+              <EntPicker hass={hass} exclude={cv.ents.filter(x => typeof x === 'string')} onPick={(id) => setEnts([...cv.ents, id])} autoFocus />
               <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr("Chaque entité choisie s'ajoute immédiatement à la vue.")}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '18px 0 8px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
+              <TplForm onAdd={(t) => setEnts([...cv.ents, t])} />
             </>)}
           </BottomSheet>
         )}
@@ -8664,7 +8705,9 @@ export default function App() {
   const activeRoom = view.indexOf('room:') === 0 ? view.slice(5) : view === 'pieces' ? ((cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))[0] || null) : null;
   // Vue pièce : on poll le domaine des appareils pilotables + les capteurs de la pièce (clés-préfixes).
   const roomKeys = activeRoom ? ['light.', 'switch.', 'cover.', 'climate.', 'media_player.', 'fan.', 'lock.', ...climateKeys(), ...(cfg.rooms || []).flatMap(r => [r.haid && r.haid.temp, r.haid && r.haid.humidity, r.haid && r.haid.co2])] : [];
-  const haKeys = [...GLOBAL_KEYS, ...(activeCv ? activeCv.ents : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
+  // Les cartes template de `ents` ne sont pas des entity_ids : leur souscription
+  // `render_template` pousse toute seule, elles n'ont pas besoin d'etre suivies.
+  const haKeys = [...GLOBAL_KEYS, ...(activeCv ? activeCv.ents.filter(x => typeof x === 'string') : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
   // Capteurs de puissance au jitter continu : signature arrondie à 10 W → pas de re-render global à chaque tick.
   // Un capteur de puissance jitter en continu chez N'IMPORTE QUI : c'est sa
   // `device_class` qui le dit, pas son nom. Cette liste portait un identifiant
