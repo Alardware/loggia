@@ -102,6 +102,15 @@ html.loggia-frosted body [style*="--o-surfA"] [style*="--o-surfA"] { -webkit-bac
 .o-optrow input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; background: var(--o-accent); border: none; cursor: pointer; }
 
 @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.45; transform:scale(.8); } }
+/* Mini-scènes météo de la vignette d'accueil : transform/opacity seulement,
+   jamais de layout — le coût GPU reste celui d'une poignée de spans. */
+@keyframes o-wxm-fall { 0% { transform: translateY(-14px); opacity: 0; } 12% { opacity: .8; } 88% { opacity: .8; } 100% { transform: translateY(64px); opacity: 0; } }
+@keyframes o-wxm-snow { 0% { transform: translate(0,-10px); opacity: 0; } 15% { opacity: .9; } 85% { opacity: .9; } 100% { transform: translate(9px,60px); opacity: 0; } }
+@keyframes o-wxm-drift { 0% { transform: translateX(-18px); } 100% { transform: translateX(150px); } }
+@keyframes o-wxm-twinkle { 0%,100% { opacity: .25; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.05); } }
+@keyframes o-wxm-flash { 0%,86%,100% { opacity: 0; } 88% { opacity: .55; } 90% { opacity: .08; } 92% { opacity: .38; } 94% { opacity: 0; } }
+@keyframes o-wxm-glow { 0%,100% { opacity: .5; transform: scale(1); } 50% { opacity: .85; transform: scale(1.12); } }
+@keyframes o-wxm-wind { 0% { transform: translateX(-30px); opacity: 0; } 18% { opacity: .55; } 82% { opacity: .55; } 100% { transform: translateX(160px); opacity: 0; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes bdrift { from { transform: translateX(-14px); } to { transform: translateX(18px); } }
 @keyframes bsun { 0%,100% { transform:scale(1); opacity:.85; } 50% { transform:scale(1.07); opacity:1; } }

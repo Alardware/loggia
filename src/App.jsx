@@ -3628,6 +3628,40 @@ const WX_BG = {
   storm: 'linear-gradient(150deg, rgba(118,98,185,.38), rgba(70,60,110,.14) 60%, var(--o-surfB))',
   night: 'linear-gradient(150deg, rgba(44,66,130,.42), rgba(20,30,60,.15) 60%, var(--o-surfB))',
 };
+/* Mini-scene animee de la vignette meteo (accueil) : la condition se VOIT —
+ * pluie qui tombe, etoiles, halo de soleil, eclair — dans la vignette meme,
+ * derriere le chiffre. Une poignee de spans en transform/opacity, rien
+ * d'autre ; l'interrupteur « Effets meteo animes » et prefers-reduced-motion
+ * la coupent net. Idee reprise du Weather Showcase de GlassHome. */
+function WxMini({ wx, on }) {
+  if (!on || REDUCE_MOTION) return null;
+  const S = { position: 'absolute', pointerEvents: 'none' };
+  const gouttes = (n, couleur, epais) => Array.from({ length: n }, (_, i) => (
+    <span key={i} style={{ ...S, top: -6, left: (8 + i * 23) % 140, width: epais, height: 9, borderRadius: 2, background: couleur, animation: `o-wxm-fall ${1.1 + (i % 3) * .35}s linear ${i * .28}s infinite` }} />
+  ));
+  let scene = null;
+  if (wx === 'rain') scene = gouttes(6, 'rgba(160,200,255,.75)', 1.5);
+  else if (wx === 'storm') scene = (<>
+    {gouttes(4, 'rgba(180,170,255,.7)', 1.5)}
+    <span style={{ ...S, inset: 0, background: 'radial-gradient(80% 90% at 60% 0%, rgba(210,200,255,.9), rgba(210,200,255,0) 70%)', animation: 'o-wxm-flash 5.2s linear infinite' }} />
+  </>);
+  else if (wx === 'snow') scene = Array.from({ length: 6 }, (_, i) => (
+    <span key={i} style={{ ...S, top: -6, left: (12 + i * 22) % 140, width: 3.5, height: 3.5, borderRadius: '50%', background: 'rgba(240,248,255,.9)', animation: `o-wxm-snow ${2.6 + (i % 3) * .7}s linear ${i * .5}s infinite` }} />
+  ));
+  else if (wx === 'sun') scene = <span style={{ ...S, top: -14, left: -10, width: 66, height: 66, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,205,100,.55), rgba(255,205,100,0) 68%)', animation: 'o-wxm-glow 3.6s ease-in-out infinite' }} />;
+  else if (wx === 'night') scene = Array.from({ length: 5 }, (_, i) => (
+    <span key={i} style={{ ...S, top: 5 + (i * 13) % 34, left: (10 + i * 31) % 145, width: 2.5, height: 2.5, borderRadius: '50%', background: '#dfe9ff', boxShadow: '0 0 5px rgba(200,220,255,.9)', animation: `o-wxm-twinkle ${2 + (i % 3) * .8}s ease-in-out ${i * .55}s infinite` }} />
+  ));
+  else if (wx === 'wind') scene = Array.from({ length: 3 }, (_, i) => (
+    <span key={i} style={{ ...S, top: 12 + i * 15, left: 0, width: 26, height: 1.5, borderRadius: 2, background: 'rgba(190,210,235,.6)', animation: `o-wxm-wind ${2.2 + i * .5}s linear ${i * .7}s infinite` }} />
+  ));
+  else if (wx === 'partly' || wx === 'clouds') scene = Array.from({ length: 2 }, (_, i) => (
+    <span key={i} style={{ ...S, top: 8 + i * 22, left: -20, width: 34, height: 11, borderRadius: 8, background: `rgba(200,215,235,${.18 - i * .06})`, filter: 'blur(1.5px)', animation: `o-wxm-drift ${17 + i * 8}s linear ${-i * 9}s infinite` }} />
+  ));
+  if (!scene) return null;
+  return <span aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 14 }}>{scene}</span>;
+}
+
 /**
  * Presentation des vues metier : en-tete, carte a lignes denses.
  *
@@ -3988,9 +4022,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               {/* La vue Météo dit tout ce que cette vignette resume : elle est
                   la destination naturelle. La pièce « Extérieur » reste le
                   repli quand la vue est masquée ou absente. */}
-              <div onClick={() => { if (onOpenMeteo) onOpenMeteo(); else if (extPiece) setRoomPop(extPiece.name); }} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (onOpenMeteo) onOpenMeteo(); else if (extPiece) setRoomPop(extPiece.name); } }} title={onOpenMeteo ? 'Ouvrir la vue Météo' : 'Voir la météo extérieure'} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', borderRadius: 14, background: WX_BG[wx] || WX_BG.clouds, border: 'none', transition: 'background .6s ease', cursor: 'pointer' }}>
+              <div onClick={() => { if (onOpenMeteo) onOpenMeteo(); else if (extPiece) setRoomPop(extPiece.name); }} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (onOpenMeteo) onOpenMeteo(); else if (extPiece) setRoomPop(extPiece.name); } }} title={onOpenMeteo ? 'Ouvrir la vue Météo' : 'Voir la météo extérieure'} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', borderRadius: 14, background: WX_BG[wx] || WX_BG.clouds, border: 'none', transition: 'background .6s ease', cursor: 'pointer' }}>
+                <WxMini wx={wx} on={wxFx} />
                 <WeatherIco wx={wx} size={42} />
-                <div style={{ lineHeight: 1.1 }}><div style={{ fontSize: 20, fontWeight: 800 }}>{weatherTemp != null ? Math.round(weatherTemp) : 18}°<span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>C</span></div><div style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>{weatherLabel || 'Nuageux'}</div></div>
+                <div style={{ position: 'relative', lineHeight: 1.1 }}><div style={{ fontSize: 20, fontWeight: 800 }}>{weatherTemp != null ? Math.round(weatherTemp) : 18}°<span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>C</span></div><div style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>{weatherLabel || 'Nuageux'}</div></div>
               </div>
               <div style={{ display: 'flex', gap: 9 }}>
                 {avatars.map((u, i) => {
