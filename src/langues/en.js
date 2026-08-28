@@ -649,6 +649,12 @@ export default {
     'Jinja, rendered by Home Assistant. The card updates live.',
   'OU UNE CARTE TEMPLATE': 'OR A TEMPLATE CARD',
   'Ajouter': 'Add',
+  'Les dernières 24 heures, en direct': 'The last 24 hours, live',
+  'Ouverture…': 'Opening…',
+  'Fermeture…': 'Closing…',
+  'Verrouillée': 'Locked',
+  'Déverrouillée': 'Unlocked',
+  'À la base': 'Docked',
   "l'aperçu suit le thème choisi": 'the preview follows the chosen theme',
   'Seul un administrateur peut ajouter, modifier ou supprimer un utilisateur.':
     'Only an administrator can add, edit or delete a user.',
