@@ -1,99 +1,30 @@
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-import App from './App.jsx';
-import { migrerAnciennesCles } from './state.js';
+/**
+ * Amorce. Elle ne fait qu'une chose : decider AVANT d'evaluer l'application.
+ *
+ * `?demo` sur la page directe installe la maison de demonstration — dont le
+ * remplacement du localStorage par un magasin memoire. Or les modules de
+ * l'application lisent le stockage DES leur evaluation (langue, theme,
+ * reglages) : un import statique de App ici s'executerait avant la demo, et
+ * elle lirait la vraie configuration. D'ou les imports dynamiques : rien de
+ * l'application n'est evalue tant que le decor n'est pas plante.
+ *
+ * Le mode demo exige la page DIRECTE (window === window.top) : dans l'iframe
+ * du panneau, le vrai Home Assistant est au-dessus, on ne melange pas.
+ */
+// Le CSS reste ici, dans l'amorce : importe depuis boot.jsx (dynamique), il
+// deviendrait un asset charge en retard — flash sans style, et plus de <link>
+// dans index.html pour l'inline du paquet (pack_frontend l'exige).
 import './index.css';
 
-// Avant toute lecture, donc avant le rendu : sans cela, une installation qui
-// vient d'Orion demarre sur des reglages vides et les reecrit aussitot.
-migrerAnciennesCles();
+const demo = (() => {
+  try { return new URLSearchParams(window.location.search).has('demo') && window === window.top; }
+  catch (e) { return false; }
+})();
 
-/**
- * Filet de securite au rendu.
- *
- * Une erreur pendant le rendu demonte tout l'arbre React : la page reste noire,
- * sans un mot. Le message se trouve dans la console — encore faut-il l'ouvrir,
- * et savoir que le dashboard tourne dans une iframe.
- *
- * Ici, l'erreur s'affiche. C'est moins beau qu'un dashboard, mais infiniment
- * plus utile qu'un ecran noir.
- */
-class LoggiaErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { err: null };
+(async () => {
+  if (demo) {
+    try { (await import('./demo.js')).installerDemo(); }
+    catch (e) { console.error('demo indisponible', e); }
   }
-
-  static getDerivedStateFromError(err) {
-    return { err };
-  }
-
-  componentDidCatch(err, info) {
-    console.error('Loggia : erreur de rendu', err, info);
-  }
-
-  render() {
-    const { err } = this.state;
-    if (!err) return this.props.children;
-    const box = {
-      minHeight: '100vh', padding: '40px 24px', boxSizing: 'border-box',
-      background: '#0b1017', color: '#e6ecf5',
-      font: '400 14px/1.6 ui-sans-serif, system-ui, sans-serif',
-    };
-    const pre = {
-      whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12,
-      background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.12)',
-      borderRadius: 10, padding: '12px 14px', margin: '14px 0 18px', maxHeight: 260, overflow: 'auto',
-    };
-    return (
-      <div style={box}>
-        <div style={{ maxWidth: 640, margin: '0 auto' }}>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Loggia n'a pas pu s'afficher</div>
-          <div style={{ color: '#93a3ba' }}>
-            Une erreur est survenue pendant le rendu. Le détail ci-dessous permet de la corriger.
-          </div>
-          <pre style={pre}>{String((err && err.stack) || (err && err.message) || err)}</pre>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            <button
-              onClick={() => window.location.reload()}
-              style={{ padding: '10px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: '#4f8cff', color: '#06121f' }}
-            >
-              Recharger
-            </button>
-            {/* Filet n° 1 : recharger en ignorant les vues custom, seule partie du
-                dashboard dont le contenu est arbitraire. Le drapeau ne vaut que
-                pour UN chargement et ne touche pas à la configuration. */}
-            <button
-              onClick={() => { try { sessionStorage.setItem('loggia_safe_nocv', '1'); } catch (e) {} window.location.reload(); }}
-              style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.16)', color: '#e6ecf5' }}
-            >
-              Repartir sans les vues custom
-            </button>
-            {/* Filet n° 2 : tout effacer. Confirmation native — ici, plus rien du
-                dashboard n'est montable, donc pas de BottomSheet. */}
-            <button
-              onClick={() => {
-                if (!window.confirm('Effacer tous les réglages Loggia de ce navigateur (vues, utilisateurs, thème, entités) et repartir des réglages d’usine ?')) return;
-                try {
-                  const ls = window.localStorage;
-                  for (let i = ls.length - 1; i >= 0; i--) {
-                    const k = ls.key(i);
-                    if (k && (k.indexOf('loggia') === 0 || k.indexOf('orion') === 0)) ls.removeItem(k);
-                  }
-                } catch (e) {}
-                window.location.reload();
-              }}
-              style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(240,100,90,.12)', border: '1px solid rgba(240,100,90,.35)', color: '#f0938c' }}
-            >
-              Réglages d'usine
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-}
-
-createRoot(document.getElementById('root')).render(
-  <LoggiaErrorBoundary><App /></LoggiaErrorBoundary>
-);
+  await import('./boot.jsx');
+})();

@@ -24,6 +24,10 @@ const SRC = join(RACINE, 'src');
 function sources() {
   return readdirSync(SRC)
     .filter(f => /\.(js|jsx)$/.test(f))
+    // demo.js est la maison de démonstration : ses identifiants sont INVENTÉS
+    // et publics par construction — c'est tout son objet. L'exempter ici ne
+    // troue pas le filet : il ne s'exécute que derrière `?demo`.
+    .filter(f => f !== 'demo.js')
     .map(f => ({ nom: f, texte: readFileSync(join(SRC, f), 'utf8') }));
 }
 
