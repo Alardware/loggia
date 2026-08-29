@@ -182,9 +182,15 @@ def main():
     with open(os.path.join(DIST, 'index.html'), encoding='utf-8') as f:
         html = f.read()
     html = inliner_css(html, assets_src)
+    # Normalisation : sur une source a fins de ligne Windows, Vite laisse un \r
+    # orphelin en retirant la balise <script> d'amorce — une ligne vide que le
+    # meme build sous Linux n'a pas. La CI compare les deux au caractere pres :
+    # fins de ligne LF et pas de ligne vide, quel que soit l'OS qui packe.
+    html = html.replace('\r\n', '\n').replace('\r', '\n')
+    html = re.sub(r'\n[ \t]*\n+', '\n', html)
     if '<style>' not in html:
         print('ATTENTION : le CSS n a pas ete inline — feuille de style introuvable')
-    with open(os.path.join(CIBLE, 'index.html'), 'w', encoding='utf-8') as f:
+    with open(os.path.join(CIBLE, 'index.html'), 'w', encoding='utf-8', newline='\n') as f:
         f.write(html)
 
     # Ce que le html qu'on vient d'ecrire demande : intouchable.
