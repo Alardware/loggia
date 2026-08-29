@@ -3910,9 +3910,84 @@ function jourAgenda(e) {
   return { jour, heure };
 }
 
+/* Sections personnalisables de l'accueil : identifiants stables (jamais les
+ * libellés traduits) et libellés dits au rendu. */
+const ACC_MAIN = ['scenes', 'pieces', 'cameras'];
+const ACC_RAIL = ['etats', 'rappels', 'agenda'];
+const ACC_NOMS = () => ({ scenes: tr('Scènes rapides'), pieces: tr('Pièces'), cameras: tr('Caméras'), etats: tr('En cours'), rappels: tr('Rappels'), agenda: tr('Agenda') });
+
 function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onOpenMeteo }) {
   const [override, setOverride] = useState(null);
   const agenda = useAgenda(accueil && accueil.hass);
+  /* ── L'accueil se compose : ordre et visibilité des sections ───────────────
+   * En mode édition, chaque section se SAISIT et se glisse sur une autre de sa
+   * colonne pour prendre sa place, et la croix la masque — elle réapparaît
+   * grisée en édition, avec un bouton pour la rétablir. Ordre et masques dans
+   * `loggia_accueil`, par appareil. Une section inconnue de la sauvegarde
+   * (ajoutée par une version future) se range à la fin, jamais perdue. */
+  const [accL, setAccL] = useState(() => {
+    const v = readLS('loggia_accueil', null) || {};
+    return { main: Array.isArray(v.main) ? v.main : null, rail: Array.isArray(v.rail) ? v.rail : null, caches: Array.isArray(v.caches) ? v.caches : [] };
+  });
+  const saveAccL = (n) => { setAccL(n); try { localStorage.setItem('loggia_accueil', JSON.stringify(n)); } catch (e) {} };
+  const ordreDe = (zone) => {
+    const base = zone === 'main' ? ACC_MAIN : ACC_RAIL;
+    const sauve = (accL[zone] || []).filter(s => base.indexOf(s) >= 0);
+    return [...sauve, ...base.filter(s => sauve.indexOf(s) < 0)];
+  };
+  const [secDrag, setSecDrag] = useState(null); // { zone, id, ordre }
+  const debutSec = (e, zone, id) => {
+    if (!editMode) return;
+    if (e.target.closest && e.target.closest('button, [role="switch"], input')) return;
+    e.preventDefault();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) {}
+    setSecDrag({ zone, id, ordre: ordreDe(zone) });
+  };
+  const mouvSec = (e) => {
+    if (!secDrag) return;
+    const sous = document.elementFromPoint(e.clientX, e.clientY);
+    const cible = sous && sous.closest ? sous.closest('[data-sec]') : null;
+    if (!cible) return;
+    const idCible = cible.getAttribute('data-sec');
+    if (idCible === secDrag.id || cible.getAttribute('data-zone') !== secDrag.zone) return;
+    const a = [...secDrag.ordre];
+    const de = a.indexOf(secDrag.id), vers = a.indexOf(idCible);
+    if (de < 0 || vers < 0) return;
+    a.splice(de, 1); a.splice(vers, 0, secDrag.id);
+    setSecDrag({ ...secDrag, ordre: a });
+  };
+  const finSec = () => {
+    if (secDrag) saveAccL({ ...accL, [secDrag.zone]: secDrag.ordre });
+    setSecDrag(null);
+  };
+  const cacheSec = (id) => saveAccL({ ...accL, caches: [...accL.caches, id] });
+  const montreSec = (id) => saveAccL({ ...accL, caches: accL.caches.filter(x => x !== id) });
+  /** Enveloppe d'une section : drag + masque en édition, rien sinon. */
+  const Sec = (zone, id, contenu) => {
+    const cache = accL.caches.indexOf(id) >= 0;
+    if (cache && !editMode) return null;
+    const saisie = secDrag && secDrag.id === id;
+    return (
+      <div key={id} data-sec={id} data-zone={zone}
+        onPointerDown={editMode ? (e) => debutSec(e, zone, id) : undefined}
+        onPointerMove={editMode ? mouvSec : undefined}
+        onPointerUp={editMode ? finSec : undefined}
+        onPointerCancel={editMode ? finSec : undefined}
+        style={{ position: 'relative', minWidth: 0,
+          opacity: saisie ? .55 : cache ? .4 : 1, transition: 'opacity .15s',
+          ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 4, borderRadius: 14, cursor: 'grab', touchAction: 'none' } : {}) }}>
+        {cache
+          ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--o-text3)' }}>{ACC_NOMS()[id]} · {tr('masquée')}</span>
+              <button onClick={() => montreSec(id)} style={{ padding: '6px 12px', borderRadius: 9, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{tr('Réafficher')}</button>
+            </div>
+          : <>
+              <div style={{ pointerEvents: editMode ? 'none' : 'auto' }}>{contenu}</div>
+              {editMode && <button onClick={() => cacheSec(id)} title={tr('Masquer')} style={{ position: 'absolute', top: -10, right: -10, width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-bad)', color: '#fff', boxShadow: '0 3px 10px rgba(0,0,0,.35)', fontSize: 12, fontWeight: 800, padding: 0 }}>×</button>}
+            </>}
+      </div>
+    );
+  };
   const [roomPop, setRoomPop] = useState(null);
   const wx = (editMode && override) ? override : (weatherMode || 'clouds'); // suit l'entité météo, sauf override en mode édition
   // Fond GLSL : état HA brut prioritaire ; les overrides du mode édition sont mappés vers un preset proche
@@ -4138,11 +4213,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           </div>
         </div>
 
-        {/* SCÈNES RAPIDES (remplace le flux énergétique, qui reste dans la vue Énergie) */}
-        <QuickScenes hass={accueil && accueil.hass} />
-
-        {/* PIECES + CAMÉRAS + À VENIR — PC ≥1180 : rail « En cours / Rappels » accolé à droite,
-            caméras poussées en bas (alignées avec le bas du rail). Mobile/tablette : empilement historique. */}
+        {/* SECTIONS PERSONNALISABLES — scènes rapides, pièces, caméras, et le rail.
+            PC ≥1180 : rail accolé à droite. Mobile/tablette : empilement. */}
         {(() => {
           const inner = pieces;
           const piecesHeader = (
@@ -4252,30 +4324,30 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             );
           };
           const plantsCards = (sm) => <>{plantsList.map(pl => plantRow(sm, pl))}</>;
+          // Sections nommées : l'ordre vient de `loggia_accueil`, le contenu d'ici.
+          // Une section sans rien à montrer (pas de caméra, agenda vide) n'existe
+          // pas du tout — ni wrapper, ni place dans l'édition.
+          const secsMain = {
+            scenes: <QuickScenes hass={dashHass} />,
+            pieces: <>{piecesHeader}{piecesGrid}</>,
+            cameras: cams.length > 0 ? <>{camsHeader}{camsGrid}</> : null,
+          };
+          const secsRail = { etats: railEtats, rappels: railRappels, agenda: railAgenda };
+          const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
+          const renduRail = ordreDe('rail').map(id => secsRail[id] ? Sec('rail', id, secsRail[id]) : null).filter(Boolean);
           if (!wide) return (
             <>
-              {piecesHeader}
-              {piecesGrid}
-              {cams.length > 0 && camsHeader}
-              {cams.length > 0 && camsGrid}
-              {railEtats}
-              {railRappels}
-              {railAgenda}
+              {renduMain}
+              {renduRail}
             </>
           );
           return (
             <div style={{ display: 'grid', gridTemplateColumns: wideXL ? '1fr 330px' : '1fr 276px', gap: wideXL ? 18 : 14 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                {piecesHeader}
-                {piecesGrid}
-                {/* marginTop auto : caméras collées en bas → bas aligné avec le bas du rail */}
-                {cams.length > 0 && <div style={{ marginTop: 'auto', paddingTop: 18 }}>{camsHeader}</div>}
-                {cams.length > 0 && camsGrid}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
+                {renduMain}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-                {railEtats}
-                {railRappels}
-                {railAgenda}
+                {renduRail}
               </div>
             </div>
           );
@@ -8014,38 +8086,39 @@ function CvCard({ id, hass, label = null }) {
   );
 }
 
-/* Tailles de carte d'une vue custom : petite (1 colonne), large (2 colonnes),
- * grande (2×2). Rangées dans `cv.tailles`, une table clé → taille A CÔTÉ de
+/* Taille d'une carte de vue custom : { w, h } en cellules de grille, bornée
+ * 1..4 × 1..3. Rangée dans `cv.tailles`, une table clé → taille A CÔTÉ de
  * `ents` : les vues existantes ne changent pas d'un octet, l'absence vaut
- * petite. Le cycle se fait au bouton, pas à la poignée — une poignée de
- * redimensionnement continue n'a pas de sens sur une grille à colonnes. */
-const CV_TAILLES = ['s', 'l', 'xl'];
-const CV_TAILLE_LIBELLE = { s: '1×1', l: '2×1', xl: '2×2' };
+ * 1×1. Les chaînes de la 2.17.0 ('s'/'l'/'xl') se relisent encore. */
+function cvTailleNorm(t) {
+  if (t && typeof t === 'object') return { w: Math.max(1, Math.min(4, t.w | 0 || 1)), h: Math.max(1, Math.min(3, t.h | 0 || 1)) };
+  if (t === 'l') return { w: 2, h: 1 };
+  if (t === 'xl') return { w: 2, h: 2 };
+  return { w: 1, h: 1 };
+}
 
 function CustomView({ cv, hass, edit = false, onSave }) {
-  // Mode édition en place (façon Home Assistant) : croix pour retirer, POIGNÉE
-  // pour déplacer (glisser une carte sur une autre l'insère à sa place),
-  // bouton de taille, tuile « + Ajouter une carte », renommage inline.
+  // Mode édition en place : la CARTE ENTIÈRE se saisit et se déplace (ses
+  // contrôles sont inertes pendant l'édition), le COIN bas-droit s'étire pour
+  // choisir le format, la croix retire. Tuile « + Ajouter une carte »,
+  // renommage inline.
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState(cv.name);
   useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); }, [cv.id, edit]);
   const setEnts = (ents) => onSave && onSave({ ...cv, ents });
-  const tailleDe = (x) => (cv.tailles && cv.tailles[cvKey(x)]) || 's';
-  const cycleTaille = (x) => {
-    const cle = cvKey(x);
-    const suiv = CV_TAILLES[(CV_TAILLES.indexOf(tailleDe(x)) + 1) % CV_TAILLES.length];
-    onSave && onSave({ ...cv, tailles: { ...(cv.tailles || {}), [cle]: suiv } });
-  };
-  /* ── Déplacement à la poignée ──────────────────────────────────────────────
-   * Pointer capture sur la poignée ; au mouvement, la carte sous le doigt
+  const tailleDe = (x) => cvTailleNorm(cv.tailles && cv.tailles[cvKey(x)]);
+  /* ── Déplacement : saisir la carte ─────────────────────────────────────────
+   * Pointer capture sur le wrapper ; au mouvement, la carte sous le doigt
    * (elementFromPoint → wrapper [data-cvk]) désigne la place d'insertion. La
    * liste se réordonne EN DIRECT dans un état local — le doigt voit ce qu'il
    * fait — et l'enregistrement n'a lieu qu'au relâcher, comme les sliders. */
   const [dragCle, setDragCle] = useState(null);
   const [ordreDrag, setOrdreDrag] = useState(null);
+  const grilleRef = useRef(null);
   const debutDrag = (e, x) => {
     if (!edit) return;
+    if (e.target.closest && e.target.closest('button')) return; // ×, coin
     e.preventDefault();
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) {}
     setDragCle(cvKey(x));
@@ -8070,6 +8143,41 @@ function CustomView({ cv, hass, edit = false, onSave }) {
     if (dragCle != null && ordreDrag) setEnts(ordreDrag);
     setDragCle(null); setOrdreDrag(null);
   };
+  /* ── Redimensionnement : étirer le coin ────────────────────────────────────
+   * Le coin bas-droit se tire dans le format voulu. La géométrie de la grille
+   * (largeur de colonne, hauteur de rangée) se mesure au premier geste ; au
+   * mouvement, la position du pointeur depuis le bord GAUCHE/HAUT de la carte
+   * donne le nombre de cellules visé, peint AUSSITÔT sur le wrapper (DOM
+   * direct, pas de re-render) ; l'enregistrement n'a lieu qu'au relâcher. */
+  const resizeRef = useRef(null);
+  const debutResize = (e, x) => {
+    e.preventDefault(); e.stopPropagation();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) {}
+    const wrap = e.currentTarget.closest('[data-cvk]');
+    const grille = grilleRef.current;
+    if (!wrap || !grille) return;
+    const gs = getComputedStyle(grille);
+    const gap = parseFloat(gs.gap) || 14;
+    const cols = gs.gridTemplateColumns.split(' ').length || 1;
+    const colW = (grille.clientWidth - gap * (cols - 1)) / cols;
+    const r = wrap.getBoundingClientRect();
+    resizeRef.current = { cle: cvKey(x), wrap, gauche: r.left, haut: r.top, colW, rowH: 96, gap, w: tailleDe(x).w, h: tailleDe(x).h };
+  };
+  const mouvResize = (e) => {
+    const R = resizeRef.current; if (!R) return;
+    const w = Math.max(1, Math.min(4, Math.round((e.clientX - R.gauche) / (R.colW + R.gap) + 0.5)));
+    const h = Math.max(1, Math.min(3, Math.round((e.clientY - R.haut) / (R.rowH + R.gap) + 0.5)));
+    if (w !== R.w || h !== R.h) {
+      R.w = w; R.h = h;
+      R.wrap.style.gridColumn = w === 1 ? 'auto' : 'span ' + w;
+      R.wrap.style.gridRow = h === 1 ? 'auto' : 'span ' + h;
+    }
+  };
+  const finResize = () => {
+    const R = resizeRef.current; if (!R) return;
+    resizeRef.current = null;
+    onSave && onSave({ ...cv, tailles: { ...(cv.tailles || {}), [R.cle]: { w: R.w, h: R.h } } });
+  };
   const liste = ordreDrag || cv.ents;
   const editBtn = { width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-surfA)', color: 'var(--o-text1)', boxShadow: '0 3px 10px rgba(0,0,0,.35)', fontSize: 12, fontWeight: 800, padding: 0 };
   return (
@@ -8080,7 +8188,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderRadius: 14, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
             <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{tr('Mode édition')}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1 }}>{tr('Retire (×), déplace à la poignée (⠿), redimensionne (1×1), ou ajoute des cartes.')}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1 }}>{tr('Prends une carte pour la déplacer, tire le coin pour l’étirer, retire (×) ou ajoute.')}</span>
           </div>
         )}
         <div>
@@ -8092,28 +8200,34 @@ function CustomView({ cv, hass, edit = false, onSave }) {
             : <h1 onClick={edit ? () => setRenaming(true) : undefined} style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, cursor: edit ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: 12 }}>{cv.name}{edit && <Fi i="pencil" size={16} color="var(--o-text3)" />}</h1>}
           <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gridAutoRows: 'minmax(96px,auto)', gridAutoFlow: 'dense', gap: 14 }}>
-          {liste.map((x, i) => {
+        <div ref={grilleRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gridAutoRows: 'minmax(96px,auto)', gridAutoFlow: 'dense', gap: 14 }}>
+          {liste.map((x) => {
             const taille = tailleDe(x);
             const saisie = dragCle === cvKey(x);
             return (
-            <div key={cvKey(x)} data-cvk={cvKey(x)} style={{ position: 'relative', minWidth: 0,
-              gridColumn: taille === 's' ? 'auto' : 'span 2',
-              gridRow: taille === 'xl' ? 'span 2' : 'auto',
+            <div key={cvKey(x)} data-cvk={cvKey(x)}
+              onPointerDown={edit ? (e) => debutDrag(e, x) : undefined}
+              onPointerMove={edit ? mouvDrag : undefined}
+              onPointerUp={edit ? finDrag : undefined}
+              onPointerCancel={edit ? finDrag : undefined}
+              style={{ position: 'relative', minWidth: 0,
+              gridColumn: taille.w === 1 ? 'auto' : 'span ' + taille.w,
+              gridRow: taille.h === 1 ? 'auto' : 'span ' + taille.h,
               opacity: saisie ? .55 : 1, transform: saisie ? 'scale(.97)' : 'none', transition: 'opacity .15s, transform .15s',
-              ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)' } : {}) }}>
-              <div style={{ height: '100%' }}>
+              ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'none' } : {}) }}>
+              {/* En édition, la carte est INERTE : la saisir la déplace, ses contrôles ne s'actionnent pas. */}
+              <div style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
                 {cvEstTpl(x) ? <CvTemplateCard def={x} hass={hass} /> : <CvCard id={x} hass={hass} />}
               </div>
               {edit && (
                 <>
-                  {/* poignée : SEULE zone qui déplace — le reste de la carte scrolle et clique normalement */}
-                  <button onPointerDown={(e) => debutDrag(e, x)} onPointerMove={mouvDrag} onPointerUp={finDrag} onPointerCancel={finDrag}
-                    title={tr('Déplacer')} aria-label={tr('Déplacer')}
-                    style={{ ...editBtn, position: 'absolute', top: -9, left: -9, cursor: 'grab', touchAction: 'none', fontSize: 13 }}>⠿</button>
                   <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...editBtn, position: 'absolute', top: -9, right: -9, background: 'var(--o-bad)', color: '#fff' }}>×</button>
-                  <button onClick={() => cycleTaille(x)} title={tr('Taille de la carte')}
-                    style={{ ...editBtn, position: 'absolute', bottom: -9, right: 6, width: 'auto', padding: '0 9px', fontSize: 10.5, letterSpacing: '.04em' }}>{CV_TAILLE_LIBELLE[taille]}</button>
+                  {/* coin d'étirement : tirer dans le format voulu */}
+                  <button onPointerDown={(e) => debutResize(e, x)} onPointerMove={mouvResize} onPointerUp={finResize} onPointerCancel={finResize}
+                    title={tr('Étirer')} aria-label={tr('Étirer')}
+                    style={{ ...editBtn, position: 'absolute', bottom: -9, right: -9, cursor: 'nwse-resize', touchAction: 'none', background: 'var(--o-accent)', color: '#fff' }}>
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 5v6H5M11 1L1 11" /></svg>
+                  </button>
                 </>
               )}
             </div>
