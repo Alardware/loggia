@@ -25,7 +25,7 @@ import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.j
 import { isViewAvailable, viewReason } from './views.js';
 import { REDUCE_MOTION, Fi, Anim, useTilt, editBtn, ViewEditBar,
   HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, HX_TOKENS, userBg, userImg, personPicture,
-  EnRow, EnVal, EnGauge, LOOK_DEF, CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS,
+  EnRow, EnVal, EnGauge, LOOK_DEF, CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, lireFondPhoto, USER_COLORS,
   FlipText, Gauge, BottomSheet, onPaintReady, PAINT_READY,
   EntPicker, CV_DOM_ICON, cvDomain } from './ui.jsx';
 import { WX_ICON, WX_ICOLOR, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
@@ -9027,6 +9027,15 @@ export default function App() {
   // Mode ambiant : minutes d'inactivité avant l'écran de veille, 0 = coupé.
   // Par APPAREIL (localStorage, hors sync) : on l'active sur la tablette
   // murale, pas sur le poste de travail.
+  // Fond photo : la dataURL vit dans un cache module (lireFondPhoto) ; ce
+  // compteur force le re-rendu quand les Paramètres la changent.
+  const [, setFondV] = useState(0);
+  useEffect(() => {
+    const f = () => setFondV(v => v + 1);
+    window.addEventListener('loggia-fond-photo', f);
+    return () => window.removeEventListener('loggia-fond-photo', f);
+  }, []);
+  const fondPhotoActif = look.fond === 'photo' ? lireFondPhoto() : null;
   const [ambient, setAmbient] = useState(() => { try { return parseInt(localStorage.getItem('loggia-ambient') || '0', 10) || 0; } catch (e) { return 0; } });
   const onAmbient = (min) => { setAmbient(min); try { localStorage.setItem('loggia-ambient', String(min)); } catch (e) {} };
   const [idle, setIdle] = useState(false);
@@ -9160,7 +9169,20 @@ export default function App() {
     <LoggiaContext.Provider value={loggiaRuntime}>
     {showOnboarding && <Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} />}
     <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, isAdmin, notifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn }}>
-    <div className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)' }}>
+    <div className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)',
+      // isolate : notre propre contexte d'empilement. Sans lui, le z-index
+      // négatif du calque photo l'envoie sous le fond OPAQUE de tout wrapper
+      // qu'une extension glisse entre body et #root — photo invisible, vécu.
+      isolation: 'isolate' }}>
+      {/* Fond photo : un calque FIXE derrière tout (z-index négatif) — pas de
+          background-attachment: fixed, que Safari iOS ne sait pas peindre. Le
+          voile assombrit (ou éclaircit, en mode clair) pour que le texte des
+          cartes reste lisible sur n'importe quelle photo. */}
+      {fondPhotoActif && (
+        <div aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none',
+          background: (lightMode ? 'linear-gradient(rgba(240,244,250,.6),rgba(240,244,250,.6)), ' : 'linear-gradient(rgba(5,7,11,.55),rgba(5,7,11,.55)), ')
+            + `url("${fondPhotoActif}") center center / cover no-repeat var(--o-bg)` }} />
+      )}
       {idle && ambient > 0 && <AmbientOverlay wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} lightsOn={lightsOn} notifs={notifs}
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
       {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12.5, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
