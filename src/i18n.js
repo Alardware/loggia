@@ -29,15 +29,13 @@
  */
 import { cfgVal, getHass } from './state.js';
 import EN from './langues/en.js';
-import ES from './langues/es.js';
-import DE from './langues/de.js';
 
-/* Quatre langues, traduites en entier — plutot que soixante a moitie.
+/* Deux langues, traduites en entier — plutot que soixante a moitie.
  *
- * Home Assistant en propose 64, et Loggia sait en afficher le vocabulaire dans
- * toutes. Mais ses propres phrases — « 4 lampes allumees », « Controle general »
- * — n'ont d'equivalent chez lui dans aucune. Un dashboard polonais aurait donc
- * garde la moitie de ses textes en anglais.
+ * L'espagnol et l'allemand ont vecu jusqu'au 29/08/2026 : deux catalogues de
+ * plus a maintenir a chaque phrase ajoutee, pour aucun utilisateur connu.
+ * Retires a la demande de l'utilisateur ; ils reviendront si quelqu'un les
+ * demande (l'historique git les garde).
  *
  * Ajouter une langue = un fichier dans `langues/`, une entree ici, une dans
  * CATALOGUES. Rien d'autre a toucher. */
@@ -45,11 +43,9 @@ export const LANGUES = [
   { code: 'auto', nom: 'Suivre Home Assistant' },
   { code: 'fr', nom: 'Français' },
   { code: 'en', nom: 'English' },
-  { code: 'es', nom: 'Español' },
-  { code: 'de', nom: 'Deutsch' },
 ];
 
-const CATALOGUES = { en: EN, es: ES, de: DE };
+const CATALOGUES = { en: EN };
 
 /** Les langues proposees dans les reglages. */
 export function languesDisponibles() {
