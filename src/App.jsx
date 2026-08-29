@@ -1375,15 +1375,15 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   };
   return (
     <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (titre || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
-      // Teinte d'état : volet ouvert = lavis d'accent, gradué par la position.
+      // Teinte d'état : volet ouvert = lavis VIOLET, gradué par la position — le bleu accent restait trop proche des autres cartes.
       ...(pos > 0 && LAVIS ? {
-        background: `linear-gradient(180deg,var(--o-surfA) 28%,rgba(var(--o-accent-rgb),${lav(.10 + pos * .0012)}))`,
-        border: `1px solid rgba(var(--o-accent-rgb),${lav(.26)})`,
+        background: `linear-gradient(180deg,var(--o-surfA) 28%,rgba(var(--o-purple-rgb),${lav(.10 + pos * .0012)}))`,
+        border: `1px solid rgba(var(--o-purple-rgb),${lav(.26)})`,
       } : null) }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ ...RM_ICO(pos > 0 ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', pos > 0 ? 'var(--o-accent-soft)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden' }}>
+        <span style={{ ...RM_ICO(pos > 0 ? 'rgba(var(--o-purple-rgb),.16)' : 'var(--o-s1)', pos > 0 ? 'var(--o-purple)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden' }}>
           {/* store qui descend dans le chip : hauteur = part fermée, suit la position en douceur */}
-          <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: (100 - pos) + '%', background: 'linear-gradient(180deg,rgba(var(--o-accent-rgb),.34),rgba(var(--o-accent-rgb),.14))', transition: REDUCE_MOTION ? 'none' : 'height .7s cubic-bezier(.22,.61,.36,1)', pointerEvents: 'none' }} />
+          <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: (100 - pos) + '%', background: 'linear-gradient(180deg,rgba(var(--o-purple-rgb),.34),rgba(var(--o-purple-rgb),.14))', transition: REDUCE_MOTION ? 'none' : 'height .7s cubic-bezier(.22,.61,.36,1)', pointerEvents: 'none' }} />
           <Ico name="blinds" size={18} /></span>
         <span style={{ fontSize: 15, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos}%</span>
       </div>
@@ -1392,14 +1392,15 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
         <div style={RM_SUB}>{label}</div>
         <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => { e.stopPropagation(); drag(e); }} {...kbSlider('Position ' + (a.friendly_name || id), pos, (nv) => { setOv(nv); commander(hass, id, 'set_position', nv); })} style={{ padding: '10px 0 12px', cursor: 'pointer', touchAction: 'none' }}>
           <div style={{ position: 'relative', height: 6, borderRadius: 4, background: 'var(--o-bd1)' }}>
-            <div data-fill style={{ position: 'absolute', inset: '0 auto 0 0', width: pos + '%', background: 'linear-gradient(90deg,var(--o-accent),var(--o-accent-soft))', borderRadius: 4, transition: 'width .25s' }} />
+            <div data-fill style={{ position: 'absolute', inset: '0 auto 0 0', width: pos + '%', background: 'linear-gradient(90deg,var(--o-purple),rgba(var(--o-purple-rgb),.6))', borderRadius: 4, transition: 'width .25s' }} />
             <span data-knob style={{ position: 'absolute', top: '50%', left: `calc(${pos}% - 8px)`, transform: 'translateY(-50%)', width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,.4)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
           </div>
         </div>
+        {/* Les mêmes trois gestes que la carte compacte : ouvrir, stop, fermer — le slider règle le reste. */}
         <div style={{ display: 'flex', gap: 7 }}>
-          <button onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }} className="o-rmbtn" style={RM_BTN}>{tr('Fermer')}</button>
-          <button onClick={(e) => { e.stopPropagation(); setOv(50); commander(hass, id, 'set_position', 50); }} className="o-rmbtn" style={RM_BTN}>50 %</button>
-          <button onClick={(e) => { e.stopPropagation(); setOv(100); commander(hass, id, 'open'); }} className="o-rmbtn" style={RM_BTN}>{tr('Ouvrir')}</button>
+          <button aria-label={tr('Ouvrir')} title={tr('Ouvrir')} onClick={(e) => { e.stopPropagation(); setOv(100); commander(hass, id, 'open'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-up" size={14} /></button>
+          <button aria-label={tr('Stop')} title={tr('Stop')} onClick={(e) => { e.stopPropagation(); call('stop_cover'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="square" size={12} /></button>
+          <button aria-label={tr('Fermer')} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-down" size={14} /></button>
         </div>
       </div>
     </div>
@@ -1854,7 +1855,7 @@ function RoomCoverSheet({ id, hass, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ flex: 1, fontSize: 19, fontWeight: 700 }}>{a.friendly_name || id}</span>
-          <span style={{ fontSize: 20, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-accent-soft)' }}>{pos}%</span>
+          <span style={{ fontSize: 20, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-purple)' }}>{pos}%</span>
         </div>
         {/* visuel du volet + rail */}
         <div style={{ display: 'flex', gap: 20, alignItems: 'center', margin: '18px 0 6px' }}>
@@ -1865,13 +1866,13 @@ function RoomCoverSheet({ id, hass, onClose }) {
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{pos === 0 ? tr('Fermé') : pos === 100 ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos })}</div>
             <div onPointerDown={drag} style={{ padding: '14px 0', cursor: 'pointer', touchAction: 'none' }}>
               <div style={{ position: 'relative', height: 34, borderRadius: 11, background: 'var(--o-s1)', overflow: 'hidden' }}>
-                <div data-fill style={{ position: 'absolute', inset: '0 auto 0 0', width: pos + '%', background: 'linear-gradient(90deg,var(--o-accent),var(--o-accent-soft))', borderRadius: 11, transition: 'width .25s' }} />
+                <div data-fill style={{ position: 'absolute', inset: '0 auto 0 0', width: pos + '%', background: 'linear-gradient(90deg,var(--o-purple),rgba(var(--o-purple-rgb),.6))', borderRadius: 11, transition: 'width .25s' }} />
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => { setOv(100); cov('open_cover'); }} style={bigBtn(pos === 100, 'var(--o-ok)')}><Fi i="angle-up" size={15} />{tr('Ouvrir')}</button>
               <button onClick={() => cov('stop_cover')} style={bigBtn(false, 'var(--o-text1)')}><Fi i="square" size={12} />{tr('Stop')}</button>
-              <button onClick={() => { setOv(0); cov('close_cover'); }} style={bigBtn(pos === 0, 'var(--o-accent)')}><Fi i="angle-down" size={15} />{tr('Fermer')}</button>
+              <button onClick={() => { setOv(0); cov('close_cover'); }} style={bigBtn(pos === 0, 'var(--o-purple)')}><Fi i="angle-down" size={15} />{tr('Fermer')}</button>
             </div>
           </div>
         </div>
@@ -8055,8 +8056,8 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
   // Chaque domaine garde sa teinte des vues intégrées : lumière = sa couleur RGB ou l'or,
   // climat = le rouge de la vue Climatisation — l'accent bleu pour le reste.
   const rgbHex = dom === 'light' && a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
-  const teinte = cvEstLumiere(id) ? (rgbHex || '#FFCC44') : dom === 'climate' ? 'var(--o-warn2)' : null;
-  const teinteTxt = rgbHex || (cvEstLumiere(id) ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-warn2)' : 'var(--o-accent-soft)');
+  const teinte = cvEstLumiere(id) ? (rgbHex || '#FFCC44') : dom === 'climate' ? 'var(--o-warn2)' : dom === 'cover' ? 'var(--o-purple)' : null;
+  const teinteTxt = rgbHex || (cvEstLumiere(id) ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-warn2)' : dom === 'cover' ? 'var(--o-purple)' : 'var(--o-accent-soft)');
   const acc = on ? 'var(--o-accent)' : 'var(--o-text3)';
   const togglable = ['light', 'switch', 'input_boolean', 'fan'].indexOf(dom) >= 0;
   // Cliquable comme la carte riche : la fiche du domaine s'ouvre (lumière réglable seulement — un simple toggle n'a pas de fiche).
