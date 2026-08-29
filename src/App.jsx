@@ -25,7 +25,7 @@ import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.j
 import { isViewAvailable, viewReason } from './views.js';
 import { REDUCE_MOTION, Fi, Anim, useTilt, editBtn, ViewEditBar,
   HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, HX_TOKENS, userBg, userImg, personPicture,
-  EnRow, EnVal, EnGauge, LOOK_DEF, CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, lireFondPhoto, USER_COLORS,
+  EnRow, EnVal, EnGauge, LOOK_DEF, CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, USER_COLORS,
   FlipText, Gauge, BottomSheet, onPaintReady, PAINT_READY,
   EntPicker, CV_DOM_ICON, cvDomain } from './ui.jsx';
 import { WX_ICON, WX_ICOLOR, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
@@ -3866,10 +3866,10 @@ function habillagePiece(nom, mdi) {
  * configuration : pas de calendrier chez vous, pas de carte. Les evenements ne
  * se poussent pas : l'API calendrier de HA est un GET — on relit au montage,
  * puis toutes les quinze minutes, et quand un calendrier apparait ou disparait. */
-function useAgenda(hass) {
+function useAgenda(hass, seulement = null) {
   const [events, setEvents] = useState([]);
   const S = hass && hass.states;
-  const ids = useMemo(() => S ? Object.keys(S).filter(id => id.indexOf('calendar.') === 0) : [], [S]);
+  const ids = useMemo(() => (seulement && seulement.length) ? seulement : (S ? Object.keys(S).filter(id => id.indexOf('calendar.') === 0) : []), [S, seulement ? seulement.join('|') : '']);
   const sig = ids.join('|');
   const api = hass && hass.callApi ? hass.callApi.bind(hass) : null;
   useEffect(() => {
@@ -8085,6 +8085,299 @@ function CvCard({ id, hass, label = null }) {
   );
 }
 
+/* ════════════ CATALOGUE DE CARTES des vues custom ════════════
+ * Le TYPE se choisit à l'ajout — jamais par un geste implicite : quand une
+ * entité admet plusieurs cartes, le sheet d'ajout les propose. Chaque entrée
+ * typée de `cv.ents` s'écrit { t, id } ; la chaîne nue reste la compacte. */
+
+const CV_CADRE = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' };
+
+/** Les cartes qui vont à une entité, la première étant proposée en premier. */
+function cvTypesPour(id) {
+  const d = String(id).split('.')[0];
+  if (d === 'light' || d === 'switch' || d === 'fan') return ['compacte', 'riche', 'gros', 'journal'];
+  if (d === 'cover' || d === 'climate' || d === 'media_player') return ['compacte', 'riche', 'journal'];
+  if (d === 'sensor') return ['compacte', 'chiffre', 'jauge', 'graph', 'journal'];
+  if (d === 'binary_sensor') return ['compacte', 'chiffre', 'journal'];
+  if (d === 'person') return ['compacte', 'personne', 'journal'];
+  if (d === 'weather') return ['compacte', 'meteo'];
+  if (d === 'calendar') return ['agenda', 'compacte'];
+  if (d === 'alarm_control_panel') return ['compacte', 'alarme'];
+  return ['compacte'];
+}
+const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Riche'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme') });
+
+/* Grand chiffre : la valeur en très grand, l'unité, le nom. Un binaire dit son
+ * état en toutes lettres ; la richesse d'un capteur, c'est sa lisibilité. */
+function CvBigSensor({ id, hass }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const dom = String(id).split('.')[0];
+  const brut = st ? st.state : null;
+  const mort = !st || brut === 'unavailable' || brut === 'unknown';
+  let valeur, unite = '';
+  if (mort) valeur = '—';
+  else if (dom === 'binary_sensor') {
+    const porte = ['door', 'window', 'garage_door', 'opening'].indexOf(a.device_class) >= 0;
+    valeur = brut === 'on' ? (porte ? tr('Ouvert') : tr('Détecté')) : (porte ? tr('Fermé') : 'RAS');
+  } else {
+    const n = parseFloat(brut);
+    valeur = isNaN(n) ? brut : (Math.round(n * 10) / 10).toLocaleString(locale());
+    unite = a.unit_of_measurement || '';
+  }
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150, opacity: mort ? .55 : 1 }}>
+      <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text3)' }}><Fi i={CV_DOM_ICON[cvDomain(id)] || 'bolt'} size={17} /></span>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
+        <div style={{ fontSize: 'clamp(32px, 3vw + 12px, 54px)', fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
+          {valeur}{unite && <span style={{ fontSize: '.42em', fontWeight: 700, color: 'var(--o-text2)', marginLeft: 6 }}>{unite}</span>}
+        </div>
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
+    </div>
+  );
+}
+
+/* Jauge : un arc de cercle. Le pourcentage vient de l'unité « % », sinon des
+ * bornes min/max de l'entité — des °C entre min_temp et max_temp se jaugent
+ * aussi bien qu'une batterie. */
+function CvGauge({ id, hass }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const n = st ? parseFloat(st.state) : NaN;
+  const mort = !st || isNaN(n);
+  const min = a.min != null ? +a.min : (a.min_temp != null ? +a.min_temp : 0);
+  const max = a.max != null ? +a.max : (a.max_temp != null ? +a.max_temp : (a.unit_of_measurement === '%' ? 100 : 100));
+  const pct = mort ? 0 : Math.max(0, Math.min(1, (n - min) / (max - min || 1)));
+  const basse = a.device_class === 'battery' && n < 20;
+  const col = basse ? 'var(--o-bad)' : 'var(--o-accent)';
+  // Arc de 240° : de 150° à 390°, rayon 44, épaisseur 9.
+  const arc = (p) => {
+    const a0 = (150 * Math.PI) / 180, a1 = ((150 + 240 * p) * Math.PI) / 180;
+    const x0 = 60 + 44 * Math.cos(a0), y0 = 60 + 44 * Math.sin(a0);
+    const x1 = 60 + 44 * Math.cos(a1), y1 = 60 + 44 * Math.sin(a1);
+    return `M ${x0} ${y0} A 44 44 0 ${240 * p > 180 ? 1 : 0} 1 ${x1} ${y1}`;
+  };
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150, alignItems: 'center', opacity: mort ? .55 : 1 }}>
+      <div style={{ position: 'relative', width: 120, height: 104, flexShrink: 0 }}>
+        <svg width="120" height="120" viewBox="0 0 120 120" style={{ position: 'absolute', top: -4 }}>
+          <path d={arc(1)} fill="none" stroke="var(--o-s1)" strokeWidth="9" strokeLinecap="round" />
+          {!mort && pct > 0.005 && <path d={arc(pct)} fill="none" stroke={col} strokeWidth="9" strokeLinecap="round" style={{ transition: 'stroke .3s' }} />}
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: 6 }}>
+          <span style={{ fontSize: 24, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{mort ? '—' : Math.round(n * 10) / 10}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{a.unit_of_measurement || ''}</span>
+        </div>
+      </div>
+      <div style={{ marginTop: 'auto', width: '100%', textAlign: 'center', fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
+    </div>
+  );
+}
+
+/* Gros interrupteur : toute la carte est le bouton — pensée pour la tablette
+ * murale, où viser un petit toggle est une corvée. */
+function CvBigToggle({ id, hass }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const on = !!st && st.state === 'on';
+  const mort = !st || st.state === 'unavailable';
+  const toggle = () => { try { if (hass && hass.callService) hass.callService('homeassistant', 'toggle', { entity_id: id }); } catch (e) {} };
+  return (
+    <button className="o-piece" onClick={toggle} disabled={mort}
+      style={{ ...CV_CADRE, height: '100%', minHeight: 150, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 12, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
+        ...(on ? { background: `linear-gradient(160deg,rgba(var(--o-gold-rgb),${lav(.22)}),var(--o-surfB))`, border: `1px solid rgba(var(--o-gold-rgb),${lav(.35)})` } : {}) }}>
+      <span style={{ width: 62, height: 62, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'rgba(var(--o-gold-rgb),.2)' : 'var(--o-s1)', color: on ? 'var(--o-warn)' : 'var(--o-text3)', boxShadow: on ? '0 0 22px rgba(var(--o-gold-rgb),.4)' : 'none', transition: 'all .25s' }}>
+        <Fi i="power" size={26} />
+      </span>
+      <span style={{ fontSize: 14.5, fontWeight: 800 }}>{cvName(st, id)}</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color: on ? 'var(--o-warn)' : 'var(--o-text3)' }}>{mort ? tr('Indisponible') : on ? tr('Allumé') : tr('Éteint')}</span>
+    </button>
+  );
+}
+
+/* Présence : la personne, son état, depuis quand. */
+function CvPerson({ id, hass }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const nom = cvName(st, id);
+  const home = !!st && st.state === 'home';
+  const img = a.entity_picture || null;
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150, alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+      <span style={{ position: 'relative', width: 58, height: 58, flexShrink: 0 }}>
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', background: img ? `url("${img}") center/cover` : 'var(--o-s1)', color: 'var(--o-text2)', fontSize: 22, fontWeight: 800, boxShadow: home ? '0 0 0 2.5px var(--o-ok), 0 0 12px rgba(52,211,153,.5)' : '0 0 0 2px var(--o-bd1)', opacity: home ? 1 : .55 }}>{!img && nom.charAt(0).toUpperCase()}</span>
+        <span style={{ position: 'absolute', right: -1, bottom: -1, width: 14, height: 14, borderRadius: '50%', background: home ? 'var(--o-ok)' : 'var(--o-text3)', border: '2.5px solid var(--o-surfA)' }} />
+      </span>
+      <span style={{ fontSize: 14.5, fontWeight: 800 }}>{nom}</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color: home ? 'var(--o-ok)' : 'var(--o-text3)' }}>{home ? tr('Présent') : 'Absent'}{st && st.last_changed ? ' · ' + relTime(st.last_changed).toLowerCase() : ''}</span>
+    </div>
+  );
+}
+
+/* Météo : la vignette animée de l'accueil, en carte. */
+function CvWeather({ id, hass }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const S = (hass && hass.states) || {};
+  const nuit = S['sun.sun'] ? S['sun.sun'].state === 'below_horizon' : false;
+  const wx = st ? haWeatherMode(st.state, nuit) : 'clouds';
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150, position: 'relative', overflow: 'hidden', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+      <WxMini wx={wx} on={true} />
+      <WeatherIco wx={wx} size={52} />
+      <div style={{ position: 'relative', textAlign: 'center' }}>
+        <div style={{ fontSize: 28, fontWeight: 800 }}>{a.temperature != null ? Math.round(a.temperature) : '—'}°</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{st ? haWeatherLabel(st.state) : ''}</div>
+      </div>
+    </div>
+  );
+}
+
+/* Agenda : les prochains événements d'UN calendrier. */
+function CvAgenda({ id, hass }) {
+  const events = useAgenda(hass, useMemo(() => [id], [id]));
+  const st = hass && hass.states ? hass.states[id] : null;
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 2 }}>{cvName(st, id)}</div>
+      <div style={{ fontSize: 10.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 4 }}>{tr('Les 7 prochains jours')}</div>
+      {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien de prévu')}</div>}
+      {events.slice(0, 4).map((e, i) => {
+        const { jour, heure } = jourAgenda(e);
+        return (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.summary}</div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text2)' }}>{jour}</div>
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, color: 'var(--o-accent-soft)' }}>{heure}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Alarme : l'état et les trois gestes. Le désarmement passe par le service ;
+ * si le panneau exige un code, Home Assistant refusera — comme partout. */
+function CvAlarm({ id, hass }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const s = st ? st.state : null;
+  const call = (svc) => { try { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id }); } catch (e) {} };
+  const [txt, col] = s === 'disarmed' ? [tr('Désarmée'), 'var(--o-ok)']
+    : s === 'triggered' ? [tr('ALERTE'), 'var(--o-bad)']
+      : (s === 'arming' || s === 'pending') ? [tr('Activation en cours…'), 'var(--o-warn2)']
+        : s ? [tr('Armée'), 'var(--o-warn2)'] : ['—', 'var(--o-text3)'];
+  const btn = { flex: 1, padding: '9px 6px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' };
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+        <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(col, .16), color: col }}><Fi i="shield-check" size={17} /></span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: col }}>{txt}</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 7, marginTop: 10 }}>
+        <button style={btn} onClick={() => call('alarm_arm_away')}>{tr('Absent')}</button>
+        <button style={btn} onClick={() => call('alarm_arm_home')}>{tr('Présent')}</button>
+        <button style={{ ...btn, background: 'rgba(52,211,153,.12)', color: 'var(--o-ok)', borderColor: 'rgba(52,211,153,.3)' }} onClick={() => call('alarm_disarm')}>{tr('Désarmer')}</button>
+      </div>
+    </div>
+  );
+}
+
+/* Journal : les dernières entrées du logbook pour CETTE entité. */
+function CvJournal({ id, hass }) {
+  const events = useRoomLogbook(hass, useMemo(() => [id], [id]));
+  const S = (hass && hass.states) || {};
+  const st = S[id];
+  const heure = (when) => { const ms = when < 1e12 ? when * 1000 : when; return new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
+      <div style={{ fontSize: 10.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 4 }}>{tr('Journal')}</div>
+      {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien à raconter')}</div>}
+      {events.slice(0, 5).map((e, i) => (
+        <div key={(e.when || 0) + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+          <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{e.state != null ? etatJournal(id, e.state, S) : (e.message || '')}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{heure(e.when)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Graphique 24 h : l'historique du capteur en filigrane, la valeur en clair.
+ * L'API historique de HA est un GET (pattern des autres lectures d'historique
+ * du fichier) : relecture au montage puis toutes les cinq minutes. */
+function CvHistory({ id, hass }) {
+  const [points, setPoints] = useState(null);
+  const api = hass && hass.callApi ? 1 : 0;
+  useEffect(() => {
+    if (!api) return;
+    let mort = false;
+    const lire = () => {
+      const debut = new Date(Date.now() - 24 * 3600e3).toISOString();
+      hass.callApi('GET', 'history/period/' + debut + '?filter_entity_id=' + encodeURIComponent(id) + '&minimal_response&no_attributes')
+        .then(r => {
+          if (mort) return;
+          const serie = (Array.isArray(r) && r[0] ? r[0] : []).map(p => ({ t: new Date(p.last_changed || p.lu || 0).getTime(), v: parseFloat(p.state) })).filter(p => !isNaN(p.v));
+          setPoints(serie);
+        }).catch(() => { if (!mort) setPoints([]); });
+    };
+    lire();
+    const iv = setInterval(lire, 5 * 60000);
+    return () => { mort = true; clearInterval(iv); };
+  }, [api, id]);
+  const st = hass && hass.states ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const cur = st ? parseFloat(st.state) : NaN;
+  let chemin = '', aire = '', vmin = null, vmax = null;
+  if (points && points.length > 1) {
+    const t0 = points[0].t, t1 = points[points.length - 1].t || t0 + 1;
+    vmin = Math.min(...points.map(p => p.v)); vmax = Math.max(...points.map(p => p.v));
+    const spread = (vmax - vmin) || 1;
+    const X = (t) => ((t - t0) / (t1 - t0 || 1)) * 100;
+    const Y = (v) => 34 - ((v - vmin) / spread) * 28;
+    chemin = points.map((p, i) => (i ? 'L' : 'M') + X(p.t).toFixed(1) + ' ' + Y(p.v).toFixed(1)).join(' ');
+    aire = chemin + ` L 100 40 L 0 40 Z`;
+  }
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150, position: 'relative', overflow: 'hidden' }}>
+      {chemin && (
+        <svg viewBox="0 0 100 40" preserveAspectRatio="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, width: '100%', height: '58%' }}>
+          <path d={aire} fill="rgba(var(--o-accent-rgb),.10)" />
+          <path d={chemin} fill="none" stroke="var(--o-accent)" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+        </svg>
+      )}
+      <div style={{ position: 'relative', fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
+      <div style={{ position: 'relative', fontSize: 26, fontWeight: 800, marginTop: 2 }}>{isNaN(cur) ? '—' : Math.round(cur * 10) / 10}<span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 4 }}>{a.unit_of_measurement || ''}</span></div>
+      <div style={{ position: 'relative', marginTop: 'auto', fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)' }}>
+        {points === null ? tr('Chargement…') : points.length < 2 ? tr("Pas d'historique sur 24 h") : (tr('min {a} · max {b}', { a: Math.round(vmin * 10) / 10, b: Math.round(vmax * 10) / 10 }))}
+      </div>
+    </div>
+  );
+}
+
+/** La carte d'une entrée de vue custom, selon sa forme et son type. */
+function CvTyped({ x, hass, dc }) {
+  if (cvEstTpl(x)) return <CvTemplateCard def={x} hass={hass} />;
+  if (typeof x === 'string') return <CvCard id={x} hass={hass} />;
+  const { t, id } = x;
+  if (t === 'riche') return dc.card(id);
+  if (t === 'chiffre') return <CvBigSensor id={id} hass={hass} />;
+  if (t === 'jauge') return <CvGauge id={id} hass={hass} />;
+  if (t === 'graph') return <CvHistory id={id} hass={hass} />;
+  if (t === 'gros') return <CvBigToggle id={id} hass={hass} />;
+  if (t === 'personne') return <CvPerson id={id} hass={hass} />;
+  if (t === 'meteo') return <CvWeather id={id} hass={hass} />;
+  if (t === 'agenda') return <CvAgenda id={id} hass={hass} />;
+  if (t === 'alarme') return <CvAlarm id={id} hass={hass} />;
+  if (t === 'journal') return <CvJournal id={id} hass={hass} />;
+  return <CvCard id={id} hass={hass} />;
+}
+
 function CustomView({ cv, hass, edit = false, onSave }) {
   // Mode édition en place : la CARTE ENTIÈRE se saisit et se déplace (ses
   // contrôles sont inertes pendant l'édition), le COIN bas-droit s'étire pour
@@ -8095,6 +8388,9 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   const [nameDraft, setNameDraft] = useState(cv.name);
   useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); }, [cv.id, edit]);
   const setEnts = (ents) => onSave && onSave({ ...cv, ents });
+  const dc = useDomainCards(hass);
+  // Choix du TYPE à l'ajout : l'entité cliquée dont on attend le choix.
+  const [pickCarte, setPickCarte] = useState(null);
   /* ── Déplacement : saisir la carte ─────────────────────────────────────────
    * Pointer capture sur le wrapper ; au mouvement, la carte sous le doigt
    * (elementFromPoint → wrapper [data-cvk]) désigne la place d'insertion. La
@@ -8166,7 +8462,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
               ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'none' } : {}) }}>
               {/* En édition, la carte est INERTE : la saisir la déplace, ses contrôles ne s'actionnent pas. */}
               <div className="o-cvfit" style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
-                {cvEstTpl(x) ? <CvTemplateCard def={x} hass={hass} /> : <CvCard id={x} hass={hass} />}
+                <CvTyped x={x} hass={hass} dc={dc} />
               </div>
               {edit && (
                 <>
@@ -8183,6 +8479,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           )}
         </div>
         {!edit && !cv.ents.length && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Vue vide — active le crayon (en haut) pour ajouter des cartes.')}</div>}
+        {dc.sheets}
         {adding && (
           <BottomSheet onClose={() => setAdding(false)}>
             {close => (<>
@@ -8190,10 +8487,29 @@ function CustomView({ cv, hass, edit = false, onSave }) {
                 <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
                 <span style={{ fontSize: 18, fontWeight: 700 }}>{tr('Ajouter une carte')}</span>
               </div>
-              <EntPicker hass={hass} exclude={cv.ents.filter(x => typeof x === 'string')} onPick={(id) => setEnts([...cv.ents, id])} autoFocus />
-              <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr("Chaque entité choisie s'ajoute immédiatement à la vue.")}</div>
+              {pickCarte ? (() => {
+                /* Le type se choisit ICI, à l'ajout — jamais par un geste
+                 * implicite. La compacte reste le premier choix. */
+                const noms = CV_TYPE_NOMS();
+                const st = hass && hass.states ? hass.states[pickCarte] : null;
+                return (
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{tr('Quelle carte pour {nom} ?', { nom: cvName(st, pickCarte) })}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {cvTypesPour(pickCarte).map(t => (
+                        <button key={t} onClick={() => { setEnts([...cv.ents, t === 'compacte' ? pickCarte : { t, id: pickCarte }]); setPickCarte(null); }}
+                          style={{ padding: '10px 15px', borderRadius: 11, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, background: t === 'compacte' ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', border: '1px solid ' + (t === 'compacte' ? 'var(--o-accent)' : 'var(--o-bd1)'), color: t === 'compacte' ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{noms[t]}</button>
+                      ))}
+                    </div>
+                    <button onClick={() => setPickCarte(null)} style={{ marginTop: 12, padding: '8px 14px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('Annuler')}</button>
+                  </div>
+                );
+              })() : (<>
+              <EntPicker hass={hass} exclude={[]} onPick={(id) => { if (cvTypesPour(id).length > 1) setPickCarte(id); else setEnts([...cv.ents, id]); }} autoFocus />
+              <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Choisis une entité, puis la carte qui lui va.')}</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '18px 0 8px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
               <TplForm onAdd={(t) => setEnts([...cv.ents, t])} />
+              </>)}
             </>)}
           </BottomSheet>
         )}
@@ -9018,9 +9334,11 @@ export default function App() {
   const activeRoom = view.indexOf('room:') === 0 ? view.slice(5) : view === 'pieces' ? ((cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))[0] || null) : null;
   // Vue pièce : on poll le domaine des appareils pilotables + les capteurs de la pièce (clés-préfixes).
   const roomKeys = activeRoom ? ['light.', 'switch.', 'cover.', 'climate.', 'media_player.', 'fan.', 'lock.', ...climateKeys(), ...(cfg.rooms || []).flatMap(r => [r.haid && r.haid.temp, r.haid && r.haid.humidity, r.haid && r.haid.co2])] : [];
-  // Les cartes template de `ents` ne sont pas des entity_ids : leur souscription
-  // `render_template` pousse toute seule, elles n'ont pas besoin d'etre suivies.
-  const haKeys = [...GLOBAL_KEYS, ...(activeCv ? activeCv.ents.filter(x => typeof x === 'string') : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
+  // Les cartes d'une vue custom suivent leur entity_id — y compris les cartes
+  // TYPÉES ({ t, id }), sans quoi une jauge ou un gros interrupteur ne se
+  // redessinait jamais. Seuls les templates restent dehors : leur souscription
+  // `render_template` pousse toute seule.
+  const haKeys = [...GLOBAL_KEYS, ...(activeCv ? activeCv.ents.map(x => cvId(x)) : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
   // Capteurs de puissance au jitter continu : signature arrondie à 10 W → pas de re-render global à chaque tick.
   // Un capteur de puissance jitter en continu chez N'IMPORTE QUI : c'est sa
   // `device_class` qui le dit, pas son nom. Cette liste portait un identifiant
