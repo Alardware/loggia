@@ -116,6 +116,24 @@ html.loggia-frosted body [style*="--o-surfA"] [style*="--o-surfA"] { -webkit-bac
 /* Vues custom : la carte REMPLIT sa cellule de grille — sans quoi étirer le
    coin agrandissait le cadre pointillé et laissait la carte petite dedans. */
 .o-cvfit > * { height: 100%; box-sizing: border-box; }
+/* Une entité indisponible respire, et sa bordure tourne (reprise d'Atrium) :
+   une pastille grise ne se voit pas de l'autre bout de la pièce, une tuile qui
+   souffle, si. Cycles désynchronisés exprès pour ne pas battre ensemble. */
+@property --o-tour { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes o-souffle { 0%, 100% { box-shadow: 0 0 0 0 rgba(var(--o-bad-rgb), .45); } 55% { box-shadow: 0 0 0 7px transparent; } }
+@keyframes o-tour { to { --o-tour: 360deg; } }
+/* overflow visible imposé : les cartes à filigrane (média, graphique) clippent
+   en inline leur border-box, ce qui avalerait le liseré posé juste dehors. */
+.o-panne { position: relative; overflow: visible !important; animation: o-souffle 2.6s ease-in-out infinite; }
+/* Bordure en dégradé conique, masquée pour n'en garder que le liseré. */
+.o-panne::before { content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 1;
+  background: conic-gradient(from var(--o-tour), transparent 0deg, var(--o-bad) 34deg, transparent 88deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: o-tour 3.4s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .o-panne, .o-panne::before { animation: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes bdrift { from { transform: translateX(-14px); } to { transform: translateX(18px); } }
 @keyframes bsun { 0%,100% { transform:scale(1); opacity:.85; } 50% { transform:scale(1.07); opacity:1; } }
