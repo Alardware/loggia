@@ -8097,6 +8097,42 @@ function cvTailleNorm(t) {
   return { w: 1, h: 1 };
 }
 
+/* Carte grand format d'un capteur : le chiffre en très grand, l'unité, le nom.
+ * Les capteurs n'ont pas de carte riche de domaine — leur richesse, c'est la
+ * lisibilité de loin. Un binaire dit son état en toutes lettres. */
+function CvBigSensor({ id, hass }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const nom = a.friendly_name || cvName(st, id);
+  const dom = id.slice(0, id.indexOf('.'));
+  const brut = st ? st.state : null;
+  const mort = !st || brut === 'unavailable' || brut === 'unknown';
+  let valeur, unite = '';
+  if (mort) { valeur = '—'; }
+  else if (dom === 'binary_sensor') {
+    const porte = ['door', 'window', 'garage_door', 'opening'].indexOf(a.device_class) >= 0;
+    valeur = brut === 'on' ? (porte ? tr('Ouvert') : tr('Détecté')) : (porte ? tr('Fermé') : 'RAS');
+  } else if (dom === 'person') {
+    valeur = brut === 'home' ? tr('Présent') : 'Absent';
+  } else {
+    const n = parseFloat(brut);
+    valeur = isNaN(n) ? brut : (Math.round(n * 10) / 10).toLocaleString(locale());
+    unite = a.unit_of_measurement || '';
+  }
+  const actif = !mort && (brut === 'on' || brut === 'home');
+  return (
+    <div className="o-piece" style={{ height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: mort ? .55 : 1 }}>
+      <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: actif ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', color: actif ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}><Fi i={CV_DOM_ICON[cvDomain(id)] || 'bolt'} size={17} /></span>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
+        <div style={{ fontSize: 'clamp(34px, 3.2vw + 12px, 60px)', fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
+          {valeur}{unite && <span style={{ fontSize: '.42em', fontWeight: 700, color: 'var(--o-text2)', marginLeft: 6 }}>{unite}</span>}
+        </div>
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
+    </div>
+  );
+}
+
 function CustomView({ cv, hass, edit = false, onSave }) {
   // Mode édition en place : la CARTE ENTIÈRE se saisit et se déplace (ses
   // contrôles sont inertes pendant l'édition), le COIN bas-droit s'étire pour
@@ -8108,6 +8144,10 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); }, [cv.id, edit]);
   const setEnts = (ents) => onSave && onSave({ ...cv, ents });
   const tailleDe = (x) => cvTailleNorm(cv.tailles && cv.tailles[cvKey(x)]);
+  // La taille choisit le NIVEAU DE DÉTAIL, pas seulement la place : une carte
+  // étirée en hauteur devient la carte riche de son domaine — celle des vues
+  // Lumières, Pièces… — et redevient la compacte en la réduisant.
+  const dc = useDomainCards(hass);
   /* ── Déplacement : saisir la carte ─────────────────────────────────────────
    * Pointer capture sur le wrapper ; au mouvement, la carte sous le doigt
    * (elementFromPoint → wrapper [data-cvk]) désigne la place d'insertion. La
@@ -8216,8 +8256,16 @@ function CustomView({ cv, hass, edit = false, onSave }) {
               opacity: saisie ? .55 : 1, transform: saisie ? 'scale(.97)' : 'none', transition: 'opacity .15s, transform .15s',
               ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'none' } : {}) }}>
               {/* En édition, la carte est INERTE : la saisir la déplace, ses contrôles ne s'actionnent pas. */}
-              <div style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
-                {cvEstTpl(x) ? <CvTemplateCard def={x} hass={hass} /> : <CvCard id={x} hass={hass} />}
+              <div className="o-cvfit" style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
+                {cvEstTpl(x)
+                  ? <CvTemplateCard def={x} hass={hass} />
+                  : taille.h >= 2
+                    ? (['light', 'switch', 'cover', 'climate', 'media_player'].indexOf(String(x).split('.')[0]) >= 0
+                      ? dc.card(x)          /* étirée en hauteur : la carte riche du domaine */
+                      : ['sensor', 'binary_sensor', 'person'].indexOf(String(x).split('.')[0]) >= 0
+                        ? <CvBigSensor id={x} hass={hass} />  /* capteur : le chiffre en grand */
+                        : <CvCard id={x} hass={hass} />)
+                    : <CvCard id={x} hass={hass} />}
               </div>
               {edit && (
                 <>
@@ -8240,6 +8288,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           )}
         </div>
         {!edit && !cv.ents.length && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Vue vide — active le crayon (en haut) pour ajouter des cartes.')}</div>}
+        {dc.sheets}
         {adding && (
           <BottomSheet onClose={() => setAdding(false)}>
             {close => (<>
