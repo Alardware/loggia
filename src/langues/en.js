@@ -588,8 +588,8 @@ export default {
     'Tick to add, untick to remove. Changes apply immediately.',
   "Les modifications s'appliquent immédiatement à cet appareil":
     'Changes apply immediately to this device',
-  'Retire (×), réordonne (‹ ›) ou ajoute des cartes. Quitte avec le crayon du haut.':
-    'Remove (×), reorder (‹ ›) or add cards. Leave with the pencil at the top.',
+  'Retire (×), déplace à la poignée (⠿), redimensionne (1×1), ou ajoute des cartes.':
+    'Remove (×), drag by the handle (⠿), resize (1×1), or add cards.',
   'Crée tes propres vues avec tes entités — elles apparaissent dans le menu latéral.':
     'Build your own views from your entities — they appear in the sidebar.',
   'Créées avec tes entités, éditables à tout moment': 'Built from your entities, editable at any time',
@@ -625,11 +625,8 @@ export default {
   'Douce': 'Soft',
   'Pleine': 'Full',
   "Fond d'écran": 'Background',
-  'Un dégradé discret sous les cartes, dans la palette du thème. Donne sa profondeur au verre.':
-    'A quiet gradient behind the cards, in the theme palette. Gives the glass its depth.',
-  'Minuit': 'Midnight',
-  'Abysse': 'Abyss',
-  'Ardoise': 'Slate',
+  'Votre photo sous les cartes — et sous leur flou si la matière Verre est active.':
+    'Your photo behind the cards — and behind their blur when the Glass material is on.',
   'Voir les lumières': 'See the lights',
   'Fumée': 'Smoke',
   'Fumée détectée': 'Smoke detected',
@@ -660,6 +657,9 @@ export default {
   'Demain': 'Tomorrow',
   'journée': 'all day',
   'Photo': 'Photo',
+  'Retirer': 'Remove',
+  'Déplacer': 'Move',
+  'Taille de la carte': 'Card size',
   'changer': 'change',
   'retirer': 'remove',
   "L'image n'a pas pu être utilisée : ": 'The image could not be used: ',

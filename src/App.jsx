@@ -740,8 +740,11 @@ function readComputedHaTheme(hass) {
   return null;
 }
 function readLook() {
-  try { return { ...LOOK_DEF, ...(JSON.parse(window.localStorage.getItem('loggia_look') || 'null') || {}) }; }
-  catch (e) { return { ...LOOK_DEF }; }
+  try {
+    const L = { ...LOOK_DEF, ...(JSON.parse(window.localStorage.getItem('loggia_look') || 'null') || {}) };
+    if (L.fond !== 'photo') L.fond = 'aucun'; // les degrades retires retombent sur « aucun »
+    return L;
+  } catch (e) { return { ...LOOK_DEF }; }
 }
 
 /* Teinte d'état : les cartes qui montrent un appareil ACTIF (lampe allumée,
@@ -757,30 +760,13 @@ let LAVIS = 1;
 /** Alpha de lavis bornée : base × facteur du réglage, plafonnée à .85. */
 const lav = (base) => Math.min(.85, Math.round(base * LAVIS * 1000) / 1000);
 
-/* Fond d'écran : un dégradé discret sous les cartes, décliné dans la palette
- * du thème sombre et une variante pour le clair. Posé via `--o-bggrad`, le
- * canal que les presets emploient déjà — donc aucun sélecteur nouveau. */
-const FONDS = {
-  minuit: {
-    dark: 'radial-gradient(85% 65% at 18% 8%, #16233b 0%, rgba(22,35,59,0) 62%), radial-gradient(70% 55% at 88% 90%, #101d30 0%, rgba(16,29,48,0) 58%), var(--o-bg)',
-    light: 'radial-gradient(85% 65% at 18% 8%, #dde7f5 0%, rgba(221,231,245,0) 62%), radial-gradient(70% 55% at 88% 90%, #e7edf6 0%, rgba(231,237,246,0) 58%), var(--o-bg)',
-  },
-  abysse: {
-    dark: 'radial-gradient(60% 48% at 85% 0%, rgba(var(--o-accent-rgb),.14) 0%, rgba(0,0,0,0) 60%), linear-gradient(200deg, #0e1726 0%, var(--o-bg) 70%)',
-    light: 'radial-gradient(60% 48% at 85% 0%, rgba(var(--o-accent-rgb),.12) 0%, rgba(255,255,255,0) 60%), linear-gradient(200deg, #eef3fa 0%, var(--o-bg) 70%)',
-  },
-  ardoise: {
-    dark: 'radial-gradient(120% 100% at 50% -20%, #1a2433 0%, #0e141f 55%, var(--o-bg) 100%)',
-    light: 'radial-gradient(120% 100% at 50% -20%, #f2f5fa 0%, #e9edf4 55%, var(--o-bg) 100%)',
-  },
-};
+/* Fond d'écran : « aucun » ou la photo de l'utilisateur (voir lireFondPhoto).
+ * Les dégradés Minuit / Abysse / Ardoise ont vécu du 28 au 29/08/2026 —
+ * retirés à la demande de l'utilisateur, la photo les rendait superflus. Une
+ * ancienne valeur enregistrée retombe sur « aucun ». */
 function applyLook(root, L, frostedPreset, light) {
   // Intensité du lavis de teinte, lue par les cartes au rendu (voir TEINTES).
   LAVIS = TEINTES[L.tint] != null ? TEINTES[L.tint] : 1;
-  // Fond d'écran : après applyVars, donc il bat le bggrad d'un preset — mais
-  // « aucun » ne pose rien et laisse le preset ou le fond uni s'exprimer.
-  const fond = FONDS[L.fond];
-  if (fond) root.style.setProperty('--o-bggrad', light ? fond.light : fond.dark);
   const verre = !!frostedPreset || !!L.glass;
   root.classList.toggle('loggia-frosted', verre);
   /* « Verre » ne posait qu'un `backdrop-filter`. Or un flou d'arriere-plan ne se
@@ -8028,15 +8014,63 @@ function CvCard({ id, hass, label = null }) {
   );
 }
 
+/* Tailles de carte d'une vue custom : petite (1 colonne), large (2 colonnes),
+ * grande (2×2). Rangées dans `cv.tailles`, une table clé → taille A CÔTÉ de
+ * `ents` : les vues existantes ne changent pas d'un octet, l'absence vaut
+ * petite. Le cycle se fait au bouton, pas à la poignée — une poignée de
+ * redimensionnement continue n'a pas de sens sur une grille à colonnes. */
+const CV_TAILLES = ['s', 'l', 'xl'];
+const CV_TAILLE_LIBELLE = { s: '1×1', l: '2×1', xl: '2×2' };
+
 function CustomView({ cv, hass, edit = false, onSave }) {
-  // Mode édition en place (façon Home Assistant) : croix pour retirer, flèches pour réordonner,
-  // tuile « + Ajouter une carte », renommage inline. Actif via le crayon du header (admin).
+  // Mode édition en place (façon Home Assistant) : croix pour retirer, POIGNÉE
+  // pour déplacer (glisser une carte sur une autre l'insère à sa place),
+  // bouton de taille, tuile « + Ajouter une carte », renommage inline.
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState(cv.name);
   useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); }, [cv.id, edit]);
   const setEnts = (ents) => onSave && onSave({ ...cv, ents });
-  const move = (i, d) => { const a = [...cv.ents]; const j = i + d; if (j < 0 || j >= a.length) return; const t = a[i]; a[i] = a[j]; a[j] = t; setEnts(a); };
+  const tailleDe = (x) => (cv.tailles && cv.tailles[cvKey(x)]) || 's';
+  const cycleTaille = (x) => {
+    const cle = cvKey(x);
+    const suiv = CV_TAILLES[(CV_TAILLES.indexOf(tailleDe(x)) + 1) % CV_TAILLES.length];
+    onSave && onSave({ ...cv, tailles: { ...(cv.tailles || {}), [cle]: suiv } });
+  };
+  /* ── Déplacement à la poignée ──────────────────────────────────────────────
+   * Pointer capture sur la poignée ; au mouvement, la carte sous le doigt
+   * (elementFromPoint → wrapper [data-cvk]) désigne la place d'insertion. La
+   * liste se réordonne EN DIRECT dans un état local — le doigt voit ce qu'il
+   * fait — et l'enregistrement n'a lieu qu'au relâcher, comme les sliders. */
+  const [dragCle, setDragCle] = useState(null);
+  const [ordreDrag, setOrdreDrag] = useState(null);
+  const debutDrag = (e, x) => {
+    if (!edit) return;
+    e.preventDefault();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) {}
+    setDragCle(cvKey(x));
+    setOrdreDrag([...cv.ents]);
+  };
+  const mouvDrag = (e) => {
+    if (dragCle == null || !ordreDrag) return;
+    const sous = document.elementFromPoint(e.clientX, e.clientY);
+    const cible = sous && sous.closest ? sous.closest('[data-cvk]') : null;
+    if (!cible) return;
+    const cleCible = cible.getAttribute('data-cvk');
+    if (cleCible === dragCle) return;
+    const de = ordreDrag.findIndex(x => cvKey(x) === dragCle);
+    const vers = ordreDrag.findIndex(x => cvKey(x) === cleCible);
+    if (de < 0 || vers < 0) return;
+    const a = [...ordreDrag];
+    const [pris] = a.splice(de, 1);
+    a.splice(vers, 0, pris);
+    setOrdreDrag(a);
+  };
+  const finDrag = () => {
+    if (dragCle != null && ordreDrag) setEnts(ordreDrag);
+    setDragCle(null); setOrdreDrag(null);
+  };
+  const liste = ordreDrag || cv.ents;
   const editBtn = { width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-surfA)', color: 'var(--o-text1)', boxShadow: '0 3px 10px rgba(0,0,0,.35)', fontSize: 12, fontWeight: 800, padding: 0 };
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
@@ -8046,7 +8080,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderRadius: 14, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
             <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{tr('Mode édition')}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1 }}>{tr('Retire (×), réordonne (‹ ›) ou ajoute des cartes. Quitte avec le crayon du haut.')}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1 }}>{tr('Retire (×), déplace à la poignée (⠿), redimensionne (1×1), ou ajoute des cartes.')}</span>
           </div>
         )}
         <div>
@@ -8058,21 +8092,33 @@ function CustomView({ cv, hass, edit = false, onSave }) {
             : <h1 onClick={edit ? () => setRenaming(true) : undefined} style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, cursor: edit ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: 12 }}>{cv.name}{edit && <Fi i="pencil" size={16} color="var(--o-text3)" />}</h1>}
           <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
-          {cv.ents.map((x, i) => (
-            <div key={cvKey(x)} style={{ position: 'relative', ...(edit ? { outline: '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)' } : {}) }}>
-              {cvEstTpl(x) ? <CvTemplateCard def={x} hass={hass} /> : <CvCard id={x} hass={hass} />}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gridAutoRows: 'minmax(96px,auto)', gridAutoFlow: 'dense', gap: 14 }}>
+          {liste.map((x, i) => {
+            const taille = tailleDe(x);
+            const saisie = dragCle === cvKey(x);
+            return (
+            <div key={cvKey(x)} data-cvk={cvKey(x)} style={{ position: 'relative', minWidth: 0,
+              gridColumn: taille === 's' ? 'auto' : 'span 2',
+              gridRow: taille === 'xl' ? 'span 2' : 'auto',
+              opacity: saisie ? .55 : 1, transform: saisie ? 'scale(.97)' : 'none', transition: 'opacity .15s, transform .15s',
+              ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)' } : {}) }}>
+              <div style={{ height: '100%' }}>
+                {cvEstTpl(x) ? <CvTemplateCard def={x} hass={hass} /> : <CvCard id={x} hass={hass} />}
+              </div>
               {edit && (
                 <>
-                  <button onClick={() => setEnts(cv.ents.filter((_, k) => k !== i))} title="Retirer" style={{ ...editBtn, position: 'absolute', top: -9, right: -9, background: 'var(--o-bad)', color: '#fff' }}>×</button>
-                  <div style={{ position: 'absolute', bottom: -9, right: 6, display: 'flex', gap: 5 }}>
-                    <button onClick={() => move(i, -1)} title="Avancer" style={{ ...editBtn, opacity: i === 0 ? .35 : 1 }}>‹</button>
-                    <button onClick={() => move(i, 1)} title="Reculer" style={{ ...editBtn, opacity: i === cv.ents.length - 1 ? .35 : 1 }}>›</button>
-                  </div>
+                  {/* poignée : SEULE zone qui déplace — le reste de la carte scrolle et clique normalement */}
+                  <button onPointerDown={(e) => debutDrag(e, x)} onPointerMove={mouvDrag} onPointerUp={finDrag} onPointerCancel={finDrag}
+                    title={tr('Déplacer')} aria-label={tr('Déplacer')}
+                    style={{ ...editBtn, position: 'absolute', top: -9, left: -9, cursor: 'grab', touchAction: 'none', fontSize: 13 }}>⠿</button>
+                  <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...editBtn, position: 'absolute', top: -9, right: -9, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                  <button onClick={() => cycleTaille(x)} title={tr('Taille de la carte')}
+                    style={{ ...editBtn, position: 'absolute', bottom: -9, right: 6, width: 'auto', padding: '0 9px', fontSize: 10.5, letterSpacing: '.04em' }}>{CV_TAILLE_LIBELLE[taille]}</button>
                 </>
               )}
             </div>
-          ))}
+            );
+          })}
           {edit && (
             <button onClick={() => setAdding(true)} style={{ minHeight: 88, borderRadius: 'var(--o-radius,18px)', border: '2px dashed rgba(var(--o-accent-rgb),.45)', background: 'rgba(var(--o-accent-rgb),.06)', color: 'var(--o-accent-soft)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 13 }}>
               <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>Ajouter une carte

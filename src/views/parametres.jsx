@@ -1069,20 +1069,17 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 opts={[['sans', tr('Sans')], ['discrete', tr('Discrète')], ['douce', tr('Douce')], ['pleine', tr('Pleine')]]}
                 onPick={v => onLook({ tint: v })} />
             </OptRow>
-            <OptRow title={tr("Fond d'écran")} desc={tr('Un dégradé discret sous les cartes, dans la palette du thème. Donne sa profondeur au verre.')}>
-              {[['aucun', tr('Aucun'), 'var(--o-bg)'],
-                ['minuit', tr('Minuit'), 'radial-gradient(90% 80% at 25% 15%, #16233b 0%, #0b0f16 75%)'],
-                ['abysse', tr('Abysse'), 'radial-gradient(70% 60% at 80% 10%, rgba(var(--o-accent-rgb),.4) 0%, #0e1726 70%)'],
-                ['ardoise', tr('Ardoise'), 'radial-gradient(120% 110% at 50% -10%, #23303f 0%, #0e141f 80%)']].map(([v, lb, ap]) => {
-                const on = (look.fond || 'aucun') === v;
+            <OptRow title={tr("Fond d'écran")} desc={tr('Votre photo sous les cartes — et sous leur flou si la matière Verre est active.')}>
+              {(() => {
+                const on = (look.fond || 'aucun') !== 'photo';
                 return (
-                  <button key={v} onClick={() => onLook({ fond: v })} aria-pressed={on} aria-label={tr("Fond d'écran") + ' ' + lb}
+                  <button onClick={() => onLook({ fond: 'aucun' })} aria-pressed={on} aria-label={tr("Fond d'écran") + ' ' + tr('Aucun')}
                     style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 12, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
-                    <span style={{ width: 34, height: 22, borderRadius: 6, background: ap, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd2)') }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</span>
+                    <span style={{ width: 34, height: 22, borderRadius: 6, background: 'var(--o-bg)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd2)') }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{tr('Aucun')}</span>
                   </button>
                 );
-              })}
+              })()}
               <FondPhotoBtn actif={(look.fond || 'aucun') === 'photo'} onLook={onLook} />
             </OptRow>
             <OptRow title="Couleur d'accent" desc={tr('Éléments actifs, jauges et liens.')}>
