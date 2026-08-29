@@ -2889,7 +2889,6 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
         {addSheet && <RoomAddSheet room={room} hass={hass} present={ents} onToggle={ed.toggle} onClose={() => setAddSheet(false)} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
         {comfort && piece && <RoomComfortModal piece={piece} hass={hass} onClose={() => setComfort(false)} />}
-        {dc.sheets}
       </div>
     </main>
   );
@@ -8086,53 +8085,6 @@ function CvCard({ id, hass, label = null }) {
   );
 }
 
-/* Taille d'une carte de vue custom : { w, h } en cellules de grille, bornée
- * 1..4 × 1..3. Rangée dans `cv.tailles`, une table clé → taille A CÔTÉ de
- * `ents` : les vues existantes ne changent pas d'un octet, l'absence vaut
- * 1×1. Les chaînes de la 2.17.0 ('s'/'l'/'xl') se relisent encore. */
-function cvTailleNorm(t) {
-  if (t && typeof t === 'object') return { w: Math.max(1, Math.min(4, t.w | 0 || 1)), h: Math.max(1, Math.min(3, t.h | 0 || 1)) };
-  if (t === 'l') return { w: 2, h: 1 };
-  if (t === 'xl') return { w: 2, h: 2 };
-  return { w: 1, h: 1 };
-}
-
-/* Carte grand format d'un capteur : le chiffre en très grand, l'unité, le nom.
- * Les capteurs n'ont pas de carte riche de domaine — leur richesse, c'est la
- * lisibilité de loin. Un binaire dit son état en toutes lettres. */
-function CvBigSensor({ id, hass }) {
-  const st = hass && hass.states ? hass.states[id] : null;
-  const a = (st && st.attributes) || {};
-  const nom = a.friendly_name || cvName(st, id);
-  const dom = id.slice(0, id.indexOf('.'));
-  const brut = st ? st.state : null;
-  const mort = !st || brut === 'unavailable' || brut === 'unknown';
-  let valeur, unite = '';
-  if (mort) { valeur = '—'; }
-  else if (dom === 'binary_sensor') {
-    const porte = ['door', 'window', 'garage_door', 'opening'].indexOf(a.device_class) >= 0;
-    valeur = brut === 'on' ? (porte ? tr('Ouvert') : tr('Détecté')) : (porte ? tr('Fermé') : 'RAS');
-  } else if (dom === 'person') {
-    valeur = brut === 'home' ? tr('Présent') : 'Absent';
-  } else {
-    const n = parseFloat(brut);
-    valeur = isNaN(n) ? brut : (Math.round(n * 10) / 10).toLocaleString(locale());
-    unite = a.unit_of_measurement || '';
-  }
-  const actif = !mort && (brut === 'on' || brut === 'home');
-  return (
-    <div className="o-piece" style={{ height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: mort ? .55 : 1 }}>
-      <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: actif ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', color: actif ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}><Fi i={CV_DOM_ICON[cvDomain(id)] || 'bolt'} size={17} /></span>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
-        <div style={{ fontSize: 'clamp(34px, 3.2vw + 12px, 60px)', fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
-          {valeur}{unite && <span style={{ fontSize: '.42em', fontWeight: 700, color: 'var(--o-text2)', marginLeft: 6 }}>{unite}</span>}
-        </div>
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
-    </div>
-  );
-}
-
 function CustomView({ cv, hass, edit = false, onSave }) {
   // Mode édition en place : la CARTE ENTIÈRE se saisit et se déplace (ses
   // contrôles sont inertes pendant l'édition), le COIN bas-droit s'étire pour
@@ -8143,11 +8095,6 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   const [nameDraft, setNameDraft] = useState(cv.name);
   useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); }, [cv.id, edit]);
   const setEnts = (ents) => onSave && onSave({ ...cv, ents });
-  const tailleDe = (x) => cvTailleNorm(cv.tailles && cv.tailles[cvKey(x)]);
-  // La taille choisit le NIVEAU DE DÉTAIL, pas seulement la place : une carte
-  // étirée en hauteur devient la carte riche de son domaine — celle des vues
-  // Lumières, Pièces… — et redevient la compacte en la réduisant.
-  const dc = useDomainCards(hass);
   /* ── Déplacement : saisir la carte ─────────────────────────────────────────
    * Pointer capture sur le wrapper ; au mouvement, la carte sous le doigt
    * (elementFromPoint → wrapper [data-cvk]) désigne la place d'insertion. La
@@ -8183,41 +8130,6 @@ function CustomView({ cv, hass, edit = false, onSave }) {
     if (dragCle != null && ordreDrag) setEnts(ordreDrag);
     setDragCle(null); setOrdreDrag(null);
   };
-  /* ── Redimensionnement : étirer le coin ────────────────────────────────────
-   * Le coin bas-droit se tire dans le format voulu. La géométrie de la grille
-   * (largeur de colonne, hauteur de rangée) se mesure au premier geste ; au
-   * mouvement, la position du pointeur depuis le bord GAUCHE/HAUT de la carte
-   * donne le nombre de cellules visé, peint AUSSITÔT sur le wrapper (DOM
-   * direct, pas de re-render) ; l'enregistrement n'a lieu qu'au relâcher. */
-  const resizeRef = useRef(null);
-  const debutResize = (e, x) => {
-    e.preventDefault(); e.stopPropagation();
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) {}
-    const wrap = e.currentTarget.closest('[data-cvk]');
-    const grille = grilleRef.current;
-    if (!wrap || !grille) return;
-    const gs = getComputedStyle(grille);
-    const gap = parseFloat(gs.gap) || 14;
-    const cols = gs.gridTemplateColumns.split(' ').length || 1;
-    const colW = (grille.clientWidth - gap * (cols - 1)) / cols;
-    const r = wrap.getBoundingClientRect();
-    resizeRef.current = { cle: cvKey(x), wrap, gauche: r.left, haut: r.top, colW, rowH: 96, gap, w: tailleDe(x).w, h: tailleDe(x).h };
-  };
-  const mouvResize = (e) => {
-    const R = resizeRef.current; if (!R) return;
-    const w = Math.max(1, Math.min(4, Math.round((e.clientX - R.gauche) / (R.colW + R.gap) + 0.5)));
-    const h = Math.max(1, Math.min(3, Math.round((e.clientY - R.haut) / (R.rowH + R.gap) + 0.5)));
-    if (w !== R.w || h !== R.h) {
-      R.w = w; R.h = h;
-      R.wrap.style.gridColumn = w === 1 ? 'auto' : 'span ' + w;
-      R.wrap.style.gridRow = h === 1 ? 'auto' : 'span ' + h;
-    }
-  };
-  const finResize = () => {
-    const R = resizeRef.current; if (!R) return;
-    resizeRef.current = null;
-    onSave && onSave({ ...cv, tailles: { ...(cv.tailles || {}), [R.cle]: { w: R.w, h: R.h } } });
-  };
   const liste = ordreDrag || cv.ents;
   const editBtn = { width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-surfA)', color: 'var(--o-text1)', boxShadow: '0 3px 10px rgba(0,0,0,.35)', fontSize: 12, fontWeight: 800, padding: 0 };
   return (
@@ -8228,7 +8140,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderRadius: 14, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
             <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{tr('Mode édition')}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1 }}>{tr('Prends une carte pour la déplacer, tire le coin pour l’étirer, retire (×) ou ajoute.')}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1 }}>{tr('Prends une carte pour la déplacer, retire (×) ou ajoute.')}</span>
           </div>
         )}
         <div>
@@ -8240,9 +8152,8 @@ function CustomView({ cv, hass, edit = false, onSave }) {
             : <h1 onClick={edit ? () => setRenaming(true) : undefined} style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, cursor: edit ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: 12 }}>{cv.name}{edit && <Fi i="pencil" size={16} color="var(--o-text3)" />}</h1>}
           <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div>
         </div>
-        <div ref={grilleRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gridAutoRows: 'minmax(96px,auto)', gridAutoFlow: 'dense', gap: 14 }}>
+        <div ref={grilleRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
           {liste.map((x) => {
-            const taille = tailleDe(x);
             const saisie = dragCle === cvKey(x);
             return (
             <div key={cvKey(x)} data-cvk={cvKey(x)}
@@ -8251,31 +8162,15 @@ function CustomView({ cv, hass, edit = false, onSave }) {
               onPointerUp={edit ? finDrag : undefined}
               onPointerCancel={edit ? finDrag : undefined}
               style={{ position: 'relative', minWidth: 0,
-              gridColumn: taille.w === 1 ? 'auto' : 'span ' + taille.w,
-              gridRow: taille.h === 1 ? 'auto' : 'span ' + taille.h,
               opacity: saisie ? .55 : 1, transform: saisie ? 'scale(.97)' : 'none', transition: 'opacity .15s, transform .15s',
               ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'none' } : {}) }}>
               {/* En édition, la carte est INERTE : la saisir la déplace, ses contrôles ne s'actionnent pas. */}
               <div className="o-cvfit" style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
-                {cvEstTpl(x)
-                  ? <CvTemplateCard def={x} hass={hass} />
-                  : taille.h >= 2
-                    ? (['light', 'switch', 'cover', 'climate', 'media_player'].indexOf(String(x).split('.')[0]) >= 0
-                      ? dc.card(x)          /* étirée en hauteur : la carte riche du domaine */
-                      : ['sensor', 'binary_sensor', 'person'].indexOf(String(x).split('.')[0]) >= 0
-                        ? <CvBigSensor id={x} hass={hass} />  /* capteur : le chiffre en grand */
-                        : <CvCard id={x} hass={hass} />)
-                    : <CvCard id={x} hass={hass} />}
+                {cvEstTpl(x) ? <CvTemplateCard def={x} hass={hass} /> : <CvCard id={x} hass={hass} />}
               </div>
               {edit && (
                 <>
                   <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...editBtn, position: 'absolute', top: -9, right: -9, background: 'var(--o-bad)', color: '#fff' }}>×</button>
-                  {/* coin d'étirement : tirer dans le format voulu */}
-                  <button onPointerDown={(e) => debutResize(e, x)} onPointerMove={mouvResize} onPointerUp={finResize} onPointerCancel={finResize}
-                    title={tr('Étirer')} aria-label={tr('Étirer')}
-                    style={{ ...editBtn, position: 'absolute', bottom: -9, right: -9, cursor: 'nwse-resize', touchAction: 'none', background: 'var(--o-accent)', color: '#fff' }}>
-                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 5v6H5M11 1L1 11" /></svg>
-                  </button>
                 </>
               )}
             </div>
@@ -8288,7 +8183,6 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           )}
         </div>
         {!edit && !cv.ents.length && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Vue vide — active le crayon (en haut) pour ajouter des cartes.')}</div>}
-        {dc.sheets}
         {adding && (
           <BottomSheet onClose={() => setAdding(false)}>
             {close => (<>

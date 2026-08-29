@@ -588,8 +588,8 @@ export default {
     'Tick to add, untick to remove. Changes apply immediately.',
   "Les modifications s'appliquent immédiatement à cet appareil":
     'Changes apply immediately to this device',
-  'Prends une carte pour la déplacer, tire le coin pour l’étirer, retire (×) ou ajoute.':
-    'Grab a card to move it, pull the corner to stretch it, remove (×) or add.',
+  'Prends une carte pour la déplacer, retire (×) ou ajoute.':
+    'Grab a card to move it, remove (×) or add.',
   'Crée tes propres vues avec tes entités — elles apparaissent dans le menu latéral.':
     'Build your own views from your entities — they appear in the sidebar.',
   'Créées avec tes entités, éditables à tout moment': 'Built from your entities, editable at any time',
@@ -658,7 +658,6 @@ export default {
   'journée': 'all day',
   'Photo': 'Photo',
   'Retirer': 'Remove',
-  'Étirer': 'Stretch',
   'Réafficher': 'Show again',
   'Masquer': 'Hide',
   'Déplacer': 'Move',
