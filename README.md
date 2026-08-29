@@ -17,11 +17,28 @@ Les réglages, où chaque section indique ce qu'elle a trouvé et ce qui manque 
 
 ![Les réglages](docs/parametres.png)
 
-> Ces captures viennent d'une maison de démonstration — `scripts/demo.js` —, pas
-> d'une installation réelle. Six pièces, quelques capteurs, aucune caméra : de
-> quoi montrer le rendu sans exposer le domicile de qui que ce soit. Le script
-> s'injecte dans la page avant le chargement, ce qui permet de refaire les
-> captures à l'identique à chaque version.
+> Ces captures viennent d'une maison de démonstration, pas d'une installation
+> réelle : six pièces, quelques capteurs, aucune caméra — de quoi montrer le
+> rendu sans exposer le domicile de qui que ce soit.
+
+## Essayer sans rien installer
+
+Ouvrez la page directe du dashboard avec `?demo` :
+
+```
+http://<votre-ha>:8123/loggia-static/index.html?demo
+```
+
+La maison de démonstration se monte : pièces, lumières, volets, thermostats,
+agenda, scènes — **jouables** (une lampe basculée bascule), deux profils dont
+un administrateur pour tout essayer. Aucune trace : le stockage du navigateur
+est remplacé par un magasin en mémoire, votre configuration n'est ni lue ni
+écrite, et tout s'évapore à la fermeture de l'onglet. Un badge
+« Démonstration » reste à l'écran.
+
+C'est aussi le banc d'essai du projet : les branches que l'installation de
+l'auteur n'exerce pas — un compte administrateur, une maison sans caméras —
+se testent là.
 
 ## Installation
 
