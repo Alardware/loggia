@@ -8034,9 +8034,11 @@ function CvCard({ id, hass, label = null }) {
   const a = (st && st.attributes) || {};
   const dead = !st || s === 'unavailable' || s === 'unknown';
   const on = !dead && (dom === 'cover' ? (s === 'open' || s === 'opening') : dom === 'lock' ? s === 'unlocked' : dom === 'media_player' ? s === 'playing' : dom === 'climate' ? s !== 'off' : s === 'on');
-  // Une lumière allumée se teinte comme dans la vue Lumières : sa couleur si elle en a une, l'or sinon — jamais l'accent bleu.
+  // Chaque domaine garde sa teinte des vues intégrées : lumière = sa couleur RGB ou l'or,
+  // climat = le rouge de la vue Climatisation — l'accent bleu pour le reste.
   const rgbHex = dom === 'light' && a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
-  const teinte = dom === 'light' ? (rgbHex || '#FFCC44') : null;
+  const teinte = dom === 'light' ? (rgbHex || '#FFCC44') : dom === 'climate' ? 'var(--o-warn2)' : null;
+  const teinteTxt = rgbHex || (dom === 'light' ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-warn2)' : 'var(--o-accent-soft)');
   const acc = on ? 'var(--o-accent)' : 'var(--o-text3)';
   const togglable = ['light', 'switch', 'input_boolean', 'fan'].indexOf(dom) >= 0;
   const runnable = { scene: ['scene', 'turn_on', 'Activer'], script: ['script', 'turn_on', tr('Exécuter')], button: ['button', 'press', 'Appuyer'], input_button: ['input_button', 'press', 'Appuyer'], automation: ['automation', 'trigger', tr('Exécuter')] }[dom];
@@ -8059,7 +8061,7 @@ function CvCard({ id, hass, label = null }) {
         <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinte || 'var(--o-accent-soft)') : 'var(--o-text3)' }}><Fi i={ico} size={17} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: on ? (teinte ? (rgbHex || 'var(--o-warn)') : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stateTxt}</div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: on ? (teinte ? teinteTxt : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stateTxt}</div>
         </div>
         {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + name} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={() => call('homeassistant', on ? 'turn_off' : 'turn_on')} style={{ width: 44, height: 25, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
         {runnable && !dead && <button onClick={() => call(runnable[0], runnable[1])} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
