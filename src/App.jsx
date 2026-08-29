@@ -1326,6 +1326,7 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
   // Une prise n'est pas une lumière : pas d'or ni d'ampoule pour un switch hors interrupteurs-lumières.
   const prise = isSwitch && !cvEstLumiere(id);
+  const mort = !st || st.state === 'unavailable';
   const accent = prise ? 'var(--o-accent)' : (rgb && color) ? color : '#FFCC44';
   const ltype = lightType({ id, name: (a.friendly_name || id), rgb, ct });
   const adjustable = !isSwitch && dimmable;
@@ -1335,7 +1336,7 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
   useEffect(() => () => clearTimeout(ovRevertRef.current), []);
   const toggle = (e) => { e.stopPropagation(); flash(accent); setOv(!on); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); try { if (hass && hass.callService) hass.callService('homeassistant', on ? 'turn_off' : 'turn_on', { entity_id: id }); } catch (er) {} };
   return (
-    <button ref={flashRef} className="o-light-card o-rmcard" onClick={() => { if (adjustable && onOpen) onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed }); }}
+    <button ref={flashRef} className={'o-light-card o-rmcard' + (mort ? ' o-panne' : '')} onClick={() => { if (adjustable && onOpen) onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed }); }}
       style={{ ...RM_CARD, alignItems: 'stretch', textAlign: 'left', width: '100%', cursor: adjustable ? 'pointer' : 'default', overflow: 'hidden',
         background: on && LAVIS ? `linear-gradient(180deg,var(--o-surfA) 28%,${hx(accent, lav(.22))})` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
         border: on && LAVIS ? `1px solid ${hx(accent, lav(.3))}` : 'var(--o-bw,1px) solid var(--o-bd2)' }}>
@@ -1361,6 +1362,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   const pos = ov != null ? ov : realPos;
   const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('cover', svc, { entity_id: id, ...(data || {}) }); } catch (e) {} };
   const label = pos === 0 ? tr('Fermé') : pos === 100 ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
+  const mort = !st || st.state === 'unavailable';
   const drag = (e) => {
     e.preventDefault();
     const el = e.currentTarget, fill = el.querySelector('[data-fill]'), kn = el.querySelector('[data-knob]'), r = el.getBoundingClientRect();
@@ -1374,7 +1376,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
     el.onpointercancel = () => { end(); if (fill) fill.style.width = pos + '%'; };
   };
   return (
-    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (titre || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (titre || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : volet ouvert = lavis VIOLET, gradué par la position — le bleu accent restait trop proche des autres cartes.
       ...(pos > 0 && LAVIS ? {
         background: `linear-gradient(180deg,var(--o-surfA) 28%,rgba(var(--o-purple-rgb),${lav(.10 + pos * .0012)}))`,
@@ -1489,6 +1491,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const mode = st ? st.state : 'off';
   const off = mode === 'off';
   const heating = a.hvac_action === 'heating';
+  const mort = !st || st.state === 'unavailable';
   const MODE_FR = { off: tr('ARRÊT'), heat: tr('CONFORT'), cool: tr('FROID'), auto: 'AUTO', heat_cool: 'AUTO', dry: tr('SEC'), fan_only: tr('VENTIL') };
   const all = a.hvac_modes || ['off', 'heat'];
   const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('climate', svc, { entity_id: id, ...(data || {}) }); } catch (e) {} };
@@ -1499,7 +1502,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
   const nextMode = () => { const i = all.indexOf(mode); commander(hass, id, 'set_hvac_mode', all[(i + 1) % all.length]); };
   return (
-    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
       ...(heating && LAVIS ? {
         background: `linear-gradient(180deg,var(--o-surfA) 28%,rgba(var(--o-warn2-rgb),${lav(.16)}))`,
@@ -1796,8 +1799,9 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
   const mp = medPlayers().find(x => x.haid === id);
   const artKey = (mp ? mp.id : '') + ' ' + id;
   const art = /echo/i.test(artKey) ? DEVICE_ART.echo : /apple|atv|tv/i.test(artKey) ? DEVICE_ART.appletv : null;
+  const mort = !S || !S[id] || S[id].state === 'unavailable';
   return (
-    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || (a && a.friendly_name) || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, position: 'relative', overflow: 'hidden', cursor: onOpen ? 'pointer' : 'default' }}>
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || (a && a.friendly_name) || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, position: 'relative', overflow: 'hidden', cursor: onOpen ? 'pointer' : 'default' }}>
       {art && <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 96, height: 96, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.13, pointerEvents: 'none' }} />}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(np.on ? 'rgba(167,139,250,.16)' : 'var(--o-s1)', np.on ? 'var(--o-purple)' : 'var(--o-text3)')}>
@@ -8079,7 +8083,7 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
   else if (runnable || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—'; // scene/script/button : état = date de dernière exécution
   else stateTxt = String(s);
   return (
-    <div className="o-piece" role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? 'Ouvrir ' + name : undefined}
+    <div className={'o-piece' + (dead ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? 'Ouvrir ' + name : undefined}
       onClick={ouvrable ? () => onOpen(id) : undefined}
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
       style={{ background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},var(--o-surfA))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? (teinte ? hx(teinte, .3) : 'rgba(var(--o-accent-rgb),.3)') : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s' }}>
@@ -8169,7 +8173,7 @@ function CvBigSensor({ id, hass }) {
     unite = a.unit_of_measurement || '';
   }
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150, opacity: mort ? .55 : 1 }}>
+    <div className={'o-piece' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 150, opacity: mort ? .55 : 1 }}>
       <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text3)' }}><Fi i={CV_DOM_ICON[cvDomain(id)] || 'bolt'} size={17} /></span>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
         <div style={{ fontSize: 'clamp(32px, 3vw + 12px, 54px)', fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
@@ -8202,7 +8206,7 @@ function CvGauge({ id, hass }) {
     return `M ${x0} ${y0} A 44 44 0 ${240 * p > 180 ? 1 : 0} 1 ${x1} ${y1}`;
   };
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150, alignItems: 'center', opacity: mort ? .55 : 1 }}>
+    <div className={'o-piece' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 150, alignItems: 'center', opacity: mort ? .55 : 1 }}>
       <div style={{ position: 'relative', width: 120, height: 104, flexShrink: 0 }}>
         <svg width="120" height="120" viewBox="0 0 120 120" style={{ position: 'absolute', top: -4 }}>
           <path d={arc(1)} fill="none" stroke="var(--o-s1)" strokeWidth="9" strokeLinecap="round" />
@@ -8230,7 +8234,7 @@ function CvBigToggle({ id, hass }) {
   const txtCol = lum ? 'var(--o-warn)' : 'var(--o-accent-soft)';
   const toggle = () => { try { if (hass && hass.callService) hass.callService('homeassistant', 'toggle', { entity_id: id }); } catch (e) {} };
   return (
-    <button className="o-piece" onClick={toggle} disabled={mort}
+    <button className={'o-piece' + (mort ? ' o-panne' : '')} onClick={toggle} disabled={mort}
       style={{ ...CV_CADRE, height: '100%', minHeight: 150, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 12, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
         ...(on ? { background: `linear-gradient(160deg,rgba(${rgbTok},${lav(.22)}),var(--o-surfB))`, border: `1px solid rgba(${rgbTok},${lav(.35)})` } : {}) }}>
       <span style={{ width: 62, height: 62, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? `rgba(${rgbTok},.2)` : 'var(--o-s1)', color: on ? txtCol : 'var(--o-text3)', boxShadow: on ? `0 0 22px rgba(${rgbTok},.4)` : 'none', transition: 'all .25s' }}>
@@ -8379,6 +8383,7 @@ function CvHistory({ id, hass }) {
   }, [api, id]);
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
+  const mort = !st || st.state === 'unavailable';
   const cur = st ? parseFloat(st.state) : NaN;
   let chemin = '', aire = '', vmin = null, vmax = null;
   if (points && points.length > 1) {
@@ -8391,7 +8396,7 @@ function CvHistory({ id, hass }) {
     aire = chemin + ` L 100 40 L 0 40 Z`;
   }
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150, position: 'relative', overflow: 'hidden' }}>
+    <div className={'o-piece' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 150, position: 'relative', overflow: 'hidden', opacity: mort ? .55 : 1 }}>
       {chemin && (
         <svg viewBox="0 0 100 40" preserveAspectRatio="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, width: '100%', height: '58%' }}>
           <path d={aire} fill="rgba(var(--o-accent-rgb),.10)" />
