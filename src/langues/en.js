@@ -661,7 +661,7 @@ export default {
   'Réafficher': 'Show again',
   'Masquer': 'Hide',
   'Compacte': 'Compact',
-  'Riche': 'Full card',
+  'Standard': 'Standard',
   'Gros interrupteur': 'Big switch',
   'Grand chiffre': 'Big number',
   'Jauge': 'Gauge',
