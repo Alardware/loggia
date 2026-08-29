@@ -493,10 +493,12 @@ html.loggia-sky .loggia-aside {
   z-index: 60;
 }
 html.loggia-light.loggia-sky .loggia-aside { background: linear-gradient(180deg, #ffffff, #f4f7fb) !important; }
-/* Toute vue qui porte un fond anime : aucune carte ne floute son arriere-plan.
-   Le flou se recalcule a chaque image, et il y a autant de recalculs que de
-   cartes. Vaut aussi pour le theme Frosted, dont c'est pourtant la signature. */
-main:has(.o-wx3d) [style*="--o-surfA"] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+/* L'accueil et son ciel meteo gardent le depoli : couper le flou la-bas
+   donnait a l'accueil un rendu different des autres vues (retour user 29/08).
+   Seul le ciel three.js PLEIN ECRAN (loggia-sky) coupe encore : le flou s'y
+   recalcule a chaque image sur toute la page, et il y a autant de recalculs
+   que de cartes. */
+html.loggia-sky main [style*="--o-surfA"] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 /* le ciel reste tout au fond, quoi qu'il arrive */
 html.loggia-sky .o-sky-full { z-index: 0 !important; }
 
