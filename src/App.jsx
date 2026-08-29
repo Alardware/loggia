@@ -3876,8 +3876,57 @@ function habillagePiece(nom, mdi) {
   };
 }
 
+/* ── Agenda de l'accueil ──────────────────────────────────────────────────────
+ * Les prochains evenements de TOUS les `calendar.*`, fusionnes. Zero
+ * configuration : pas de calendrier chez vous, pas de carte. Les evenements ne
+ * se poussent pas : l'API calendrier de HA est un GET — on relit au montage,
+ * puis toutes les quinze minutes, et quand un calendrier apparait ou disparait. */
+function useAgenda(hass) {
+  const [events, setEvents] = useState([]);
+  const S = hass && hass.states;
+  const ids = useMemo(() => S ? Object.keys(S).filter(id => id.indexOf('calendar.') === 0) : [], [S]);
+  const sig = ids.join('|');
+  const api = hass && hass.callApi ? hass.callApi.bind(hass) : null;
+  useEffect(() => {
+    if (!api || !sig) { setEvents([]); return; }
+    let mort = false;
+    const lire = async () => {
+      const debut = new Date(); debut.setSeconds(0, 0);
+      const fin = new Date(debut.getTime() + 7 * 864e5);
+      const q = '?start=' + encodeURIComponent(debut.toISOString()) + '&end=' + encodeURIComponent(fin.toISOString());
+      const tous = [];
+      for (const id of sig.split('|')) {
+        try {
+          const evs = await api('GET', 'calendars/' + id + q);
+          if (Array.isArray(evs)) evs.forEach(e => { if (e && e.summary && e.start) tous.push({ ...e, _cal: id }); });
+        } catch (e) {} // un calendrier qui refuse ne prive pas les autres
+      }
+      if (mort) return;
+      const quand = (e) => new Date(e.start.dateTime || (e.start.date + 'T00:00:00')).getTime();
+      tous.sort((x, y) => quand(x) - quand(y));
+      setEvents(tous.slice(0, 8));
+    };
+    lire();
+    const iv = setInterval(lire, 15 * 60000);
+    return () => { mort = true; clearInterval(iv); };
+  }, [api ? 1 : 0, sig]);
+  return events;
+}
+
+/** Le jour d'un evenement, dit court : Aujourd'hui, Demain, sinon « mar. 2 ». */
+function jourAgenda(e) {
+  const d = new Date(e.start.dateTime || (e.start.date + 'T00:00:00'));
+  const j0 = new Date(); j0.setHours(0, 0, 0, 0);
+  const diff = Math.floor((d.getTime() - j0.getTime()) / 864e5);
+  const jour = diff === 0 ? tr("Aujourd'hui") : diff === 1 ? tr('Demain')
+    : d.toLocaleDateString(locale(), { weekday: 'short', day: 'numeric' });
+  const heure = e.start.dateTime ? d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : tr('journée');
+  return { jour, heure };
+}
+
 function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onOpenMeteo }) {
   const [override, setOverride] = useState(null);
+  const agenda = useAgenda(accueil && accueil.hass);
   const [roomPop, setRoomPop] = useState(null);
   const wx = (editMode && override) ? override : (weatherMode || 'clouds'); // suit l'entité météo, sauf override en mode édition
   // Fond GLSL : état HA brut prioritaire ; les overrides du mode édition sont mappés vers un preset proche
@@ -4179,6 +4228,13 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           if (mPb) rappelsRows.push(railRow('pb', tr('Poubelles'), mPb.valueText, mPb.phase, mPb.color));
           const railEtats = railPanel(tr('En cours'), tr('Volets, robots et sécurité'), nActifs ? nActifs + ' ' + (nActifs > 1 ? tr('ACTIFS') : tr('ACTIF')) : tr('TOUT AU REPOS'), nActifs ? '79,140,255' : OKRGB, etatsRows);
           const railRappels = railPanel(tr('Rappels'), tr('Repas du chat et ramassage'), null, AMBRGB, rappelsRows);
+          // Agenda : les prochains evenements des calendriers HA. Pas de
+          // calendrier, ou rien sous sept jours → pas de carte.
+          const agendaRows = (agenda || []).slice(0, 5).map((e, i) => {
+            const { jour, heure } = jourAgenda(e);
+            return railRow('ag' + i, e.summary, jour, heure, 'var(--o-accent-soft)');
+          });
+          const railAgenda = railPanel(tr('Agenda'), tr('Les 7 prochains jours'), null, AMBRGB, agendaRows);
           const camsHeader = (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <div style={sectionTitle}>{tr('Caméras')}</div>
@@ -4218,6 +4274,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               {cams.length > 0 && camsGrid}
               {railEtats}
               {railRappels}
+              {railAgenda}
             </>
           );
           return (
@@ -4232,6 +4289,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
                 {railEtats}
                 {railRappels}
+                {railAgenda}
               </div>
             </div>
           );
