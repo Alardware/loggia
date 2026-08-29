@@ -3160,8 +3160,34 @@ function CamLive({ hass, haid, online = true }) {
     let cancelled = false, cleanupRtc = null;
     setMode('loading');
     if (!online || !token || !conn) { setMode('off'); return; }
+    /* Un flux qui a réussi à se connecter peut mourir en route — la 5G
+     * capricieuse gèle la vidéo sans la fermer, et l'image figée a l'air d'un
+     * direct. Sans nouvelle frame décodée pendant trois relevés (9 s), on
+     * abandonne le direct pour le repli : mieux vaut un instantané de 2 s
+     * qu'un faux direct. */
+    let gelIv = null;
+    const armerGel = () => {
+      clearInterval(gelIv);
+      let vues = -1, immobiles = 0;
+      gelIv = setInterval(() => {
+        const v = vidRef.current;
+        if (cancelled || !v) return;
+        const n = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality().totalVideoFrames
+          : (v.webkitDecodedFrameCount != null ? v.webkitDecodedFrameCount : null);
+        if (n == null) { clearInterval(gelIv); return; } // pas de compteur : impossible de juger
+        if (n === vues) {
+          immobiles += 1;
+          if (immobiles >= 3) {
+            clearInterval(gelIv);
+            if (cleanupRtc) { try { cleanupRtc(); } catch (e) {} cleanupRtc = null; }
+            startMjpeg();
+          }
+        } else { vues = n; immobiles = 0; }
+      }, 3000);
+    };
     const startMjpeg = async () => {
       if (cancelled) return;
+      clearInterval(gelIv); // le direct est abandonné : plus rien à surveiller
       try {
         const r = await conn.sendMessagePromise({ type: 'auth/sign_path', path: `/api/camera_proxy_stream/${haid}`, expires: 3600 });
         if (cancelled) return;
@@ -3177,7 +3203,7 @@ function CamLive({ hass, haid, online = true }) {
         try {
           const res = await conn.sendMessagePromise({ type: 'camera/stream', entity_id: haid, format: 'hls' });
           if (cancelled) return;
-          if (res && res.url && vidRef.current) { vidRef.current.srcObject = null; vidRef.current.onerror = () => { if (!cancelled) startMjpeg(); }; vidRef.current.src = res.url; setMode('video'); vidRef.current.play && vidRef.current.play().catch(() => {}); return; }
+          if (res && res.url && vidRef.current) { vidRef.current.srcObject = null; vidRef.current.onerror = () => { if (!cancelled) startMjpeg(); }; vidRef.current.src = res.url; setMode('video'); armerGel(); vidRef.current.play && vidRef.current.play().catch(() => {}); return; }
         } catch { /* HLS indispo → MJPEG */ }
       }
       startMjpeg();
@@ -3196,7 +3222,7 @@ function CamLive({ hass, haid, online = true }) {
       cleanupRtc = () => { try { unsub && unsub(); } catch {} try { pc.close(); } catch {} };
       if (cancelled) { cleanupRtc(); cleanupRtc = null; return false; }
       try { pc.addTransceiver('video', { direction: 'recvonly' }); pc.addTransceiver('audio', { direction: 'recvonly' }); } catch {}
-      pc.addEventListener('track', (e) => { if (cancelled) return; gotTrack = true; if (vidRef.current && e.streams && e.streams[0]) { vidRef.current.srcObject = e.streams[0]; setMode('video'); vidRef.current.play && vidRef.current.play().catch(() => {}); } });
+      pc.addEventListener('track', (e) => { if (cancelled) return; gotTrack = true; if (vidRef.current && e.streams && e.streams[0]) { vidRef.current.srcObject = e.streams[0]; setMode('video'); armerGel(); vidRef.current.play && vidRef.current.play().catch(() => {}); } });
       pc.addEventListener('icecandidate', (e) => { if (cancelled || !sessionId || !e.candidate) return; conn.sendMessagePromise({ type: 'camera/webrtc/candidate', entity_id: haid, session_id: sessionId, candidate: { candidate: e.candidate.candidate, sdpMLineIndex: e.candidate.sdpMLineIndex, sdpMid: e.candidate.sdpMid } }).catch(() => {}); });
       try {
         const offer = await pc.createOffer();
@@ -3231,7 +3257,7 @@ function CamLive({ hass, haid, online = true }) {
     // Captures : dans le nettoyage, `ref.current` peut avoir change.
     const vidCapture = vidRef.current;
     const imgCapture = imgRef.current;
-    return () => { cancelled = true; if (cleanupRtc) { try { cleanupRtc(); } catch {} } const v = vidCapture; if (v) { try { v.pause(); } catch {} try { v.srcObject = null; } catch {} v.removeAttribute('src'); try { v.load(); } catch {} } const im = imgCapture; if (im) { im.onerror = null; im.removeAttribute('src'); } };
+    return () => { cancelled = true; clearInterval(gelIv); if (cleanupRtc) { try { cleanupRtc(); } catch {} } const v = vidCapture; if (v) { try { v.pause(); } catch {} try { v.srcObject = null; } catch {} v.removeAttribute('src'); try { v.load(); } catch {} } const im = imgCapture; if (im) { im.onerror = null; im.removeAttribute('src'); } };
   }, [haid, online, token, conn]);
   const cover = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' };
   if (mode === 'off') return null; // repli sur le fond gradient de la tuile
