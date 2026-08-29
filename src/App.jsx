@@ -1324,7 +1324,9 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
   const on = ov != null ? ov : realOn;
   const bri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : 100;
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
-  const accent = (rgb && color) ? color : '#FFCC44';
+  // Une prise n'est pas une lumière : pas d'or ni d'ampoule pour un switch hors interrupteurs-lumières.
+  const prise = isSwitch && !cvEstLumiere(id);
+  const accent = prise ? 'var(--o-accent)' : (rgb && color) ? color : '#FFCC44';
   const ltype = lightType({ id, name: (a.friendly_name || id), rgb, ct });
   const adjustable = !isSwitch && dimmable;
   const [flashRef, flash] = useFlash();
@@ -1338,12 +1340,12 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
         background: on && LAVIS ? `linear-gradient(180deg,var(--o-surfA) 28%,${hx(accent, lav(.22))})` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
         border: on && LAVIS ? `1px solid ${hx(accent, lav(.3))}` : 'var(--o-bw,1px) solid var(--o-bd2)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ ...RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accent : 'var(--o-text3)'), boxShadow: on ? `0 0 ${Math.round(6 + bri * 0.22)}px ${Math.round(bri * 0.05)}px ${hx(accent, 0.18 + bri * 0.004)}` : 'none', transition: 'box-shadow .6s ease' }}><LightIcon type={ltype} size={19} /></span>
+        <span style={{ ...RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accent : 'var(--o-text3)'), boxShadow: on ? `0 0 ${Math.round(6 + bri * 0.22)}px ${Math.round(bri * 0.05)}px ${hx(accent, 0.18 + bri * 0.004)}` : 'none', transition: 'box-shadow .6s ease' }}>{prise ? <PlugIcon size={19} /> : <LightIcon type={ltype} size={19} />}</span>
         <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + (label || a.friendly_name || id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }} onClick={toggle} style={{ width: 46, height: 26, borderRadius: 13, background: on ? '#FF2D78' : 'rgba(150,162,184,.2)', position: 'relative', cursor: 'pointer', flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span>
       </div>
       <div>
         <div style={RM_NAME}>{label || a.friendly_name || id}</div>
-        <div style={{ ...RM_SUB, color: on ? 'var(--o-warn)' : 'var(--o-text3)' }}>{on ? (adjustable ? tr('{n} % de luminosité', { n: bri }) : tr('Allumé')) : tr('Éteint')}</div>
+        <div style={{ ...RM_SUB, color: on ? (prise ? 'var(--o-accent-soft)' : 'var(--o-warn)') : 'var(--o-text3)' }}>{on ? (adjustable ? tr('{n} % de luminosité', { n: bri }) : tr('Allumé')) : tr('Éteint')}</div>
         {adjustable && <div style={{ height: 3, borderRadius: 2, background: 'var(--o-bd1)', marginTop: 10, overflow: 'hidden' }}><div style={{ height: '100%', width: (on ? bri : 0) + '%', background: accent, borderRadius: 2, transition: 'width .3s' }} /></div>}
       </div>
     </button>
@@ -5866,7 +5868,7 @@ function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, 
 /* ════════════ VUE ÉNERGIE (package energie.yaml v3 + arc solaire type Helios) ════════════ */
 const enKeys = () => [...Object.values(enHaids()), ...enDevices(null).flatMap(d => [d.power, d.kwh])].filter(Boolean);
 const EN_ART = ['pc', 'nas', 'radiator', 'dishwasher'];
-const EN_LOOK = [['briefcase', 'var(--o-cyan)'], ['microchip', 'var(--o-purple)'], ['thermometer-half', '#ff8a4c'], ['utensils', 'var(--o-accent-soft)'], ['plug', '#f472b6']];
+const EN_LOOK = [['briefcase', 'var(--o-cyan)'], ['microchip', 'var(--o-purple)'], ['thermometer-half', '#ff8a4c'], ['utensils', 'var(--o-accent-soft)'], ['bolt', '#f472b6']]; // 'plug' n'existe pas dans la fonte UICons
 function enDevices(S) {
   const cfg = loggiaEnt('energyDevices', null);
   if (Array.isArray(cfg) && cfg.length) return cfg.filter(d => d && (!S || S[d.power] || S[d.kwh]));
@@ -6041,7 +6043,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
     const st = (hass && hass.states && hass.states[id]) || null;
     const base = connu || {
       name: (st && st.attributes && st.attributes.friendly_name) || id,
-      power: id, kwh: null, art: null, icon: 'plug', c: 'var(--o-accent-soft)',
+      power: id, kwh: null, art: null, icon: 'bolt', c: 'var(--o-accent-soft)',
     };
     return { ...base, name: ed.labelOf(k) || base.name };
   };
@@ -8044,7 +8046,7 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
   const dom = cvDomain(id);
-  const ico = CV_DOM_ICON[dom] || 'bolt';
+  const ico = dom === 'switch' ? (cvEstLumiere(id) ? 'bulb' : null) : CV_DOM_ICON[dom] || 'bolt'; // null = prise, SVG maison
   const name = label || cvName(st, id);
   const s = st ? st.state : null;
   const a = (st && st.attributes) || {};
@@ -8053,8 +8055,8 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
   // Chaque domaine garde sa teinte des vues intégrées : lumière = sa couleur RGB ou l'or,
   // climat = le rouge de la vue Climatisation — l'accent bleu pour le reste.
   const rgbHex = dom === 'light' && a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
-  const teinte = dom === 'light' ? (rgbHex || '#FFCC44') : dom === 'climate' ? 'var(--o-warn2)' : null;
-  const teinteTxt = rgbHex || (dom === 'light' ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-warn2)' : 'var(--o-accent-soft)');
+  const teinte = cvEstLumiere(id) ? (rgbHex || '#FFCC44') : dom === 'climate' ? 'var(--o-warn2)' : null;
+  const teinteTxt = rgbHex || (cvEstLumiere(id) ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-warn2)' : 'var(--o-accent-soft)');
   const acc = on ? 'var(--o-accent)' : 'var(--o-text3)';
   const togglable = ['light', 'switch', 'input_boolean', 'fan'].indexOf(dom) >= 0;
   // Cliquable comme la carte riche : la fiche du domaine s'ouvre (lumière réglable seulement — un simple toggle n'a pas de fiche).
@@ -8081,7 +8083,7 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
       style={{ background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},var(--o-surfA))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? (teinte ? hx(teinte, .3) : 'rgba(var(--o-accent-rgb),.3)') : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinte || 'var(--o-accent-soft)') : 'var(--o-text3)' }}><Fi i={ico} size={17} /></span>
+        <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinte || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{ico ? <Fi i={ico} size={17} /> : <PlugIcon size={17} />}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
           <div style={{ fontSize: 11.5, fontWeight: 600, color: on ? (teinte ? teinteTxt : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stateTxt}</div>
@@ -8120,6 +8122,18 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
 
 const CV_CADRE = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' };
 
+/* Un switch n'est une lumière que s'il est déclaré interrupteur-lumière ;
+ * sinon c'est une prise ou un appareil : icône prise, teinte accent — pas l'or. */
+const cvEstLumiere = (id) => String(id).indexOf('light.') === 0 || (String(id).indexOf('switch.') === 0 && switchLights().indexOf(id) >= 0);
+// La fonte UICons n'a pas de prise : SVG maison, comme BulbIcon.
+const PlugIcon = ({ size = 19 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M9 2v6M15 2v6" />
+    <path d="M6 8h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6V8z" />
+    <path d="M12 17v5" />
+  </svg>
+);
+
 /** Les cartes qui vont à une entité, la première étant proposée en premier. */
 function cvTypesPour(id) {
   const d = String(id).split('.')[0];
@@ -8133,7 +8147,7 @@ function cvTypesPour(id) {
   if (d === 'alarm_control_panel') return ['compacte', 'alarme'];
   return ['compacte'];
 }
-const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Riche'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme') });
+const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme') });
 
 /* Grand chiffre : la valeur en très grand, l'unité, le nom. Un binaire dit son
  * état en toutes lettres ; la richesse d'un capteur, c'est sa lisibilité. */
@@ -8209,16 +8223,20 @@ function CvBigToggle({ id, hass }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const on = !!st && st.state === 'on';
   const mort = !st || st.state === 'unavailable';
+  // L'or est réservé aux lumières ; une prise ou un appareil s'allume à l'accent, icône prise.
+  const lum = cvEstLumiere(id);
+  const rgbTok = lum ? 'var(--o-gold-rgb)' : 'var(--o-accent-rgb)';
+  const txtCol = lum ? 'var(--o-warn)' : 'var(--o-accent-soft)';
   const toggle = () => { try { if (hass && hass.callService) hass.callService('homeassistant', 'toggle', { entity_id: id }); } catch (e) {} };
   return (
     <button className="o-piece" onClick={toggle} disabled={mort}
       style={{ ...CV_CADRE, height: '100%', minHeight: 150, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 12, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
-        ...(on ? { background: `linear-gradient(160deg,rgba(var(--o-gold-rgb),${lav(.22)}),var(--o-surfB))`, border: `1px solid rgba(var(--o-gold-rgb),${lav(.35)})` } : {}) }}>
-      <span style={{ width: 62, height: 62, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'rgba(var(--o-gold-rgb),.2)' : 'var(--o-s1)', color: on ? 'var(--o-warn)' : 'var(--o-text3)', boxShadow: on ? '0 0 22px rgba(var(--o-gold-rgb),.4)' : 'none', transition: 'all .25s' }}>
-        <Fi i="power" size={26} />
+        ...(on ? { background: `linear-gradient(160deg,rgba(${rgbTok},${lav(.22)}),var(--o-surfB))`, border: `1px solid rgba(${rgbTok},${lav(.35)})` } : {}) }}>
+      <span style={{ width: 62, height: 62, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? `rgba(${rgbTok},.2)` : 'var(--o-s1)', color: on ? txtCol : 'var(--o-text3)', boxShadow: on ? `0 0 22px rgba(${rgbTok},.4)` : 'none', transition: 'all .25s' }}>
+        {String(id).indexOf('switch.') === 0 && !lum ? <PlugIcon size={26} /> : <Fi i="power" size={26} />}
       </span>
       <span style={{ fontSize: 14.5, fontWeight: 800 }}>{cvName(st, id)}</span>
-      <span style={{ fontSize: 12, fontWeight: 700, color: on ? 'var(--o-warn)' : 'var(--o-text3)' }}>{mort ? tr('Indisponible') : on ? tr('Allumé') : tr('Éteint')}</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color: on ? txtCol : 'var(--o-text3)' }}>{mort ? tr('Indisponible') : on ? tr('Allumé') : tr('Éteint')}</span>
     </button>
   );
 }
