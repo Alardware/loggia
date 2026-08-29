@@ -169,6 +169,46 @@ export const USER_COLORS = ['#4f8cff', 'var(--o-ok)', 'var(--o-purple)', '#ff8a4
 
 export const cvName = (st, id) => (st && st.attributes && st.attributes.friendly_name) || id.slice(id.indexOf('.') + 1).replace(/_/g, ' ');
 
+/* ── Fond photo ──────────────────────────────────────────────────────────────
+ * L'image de l'utilisateur, compressee a l'import et gardee en dataURL dans le
+ * localStorage de l'APPAREIL — jamais envoyee au serveur. Cache module : la
+ * chaine pese des centaines de kilo-octets, on ne la relit pas a chaque rendu.
+ * L'evenement `loggia-fond-photo` invalide le cache quand on ecrit. */
+export const FOND_PHOTO_CLE = 'loggia-fond-photo';
+let _fondPhoto;
+export function lireFondPhoto() {
+  if (_fondPhoto === undefined) {
+    try { _fondPhoto = window.localStorage.getItem(FOND_PHOTO_CLE) || null; } catch (e) { _fondPhoto = null; }
+  }
+  return _fondPhoto;
+}
+try { window.addEventListener('loggia-fond-photo', () => { _fondPhoto = undefined; }); } catch (e) {}
+
+/**
+ * Compresse une image choisie par l'utilisateur : 1920 px de grand cote au
+ * plus, JPEG qualite .8. Rend la dataURL, ou lance si le resultat depasse
+ * encore ~3,5 Mo — le localStorage n'est pas extensible.
+ */
+export function compresserImage(fichier) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(fichier);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const max = 1920;
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      const out = cv.toDataURL('image/jpeg', .8);
+      if (out.length > 3.5 * 1024 * 1024) { reject(new Error('image trop lourde')); return; }
+      resolve(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image illisible')); };
+    img.src = url;
+  });
+}
+
 /* ── Cartes template des vues custom ─────────────────────────────────────────
  * `cv.ents` mele deux formes : l'entity_id nu (une chaine, l'historique) et la
  * carte template `{ t:'tpl', id, name, src }` — `src` est du Jinja, evalue par

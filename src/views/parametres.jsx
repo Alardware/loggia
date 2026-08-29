@@ -13,7 +13,7 @@ import { cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_ENT, LOGGIA_RESO
   exportLoggiaConfig, importLoggiaConfig,
   exportConfigComplete, importConfigComplete, resetLoggiaComplet,
   cheminPanneau, lirePageAccueil, definirPageAccueil } from '../state.js';
-import { CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS, BottomSheet, EntPicker, CV_DOM_ICON, cvDomain } from '../ui.jsx';
+import { CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS, BottomSheet, EntPicker, CV_DOM_ICON, cvDomain, FOND_PHOTO_CLE, lireFondPhoto, compresserImage } from '../ui.jsx';
 import { useLoggia } from '../runtime.js';
 import { viewReason } from '../views.js';
 import { weatherEntity } from '../wxutil.jsx';
@@ -271,6 +271,48 @@ function UserEditor({ user, onSave, onDelete, onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* Vignette « Photo » du fond d'écran : sans photo, le clic ouvre le sélecteur
+ * de fichier ; avec, il active le fond. Les deux petits boutons dessous
+ * changent ou retirent l'image. La photo est compressée à l'import (1920 px,
+ * JPEG) et reste dans le localStorage de CET appareil — rien ne part au
+ * serveur. */
+function FondPhotoBtn({ actif, onLook }) {
+  const [, force] = useState(0);
+  const fichierRef = useRef(null);
+  const photo = lireFondPhoto();
+  const prev = () => { try { window.dispatchEvent(new CustomEvent('loggia-fond-photo')); } catch (e) {} force(v => v + 1); };
+  const choisir = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const data = await compresserImage(f);
+      localStorage.setItem(FOND_PHOTO_CLE, data);
+      prev();
+      onLook({ fond: 'photo' });
+    } catch (er) {
+      alert(tr("L'image n'a pas pu être utilisée : ") + (er && er.message === 'image trop lourde' ? tr('trop lourde même compressée.') : tr('fichier illisible.')));
+    }
+  };
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
+      <input ref={fichierRef} type="file" accept="image/*" onChange={choisir} style={{ display: 'none' }} />
+      <button onClick={() => { if (!photo) { fichierRef.current && fichierRef.current.click(); return; } onLook({ fond: 'photo' }); }}
+        aria-pressed={actif} aria-label={tr("Fond d'écran") + ' ' + tr('Photo')}
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 12, cursor: 'pointer', transition: 'all .2s', background: actif ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
+        <span style={{ width: 34, height: 22, borderRadius: 6, border: '1px solid ' + (actif ? 'var(--o-accent)' : 'var(--o-bd2)'), background: photo ? `url("${photo}") center/cover` : 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{!photo && <Fi i="picture" size={11} color="var(--o-text3)" />}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: actif ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{tr('Photo')}</span>
+      </button>
+      {photo && (
+        <span style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => fichierRef.current && fichierRef.current.click()} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 10, fontWeight: 700, cursor: 'pointer', padding: 0 }}>{tr('changer')}</button>
+          <button onClick={() => { try { localStorage.removeItem(FOND_PHOTO_CLE); } catch (e) {} prev(); if (actif) onLook({ fond: 'aucun' }); }} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 10, fontWeight: 700, cursor: 'pointer', padding: 0 }}>{tr('retirer')}</button>
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -1041,6 +1083,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                   </button>
                 );
               })}
+              <FondPhotoBtn actif={(look.fond || 'aucun') === 'photo'} onLook={onLook} />
             </OptRow>
             <OptRow title="Couleur d'accent" desc={tr('Éléments actifs, jauges et liens.')}>
               {ACCENTS.map(([c, lb]) => {
