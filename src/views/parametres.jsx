@@ -994,7 +994,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         </SecBar>
         {panel && (() => {
           const pm = PRESET_META().find(x => x.id === loggiaTheme) || PRESET_META()[0];
-          const formes = [look.glass ? 'verre' : 'opaque', look.radius, look.shadow ? 'ombres' : 'à plat', look.hairline ? 'liserés' : 'sans liseré'].join(' · ');
+          const formes = [look.radius, look.shadow ? 'ombres' : 'à plat', look.hairline ? 'liserés' : 'sans liseré'].join(' · ');
           return (
             <SecCard title={tr('Thème actif')} tag={haTheme === 'FOLLOW' ? 'SUIVI DE HA' : 'CHOIX MANUEL'} tagCol={haTheme === 'FOLLOW' ? 'warn' : 'ok'}
               sub="Réglages visuels, propres à cet appareil. L'aperçu à droite suit vos choix.">
@@ -1130,10 +1130,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </OptRow>
           </AppCard>
 
+          {/* La matière n'est plus un choix : un seul matériau — le translucide de
+              l'accueil — partout (décision user 29/08). L'ancien réglage glass
+              reste dans les configs mais n'est plus lu. */}
           <AppCard title={tr('Matière & formes')} note="aucun coût GPU">
-            <OptRow title={tr('Matière des cartes')} desc={tr('Le verre rend les cartes translucides et floute ce qui passe dessous.')}>
-              <Seg value={!!look.glass} opts={[[false, 'Opaque'], [true, 'Verre']]} onPick={v => onLook({ glass: v })} />
-            </OptRow>
             <OptRow title="Arrondi" desc={tr('Rayon des cartes, des champs et des boutons.')}>
               {[['net', 'Net', 3], ['doux', 'Doux', 8], ['rond', 'Rond', 999]].map(([v, lb, r]) => {
                 const on = look.radius === v;

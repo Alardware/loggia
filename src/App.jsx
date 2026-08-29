@@ -767,7 +767,10 @@ const lav = (base) => Math.min(.85, Math.round(base * LAVIS * 1000) / 1000);
 function applyLook(root, L, frostedPreset, light) {
   // Intensité du lavis de teinte, lue par les cartes au rendu (voir TEINTES).
   LAVIS = TEINTES[L.tint] != null ? TEINTES[L.tint] : 1;
-  const verre = !!frostedPreset || !!L.glass;
+  /* Un seul matériau depuis le 29/08 (décision user) : le translucide de
+   * l'accueil, partout. Le réglage Opaque/Verre a disparu de l'Apparence ;
+   * `L.glass` reste dans les configs enregistrées mais n'est plus lu. */
+  const verre = true;
   root.classList.toggle('loggia-frosted', verre);
   /* « Verre » ne posait qu'un `backdrop-filter`. Or un flou d'arriere-plan ne se
    * voit qu'a travers ce qui est translucide : les surfaces sont a 90 %
@@ -1338,7 +1341,10 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
   return (
     <button ref={flashRef} className={'o-light-card o-rmcard' + (mort ? ' o-panne' : '')} onClick={() => { if (adjustable && onOpen) onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed }); }}
       style={{ ...RM_CARD, alignItems: 'stretch', textAlign: 'left', width: '100%', cursor: adjustable ? 'pointer' : 'default', overflow: 'hidden',
-        background: on && LAVIS ? `linear-gradient(180deg,var(--o-surfA) 28%,${hx(accent, lav(.22))})` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
+        // Le lavis est une COUCHE posée sur la surface, jamais la surface elle-même :
+        // sinon le bas de carte restait un alpha .22 sur le fond de page — faux-transparent
+        // en mode opaque, et un rendu différent d'un matériau à l'autre (retour user 29/08).
+        background: on && LAVIS ? `linear-gradient(180deg,transparent 28%,${hx(accent, lav(.22))}), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
         border: on && LAVIS ? `1px solid ${hx(accent, lav(.3))}` : 'var(--o-bw,1px) solid var(--o-bd2)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ ...RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accent : 'var(--o-text3)'), boxShadow: on ? `0 0 ${Math.round(6 + bri * 0.22)}px ${Math.round(bri * 0.05)}px ${hx(accent, 0.18 + bri * 0.004)}` : 'none', transition: 'box-shadow .6s ease' }}>{prise ? <PlugIcon size={19} /> : <LightIcon type={ltype} size={19} />}</span>
@@ -1379,7 +1385,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (titre || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : volet ouvert = lavis VIOLET, gradué par la position — le bleu accent restait trop proche des autres cartes.
       ...(pos > 0 && LAVIS ? {
-        background: `linear-gradient(180deg,var(--o-surfA) 28%,rgba(var(--o-purple-rgb),${lav(.10 + pos * .0012)}))`,
+        background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-purple-rgb),${lav(.10 + pos * .0012)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
         border: `1px solid rgba(var(--o-purple-rgb),${lav(.26)})`,
       } : null) }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -1505,7 +1511,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
       ...(heating && LAVIS ? {
-        background: `linear-gradient(180deg,var(--o-surfA) 28%,rgba(var(--o-warn2-rgb),${lav(.16)}))`,
+        background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-warn2-rgb),${lav(.16)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
         border: `1px solid rgba(var(--o-warn2-rgb),${lav(.28)})`,
       } : null) }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -8219,7 +8225,7 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
     <div className={'o-piece' + (dead ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? 'Ouvrir ' + name : undefined}
       onClick={ouvrable ? () => onOpen(id) : undefined}
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
-      style={{ background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},var(--o-surfA))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? (teinte ? hx(teinte, .3) : 'rgba(var(--o-accent-rgb),.3)') : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s' }}>
+      style={{ background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? (teinte ? hx(teinte, .3) : 'rgba(var(--o-accent-rgb),.3)') : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
         <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinte || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{ico ? <Fi i={ico} size={17} /> : <PlugIcon size={17} />}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -8369,7 +8375,7 @@ function CvBigToggle({ id, hass }) {
   return (
     <button className={'o-piece' + (mort ? ' o-panne' : '')} onClick={toggle} disabled={mort}
       style={{ ...CV_CADRE, height: '100%', minHeight: 150, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 12, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
-        ...(on ? { background: `linear-gradient(160deg,rgba(${rgbTok},${lav(.22)}),var(--o-surfB))`, border: `1px solid rgba(${rgbTok},${lav(.35)})` } : {}) }}>
+        ...(on ? { background: `linear-gradient(160deg,rgba(${rgbTok},${lav(.22)}),transparent 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`, border: `1px solid rgba(${rgbTok},${lav(.35)})` } : {}) }}>
       <span style={{ width: 62, height: 62, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? `rgba(${rgbTok},.2)` : 'var(--o-s1)', color: on ? txtCol : 'var(--o-text3)', boxShadow: on ? `0 0 22px rgba(${rgbTok},.4)` : 'none', transition: 'all .25s' }}>
         {String(id).indexOf('switch.') === 0 && !lum ? <PlugIcon size={26} /> : <Fi i="power" size={26} />}
       </span>
