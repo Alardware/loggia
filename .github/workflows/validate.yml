@@ -49,6 +49,30 @@ jobs:
       - run: pip install pytest
       - run: python -m pytest tests/python -q
 
+  paquet:
+    name: Paquet embarque = build du commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: npm run build
+      - run: python scripts/pack_frontend.py
+      # Le paquet du depot doit etre EXACTEMENT ce que produit le build de ce
+      # commit — c'est lui que HACS livre. Jusqu'ici cette garde n'existait
+      # que sur la machine de developpement (pack_frontend refuse un build
+      # perime) ; un commit pousse avec frontend/ desynchronise partait tel
+      # quel. `git add -N` rend visibles au diff les fichiers que le pack
+      # aurait crees en plus.
+      - run: |
+          git add -N custom_components/loggia/frontend
+          git diff --exit-code -- custom_components/loggia/frontend
+
   frontend:
     name: Frontend (lint, tests, donnees personnelles)
     runs-on: ubuntu-latest
