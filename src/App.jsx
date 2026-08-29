@@ -1629,6 +1629,9 @@ function RoomPilotSheet({ zone, hass, onClose }) {
   const heating = !off && z.current != null && z.current < target;
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
   const setT = (d) => { const v = Math.max(5, Math.min(30, Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
+  // La température vécue : le capteur de la zone s'il existe (état numérique, requête légère),
+  // sinon l'attribut current_temperature du climate.
+  const ptsTemp = useHistorique24(hass, zone.tempSensor || (estClimate(zone) ? zone.haid : null), zone.tempSensor ? null : 'current_temperature');
   const pct = Math.max(0, Math.min(1, (target - RM_TMIN) / (RM_TMAX - RM_TMIN)));
   const R = 54, ARC = 2 * Math.PI * R * 0.75;
   const col = off ? 'var(--o-text3)' : 'var(--o-warn)';
@@ -1661,6 +1664,10 @@ function RoomPilotSheet({ zone, hass, onClose }) {
             <button key={opt} onClick={() => { if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', opt); else call('input_select', 'select_option', { entity_id: zone.modeEnt, option: opt }); }} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-warn2-rgb),.5)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-warn2-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-warn2)' : 'var(--o-text1)' }}>{zoneModeLabel(zone, opt)}</button>
           ); })}
         </div>
+        {(zone.tempSensor || estClimate(zone)) && (<>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '18px 0 9px' }}>{tr('TEMPÉRATURE · 24 H')}</div>
+          <Courbe24 points={ptsTemp} couleur="#ff8a4c" unite="°" />
+        </>)}
       </>)}
     </BottomSheet>
   );
@@ -1925,6 +1932,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
   // aussi lui appartient. On affiche ce qui a ete envoye, pas ce qui a ete
   // demande — sinon la consigne affichee mentirait des qu'elle est bornee.
   const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
+  const ptsTemp = useHistorique24(hass, id, 'current_temperature');
   const pct = Math.max(0, Math.min(1, (target - RM_TMIN) / (RM_TMAX - RM_TMIN)));
   const R = 54, ARC = 2 * Math.PI * R * 0.75; // arc 270°
   const col = off ? 'var(--o-text3)' : 'var(--o-warn)';
@@ -1956,6 +1964,8 @@ function RoomClimateSheet({ id, hass, onClose }) {
             <button key={m} onClick={() => commander(hass, id, 'set_hvac_mode', m)} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 13, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-text)' : 'var(--o-s1)', color: on ? 'var(--o-bg)' : 'var(--o-text1)' }}>{tr(MODE_FR[m]) || m}</button>
           ); })}
         </div>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '18px 0 9px' }}>{tr('TEMPÉRATURE · 24 H')}</div>
+        <Courbe24 points={ptsTemp} couleur="#ff8a4c" unite="°" />
       </>)}
     </BottomSheet>
   );
@@ -2504,6 +2514,100 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
  * feuilles voyagent avec, sinon chaque vue redeclarerait les cinq etats.
  *
  */
+/* ── Historique 24 h ─────────────────────────────────────────────────────────
+ * Le GET history/period, partagé entre la carte graphique et les fiches.
+ * `attribut` : pour un climat, la température vécue est un ATTRIBUT
+ * (current_temperature) — la requête part alors sans minimal_response ni
+ * no_attributes, plus lourde, réservée à une fiche ouverte. */
+function useHistorique24(hass, id, attribut = null) {
+  const [points, setPoints] = useState(null);
+  const api = hass && hass.callApi ? 1 : 0;
+  useEffect(() => {
+    if (!api || !id) return;
+    let mort = false;
+    const lire = () => {
+      const debut = new Date(Date.now() - 24 * 3600e3).toISOString();
+      const q = 'history/period/' + debut + '?filter_entity_id=' + encodeURIComponent(id) + (attribut ? '' : '&minimal_response&no_attributes');
+      hass.callApi('GET', q)
+        .then(r => {
+          if (mort) return;
+          const brut = Array.isArray(r) && r[0] ? r[0] : [];
+          const serie = brut
+            .map(p => ({ t: new Date(p.last_changed || p.last_updated || 0).getTime(), v: parseFloat(attribut ? (p.attributes ? p.attributes[attribut] : NaN) : p.state) }))
+            .filter(p => !isNaN(p.v));
+          setPoints(serie);
+        }).catch(() => { if (!mort) setPoints([]); });
+    };
+    lire();
+    const iv = setInterval(lire, 5 * 60000);
+    return () => { mort = true; clearInterval(iv); };
+  }, [api, id, attribut]);
+  return points;
+}
+
+/* La courbe d'une fiche : le filigrane de la carte graphique, en plus grand,
+ * avec ses bornes et son axe du temps. */
+function Courbe24({ points, couleur = 'var(--o-accent)', unite = '' }) {
+  let chemin = '', aire = '', vmin = null, vmax = null;
+  if (points && points.length > 1) {
+    const t0 = points[0].t, t1 = points[points.length - 1].t || t0 + 1;
+    vmin = Math.min(...points.map(p => p.v)); vmax = Math.max(...points.map(p => p.v));
+    const plat = vmax === vmin; // une valeur constante se trace au milieu, pas collée en bas
+    const spread = (vmax - vmin) || 1;
+    const X = (t) => ((t - t0) / (t1 - t0 || 1)) * 100;
+    const Y = (v) => plat ? 21 : 36 - ((v - vmin) / spread) * 30;
+    chemin = points.map((p, i) => (i ? 'L' : 'M') + X(p.t).toFixed(1) + ' ' + Y(p.v).toFixed(1)).join(' ');
+    aire = chemin + ' L 100 40 L 0 40 Z';
+  }
+  const fmt = (x) => Math.round(x * 10) / 10;
+  return (
+    <div>
+      <div style={{ position: 'relative', height: 110, borderRadius: 12, background: 'var(--o-s1)', overflow: 'hidden' }}>
+        {chemin ? (
+          <svg viewBox="0 0 100 40" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+            <path d={aire} fill={hx(couleur, .12)} />
+            <path d={chemin} fill="none" stroke={couleur} strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+          </svg>
+        ) : (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>
+            {points === null ? tr('Chargement…') : tr("Pas d'historique sur 24 h")}
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 7, fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)' }}>
+        <span>{tr('il y a 24 h')}</span>
+        {vmin != null && <span style={{ fontWeight: 700, color: 'var(--o-text2)' }}>{tr('min {a} · max {b}', { a: fmt(vmin) + unite, b: fmt(vmax) + unite })}</span>}
+        <span>{tr('maintenant')}</span>
+      </div>
+    </div>
+  );
+}
+
+/* Fiche d'un capteur : la valeur en grand et sa journée. */
+function SensorSheet({ id, hass, onClose }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const points = useHistorique24(hass, id);
+  const n = st ? parseFloat(st.state) : NaN;
+  const unite = a.unit_of_measurement || '';
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (<>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+          <span style={{ flex: 1, fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</span>
+        </div>
+        <div style={{ textAlign: 'center', margin: '16px 0 18px' }}>
+          <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>{isNaN(n) ? (st ? st.state : '—') : Math.round(n * 10) / 10}</span>
+          {unite && <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 6 }}>{unite}</span>}
+        </div>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '0 0 9px' }}>{tr('DERNIÈRES 24 H')}</div>
+        <Courbe24 points={points} unite={unite} />
+      </>)}
+    </BottomSheet>
+  );
+}
+
 function useDomainCards(hass) {
   const S = (hass && hass.states) || {};
   const [lightPop, setLightPop] = useState(null);
@@ -2511,6 +2615,7 @@ function useDomainCards(hass) {
   const [pilotPop, setPilotPop] = useState(null);
   const [coverPop, setCoverPop] = useState(null);
   const [mediaPop, setMediaPop] = useState(null);
+  const [sensPop, setSensPop] = useState(null);
   // La fiche du domaine, depuis n'importe quelle carte — la compacte ouvre la même popup que la riche.
   const ouvrir = (id) => {
     const d = String(id).split('.')[0];
@@ -2526,6 +2631,7 @@ function useDomainCards(hass) {
     } else if (d === 'climate') setClimPop(id);
     else if (d === 'cover') setCoverPop(id);
     else if (d === 'media_player') setMediaPop(id);
+    else if (d === 'sensor') setSensPop(id);
   };
   const card = (id, label = null, zone = null) => {
     const d = String(id).split('.')[0];
@@ -2543,9 +2649,10 @@ function useDomainCards(hass) {
       {pilotPop && (() => { const z = climateZones(S).find(x => x.id === pilotPop); return z ? <RoomPilotSheet zone={z} hass={hass} onClose={() => setPilotPop(null)} /> : null; })()}
       {coverPop && <RoomCoverSheet id={coverPop} hass={hass} onClose={() => setCoverPop(null)} />}
       {mediaPop && <RoomMediaSheet id={mediaPop} hass={hass} onClose={() => setMediaPop(null)} />}
+      {sensPop && <SensorSheet id={sensPop} hass={hass} onClose={() => setSensPop(null)} />}
     </>
   );
-  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); };
+  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); };
   return { card, sheets, fermer, ouvrir };
 }
 
@@ -8067,7 +8174,7 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
   // Cliquable comme la carte riche : la fiche du domaine s'ouvre (lumière réglable seulement — un simple toggle n'a pas de fiche).
   const modes = a.supported_color_modes || [];
   const reglable = dom !== 'light' || modes.length > 1 || a.brightness != null || modes.indexOf('brightness') >= 0 || modes.some(m => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww', 'color_temp'].indexOf(m) >= 0);
-  const ouvrable = !dead && !!onOpen && reglable && ['light', 'climate', 'cover', 'media_player'].indexOf(dom) >= 0;
+  const ouvrable = !dead && !!onOpen && ((dom === 'sensor' && !isNaN(parseFloat(s))) || (reglable && ['light', 'climate', 'cover', 'media_player'].indexOf(dom) >= 0));
   const runnable = { scene: ['scene', 'turn_on', 'Activer'], script: ['script', 'turn_on', tr('Exécuter')], button: ['button', 'press', 'Appuyer'], input_button: ['input_button', 'press', 'Appuyer'], automation: ['automation', 'trigger', tr('Exécuter')] }[dom];
   let stateTxt;
   if (dead) stateTxt = tr('Indisponible');
@@ -8363,24 +8470,7 @@ function CvJournal({ id, hass }) {
  * L'API historique de HA est un GET (pattern des autres lectures d'historique
  * du fichier) : relecture au montage puis toutes les cinq minutes. */
 function CvHistory({ id, hass }) {
-  const [points, setPoints] = useState(null);
-  const api = hass && hass.callApi ? 1 : 0;
-  useEffect(() => {
-    if (!api) return;
-    let mort = false;
-    const lire = () => {
-      const debut = new Date(Date.now() - 24 * 3600e3).toISOString();
-      hass.callApi('GET', 'history/period/' + debut + '?filter_entity_id=' + encodeURIComponent(id) + '&minimal_response&no_attributes')
-        .then(r => {
-          if (mort) return;
-          const serie = (Array.isArray(r) && r[0] ? r[0] : []).map(p => ({ t: new Date(p.last_changed || p.lu || 0).getTime(), v: parseFloat(p.state) })).filter(p => !isNaN(p.v));
-          setPoints(serie);
-        }).catch(() => { if (!mort) setPoints([]); });
-    };
-    lire();
-    const iv = setInterval(lire, 5 * 60000);
-    return () => { mort = true; clearInterval(iv); };
-  }, [api, id]);
+  const points = useHistorique24(hass, id);
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const mort = !st || st.state === 'unavailable';
@@ -8417,10 +8507,14 @@ function CvTyped({ x, hass, dc }) {
   if (cvEstTpl(x)) return <CvTemplateCard def={x} hass={hass} />;
   if (typeof x === 'string') return <CvCard id={x} hass={hass} onOpen={dc.ouvrir} />;
   const { t, id } = x;
+  // Les cartes capteur ouvrent la fiche 24 h au clic — elles n'ont aucun contrôle interne à protéger.
+  const ouvre = (comp) => String(id).split('.')[0] === 'sensor'
+    ? <div role="button" tabIndex={0} aria-label={'Ouvrir ' + id} onClick={() => dc.ouvrir(id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dc.ouvrir(id); } }} style={{ height: '100%', cursor: 'pointer' }}>{comp}</div>
+    : comp;
   if (t === 'riche') return dc.card(id);
-  if (t === 'chiffre') return <CvBigSensor id={id} hass={hass} />;
-  if (t === 'jauge') return <CvGauge id={id} hass={hass} />;
-  if (t === 'graph') return <CvHistory id={id} hass={hass} />;
+  if (t === 'chiffre') return ouvre(<CvBigSensor id={id} hass={hass} />);
+  if (t === 'jauge') return ouvre(<CvGauge id={id} hass={hass} />);
+  if (t === 'graph') return ouvre(<CvHistory id={id} hass={hass} />);
   if (t === 'gros') return <CvBigToggle id={id} hass={hass} />;
   if (t === 'personne') return <CvPerson id={id} hass={hass} />;
   if (t === 'meteo') return <CvWeather id={id} hass={hass} />;
