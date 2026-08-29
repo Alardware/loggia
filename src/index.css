@@ -113,6 +113,9 @@ html.loggia-frosted body [style*="--o-surfA"] [style*="--o-surfA"] { -webkit-bac
 @keyframes o-wxm-wind { 0% { transform: translateX(-30px); opacity: 0; } 18% { opacity: .55; } 82% { opacity: .55; } 100% { transform: translateX(160px); opacity: 0; } }
 /* Mode ambiant : le fondu d'entrée de l'écran de veille. */
 @keyframes o-ambient-in { from { opacity: 0; } to { opacity: 1; } }
+/* Vues custom : la carte REMPLIT sa cellule de grille — sans quoi étirer le
+   coin agrandissait le cadre pointillé et laissait la carte petite dedans. */
+.o-cvfit > * { height: 100%; box-sizing: border-box; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes bdrift { from { transform: translateX(-14px); } to { transform: translateX(18px); } }
 @keyframes bsun { 0%,100% { transform:scale(1); opacity:.85; } 50% { transform:scale(1.07); opacity:1; } }
