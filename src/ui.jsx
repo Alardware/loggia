@@ -216,7 +216,12 @@ export function compresserImage(fichier) {
  * nouvelle valeur : rien a rafraichir). Ces deux aides sont le seul endroit
  * qui connaisse la difference ; tout le reste passe par elles. */
 export const cvEstTpl = (x) => !!(x && typeof x === 'object' && x.t === 'tpl');
-export const cvKey = (x) => (cvEstTpl(x) ? x.id : x);
+/* Cle unique d'une entree : la chaine elle-meme, l'id genere d'un template, ou
+ * `type:id` pour une carte typee — la meme entite peut ainsi vivre deux fois
+ * dans une vue sous deux formes (une jauge ET un graphique du meme capteur). */
+export const cvKey = (x) => (cvEstTpl(x) ? x.id : (x && typeof x === 'object' && x.t) ? x.t + ':' + x.id : x);
+/** L'entity_id d'une entree, quelle que soit sa forme (null pour un template). */
+export const cvId = (x) => (typeof x === 'string' ? x : cvEstTpl(x) ? null : x && x.id);
 
 /** Petit formulaire d'ajout d'une carte template (partage entre les deux
  *  editeurs de vues : celui en place et celui des Parametres). */
