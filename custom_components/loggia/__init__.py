@@ -91,6 +91,17 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
 
+    # Alertes de surete poussees sur telephone. Meme regime que le WebSocket :
+    # le listener vit jusqu'a l'arret du process, on ne l'enregistre qu'une fois,
+    # et son absence ne doit pas empecher le reste de fonctionner.
+    if not data.get("alertes") and data.get("store"):
+        try:
+            from .alertes import LoggiaAlertes
+
+            data["alertes"] = LoggiaAlertes(hass, data["store"])
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : alertes de sûreté indisponibles")
+
     # ── Ce qui se refait a chaque chargement : le panneau ──
     # Il se retire proprement dans `async_unload_entry`, donc il se reenregistre
     # sans risque. Un dashboard qui ne se sert pas ne doit pas empecher le proxy

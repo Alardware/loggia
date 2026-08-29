@@ -78,7 +78,7 @@ const PRESET_META = () => [
  * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
  * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
  * langue. Appelee au rendu, elle se dit dans la langue du moment. */
-const PAR_TABS = () => [['connexion', tr('Connexion HA')], ['users', tr('Utilisateurs')], ['vues', tr('Vues')], ['entites', tr('Entités')], ['auto', tr('Automatisations')], ['maj', tr('Mises à jour')], ['apparence', tr('Apparence')], ['about', tr('À propos')]];
+const PAR_TABS = () => [['connexion', tr('Connexion HA')], ['users', tr('Utilisateurs')], ['vues', tr('Vues')], ['entites', tr('Entités')], ['auto', tr('Automatisations')], ['alertes', tr('Alertes')], ['maj', tr('Mises à jour')], ['apparence', tr('Apparence')], ['about', tr('À propos')]];
 // Nav latérale des Paramètres, groupée façon Atrium (réf. user 20/08) : { grp, items: [id, label, glyphe UICons] }
 
 /* Une FONCTION, pas une table.
@@ -91,6 +91,95 @@ const PAR_HELPS = () => [
   { id: 'why', title: 'Pourquoi cette bascule ?', body: 'Les navigateurs bloquent les requêtes HTTP depuis une page HTTPS (protection "mixed content"). Le token n\'est pas en cause — il marche pour les deux URLs.' },
   { id: 'notoken', title: tr('Sans token'), body: 'Loggia fonctionne en mode démo (état local seulement).' },
 ];
+
+/* ════════════ ALERTES SÛRETÉ → TÉLÉPHONE (admin) ════════════
+ * L'écoute vit dans le COMPOSANT serveur (alertes.py) : le dashboard peut être
+ * fermé, l'alerte part quand même. Ici on ne fait que régler et tester. La
+ * configuration s'écrit dans la partie commune du store (clé loggia_alertes). */
+const ALERTES_DEF = () => ({ actif: false, service: '', categories: { fumee: true, gaz: true, co: true, fuite: true, alarme: true, portes: false }, cooldown_min: 5 });
+function AlertesTele({ hass, cardSt }) {
+  const h = hass && typeof hass.callWS === 'function' ? hass : null;
+  const [cfg, setCfg] = useState(null);
+  const [services, setServices] = useState([]);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    if (!h) { setCfg(ALERTES_DEF()); return; }
+    h.callWS({ type: 'loggia/config/get' }).then(r => {
+      const c = (r && r.config && r.config.loggia_alertes) || {};
+      const d = ALERTES_DEF();
+      setCfg({ ...d, ...c, categories: { ...d.categories, ...(c.categories || {}) } });
+    }).catch(() => setCfg(ALERTES_DEF()));
+    // La liste des cibles possibles : les services notify de l'installation.
+    h.callWS({ type: 'get_services' }).then(r => {
+      const n = (r && r.notify) || {};
+      setServices(Object.keys(n).filter(s => ['notify', 'persistent_notification', 'send_message'].indexOf(s) < 0).sort());
+    }).catch(() => {});
+  }, [!!h]);
+  const save = (patch) => {
+    const n = { ...cfg, ...patch };
+    setCfg(n); setMsg('');
+    if (h) h.callWS({ type: 'loggia/config/set', config: { loggia_alertes: n } })
+      .catch(() => setMsg("Enregistrement impossible — le composant ne répond pas."));
+  };
+  const test = () => {
+    if (!cfg.service) { setMsg(tr('Choisis d’abord un service.')); return; }
+    try {
+      hass.callService('notify', cfg.service, { title: 'Loggia — sûreté', message: tr('Notification de test — tout est en place.') });
+      setMsg(tr('Test envoyé — regarde ton téléphone.'));
+    } catch (e) { setMsg("Envoi impossible."); }
+  };
+  const Tgl = ({ on, cb, label }) => (
+    <span onClick={cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } }}
+      style={{ width: 46, height: 26, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}>
+      <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
+    </span>
+  );
+  const ligne = { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' };
+  const lbl = (t, d) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t}</div>
+      {d && <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{d}</div>}
+    </div>
+  );
+  if (!cfg) return <div style={cardSt}><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Chargement…')}</div></div>;
+  const CATS = [
+    ['fumee', tr('Fumée'), tr('Détecteurs de fumée et de sûreté')],
+    ['gaz', tr('Gaz'), tr('Détecteurs de gaz')],
+    ['co', tr('Monoxyde de carbone'), tr('Détecteurs de CO')],
+    ['fuite', tr("Fuite d'eau"), tr("Détecteurs d'humidité et de fuite")],
+    ['alarme', tr('Alarme déclenchée'), tr('Toujours envoyée, sans délai anti-rafale')],
+    ['portes', tr("Ouverture pendant que l'alarme est armée"), tr('Portes, fenêtres et garage')],
+  ];
+  return (
+    <div style={cardSt}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Alertes téléphone')}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 3 }}>{tr("Envoyées par le serveur via l'app compagnon Home Assistant — même dashboard fermé.")}</div>
+        </div>
+        <Tgl on={cfg.actif} cb={() => save({ actif: !cfg.actif })} label={tr('Activer les alertes')} />
+      </div>
+      <div style={{ ...ligne, marginTop: 14 }}>
+        {lbl(tr('Téléphone cible'), tr('Le service notify de l’app compagnon'))}
+        <input list="loggia-notify-svcs" value={cfg.service} onChange={e => save({ service: e.target.value.trim() })} placeholder="mobile_app_…"
+          style={{ ...cvInp, maxWidth: 260, padding: '9px 12px', fontSize: 13 }} />
+        <datalist id="loggia-notify-svcs">{services.map(s => <option key={s} value={s} />)}</datalist>
+      </div>
+      {CATS.map(([k, t, d]) => (
+        <div key={k} style={ligne}>
+          {lbl(t, d)}
+          <Tgl on={!!cfg.categories[k]} cb={() => save({ categories: { ...cfg.categories, [k]: !cfg.categories[k] } })} label={t} />
+        </div>
+      ))}
+      <div style={{ ...ligne, borderBottom: 'none' }}>
+        {lbl(tr('Essai'), tr('Envoie une notification de test au téléphone choisi'))}
+        <button onClick={test} style={{ padding: '9px 16px', borderRadius: 11, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Envoyer un test')}</button>
+      </div>
+      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-accent-soft)', marginTop: 4 }}>{msg}</div>}
+      <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 12 }}>{tr("Les catégories se reconnaissent à la classe des capteurs (device_class) — rien à désigner à la main. Anti-rafale : 5 min par capteur, sauf l'alarme.")}</div>
+    </div>
+  );
+}
 
 
 
@@ -679,7 +768,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const lastSeen = (() => { try { return JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); } catch (e) { return {}; } })();
   const seenRel = (name, isCur) => { if (isCur) return 'actif maintenant'; const t = lastSeen[name]; if (!t) return ''; const m = (Date.now() - t) / 60000; if (m < 60) return 'vu il y a ' + Math.max(1, Math.round(m)) + ' min'; if (m < 1440) return 'vu il y a ' + Math.round(m / 60) + ' h'; if (m < 2880) return 'vu hier'; return 'vu il y a ' + Math.round(m / 1440) + ' j'; };
   const [editing, setEditing] = useState(null); // { i, u } pour éditer, { i:null } pour ajouter
-  const visTabs = isAdmin ? PAR_TABS() : PAR_TABS().filter(([id]) => id !== 'vues' && id !== 'auto' && id !== 'maj' && id !== 'entites');
+  const visTabs = isAdmin ? PAR_TABS() : PAR_TABS().filter(([id]) => id !== 'vues' && id !== 'auto' && id !== 'maj' && id !== 'entites' && id !== 'alertes');
   // Automatisations : état optimiste local (id → on/off) au-dessus de hass.
   const [autoOv, setAutoOv] = useState({});
   // Signature des états automation.* → purge l'override optimiste dès que HA confirme (ou change depuis un autre appareil).
@@ -756,6 +845,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       sub: accessKind, pageSub: 'Session empruntée au navigateur · ' + accessKind, big: (lat != null && lat >= 0) ? lat + ' ms' : (hass ? 'active' : 'hors ligne'), unit: hass ? 'session active' : 'session absente', admin: false, small: true },
     { id: 'auto', name: tr('Automatisations'), ico: 'bolt', col: 'var(--o-warn)', bg: 'rgba(var(--o-warn-rgb),.14)',
       sub: tr('Gérées dans Home Assistant'), big: String(autos.filter(a => a.on).length), unit: tr('actives sur {n}', { n: autos.length }), admin: true },
+    { id: 'alertes', name: tr('Alertes'), ico: 'bell', col: 'var(--o-bad)', bg: 'rgba(var(--o-bad-rgb),.14)',
+      sub: tr('Sûreté poussée sur téléphone'), big: tr('notify'), unit: tr('via app compagnon'), admin: true, small: true },
     { id: 'maj', name: tr('Mises à jour'), ico: 'refresh', col: 'var(--o-warn2)', bg: 'rgba(var(--o-warn2-rgb),.14)',
       sub: upsAvail ? 'Firmwares et modules' : tr('Tout est à jour'), big: String(upsAvail || 0), unit: upsAvail ? 'en attente' : 'à jour', admin: true, dot: upsAvail > 0 },
     { id: 'vues', name: tr('Vues'), ico: 'layout-fluid', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
@@ -1479,6 +1570,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         </div>
       </>)}
 
+      {tab === 'alertes' && isAdmin && <AlertesTele hass={hass} cardSt={cardSt} />}
       {tab === 'maj' && isAdmin && (<>
         <SecBar>
           <SecGroup label="Installer">
