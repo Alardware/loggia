@@ -199,6 +199,15 @@ class LoggiaStore:
         )
         return True
 
+    async def async_get_shared(self, key: str, default: Any = None) -> Any:
+        """Une valeur de la partie commune, pour les modules serveur.
+
+        Les alertes lisent ici : leur configuration appartient a la maison,
+        pas a un compte. Bon marche — le fichier est en cache memoire.
+        """
+        data = await self._load()
+        return data["shared"].get(key, default)
+
     async def async_get_user(self, user_id: str) -> dict[str, Any]:
         """Configuration vue par un utilisateur : le commun, puis le sien.
 
