@@ -8034,6 +8034,9 @@ function CvCard({ id, hass, label = null }) {
   const a = (st && st.attributes) || {};
   const dead = !st || s === 'unavailable' || s === 'unknown';
   const on = !dead && (dom === 'cover' ? (s === 'open' || s === 'opening') : dom === 'lock' ? s === 'unlocked' : dom === 'media_player' ? s === 'playing' : dom === 'climate' ? s !== 'off' : s === 'on');
+  // Une lumière allumée se teinte comme dans la vue Lumières : sa couleur si elle en a une, l'or sinon — jamais l'accent bleu.
+  const rgbHex = dom === 'light' && a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
+  const teinte = dom === 'light' ? (rgbHex || '#FFCC44') : null;
   const acc = on ? 'var(--o-accent)' : 'var(--o-text3)';
   const togglable = ['light', 'switch', 'input_boolean', 'fan'].indexOf(dom) >= 0;
   const runnable = { scene: ['scene', 'turn_on', 'Activer'], script: ['script', 'turn_on', tr('Exécuter')], button: ['button', 'press', 'Appuyer'], input_button: ['input_button', 'press', 'Appuyer'], automation: ['automation', 'trigger', tr('Exécuter')] }[dom];
@@ -8051,12 +8054,12 @@ function CvCard({ id, hass, label = null }) {
   else if (runnable || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—'; // scene/script/button : état = date de dernière exécution
   else stateTxt = String(s);
   return (
-    <div className="o-piece" style={{ background: on ? `linear-gradient(180deg,${hx('var(--o-accent)', .12)},var(--o-surfA))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.3)' : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, transition: 'all .25s' }}>
+    <div className="o-piece" style={{ background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},var(--o-surfA))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? (teinte ? hx(teinte, .3) : 'rgba(var(--o-accent-rgb),.3)') : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, transition: 'all .25s' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}><Fi i={ico} size={17} /></span>
+        <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinte || 'var(--o-accent-soft)') : 'var(--o-text3)' }}><Fi i={ico} size={17} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: on ? 'var(--o-accent-soft)' : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stateTxt}</div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: on ? (teinte ? (rgbHex || 'var(--o-warn)') : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stateTxt}</div>
         </div>
         {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + name} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={() => call('homeassistant', on ? 'turn_off' : 'turn_on')} style={{ width: 44, height: 25, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
         {runnable && !dead && <button onClick={() => call(runnable[0], runnable[1])} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
@@ -8238,7 +8241,7 @@ function CvAgenda({ id, hass }) {
   const events = useAgenda(hass, useMemo(() => [id], [id]));
   const st = hass && hass.states ? hass.states[id] : null;
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150 }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
       <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 2 }}>{cvName(st, id)}</div>
       <div style={{ fontSize: 10.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 4 }}>{tr('Les 7 prochains jours')}</div>
       {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien de prévu')}</div>}
@@ -8270,7 +8273,7 @@ function CvAlarm({ id, hass }) {
         : s ? [tr('Armée'), 'var(--o-warn2)'] : ['—', 'var(--o-text3)'];
   const btn = { flex: 1, padding: '9px 6px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' };
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150 }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
         <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(col, .16), color: col }}><Fi i="shield-check" size={17} /></span>
         <div style={{ minWidth: 0 }}>
@@ -8294,7 +8297,7 @@ function CvJournal({ id, hass }) {
   const st = S[id];
   const heure = (when) => { const ms = when < 1e12 ? when * 1000 : when; return new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150 }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
       <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
       <div style={{ fontSize: 10.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 4 }}>{tr('Journal')}</div>
       {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien à raconter')}</div>}
@@ -8448,7 +8451,8 @@ function CustomView({ cv, hass, edit = false, onSave }) {
             : <h1 onClick={edit ? () => setRenaming(true) : undefined} style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, cursor: edit ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: 12 }}>{cv.name}{edit && <Fi i="pencil" size={16} color="var(--o-text3)" />}</h1>}
           <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div>
         </div>
-        <div ref={grilleRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
+        {/* alignItems:start — chaque carte garde sa hauteur naturelle, la plus haute de la rangée n'étire pas les autres. */}
+        <div ref={grilleRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14, alignItems: 'start' }}>
           {liste.map((x) => {
             const saisie = dragCle === cvKey(x);
             return (
