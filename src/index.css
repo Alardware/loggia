@@ -370,10 +370,12 @@ html.loggia-frosted body [style*="--o-surfA"] [style*="--o-surfA"] { -webkit-bac
 /* 4. indicateur sidebar : grandit depuis le centre quand il change d'item */
 @keyframes o-indIn { from { transform: scaleY(.2); opacity: .4; } to { transform: none; opacity: 1; } }
 .o-navbar-ind { animation: o-indIn .28s cubic-bezier(.22,1.2,.36,1) both; transform-origin: center; }
-/* 5. hover profondeur (pointeur fin uniquement) : ombre plus profonde + léger éclaircissement */
+/* 5. hover profondeur (pointeur fin uniquement) : ombre plus profonde SEULEMENT.
+   Le brightness(1.03) délavait les cartes translucides (lavis, verre) — elles
+   semblaient devenir transparentes au survol (retour user 29/08). */
 @media (hover: hover) and (pointer: fine) {
-  .o-hov { transition: box-shadow .25s ease, filter .25s ease; }
-  .o-hov:hover { box-shadow: var(--o-shadow-hover, 0 10px 24px rgba(0,0,0,.32), 0 26px 52px rgba(0,0,0,.26)) !important; filter: brightness(1.03); }
+  .o-hov { transition: box-shadow .25s ease; }
+  .o-hov:hover { box-shadow: var(--o-shadow-hover, 0 10px 24px rgba(0,0,0,.32), 0 26px 52px rgba(0,0,0,.26)) !important; }
 }
 @media (prefers-reduced-motion: reduce) { .o-view, .o-flash, .o-ripple, .o-actbtn-done, .o-navbar-ind { animation: none; } .o-hov { transition: none; } }
 /* lot 4 — pill de sélection sidebar qui glisse entre items */
