@@ -2504,6 +2504,22 @@ function useDomainCards(hass) {
   const [pilotPop, setPilotPop] = useState(null);
   const [coverPop, setCoverPop] = useState(null);
   const [mediaPop, setMediaPop] = useState(null);
+  // La fiche du domaine, depuis n'importe quelle carte — la compacte ouvre la même popup que la riche.
+  const ouvrir = (id) => {
+    const d = String(id).split('.')[0];
+    const st = S[id]; const a = (st && st.attributes) || {};
+    if (d === 'light') {
+      const modes = a.supported_color_modes || [];
+      const rgb = modes.some(m => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'].indexOf(m) >= 0);
+      const ct = modes.indexOf('color_temp') >= 0;
+      const dimmable = rgb || ct || modes.indexOf('brightness') >= 0 || a.brightness != null;
+      if (!dimmable) return; // rien à régler : le toggle suffit
+      const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
+      setLightPop({ id, name: a.friendly_name || id, on: !!st && st.state === 'on', bri: a.brightness != null ? Math.round(a.brightness / 255 * 100) : 100, color, rgb, ct, dimmable, lc: st && st.last_changed });
+    } else if (d === 'climate') setClimPop(id);
+    else if (d === 'cover') setCoverPop(id);
+    else if (d === 'media_player') setMediaPop(id);
+  };
   const card = (id, label = null, zone = null) => {
     const d = String(id).split('.')[0];
     return zone ? <RoomPilotCard zone={zone} hass={hass} onOpen={setPilotPop} titre={label} />
@@ -2511,7 +2527,7 @@ function useDomainCards(hass) {
         : d === 'cover' ? <RoomCoverCard id={id} hass={hass} onOpen={setCoverPop} titre={label} />
           : d === 'climate' ? <RoomClimateCard id={id} hass={hass} onOpen={setClimPop} label={label} />
             : d === 'media_player' ? <RoomMediaCard id={id} hass={hass} onOpen={setMediaPop} label={label} />
-              : <CvCard id={id} hass={hass} label={label} />;
+              : <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} />;
   };
   const sheets = (
     <>
@@ -2523,7 +2539,7 @@ function useDomainCards(hass) {
     </>
   );
   const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); };
-  return { card, sheets, fermer };
+  return { card, sheets, fermer, ouvrir };
 }
 
 /* ── Journal d'activite d'une piece ──────────────────────────────────────────
@@ -8024,7 +8040,7 @@ function CvTemplateCard({ def, hass }) {
   );
 }
 
-function CvCard({ id, hass, label = null }) {
+function CvCard({ id, hass, label = null, onOpen = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
   const dom = cvDomain(id);
@@ -8041,6 +8057,10 @@ function CvCard({ id, hass, label = null }) {
   const teinteTxt = rgbHex || (dom === 'light' ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-warn2)' : 'var(--o-accent-soft)');
   const acc = on ? 'var(--o-accent)' : 'var(--o-text3)';
   const togglable = ['light', 'switch', 'input_boolean', 'fan'].indexOf(dom) >= 0;
+  // Cliquable comme la carte riche : la fiche du domaine s'ouvre (lumière réglable seulement — un simple toggle n'a pas de fiche).
+  const modes = a.supported_color_modes || [];
+  const reglable = dom !== 'light' || modes.length > 1 || a.brightness != null || modes.indexOf('brightness') >= 0 || modes.some(m => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww', 'color_temp'].indexOf(m) >= 0);
+  const ouvrable = !dead && !!onOpen && reglable && ['light', 'climate', 'cover', 'media_player'].indexOf(dom) >= 0;
   const runnable = { scene: ['scene', 'turn_on', 'Activer'], script: ['script', 'turn_on', tr('Exécuter')], button: ['button', 'press', 'Appuyer'], input_button: ['input_button', 'press', 'Appuyer'], automation: ['automation', 'trigger', tr('Exécuter')] }[dom];
   let stateTxt;
   if (dead) stateTxt = tr('Indisponible');
@@ -8056,34 +8076,37 @@ function CvCard({ id, hass, label = null }) {
   else if (runnable || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—'; // scene/script/button : état = date de dernière exécution
   else stateTxt = String(s);
   return (
-    <div className="o-piece" style={{ background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},var(--o-surfA))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? (teinte ? hx(teinte, .3) : 'rgba(var(--o-accent-rgb),.3)') : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, transition: 'all .25s' }}>
+    <div className="o-piece" role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? 'Ouvrir ' + name : undefined}
+      onClick={ouvrable ? () => onOpen(id) : undefined}
+      onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
+      style={{ background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},var(--o-surfA))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? (teinte ? hx(teinte, .3) : 'rgba(var(--o-accent-rgb),.3)') : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
         <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinte || 'var(--o-accent-soft)') : 'var(--o-text3)' }}><Fi i={ico} size={17} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
           <div style={{ fontSize: 11.5, fontWeight: 600, color: on ? (teinte ? teinteTxt : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stateTxt}</div>
         </div>
-        {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + name} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={() => call('homeassistant', on ? 'turn_off' : 'turn_on')} style={{ width: 44, height: 25, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
-        {runnable && !dead && <button onClick={() => call(runnable[0], runnable[1])} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
-        {dom === 'lock' && !dead && <button onClick={() => call('lock', s === 'locked' ? 'unlock' : 'lock')} style={{ padding: '7px 12px', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{s === 'locked' ? 'Déverrouiller' : 'Verrouiller'}</button>}
+        {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + name} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={(e) => { e.stopPropagation(); call('homeassistant', on ? 'turn_off' : 'turn_on'); }} style={{ width: 44, height: 25, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
+        {runnable && !dead && <button onClick={(e) => { e.stopPropagation(); call(runnable[0], runnable[1]); }} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
+        {dom === 'lock' && !dead && <button onClick={(e) => { e.stopPropagation(); call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ padding: '7px 12px', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{s === 'locked' ? 'Déverrouiller' : 'Verrouiller'}</button>}
       </div>
       {dom === 'climate' && !dead && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-          <button onClick={() => a.temperature != null && commander(hass, id, 'set_temperature', a.temperature - .5)} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>−</button>
+          <button onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>−</button>
           <span style={{ fontSize: 15, fontWeight: 800, minWidth: 52, textAlign: 'center' }}>{a.temperature != null ? a.temperature + '°' : '—'}</span>
-          <button onClick={() => a.temperature != null && commander(hass, id, 'set_temperature', a.temperature + .5)} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>+</button>
+          <button onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature + .5); }} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>+</button>
         </div>
       )}
       {dom === 'cover' && !dead && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           {[['open_cover', 'angle-up'], ['stop_cover', 'square'], ['close_cover', 'angle-down']].map(([svc, gi]) => (
-            <button key={svc} onClick={() => call('cover', svc)} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={gi} size={14} /></button>
+            <button key={svc} onClick={(e) => { e.stopPropagation(); call('cover', svc); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={gi} size={14} /></button>
           ))}
         </div>
       )}
       {dom === 'media_player' && !dead && s !== 'off' && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button onClick={() => commander(hass, id, 'play_pause')} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 12 }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={13} />{s === 'playing' ? 'Pause' : tr('Lecture')}</button>
+          <button onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 12 }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={13} />{s === 'playing' ? 'Pause' : tr('Lecture')}</button>
         </div>
       )}
     </div>
@@ -8368,7 +8391,7 @@ function CvHistory({ id, hass }) {
 /** La carte d'une entrée de vue custom, selon sa forme et son type. */
 function CvTyped({ x, hass, dc }) {
   if (cvEstTpl(x)) return <CvTemplateCard def={x} hass={hass} />;
-  if (typeof x === 'string') return <CvCard id={x} hass={hass} />;
+  if (typeof x === 'string') return <CvCard id={x} hass={hass} onOpen={dc.ouvrir} />;
   const { t, id } = x;
   if (t === 'riche') return dc.card(id);
   if (t === 'chiffre') return <CvBigSensor id={id} hass={hass} />;
@@ -8380,7 +8403,7 @@ function CvTyped({ x, hass, dc }) {
   if (t === 'agenda') return <CvAgenda id={id} hass={hass} />;
   if (t === 'alarme') return <CvAlarm id={id} hass={hass} />;
   if (t === 'journal') return <CvJournal id={id} hass={hass} />;
-  return <CvCard id={id} hass={hass} />;
+  return <CvCard id={id} hass={hass} onOpen={dc.ouvrir} />;
 }
 
 function CustomView({ cv, hass, edit = false, onSave }) {
