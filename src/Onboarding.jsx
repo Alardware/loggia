@@ -72,11 +72,23 @@ function Check({ on, onT, name, sub }) {
 
 export default function Onboarding({ runtime, onDone, onSkip }) {
   const [step, setStep] = useState(0);
-  const rooms = (runtime && runtime.resolved && runtime.resolved.rooms) || {};
+  const resolved = (runtime && runtime.resolved) || {};
+  const rooms = resolved.rooms || {};
   const suggested = rooms.suggested || [];
   const technical = rooms.technical || [];
   const totals = ((runtime && runtime.caps) || {}).totals || {};
   const views = (runtime && runtime.views) || {};
+  // Entites cles : l'alarme et la meteo se CHOISISSENT (une installation peut
+  // en avoir plusieurs), l'energie se CONSTATE (elle vient du tableau de bord
+  // Energie de Home Assistant, rien a designer).
+  const alarm = resolved.alarm || {};
+  const weather = resolved.weather || {};
+  const energy = resolved.energy || {};
+  const [alarme, setAlarme] = useState(alarm.available ? alarm.main : null);
+  const [meteo, setMeteo] = useState(weather.available ? weather.main : null);
+  const cles = !!((alarm.available && (alarm.choices || []).length) || (weather.available && (weather.choices || []).length) || energy.available);
+  const totalEtapes = cles ? 4 : 3;
+  const etapeAffichee = cles ? step + 1 : (step === 3 ? 3 : step + 1);
 
   // Zones proposees cochees d'office : c'est la lecture la plus probable, et
   // decocher est plus rapide que cocher sept fois. Si des pieces sont deja
@@ -100,10 +112,15 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
     const chosen = [...suggested, ...technical]
       .filter(a => picked[a.id])
       .map(a => ({ room: a.name, haid: { temp: a.temp || null, humidity: a.hum || null, co2: a.co2 || null } }));
+    // Les entites cles choisies partent avec les pieces. Une seule candidate,
+    // c'est quand meme un choix : l'ecrire fige la decouverte du jour.
+    const patch = {};
+    if (alarm.available && alarme) patch.loggia_alarm = alarme;
+    if (weather.available && meteo) patch.loggia_weather = meteo;
     // Rien à proposer et des pièces déjà enregistrées : on les garde telles
     // quelles. Un écran d'accueil ne doit jamais effacer une configuration.
-    if (!chosen.length) { onDone(known.length ? { loggia_rooms: known } : {}); return; }
-    onDone({ loggia_rooms: chosen });
+    if (!chosen.length) { onDone(known.length ? { ...patch, loggia_rooms: known } : patch); return; }
+    onDone({ ...patch, loggia_rooms: chosen });
   };
 
   const titre = (v) => !!VIEW_TITLES[v];
@@ -118,7 +135,7 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
           <span style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg,var(--o-ok),var(--o-accent))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#06121f', fontSize: 19 }}>O</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 800 }}>Loggia</div>
-            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', color: 'var(--o-text3)' }}>ÉTAPE {step + 1} SUR 3</div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', color: 'var(--o-text3)' }}>ÉTAPE {etapeAffichee} SUR {totalEtapes}</div>
           </div>
           <button onClick={onSkip} style={{ ...ghost, padding: '7px 13px', fontSize: 12 }}>Passer</button>
         </div>
@@ -177,14 +194,53 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <button onClick={() => setStep(2)} style={primary}>Continuer</button>
+              <button onClick={() => setStep(cles ? 2 : 3)} style={primary}>Continuer</button>
               <button onClick={() => setStep(0)} style={ghost}>Retour</button>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{nPicked} pièce{nPicked > 1 ? 's' : ''}</span>
             </div>
           </>
         )}
 
-        {step === 2 && (
+        {step === 2 && cles && (
+          <>
+            <div>
+              <h1 style={title}>{tr('Les entités clés')}</h1>
+              <div style={lead}>
+                {tr('Trois repères que le dashboard utilise partout. Tout se change plus tard dans Paramètres → Entités.')}
+              </div>
+            </div>
+            {alarm.available && (alarm.choices || []).length > 0 && (
+              <div style={{ ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', padding: '2px 2px 0' }}>{tr('ALARME')}</div>
+                {alarm.choices.map(c => (
+                  <Check key={c.id} on={alarme === c.id} onT={() => setAlarme(c.id)} name={c.name} sub={c.id} />
+                ))}
+              </div>
+            )}
+            {weather.available && (weather.choices || []).length > 0 && (
+              <div style={{ ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', padding: '2px 2px 0' }}>{tr('MÉTÉO')}</div>
+                {weather.choices.map(c => (
+                  <Check key={c.id} on={meteo === c.id} onT={() => setMeteo(c.id)} name={c.name} sub={c.id} />
+                ))}
+              </div>
+            )}
+            <div style={{ ...card, padding: '15px 17px' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('ÉNERGIE')}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.5 }}>
+                {energy.available
+                  ? tr('Suivie via le {src}', { src: energy.source }) + ((energy.devices || []).length ? ' · ' + tr('{n} appareils mesurés', { n: energy.devices.length }) : '') + '. ' + tr('Rien à désigner.')
+                  : tr("Rien de détecté — configure le tableau de bord Énergie de Home Assistant, Loggia s'en servira tout seul.")}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setStep(3)} style={primary}>Continuer</button>
+              <button onClick={() => setStep(1)} style={ghost}>Retour</button>
+            </div>
+          </>
+        )}
+
+        {step === 3 && (
           <>
             <div>
               <h1 style={title}>{tr("C'est prêt")}</h1>
@@ -206,7 +262,7 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
             )}
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={finish} style={primary}>Ouvrir mon dashboard</button>
-              <button onClick={() => setStep(1)} style={ghost}>Retour</button>
+              <button onClick={() => setStep(cles ? 2 : 1)} style={ghost}>Retour</button>
             </div>
           </>
         )}
