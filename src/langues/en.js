@@ -384,6 +384,8 @@ export default {
   // Etats d'aspirateur (table VACUUM_STATE_FR)
   'Nettoyage': 'Cleaning',
   'Sur la base': 'Docked',
+  'Tonte': 'Mowing',
+  'Lancer la tonte': 'Start mowing',
   'Sur base': 'Docked',
   'En pause': 'Paused',
   'En veille': 'Idle',
