@@ -974,7 +974,7 @@ const PIECES = [
   { name: 'Extérieur', bg: 'rgba(52,211,153,.16)', box: 36, rad: 11, icon: <Ico name="tree" color="var(--o-ok)" size={22} />, status: { kind: 'ext' }, temp: '6.2°', tc: 'var(--o-accent-soft)', hum: '84%', badge: 'Vent 12', bc: 'var(--o-text2)', bbg: 'var(--o-bd3)' },
 ];
 
-function PieceCard({ p, onOpen, compact = false, lights = null, mains = null, onToggleLights, idx = 0 }) {
+function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, mains = null, onToggleLights, idx = 0 }) {
   // Format compact (PC ≥1180) : compteur = luminaires non-« Ampoule » ; interrupteur = plafonnier(s) SEULS
   const tilt = useTilt(4);
   const [flashRef, flash] = useFlash();
@@ -996,6 +996,42 @@ function PieceCard({ p, onOpen, compact = false, lights = null, mains = null, on
   const ovRevertRef = useRef(0);
   useEffect(() => () => clearTimeout(ovRevertRef.current), []);
   const doToggle = () => { flash(p.tc || 'var(--o-accent)'); if (realOn != null) { setOv(!(ov != null ? ov : realOn)); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); } onToggleLights && onToggleLights(); };
+  if (chip) {
+    // Pièce COMPACTE : mêmes dimensions que la CvCard dense (une rangée de
+    // 88 px) — icône 34, nom + état dessous, switch 44×25 à droite.
+    const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
+    const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
+    const canToggle = !!(mains && mains.length && onToggleLights);
+    const temp = p.live && p.live.temp != null ? (Math.round(p.live.temp * 10) / 10).toLocaleString('fr-FR') + '°' : null;
+    const etat = lights ? (n > 0 ? (n > 1 ? tr('{n} lampes allumées', { n }) : tr('{n} lampe allumée', { n })) : tr('Tout éteint')) : '—';
+    return (
+      <div className="o-piece" onClick={onOpen} role="button" tabIndex={0}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
+        style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer',
+          background: on ? `linear-gradient(180deg,rgba(var(--o-gold-rgb),${lav(.12)}),transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
+          border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-gold-rgb),.3)' : 'var(--o-bd2)'),
+          boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
+        <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 'var(--o-radius,18px)', pointerEvents: 'none' }} />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.bg }}>{p.icon}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: on ? 'var(--o-warn)' : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {temp ? <span style={{ color: p.tc, fontWeight: 800 }}>{temp}</span> : null}{temp ? ' · ' : ''}{etat}
+            </div>
+          </div>
+          {canToggle && (
+            <span role="switch" aria-checked={on} aria-label={'Lumières ' + p.name} tabIndex={0}
+              onClick={e => { e.stopPropagation(); doToggle(); }}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
+              style={{ width: 44, height: 25, borderRadius: 13, position: 'relative', cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-bd1)', transition: 'background .25s' }}>
+              <span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
   if (compact) {
     const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
     const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
@@ -5260,8 +5296,29 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('{n} pièces', { n: inner.length })}</span>
             </div>
           );
-          const piecesGrid = (
-            <div className="grid-pieces" style={{ display: 'grid', gridTemplateColumns: v2 ? 'repeat(auto-fill,minmax(168px,1fr))' : wide ? 'repeat(auto-fill,minmax(205px,1fr))' : 'repeat(3,1fr)', gap: v2 ? 10 : wide ? 12 : 16 }}>
+          const piecesGrid = v2 ? (
+            // Deux densités comme partout : compacte = une rangée de 88 px
+            // (défaut), standard = deux rangées. Choix par pièce en édition
+            // (coin bas-droit), persisté avec l'agencement de l'accueil.
+            <div className="grid-chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 8 }}>
+              {inner.map((p, i) => {
+                const t = ((accL.tailles || {})[p.name] === 's') ? 's' : 'c';
+                return (
+                  <div key={p.name} className={t === 'c' ? 'o-chiprow1' : undefined} style={{ position: 'relative', minWidth: 0 }}>
+                    <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />
+                    {editMode && (
+                      <button aria-label={tr('Taille de la carte') + ' · ' + p.name}
+                        onClick={(e) => { e.stopPropagation(); saveAccL({ ...accL, tailles: { ...(accL.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } }); }}
+                        style={{ position: 'absolute', right: 7, bottom: 7, width: 26, height: 26, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.16)', border: '1px solid rgba(var(--o-accent-rgb),.35)', color: 'var(--o-accent-soft)', zIndex: 2 }}>
+                        <Fi i="resize" size={12} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid-pieces" style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(auto-fill,minmax(205px,1fr))' : 'repeat(3,1fr)', gap: wide ? 12 : 16 }}>
               {inner.map((p, i) => <PieceCard key={p.name} p={p} idx={i} compact lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />)}
             </div>
           );
