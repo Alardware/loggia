@@ -8800,7 +8800,10 @@ function MenuDeroulant({ icone = null, etiquette, valeur, options, surChoix, ren
     </div>
   );
 }
-function CvCard({ id, hass, label = null, onOpen = null }) {
+/* `dense` : la COMPACTE — une seule ligne (icône, nom, état) et le contrôle
+ * primaire à droite, JAMAIS de rangée de contrôles dessous. La pleine, elle,
+ * est la STANDARD : mêmes en-têtes, les contrôles du domaine en dessous. */
+function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
   const dom = cvDomain(id);
@@ -8854,35 +8857,65 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
         {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + name} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={(e) => { e.stopPropagation(); call('homeassistant', on ? 'turn_off' : 'turn_on'); }} style={{ width: 44, height: 25, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
         {runnable && !dead && <button onClick={(e) => { e.stopPropagation(); call(runnable[0], runnable[1]); }} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
         {dom === 'lock' && !dead && <button onClick={(e) => { e.stopPropagation(); call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ padding: '7px 12px', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{s === 'locked' ? 'Déverrouiller' : 'Verrouiller'}</button>}
+        {/* Compacte : le contrôle PRIMAIRE du domaine reste sur la ligne. */}
+        {dense && !dead && (() => {
+          const mini = { width: 30, height: 30, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, padding: 0 };
+          if (dom === 'climate') return (<>
+            <button style={mini} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }}>−</button>
+            <button style={mini} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature + .5); }}>+</button>
+          </>);
+          if (dom === 'cover') return (<>
+            <button style={mini} aria-label={tr('Ouvrir') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'open_cover'); }}><Fi i="angle-up" size={13} /></button>
+            <button style={mini} aria-label={tr('Fermer') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'close_cover'); }}><Fi i="angle-down" size={13} /></button>
+          </>);
+          if (dom === 'vacuum' || dom === 'lawn_mower') return (
+            <button style={mini} title={on ? tr('Renvoyer au dock') : (dom === 'vacuum' ? tr('Démarrer le nettoyage') : tr('Lancer la tonte'))} onClick={(e) => { e.stopPropagation(); call(dom, on ? (dom === 'vacuum' ? 'return_to_base' : 'dock') : (dom === 'vacuum' ? 'start' : 'start_mowing')); }}><Fi i={on ? 'home' : 'play'} size={12} /></button>
+          );
+          if (dom === 'media_player' && s !== 'off') return (
+            <button style={mini} aria-label={s === 'playing' ? 'Pause' : tr('Lecture')} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={12} /></button>
+          );
+          return null;
+        })()}
       </div>
       {/* Machines : l'illustration au centre, comme la fiche native. */}
-      {(dom === 'vacuum' || dom === 'lawn_mower') && !dead && (
+      {!dense && (dom === 'vacuum' || dom === 'lawn_mower') && !dead && (
         <div aria-hidden="true" style={{ display: 'flex', justifyContent: 'center', margin: '12px 0 2px' }}>
           <div style={{ width: 94, height: 94, backgroundImage: `url("${dom === 'vacuum' ? DEVICE_ART.vacuum : DEVICE_ART.mower}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', opacity: 0.55 }} />
         </div>
       )}
-      {dom === 'climate' && !dead && (
+      {/* Standard lumière : la luminosité en dessous — commit au relâcher. */}
+      {!dense && dom === 'light' && !dead && (a.brightness != null || (a.supported_color_modes || []).indexOf('brightness') >= 0) && (
+        <div className="o-cvrange" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+          <Fi i="bulb" size={13} color="var(--o-text3)" />
+          <input type="range" min="1" max="100" key={on ? Math.round((a.brightness || 0) / 255 * 100) : 0}
+            defaultValue={on ? Math.round((a.brightness || 0) / 255 * 100) : 0} aria-label={tr('{n} % de luminosité', { n: '' })}
+            onPointerUp={(e) => call('light', 'turn_on', { brightness_pct: +e.target.value })}
+            onKeyUp={(e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') call('light', 'turn_on', { brightness_pct: +e.target.value }); }}
+            style={{ flex: 1, minWidth: 0 }} />
+        </div>
+      )}
+      {!dense && dom === 'climate' && !dead && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
           <button onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>−</button>
           <span style={{ fontSize: 15, fontWeight: 800, minWidth: 52, textAlign: 'center' }}>{a.temperature != null ? a.temperature + '°' : '—'}</span>
           <button onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature + .5); }} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>+</button>
         </div>
       )}
-      {dom === 'cover' && !dead && (
+      {!dense && dom === 'cover' && !dead && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           {[['open_cover', 'angle-up'], ['stop_cover', 'square'], ['close_cover', 'angle-down']].map(([svc, gi]) => (
             <button key={svc} onClick={(e) => { e.stopPropagation(); call('cover', svc); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={gi} size={14} /></button>
           ))}
         </div>
       )}
-      {dom === 'media_player' && !dead && s !== 'off' && (
+      {!dense && dom === 'media_player' && !dead && s !== 'off' && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 12 }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={13} />{s === 'playing' ? 'Pause' : tr('Lecture')}</button>
         </div>
       )}
       {/* Machines : les MÊMES contrôles que la fiche native Home Assistant,
         * dérivés de supported_features — aucun script, aucune configuration. */}
-      {(dom === 'vacuum' || dom === 'lawn_mower') && !dead && (() => {
+      {!dense && (dom === 'vacuum' || dom === 'lawn_mower') && !dead && (() => {
         const f = a.supported_features || 0;
         const btns = [];
         if (dom === 'vacuum') {
@@ -8904,18 +8937,18 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
           </div>
         );
       })()}
-      {dom === 'vacuum' && !dead && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
+      {!dense && dom === 'vacuum' && !dead && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
           <MenuDeroulant icone="wind" etiquette={tr('Vitesse')} valeur={a.fan_speed} options={a.fan_speed_list}
             rendre={(v) => FAN_FR()[v] || v} surChoix={(v) => call('vacuum', 'set_fan_speed', { fan_speed: v })} />
         </div>
       )}
-      {dom === 'valve' && !dead && (
+      {!dense && dom === 'valve' && !dead && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button onClick={(e) => { e.stopPropagation(); call('valve', on ? 'close_valve' : 'open_valve'); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>{on ? tr('Fermer') : tr('Ouvrir')}</button>
         </div>
       )}
-      <Epingles pourId={id} hass={hass} />
+      {!dense && <Epingles pourId={id} hass={hass} />}
     </div>
   );
 }
@@ -8939,20 +8972,38 @@ const PlugIcon = ({ size = 19 }) => (
   </svg>
 );
 
-/** Les cartes qui vont à une entité, la première étant proposée en premier. */
+/** Les cartes qui vont à une entité, la première étant proposée en premier.
+ * Partout : COMPACTE (une ligne, contrôle primaire, rien dessous) et STANDARD
+ * (les contrôles du domaine en dessous) — puis les spécialisées du domaine. */
 function cvTypesPour(id) {
   const d = String(id).split('.')[0];
   if (d === 'light' || d === 'switch' || d === 'fan') return ['compacte', 'riche', 'gros', 'journal'];
-  if (d === 'cover' || d === 'climate' || d === 'media_player') return ['compacte', 'riche', 'journal'];
+  if (d === 'cover' || d === 'climate' || d === 'media_player' || d === 'vacuum' || d === 'lawn_mower' || d === 'valve' || d === 'humidifier' || d === 'lock' || d === 'siren' || d === 'water_heater') return ['compacte', 'riche', 'journal'];
+  if (d === 'scene' || d === 'script' || d === 'button' || d === 'input_button' || d === 'automation') return ['compacte', 'riche'];
   if (d === 'sensor') return ['compacte', 'chiffre', 'jauge', 'graph', 'journal'];
   if (d === 'binary_sensor') return ['compacte', 'chiffre', 'journal'];
   if (d === 'person') return ['compacte', 'personne', 'journal'];
   if (d === 'weather') return ['compacte', 'meteo'];
   if (d === 'calendar') return ['agenda', 'compacte'];
-  if (d === 'alarm_control_panel') return ['compacte', 'alarme'];
-  return ['compacte'];
+  if (d === 'alarm_control_panel') return ['compacte', 'alarme', 'riche'];
+  return ['compacte', 'riche'];
 }
-const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme') });
+const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge') });
+
+/* Horloge : l'heure de la maison, sans entité — la carte se suffit. */
+function CvClock() {
+  const [, tic] = useState(0);
+  useEffect(() => { const iv = setInterval(() => tic(n => n + 1), 15000); return () => clearInterval(iv); }, []);
+  const d = new Date();
+  const h = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+  const jour = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  return (
+    <div style={{ ...CV_CADRE, alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+      <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{h}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, textTransform: 'capitalize' }}>{jour}</div>
+    </div>
+  );
+}
 
 /* Grand chiffre : la valeur en très grand, l'unité, le nom. Un binaire dit son
  * état en toutes lettres ; la richesse d'un capteur, c'est sa lisibilité. */
@@ -9200,13 +9251,17 @@ function CvHistory({ id, hass }) {
 /** La carte d'une entrée de vue custom, selon sa forme et son type. */
 function CvTyped({ x, hass, dc }) {
   if (cvEstTpl(x)) return <CvTemplateCard def={x} hass={hass} />;
-  if (typeof x === 'string') return <CvCard id={x} hass={hass} onOpen={dc.ouvrir} />;
+  // La chaîne nue EST la compacte : une ligne, le contrôle primaire, rien dessous.
+  if (typeof x === 'string') return <CvCard id={x} hass={hass} onOpen={dc.ouvrir} dense />;
   const { t, id } = x;
   // Les cartes capteur ouvrent la fiche 24 h au clic — elles n'ont aucun contrôle interne à protéger.
   const ouvre = (comp) => String(id).split('.')[0] === 'sensor'
     ? <div role="button" tabIndex={0} aria-label={'Ouvrir ' + id} onClick={() => dc.ouvrir(id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dc.ouvrir(id); } }} style={{ height: '100%', cursor: 'pointer' }}>{comp}</div>
     : comp;
-  if (t === 'riche') return dc.card(id);
+  if (t === 'compacte') return <CvCard id={id} hass={hass} onOpen={dc.ouvrir} dense />;
+  // La STANDARD : mêmes en-têtes que la compacte, les contrôles du domaine dessous.
+  if (t === 'riche') return <CvCard id={id} hass={hass} onOpen={dc.ouvrir} />;
+  if (t === 'horloge') return <CvClock />;
   if (t === 'chiffre') return ouvre(<CvBigSensor id={id} hass={hass} />);
   if (t === 'jauge') return ouvre(<CvGauge id={id} hass={hass} />);
   if (t === 'graph') return ouvre(<CvHistory id={id} hass={hass} />);
@@ -9276,8 +9331,19 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   const cvW = (x) => (x && typeof x === 'object' && x.w === 2) ? 2 : 1;
   /* Hauteur en RANGÉES de la grille dense : une compacte tient sur une, une
    * standard sur deux — deux compactes s'empilent donc à côté d'une standard. */
-  const CV_ROWS = { compacte: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 3, agenda: 3, journal: 3 };
-  const cvRowsDe = (x) => typeof x === 'string' ? 1 : (CV_ROWS[x.t] || 2);
+  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 3, agenda: 3, journal: 3 };
+  const cvRowsDe = (x) => {
+    if (typeof x === 'string') return 1;
+    const d = String(x.id || '').split('.')[0];
+    if (x.t === 'riche') {
+      // La hauteur suit les contrôles du domaine : les machines (illustration +
+      // boutons + vitesse) sont hautes, un simple toggle ne l'est pas.
+      if (d === 'vacuum' || d === 'lawn_mower') return 3;
+      if (['climate', 'cover', 'media_player', 'valve', 'light'].indexOf(d) >= 0) return 2;
+      return 1;
+    }
+    return CV_ROWS[x.t] || 2;
+  };
   const basculerW = (x) => {
     const suiv = typeof x === 'string'
       ? { t: 'compacte', id: x, w: 2 }
@@ -9376,6 +9442,10 @@ function CustomView({ cv, hass, edit = false, onSave }) {
               })() : (<>
               <EntPicker hass={hass} exclude={[]} onPick={(id) => { if (cvTypesPour(id).length > 1) setPickCarte(id); else setEnts([...cv.ents, id]); }} autoFocus />
               <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Choisis une entité, puis la carte qui lui va.')}</div>
+              <button onClick={() => { setEnts([...cv.ents, { t: 'horloge', id: 'horloge:' + Date.now() }]); close(); }}
+                style={{ marginTop: 14, padding: '9px 14px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Fi i="clock" size={13} />{tr('Ajouter une horloge')}
+              </button>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '18px 0 8px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
               <TplForm hass={hass} onAdd={(t) => setEnts([...cv.ents, t])} />
               </>)}

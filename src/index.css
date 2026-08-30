@@ -103,7 +103,7 @@ html.loggia-frosted body [style*="--o-surfA"] [style*="--o-surfA"] { -webkit-bac
 /* Vue custom : grille DENSE — une compacte occupe une rangée, une standard
  * deux ; deux compactes s'empilent à côté d'une standard. Sur mobile, deux
  * colonnes pour que compactes et largeur double gardent un sens. */
-.grid-custom { grid-auto-flow: row dense; grid-auto-rows: 96px; }
+.grid-custom { grid-auto-flow: row dense; grid-auto-rows: 88px; }
 @media (max-width: 640px) { .grid-custom { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
 
 /* Mobile : le contrôle (Seg large, champ…) écrasait la colonne de texte à un
@@ -113,9 +113,9 @@ html.loggia-frosted body [style*="--o-surfA"] [style*="--o-surfA"] { -webkit-bac
   .o-optrow { flex-wrap: wrap !important; }
   .o-optrow > div:first-child { flex: 1 1 100% !important; max-width: none !important; }
 }
-.o-optrow input[type="range"] { height: 4px; border-radius: 3px; background: var(--o-s2); appearance: none; -webkit-appearance: none; }
-.o-optrow input[type="range"]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: var(--o-accent); border: none; cursor: pointer; }
-.o-optrow input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; background: var(--o-accent); border: none; cursor: pointer; }
+.o-optrow input[type="range"], .o-cvrange input[type="range"] { height: 4px; border-radius: 3px; background: var(--o-s2); appearance: none; -webkit-appearance: none; }
+.o-optrow input[type="range"]::-webkit-slider-thumb, .o-cvrange input[type="range"]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: var(--o-accent); border: none; cursor: pointer; }
+.o-optrow input[type="range"]::-moz-range-thumb, .o-cvrange input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; background: var(--o-accent); border: none; cursor: pointer; }
 
 @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.45; transform:scale(.8); } }
 /* Mini-scènes météo de la vignette d'accueil : transform/opacity seulement,
