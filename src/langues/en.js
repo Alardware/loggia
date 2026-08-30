@@ -397,6 +397,7 @@ export default {
   'LARGEUR': 'WIDTH',
   'CARTE': 'CARD',
   'Horloge': 'Clock',
+  'Prochaine ration': 'Next meal',
   'Ajouter une horloge': 'Add a clock',
   '« Auto » : le rendu habituel de cette vue.': '"Auto": the usual rendering of this view.',
   'Simple': 'Single',

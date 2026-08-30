@@ -1459,7 +1459,7 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
  * volets et radiateurs : icône en haut à gauche, batterie en haut à droite,
  * nom et état SOUS l'icône, les boutons ronds en bas. La vitesse d'aspiration
  * ne vit que dans la fiche. */
-function RoomMachineCard({ id, hass, onOpen, label = null }) {
+function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const dom = String(id).split('.')[0];
@@ -1499,11 +1499,66 @@ function RoomMachineCard({ id, hass, onOpen, label = null }) {
         <div style={RM_NAME}>{label || a.friendly_name || id}</div>
         <div style={{ ...RM_SUB, color: actif ? 'var(--o-ok)' : 'var(--o-text3)' }}>{mort ? tr('Indisponible') : etat}</div>
         {btns.length > 0 && !mort && (
-          <div style={{ display: 'flex', gap: 9, marginTop: 11 }}>
+          <div style={{ display: 'flex', gap: 7, marginTop: 11 }}>
             {btns.map(([gi, svc, lbl2], bi) => (
-              <button key={svc} title={lbl2} aria-label={lbl2} onClick={(e) => { e.stopPropagation(); call(svc); }}
-                style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={13} /></button>
+              <button key={svc} title={lbl2} aria-label={lbl2} onClick={(e) => { e.stopPropagation(); call(svc); }} className="o-rmbtn"
+                style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 6px', ...(bi === 0 ? { background: 'var(--o-accent)', border: '1px solid transparent', color: '#fff' } : {}) }}><Fi i={gi} size={13} /></button>
             ))}
+          </div>
+        )}
+        {extra}
+      </div>
+    </div>
+  );
+}
+
+/* Distributeur de croquettes, même gabarit : patte en haut à gauche, RÉSERVOIR
+ * en haut à droite, nom et prochaine ration sous l'icône, Distribuer en bas. */
+function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onOpen, extra = null }) {
+  return (
+    <div className="o-rmcard" role="button" tabIndex={0} aria-label={'Ouvrir ' + nom}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
+      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={RM_ICO('rgba(255,206,115,.14)', '#ffce73')}><Fi i="paw" size={16} /></span>
+        {pct != null && <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: pct < 25 ? 'var(--o-bad)' : 'var(--o-text2)' }}>{pct}%</span>}
+      </div>
+      <div>
+        <div style={RM_NAME}>{nom}</div>
+        <div style={RM_SUB}>{sub || prochaine || '—'}</div>
+        {onFeed && (
+          <div style={{ display: 'flex', gap: 7, marginTop: 11 }}>
+            <button className="o-rmbtn" onClick={(e) => { e.stopPropagation(); onFeed(); }}
+              style={{ ...RM_BTN, background: 'var(--o-accent)', border: '1px solid transparent', color: '#fff' }}>{tr('Distribuer une ration')}</button>
+          </div>
+        )}
+        {extra}
+      </div>
+    </div>
+  );
+}
+
+/* Capteur de plante, même gabarit : pousse en haut à gauche, HUMIDITÉ en haut
+ * à droite (à la couleur du verdict), nom et verdict sous l'icône. */
+function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, onOpen }) {
+  return (
+    <div className="o-rmcard" role="button" tabIndex={0} aria-label={'Ouvrir ' + nom}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
+      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={RM_ICO('rgba(52,211,153,.14)', 'var(--o-ok)')}><Fi i="seedling" size={16} /></span>
+        {hum != null && <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: verdictCol || 'var(--o-text2)' }}>{Math.round(hum)}%</span>}
+      </div>
+      <div>
+        <div style={RM_NAME}>{nom}</div>
+        <div style={{ ...RM_SUB, color: verdictCol || 'var(--o-text3)' }}>{verdict || sub || '—'}</div>
+        <div style={{ height: 4, borderRadius: 2, background: 'var(--o-bd1)', marginTop: 10, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: Math.max(0, Math.min(100, hum || 0)) + '%', background: verdictCol || 'var(--o-ok)', borderRadius: 2, transition: 'width .3s' }} />
+        </div>
+        {(lux != null || cond != null) && (
+          <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)' }}>
+            {lux != null && <span><Fi i="brightness" size={10} /> {lux}</span>}
+            {cond != null && <span>{cond}</span>}
           </div>
         )}
       </div>
@@ -4092,21 +4147,27 @@ function ObjetsView({ hass, onNav, edit = false }) {
             const med = k.indexOf('media:') === 0 ? medias.find(m => 'media:' + m.p.haid === k) : null;
             let carte;
             if (k === 'obj:vacuum') {
-              carte = <ObjCard idx={i} icon={<Ico name="vacuum" size={19} color="var(--o-ok)" />} iconBg="rgba(52,211,153,.16)" art={DEVICE_ART.vacuum}
-                name={nomDe(k)} iconActive={vacCleaning} sub={nomHA(objVacMain)} status={vacEtat} statusColor={vacCleaning ? 'var(--o-accent-soft)' : 'var(--o-text2)'}
-                barLabel="Batterie" barPct={vacBat} barColor={batCol(vacBat)} barText={vacBat != null ? Math.round(vacBat) + '%' : '—'}
-                actionLabel={vacCleaning ? tr('Renvoyer au dock') : tr('Démarrer le nettoyage')}
-                onAction={() => objVacRun(vacCleaning ? 'retour_base' : 'nettoyer_tout', vacCleaning ? 'return_to_base' : 'start')}
-                onOpen={() => setSheet({ type: 'vac' })}
-                extra={objVacMain ? <Epingles pourId={objVacMain} hass={hass} avecAncre /> : null} />;
+              // Le gabarit maison, comme partout — l'ancienne ObjCard reste le
+              // filet des installations sans entité résolue.
+              carte = objVacMain
+                ? <RoomMachineCard id={objVacMain} hass={hass} label={nomDe(k)} onOpen={() => setSheet({ type: 'vac' })}
+                    extra={<Epingles pourId={objVacMain} hass={hass} avecAncre />} />
+                : <ObjCard idx={i} icon={<Ico name="vacuum" size={19} color="var(--o-ok)" />} iconBg="rgba(52,211,153,.16)"
+                    name={nomDe(k)} iconActive={vacCleaning} sub={nomHA(objVacMain)} status={vacEtat} statusColor={vacCleaning ? 'var(--o-accent-soft)' : 'var(--o-text2)'}
+                    barLabel="Batterie" barPct={vacBat} barColor={batCol(vacBat)} barText={vacBat != null ? Math.round(vacBat) + '%' : '—'}
+                    actionLabel={vacCleaning ? tr('Renvoyer au dock') : tr('Démarrer le nettoyage')}
+                    onAction={() => objVacRun(vacCleaning ? 'retour_base' : 'nettoyer_tout', vacCleaning ? 'return_to_base' : 'start')}
+                    onOpen={() => setSheet({ type: 'vac' })} />;
             } else if (k === 'obj:mower') {
-              carte = <ObjCard idx={i} icon={<Ico name="mower" size={19} color="#a3e635" />} iconBg="rgba(163,230,53,.14)" art={DEVICE_ART.mower}
-                name={nomDe(k)} iconActive={lubaMow} sub={nomHA(lubaId)} status={lubaTxt} statusColor={lubaMow ? 'var(--o-ok)' : 'var(--o-text2)'}
-                barLabel="Batterie" barPct={lubaBat} barColor={batCol(lubaBat)} barText={lubaBat != null ? Math.round(lubaBat) + '%' : '—'}
-                actionLabel={lubaMow ? 'Renvoyer à la base' : 'Lancer la tonte'}
-                onAction={() => call('lawn_mower', lubaMow ? 'dock' : 'start_mowing', { entity_id: lubaId })}
-                onOpen={() => setSheet({ type: 'luba' })}
-                extra={lubaId ? <Epingles pourId={lubaId} hass={hass} avecAncre /> : null} />;
+              carte = lubaId
+                ? <RoomMachineCard id={lubaId} hass={hass} label={nomDe(k)} onOpen={() => setSheet({ type: 'luba' })}
+                    extra={<Epingles pourId={lubaId} hass={hass} avecAncre />} />
+                : <ObjCard idx={i} icon={<Ico name="mower" size={19} color="#a3e635" />} iconBg="rgba(163,230,53,.14)"
+                    name={nomDe(k)} iconActive={lubaMow} sub={nomHA(lubaId)} status={lubaTxt} statusColor={lubaMow ? 'var(--o-ok)' : 'var(--o-text2)'}
+                    barLabel="Batterie" barPct={lubaBat} barColor={batCol(lubaBat)} barText={lubaBat != null ? Math.round(lubaBat) + '%' : '—'}
+                    actionLabel={lubaMow ? 'Renvoyer à la base' : 'Lancer la tonte'}
+                    onAction={() => call('lawn_mower', lubaMow ? 'dock' : 'start_mowing', { entity_id: lubaId })}
+                    onOpen={() => setSheet({ type: 'luba' })} />;
             } else if (k === 'obj:feeder') {
               /* Le « distribuer » vient de l'APPAREIL : un feeder Zigbee
                * standard expose un select `feed` dont l'option START lance une
@@ -4120,13 +4181,12 @@ function ObjetsView({ hass, onNav, edit = false }) {
                 return fid ? { id: fid, opt: S[fid].attributes.options.find(o => /^(start|feed)$/i.test(o)) } : null;
               })();
               const sc = ff ? null : feederScript(hass, loggiaEnt('feeder', null));
-              carte = <ObjCard idx={i} icon={<Fi i="paw" size={17} color="#ffce73" />} iconBg="rgba(255,206,115,.14)" art={DEVICE_ART.feeder}
-                name={nomDe(k)} sub={nomHA(croqHaids().reservoir)} status={nextMeal ? ('Prochaine ration ' + nextMeal.time) : 'Programme terminé'} statusColor="var(--o-text2)"
-                barLabel={tr('Réservoir')} barPct={croqPct} barColor={croqPct < 25 ? '#f87171' : '#ffce73'} barText={croqPct + '%'} barLiquid
-                actionLabel={(ff || sc) ? 'Distribuer une ration' : null}
-                onAction={() => { if (ff) call('select', 'select_option', { entity_id: ff.id, option: ff.opt }); else if (sc) call('script', 'turn_on', { entity_id: sc }); }}
+              const fidEp = (loggiaEnt('feeder', null) || {}).haid || (S ? Object.keys(S).find(x => x.indexOf('number.') === 0 && /serving_size$/.test(x)) : null);
+              carte = <RoomFeederCard nom={nomDe(k)} pct={croqPct}
+                prochaine={nextMeal ? (tr('Prochaine ration') + ' ' + nextMeal.time) : 'Programme terminé'}
+                onFeed={(ff || sc) ? () => { if (ff) call('select', 'select_option', { entity_id: ff.id, option: ff.opt }); else if (sc) call('script', 'turn_on', { entity_id: sc }); } : null}
                 onOpen={() => setSheet({ type: 'croq' })}
-                extra={(() => { const fid = (loggiaEnt('feeder', null) || {}).haid || (S ? Object.keys(S).find(x => x.indexOf('number.') === 0 && /serving_size$/.test(x)) : null); return fid ? <Epingles pourId={fid} hass={hass} avecAncre /> : null; })()} />;
+                extra={fidEp ? <Epingles pourId={fidEp} hass={hass} avecAncre /> : null} />;
             } else if (med) {
               const { p, np } = med;
               carte = <ObjCard idx={i}
@@ -4141,7 +4201,10 @@ function ObjetsView({ hass, onNav, edit = false }) {
                 onOpen={() => setSheet({ type: 'media', id: p.haid })} />;
             } else if (k.indexOf('plant:') === 0) {
               const pl = plantDe(k);
-              carte = pl ? <PlantObjCard pl={{ ...pl, name: nomDe(k) }} pi={i} v={plantVerdict(pl.hum)} batCol={batCol} fmtV={fmtV} onOpen={() => setSheet({ type: 'plant', pl })} /> : null;
+              const v = pl ? plantVerdict(pl.hum) : null;
+              carte = pl ? <RoomPlantCard nom={nomDe(k)} sub={pl.room} hum={pl.hum} verdict={v.t} verdictCol={v.c}
+                lux={pl.lux != null ? fmtV(pl.lux, ' lx') : null} cond={pl.cond != null ? fmtV(pl.cond, ' µS') : null}
+                onOpen={() => setSheet({ type: 'plant', pl })} /> : null;
             } else {
               // Ajout libre : la carte du catalogue si un type est choisi,
               // sinon la générique — même personnalisation que les vues custom.
