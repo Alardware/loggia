@@ -4784,7 +4784,34 @@ const ACC_MAIN = ['scenes', 'pieces', 'cameras'];
 const ACC_RAIL = ['etats', 'rappels', 'agenda'];
 const ACC_NOMS = () => ({ scenes: tr('Scènes rapides'), pieces: tr('Pièces'), cameras: tr('Caméras'), etats: tr('En cours'), rappels: tr('Rappels'), agenda: tr('Agenda') });
 
+/* FAVORIS de l'accueil (nouvel accueil) : les épingles de la maison, en chips
+ * compactes 1 tap — la même CvCard dense que partout, la fiche au tap. */
+function FavorisAccueil({ hass }) {
+  const dc = useDomainCards(hass);
+  const S = (hass && hass.states) || {};
+  const eps = lireEpingles().filter(id => S[id]);
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={sectionTitle}>{tr('Favoris')}</div>
+        {eps.length > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{eps.length}</span>}
+      </div>
+      {eps.length === 0
+        ? <div style={{ padding: '14px 16px', borderRadius: 14, background: 'var(--o-s2)', border: '1px dashed var(--o-bd1)', fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Épingle des entités depuis la fiche d’un appareil (la punaise) : elles apparaîtront ici.')}</div>
+        : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 10 }}>
+            {eps.slice(0, 12).map(id => <CvCard key={id} id={id} hass={hass} onOpen={dc.ouvrir} dense />)}
+          </div>}
+      {dc.sheets}
+    </div>
+  );
+}
+
 function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onOpenMeteo }) {
+  /* Aperçu du NOUVEL ACCUEIL (Paramètres → Apparence, par appareil) : la
+   * bannière perd sa rangée de métriques (les résumés du rail les portent),
+   * les FAVORIS (épingles) arrivent sous la bannière, les pièces se resserrent.
+   * Relu au montage — le toggle vit dans Paramètres, on revient ensuite ici. */
+  const v2 = (() => { try { return JSON.parse(localStorage.getItem('loggia-accueil2') || 'false') === true; } catch (e) { return false; } })();
   const [override, setOverride] = useState(null);
   const agenda = useAgenda(accueil && accueil.hass);
   /* ── L'accueil se compose : ordre et visibilité des sections ───────────────
@@ -5060,7 +5087,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               </div>
             </div>
           </div>
-          <div style={{ position: 'relative', display: 'flex', gap: 10, marginTop: 38, overflowX: 'auto', paddingBottom: 4 }}>
+          {!v2 && <div style={{ position: 'relative', display: 'flex', gap: 10, marginTop: 38, overflowX: 'auto', paddingBottom: 4 }}>
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
               <Ico name="bolt" color="var(--o-ok)" size={17} />
               <div><div style={{ fontSize: 16, fontWeight: 800, color: a && a.metricExport ? a.metricExport.color : 'var(--o-ok)', lineHeight: 1.1 }}>{a && a.metricExport ? <Num v={a.metricExport.raw} prefix={a.metricExport.sign} fmt={fmtWatts} /> : <Skel w={64} h={16} />}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a && a.metricExport ? a.metricExport.label: tr('EXPORT RÉSEAU')}</div></div>
@@ -5078,8 +5105,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
               <div style={{ fontSize: 15, fontWeight: 800 }}>{a ? <Num v={a.lightsOn} /> : <Skel w={18} h={15} />} <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {a ? a.lightsTotal : <Skel w={14} h={11} />} {tr('prés.')}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('LUMIÈRES ALLUMÉES')}</div>
             </div>
-          </div>
+          </div>}
         </div>
+
+        {v2 && <FavorisAccueil hass={dashHass} />}
 
         {/* SECTIONS PERSONNALISABLES — scènes rapides, pièces, caméras, et le rail.
             PC ≥1180 : rail accolé à droite. Mobile/tablette : empilement. */}
@@ -5092,7 +5121,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             </div>
           );
           const piecesGrid = (
-            <div className="grid-pieces" style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(auto-fill,minmax(205px,1fr))' : 'repeat(3,1fr)', gap: wide ? 12 : 16 }}>
+            <div className="grid-pieces" style={{ display: 'grid', gridTemplateColumns: v2 ? 'repeat(auto-fill,minmax(168px,1fr))' : wide ? 'repeat(auto-fill,minmax(205px,1fr))' : 'repeat(3,1fr)', gap: v2 ? 10 : wide ? 12 : 16 }}>
               {inner.map((p, i) => <PieceCard key={p.name} p={p} idx={i} compact lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />)}
             </div>
           );
