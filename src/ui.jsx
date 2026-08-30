@@ -70,8 +70,10 @@ export const HIDDEN_VIEWS = () => [
   { label: tr('Lumières'), vid: 'lumieres', icon: 'bulb', c: '#ffce73' },
   { label: tr('Climat'), vid: 'climat', icon: 'thermometer-half', c: '#ff8a4c' },
   { label: tr('Volets'), vid: 'volets', icon: 'blinds', c: 'var(--o-accent-soft)' },
-  { label: tr('Aspirateur'), vid: 'aspirateur', icon: 'broom', c: 'var(--o-accent-soft)' },
-  { label: tr('Croquettes'), vid: 'croquettes', icon: 'paw', c: '#ffce73' },
+  /* Aspirateur et Croquettes ont quitté la liste le 30/08/2026 : la FICHE
+   * APPAREIL UNIVERSELLE (tap sur la carte, vue Objets) montre tout ce que
+   * l'appareil expose — la vue dédiée ne racontait rien de plus. Les routes
+   * restent : un appareil qui a mémorisé cette vue l'affiche encore. */
   { label: tr('Médias'), vid: 'medias', icon: 'tv-music', c: 'var(--o-purple)' },
   { label: tr('Météo'), vid: 'meteo', icon: 'cloud-sun', c: 'var(--o-cyan)' },
 ];

@@ -2622,6 +2622,158 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
  * feuilles voyagent avec, sinon chaque vue redeclarerait les cinq etats.
  *
  */
+/* ── FICHE APPAREIL UNIVERSELLE ──────────────────────────────────────────────
+ * Une seule fiche pour n'importe quel appareil, chez n'importe qui. Rien n'est
+ * écrit pour un modèle précis : les entités SŒURS du même appareil (registre)
+ * se rendent par leur domaine — number = stepper, select = chips, switch =
+ * interrupteur, button = bouton, sensor = ligne de valeur. Les entités de
+ * catégorie `config` forment le bloc Réglages, les `diagnostic` se replient.
+ * Les domaines pilotables (lumière, climat, volet…) gardent leur carte riche
+ * en tête : c'est CvCard qui sait déjà les piloter. */
+const FICHE_PILOTABLES = ['climate', 'vacuum', 'lawn_mower', 'light', 'cover', 'media_player', 'alarm_control_panel', 'lock', 'fan', 'switch', 'valve', 'humidifier', 'water_heater'];
+
+/** Une entité quelconque, rendue par son domaine — le legо de la fiche. */
+function LigneEntite({ id, hass, nom = null }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const dom = String(id).split('.')[0];
+  const label = nom || (a.friendly_name || id).replace(/^[^:]*: ?/, '');
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
+  const mort = !st || st.state === 'unavailable';
+  const ligne = { display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: mort ? .5 : 1 };
+  const lbl = <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>;
+  if (dom === 'switch' || dom === 'input_boolean' || dom === 'siren') {
+    const on = !!st && st.state === 'on';
+    return (
+      <div style={ligne}>{lbl}
+        <span role="switch" aria-checked={on} tabIndex={0} aria-label={label} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', 'toggle'); } }} onClick={() => call('homeassistant', 'toggle')} style={{ width: 42, height: 24, borderRadius: 12, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .3s cubic-bezier(.34,1.56,.64,1)' }} /></span>
+      </div>
+    );
+  }
+  if (dom === 'number' || dom === 'input_number') {
+    const v = st ? parseFloat(st.state) : NaN;
+    const pas = a.step != null ? +a.step : 1;
+    const borne = (x) => Math.min(a.max != null ? +a.max : Infinity, Math.max(a.min != null ? +a.min : -Infinity, x));
+    const poser = (x) => call(dom, 'set_value', { value: Math.round(borne(x) * 100) / 100 });
+    const btn = { width: 30, height: 30, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer', flexShrink: 0 };
+    return (
+      <div style={ligne}>{lbl}
+        <button style={btn} aria-label={'− ' + label} onClick={() => !isNaN(v) && poser(v - pas)}>−</button>
+        <span style={{ minWidth: 56, textAlign: 'center', fontSize: 13.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{isNaN(v) ? '—' : Math.round(v * 100) / 100}{a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}</span>
+        <button style={btn} aria-label={'+ ' + label} onClick={() => !isNaN(v) && poser(v + pas)}>+</button>
+      </div>
+    );
+  }
+  if (dom === 'select' || dom === 'input_select') {
+    const opts = Array.isArray(a.options) ? a.options : [];
+    return (
+      <div style={{ ...ligne, flexWrap: 'wrap' }}>{lbl}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '70%' }}>
+          {opts.slice(0, 8).map(o => { const on = st && st.state === o; return (
+            <button key={o} onClick={() => call(dom, 'select_option', { option: o })} aria-pressed={on}
+              style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{o}</button>
+          ); })}
+        </div>
+      </div>
+    );
+  }
+  if (dom === 'button' || dom === 'input_button' || dom === 'scene' || dom === 'script') {
+    const svc = dom === 'scene' || dom === 'script' ? [dom, 'turn_on'] : [dom, 'press'];
+    return (
+      <div style={ligne}>{lbl}
+        <button onClick={() => call(svc[0], svc[1])} style={{ padding: '7px 13px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Exécuter')}</button>
+      </div>
+    );
+  }
+  if (dom === 'binary_sensor') {
+    const on = !!st && st.state === 'on';
+    const grave = ['smoke', 'gas', 'moisture', 'problem', 'safety', 'carbon_monoxide'].indexOf(a.device_class) >= 0;
+    return (
+      <div style={ligne}>{lbl}
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: on ? (grave ? 'var(--o-bad)' : 'var(--o-warn)') : 'var(--o-text3)' }}>{on ? tr('Détecté') : 'RAS'}</span>
+      </div>
+    );
+  }
+  // sensor et le reste : la valeur, lisible. Une valeur VIDE ou inconnue ne
+  // mérite pas sa ligne — le vide n'informe personne.
+  const brut = st ? st.state : null;
+  if (brut === '' || brut === 'unknown' || brut == null) return null;
+  const n = parseFloat(brut);
+  const rel = /^\d{4}-\d\d-\d\dT/.test(String(brut)) ? relTime(brut) : null;
+  const bat = a.device_class === 'battery' && !isNaN(n);
+  return (
+    <div style={ligne}>{lbl}
+      <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: bat ? (n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-ok)') : 'var(--o-text)' }}>
+        {mort ? '—' : rel || (isNaN(n) ? String(brut) : Math.round(n * 100) / 100)}{!rel && a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}
+      </span>
+    </div>
+  );
+}
+
+function FicheAppareil({ id, hass, onClose }) {
+  const { index } = useLoggia();
+  const dc = useDomainCards(hass);
+  const [diagOuvert, setDiagOuvert] = useState(false);
+  const S = (hass && hass.states) || {};
+  const meta = index && index.entityMeta ? index.entityMeta.get(id) : null;
+  const devId = meta && meta.deviceId;
+  // Toutes les entités vivantes du même appareil ; sans registre, l'entité seule.
+  const soeurs = [];
+  if (devId && index && index.entityMeta) {
+    index.entityMeta.forEach((m, eid) => {
+      if (m.deviceId === devId && S[eid] && !m.hidden && !m.disabled && eid.indexOf('update.') !== 0 && eid.indexOf('device_tracker.') !== 0) soeurs.push({ id: eid, m });
+    });
+  }
+  if (!soeurs.length) soeurs.push({ id, m: meta || {} });
+  const domDe = (e) => String(e).split('.')[0];
+  const nomCourt = (x) => (x.m && x.m.name) || ((S[x.id] && S[x.id].attributes && S[x.id].attributes.friendly_name) || x.id);
+  const nomApp = (meta && meta.device) || cvName(S[id], id);
+  const dm = devId && index && index.deviceMeta ? index.deviceMeta.get(devId) : null;
+  // Les pilotables en tête — l'entité tapée d'abord ; le reste par catégorie du registre.
+  const pilotables = soeurs.filter(x => FICHE_PILOTABLES.indexOf(domDe(x.id)) >= 0 && !x.m.category)
+    .sort((a, b) => (a.id === id ? -1 : 0) - (b.id === id ? -1 : 0));
+  const restantes = soeurs.filter(x => pilotables.indexOf(x) < 0);
+  const principal = restantes.filter(x => !x.m.category);
+  const config = restantes.filter(x => x.m.category === 'config');
+  const diag = restantes.filter(x => x.m.category === 'diagnostic');
+  const triNom = (a, b) => String(nomCourt(a)).localeCompare(String(nomCourt(b)), 'fr');
+  const section = (titre2, liste) => liste.length > 0 && (
+    <>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 2px' }}>{titre2}</div>
+      {liste.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={hass} nom={nomCourt(x)} />)}
+    </>
+  );
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (<>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nomApp}</div>
+            {dm && (dm.manufacturer || dm.model) && <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[dm.manufacturer, dm.model].filter(Boolean).join(' · ')}</div>}
+          </div>
+        </div>
+        {pilotables.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
+            {pilotables.slice(0, 3).map(x => <CvCard key={x.id} id={x.id} hass={hass} onOpen={x.id !== id ? dc.ouvrir : null} />)}
+          </div>
+        )}
+        {section(tr('COMMANDES'), principal)}
+        {section(tr('RÉGLAGES'), config)}
+        {diag.length > 0 && (
+          <>
+            <button onClick={() => setDiagOuvert(o => !o)} style={{ marginTop: 16, padding: '8px 13px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', alignSelf: 'flex-start' }}>
+              {(diagOuvert ? tr('Masquer') : tr('Afficher')) + ' ' + tr('{n} diagnostics', { n: diag.length })}
+            </button>
+            {diagOuvert && diag.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={hass} nom={nomCourt(x)} />)}
+          </>
+        )}
+        {dc.sheets}
+      </>)}
+    </BottomSheet>
+  );
+}
+
 /* ── Historique 24 h ─────────────────────────────────────────────────────────
  * Le GET history/period, partagé entre la carte graphique et les fiches.
  * `attribut` : pour un climat, la température vécue est un ATTRIBUT
@@ -2733,7 +2885,10 @@ function useDomainCards(hass) {
   const [coverPop, setCoverPop] = useState(null);
   const [mediaPop, setMediaPop] = useState(null);
   const [sensPop, setSensPop] = useState(null);
-  // La fiche du domaine, depuis n'importe quelle carte — la compacte ouvre la même popup que la riche.
+  const [appPop, setAppPop] = useState(null);
+  // La fiche du domaine, depuis n'importe quelle carte — la compacte ouvre la
+  // même popup que la riche. Tout ce qui n'a pas de fiche dédiée reçoit la
+  // FICHE APPAREIL UNIVERSELLE : l'appareil entier, rendu par le registre.
   const ouvrir = (id) => {
     const d = String(id).split('.')[0];
     const st = S[id]; const a = (st && st.attributes) || {};
@@ -2742,13 +2897,14 @@ function useDomainCards(hass) {
       const rgb = modes.some(m => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'].indexOf(m) >= 0);
       const ct = modes.indexOf('color_temp') >= 0;
       const dimmable = rgb || ct || modes.indexOf('brightness') >= 0 || a.brightness != null;
-      if (!dimmable) return; // rien à régler : le toggle suffit
+      if (!dimmable) { setAppPop(id); return; } // rien à régler sur la lampe : l'appareil, alors
       const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
       setLightPop({ id, name: a.friendly_name || id, on: !!st && st.state === 'on', bri: a.brightness != null ? Math.round(a.brightness / 255 * 100) : 100, color, rgb, ct, dimmable, lc: st && st.last_changed });
     } else if (d === 'climate') setClimPop(id);
     else if (d === 'cover') setCoverPop(id);
     else if (d === 'media_player') setMediaPop(id);
     else if (d === 'sensor') setSensPop(id);
+    else setAppPop(id);
   };
   const card = (id, label = null, zone = null) => {
     const d = String(id).split('.')[0];
@@ -2767,9 +2923,10 @@ function useDomainCards(hass) {
       {coverPop && <RoomCoverSheet id={coverPop} hass={hass} onClose={() => setCoverPop(null)} />}
       {mediaPop && <RoomMediaSheet id={mediaPop} hass={hass} onClose={() => setMediaPop(null)} />}
       {sensPop && <SensorSheet id={sensPop} hass={hass} onClose={() => setSensPop(null)} />}
+      {appPop && <FicheAppareil id={appPop} hass={hass} onClose={() => setAppPop(null)} />}
     </>
   );
-  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); };
+  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); };
   return { card, sheets, fermer, ouvrir };
 }
 
@@ -3813,18 +3970,34 @@ function ObjetsView({ hass, onNav, edit = false }) {
 
 
         {sheet && sheet.type === 'media' && <RoomMediaSheet id={sheet.id} hass={hass} onClose={() => setSheet(null)} />}
-        {sheet && sheet.type === 'vac' && <ObjSheet title="Aspirateur robot" accent="var(--o-ok)"
-          rows={[[tr('État'), vacEtat], ['Batterie', vacBat != null ? Math.round(vacBat) + ' %' : '—', batCol(vacBat)], ['Surface nettoyée', vacSurf], ['Durée', vacDuree], ['Entretien', vacMaint]]}
-          actions={[{ label: vacCleaning ? tr('Renvoyer au dock') : 'Démarrer', primary: true, run: () => objVacRun(vacCleaning ? 'retour_base' : 'nettoyer_tout', vacCleaning ? 'return_to_base' : 'start') }, { label: tr('Vue complète'), run: () => onNav && onNav('aspirateur') }]}
-          onClose={() => setSheet(null)} />}
-        {sheet && sheet.type === 'luba' && <ObjSheet title="Robot tondeuse" accent="#a3e635"
-          rows={[[tr('État'), lubaTxt], ['Batterie', lubaBat != null ? Math.round(lubaBat) + ' %' : '—', batCol(lubaBat)], ['Progression', Math.round(lubaProg) + ' %'], ['Charge', isOn(mowerSensor(S, 'charging')) ? 'En charge' : '—']]}
-          actions={[{ label: lubaMow ? 'Renvoyer à la base' : 'Lancer la tonte', primary: true, run: () => call('lawn_mower', lubaMow ? 'dock' : 'start_mowing', { entity_id: lubaId }) }]}
-          onClose={() => setSheet(null)} />}
-        {sheet && sheet.type === 'croq' && <ObjSheet title="Distributeur de croquettes" accent="#f59e0b"
-          rows={[[tr('Réservoir'), croqPct + ' %', croqPct < 25 ? '#f87171' : 'var(--o-text)'], ['Prochaine ration', nextMeal ? (nextMeal.time + ' · ' + nextMeal.g + ' g') : '—'], ['Distribué aujourd\'hui', (num(croqHaids().distribuees, 0) || 0) + ' g']]}
-          actions={[...(((loggiaEnt('feeder', null) || {}).script) ? [{ label: 'Distribuer 1 ration', primary: true, run: () => call('script', 'turn_on', { entity_id: (loggiaEnt('feeder', null) || {}).script }) }] : []), { label: tr('Vue complète'), run: () => onNav && onNav('croquettes') }]}
-          onClose={() => setSheet(null)} />}
+        {/* Les machines ouvrent la FICHE APPAREIL UNIVERSELLE quand l'entité HA
+            existe — commandes, réglages, diagnostics, tout ce que l'appareil
+            expose. L'ancienne fiche maison reste le filet sans entité. */}
+        {sheet && sheet.type === 'vac' && (objVacMain
+          ? <FicheAppareil id={objVacMain} hass={hass} onClose={() => setSheet(null)} />
+          : <ObjSheet title="Aspirateur robot" accent="var(--o-ok)"
+              rows={[[tr('État'), vacEtat], ['Batterie', vacBat != null ? Math.round(vacBat) + ' %' : '—', batCol(vacBat)], ['Surface nettoyée', vacSurf], ['Durée', vacDuree], ['Entretien', vacMaint]]}
+              actions={[{ label: vacCleaning ? tr('Renvoyer au dock') : 'Démarrer', primary: true, run: () => objVacRun(vacCleaning ? 'retour_base' : 'nettoyer_tout', vacCleaning ? 'return_to_base' : 'start') }]}
+              onClose={() => setSheet(null)} />)}
+        {sheet && sheet.type === 'luba' && (lubaId
+          ? <FicheAppareil id={lubaId} hass={hass} onClose={() => setSheet(null)} />
+          : <ObjSheet title="Robot tondeuse" accent="#a3e635"
+              rows={[[tr('État'), lubaTxt], ['Batterie', lubaBat != null ? Math.round(lubaBat) + ' %' : '—', batCol(lubaBat)], ['Progression', Math.round(lubaProg) + ' %'], ['Charge', isOn(mowerSensor(S, 'charging')) ? 'En charge' : '—']]}
+              actions={[]}
+              onClose={() => setSheet(null)} />)}
+        {sheet && sheet.type === 'croq' && (() => {
+          /* L'entité du distributeur : celle que la configuration désigne, sinon
+           * le suffixe STANDARD des feeders Zigbee (`serving_size`) — un motif
+           * de la classe d'appareil, pas un identifiant d'une installation. */
+          const croqFicheId = (loggiaEnt('feeder', null) || {}).haid
+            || (S ? Object.keys(S).find(id => id.indexOf('number.') === 0 && /serving_size$/.test(id)) : null);
+          return croqFicheId
+            ? <FicheAppareil id={croqFicheId} hass={hass} onClose={() => setSheet(null)} />
+            : <ObjSheet title="Distributeur de croquettes" accent="#f59e0b"
+                rows={[[tr('Réservoir'), croqPct + ' %', croqPct < 25 ? '#f87171' : 'var(--o-text)'], ['Prochaine ration', nextMeal ? (nextMeal.time + ' · ' + nextMeal.g + ' g') : '—'], ['Distribué aujourd\'hui', (num(croqHaids().distribuees, 0) || 0) + ' g']]}
+                actions={((loggiaEnt('feeder', null) || {}).script) ? [{ label: 'Distribuer 1 ration', primary: true, run: () => call('script', 'turn_on', { entity_id: (loggiaEnt('feeder', null) || {}).script }) }] : []}
+                onClose={() => setSheet(null)} />;
+        })()}
         {sheet && sheet.type === 'plant' && (() => { const pl = sheet.pl; const v = plantVerdict(pl.hum); return <ObjSheet title={pl.name} img={pl.img && PLANT_ART[pl.img]} accent="var(--o-ok)"
           rows={[['Humidité du sol', pl.hum != null ? Math.round(pl.hum) + ' %' : '—', v.c], ['Verdict', v.t, v.c], ['Éclairement', fmtV(pl.lux, ' lx')], ['Conductivité (engrais)', fmtV(pl.cond, ' µS/cm')], [tr('Température'), pl.temp != null ? pl.temp.toFixed(1) + ' °C' : '—'], ['Pile capteur', pl.bat != null ? Math.round(pl.bat) + ' %' : '—', batCol(pl.bat)]]}
           onClose={() => setSheet(null)} />; })()}
@@ -8470,7 +8643,10 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
   // Cliquable comme la carte riche : la fiche du domaine s'ouvre (lumière réglable seulement — un simple toggle n'a pas de fiche).
   const modes = a.supported_color_modes || [];
   const reglable = dom !== 'light' || modes.length > 1 || a.brightness != null || modes.indexOf('brightness') >= 0 || modes.some(m => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww', 'color_temp'].indexOf(m) >= 0);
-  const ouvrable = !dead && !!onOpen && ((dom === 'sensor' && !isNaN(parseFloat(s))) || (reglable && ['light', 'climate', 'cover', 'media_player'].indexOf(dom) >= 0));
+  // Presque tout s'ouvre : les domaines à fiche dédiée, et tout appareil du
+  // registre via la fiche universelle. Seuls les capteurs texte restent muets.
+  const ouvrable = !dead && !!onOpen && ((dom === 'sensor' && !isNaN(parseFloat(s)))
+    || ['light', 'climate', 'cover', 'media_player', 'vacuum', 'lawn_mower', 'fan', 'lock', 'switch', 'humidifier', 'valve', 'water_heater', 'siren', 'binary_sensor', 'input_boolean'].indexOf(dom) >= 0);
   const runnable = { scene: ['scene', 'turn_on', 'Activer'], script: ['script', 'turn_on', tr('Exécuter')], button: ['button', 'press', 'Appuyer'], input_button: ['input_button', 'press', 'Appuyer'], automation: ['automation', 'trigger', tr('Exécuter')] }[dom];
   let stateTxt;
   if (dead) stateTxt = tr('Indisponible');
@@ -9917,6 +10093,17 @@ export default function App() {
     return () => window.removeEventListener('loggia-fond-photo', f);
   }, []);
   const fondPhotoActif = look.fond === 'photo' ? lireFondPhoto() : null;
+  // Aperçu de la fiche appareil universelle : ?fiche=<entity_id> — lu aussi sur
+  // l'URL du PANNEAU (le parent de l'iframe), la page directe n'ayant pas de
+  // session. Outil d'essai : la fiche s'ouvrira depuis les cartes ensuite.
+  const [ficheDemo, setFicheDemo] = useState(() => {
+    try {
+      const ici = new URLSearchParams(window.location.search).get('fiche');
+      if (ici) return ici;
+      if (window.top !== window) return new URLSearchParams(window.top.location.search).get('fiche') || null;
+    } catch (e) { /* cross-origin improbable : même hôte */ }
+    return null;
+  });
   const [ambient, setAmbient] = useState(() => { try { return parseInt(localStorage.getItem('loggia-ambient') || '0', 10) || 0; } catch (e) { return 0; } });
   const onAmbient = (min) => { setAmbient(min); try { localStorage.setItem('loggia-ambient', String(min)); } catch (e) {} };
   // Plage de la veille : « toujours », « nuit » (21 h – 8 h) ou « jour » — trois
@@ -10081,6 +10268,7 @@ export default function App() {
           background: (lightMode ? 'linear-gradient(rgba(240,244,250,.6),rgba(240,244,250,.6)), ' : 'linear-gradient(rgba(5,7,11,.55),rgba(5,7,11,.55)), ')
             + `url("${fondPhotoActif}") center center / cover no-repeat var(--o-bg)` }} />
       )}
+      {ficheDemo && <FicheAppareil id={ficheDemo} hass={hass} onClose={() => setFicheDemo(null)} />}
       {idle && ambient > 0 && plageOk && <AmbientOverlay wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} lightsOn={lightsOn} notifs={notifs}
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
       {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12.5, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
