@@ -2263,7 +2263,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
   const ids = useMemo(() => applyLayout(layoutOf(cfgKey, scope), derived), [cfgKey, scope, sig, rev]);
   const edits = (layout.removed || []).length + (layout.added || []).length
     + ((layout.order || []).length ? 1 : 0) + Object.keys(layout.labels || {}).length
-    + (layout.larges || []).length;
+    + (layout.larges || []).length + Object.keys(layout.types || {}).length;
 
   const vide = (a) => (a && a.length) ? a : null;
   const write = (patch) => { setLayout(cfgKey, scope, patch); setRev(v => v + 1); };
@@ -2331,7 +2331,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
   };
   const rename = (id, nom) => replace(id, id, nom);
 
-  const reset = () => write({ removed: null, added: null, order: null, labels: null, larges: null });
+  const reset = () => write({ removed: null, added: null, order: null, labels: null, larges: null, types: null });
   const labelOf = (id) => labelIn(layout, id);
   /* Largeur d'une carte : double = deux emplacements côte à côte, sur toutes
    * les vues à grille. Rangée dans le layout, comme l'ordre et les libellés. */
@@ -2339,6 +2339,15 @@ function useLayoutEditor(cfgKey, scope, derived) {
   const basculerLarge = (id) => {
     const l = layout.larges || [];
     write({ larges: vide(l.indexOf(id) >= 0 ? l.filter(x => x !== id) : [...l, id]) });
+  };
+  /* TYPE de carte choisi pour une entité (catalogue des vues custom : jauge,
+   * graphique, grand chiffre…) — même personnalisation sur les vues intégrées.
+   * Absent = le rendu par défaut de la vue. */
+  const typeOf = (id) => (layout.types || {})[id] || null;
+  const setType = (id, t) => {
+    const types = { ...(layout.types || {}) };
+    if (t) types[id] = t; else delete types[id];
+    write({ types: Object.keys(types).length ? types : null });
   };
 
   // Les positions de la grille sont mesurees une fois : elle ne bouge pas
@@ -2415,7 +2424,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
     return false;
   };
 
-  return { ids, edits, layout, gridRef, dragId, dragOver, dragStart, dragMove, dragEnd, remove, toggle, move, rename, replace, reset, labelOf, estLarge, basculerLarge };
+  return { ids, edits, layout, gridRef, dragId, dragOver, dragStart, dragMove, dragEnd, remove, toggle, move, rename, replace, reset, labelOf, estLarge, basculerLarge, typeOf, setType };
 }
 
 /**
@@ -2480,6 +2489,18 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
             </>
           )}
 
+          {estEntite && ed.typeOf && (
+            <>
+              <div style={etiquette}>{tr('CARTE')}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(() => { const noms = CV_TYPE_NOMS(); const choix = ed.typeOf(id); return [[null, tr('Auto')], ...cvTypesPour(brut).map(t => [t, noms[t] || t])].map(([t, lbl2]) => { const on = choix === t; return (
+                  <button key={String(t)} aria-pressed={on} onClick={() => ed.setType(id, t)}
+                    style={{ padding: '7px 12px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{lbl2}</button>
+                ); }); })()}
+              </div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('« Auto » : le rendu habituel de cette vue.')}</div>
+            </>
+          )}
           {!estSection && ed.estLarge && (
             <>
               <div style={etiquette}>{tr('LARGEUR')}</div>
@@ -2540,6 +2561,10 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, children }) {
         style={{ position: 'absolute', inset: 0, zIndex: 2, borderRadius: 'var(--o-radius,20px)', touchAction: 'none', cursor: saisie ? 'grabbing' : 'grab' }} />
       <button data-drag-ui="1" onClick={() => ed.remove(id)} title="Retirer" aria-label={'Retirer ' + (nom || id)}
         style={{ position: 'absolute', ...(plat ? { top: '50%', right: 7, transform: 'translateY(-50%)' } : { top: -9, right: -9 }), zIndex: 3, width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--o-bad)', color: '#fff', fontSize: 15, fontWeight: 800, lineHeight: 1, boxShadow: '0 3px 10px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>×</button>
+      {!plat && ed.basculerLarge && (
+        <button data-drag-ui="1" onClick={() => ed.basculerLarge(id)} title={ed.estLarge(id) ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={ed.estLarge(id)}
+          style={{ position: 'absolute', bottom: -9, right: -9, zIndex: 3, width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', background: ed.estLarge(id) ? 'var(--o-accent)' : 'var(--o-surfA)', color: ed.estLarge(id) ? '#fff' : 'var(--o-text1)', boxShadow: '0 3px 10px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i="arrows-h" size={11} /></button>
+      )}
     </div>
   );
 }
@@ -3375,7 +3400,9 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
               {bloc.cartes.map(id => {
                 const zone = id.indexOf('zone:') === 0 ? climateZones(S).find(z => z.id === id.slice(5)) : null;
                 const lbl = roomLabelOf(room, id);
-                const card = dc.card(id, lbl, zone);
+                // Type choisi dans la fiche d'édition : la carte du catalogue
+                // remplace le rendu par défaut de la vue.
+                const card = (!zone && ed.typeOf(id)) ? <CvTyped x={{ t: ed.typeOf(id), id }} hass={hass} dc={dc} /> : dc.card(id, lbl, zone);
                 if (!edit) return <Anim key={id} i={ents.indexOf(id)} className={ed.estLarge(id) ? 'o-cvw2' : ''}>{card}</Anim>;
                 return <EditableCard key={id} ed={ed} id={id} nom={nomDe(id)} onEdit={setCardEdit}>{card}</EditableCard>;
               })}
@@ -3878,6 +3905,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
     ...(plants.length ? ['sect:plantes', ...plants.map(pl => 'plant:' + pl.base)] : []),
   ];
   const ed = useLayoutEditor(OBJ_LAYOUT_KEY, 'objets', derived);
+  const dc = useDomainCards(hass); // cartes typées du catalogue sur les ajouts libres
   const [objAdd, setObjAdd] = useState(false);
   // Carte dont la fiche est ouverte, ou null.
   const [cardEdit, setCardEdit] = useState(null);
@@ -4055,8 +4083,11 @@ function ObjetsView({ hass, onNav, edit = false }) {
               const pl = plantDe(k);
               carte = pl ? <PlantObjCard pl={{ ...pl, name: nomDe(k) }} pi={i} v={plantVerdict(pl.hum)} batCol={batCol} fmtV={fmtV} onOpen={() => setSheet({ type: 'plant', pl })} /> : null;
             } else {
-              // Ajout libre : n'importe quelle entité, sur la carte générique.
-              carte = <CvCard id={k} hass={hass} label={ed.labelOf(k)} />;
+              // Ajout libre : la carte du catalogue si un type est choisi,
+              // sinon la générique — même personnalisation que les vues custom.
+              carte = ed.typeOf(k)
+                ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} />
+                : <CvCard id={k} hass={hass} label={ed.labelOf(k)} onOpen={dc.ouvrir} />;
             }
             if (!edit) return <div key={k} className={ed.estLarge(k) ? 'o-cvw2' : undefined}>{carte}</div>;
             return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
@@ -4084,6 +4115,8 @@ function ObjetsView({ hass, onNav, edit = false }) {
         })()}
         {objAdd && <RoomAddSheet room={tr('Objets')} hass={hass} present={ed.ids} onToggle={ed.toggle} onClose={() => setObjAdd(false)} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
+        {/* dc.card/dc.ouvrir sans dc.sheets = fiches muettes (piège vécu). */}
+        {dc.sheets}
 
 
         {sheet && sheet.type === 'media' && <RoomMediaSheet id={sheet.id} hass={hass} onClose={() => setSheet(null)} />}
@@ -5394,7 +5427,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
                   </div>)}
               <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {cartes.map(k => {
-                  const carte = dc.card(k, ed.labelOf(k));
+                  const carte = ed.typeOf(k) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k));
                   if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
@@ -6219,7 +6252,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
                   </div>)}
               <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {bloc.cartes.map(k => {
-                  const carte = dc.card(k, ed.labelOf(k), zoneDe(k));
+                  const carte = (!zoneDe(k) && ed.typeOf(k)) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k), zoneDe(k));
                   if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={climNom(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
@@ -6429,7 +6462,7 @@ function VoletsContent({ hass, edit = false, onEnt }) {
                   </div>)}
               <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {bloc.cartes.map(k => {
-                  const carte = dc.card(k, ed.labelOf(k));
+                  const carte = ed.typeOf(k) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k));
                   if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
@@ -8000,7 +8033,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
                   </div>)}
               <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {bloc.cartes.map(k => {
-                  const carte = dc.card(k, ed.labelOf(k));
+                  const carte = ed.typeOf(k) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k));
                   if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
@@ -9241,6 +9274,10 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   /* Largeur d'une carte : 1 (défaut) ou 2 emplacements côte à côte. Portée par
    * l'entrée typée (`w: 2`) ; une chaîne nue élargie devient sa forme typée. */
   const cvW = (x) => (x && typeof x === 'object' && x.w === 2) ? 2 : 1;
+  /* Hauteur en RANGÉES de la grille dense : une compacte tient sur une, une
+   * standard sur deux — deux compactes s'empilent donc à côté d'une standard. */
+  const CV_ROWS = { compacte: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 3, agenda: 3, journal: 3 };
+  const cvRowsDe = (x) => typeof x === 'string' ? 1 : (CV_ROWS[x.t] || 2);
   const basculerW = (x) => {
     const suiv = typeof x === 'string'
       ? { t: 'compacte', id: x, w: 2 }
@@ -9267,8 +9304,9 @@ function CustomView({ cv, hass, edit = false, onSave }) {
             : <h1 onClick={edit ? () => setRenaming(true) : undefined} style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, cursor: edit ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: 12 }}>{cv.name}{edit && <Fi i="pencil" size={16} color="var(--o-text3)" />}</h1>}
           <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div>
         </div>
-        {/* alignItems:start — chaque carte garde sa hauteur naturelle, la plus haute de la rangée n'étire pas les autres. */}
-        <div ref={grilleRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14, alignItems: 'start' }}>
+        {/* Grille DENSE : chaque carte déclare sa hauteur en rangées (.grid-custom
+          * pose l'auto-flow dense et l'unité de rangée) — les trous se comblent. */}
+        <div ref={grilleRef} className="grid-custom" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
           {liste.map((x) => {
             const saisie = dragCle === cvKey(x);
             return (
@@ -9277,7 +9315,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
               onPointerMove={edit ? mouvDrag : undefined}
               onPointerUp={edit ? finDrag : undefined}
               onPointerCancel={edit ? finDrag : undefined}
-              style={{ position: 'relative', minWidth: 0,
+              style={{ position: 'relative', minWidth: 0, gridRow: 'span ' + cvRowsDe(x),
               opacity: saisie ? .55 : 1, transform: saisie ? 'scale(.97)' : 'none', transition: 'opacity .15s, transform .15s',
               ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'none' } : {}) }}>
               {/* En édition, la carte est INERTE : la saisir la déplace, ses contrôles ne s'actionnent pas. */}
@@ -9288,7 +9326,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
                 <>
                   <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...editBtn, position: 'absolute', top: -9, right: -9, background: 'var(--o-bad)', color: '#fff' }}>×</button>
                   <button onClick={() => basculerW(x)} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={cvW(x) === 2}
-                    style={{ ...editBtn, position: 'absolute', top: -9, left: -9, ...(cvW(x) === 2 ? { background: 'var(--o-accent)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
+                    style={{ ...editBtn, position: 'absolute', bottom: -9, right: -9, ...(cvW(x) === 2 ? { background: 'var(--o-accent)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
                   {cvEstTpl(x) && <button onClick={() => setTplEdit(x)} title={tr('Modifier')} style={{ ...editBtn, position: 'absolute', top: -9, right: 24 }}><Fi i="pencil" size={11} /></button>}
                 </>
               )}

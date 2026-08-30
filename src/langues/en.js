@@ -395,6 +395,8 @@ export default {
   'Largeur simple': 'Single width',
   'Largeur double': 'Double width',
   'LARGEUR': 'WIDTH',
+  'CARTE': 'CARD',
+  '« Auto » : le rendu habituel de cette vue.': '"Auto": the usual rendering of this view.',
   'Simple': 'Single',
   'Double': 'Double',
   'Double : la carte prend deux emplacements côte à côte.': 'Double: the card spans two slots side by side.',
