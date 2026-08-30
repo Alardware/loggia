@@ -2937,6 +2937,63 @@ function Epingles({ pourId, hass, max = 3, avecAncre = false }) {
   );
 }
 
+/* Héros MACHINE de la fiche appareil : le rendu de la fiche native — l'état en
+ * grand centré, le « il y a … », la batterie, l'illustration au centre, les
+ * boutons ronds et la vitesse centrés. Réservé à la FICHE : les cartes des
+ * vues gardent leur gabarit maison. */
+function FicheMachineHero({ id, hass }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const dom = String(id).split('.')[0];
+  const s = st ? st.state : null;
+  const mort = !st || s === 'unavailable';
+  const en = dom === 'vacuum' ? s === 'cleaning' : s === 'mowing';
+  const call = (svc) => { try { if (hass && hass.callService) hass.callService(dom, svc, { entity_id: id }); } catch (e) {} };
+  const f = a.supported_features || 0;
+  const bat = (() => {
+    if (a.battery_level != null) return a.battery_level;
+    const S = (hass && hass.states) || {};
+    const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: 'battery' });
+    const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN;
+    return isNaN(n) ? null : n;
+  })();
+  const etat = ({ docked: tr('Sur la base'), cleaning: tr('Nettoyage'), mowing: tr('Tonte'), returning: tr('Retour à la base'), paused: tr('En pause'), idle: tr('Inactif'), error: tr('Erreur') })[s] || (s == null ? '—' : String(s));
+  const btns = [];
+  if (dom === 'vacuum') {
+    if (en ? (f & 4) : (f & 8192)) btns.push([en ? 'pause' : 'play', en ? 'pause' : 'start', en ? tr('Pause') : tr('Démarrer le nettoyage')]);
+    if ((f & 8) && (s === 'cleaning' || s === 'returning' || s === 'paused')) btns.push(['stop', 'stop', 'Stop']);
+    if (f & 16) btns.push(['home', 'return_to_base', tr('Renvoyer au dock')]);
+    if (f & 512) btns.push(['marker', 'locate', tr('Localiser')]);
+  } else {
+    if (en ? (f & 2) : (f & 1)) btns.push([en ? 'pause' : 'play', en ? 'pause' : 'start_mowing', en ? tr('Pause') : tr('Lancer la tonte')]);
+    if (f & 4) btns.push(['home', 'dock', tr('Renvoyer au dock')]);
+  }
+  return (
+    <div style={{ ...CV_CADRE, alignItems: 'center', textAlign: 'center', opacity: mort ? .55 : 1 }}>
+      <div style={{ fontSize: 23, fontWeight: 800, letterSpacing: '-.01em' }}>{mort ? tr('Indisponible') : etat}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 3, fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>
+        <span>{relTime(st && (st.last_changed || st.last_updated)) || '—'}</span>
+        {bat != null && <span style={{ fontVariantNumeric: 'tabular-nums', color: bat < 20 ? 'var(--o-bad)' : bat < 50 ? 'var(--o-warn)' : 'var(--o-text2)' }}>{Math.round(bat)}%</span>}
+      </div>
+      <div aria-hidden="true" style={{ width: 104, height: 104, margin: '12px 0 4px', backgroundImage: `url("${dom === 'vacuum' ? DEVICE_ART.vacuum : DEVICE_ART.mower}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', opacity: 0.55 }} />
+      {btns.length > 0 && !mort && (
+        <div style={{ display: 'flex', gap: 10, marginTop: 8, justifyContent: 'center' }}>
+          {btns.map(([gi, svc, lbl], bi) => (
+            <button key={svc} title={lbl} aria-label={lbl} onClick={() => call(svc)}
+              style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={15} /></button>
+          ))}
+        </div>
+      )}
+      {dom === 'vacuum' && !mort && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
+        <div style={{ marginTop: 12 }}>
+          <MenuDeroulant icone="wind" etiquette={tr('Vitesse')} valeur={a.fan_speed} options={a.fan_speed_list}
+            rendre={(v) => FAN_FR()[v] || v} surChoix={(v) => { try { hass.callService('vacuum', 'set_fan_speed', { entity_id: id, fan_speed: v }); } catch (e) {} }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FicheAppareil({ id, hass, onClose }) {
   const { index } = useLoggia();
   const dc = useDomainCards(hass);
@@ -3011,7 +3068,9 @@ function FicheAppareil({ id, hass, onClose }) {
         </div>
         {pilotables.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-            {pilotables.slice(0, 3).map(x => <CvCard key={x.id} id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />)}
+            {pilotables.slice(0, 3).map(x => (domDe(x.id) === 'vacuum' || domDe(x.id) === 'lawn_mower')
+              ? <FicheMachineHero key={x.id} id={x.id} hass={H} />
+              : <CvCard key={x.id} id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />)}
           </div>
         )}
         {section(tr('ÉPINGLES'), epinglees, true)}
