@@ -6,7 +6,7 @@
  * ramenerait le monolithe entier dans ce morceau et annulerait le decoupage.
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Fi, Ico, Anim, REDUCE_MOTION, EnRow, EnVal, EnGauge, LOOK_DEF, HIDDEN_VIEWS,
+import { Fi, Anim, REDUCE_MOTION, EnRow, EnVal, EnGauge, LOOK_DEF, HIDDEN_VIEWS,
   readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, personPicture } from '../ui.jsx';
 import { cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_ENT, LOGGIA_RESOLVED, LOGGIA_INDEX, readLS,
   enHaids, medCompanion, medPlayers, normRooms, secAlarm, switchLightsCfg,
