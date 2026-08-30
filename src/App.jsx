@@ -3966,16 +3966,23 @@ function ObjetsView({ hass, onNav, edit = false }) {
                 onOpen={() => setSheet({ type: 'luba' })}
                 extra={lubaId ? <Epingles pourId={lubaId} hass={hass} avecAncre /> : null} />;
             } else if (k === 'obj:feeder') {
-              // Distribuer une ration demande un script propre à l'installation :
-              // rien de standard côté Home Assistant. À défaut d'être désigné,
-              // il est reconnu au nom — sinon le bouton disparaît alors que le
-              // script existe.
-              const sc = feederScript(hass, loggiaEnt('feeder', null));
+              /* Le « distribuer » vient de l'APPAREIL : un feeder Zigbee
+               * standard expose un select `feed` dont l'option START lance une
+               * distribution de serving_size portions — celles que le stepper
+               * règle. Le script maison, qui force sa propre valeur, ne reste
+               * qu'en repli pour les distributeurs sans ce select. */
+              const ff = (() => {
+                const fid = Object.keys(S).find(x => x.indexOf('select.') === 0 && /feed$/.test(x)
+                  && S[x].attributes && Array.isArray(S[x].attributes.options)
+                  && S[x].attributes.options.some(o => /^(start|feed)$/i.test(o)));
+                return fid ? { id: fid, opt: S[fid].attributes.options.find(o => /^(start|feed)$/i.test(o)) } : null;
+              })();
+              const sc = ff ? null : feederScript(hass, loggiaEnt('feeder', null));
               carte = <ObjCard idx={i} icon={<Fi i="paw" size={17} color="#ffce73" />} iconBg="rgba(255,206,115,.14)"
                 name={nomDe(k)} sub={nomHA(croqHaids().reservoir)} status={nextMeal ? ('Prochaine ration ' + nextMeal.time) : 'Programme terminé'} statusColor="var(--o-text2)"
                 barLabel={tr('Réservoir')} barPct={croqPct} barColor={croqPct < 25 ? '#f87171' : '#ffce73'} barText={croqPct + '%'} barLiquid
-                actionLabel={sc ? 'Distribuer une ration' : null}
-                onAction={() => { if (sc) call('script', 'turn_on', { entity_id: sc }); }}
+                actionLabel={(ff || sc) ? 'Distribuer une ration' : null}
+                onAction={() => { if (ff) call('select', 'select_option', { entity_id: ff.id, option: ff.opt }); else if (sc) call('script', 'turn_on', { entity_id: sc }); }}
                 onOpen={() => setSheet({ type: 'croq' })}
                 extra={(() => { const fid = (loggiaEnt('feeder', null) || {}).haid || (S ? Object.keys(S).find(x => x.indexOf('number.') === 0 && /serving_size$/.test(x)) : null); return fid ? <Epingles pourId={fid} hass={hass} avecAncre /> : null; })()} />;
             } else if (med) {
@@ -8688,14 +8695,14 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
   const s = st ? st.state : null;
   const a = (st && st.attributes) || {};
   const dead = !st || s === 'unavailable' || s === 'unknown';
-  const on = !dead && (dom === 'cover' ? (s === 'open' || s === 'opening') : dom === 'lock' ? s === 'unlocked' : dom === 'media_player' ? s === 'playing' : dom === 'climate' ? s !== 'off' : s === 'on');
+  const on = !dead && (dom === 'cover' ? (s === 'open' || s === 'opening') : dom === 'lock' ? s === 'unlocked' : dom === 'media_player' ? s === 'playing' : dom === 'climate' ? s !== 'off' : dom === 'vacuum' ? (s === 'cleaning' || s === 'returning') : dom === 'lawn_mower' ? (s === 'mowing' || s === 'returning') : dom === 'valve' ? s === 'open' : s === 'on');
   // Chaque domaine garde sa teinte des vues intégrées : lumière = sa couleur RGB ou l'or,
   // climat = le rouge de la vue Climatisation — l'accent bleu pour le reste.
   const rgbHex = dom === 'light' && a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
   const teinte = cvEstLumiere(id) ? (rgbHex || '#FFCC44') : dom === 'climate' ? 'var(--o-warn2)' : dom === 'cover' ? 'var(--o-purple)' : null;
   const teinteTxt = rgbHex || (cvEstLumiere(id) ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-warn2)' : dom === 'cover' ? 'var(--o-purple)' : 'var(--o-accent-soft)');
   const acc = on ? 'var(--o-accent)' : 'var(--o-text3)';
-  const togglable = ['light', 'switch', 'input_boolean', 'fan'].indexOf(dom) >= 0;
+  const togglable = ['light', 'switch', 'input_boolean', 'fan', 'humidifier', 'siren'].indexOf(dom) >= 0;
   // Cliquable comme la carte riche : la fiche du domaine s'ouvre (lumière réglable seulement — un simple toggle n'a pas de fiche).
   const modes = a.supported_color_modes || [];
   const reglable = dom !== 'light' || modes.length > 1 || a.brightness != null || modes.indexOf('brightness') >= 0 || modes.some(m => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww', 'color_temp'].indexOf(m) >= 0);
@@ -8713,6 +8720,8 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
   else if (dom === 'lock') stateTxt = s === 'locked' ? 'Verrouillée' : s === 'unlocked' ? 'Déverrouillée' : s;
   else if (dom === 'media_player') stateTxt = s === 'playing' ? (a.media_title || tr('Lecture')) : s === 'paused' ? tr('En pause') : s === 'off' ? tr('Éteint') : tr('Inactif');
   else if (dom === 'binary_sensor') stateTxt = s === 'on' ? tr('Détecté') : 'RAS';
+  else if (dom === 'vacuum' || dom === 'lawn_mower') stateTxt = ({ docked: tr('Sur la base'), cleaning: tr('Nettoyage'), mowing: tr('Tonte'), returning: tr('Retour à la base'), paused: tr('En pause'), idle: tr('Inactif'), error: tr('Erreur') })[s] || String(s);
+  else if (dom === 'valve') stateTxt = s === 'open' ? tr('Ouvert') : s === 'closed' ? tr('Fermé') : String(s);
   else if (dom === 'person') stateTxt = s === 'home' ? tr('Présent') : 'Absent';
   else if (dom === 'sensor') stateTxt = (isNaN(parseFloat(s)) ? s : parseFloat(s)) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
   else if (runnable || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—'; // scene/script/button : état = date de dernière exécution
@@ -8749,6 +8758,18 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
       {dom === 'media_player' && !dead && s !== 'off' && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 12 }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={13} />{s === 'playing' ? 'Pause' : tr('Lecture')}</button>
+        </div>
+      )}
+      {/* Machines : l'action principale vient du DOMAINE — aucun script, aucune
+        * configuration. La fiche en hérite : ses pilotables sont ces cartes. */}
+      {(dom === 'vacuum' || dom === 'lawn_mower') && !dead && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button onClick={(e) => { e.stopPropagation(); call(dom, on ? (dom === 'vacuum' ? 'return_to_base' : 'dock') : (dom === 'vacuum' ? 'start' : 'start_mowing')); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>{on ? tr('Renvoyer au dock') : (dom === 'vacuum' ? tr('Démarrer le nettoyage') : tr('Lancer la tonte'))}</button>
+        </div>
+      )}
+      {dom === 'valve' && !dead && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button onClick={(e) => { e.stopPropagation(); call('valve', on ? 'close_valve' : 'open_valve'); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>{on ? tr('Fermer') : tr('Ouvrir')}</button>
         </div>
       )}
       <Epingles pourId={id} hass={hass} />
