@@ -336,7 +336,19 @@ export function BottomSheet({ onClose, children }) {
       onClick={(e) => { if (e.target === e.currentTarget && partiDuVoile.current) close(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.32)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', animation: closing ? 'o-fadeOut .3s ease forwards' : 'o-fadeIn .25s ease' }}>
       <div ref={sheetRef} role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
+          // Piège de focus : Tab boucle dans la feuille — derrière, la page vit
+          // encore, et le clavier s'y perdait sans le voir.
+          if (e.key === 'Tab') {
+            const el = sheetRef.current; if (!el) return;
+            const focs = el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            if (!focs.length) return;
+            const premier = focs[0], dernier = focs[focs.length - 1];
+            if (e.shiftKey && document.activeElement === premier) { e.preventDefault(); dernier.focus(); }
+            else if (!e.shiftKey && document.activeElement === dernier) { e.preventDefault(); premier.focus(); }
+          }
+        }}
         onAnimationEnd={(e) => { if (closing && e.target === e.currentTarget) onClose(); }}
         style={{ position: 'fixed', left: '50%', bottom: 0, transform: 'translate(-50%,0)', width: 'min(480px,100%)', maxHeight: '88vh', overflowY: 'auto', background: 'var(--o-surfA)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', borderLeft: 'var(--o-bw,1px) solid var(--o-bd1)', borderRight: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: '26px 26px 0 0', padding: '10px 22px calc(24px + var(--o-safe-bottom,0px))', boxShadow: '0 -10px 50px rgba(0,0,0,.35)', animation: closing ? 'o-sheetOut .3s cubic-bezier(.32,.72,.25,1) forwards' : 'o-sheetIn .46s cubic-bezier(.22,1.28,.36,1)' }}>
         <div onPointerDown={dragClose} style={{ touchAction: 'none', cursor: 'grab', padding: '8px 60px 12px', margin: '-10px auto 2px', width: 'fit-content' }}>

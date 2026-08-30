@@ -36,7 +36,9 @@ import { LOGGIA_INDEX, LOGGIA_ENT, LOGGIA_RESOLVED, LOGGIA_CFG, setLoggiaState, 
   enHaids, medCompanion, medPlayers, normRooms, secAlarm, switchLightsCfg,
   exportLoggiaConfig, importLoggiaConfig, LOGGIA_SYNC_KEYS,
   discoveredRooms, medResolved, MED_COLORS, vacRooms, vacSensors, vacOption } from './state.js';
-import Onboarding from './Onboarding.jsx';
+// L'accueil de premiere installation ne sert qu'une fois : son code n'a pas a
+// peser dans le bundle de chaque ouverture.
+const Onboarding = lazy(() => import('./Onboarding.jsx'));
 import { VACUUM_STATE_FR, fmtDuration, fmtArea } from './resolve.js';
 import energyHomeImg from './assets/energy/home.webp';
 import energySolarImg from './assets/energy/solar.webp';
@@ -471,7 +473,10 @@ function Header() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  const [notifSeen, setNotifSeen] = useState(false);
+  /* Vu = PERSISTÉ (par appareil) : l'ancien état React s'évaporait à chaque
+   * rechargement et le point rouge revenait pour des notifications déjà lues.
+   * On retient la signature du contenu lu ; ouvrir le panneau marque tout vu. */
+  const [vuSig, setVuSig] = useState(() => { try { return localStorage.getItem('loggia-notifsvues') || ''; } catch (e) { return ''; } });
   const [bellRing, setBellRing] = useState(false);
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => { const iv = setInterval(() => setClock(new Date()), 30000); return () => clearInterval(iv); }, []);
@@ -479,15 +484,17 @@ function Header() {
   const dateStr = capit(clock.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }));
   const timeStr = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const hasNotif = notifs.length > 0;
-  // Nouvelle notification (contenu différent, hors temps relatif) → réarme le badge après un « Tout lire ».
+  // Signature du contenu (hors temps relatif) : compare au « vu » persisté.
   const nsig = notifs.map(n => '' + n[1] + n[2]).join('|');
+  const nonVues = hasNotif && nsig !== vuSig;
+  const marquerVues = () => { setVuSig(nsig); try { localStorage.setItem('loggia-notifsvues', nsig); } catch (e) {} };
   const nsigPrev = useRef(nsig);
   useEffect(() => {
-    if (nsig && nsig !== nsigPrev.current) { setBellRing(true); const t = setTimeout(() => setBellRing(false), 900); nsigPrev.current = nsig; return () => clearTimeout(t); }
+    // La cloche ne tinte que pour du contenu jamais lu — pas pour une signature
+    // qui bouge sur des notifications déjà vues.
+    if (nsig && nsig !== nsigPrev.current && nsig !== vuSig) { setBellRing(true); const t = setTimeout(() => setBellRing(false), 900); nsigPrev.current = nsig; return () => clearTimeout(t); }
     nsigPrev.current = nsig;
   }, [nsig]);
-  const nsigRef = useRef(nsig);
-  useEffect(() => { if (nsig !== nsigRef.current) { nsigRef.current = nsig; if (nsig) setNotifSeen(false); } }, [nsig]);
   useEffect(() => {
     if (!notifOpen && !userOpen) return;
     const close = (e) => { if (!(e.target.closest && e.target.closest('[data-hdr-menu]'))) { setNotifOpen(false); setUserOpen(false); } };
@@ -533,11 +540,11 @@ function Header() {
       <div data-hdr-menu style={{ display: 'flex', alignItems: 'center', gap: 9, position: 'relative' }}>
         {isAdmin && <button onClick={onToggleEdit} title={editMode ? 'Quitter le mode édition' : tr('Mode édition')} style={editBtn}><Ico name="edit" size={17} /></button>}
         <button onClick={onToggleTheme} title={tr('Changer de thème')} style={hbtn}><Ico name="brightness" size={18} /></button>
-        <button onClick={() => { setNotifOpen(o => !o); setUserOpen(false); }} title="Notifications" style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{hasNotif && !notifSeen && <span className="o-livedot" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: '#f87171', border: '2px solid var(--o-bg2)' }} />}</button>
+        <button onClick={() => { setNotifOpen(o => { const n = !o; if (n) marquerVues(); return n; }); setUserOpen(false); }} title="Notifications" style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{nonVues && <span className="o-livedot" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: '#f87171', border: '2px solid var(--o-bg2)' }} />}</button>
         <button onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }} title="Profil" style={{ width: 44, height: 44, borderRadius: '50%', marginLeft: 4, background: curBg, border: '2px solid rgba(255,255,255,.15)', cursor: 'pointer', flexShrink: 0 }} />
         {notifOpen && (
           <div style={{ ...menu, right: 52, width: 'min(304px, calc(100vw - 32px))' }}>
-            <div style={{ padding: '12px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 14 }}>Notifications</span><span onClick={() => setNotifSeen(true)} style={{ fontSize: 12, color: 'var(--o-accent-soft)', cursor: 'pointer', fontWeight: 600 }}>Tout lire</span></div>
+            <div style={{ padding: '12px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 14 }}>Notifications</span><span onClick={marquerVues} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); marquerVues(); } }} style={{ fontSize: 12, color: 'var(--o-accent-soft)', cursor: 'pointer', fontWeight: 600 }}>Tout lire</span></div>
             <div style={{ maxHeight: 300, overflowY: 'auto' }}>
               {hasNotif ? notifs.map((n, i) => (
                 <div key={i} style={{ display: 'flex', gap: 11, padding: '11px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: n[0], marginTop: 5, flexShrink: 0 }} /><div style={{ minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700 }}>{n[1]}</div><div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{n[2]}</div>{n[3] && <div style={{ fontSize: 11, color: 'var(--o-text3)', marginTop: 2 }}>{n[3]}</div>}</div></div>
@@ -3817,6 +3824,12 @@ function WxMini({ wx, on }) {
  * en veille, pas un second a entretenir. Toujours sombre, quel que soit le
  * theme : c'est une veille. Idee reprise des dashboards ambiants de Madelena. */
 function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn, notifs, ast = null }) {
+  // Tant que la veille recouvre l'écran, les fonds GPU (wx3d, ciel 3D) rendent
+  // pour personne : la classe leur dit de souffler — batterie de la tablette.
+  useEffect(() => {
+    document.documentElement.classList.add('loggia-ambient-on');
+    return () => document.documentElement.classList.remove('loggia-ambient-on');
+  }, []);
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => { const iv = setInterval(() => setClock(new Date()), 10000); return () => clearInterval(iv); }, []);
   const hm = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
@@ -9767,7 +9780,7 @@ export default function App() {
 
   return (
     <LoggiaContext.Provider value={loggiaRuntime}>
-    {showOnboarding && <Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} />}
+    {showOnboarding && <Suspense fallback={null}><Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} /></Suspense>}
     <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, isAdmin, notifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn }}>
     <div className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)',
       // isolate : notre propre contexte d'empilement. Sans lui, le z-index

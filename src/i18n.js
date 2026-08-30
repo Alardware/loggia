@@ -28,7 +28,6 @@
  * disparaissait derriere l'ecran d'erreur.
  */
 import { cfgVal, getHass } from './state.js';
-import EN from './langues/en.js';
 
 /* Deux langues, traduites en entier — plutot que soixante a moitie.
  *
@@ -45,7 +44,25 @@ export const LANGUES = [
   { code: 'en', nom: 'English' },
 ];
 
-const CATALOGUES = { en: EN };
+/* Le catalogue anglais n'est PAS importe ici : 40 Ko que le boot francophone
+ * n'emporterait pour rien. L'amorce (main.jsx) le charge quand la langue
+ * resolue le demande et le depose sur `window.__loggiaCatEN` avant d'evaluer
+ * l'application. `chargerCatalogueTardif` couvre le cas restant : « auto » qui
+ * bascule vers l'anglais a l'arrivee de hass. */
+const CATALOGUES = {};
+try { if (typeof window !== 'undefined' && window.__loggiaCatEN) CATALOGUES.en = window.__loggiaCatEN; } catch (e) { /* rien */ }
+
+let _chargementEn = null;
+function chargerCatalogueTardif(demande) {
+  if (CATALOGUES.en || _chargementEn) return;
+  _chargementEn = import('./langues/en.js').then(m => {
+    CATALOGUES.en = m.default;
+    // La demande etait l'anglais lui-meme : on bascule — le poll de hass (2 s)
+    // redessine, les libelles suivent au tick d'apres. Pour une langue exotique
+    // le code reste le sien, seul le FILET anglais devient disponible.
+    if (demande === 'en') { _code = 'en'; _cat = m.default; }
+  }).catch(() => { _chargementEn = null; });
+}
 
 /** Les langues proposees dans les reglages. */
 export function languesDisponibles() {
@@ -382,6 +399,14 @@ const LANGUE_IMPORT = _code;
 
 export function preparerLangue(hass) {
   const avant = _code;
+  /* La langue DEMANDEE peut etre l'anglais sans que son catalogue soit charge —
+   * « auto » qui bascule a l'arrivee de hass, l'amorce n'a pas pu le prevoir.
+   * On declenche le chargement ; `resoudre` sert le francais en attendant. */
+  const choix = choixLangue();
+  const demande = choix === 'auto' ? langueDeHA(hass) : choix;
+  // Toute langue autre que le francais s'appuie sur l'anglais — en plein pour
+  // « en », en filet pour une langue exotique servie par « auto ».
+  if (demande && demande !== LANGUE_SOURCE) chargerCatalogueTardif(demande);
   _code = resoudre(hass);
   _cat = CATALOGUES[_code] || null;
 
@@ -451,7 +476,7 @@ export function tr(texte, params) {
    * L'anglais est la deuxieme langue de a peu pres tout le monde ; le francais ne
    * l'est de personne. Un dashboard allemand aux trois quarts, complete en
    * anglais, se lit. Complete en francais, il se ferme. */
-  if (!s && _code !== LANGUE_SOURCE) s = EN[texte] || null;
+  if (!s && _code !== LANGUE_SOURCE && CATALOGUES.en) s = CATALOGUES.en[texte] || null;
   if (!s) s = texte;
   if (params) {
     for (const k in params) s = s.split('{' + k + '}').join(String(params[k]));
