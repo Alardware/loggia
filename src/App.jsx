@@ -8863,10 +8863,15 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
         {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + name} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={(e) => { e.stopPropagation(); call('homeassistant', on ? 'turn_off' : 'turn_on'); }} style={{ width: 44, height: 25, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
         {runnable && !dead && <button onClick={(e) => { e.stopPropagation(); call(runnable[0], runnable[1]); }} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
         {dom === 'lock' && !dead && <button onClick={(e) => { e.stopPropagation(); call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ padding: '7px 12px', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{s === 'locked' ? 'Déverrouiller' : 'Verrouiller'}</button>}
+        {/* Batterie des machines dans l'en-tête, comme la carte de référence. */}
+        {(dom === 'vacuum' || dom === 'lawn_mower') && !dead && a.battery_level != null && (
+          <span style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: a.battery_level < 20 ? 'var(--o-bad)' : a.battery_level < 50 ? 'var(--o-warn)' : 'var(--o-text2)' }}>{Math.round(a.battery_level)}%</span>
+        )}
         {/* Compacte : le contrôle PRIMAIRE du domaine reste sur la ligne —
           * discret, pour laisser le nom respirer. */}
         {dense && !dead && (() => {
-          const mini = { width: 26, height: 26, borderRadius: 8, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, padding: 0 };
+          const mini = { width: 28, height: 28, borderRadius: '50%', border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, padding: 0 };
+          const miniAccent = { ...mini, border: 'none', background: 'var(--o-accent)', color: '#fff' };
           if (dom === 'climate') return (<>
             <button style={mini} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }}>−</button>
             <button style={mini} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature + .5); }}>+</button>
@@ -8876,19 +8881,14 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
             <button style={mini} aria-label={tr('Fermer') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'close_cover'); }}><Fi i="angle-down" size={13} /></button>
           </>);
           if (dom === 'vacuum' || dom === 'lawn_mower') return (
-            <button style={mini} title={on ? tr('Renvoyer au dock') : (dom === 'vacuum' ? tr('Démarrer le nettoyage') : tr('Lancer la tonte'))} onClick={(e) => { e.stopPropagation(); call(dom, on ? (dom === 'vacuum' ? 'return_to_base' : 'dock') : (dom === 'vacuum' ? 'start' : 'start_mowing')); }}><Fi i={on ? 'home' : 'play'} size={12} /></button>
+            <button style={miniAccent} title={on ? tr('Renvoyer au dock') : (dom === 'vacuum' ? tr('Démarrer le nettoyage') : tr('Lancer la tonte'))} onClick={(e) => { e.stopPropagation(); call(dom, on ? (dom === 'vacuum' ? 'return_to_base' : 'dock') : (dom === 'vacuum' ? 'start' : 'start_mowing')); }}><Fi i={on ? 'home' : 'play'} size={12} /></button>
           );
           if (dom === 'media_player' && s !== 'off') return (
-            <button style={mini} aria-label={s === 'playing' ? 'Pause' : tr('Lecture')} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={12} /></button>
+            <button style={miniAccent} aria-label={s === 'playing' ? 'Pause' : tr('Lecture')} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={12} /></button>
           );
           return null;
         })()}
       </div>
-      {/* Machines : l'illustration en filigrane latéral — la carte standard
-        * garde la taille standard, l'illustration ne pousse rien. */}
-      {!dense && (dom === 'vacuum' || dom === 'lawn_mower') && !dead && (
-        <div aria-hidden="true" style={{ position: 'absolute', right: 12, top: 10, width: 78, height: 78, backgroundImage: `url("${dom === 'vacuum' ? DEVICE_ART.vacuum : DEVICE_ART.mower}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', opacity: 0.3, pointerEvents: 'none' }} />
-      )}
       {/* Standard lumière : la luminosité en dessous — commit au relâcher. */}
       {!dense && dom === 'light' && !dead && (a.brightness != null || (a.supported_color_modes || []).indexOf('brightness') >= 0) && (
         <div className="o-cvrange" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
@@ -8935,20 +8935,24 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           if (enCours ? (f & 2) : (f & 1)) btns.push([enCours ? 'pause' : 'play', enCours ? 'pause' : 'start_mowing', enCours ? tr('Pause') : tr('Lancer la tonte')]);
           if (f & 4) btns.push(['home', 'dock', tr('Renvoyer au dock')]);
         }
+        // Boutons RONDS alignés à gauche, comme la carte de référence — le
+        // premier (l'action principale) porte l'accent ; la vitesse
+        // d'aspiration ferme la rangée, discrète, à droite.
         return btns.length > 0 && (
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            {btns.map(([gi, svc, lbl]) => (
-              <button key={svc} title={lbl} aria-label={lbl} onClick={(e) => { e.stopPropagation(); call(dom, svc); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={gi} size={14} /></button>
+          <div style={{ display: 'flex', gap: 10, marginTop: 12, alignItems: 'center' }}>
+            {btns.map(([gi, svc, lbl], bi) => (
+              <button key={svc} title={lbl} aria-label={lbl} onClick={(e) => { e.stopPropagation(); call(dom, svc); }}
+                style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={14} /></button>
             ))}
+            {dom === 'vacuum' && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
+              <div style={{ marginLeft: 'auto' }}>
+                <MenuDeroulant icone="wind" etiquette={tr('Vitesse')} valeur={a.fan_speed} options={a.fan_speed_list}
+                  rendre={(v) => FAN_FR()[v] || v} surChoix={(v) => call('vacuum', 'set_fan_speed', { fan_speed: v })} />
+              </div>
+            )}
           </div>
         );
       })()}
-      {!dense && dom === 'vacuum' && !dead && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
-          <MenuDeroulant icone="wind" etiquette={tr('Vitesse')} valeur={a.fan_speed} options={a.fan_speed_list}
-            rendre={(v) => FAN_FR()[v] || v} surChoix={(v) => call('vacuum', 'set_fan_speed', { fan_speed: v })} />
-        </div>
-      )}
       {!dense && dom === 'valve' && !dead && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button onClick={(e) => { e.stopPropagation(); call('valve', on ? 'close_valve' : 'open_valve'); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>{on ? tr('Fermer') : tr('Ouvrir')}</button>
