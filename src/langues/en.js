@@ -405,6 +405,7 @@ export default {
   'Toute la maison, une ligne par domaine — tape pour ouvrir': 'The whole home, one line per domain — tap to open',
   'Qualité air': 'Air quality',
   'Auto (appareil)': 'Auto (device)',
+  'Thermostats': 'Thermostats',
   'Épingle des entités depuis la fiche d’un appareil (la punaise) : elles apparaîtront ici.': 'Pin entities from a device sheet (the thumbtack): they will show up here.',
   'Ajouter une horloge': 'Add a clock',
   '« Auto » : le rendu habituel de cette vue.': '"Auto": the usual rendering of this view.',
