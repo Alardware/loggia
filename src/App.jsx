@@ -2632,80 +2632,98 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
  * en tête : c'est CvCard qui sait déjà les piloter. */
 const FICHE_PILOTABLES = ['climate', 'vacuum', 'lawn_mower', 'light', 'cover', 'media_player', 'alarm_control_panel', 'lock', 'fan', 'switch', 'valve', 'humidifier', 'water_heater'];
 
-/** Une entité quelconque, rendue par son domaine — le legо de la fiche. */
-function LigneEntite({ id, hass, nom = null }) {
+/** Une entité quelconque, rendue par son domaine — le legо de la fiche.
+ * `surEpingle` (fiche seulement) affiche la punaise : épingler remonte la
+ * ligne en tête de fiche ET l'invite sur la carte de l'appareil. */
+function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const dom = String(id).split('.')[0];
   const label = nom || (a.friendly_name || id).replace(/^[^:]*: ?/, '');
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
   const mort = !st || st.state === 'unavailable';
-  const ligne = { display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: mort ? .5 : 1 };
-  const lbl = <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>;
+  let controle = null, wrap = false;
   if (dom === 'switch' || dom === 'input_boolean' || dom === 'siren') {
     const on = !!st && st.state === 'on';
-    return (
-      <div style={ligne}>{lbl}
-        <span role="switch" aria-checked={on} tabIndex={0} aria-label={label} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', 'toggle'); } }} onClick={() => call('homeassistant', 'toggle')} style={{ width: 42, height: 24, borderRadius: 12, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .3s cubic-bezier(.34,1.56,.64,1)' }} /></span>
-      </div>
-    );
-  }
-  if (dom === 'number' || dom === 'input_number') {
+    controle = <span role="switch" aria-checked={on} tabIndex={0} aria-label={label} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', 'toggle'); } }} onClick={() => call('homeassistant', 'toggle')} style={{ width: 42, height: 24, borderRadius: 12, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .3s cubic-bezier(.34,1.56,.64,1)' }} /></span>;
+  } else if (dom === 'number' || dom === 'input_number') {
     const v = st ? parseFloat(st.state) : NaN;
     const pas = a.step != null ? +a.step : 1;
     const borne = (x) => Math.min(a.max != null ? +a.max : Infinity, Math.max(a.min != null ? +a.min : -Infinity, x));
     const poser = (x) => call(dom, 'set_value', { value: Math.round(borne(x) * 100) / 100 });
     const btn = { width: 30, height: 30, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer', flexShrink: 0 };
-    return (
-      <div style={ligne}>{lbl}
-        <button style={btn} aria-label={'− ' + label} onClick={() => !isNaN(v) && poser(v - pas)}>−</button>
-        <span style={{ minWidth: 56, textAlign: 'center', fontSize: 13.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{isNaN(v) ? '—' : Math.round(v * 100) / 100}{a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}</span>
-        <button style={btn} aria-label={'+ ' + label} onClick={() => !isNaN(v) && poser(v + pas)}>+</button>
-      </div>
-    );
-  }
-  if (dom === 'select' || dom === 'input_select') {
+    controle = (<>
+      <button style={btn} aria-label={'− ' + label} onClick={() => !isNaN(v) && poser(v - pas)}>−</button>
+      <span style={{ minWidth: 56, textAlign: 'center', fontSize: 13.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{isNaN(v) ? '—' : Math.round(v * 100) / 100}{a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}</span>
+      <button style={btn} aria-label={'+ ' + label} onClick={() => !isNaN(v) && poser(v + pas)}>+</button>
+    </>);
+  } else if (dom === 'select' || dom === 'input_select') {
     const opts = Array.isArray(a.options) ? a.options : [];
-    return (
-      <div style={{ ...ligne, flexWrap: 'wrap' }}>{lbl}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '70%' }}>
-          {opts.slice(0, 8).map(o => { const on = st && st.state === o; return (
-            <button key={o} onClick={() => call(dom, 'select_option', { option: o })} aria-pressed={on}
-              style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{o}</button>
-          ); })}
-        </div>
+    wrap = true;
+    controle = (
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '70%' }}>
+        {opts.slice(0, 8).map(o => { const on = st && st.state === o; return (
+          <button key={o} onClick={() => call(dom, 'select_option', { option: o })} aria-pressed={on}
+            style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{o}</button>
+        ); })}
       </div>
     );
-  }
-  if (dom === 'button' || dom === 'input_button' || dom === 'scene' || dom === 'script') {
+  } else if (dom === 'button' || dom === 'input_button' || dom === 'scene' || dom === 'script') {
     const svc = dom === 'scene' || dom === 'script' ? [dom, 'turn_on'] : [dom, 'press'];
-    return (
-      <div style={ligne}>{lbl}
-        <button onClick={() => call(svc[0], svc[1])} style={{ padding: '7px 13px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Exécuter')}</button>
-      </div>
-    );
-  }
-  if (dom === 'binary_sensor') {
+    controle = <button onClick={() => call(svc[0], svc[1])} style={{ padding: '7px 13px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Exécuter')}</button>;
+  } else if (dom === 'binary_sensor') {
     const on = !!st && st.state === 'on';
     const grave = ['smoke', 'gas', 'moisture', 'problem', 'safety', 'carbon_monoxide'].indexOf(a.device_class) >= 0;
-    return (
-      <div style={ligne}>{lbl}
-        <span style={{ fontSize: 12.5, fontWeight: 800, color: on ? (grave ? 'var(--o-bad)' : 'var(--o-warn)') : 'var(--o-text3)' }}>{on ? tr('Détecté') : 'RAS'}</span>
-      </div>
-    );
-  }
-  // sensor et le reste : la valeur, lisible. Une valeur VIDE ou inconnue ne
-  // mérite pas sa ligne — le vide n'informe personne.
-  const brut = st ? st.state : null;
-  if (brut === '' || brut === 'unknown' || brut == null) return null;
-  const n = parseFloat(brut);
-  const rel = /^\d{4}-\d\d-\d\dT/.test(String(brut)) ? relTime(brut) : null;
-  const bat = a.device_class === 'battery' && !isNaN(n);
-  return (
-    <div style={ligne}>{lbl}
+    controle = <span style={{ fontSize: 12.5, fontWeight: 800, color: on ? (grave ? 'var(--o-bad)' : 'var(--o-warn)') : 'var(--o-text3)' }}>{on ? tr('Détecté') : 'RAS'}</span>;
+  } else {
+    // sensor et le reste : la valeur, lisible. Une valeur VIDE ou inconnue ne
+    // mérite pas sa ligne — le vide n'informe personne.
+    const brut = st ? st.state : null;
+    if (brut === '' || brut === 'unknown' || brut == null) return null;
+    const n = parseFloat(brut);
+    const rel = /^\d{4}-\d\d-\d\dT/.test(String(brut)) ? relTime(brut) : null;
+    const bat = a.device_class === 'battery' && !isNaN(n);
+    controle = (
       <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: bat ? (n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-ok)') : 'var(--o-text)' }}>
         {mort ? '—' : rel || (isNaN(n) ? String(brut) : Math.round(n * 100) / 100)}{!rel && a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}
       </span>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: mort ? .5 : 1, flexWrap: wrap ? 'wrap' : 'nowrap' }}>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      {controle}
+      {surEpingle && (
+        <button onClick={() => surEpingle(id)} title={epingle ? tr('Désépingler') : tr('Épingler sur la carte')} aria-pressed={epingle}
+          style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: epingle ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: epingle ? 'var(--o-accent-soft)' : 'var(--o-text3)', opacity: epingle ? 1 : .55 }}>
+          <Fi i="thumbtack" size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── ÉPINGLES : la curation par l'usage ──────────────────────────────────────
+ * Le schéma générique montre tout au même niveau ; l'épingle laisse le foyer
+ * dire ce qui compte. Une entité épinglée remonte en tête de fiche ET s'invite
+ * sur la carte de son appareil. Partagé maison via la configuration (cfgSet). */
+const lireEpingles = () => { const v = cfgVal('loggia_epingles', null); return Array.isArray(v) ? v : []; };
+function Epingles({ pourId, hass, max = 3, avecAncre = false }) {
+  const { index } = useLoggia();
+  const S = (hass && hass.states) || {};
+  const eps = lireEpingles();
+  if (!eps.length || !index || !index.entityMeta) return null;
+  const meta = index.entityMeta.get(pourId);
+  const devId = meta && meta.deviceId;
+  if (!devId) return null;
+  // `avecAncre` : les cartes machines (Objets) ont une ancre arbitraire — elle
+  // aussi peut être épinglée ; une CvCard, elle, montre déjà son entité.
+  const liste = eps.filter(eid => (avecAncre || eid !== pourId) && (index.entityMeta.get(eid) || {}).deviceId === devId && S[eid]).slice(0, max);
+  if (!liste.length) return null;
+  // La carte parente s'ouvre au clic : les épingles agissent SANS ouvrir.
+  return (
+    <div onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} style={{ marginTop: 10 }}>
+      {liste.map(eid => <LigneEntite key={eid} id={eid} hass={hass} nom={(index.entityMeta.get(eid) || {}).name || undefined} />)}
     </div>
   );
 }
@@ -2714,6 +2732,13 @@ function FicheAppareil({ id, hass, onClose }) {
   const { index } = useLoggia();
   const dc = useDomainCards(hass);
   const [diagOuvert, setDiagOuvert] = useState(false);
+  // Épingles : état local pour un retour visuel immédiat, cfgSet pour la maison.
+  const [eps, setEps] = useState(lireEpingles);
+  const basculer = (eid) => {
+    const suiv = eps.indexOf(eid) >= 0 ? eps.filter(x => x !== eid) : eps.concat(eid);
+    setEps(suiv);
+    cfgSet({ loggia_epingles: suiv.length ? suiv : null });
+  };
   const S = (hass && hass.states) || {};
   const meta = index && index.entityMeta ? index.entityMeta.get(id) : null;
   const devId = meta && meta.deviceId;
@@ -2733,14 +2758,17 @@ function FicheAppareil({ id, hass, onClose }) {
   const pilotables = soeurs.filter(x => FICHE_PILOTABLES.indexOf(domDe(x.id)) >= 0 && !x.m.category)
     .sort((a, b) => (a.id === id ? -1 : 0) - (b.id === id ? -1 : 0));
   const restantes = soeurs.filter(x => pilotables.indexOf(x) < 0);
-  const principal = restantes.filter(x => !x.m.category);
-  const config = restantes.filter(x => x.m.category === 'config');
-  const diag = restantes.filter(x => x.m.category === 'diagnostic');
+  // Les épinglées quittent leur section : elles vivent en tête, pas en double.
+  const epinglees = restantes.filter(x => eps.indexOf(x.id) >= 0);
+  const libres = restantes.filter(x => eps.indexOf(x.id) < 0);
+  const principal = libres.filter(x => !x.m.category);
+  const config = libres.filter(x => x.m.category === 'config');
+  const diag = libres.filter(x => x.m.category === 'diagnostic');
   const triNom = (a, b) => String(nomCourt(a)).localeCompare(String(nomCourt(b)), 'fr');
   const section = (titre2, liste) => liste.length > 0 && (
     <>
       <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 2px' }}>{titre2}</div>
-      {liste.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={hass} nom={nomCourt(x)} />)}
+      {liste.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={hass} nom={nomCourt(x)} surEpingle={basculer} epingle={eps.indexOf(x.id) >= 0} />)}
     </>
   );
   return (
@@ -2758,6 +2786,7 @@ function FicheAppareil({ id, hass, onClose }) {
             {pilotables.slice(0, 3).map(x => <CvCard key={x.id} id={x.id} hass={hass} onOpen={x.id !== id ? dc.ouvrir : null} />)}
           </div>
         )}
+        {section(tr('ÉPINGLES'), epinglees)}
         {section(tr('COMMANDES'), principal)}
         {section(tr('RÉGLAGES'), config)}
         {diag.length > 0 && (
@@ -2765,7 +2794,7 @@ function FicheAppareil({ id, hass, onClose }) {
             <button onClick={() => setDiagOuvert(o => !o)} style={{ marginTop: 16, padding: '8px 13px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', alignSelf: 'flex-start' }}>
               {(diagOuvert ? tr('Masquer') : tr('Afficher')) + ' ' + tr('{n} diagnostics', { n: diag.length })}
             </button>
-            {diagOuvert && diag.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={hass} nom={nomCourt(x)} />)}
+            {diagOuvert && diag.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={hass} nom={nomCourt(x)} surEpingle={basculer} />)}
           </>
         )}
         {dc.sheets}
@@ -3640,7 +3669,7 @@ function ObjSheet({ title, img, accent = 'var(--o-accent)', rows = [], actions =
     </BottomSheet>
   );
 }
-function ObjCard({ icon, iconBg, name, sub, status, statusColor, barLabel, barPct, barColor, barText, barLiquid, toggleOn, onToggle, actionLabel, onAction, onOpen, art, idx = 0, iconActive = false }) {
+function ObjCard({ icon, iconBg, name, sub, status, statusColor, barLabel, barPct, barColor, barText, barLiquid, toggleOn, onToggle, actionLabel, onAction, onOpen, art, idx = 0, iconActive = false, extra = null }) {
   const tilt = useTilt(4);
   return (
     <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-stag o-hov ' + (tilt.className || '')} role="button" tabIndex={0} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', overflow: 'hidden', borderRadius: 16, padding: '14px 15px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', cursor: 'pointer', display: 'flex', flexDirection: 'column', ...stag(idx) }}>
@@ -3666,6 +3695,7 @@ function ObjCard({ icon, iconBg, name, sub, status, statusColor, barLabel, barPc
           <Gauge pct={barPct} color={barColor || 'var(--o-ok)'} liquid={!!barLiquid} />
         </div>
       )}
+      {extra && <div style={{ position: 'relative' }}>{extra}</div>}
       <div style={{ position: 'relative', marginTop: 'auto' }}>
         {actionLabel && (
           <ActionBtn onClick={() => { if (onAction) onAction(); }} style={{ marginTop: 12, width: '100%', padding: '10px 10px', borderRadius: 12, border: 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontWeight: 700, fontSize: 12.5, background: 'var(--o-s2)', color: 'var(--o-text1)' }}>{actionLabel}</ActionBtn>
@@ -3902,14 +3932,16 @@ function ObjetsView({ hass, onNav, edit = false }) {
                 barLabel="Batterie" barPct={vacBat} barColor={batCol(vacBat)} barText={vacBat != null ? Math.round(vacBat) + '%' : '—'}
                 actionLabel={vacCleaning ? tr('Renvoyer au dock') : tr('Démarrer le nettoyage')}
                 onAction={() => objVacRun(vacCleaning ? 'retour_base' : 'nettoyer_tout', vacCleaning ? 'return_to_base' : 'start')}
-                onOpen={() => setSheet({ type: 'vac' })} />;
+                onOpen={() => setSheet({ type: 'vac' })}
+                extra={objVacMain ? <Epingles pourId={objVacMain} hass={hass} avecAncre /> : null} />;
             } else if (k === 'obj:mower') {
               carte = <ObjCard idx={i} icon={<Ico name="mower" size={19} color="#a3e635" />} iconBg="rgba(163,230,53,.14)"
                 name={nomDe(k)} iconActive={lubaMow} sub={nomHA(lubaId)} status={lubaTxt} statusColor={lubaMow ? 'var(--o-ok)' : 'var(--o-text2)'}
                 barLabel="Batterie" barPct={lubaBat} barColor={batCol(lubaBat)} barText={lubaBat != null ? Math.round(lubaBat) + '%' : '—'}
                 actionLabel={lubaMow ? 'Renvoyer à la base' : 'Lancer la tonte'}
                 onAction={() => call('lawn_mower', lubaMow ? 'dock' : 'start_mowing', { entity_id: lubaId })}
-                onOpen={() => setSheet({ type: 'luba' })} />;
+                onOpen={() => setSheet({ type: 'luba' })}
+                extra={lubaId ? <Epingles pourId={lubaId} hass={hass} avecAncre /> : null} />;
             } else if (k === 'obj:feeder') {
               // Distribuer une ration demande un script propre à l'installation :
               // rien de standard côté Home Assistant. À défaut d'être désigné,
@@ -3921,7 +3953,8 @@ function ObjetsView({ hass, onNav, edit = false }) {
                 barLabel={tr('Réservoir')} barPct={croqPct} barColor={croqPct < 25 ? '#f87171' : '#ffce73'} barText={croqPct + '%'} barLiquid
                 actionLabel={sc ? 'Distribuer une ration' : null}
                 onAction={() => { if (sc) call('script', 'turn_on', { entity_id: sc }); }}
-                onOpen={() => setSheet({ type: 'croq' })} />;
+                onOpen={() => setSheet({ type: 'croq' })}
+                extra={(() => { const fid = (loggiaEnt('feeder', null) || {}).haid || (S ? Object.keys(S).find(x => x.indexOf('number.') === 0 && /serving_size$/.test(x)) : null); return fid ? <Epingles pourId={fid} hass={hass} avecAncre /> : null; })()} />;
             } else if (med) {
               const { p, np } = med;
               carte = <ObjCard idx={i}
@@ -8695,6 +8728,7 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
           <button onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 12 }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={13} />{s === 'playing' ? 'Pause' : tr('Lecture')}</button>
         </div>
       )}
+      <Epingles pourId={id} hass={hass} />
     </div>
   );
 }
