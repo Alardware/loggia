@@ -2262,7 +2262,8 @@ function useLayoutEditor(cfgKey, scope, derived) {
   const layout = layoutOf(cfgKey, scope);
   const ids = useMemo(() => applyLayout(layoutOf(cfgKey, scope), derived), [cfgKey, scope, sig, rev]);
   const edits = (layout.removed || []).length + (layout.added || []).length
-    + ((layout.order || []).length ? 1 : 0) + Object.keys(layout.labels || {}).length;
+    + ((layout.order || []).length ? 1 : 0) + Object.keys(layout.labels || {}).length
+    + (layout.larges || []).length;
 
   const vide = (a) => (a && a.length) ? a : null;
   const write = (patch) => { setLayout(cfgKey, scope, patch); setRev(v => v + 1); };
@@ -2330,8 +2331,15 @@ function useLayoutEditor(cfgKey, scope, derived) {
   };
   const rename = (id, nom) => replace(id, id, nom);
 
-  const reset = () => write({ removed: null, added: null, order: null, labels: null });
+  const reset = () => write({ removed: null, added: null, order: null, labels: null, larges: null });
   const labelOf = (id) => labelIn(layout, id);
+  /* Largeur d'une carte : double = deux emplacements côte à côte, sur toutes
+   * les vues à grille. Rangée dans le layout, comme l'ordre et les libellés. */
+  const estLarge = (id) => (layout.larges || []).indexOf(id) >= 0;
+  const basculerLarge = (id) => {
+    const l = layout.larges || [];
+    write({ larges: vide(l.indexOf(id) >= 0 ? l.filter(x => x !== id) : [...l, id]) });
+  };
 
   // Les positions de la grille sont mesurees une fois : elle ne bouge pas
   // pendant le geste, ces reperes restent donc justes sans remesurer.
@@ -2407,7 +2415,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
     return false;
   };
 
-  return { ids, edits, layout, gridRef, dragId, dragOver, dragStart, dragMove, dragEnd, remove, toggle, move, rename, replace, reset, labelOf };
+  return { ids, edits, layout, gridRef, dragId, dragOver, dragStart, dragMove, dragEnd, remove, toggle, move, rename, replace, reset, labelOf, estLarge, basculerLarge };
 }
 
 /**
@@ -2472,6 +2480,18 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
             </>
           )}
 
+          {!estSection && ed.estLarge && (
+            <>
+              <div style={etiquette}>{tr('LARGEUR')}</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[[false, tr('Simple')], [true, tr('Double')]].map(([lg, lbl2]) => { const on = ed.estLarge(id) === lg; return (
+                  <button key={lbl2} aria-pressed={on} onClick={() => { if (!on) ed.basculerLarge(id); }}
+                    style={{ flex: 1, padding: '10px 8px', borderRadius: 11, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{lbl2}</button>
+                ); })}
+              </div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('Double : la carte prend deux emplacements côte à côte.')}</div>
+            </>
+          )}
           <div style={{ display: 'flex', gap: 9, marginTop: 20, flexWrap: 'wrap' }}>
             <button onClick={() => valider(close)} style={{ flex: 1, minWidth: 130, padding: '11px 0', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700, background: 'var(--o-accent)', color: '#06121f' }}>Enregistrer</button>
             <button onClick={() => { ed.remove(id); close(); }} style={{ padding: '11px 16px', borderRadius: 12, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.14)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: 'var(--o-bad)' }}>Retirer</button>
@@ -2496,7 +2516,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, children }) {
   const saisie = ed.dragId === id;
   const visee = !!ed.dragId && ed.dragOver === ed.ids.indexOf(id) && !saisie;
   return (
-    <div data-id={id} style={{
+    <div data-id={id} className={ed.estLarge && ed.estLarge(id) ? 'o-cvw2' : undefined} style={{
       position: 'relative', borderRadius: 'var(--o-radius,20px)',
       outline: visee ? '2px dashed var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.45)',
       outlineOffset: 3,
@@ -2803,19 +2823,24 @@ function FicheAppareil({ id, hass, onClose }) {
   const config = libres.filter(x => x.m.category === 'config');
   const diag = libres.filter(x => x.m.category === 'diagnostic');
   const triNom = (a, b) => String(nomCourt(a)).localeCompare(String(nomCourt(b)), 'fr');
-  // Chaque section se replie d'un tap sur son titre — une fiche chargée
-  // (tondeuse : 15 commandes) se parcourt sans noyer l'essentiel.
+  // Chaque section se replie d'un tap sur son titre. REPLIÉES par défaut :
+  // la fiche s'ouvre sur l'essentiel (état, actions, épingles), le détail se
+  // déplie à la demande. Les épingles, choisies par le foyer, restent visibles.
   const [replies, setReplies] = useState({});
-  const section = (titre2, liste) => liste.length > 0 && (
-    <>
-      <button onClick={() => setReplies(r => ({ ...r, [titre2]: !r[titre2] }))} aria-expanded={!replies[titre2]}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', padding: 0, margin: '16px 0 2px', cursor: 'pointer' }}>
-        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{titre2 + (replies[titre2] ? ' · ' + liste.length : '')}</span>
-        <Fi i={replies[titre2] ? 'angle-down' : 'angle-up'} size={11} color="var(--o-text3)" />
-      </button>
-      {!replies[titre2] && liste.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={H} nom={nomCourt(x)} surEpingle={basculer} epingle={eps.indexOf(x.id) >= 0} />)}
-    </>
-  );
+  const section = (titre2, liste, defOuvert = false) => {
+    if (!liste.length) return false;
+    const ouvert = replies[titre2] != null ? replies[titre2] : defOuvert;
+    return (
+      <>
+        <button onClick={() => setReplies(r => ({ ...r, [titre2]: !ouvert }))} aria-expanded={ouvert}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', padding: 0, margin: '16px 0 2px', cursor: 'pointer' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{titre2 + (ouvert ? '' : ' · ' + liste.length)}</span>
+          <Fi i={ouvert ? 'angle-up' : 'angle-down'} size={11} color="var(--o-text3)" />
+        </button>
+        {ouvert && liste.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={H} nom={nomCourt(x)} surEpingle={basculer} epingle={eps.indexOf(x.id) >= 0} />)}
+      </>
+    );
+  };
   return (
     <BottomSheet onClose={onClose}>
       {close => (<>
@@ -2831,7 +2856,7 @@ function FicheAppareil({ id, hass, onClose }) {
             {pilotables.slice(0, 3).map(x => <CvCard key={x.id} id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />)}
           </div>
         )}
-        {section(tr('ÉPINGLES'), epinglees)}
+        {section(tr('ÉPINGLES'), epinglees, true)}
         {section(tr('COMMANDES'), principal)}
         {section(tr('RÉGLAGES'), config)}
         {diag.length > 0 && (
@@ -3351,7 +3376,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                 const zone = id.indexOf('zone:') === 0 ? climateZones(S).find(z => z.id === id.slice(5)) : null;
                 const lbl = roomLabelOf(room, id);
                 const card = dc.card(id, lbl, zone);
-                if (!edit) return <Anim key={id} i={ents.indexOf(id)}>{card}</Anim>;
+                if (!edit) return <Anim key={id} i={ents.indexOf(id)} className={ed.estLarge(id) ? 'o-cvw2' : ''}>{card}</Anim>;
                 return <EditableCard key={id} ed={ed} id={id} nom={nomDe(id)} onEdit={setCardEdit}>{card}</EditableCard>;
               })}
                 </div>
@@ -4033,7 +4058,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
               // Ajout libre : n'importe quelle entité, sur la carte générique.
               carte = <CvCard id={k} hass={hass} label={ed.labelOf(k)} />;
             }
-            if (!edit) return <div key={k}>{carte}</div>;
+            if (!edit) return <div key={k} className={ed.estLarge(k) ? 'o-cvw2' : undefined}>{carte}</div>;
             return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
           })}
             </div>
@@ -5370,7 +5395,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
               <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {cartes.map(k => {
                   const carte = dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)}>{carte}</Anim>;
+                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
               </div>
@@ -6195,7 +6220,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
               <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {bloc.cartes.map(k => {
                   const carte = dc.card(k, ed.labelOf(k), zoneDe(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)}>{carte}</Anim>;
+                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={climNom(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
               </div>
@@ -6405,7 +6430,7 @@ function VoletsContent({ hass, edit = false, onEnt }) {
               <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {bloc.cartes.map(k => {
                   const carte = dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)}>{carte}</Anim>;
+                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
               </div>
@@ -6893,7 +6918,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
               <div style={{ fontSize: 17, fontWeight: 800, marginTop: 3, color: on ? d.c : 'var(--o-text3)' }}>{avail(d.power) ? <Num v={w} fmt={fmtW} /> : '—'}</div>
               <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{kwh != null ? kwh.toFixed(2).replace('.', ',') + ' kWh jour' : '—'}</div>
             </div>);
-            if (!edit) return <Anim key={k} i={di} base={160}>{carte}</Anim>;
+            if (!edit) return <Anim key={k} i={di} base={160} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
             return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit}>{carte}</EditableCard>;
           })}
         </div>
@@ -7976,7 +8001,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
               <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {bloc.cartes.map(k => {
                   const carte = dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)}>{carte}</Anim>;
+                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
               </div>
