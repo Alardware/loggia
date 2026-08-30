@@ -3686,9 +3686,9 @@ Object.assign(VIEW_ART, VIEW_ART_SYS);
 const DEVICE_ART = {
   appletv: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='28' y='42' width='144' height='88' rx='9' fill='%231c2636' stroke='%233a4a63' stroke-width='4'/%3E%3Crect x='37' y='51' width='126' height='70' rx='4' fill='%23243349'/%3E%3Cpath d='M91 71 L116 86 L91 101 Z' fill='%2354c8f0' opacity='0.85'/%3E%3Crect x='90' y='130' width='20' height='8' rx='3' fill='%233a4a63'/%3E%3Crect x='62' y='138' width='76' height='6' rx='3' fill='%233a4a63'/%3E%3Crect x='70' y='156' width='60' height='15' rx='6' fill='%232a3850'/%3E%3Ccircle cx='122' cy='163' r='3' fill='%2354c8f0' opacity='0.8'/%3E%3Crect x='146' y='150' width='11' height='32' rx='5' fill='%232a3850'/%3E%3Ccircle cx='151.5' cy='158' r='2.5' fill='%233a4a63'/%3E%3C/svg%3E",
   echo: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='168' rx='44' ry='7' fill='%23101828' opacity='0.6'/%3E%3Crect x='63' y='52' width='74' height='114' rx='18' fill='%23232f42'/%3E%3Cellipse cx='100' cy='56' rx='37' ry='11' fill='%232c3b54'/%3E%3Cellipse cx='100' cy='56' rx='37' ry='11' fill='none' stroke='%2322d3ee' stroke-width='3.5' opacity='0.85'/%3E%3Crect x='72' y='80' width='56' height='4' rx='2' fill='%2331415c' opacity='0.9'/%3E%3Crect x='72' y='92' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='104' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='116' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='128' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='140' width='56' height='4' rx='2' fill='%2331415c'/%3E%3C/svg%3E",
-  vacuum: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='164' rx='60' ry='8' fill='%23101828' opacity='0.6'/%3E%3Cellipse cx='100' cy='118' rx='64' ry='42' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Cellipse cx='100' cy='110' rx='46' ry='28' fill='%23243349'/%3E%3Cellipse cx='100' cy='110' rx='46' ry='28' fill='none' stroke='%232c3b54' stroke-width='2'/%3E%3Ccircle cx='100' cy='104' r='11' fill='%23101828' stroke='%233a4a63' stroke-width='3'/%3E%3Ccircle cx='100' cy='104' r='3.5' fill='%2334d399' opacity='0.85'/%3E%3Cpath d='M48 138 A 64 42 0 0 0 152 138' fill='none' stroke='%232c3b54' stroke-width='5' opacity='0.8'/%3E%3Crect x='88' y='148' width='24' height='7' rx='3.5' fill='%23101828' opacity='0.8'/%3E%3C/svg%3E",
-  mower: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='166' rx='60' ry='8' fill='%23101828' opacity='0.6'/%3E%3Cpath d='M34 168 L40 150 L46 168 Z' fill='%2334d399' opacity='0.5'/%3E%3Cpath d='M160 168 L166 148 L172 168 Z' fill='%2334d399' opacity='0.4'/%3E%3Crect x='44' y='86' width='112' height='58' rx='24' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Cellipse cx='92' cy='88' rx='42' ry='13' fill='%232c3b54'/%3E%3Ccircle cx='68' cy='146' r='17' fill='%23101828' stroke='%233a4a63' stroke-width='4'/%3E%3Ccircle cx='68' cy='146' r='6' fill='%23243349'/%3E%3Ccircle cx='134' cy='148' r='13' fill='%23101828' stroke='%233a4a63' stroke-width='4'/%3E%3Ccircle cx='134' cy='148' r='4.5' fill='%23243349'/%3E%3Ccircle cx='140' cy='104' r='4.5' fill='%23a3e635' opacity='0.85'/%3E%3C/svg%3E",
-  feeder: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='170' rx='56' ry='7' fill='%23101828' opacity='0.6'/%3E%3Crect x='66' y='44' width='68' height='104' rx='16' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Crect x='78' y='58' width='44' height='46' rx='9' fill='%23101828'/%3E%3Cg fill='%23ffce73' opacity='0.8'%3E%3Ccircle cx='88' cy='96' r='4'/%3E%3Ccircle cx='99' cy='92' r='4'/%3E%3Ccircle cx='110' cy='97' r='4'/%3E%3Ccircle cx='93' cy='86' r='4'/%3E%3Ccircle cx='105' cy='84' r='4'/%3E%3C/g%3E%3Ccircle cx='100' cy='122' r='6' fill='%232c3b54' stroke='%233a4a63' stroke-width='2.5'/%3E%3Cpath d='M126 148 q 26 0 26 14 q 0 10 -22 10 L 118 172 Z' fill='%23243349' stroke='%233a4a63' stroke-width='3.5'/%3E%3Cg fill='%23ffce73' opacity='0.75'%3E%3Ccircle cx='138' cy='158' r='3.2'/%3E%3Ccircle cx='146' cy='161' r='3.2'/%3E%3C/g%3E%3C/svg%3E",
+  vacuum: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='100' cy='100' r='72' fill='%23232f42' stroke='%235a6b8f' stroke-width='6'/%3E%3Ccircle cx='100' cy='100' r='50' fill='%232a3852' stroke='%23455878' stroke-width='3'/%3E%3Ccircle cx='100' cy='74' r='14' fill='%23101828' stroke='%235a6b8f' stroke-width='4'/%3E%3Ccircle cx='100' cy='74' r='5' fill='%2334d399'/%3E%3Cpath d='M38 132 A 72 72 0 0 0 162 132' fill='none' stroke='%235a6b8f' stroke-width='6' opacity='0.9'/%3E%3Cpath d='M72 118 A 40 40 0 0 0 128 118' fill='none' stroke='%23455878' stroke-width='4' opacity='0.9'/%3E%3Ccircle cx='100' cy='100' r='7' fill='%23455878'/%3E%3C/svg%3E",
+  mower: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M24 172 L32 146 L40 172 Z' fill='%2334d399' opacity='0.7'/%3E%3Cpath d='M166 172 L174 144 L182 172 Z' fill='%2334d399' opacity='0.55'/%3E%3Crect x='36' y='74' width='128' height='62' rx='26' fill='%23232f42' stroke='%235a6b8f' stroke-width='6'/%3E%3Cellipse cx='86' cy='76' rx='46' ry='15' fill='%23324263' stroke='%23455878' stroke-width='3'/%3E%3Ccircle cx='64' cy='140' r='23' fill='%23101828' stroke='%235a6b8f' stroke-width='6'/%3E%3Ccircle cx='64' cy='140' r='9' fill='%232f3f5c'/%3E%3Ccircle cx='142' cy='146' r='16' fill='%23101828' stroke='%235a6b8f' stroke-width='5'/%3E%3Ccircle cx='142' cy='146' r='6' fill='%232f3f5c'/%3E%3Ccircle cx='148' cy='94' r='6' fill='%23a3e635'/%3E%3C/svg%3E",
+  feeder: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='58' y='28' width='84' height='124' rx='19' fill='%23232f42' stroke='%235a6b8f' stroke-width='6'/%3E%3Crect x='72' y='44' width='56' height='58' rx='11' fill='%23101828' stroke='%23455878' stroke-width='3'/%3E%3Cg fill='%23ffce73'%3E%3Ccircle cx='84' cy='92' r='5.5'/%3E%3Ccircle cx='98' cy='88' r='5.5'/%3E%3Ccircle cx='113' cy='93' r='5.5'/%3E%3Ccircle cx='90' cy='79' r='5.5'/%3E%3Ccircle cx='106' cy='76' r='5.5'/%3E%3C/g%3E%3Ccircle cx='100' cy='124' r='8' fill='%232f3f5c' stroke='%235a6b8f' stroke-width='3.5'/%3E%3Cpath d='M124 150 q 34 0 34 16 q 0 12 -28 12 L 114 178 Z' fill='%232a3852' stroke='%235a6b8f' stroke-width='5'/%3E%3Cg fill='%23ffce73'%3E%3Ccircle cx='140' cy='163' r='4'/%3E%3Ccircle cx='150' cy='167' r='4'/%3E%3C/g%3E%3C/svg%3E",
 };
 function ObjSheet({ title, img, accent = 'var(--o-accent)', rows = [], actions = [], onClose }) {
   return (
@@ -3724,7 +3724,7 @@ function ObjCard({ icon, iconBg, name, sub, status, statusColor, barLabel, barPc
   return (
     <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-stag o-hov ' + (tilt.className || '')} role="button" tabIndex={0} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', overflow: 'hidden', borderRadius: 16, padding: '14px 15px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', cursor: 'pointer', display: 'flex', flexDirection: 'column', ...stag(idx) }}>
       {/* filigrane appareil — ancré au bord droit (jamais en %, cf. plantes) */}
-      {art && <div aria-hidden="true" style={{ position: 'absolute', right: 8, bottom: -8, width: 112, height: 112, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.14, pointerEvents: 'none' }} />}
+      {art && <div aria-hidden="true" style={{ position: 'absolute', right: 8, bottom: -6, width: 124, height: 124, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.3, pointerEvents: 'none' }} />}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 }}>
         <div style={{ width: 38, height: 38, borderRadius: 11, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{''}<span style={{ display: 'inline-flex', animation: iconActive && !REDUCE_MOTION ? 'm-wiggle 2s ease-in-out infinite' : 'none' }}>{icon}</span></div>
         {onToggle && (
@@ -8713,8 +8713,10 @@ function CvTemplateCard({ def, hass }) {
   );
 }
 
+const FAN_FR = () => ({ quiet: tr('Silencieux'), normal: 'Normal', max: 'Max', max_plus: 'Max+', standard: 'Normal', strong: tr('Fort') });
 function CvCard({ id, hass, label = null, onOpen = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
+  const [fanOuvert, setFanOuvert] = useState(false);
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
   const dom = cvDomain(id);
   const ico = dom === 'switch' ? (cvEstLumiere(id) ? 'bulb' : null) : CV_DOM_ICON[dom] || 'bolt'; // null = prise, SVG maison
@@ -8757,8 +8759,8 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
     <div className={'o-piece' + (dead ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? 'Ouvrir ' + name : undefined}
       onClick={ouvrable ? () => onOpen(id) : undefined}
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
-      style={{ background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? (teinte ? hx(teinte, .3) : 'rgba(var(--o-accent-rgb),.3)') : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+      style={{ position: 'relative', background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? (teinte ? hx(teinte, .3) : 'rgba(var(--o-accent-rgb),.3)') : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 11 }}>
         <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinte || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{ico ? <Fi i={ico} size={17} /> : <PlugIcon size={17} />}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
@@ -8768,6 +8770,12 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
         {runnable && !dead && <button onClick={(e) => { e.stopPropagation(); call(runnable[0], runnable[1]); }} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
         {dom === 'lock' && !dead && <button onClick={(e) => { e.stopPropagation(); call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ padding: '7px 12px', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{s === 'locked' ? 'Déverrouiller' : 'Verrouiller'}</button>}
       </div>
+      {/* Machines : l'illustration au centre, comme la fiche native. */}
+      {(dom === 'vacuum' || dom === 'lawn_mower') && !dead && (
+        <div aria-hidden="true" style={{ display: 'flex', justifyContent: 'center', margin: '12px 0 2px' }}>
+          <div style={{ width: 94, height: 94, backgroundImage: `url("${dom === 'vacuum' ? DEVICE_ART.vacuum : DEVICE_ART.mower}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', opacity: 0.55 }} />
+        </div>
+      )}
       {dom === 'climate' && !dead && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
           <button onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>−</button>
@@ -8811,12 +8819,27 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
           </div>
         );
       })()}
+      {/* Vitesse d'aspiration : le sélecteur de la fiche native — un bouton qui
+        * dit la vitesse courante, un menu qui liste les autres. Les chips en
+        * rangée faisaient brouillon. */}
       {dom === 'vacuum' && !dead && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-          {a.fan_speed_list.slice(0, 6).map(v => { const act = a.fan_speed === v; return (
-            <button key={v} aria-pressed={act} onClick={(e) => { e.stopPropagation(); call('vacuum', 'set_fan_speed', { fan_speed: v }); }}
-              style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, border: '1px solid ' + (act ? 'var(--o-accent)' : 'var(--o-bd1)'), background: act ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: act ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{v}</button>
-          ); })}
+        <div style={{ position: 'relative', marginTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => setFanOuvert(o => !o)} aria-haspopup="listbox" aria-expanded={fanOuvert}
+            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 13px', borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', textAlign: 'left' }}>
+            <Fi i="wind" size={14} color="var(--o-text2)" />
+            <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('Vitesse')}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700 }}>{FAN_FR()[a.fan_speed] || a.fan_speed || '—'}</span>
+            </span>
+          </button>
+          {fanOuvert && (
+            <div role="listbox" style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 30, minWidth: 158, padding: 6, borderRadius: 13, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: '0 12px 30px rgba(0,0,0,.45)' }}>
+              {a.fan_speed_list.map(v => { const act = a.fan_speed === v; return (
+                <button key={v} role="option" aria-selected={act} onClick={() => { call('vacuum', 'set_fan_speed', { fan_speed: v }); setFanOuvert(false); }}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: act ? 'rgba(var(--o-accent-rgb),.16)' : 'transparent', color: act ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{FAN_FR()[v] || v}</button>
+              ); })}
+            </div>
+          )}
         </div>
       )}
       {dom === 'valve' && !dead && (
