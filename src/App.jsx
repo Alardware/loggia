@@ -6444,7 +6444,7 @@ function ClimatView({ hass, edit = false, onEnt }) {
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <ClimatContent hass={hass} edit={edit} onEnt={onEnt} />
-      <VoletsContent hass={hass} edit={edit} onEnt={onEnt} />
+      <VoletsContent hass={hass} edit={edit} onEnt={onEnt} embarque />
     </main>
   );
 }
@@ -6489,7 +6489,11 @@ function voletCovers(S) {
 function voletMode() { const c = loggiaEnt('covers', null); return (c && c.mode) || null; }
 function voletDays() { const c = loggiaEnt('covers', null); return (c && Array.isArray(c.days) && c.days.length) ? c.days : []; }
 
-function VoletsContent({ hass, edit = false, onEnt }) {
+/* `embarque` : rendu comme SECTION de la vue Climatisation — un intertitre
+ * « Volets » à la façon des sections de la vue Appareils, la barre d'actions
+ * et les cartes ; ni grand titre, ni carte de synthèse (le confort n'a qu'une
+ * vue, elle a déjà les siens). */
+function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
   const S = (hass && hass.states) || null;
   const derivedCovers = voletCovers(S).map(c => { const e = S && S[c.haid]; const a = e && e.attributes; const pos = a && a.current_position; return { ...c, pos: pos != null ? pos : (e && e.state === 'open' ? 100 : e && e.state === 'closed' ? 0 : 50) }; });
   const [covers, setCovers] = useState(derivedCovers);
@@ -6574,12 +6578,18 @@ function VoletsContent({ hass, edit = false, onEnt }) {
   const modeBtn = (on, col) => { const isHex = col.startsWith('#'); const rgb = isHex ? cl_hexRgb(col) : '140,152,180'; return { display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px', borderRadius: 14, border: '1px solid ' + (on && isHex ? col + '55' : 'var(--o-bd3)'), cursor: 'pointer', transition: 'all .2s', textAlign: 'left', background: on ? `rgba(${rgb},.14)` : 'var(--o-s2)', color: on ? col : 'var(--o-text1)' }; };
 
   return (
-    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {edit && <ViewEditBar onEnt={onEnt} texte={tr('Mode édition : clique un volet pour le modifier, glisse-le pour le déplacer.')} />}
-      <ViewHead titre={tr('Volets')}
-        sous={(covers.length > 1 ? tr('{n} volets', { n: covers.length }) : tr('{n} volet', { n: covers.length })) + (mode ? ' · ' + String(mode).toLowerCase() : '')}
-        badge={openCount ? (openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })) : tr('tous fermés')}
-        rgb={openCount ? '52,211,153' : '140,152,180'} />
+    <div className="loggia-content" style={{ padding: embarque ? '0 28px 40px' : '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {!embarque && edit && <ViewEditBar onEnt={onEnt} texte={tr('Mode édition : clique un volet pour le modifier, glisse-le pour le déplacer.')} />}
+      {embarque
+        ? <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <span style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Volets')}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{openCount ? (openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })) : tr('tous fermés')}</span>
+            <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
+          </div>
+        : <ViewHead titre={tr('Volets')}
+            sous={(covers.length > 1 ? tr('{n} volets', { n: covers.length }) : tr('{n} volet', { n: covers.length })) + (mode ? ' · ' + String(mode).toLowerCase() : '')}
+            badge={openCount ? (openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })) : tr('tous fermés')}
+            rgb={openCount ? '52,211,153' : '140,152,180'} />}
 
       <ViewBar panel={panel} onPanel={togglePanel}>
         <BarGroup label={tr('Volets')}>
@@ -6594,7 +6604,7 @@ function VoletsContent({ hass, edit = false, onEnt }) {
         )}
       </ViewBar>
 
-      {panel && <PresCard titre="Tous les volets" lead={tr('Vue d’ensemble de la position et du pilotage')}
+      {!embarque && panel && <PresCard titre="Tous les volets" lead={tr('Vue d’ensemble de la position et du pilotage')}
         badge={openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })} rgb="52,211,153">
         <PresLigne titre={tr('Position moyenne')} sous={covers.length > 1 ? tr('{n} volets suivis', { n: covers.length }) : tr('{n} volet suivi', { n: covers.length })}
           valeur={Math.round(covers.reduce((n, c) => n + (c.pos || 0), 0) / Math.max(1, covers.length)) + ' %'}
