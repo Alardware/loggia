@@ -2644,14 +2644,14 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
   const mort = !st || st.state === 'unavailable';
   /* Optimisme : l'écran répond au doigt, Home Assistant confirme après.
    * Sans lui, chaque clic attend l'aller-retour Zigbee PUIS le poll — mou.
-   * `opt` s'efface dès que l'état publié bouge ; filet 8 s si rien ne revient. */
+   * `opt` tient une FENÊTRE FIXE (pas « jusqu'au premier changement d'état ») :
+   * Zigbee2MQTT rejoue parfois l'ancienne valeur après la confirmation, et
+   * suivre ce rapport retardé faisait clignoter 1 → 2 → 1 à l'écran. */
   const [opt, setOpt] = useState(null);
   const commitRef = useRef(null);
   const filetRef = useRef(null);
-  const etatHass = st ? st.state : null;
-  useEffect(() => { setOpt(null); clearTimeout(filetRef.current); }, [etatHass]);
   useEffect(() => () => { clearTimeout(commitRef.current); clearTimeout(filetRef.current); }, []);
-  const poserOpt = (v) => { setOpt(v); clearTimeout(filetRef.current); filetRef.current = setTimeout(() => setOpt(null), 8000); };
+  const poserOpt = (v) => { setOpt(v); clearTimeout(filetRef.current); filetRef.current = setTimeout(() => setOpt(null), 4000); };
   let controle = null, wrap = false;
   if (dom === 'switch' || dom === 'input_boolean' || dom === 'siren') {
     const on = opt != null ? opt === 'on' : (!!st && st.state === 'on');
