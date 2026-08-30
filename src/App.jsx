@@ -3964,6 +3964,84 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
   // La nuit, la veille baisse encore d'un ton : personne ne la regarde, et une
   // chambre n'a pas besoin d'une lanterne.
   const nuit = clock.getHours() >= 23 || clock.getHours() < 6;
+  /* Économiseur d'écran : un diaporama des images des MÉDIAS LOCAUX de Home
+   * Assistant (le dossier media) — jamais un service externe, le projet se
+   * l'interdit. Sans image trouvée, la veille classique reste. */
+  const photosOn = (() => { try { return localStorage.getItem('loggia-ambphotos') === '1'; } catch (e) { return false; } })();
+  const [photos, setPhotos] = useState([]);
+  const [photoIdx, setPhotoIdx] = useState(0);
+  useEffect(() => {
+    if (!photosOn) return;
+    let mort = false;
+    (async () => {
+      try {
+        const h = getHass(); if (!h || !h.callWS) return;
+        const images = [];
+        const parcourir = async (id, prof) => {
+          if (mort || images.length >= 60 || prof > 2) return;
+          // try PAR SOURCE : une intégration qui refuse le browse (Netatmo…)
+          // ne doit pas emporter les images déjà trouvées ailleurs.
+          let r = null;
+          try { r = await h.callWS({ type: 'media_source/browse_media', ...(id ? { media_content_id: id } : {}) }); } catch (e) { return; }
+          for (const c of (r && r.children) || []) {
+            if (mort || images.length >= 60) return;
+            if (c.media_class === 'image' && c.media_content_id) images.push(c.media_content_id);
+            else if (c.can_expand) await parcourir(c.media_content_id, prof + 1);
+          }
+        };
+        await parcourir(null, 0);
+        if (mort || !images.length) return;
+        const urls = [];
+        for (const mid of images.slice(0, 40)) {
+          if (mort) return;
+          try { const rr = await h.callWS({ type: 'media_source/resolve_media', media_content_id: mid }); if (rr && rr.url) urls.push(rr.url); } catch (e) { /* image illisible */ }
+        }
+        // Mélange : ne pas revoir toujours les mêmes premières photos.
+        for (let i = urls.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t2 = urls[i]; urls[i] = urls[j]; urls[j] = t2; }
+        if (!mort && urls.length) setPhotos(urls);
+      } catch (e) { /* pas de médias : la veille classique */ }
+    })();
+    return () => { mort = true; };
+  }, [photosOn]);
+  useEffect(() => {
+    if (photos.length < 2) return;
+    const iv = setInterval(() => setPhotoIdx(i => (i + 1) % photos.length), 30000);
+    return () => clearInterval(iv);
+  }, [photos.length]);
+  /* Détection de mouvement : la caméra de la TABLETTE réveille l'écran quand
+   * quelqu'un passe. Tout est local — les frames ne quittent jamais l'appareil,
+   * rien n'est enregistré. getUserMedia exige un contexte sécurisé : en HTTP
+   * local la fonction s'éteint d'elle-même, le toucher réveille toujours. */
+  const motionOn = (() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch (e) { return false; } })();
+  useEffect(() => {
+    if (!motionOn) return;
+    let flux = null, iv = 0, mort = false, avant = null;
+    const video = document.createElement('video'); video.muted = true; video.playsInline = true;
+    const canvas = document.createElement('canvas'); canvas.width = 32; canvas.height = 24;
+    const ctx2 = canvas.getContext('2d', { willReadFrequently: true });
+    (async () => {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+        flux = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' }, audio: false });
+        if (mort) { flux.getTracks().forEach(t => t.stop()); return; }
+        video.srcObject = flux; await video.play();
+        iv = setInterval(() => {
+          try {
+            ctx2.drawImage(video, 0, 0, 32, 24);
+            const d = ctx2.getImageData(0, 0, 32, 24).data;
+            if (avant) {
+              let diff = 0;
+              for (let i = 0; i < d.length; i += 16) { if (Math.abs(d[i] - avant[i]) > 26) diff++; }
+              // ~192 points échantillonnés : une vingtaine qui bougent = une présence, pas du bruit de capteur.
+              if (diff > 18) { try { window.dispatchEvent(new PointerEvent('pointerdown')); } catch (e) { window.dispatchEvent(new Event('pointerdown')); } }
+            }
+            avant = new Uint8ClampedArray(d);
+          } catch (e) { /* frame illisible */ }
+        }, 900);
+      } catch (e) { /* permission refusée : le toucher réveille */ }
+    })();
+    return () => { mort = true; clearInterval(iv); try { if (flux) flux.getTracks().forEach(t => t.stop()); } catch (e) {} try { video.srcObject = null; } catch (e) {} };
+  }, [motionOn]);
   // Scène lancée depuis la veille : retour visuel bref, sans réveiller l'écran.
   const [scFlash, setScFlash] = useState(null);
   const scRef = useRef(0);
@@ -3980,7 +4058,17 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
   const pt = (c) => <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: c, boxShadow: '0 0 8px ' + c }} />;
   return (
     <div role="button" aria-label={tr('Toucher pour réveiller')} style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070b', color: '#e8edf5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', animation: REDUCE_MOTION ? 'none' : 'o-ambient-in 1s ease', userSelect: 'none' }}>
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transform: `translate(${decal.x}px, ${decal.y}px)`, opacity: nuit ? .55 : 1, transition: REDUCE_MOTION ? 'opacity 2s ease' : 'transform 6s ease, opacity 2s ease' }}>
+    {/* Diaporama : la photo courante en fondu, la suivante préchargée invisible,
+        un voile pour que l'horloge reste lisible — plus opaque la nuit. */}
+    {photos.length > 0 && (
+      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+        {photos.map((u, i) => (i === photoIdx || i === (photoIdx + 1) % photos.length)
+          ? <img key={u} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: i === photoIdx ? 1 : 0, transition: REDUCE_MOTION ? 'none' : 'opacity 2.5s ease' }} />
+          : null)}
+        <div style={{ position: 'absolute', inset: 0, background: nuit ? 'rgba(5,7,11,.74)' : 'rgba(5,7,11,.48)' }} />
+      </div>
+    )}
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transform: `translate(${decal.x}px, ${decal.y}px)`, opacity: nuit ? .55 : 1, transition: REDUCE_MOTION ? 'opacity 2s ease' : 'transform 6s ease, opacity 2s ease' }}>
       <div style={{ fontSize: 'clamp(72px, 17vw, 170px)', fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{hm}</div>
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 'clamp(17px, 2.6vw, 24px)', color: '#8b95a7' }}>{dateStr}</div>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 22px', borderRadius: 18, background: 'rgba(255,255,255,.035)', marginTop: 18, overflow: 'hidden' }}>
