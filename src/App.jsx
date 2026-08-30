@@ -185,14 +185,16 @@ const NAV = [
 const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scènes': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Aspirateur': 'aspirateur', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Caméras': 'cameras', 'Système': 'systeme', 'Paramètres': 'parametres' };
 const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'aspirateur', 'croquettes', 'medias', 'meteo', 'objets', 'securite', 'systeme', 'parametres']);
 
-function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
+function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAutorisees = null }) {
+  // Permissions par profil : `null` = tout (admins et profils sans restriction).
+  const permis = (vid) => !vuesAutorisees || vid === 'accueil' || vid === 'parametres' || vuesAutorisees.has(vid);
   // Une vue que l'installation ne peut pas remplir ne figure pas dans le menu.
   const { views: avail } = useLoggia();
   const [viewsCfg, setViewsCfg] = useState(readViewsCfg);
   // Vues remises au menu depuis Parametres : ce ne sont pas des vues
   // principales, elles ont donc leur propre section plutot que d'etre
   // melangees a MAISON, ou rien ne les distinguait.
-  const secondaires = HIDDEN_VIEWS().filter(h => viewsCfg.shown.has(h.vid) && isViewAvailable(avail, h.vid));
+  const secondaires = HIDDEN_VIEWS().filter(h => permis(h.vid) && viewsCfg.shown.has(h.vid) && isViewAvailable(avail, h.vid));
   useEffect(() => { const f = () => setViewsCfg(readViewsCfg()); window.addEventListener('loggia-views-changed', f); return () => window.removeEventListener('loggia-views-changed', f); }, []);
   // Pill de sélection unique qui GLISSE vers l'item actif (au lieu de réapparaître)
   const navRef = useRef(null);
@@ -206,10 +208,15 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
   }, [view, open, customViews.length]);
   // Un groupe de la nav. Rendu deux fois, a deux endroits differents de la
   // liste : les vues d'abord, les reglages tout en bas.
+  // L'ordre choisi dans Paramètres → Vues (les vues absentes de la liste
+  // gardent leur place d'origine — le tri est stable).
+  const iOrdre = (vid) => { const i = (viewsCfg.order || []).indexOf(vid); return i < 0 ? 999 : i; };
   const groupeNav = (g) => (
     <div key={g.group}>
       <div className="o-side-text" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: g.group === 'MAISON' ? '8px 8px 5px' : '12px 8px 5px' }}>{tr(g.group)}</div>
-      {g.items.filter(it => !viewsCfg.hidden.has(LABEL_VIEW[it.label]) && isViewAvailable(avail, LABEL_VIEW[it.label])).map(it => {
+      {g.items.filter(it => permis(LABEL_VIEW[it.label]) && !viewsCfg.hidden.has(LABEL_VIEW[it.label]) && isViewAvailable(avail, LABEL_VIEW[it.label]))
+        .sort(g.reglages ? () => 0 : (a, b) => iOrdre(LABEL_VIEW[a.label]) - iOrdre(LABEL_VIEW[b.label]))
+        .map(it => {
         const vid = LABEL_VIEW[it.label];
         const active = vid === view || (vid === 'pieces' && view.indexOf('room:') === 0);
         const built = BUILT.has(vid);
@@ -247,10 +254,10 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null }) {
           })}
         </div>
       )}
-      {customViews.length > 0 && (
+      {customViews.filter(cv => permis('cv:' + cv.id)).length > 0 && (
         <div>
           <div className="o-side-text" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: '12px 8px 5px' }}>MES VUES</div>
-          {customViews.map(cv => {
+          {customViews.filter(cv => permis('cv:' + cv.id)).map(cv => {
             const vid = 'cv:' + cv.id;
             const active = vid === view;
             return (
@@ -963,6 +970,16 @@ function PieceCard({ p, onOpen, compact = false, lights = null, mains = null, on
   // Format compact (PC ≥1180) : compteur = luminaires non-« Ampoule » ; interrupteur = plafonnier(s) SEULS
   const tilt = useTilt(4);
   const [flashRef, flash] = useFlash();
+  /* Mini-courbe de température : la journée de la pièce d'un coup d'œil.
+   * Le cache 5 min du hook évite de mitrailler l'API à chaque navigation. */
+  const ptsTemp = useHistorique24(getHass(), (compact && p.live && p.live.tempId) || null);
+  let cheminTemp = '';
+  if (ptsTemp && ptsTemp.length > 1) {
+    const t0 = ptsTemp[0].t, t1 = ptsTemp[ptsTemp.length - 1].t || t0 + 1;
+    const vmin = Math.min(...ptsTemp.map(q => q.v)), vmax = Math.max(...ptsTemp.map(q => q.v));
+    const spread = (vmax - vmin) || 1;
+    cheminTemp = ptsTemp.map((q, i2) => (i2 ? 'L' : 'M') + (((q.t - t0) / (t1 - t0 || 1)) * 100).toFixed(1) + ' ' + (vmax === vmin ? 8 : 14 - ((q.v - vmin) / spread) * 12).toFixed(1)).join(' ');
+  }
   // Optimiste : l'interrupteur bascule tout de suite, puis se réconcilie avec HA au poll suivant
   const realOn = (mains && mains.length) ? mains.some(l => l.on) : null;
   const [ov, setOv] = useState(null);
@@ -1008,6 +1025,11 @@ function PieceCard({ p, onOpen, compact = false, lights = null, mains = null, on
           <span style={{ color: p.tc, fontSize: 15.5, fontWeight: 800 }}>{p.live ? (p.live.temp != null ? <Num v={p.live.temp} d={1} suffix="°" /> : '—') : <Skel w={40} h={15} />}</span>· {p.live ? (p.live.hum != null ? <Num v={p.live.hum} suffix="%" /> : '—') : <Skel w={28} h={12} />}
           {p.live && p.badge && <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 800, color: p.bc, background: p.bbg, padding: '2px 8px', borderRadius: 999 }}>{p.badge}</span>}
         </div>
+        {cheminTemp && (
+          <svg viewBox="0 0 100 16" preserveAspectRatio="none" aria-hidden="true" style={{ display: 'block', width: '100%', height: 14, marginTop: 6, opacity: .5 }}>
+            <path d={cheminTemp} fill="none" stroke={p.tc || 'var(--o-accent)'} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+          </svg>
+        )}
       </div>
     );
   }
@@ -2605,12 +2627,20 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
  * `attribut` : pour un climat, la température vécue est un ATTRIBUT
  * (current_temperature) — la requête part alors sans minimal_response ni
  * no_attributes, plus lourde, réservée à une fiche ouverte. */
+/* Cache module : plusieurs cartes demandent le même historique (les pièces de
+ * l'accueil, une fiche rouverte) — cinq minutes de mémoire évitent de refaire
+ * le même GET à chaque navigation. */
+const HISTO_CACHE = new Map();
 function useHistorique24(hass, id, attribut = null) {
-  const [points, setPoints] = useState(null);
+  const cle = id ? id + '|' + (attribut || '') : null;
+  const enCache = cle && HISTO_CACHE.get(cle);
+  const [points, setPoints] = useState(enCache && Date.now() - enCache.t < 5 * 60000 ? enCache.serie : null);
   const api = hass && hass.callApi ? 1 : 0;
   useEffect(() => {
     if (!api || !id) return;
     let mort = false;
+    const frais = HISTO_CACHE.get(cle);
+    if (frais && Date.now() - frais.t < 5 * 60000) setPoints(frais.serie);
     const lire = () => {
       const debut = new Date(Date.now() - 24 * 3600e3).toISOString();
       const q = 'history/period/' + debut + '?filter_entity_id=' + encodeURIComponent(id) + (attribut ? '' : '&minimal_response&no_attributes');
@@ -2621,10 +2651,11 @@ function useHistorique24(hass, id, attribut = null) {
           const serie = brut
             .map(p => ({ t: new Date(p.last_changed || p.last_updated || 0).getTime(), v: parseFloat(attribut ? (p.attributes ? p.attributes[attribut] : NaN) : p.state) }))
             .filter(p => !isNaN(p.v));
+          HISTO_CACHE.set(cle, { t: Date.now(), serie });
           setPoints(serie);
         }).catch(() => { if (!mort) setPoints([]); });
     };
-    lire();
+    if (!frais || Date.now() - frais.t >= 5 * 60000) lire();
     const iv = setInterval(lire, 5 * 60000);
     return () => { mort = true; clearInterval(iv); };
   }, [api, id, attribut]);
@@ -2750,12 +2781,14 @@ function useDomainCards(hass) {
  * capteurs continus (temperatures…) : ce qui arrive est un CHANGEMENT digne
  * d'etre raconte. Idee reprise de GlassHome. */
 function useRoomLogbook(hass, ids) {
+  // `ids = null` : le journal de TOUTE la maison — le logbook écarte déjà de
+  // lui-même les capteurs continus, ce qui arrive mérite d'être raconté.
   const [events, setEvents] = useState([]);
   const conn = hass && hass.connection;
-  const sig = ids.join('|');
+  const sig = ids ? ids.join('|') : '*';
   useEffect(() => {
     setEvents([]);
-    if (!conn || !ids.length) return;
+    if (!conn || (ids && !ids.length)) return;
     let unsub = null, mort = false;
     const debut = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
     conn.subscribeMessage((msg) => {
@@ -2765,7 +2798,7 @@ function useRoomLogbook(hass, ids) {
         tous.sort((a, b) => (b.when || 0) - (a.when || 0));
         return tous.slice(0, 30);
       });
-    }, { type: 'logbook/event_stream', start_time: debut, entity_ids: ids })
+    }, { type: 'logbook/event_stream', start_time: debut, ...(ids ? { entity_ids: ids } : {}) })
       .then(u => { if (mort) { try { u(); } catch (e) {} } else unsub = u; })
       .catch(() => {}); // logbook absent ou refuse : la carte ne s'affiche pas, c'est tout
     return () => { mort = true; if (unsub) { try { unsub(); } catch (e) {} } };
@@ -2804,7 +2837,7 @@ function grouperJournal(events, cle = (e) => e.entity_id) {
   return out;
 }
 
-function RoomActivityCard({ hass, ids }) {
+function RoomActivityCard({ hass, ids, titre = null, sous = null, max = 8 }) {
   const events = grouperJournal(useRoomLogbook(hass, ids));
   if (!events.length) return null;
   const S = (hass && hass.states) || {};
@@ -2812,10 +2845,10 @@ function RoomActivityCard({ hass, ids }) {
   const actif = (e) => ['on', 'open', 'unlocked', 'playing', 'heat', 'cleaning', 'home'].indexOf(e.state) >= 0;
   return (
     <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-      <div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Activité')}</div>
-      <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 10px' }}>{tr('Les dernières 24 heures, en direct')}</div>
+      <div style={{ fontSize: 16, fontWeight: 700 }}>{titre || tr('Activité')}</div>
+      <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 10px' }}>{sous || tr('Les dernières 24 heures, en direct')}</div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {events.slice(0, 8).map((e, i) => (
+        {events.slice(0, max).map((e, i) => (
           <div key={(e.when || 0) + '|' + e.entity_id + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none' }}>
             <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: actif(e) ? 'var(--o-warn)' : 'var(--o-text3)', boxShadow: actif(e) ? '0 0 7px var(--o-warn)' : 'none' }} />
             <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.name || (S[e.entity_id] && S[e.entity_id].attributes && S[e.entity_id].attributes.friendly_name) || e.entity_id}</span>
@@ -3931,6 +3964,14 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
   // La nuit, la veille baisse encore d'un ton : personne ne la regarde, et une
   // chambre n'a pas besoin d'une lanterne.
   const nuit = clock.getHours() >= 23 || clock.getHours() < 6;
+  // Scène lancée depuis la veille : retour visuel bref, sans réveiller l'écran.
+  const [scFlash, setScFlash] = useState(null);
+  const scRef = useRef(0);
+  useEffect(() => () => clearTimeout(scRef.current), []);
+  const lancerScene = (s) => {
+    setScFlash(s.haid); clearTimeout(scRef.current); scRef.current = setTimeout(() => setScFlash(null), 1600);
+    try { const h = getHass(); if (h && h.callService) h.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); } catch (e) { /* le poll dira */ }
+  };
   const hm = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const capit = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   const dateStr = capit(clock.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }));
@@ -3958,6 +3999,24 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
       {rouges.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 14, alignItems: 'center' }}>
           {rouges.map((n, i) => <span key={i} style={{ ...chip, color: '#f87171', borderColor: 'rgba(248,113,113,.3)', background: 'rgba(248,113,113,.08)' }}>{pt('#f87171')}{n[1]} · {n[2]}</span>)}
+        </div>
+      )}
+      {/* Scènes rapides SANS réveiller : le pointeur est stoppé avant d'atteindre
+          la fenêtre (le réveil écoute là) — le geste du soir se fait depuis la
+          veille, l'écran reste en veille. */}
+      {quickScenes().length > 0 && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center', maxWidth: '84vw' }}>
+          {quickScenes().slice(0, 4).map(s => (
+            <button key={s.haid}
+              onPointerDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); lancerScene(s); }}
+              style={{ ...chip, cursor: 'pointer', fontSize: 12.5, padding: '8px 14px', transition: 'background .3s, border-color .3s',
+                background: scFlash === s.haid ? 'rgba(var(--o-accent-rgb),.28)' : 'rgba(255,255,255,.05)',
+                border: '1px solid ' + (scFlash === s.haid ? 'rgba(var(--o-accent-rgb),.55)' : 'rgba(255,255,255,.09)') }}>
+              <Fi i={s.icon} size={13} />{s.name}
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -8236,6 +8295,9 @@ function SystemeContent({ hass }) {
             </div>
           : <div style={{ padding: '6px 0', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{logbook === null ? tr('Journal indisponible sur cet accès.') : tr('Aucun événement système sur 24 h.')}</div>}
       </div>
+      {/* Le journal de TOUTE la maison — le pendant global du journal système
+          ci-dessus, poussé en direct par le logbook. */}
+      <RoomActivityCard hass={hass} ids={null} max={14} titre={tr('Journal de la maison')} sous={tr('Tout ce qui a bougé, pièces confondues — 24 h, en direct')} />
     </div>
   );
 }
@@ -9861,6 +9923,16 @@ export default function App() {
   const applyUser = (i) => { try { localStorage.setItem('loggia_active_user', String(i)); const u = users[i]; if (u && u.name) { const m = JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); m[u.name] = Date.now(); localStorage.setItem('loggia-lastseen', JSON.stringify(m)); } } catch (e) {} setUserIdx(i); };
   const switchUser = (i) => { if (i === userIdx) return; if (users[i] && users[i].role === 'Admin') setPinTarget(i); else applyUser(i); };
   const isAdmin = !!(users[userIdx] && users[userIdx].role === 'Admin');
+  /* Permissions par profil : le set des vues autorisées du profil actif, ou
+   * null = toutes (admins, et profils sans restriction — le défaut). */
+  const vuesAutorisees = (!isAdmin && users[userIdx] && Array.isArray(users[userIdx].vues) && users[userIdx].vues.length)
+    ? new Set(users[userIdx].vues) : null;
+  // Une vue interdite atteinte autrement (restauration, lien) retombe sur l'accueil.
+  useEffect(() => {
+    if (!vuesAutorisees) return;
+    const base = view.indexOf('room:') === 0 ? 'pieces' : view;
+    if (base !== 'accueil' && base !== 'parametres' && !vuesAutorisees.has(base)) setView('accueil');
+  }, [view, vuesAutorisees ? [...vuesAutorisees].join('|') : '']);
   useEffect(() => { if (!isAdmin) setEditMode(false); }, [isAdmin]);
   // Édition en place des vues intégrées : sheet « Entités de cette vue » (crayon actif + vue configurable).
   const [entSheet, setEntSheet] = useState(false);
@@ -9925,7 +9997,7 @@ export default function App() {
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
       {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12.5, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 12, padding: '10px 16px', fontSize: 12.5, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
-      <Sidebar view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} open={navOpen} customViews={customViews} ha={(() => {
+      <Sidebar view={view} vuesAutorisees={vuesAutorisees} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} open={navOpen} customViews={customViews} ha={(() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
         let devCount = 0;
         if (ok) { const doms = ['light.', 'switch.', 'media_player.', 'camera.', 'climate.', 'cover.', 'vacuum.', 'lawn_mower.']; for (const id in hass.states) { if (doms.some(d => id.indexOf(d) === 0) && hass.states[id] && hass.states[id].state !== 'unavailable') devCount++; } }
