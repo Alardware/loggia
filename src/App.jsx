@@ -1766,6 +1766,18 @@ function RoomPilotSheet({ zone, hass, onClose }) {
             <button key={opt} onClick={() => { if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', opt); else call('input_select', 'select_option', { entity_id: zone.modeEnt, option: opt }); }} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-warn2-rgb),.5)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-warn2-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-warn2)' : 'var(--o-text1)' }}>{zoneModeLabel(zone, opt)}</button>
           ); })}
         </div>
+        {/* Préréglages du thermostat (Turbo, Comfort, Overnight…) : comme la
+          * fiche native — ils viennent de l'entité, leurs noms aussi. */}
+        {estClimate(zone) && (() => { const at = (S && S[zone.haid] && S[zone.haid].attributes) || {}; return Array.isArray(at.preset_modes) && at.preset_modes.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 8px' }}>{tr('PRÉRÉGLAGE')}</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {at.preset_modes.slice(0, 8).map(p => { const on = at.preset_mode === p; return (
+                <button key={p} aria-pressed={on} onClick={() => commander(hass, zone.haid, 'set_preset_mode', p)} style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{p}</button>
+              ); })}
+            </div>
+          </>
+        ); })()}
         {(zone.tempSensor || estClimate(zone)) && (<>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '18px 0 9px' }}>{tr('TEMPÉRATURE · 24 H')}</div>
           <Courbe24 points={ptsTemp} couleur="#ff8a4c" unite="°" />
@@ -2072,6 +2084,18 @@ function RoomClimateSheet({ id, hass, onClose }) {
             <button key={m} onClick={() => commander(hass, id, 'set_hvac_mode', m)} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 13, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-text)' : 'var(--o-s1)', color: on ? 'var(--o-bg)' : 'var(--o-text1)' }}>{tr(MODE_FR[m]) || m}</button>
           ); })}
         </div>
+        {/* Préréglages du thermostat (Turbo, Comfort, Overnight…) : comme la
+          * fiche native — ils viennent de l'entité, leurs noms aussi. */}
+        {Array.isArray(a.preset_modes) && a.preset_modes.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 8px' }}>{tr('PRÉRÉGLAGE')}</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {a.preset_modes.slice(0, 8).map(p => { const on = a.preset_mode === p; return (
+                <button key={p} aria-pressed={on} onClick={() => commander(hass, id, 'set_preset_mode', p)} style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{p}</button>
+              ); })}
+            </div>
+          </>
+        )}
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '18px 0 9px' }}>{tr('TEMPÉRATURE · 24 H')}</div>
         <Courbe24 points={ptsTemp} couleur="#ff8a4c" unite="°" />
       </>)}
@@ -3662,6 +3686,9 @@ Object.assign(VIEW_ART, VIEW_ART_SYS);
 const DEVICE_ART = {
   appletv: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='28' y='42' width='144' height='88' rx='9' fill='%231c2636' stroke='%233a4a63' stroke-width='4'/%3E%3Crect x='37' y='51' width='126' height='70' rx='4' fill='%23243349'/%3E%3Cpath d='M91 71 L116 86 L91 101 Z' fill='%2354c8f0' opacity='0.85'/%3E%3Crect x='90' y='130' width='20' height='8' rx='3' fill='%233a4a63'/%3E%3Crect x='62' y='138' width='76' height='6' rx='3' fill='%233a4a63'/%3E%3Crect x='70' y='156' width='60' height='15' rx='6' fill='%232a3850'/%3E%3Ccircle cx='122' cy='163' r='3' fill='%2354c8f0' opacity='0.8'/%3E%3Crect x='146' y='150' width='11' height='32' rx='5' fill='%232a3850'/%3E%3Ccircle cx='151.5' cy='158' r='2.5' fill='%233a4a63'/%3E%3C/svg%3E",
   echo: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='168' rx='44' ry='7' fill='%23101828' opacity='0.6'/%3E%3Crect x='63' y='52' width='74' height='114' rx='18' fill='%23232f42'/%3E%3Cellipse cx='100' cy='56' rx='37' ry='11' fill='%232c3b54'/%3E%3Cellipse cx='100' cy='56' rx='37' ry='11' fill='none' stroke='%2322d3ee' stroke-width='3.5' opacity='0.85'/%3E%3Crect x='72' y='80' width='56' height='4' rx='2' fill='%2331415c' opacity='0.9'/%3E%3Crect x='72' y='92' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='104' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='116' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='128' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='140' width='56' height='4' rx='2' fill='%2331415c'/%3E%3C/svg%3E",
+  vacuum: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='164' rx='60' ry='8' fill='%23101828' opacity='0.6'/%3E%3Cellipse cx='100' cy='118' rx='64' ry='42' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Cellipse cx='100' cy='110' rx='46' ry='28' fill='%23243349'/%3E%3Cellipse cx='100' cy='110' rx='46' ry='28' fill='none' stroke='%232c3b54' stroke-width='2'/%3E%3Ccircle cx='100' cy='104' r='11' fill='%23101828' stroke='%233a4a63' stroke-width='3'/%3E%3Ccircle cx='100' cy='104' r='3.5' fill='%2334d399' opacity='0.85'/%3E%3Cpath d='M48 138 A 64 42 0 0 0 152 138' fill='none' stroke='%232c3b54' stroke-width='5' opacity='0.8'/%3E%3Crect x='88' y='148' width='24' height='7' rx='3.5' fill='%23101828' opacity='0.8'/%3E%3C/svg%3E",
+  mower: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='166' rx='60' ry='8' fill='%23101828' opacity='0.6'/%3E%3Cpath d='M34 168 L40 150 L46 168 Z' fill='%2334d399' opacity='0.5'/%3E%3Cpath d='M160 168 L166 148 L172 168 Z' fill='%2334d399' opacity='0.4'/%3E%3Crect x='44' y='86' width='112' height='58' rx='24' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Cellipse cx='92' cy='88' rx='42' ry='13' fill='%232c3b54'/%3E%3Ccircle cx='68' cy='146' r='17' fill='%23101828' stroke='%233a4a63' stroke-width='4'/%3E%3Ccircle cx='68' cy='146' r='6' fill='%23243349'/%3E%3Ccircle cx='134' cy='148' r='13' fill='%23101828' stroke='%233a4a63' stroke-width='4'/%3E%3Ccircle cx='134' cy='148' r='4.5' fill='%23243349'/%3E%3Ccircle cx='140' cy='104' r='4.5' fill='%23a3e635' opacity='0.85'/%3E%3C/svg%3E",
+  feeder: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='170' rx='56' ry='7' fill='%23101828' opacity='0.6'/%3E%3Crect x='66' y='44' width='68' height='104' rx='16' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Crect x='78' y='58' width='44' height='46' rx='9' fill='%23101828'/%3E%3Cg fill='%23ffce73' opacity='0.8'%3E%3Ccircle cx='88' cy='96' r='4'/%3E%3Ccircle cx='99' cy='92' r='4'/%3E%3Ccircle cx='110' cy='97' r='4'/%3E%3Ccircle cx='93' cy='86' r='4'/%3E%3Ccircle cx='105' cy='84' r='4'/%3E%3C/g%3E%3Ccircle cx='100' cy='122' r='6' fill='%232c3b54' stroke='%233a4a63' stroke-width='2.5'/%3E%3Cpath d='M126 148 q 26 0 26 14 q 0 10 -22 10 L 118 172 Z' fill='%23243349' stroke='%233a4a63' stroke-width='3.5'/%3E%3Cg fill='%23ffce73' opacity='0.75'%3E%3Ccircle cx='138' cy='158' r='3.2'/%3E%3Ccircle cx='146' cy='161' r='3.2'/%3E%3C/g%3E%3C/svg%3E",
 };
 function ObjSheet({ title, img, accent = 'var(--o-accent)', rows = [], actions = [], onClose }) {
   return (
@@ -3950,7 +3977,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
             const med = k.indexOf('media:') === 0 ? medias.find(m => 'media:' + m.p.haid === k) : null;
             let carte;
             if (k === 'obj:vacuum') {
-              carte = <ObjCard idx={i} icon={<Ico name="vacuum" size={19} color="var(--o-ok)" />} iconBg="rgba(52,211,153,.16)"
+              carte = <ObjCard idx={i} icon={<Ico name="vacuum" size={19} color="var(--o-ok)" />} iconBg="rgba(52,211,153,.16)" art={DEVICE_ART.vacuum}
                 name={nomDe(k)} iconActive={vacCleaning} sub={nomHA(objVacMain)} status={vacEtat} statusColor={vacCleaning ? 'var(--o-accent-soft)' : 'var(--o-text2)'}
                 barLabel="Batterie" barPct={vacBat} barColor={batCol(vacBat)} barText={vacBat != null ? Math.round(vacBat) + '%' : '—'}
                 actionLabel={vacCleaning ? tr('Renvoyer au dock') : tr('Démarrer le nettoyage')}
@@ -3958,7 +3985,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
                 onOpen={() => setSheet({ type: 'vac' })}
                 extra={objVacMain ? <Epingles pourId={objVacMain} hass={hass} avecAncre /> : null} />;
             } else if (k === 'obj:mower') {
-              carte = <ObjCard idx={i} icon={<Ico name="mower" size={19} color="#a3e635" />} iconBg="rgba(163,230,53,.14)"
+              carte = <ObjCard idx={i} icon={<Ico name="mower" size={19} color="#a3e635" />} iconBg="rgba(163,230,53,.14)" art={DEVICE_ART.mower}
                 name={nomDe(k)} iconActive={lubaMow} sub={nomHA(lubaId)} status={lubaTxt} statusColor={lubaMow ? 'var(--o-ok)' : 'var(--o-text2)'}
                 barLabel="Batterie" barPct={lubaBat} barColor={batCol(lubaBat)} barText={lubaBat != null ? Math.round(lubaBat) + '%' : '—'}
                 actionLabel={lubaMow ? 'Renvoyer à la base' : 'Lancer la tonte'}
@@ -3978,7 +4005,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
                 return fid ? { id: fid, opt: S[fid].attributes.options.find(o => /^(start|feed)$/i.test(o)) } : null;
               })();
               const sc = ff ? null : feederScript(hass, loggiaEnt('feeder', null));
-              carte = <ObjCard idx={i} icon={<Fi i="paw" size={17} color="#ffce73" />} iconBg="rgba(255,206,115,.14)"
+              carte = <ObjCard idx={i} icon={<Fi i="paw" size={17} color="#ffce73" />} iconBg="rgba(255,206,115,.14)" art={DEVICE_ART.feeder}
                 name={nomDe(k)} sub={nomHA(croqHaids().reservoir)} status={nextMeal ? ('Prochaine ration ' + nextMeal.time) : 'Programme terminé'} statusColor="var(--o-text2)"
                 barLabel={tr('Réservoir')} barPct={croqPct} barColor={croqPct < 25 ? '#f87171' : '#ffce73'} barText={croqPct + '%'} barLiquid
                 actionLabel={(ff || sc) ? 'Distribuer une ration' : null}
@@ -8760,11 +8787,36 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
           <button onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 12 }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={13} />{s === 'playing' ? 'Pause' : tr('Lecture')}</button>
         </div>
       )}
-      {/* Machines : l'action principale vient du DOMAINE — aucun script, aucune
-        * configuration. La fiche en hérite : ses pilotables sont ces cartes. */}
-      {(dom === 'vacuum' || dom === 'lawn_mower') && !dead && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button onClick={(e) => { e.stopPropagation(); call(dom, on ? (dom === 'vacuum' ? 'return_to_base' : 'dock') : (dom === 'vacuum' ? 'start' : 'start_mowing')); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>{on ? tr('Renvoyer au dock') : (dom === 'vacuum' ? tr('Démarrer le nettoyage') : tr('Lancer la tonte'))}</button>
+      {/* Machines : les MÊMES contrôles que la fiche native Home Assistant,
+        * dérivés de supported_features — aucun script, aucune configuration. */}
+      {(dom === 'vacuum' || dom === 'lawn_mower') && !dead && (() => {
+        const f = a.supported_features || 0;
+        const btns = [];
+        if (dom === 'vacuum') {
+          const enCours = s === 'cleaning';
+          if (enCours ? (f & 4) : (f & 8192)) btns.push([enCours ? 'pause' : 'play', enCours ? 'pause' : 'start', enCours ? tr('Pause') : tr('Démarrer le nettoyage')]);
+          if ((f & 8) && (s === 'cleaning' || s === 'returning' || s === 'paused')) btns.push(['stop', 'stop', 'Stop']);
+          if (f & 16) btns.push(['home', 'return_to_base', tr('Renvoyer au dock')]);
+          if (f & 512) btns.push(['marker', 'locate', tr('Localiser')]);
+        } else {
+          const enCours = s === 'mowing';
+          if (enCours ? (f & 2) : (f & 1)) btns.push([enCours ? 'pause' : 'play', enCours ? 'pause' : 'start_mowing', enCours ? tr('Pause') : tr('Lancer la tonte')]);
+          if (f & 4) btns.push(['home', 'dock', tr('Renvoyer au dock')]);
+        }
+        return btns.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            {btns.map(([gi, svc, lbl]) => (
+              <button key={svc} title={lbl} aria-label={lbl} onClick={(e) => { e.stopPropagation(); call(dom, svc); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={gi} size={14} /></button>
+            ))}
+          </div>
+        );
+      })()}
+      {dom === 'vacuum' && !dead && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+          {a.fan_speed_list.slice(0, 6).map(v => { const act = a.fan_speed === v; return (
+            <button key={v} aria-pressed={act} onClick={(e) => { e.stopPropagation(); call('vacuum', 'set_fan_speed', { fan_speed: v }); }}
+              style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, border: '1px solid ' + (act ? 'var(--o-accent)' : 'var(--o-bd1)'), background: act ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: act ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{v}</button>
+          ); })}
         </div>
       )}
       {dom === 'valve' && !dead && (
