@@ -1409,7 +1409,7 @@ const RM_BTN = { flex: 1, padding: '9px 6px', borderRadius: 10, background: 'var
 const RM_NAME = { fontSize: 14.5, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
 const RM_SUB = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
 
-function RoomLightCard({ id, hass, onOpen, label = null }) {
+function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const modes = a.supported_color_modes || [];
@@ -1435,8 +1435,8 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
   useEffect(() => () => clearTimeout(ovRevertRef.current), []);
   const toggle = (e) => { e.stopPropagation(); flash(accent); setOv(!on); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); try { if (hass && hass.callService) hass.callService('homeassistant', on ? 'turn_off' : 'turn_on', { entity_id: id }); } catch (er) {} };
   return (
-    <button ref={flashRef} className={'o-light-card o-rmcard' + (mort ? ' o-panne' : '')} onClick={() => { if (adjustable && onOpen) onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed }); }}
-      style={{ ...RM_CARD, alignItems: 'stretch', textAlign: 'left', width: '100%', cursor: adjustable ? 'pointer' : 'default', overflow: 'hidden',
+    <button ref={flashRef} className={'o-light-card o-rmcard' + (mort ? ' o-panne' : '')} onClick={() => { if (adjustable && onOpen) onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed }); else if (onFiche) onFiche(id); }}
+      style={{ ...RM_CARD, alignItems: 'stretch', textAlign: 'left', width: '100%', cursor: (adjustable || onFiche) ? 'pointer' : 'default', overflow: 'hidden',
         // Le lavis est une COUCHE posée sur la surface, jamais la surface elle-même :
         // sinon le bas de carte restait un alpha .22 sur le fond de page — faux-transparent
         // en mode opaque, et un rendu différent d'un matériau à l'autre (retour user 29/08).
@@ -3164,7 +3164,7 @@ function useDomainCards(hass) {
   const card = (id, label = null, zone = null) => {
     const d = String(id).split('.')[0];
     return zone ? <RoomPilotCard zone={zone} hass={hass} onOpen={setPilotPop} titre={label} />
-      : (d === 'light' || d === 'switch') ? <RoomLightCard id={id} hass={hass} onOpen={setLightPop} label={label} />
+      : (d === 'light' || d === 'switch') ? <RoomLightCard id={id} hass={hass} onOpen={setLightPop} label={label} onFiche={ouvrir} />
         : d === 'cover' ? <RoomCoverCard id={id} hass={hass} onOpen={setCoverPop} titre={label} />
           : d === 'climate' ? <RoomClimateCard id={id} hass={hass} onOpen={setClimPop} label={label} />
             : d === 'media_player' ? <RoomMediaCard id={id} hass={hass} onOpen={setMediaPop} label={label} />
@@ -9297,12 +9297,12 @@ function CvBigToggle({ id, hass }) {
   const toggle = () => { try { if (hass && hass.callService) hass.callService('homeassistant', 'toggle', { entity_id: id }); } catch (e) {} };
   return (
     <button className={'o-piece' + (mort ? ' o-panne' : '')} onClick={toggle} disabled={mort}
-      style={{ ...CV_CADRE, height: '100%', minHeight: 150, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 12, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
+      style={{ ...CV_CADRE, height: '100%', minHeight: 150, maxHeight: 178, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 9, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
         ...(on ? { background: `linear-gradient(160deg,rgba(${rgbTok},${lav(.22)}),transparent 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`, border: `1px solid rgba(${rgbTok},${lav(.35)})` } : {}) }}>
-      <span style={{ width: 62, height: 62, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? `rgba(${rgbTok},.2)` : 'var(--o-s1)', color: on ? txtCol : 'var(--o-text3)', boxShadow: on ? `0 0 22px rgba(${rgbTok},.4)` : 'none', transition: 'all .25s' }}>
-        {String(id).indexOf('switch.') === 0 && !lum ? <PlugIcon size={26} /> : <Fi i="power" size={26} />}
+      <span style={{ width: 52, height: 52, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? `rgba(${rgbTok},.2)` : 'var(--o-s1)', color: on ? txtCol : 'var(--o-text3)', boxShadow: on ? `0 0 22px rgba(${rgbTok},.4)` : 'none', transition: 'all .25s', flexShrink: 0 }}>
+        {String(id).indexOf('switch.') === 0 && !lum ? <PlugIcon size={23} /> : <Fi i="power" size={23} />}
       </span>
-      <span style={{ fontSize: 14.5, fontWeight: 800 }}>{cvName(st, id)}</span>
+      <span style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{cvName(st, id)}</span>
       <span style={{ fontSize: 12, fontWeight: 700, color: on ? txtCol : 'var(--o-text3)' }}>{mort ? tr('Indisponible') : on ? tr('Allumé') : tr('Éteint')}</span>
     </button>
   );
