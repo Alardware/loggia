@@ -1455,6 +1455,62 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
   );
 }
 
+/* Carte machine (aspirateur, tondeuse) au GABARIT MAISON — le même que les
+ * volets et radiateurs : icône en haut à gauche, batterie en haut à droite,
+ * nom et état SOUS l'icône, les boutons ronds en bas. La vitesse d'aspiration
+ * ne vit que dans la fiche. */
+function RoomMachineCard({ id, hass, onOpen, label = null }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const dom = String(id).split('.')[0];
+  const s = st ? st.state : null;
+  const mort = !st || s === 'unavailable';
+  const en = dom === 'vacuum' ? s === 'cleaning' : s === 'mowing';
+  const actif = en || s === 'returning';
+  const call = (svc) => { try { if (hass && hass.callService) hass.callService(dom, svc, { entity_id: id }); } catch (e) {} };
+  const f = a.supported_features || 0;
+  // La batterie vit rarement dans l'attribut : le capteur SŒUR fait foi.
+  const bat = (() => {
+    if (a.battery_level != null) return a.battery_level;
+    const S = (hass && hass.states) || {};
+    const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: 'battery' });
+    const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN;
+    return isNaN(n) ? null : n;
+  })();
+  const etat = ({ docked: tr('Sur la base'), cleaning: tr('Nettoyage'), mowing: tr('Tonte'), returning: tr('Retour à la base'), paused: tr('En pause'), idle: tr('Inactif'), error: tr('Erreur') })[s] || (s == null ? '—' : String(s));
+  const btns = [];
+  if (dom === 'vacuum') {
+    if (en ? (f & 4) : (f & 8192)) btns.push([en ? 'pause' : 'play', en ? 'pause' : 'start', en ? tr('Pause') : tr('Démarrer le nettoyage')]);
+    if (f & 16) btns.push(['home', 'return_to_base', tr('Renvoyer au dock')]);
+    if (f & 512) btns.push(['marker', 'locate', tr('Localiser')]);
+  } else {
+    if (en ? (f & 2) : (f & 1)) btns.push([en ? 'pause' : 'play', en ? 'pause' : 'start_mowing', en ? tr('Pause') : tr('Lancer la tonte')]);
+    if (f & 4) btns.push(['home', 'dock', tr('Renvoyer au dock')]);
+  }
+  return (
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)}
+      onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }}
+      onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={RM_ICO(actif ? 'rgba(52,211,153,.16)' : 'var(--o-s1)', actif ? 'var(--o-ok)' : 'var(--o-text3)')}><Ico name={dom === 'vacuum' ? 'vacuum' : 'mower'} size={17} color={actif ? 'var(--o-ok)' : 'var(--o-text3)'} /></span>
+        {bat != null && <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: bat < 20 ? 'var(--o-bad)' : bat < 50 ? 'var(--o-warn)' : 'var(--o-text2)' }}>{Math.round(bat)}%</span>}
+      </div>
+      <div>
+        <div style={RM_NAME}>{label || a.friendly_name || id}</div>
+        <div style={{ ...RM_SUB, color: actif ? 'var(--o-ok)' : 'var(--o-text3)' }}>{mort ? tr('Indisponible') : etat}</div>
+        {btns.length > 0 && !mort && (
+          <div style={{ display: 'flex', gap: 9, marginTop: 11 }}>
+            {btns.map(([gi, svc, lbl2], bi) => (
+              <button key={svc} title={lbl2} aria-label={lbl2} onClick={(e) => { e.stopPropagation(); call(svc); }}
+                style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={13} /></button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
@@ -3037,7 +3093,8 @@ function useDomainCards(hass) {
         : d === 'cover' ? <RoomCoverCard id={id} hass={hass} onOpen={setCoverPop} titre={label} />
           : d === 'climate' ? <RoomClimateCard id={id} hass={hass} onOpen={setClimPop} label={label} />
             : d === 'media_player' ? <RoomMediaCard id={id} hass={hass} onOpen={setMediaPop} label={label} />
-              : <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} />;
+              : (d === 'vacuum' || d === 'lawn_mower') ? <RoomMachineCard id={id} hass={hass} onOpen={ouvrir} label={label} />
+                : <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} />;
   };
   const sheets = (
     <>
