@@ -3005,6 +3005,9 @@ function FicheAppareil({ id, hass, onClose }) {
             <div style={{ fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nomApp}</div>
             {dm && (dm.manufacturer || dm.model) && <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[dm.manufacturer, dm.model].filter(Boolean).join(' · ')}</div>}
           </div>
+          {/* Épingler l'entité TAPÉE : elle vit en carte de tête, hors des
+            * lignes — sans ce bouton, l'entité principale était inépinglable. */}
+          <BoutonEpingle id={id} />
         </div>
         {pilotables.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
