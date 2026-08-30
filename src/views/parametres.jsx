@@ -350,12 +350,22 @@ function AdminPinEditor() {
 
 
 // Modale ajout / modification d'un utilisateur (admin uniquement).
-function UserEditor({ user, onSave, onDelete, onClose }) {
+function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
   const [name, setName] = useState(user ? user.name : '');
   const [role, setRole] = useState(user ? user.role : 'Famille');
   const [c, setC] = useState(user ? (user.c || USER_COLORS[0]) : USER_COLORS[0]);
+  /* Vues autorisées : rien de coché = TOUTES (le défaut, et le comportement
+   * historique). La restriction ne concerne que les non-admins — un admin voit
+   * tout, c'est son rôle. */
+  const [vues, setVues] = useState(() => (user && Array.isArray(user.vues) ? user.vues : []));
+  const VUES_CHOIX = [
+    ['pieces', tr('Pièces')], ['scenes', tr('Scènes')], ['objets', tr('Objets')],
+    ['energie', tr('Énergie')], ['securite', tr('Sécurité')], ['systeme', tr('Système')],
+    ...customViews.map(cv => ['cv:' + cv.id, cv.name]),
+  ];
+  const basculeVue = (vid) => setVues(v => v.indexOf(vid) >= 0 ? v.filter(x => x !== vid) : [...v, vid]);
   const inp = { width: '100%', padding: '12px 14px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 14.5, fontWeight: 600, boxSizing: 'border-box' };
-  const save = () => { const n = name.trim(); if (!n) return; onSave({ name: n, role, c, sub: role + ' · ' + n.toLowerCase().replace(/\s+/g, '.') }); };
+  const save = () => { const n = name.trim(); if (!n) return; onSave({ name: n, role, c, sub: role + ' · ' + n.toLowerCase().replace(/\s+/g, '.'), vues: role === 'Admin' ? [] : vues }); };
   const roleBtn = (on) => ({ flex: 1, padding: 11, borderRadius: 11, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' });
   return (
     <div onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -372,6 +382,16 @@ function UserEditor({ user, onSave, onDelete, onClose }) {
         <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', marginBottom: 20 }}>
           {USER_COLORS.map(col => <button key={col} onClick={() => setC(col)} style={{ width: 32, height: 32, borderRadius: '50%', border: col === c ? '2px solid var(--o-text)' : '2px solid transparent', background: col, cursor: 'pointer', flexShrink: 0 }} />)}
         </div>
+        {role !== 'Admin' && (<>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 4 }}>{tr('VUES AUTORISÉES')}</div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 8 }}>{tr("Rien de coché = tout est visible. L'Accueil et les fiches restent toujours accessibles.")}</div>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 20 }}>
+            {VUES_CHOIX.map(([vid, lb]) => { const on = vues.indexOf(vid) >= 0; return (
+              <button key={vid} onClick={() => basculeVue(vid)} aria-pressed={on}
+                style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{lb}</button>
+            ); })}
+          </div>
+        </>)}
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 12, background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', color: '#f87171', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Supprimer</button>}
           <div style={{ flex: 1 }} />
@@ -1000,7 +1020,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{curSection ? (curSection.pageSub || curSection.sub) : ''}</div>
           </div>
 
-      {editing && isAdmin && <UserEditor user={editing.u} onSave={(data) => { if (editing.i == null) onAddUser && onAddUser(data); else onUpdateUser && onUpdateUser(editing.i, data); setEditing(null); }} onDelete={editing.i != null ? () => { onDeleteUser && onDeleteUser(editing.i); setEditing(null); } : null} onClose={() => setEditing(null)} />}
+      {editing && isAdmin && <UserEditor user={editing.u} customViews={customViews} onSave={(data) => { if (editing.i == null) onAddUser && onAddUser(data); else onUpdateUser && onUpdateUser(editing.i, data); setEditing(null); }} onDelete={editing.i != null ? () => { onDeleteUser && onDeleteUser(editing.i); setEditing(null); } : null} onClose={() => setEditing(null)} />}
 
       {tab === 'apparence' && (<>
         <SecBar>
@@ -1380,10 +1400,23 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         const bump = () => setAutoOpen(o => ({ ...o }));
         const toggleMain = (vid) => { const c = readViewsCfg(); if (c.hidden.has(vid)) c.hidden.delete(vid); else c.hidden.add(vid); writeViewsCfg(c); bump(); };
         const toggleExtra = (vid) => { const c = readViewsCfg(); if (c.shown.has(vid)) c.shown.delete(vid); else c.shown.add(vid); writeViewsCfg(c); bump(); };
-        const Row = ({ icon, c, name, sub, on, locked, onT }) => (
+        // Ordre choisi des vues intégrées : appliqué ici ET dans le menu latéral.
+        const iOrdre = (vid) => { const i = (cfg.order || []).indexOf(vid); return i < 0 ? 999 : i; };
+        const ordonnes = [...BUILTIN_VIEWS].sort((a, b) => iOrdre(a[0]) - iOrdre(b[0]));
+        const bouger = (vid, dir) => {
+          const ids = ordonnes.map(v => v[0]);
+          const i = ids.indexOf(vid), j = i + dir;
+          if (j < 0 || j >= ids.length) return;
+          const t2 = ids[i]; ids[i] = ids[j]; ids[j] = t2;
+          const c = readViewsCfg(); c.order = ids; writeViewsCfg(c); bump();
+        };
+        const fleche = { width: 26, height: 26, borderRadius: 8, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 };
+        const Row = ({ icon, c, name, sub, on, locked, onT, onUp, onDown }) => (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
             <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', opacity: on ? 1 : .55 }}><Fi i={icon} size={15} color={c || 'var(--o-text2)'} /></span>
             <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 700, color: on ? 'var(--o-text)' : 'var(--o-text3)' }}>{name}</div><div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600 }}>{on ? sub: tr('masquée')}</div></div>
+            {onUp && <button onClick={onUp} title={tr('Monter')} aria-label={tr('Monter') + ' ' + name} style={fleche}><Fi i="angle-up" size={12} /></button>}
+            {onDown && <button onClick={onDown} title={tr('Descendre')} aria-label={tr('Descendre') + ' ' + name} style={fleche}><Fi i="angle-down" size={12} /></button>}
             <button onClick={() => setTab('entites')} style={{ padding: '6px 11px', borderRadius: 9, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>{tr('Entités')}</button>
             {locked
               ? <span style={{ width: 46, textAlign: 'center', flexShrink: 0 }}><Fi i="lock" size={13} color="var(--o-text3)" /></span>
@@ -1412,8 +1445,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Vues intégrées')}</div><span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.05em' }}>visibilité du menu latéral</span></div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 6px' }}>Masque celles que tu n'utilises pas, ou réactive une vue retirée. La barre mobile garde ses raccourcis.</div>
           <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
-            {BUILTIN_VIEWS.map(([vid, name, icon, sub, locked]) => { const why = viewReason(availViews, vid); return (
-              <Row key={vid} icon={icon} name={name} sub={why || sub} locked={locked || !!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)} />
+            {ordonnes.map(([vid, name, icon, sub, locked], idx) => { const why = viewReason(availViews, vid); return (
+              <Row key={vid} icon={icon} name={name} sub={why || sub} locked={locked || !!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)}
+                onUp={idx > 0 ? () => bouger(vid, -1) : null} onDown={idx < ordonnes.length - 1 ? () => bouger(vid, 1) : null} />
             ); })}
             {HIDDEN_VIEWS().map(h => { const why = viewReason(availViews, h.vid); return (
               <Row key={h.vid} icon={h.icon} c={h.c} name={h.label} sub={why || 'vue retirée, accessible par la recherche'} locked={!!why} on={!why && cfg.shown.has(h.vid)} onT={() => toggleExtra(h.vid)} />

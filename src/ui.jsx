@@ -81,13 +81,15 @@ export const HIDDEN_VIEWS = () => [
 // hidden = vids masquées parmi les vues principales ; shown = vids réactivées parmi les vues retirées.
 export function readViewsCfg() {
   const rd = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
-  return { hidden: new Set(rd('loggia-hiddenviews')), shown: new Set(rd('loggia-shownviews')) };
+  // `order` : l'ordre choisi des vues intégrées dans le menu (vide = ordre d'origine).
+  return { hidden: new Set(rd('loggia-hiddenviews')), shown: new Set(rd('loggia-shownviews')), order: rd('loggia-vueordre') };
 }
 
 export function writeViewsCfg(cfg) {
   try {
     localStorage.setItem('loggia-hiddenviews', JSON.stringify([...cfg.hidden]));
     localStorage.setItem('loggia-shownviews', JSON.stringify([...cfg.shown]));
+    localStorage.setItem('loggia-vueordre', JSON.stringify(cfg.order || []));
   } catch (e) {}
   try { window.dispatchEvent(new Event('loggia-views-changed')); } catch (e) {}
 }
