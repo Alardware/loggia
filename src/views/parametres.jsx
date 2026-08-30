@@ -1033,7 +1033,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <SecBar>
           <SecGroup label={tr('Mode')}>
             <div style={{ display: 'flex', gap: 4 }}>
-              {[['dark', 'Foncé'], ['light', 'Clair']].map(([id, lb]) => (
+              {[['auto', 'Auto'], ['dark', 'Foncé'], ['light', 'Clair']].map(([id, lb]) => (
                 <button key={id} onClick={() => onMode(id)} disabled={haTheme === 'FOLLOW'} style={{ ...secBtn(haTheme !== 'FOLLOW' && themeMode === id), opacity: haTheme === 'FOLLOW' ? .5 : 1, cursor: haTheme === 'FOLLOW' ? 'not-allowed' : 'pointer' }}>{lb}</button>
               ))}
             </div>
@@ -1046,7 +1046,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <SecCard title={tr('Thème actif')} tag={haTheme === 'FOLLOW' ? 'SUIVI DE HA' : 'CHOIX MANUEL'} tagCol={haTheme === 'FOLLOW' ? 'warn' : 'ok'}
               sub="Réglages visuels, propres à cet appareil. L'aperçu à droite suit vos choix.">
               <EnRow label="Palette" desc={pm.desc}><EnVal v={pm.name} col="var(--o-accent-soft)" /></EnRow>
-              <EnRow label="Mode d'affichage" desc={haTheme === 'FOLLOW' ? 'Imposé par le thème actif de Home Assistant' : 'Clair ou foncé, appliqué au thème choisi'}><EnVal v={themeMode === 'light' ? 'Clair' : 'Foncé'} col="var(--o-text)" /></EnRow>
+              <EnRow label="Mode d'affichage" desc={haTheme === 'FOLLOW' ? 'Imposé par le thème actif de Home Assistant' : 'Clair ou foncé, appliqué au thème choisi'}><EnVal v={themeMode === 'auto' ? tr('Auto (appareil)') : themeMode === 'light' ? 'Clair' : 'Foncé'} col="var(--o-text)" /></EnRow>
               <EnRow label={tr('Effets animés')} desc={wxFx ? 'Ciel météo suivant la condition et l’heure réelles' : 'Bannière fixe, aucun rendu animé'}><EnVal v={wxFx ? tr('Météo') : 'Désactivés'} col={wxFx ? 'var(--o-ok)' : 'var(--o-text3)'} /></EnRow>
               <EnRow label={tr('Matière & formes')} desc={formes}><EnVal v={look.contrast ? 'contraste renforcé' : 'contraste normal'} col="var(--o-text)" /></EnRow>
               <EnRow label="Interface mobile" desc={'Marge du haut ' + (topAuto ? 'auto' : Math.round(topMargin) + ' px') + (navbar ? ' · marge du bas ' + (navAuto ? 'auto' : Math.round(navMargin) + ' px') : '')}><EnVal v={navbar ? 'Barre de navigation' : 'Sans barre'} col={navbar ? 'var(--o-text)' : 'var(--o-text3)'} /></EnRow>
@@ -1115,7 +1115,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         return (<>
           <AppCard title="Affichage">
             <OptRow title={tr('Mode')} desc={tr('Appliqué au thème choisi.')}>
-              <Seg value={themeMode} opts={[['dark', 'Foncé'], ['light', 'Clair']]} onPick={onMode} disabled={!notFollow} />
+              <Seg value={themeMode} opts={[['auto', 'Auto'], ['dark', 'Foncé'], ['light', 'Clair']]} onPick={onMode} disabled={!notFollow} />
             </OptRow>
             <OptRow title={tr('Langue')} desc={tr('Les états et les commandes viennent de Home Assistant, dans toutes les langues qu’il connaît. Les noms de pièces et d’appareils aussi : ils ne sont pas traduits ici.')}>
               {/* Plus de liste deroulante.

@@ -4806,7 +4806,7 @@ function FavorisAccueil({ hass }) {
   );
 }
 
-function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onOpenMeteo }) {
+function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onOpenMeteo, onNav = null }) {
   /* Aperçu du NOUVEL ACCUEIL (Paramètres → Apparence, par appareil) : la
    * bannière perd sa rangée de métriques (les résumés du rail les portent),
    * les FAVORIS (épingles) arrivent sous la bannière, les pièces se resserrent.
@@ -5151,15 +5151,23 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           // autres vues (libelle + contexte a gauche, valeur alignee a droite, filet entre
           // les lignes). Une entite absente = pas de ligne, jamais une ligne vide.
           const hasEnt = (id) => !!(dashHass && dashHass.states && dashHass.states[id]);
-          const railRow = (k, label, desc, val, col) => (
-            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
-                <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{desc}</div>
+          /* `vue` (nouvel accueil) : la ligne devient un RÉSUMÉ cliquable — tap
+           * → la vue du domaine, chevron pour le dire. Sans vue, ligne inerte. */
+          const railRow = (k, label, desc, val, col, vue = null) => {
+            const clic = v2 && vue && onNav ? () => onNav(vue) : null;
+            return (
+              <div key={k} role={clic ? 'button' : undefined} tabIndex={clic ? 0 : undefined}
+                onClick={clic || undefined} onKeyDown={clic ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clic(); } } : undefined}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', cursor: clic ? 'pointer' : 'default' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{desc}</div>
+                </div>
+                <span style={{ fontSize: 12.5, fontWeight: 800, flexShrink: 0, color: col || 'var(--o-text)' }}>{val}</span>
+                {clic && <Fi i="angle-right" size={10} color="var(--o-text3)" />}
               </div>
-              <span style={{ fontSize: 12.5, fontWeight: 800, flexShrink: 0, color: col || 'var(--o-text)' }}>{val}</span>
-            </div>
-          );
+            );
+          };
           const railPanel = (title, sub, tag, tagCol, rows) => rows.length ? (
             <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,16px)', padding: '13px 15px', boxShadow: 'var(--o-shadow)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
@@ -5172,16 +5180,21 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           ) : null;
           const OKRGB = '52,211,153', AMBRGB = '251,191,36';
           const etatsRows = [];
-          etatsRows.push(railRow('vol', tr('Mode volets'), tr('Auto lever/coucher'), (a && a.sunsetHM) ? a.sunsetHM : '21:42', 'var(--o-accent-soft)'));
-          if (mWallE && (!a || hasEnt((loggiaEnt('vacuum', {}) || {}).etat))) etatsRows.push(railRow('we', mWallE.label, mWallE.phase, mWallE.valueText, mWallE.barColor || mWallE.color));
-          if (mLuba && (!a || hasEnt(mowerId(a && a.states)))) etatsRows.push(railRow('lu', mLuba.label, mLuba.phase, mLuba.valueText, mLuba.barColor || mLuba.color));
-          if (mLv && (!a || hasEnt(notifIds().dishwasher))) etatsRows.push(railRow('lv', mLv.label, mLv.phase, mLv.valueText, mLv.color));
-          etatsRows.push(railRow('sec', tr('Sécurité'), (a ? a.camOnline + '/' + a.camTotal : '3/3') + ' ' + tr('caméras en ligne'), (a && a.alarmArmed) ? tr('Armée') : tr('Désarmée'), (a && a.alarmArmed) ? 'var(--o-warn2)' : 'var(--o-ok)'));
+          // Nouvel accueil : les métriques quittent la bannière et deviennent
+          // des résumés cliquables — Lumières en tête, Énergie en pied.
+          if (v2) etatsRows.push(railRow('lum', tr('Lumières'), tr('LUMIÈRES ALLUMÉES').toLowerCase(), a ? (a.lightsOn + ' / ' + a.lightsTotal) : '—', a && a.lightsOn ? 'var(--o-warn)' : 'var(--o-text3)', 'lumieres'));
+          etatsRows.push(railRow('vol', tr('Mode volets'), tr('Auto lever/coucher'), (a && a.sunsetHM) ? a.sunsetHM : '21:42', 'var(--o-accent-soft)', 'climat'));
+          if (mWallE && (!a || hasEnt((loggiaEnt('vacuum', {}) || {}).etat))) etatsRows.push(railRow('we', mWallE.label, mWallE.phase, mWallE.valueText, mWallE.barColor || mWallE.color, 'objets'));
+          if (mLuba && (!a || hasEnt(mowerId(a && a.states)))) etatsRows.push(railRow('lu', mLuba.label, mLuba.phase, mLuba.valueText, mLuba.barColor || mLuba.color, 'objets'));
+          if (mLv && (!a || hasEnt(notifIds().dishwasher))) etatsRows.push(railRow('lv', mLv.label, mLv.phase, mLv.valueText, mLv.color, 'objets'));
+          etatsRows.push(railRow('sec', tr('Sécurité'), (a ? a.camOnline + '/' + a.camTotal : '3/3') + ' ' + tr('caméras en ligne'), (a && a.alarmArmed) ? tr('Armée') : tr('Désarmée'), (a && a.alarmArmed) ? 'var(--o-warn2)' : 'var(--o-ok)', 'securite'));
+          if (v2 && a && a.metricExport) etatsRows.push(railRow('nrj', tr('Énergie'), a.metricExport.label.toLowerCase(), fmtWatts(a.metricExport.raw), a.metricExport.color, 'energie'));
+          if (v2 && a) etatsRows.push(railRow('air', tr('Qualité air'), a.maxCo2 != null ? tr(airLabel(a.maxCo2)).toLowerCase() : '—', a.maxCo2 != null ? Math.round(a.maxCo2) + ' ppm' : '—', 'var(--o-accent-soft)', 'pieces'));
           const nActifs = [mWallE, mLuba, mLv].filter(m => m && m.active).length;
           const rappelsRows = [];
           if (!a || (a.repasIn && a.repasLabel)) rappelsRows.push(railRow('rep', tr('Repas chat'), a ? a.repasLabel : 'Collation après-midi · 18g', a ? a.repasIn.replace('DANS ', '').toLowerCase() : '1h38', 'var(--o-warn)'));
           if (mPb) rappelsRows.push(railRow('pb', tr('Poubelles'), mPb.valueText, mPb.phase, mPb.color));
-          const railEtats = railPanel(tr('En cours'), tr('Volets, robots et sécurité'), nActifs ? nActifs + ' ' + (nActifs > 1 ? tr('ACTIFS') : tr('ACTIF')) : tr('TOUT AU REPOS'), nActifs ? '79,140,255' : OKRGB, etatsRows);
+          const railEtats = railPanel(v2 ? tr('Résumés') : tr('En cours'), v2 ? tr('Toute la maison, une ligne par domaine — tape pour ouvrir') : tr('Volets, robots et sécurité'), nActifs ? nActifs + ' ' + (nActifs > 1 ? tr('ACTIFS') : tr('ACTIF')) : tr('TOUT AU REPOS'), nActifs ? '79,140,255' : OKRGB, etatsRows);
           const railRappels = railPanel(tr('Rappels'), tr('Repas du chat et ramassage'), null, AMBRGB, rappelsRows);
           // Agenda : les prochains evenements des calendriers HA. Pas de
           // calendrier, ou rien sous sept jours → pas de carte.
@@ -10286,9 +10299,12 @@ export default function App() {
     return () => { alive = false; if (minuteur) clearTimeout(minuteur); };
   }, []);
 
-  const [themeMode, setThemeMode] = useState('dark'); // base Loggia : clair/foncé
-  const [loggiaTheme, setLoggiaTheme] = useState('');     // '' = défaut Loggia ; sinon preset natif (neumorphix/google/ios)
-  const [haTheme, setHaTheme] = useState('');           // '' = base Loggia ; 'FOLLOW' = suit HA ; sinon nom de thème HA
+  /* Lecture PARESSEUSE : l'effet d'application réécrit ces clés — les lire
+   * dans un effet arrivait APRÈS la première écriture (le défaut écrasait le
+   * réglage au double-montage de dev, et par pure chance d'ordre en prod). */
+  const [themeMode, setThemeMode] = useState(() => { try { const m = localStorage.getItem('loggia-mode'); return (m === 'light' || m === 'dark' || m === 'auto') ? m : 'dark'; } catch (e) { return 'dark'; } }); // base Loggia : clair/foncé/auto
+  const [loggiaTheme, setLoggiaTheme] = useState(() => { if (SAFE_NOLOOK) return ''; try { const t = localStorage.getItem('loggia-theme'); return t != null ? t : ''; } catch (e) { return ''; } });     // '' = défaut Loggia ; sinon preset natif (neumorphix/google/ios)
+  const [haTheme, setHaTheme] = useState(() => { if (SAFE_NOLOOK) return ''; try { const h = localStorage.getItem('loggia-ha'); return h != null ? h : ''; } catch (e) { return ''; } });           // '' = base Loggia ; 'FOLLOW' = suit HA ; sinon nom de thème HA
   const [lightMode, setLightMode] = useState(false);
   /* La vue courante survit au rechargement.
    *
@@ -10497,25 +10513,25 @@ export default function App() {
   let accueil = null; // Dashboard + vue Pièce (capteurs de la pièce) — pas calculé ailleurs
   if (view === 'accueil' || activeRoom) { try { accueil = deriveAccueil(hass, cfg, loggiaRuntime.resolved); if (accueil) accueil.index = loggiaRuntime.index; } catch (e) { console.error('deriveAccueil', e); accueil = null; } }
   let notifs; try { notifs = deriveNotifs(hass); } catch (e) { console.error('deriveNotifs', e); notifs = []; }
-  useEffect(() => {
-    try {
-      const m = localStorage.getItem('loggia-mode'); if (m === 'light' || m === 'dark') setThemeMode(m);
-      // Safe mode « sans thème » : preset et suivi HA restent aux défauts pour ce chargement.
-      if (!SAFE_NOLOOK) {
-        const t = localStorage.getItem('loggia-theme'); if (t != null) setLoggiaTheme(t);
-        const h = localStorage.getItem('loggia-ha'); if (h != null) setHaTheme(h);
-      }
-    } catch (e) {}
-  }, []);
+  // (thème/mode/suivi HA lus paresseusement à l'initialisation des states —
+  //  les relire ici arrivait après leur première réécriture.)
   const [look, setLook] = useState(readLook);
   const onLook = (patch) => setLook(l => { const n = { ...l, ...patch }; try { localStorage.setItem('loggia_look', JSON.stringify(n)); } catch (e) {} return n; });
   useEffect(() => {
-    const run = () => setLightMode(!applyTheme({ mode: themeMode, loggiaTheme, haTheme, look }, getHass()));
+    // « Auto » : le clair/foncé suit l'APPAREIL (prefers-color-scheme) — et le
+    // suit en direct quand l'OS bascule au coucher du soleil.
+    const modeEff = () => themeMode === 'auto'
+      ? ((() => { try { return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; } catch (e) { return 'dark'; } })())
+      : themeMode;
+    const run = () => setLightMode(!applyTheme({ mode: modeEff(), loggiaTheme, haTheme, look }, getHass()));
     run();
     // En safe mode, ne RIEN réécrire : les défauts affichés écraseraient le thème enregistré.
     if (!SAFE_NOLOOK) { try { localStorage.setItem('loggia-mode', themeMode); localStorage.setItem('loggia-theme', loggiaTheme); localStorage.setItem('loggia-ha', haTheme); } catch (e) {} }
+    let mq = null;
+    if (themeMode === 'auto') { try { mq = window.matchMedia('(prefers-color-scheme: light)'); mq.addEventListener('change', run); } catch (e) { mq = null; } }
     // Suivre HA : hass.themes peut charger après coup / l'actif peut changer → on réapplique en boucle
-    if (haTheme === 'FOLLOW') { const iv = setInterval(run, 1500); return () => clearInterval(iv); }
+    if (haTheme === 'FOLLOW') { const iv = setInterval(run, 1500); return () => { clearInterval(iv); if (mq) mq.removeEventListener('change', run); }; }
+    return () => { if (mq) mq.removeEventListener('change', run); };
   }, [themeMode, loggiaTheme, haTheme, look]);
   // Bascule Nabu Casa automatique. Garde-fous, tous obligatoires :
   //   1. l'interrupteur est armé et une URL distante est renseignée ;
@@ -10544,6 +10560,17 @@ export default function App() {
   const onFollowHa = () => setHaTheme(h => h === 'FOLLOW' ? '' : 'FOLLOW');
   const toggle = () => { setHaTheme(''); setThemeMode(m => m === 'light' ? 'dark' : 'light'); }; // bouton flottant = bascule clair/foncé Loggia
   const [navOpen, setNavOpen] = useState(() => { try { return (typeof window !== 'undefined' ? window.innerWidth : 1000) > 820; } catch (e) { return true; } });
+  /* Aperçu nouvelle interface (loggia-accueil2) sur écran TACTILE — téléphone
+   * ET tablette, portrait comme paysage : la classe `loggia-tactile` masque le
+   * bandeau du haut, met la sidebar en tiroir et affiche la barre du bas. Le
+   * type d'appareil (pointer: coarse) décide, jamais la largeur. */
+  useEffect(() => {
+    const tactile = (() => { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
+    const v2ui = (() => { try { return JSON.parse(localStorage.getItem('loggia-accueil2') || 'false') === true; } catch (e) { return false; } })();
+    const actif = tactile && v2ui;
+    try { document.documentElement.classList.toggle('loggia-tactile', actif); } catch (e) {}
+    if (actif) setNavOpen(false); // la sidebar devient un tiroir : fermée d'office
+  }, [view]);
   /* Le menu mobile se fermait au clic sur le voile, mais rien au clavier :
    * qui l'ouvre sans souris y restait enferme. Trois autres panneaux geraient
    * deja Echap, celui-ci avait ete oublie. */
@@ -10769,7 +10796,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && isAdmin} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && isAdmin} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && isAdmin} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && isAdmin} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'parametres' ? <ParametresView themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && isAdmin} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && isAdmin} /> : <Dashboard editMode={editMode} onEnt={isAdmin ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} />}
+        : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && isAdmin} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && isAdmin} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && isAdmin} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && isAdmin} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'parametres' ? <ParametresView themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && isAdmin} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && isAdmin} /> : <Dashboard editMode={editMode} onEnt={isAdmin ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} onMenu={() => setNavOpen(o => !o)} />}
       {entSheet && editMode && isAdmin && <Suspense fallback={null}><ViewEntSheet view={view} hass={hass} onClose={() => setEntSheet(false)} /></Suspense>}
