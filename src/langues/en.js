@@ -386,6 +386,8 @@ export default {
   'Sur la base': 'Docked',
   'Tonte': 'Mowing',
   'Lancer la tonte': 'Start mowing',
+  'PRÉRÉGLAGE': 'PRESET',
+  'Localiser': 'Locate',
   'Sur base': 'Docked',
   'En pause': 'Paused',
   'En veille': 'Idle',
