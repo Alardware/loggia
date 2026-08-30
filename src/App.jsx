@@ -5033,6 +5033,55 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   };
   const cacheSec = (id) => saveAccL({ ...accL, caches: [...accL.caches, id] });
   const montreSec = (id) => saveAccL({ ...accL, caches: accL.caches.filter(x => x !== id) });
+  // Drag d'une CARTE pièce (dans la section) : même mécanique que les sections
+  // — souris directe, appui long au doigt — mais l'ordre est le sien
+  // (accL.piecesOrdre). stopPropagation : sinon la section se saisit avec.
+  const [pieceDrag, setPieceDrag] = useState(null); // { id, ordre }
+  const pieceTimer = useRef(null);
+  const pieceDebut = useRef(null);
+  const ordrePieces = (noms) => { const sauve = (accL.piecesOrdre || []).filter(n => noms.indexOf(n) >= 0); return [...sauve, ...noms.filter(n => sauve.indexOf(n) < 0)]; };
+  const debutPiece = (e, id, noms) => {
+    if (!editMode) return;
+    if (e.target.closest && e.target.closest('button, [role="switch"], input')) return;
+    e.stopPropagation();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) {}
+    if (e.pointerType === 'touch') {
+      pieceDebut.current = { x: e.clientX, y: e.clientY, id, noms };
+      clearTimeout(pieceTimer.current);
+      pieceTimer.current = setTimeout(() => {
+        if (!pieceDebut.current) return;
+        try { if (navigator.vibrate) navigator.vibrate(35); } catch (er) {}
+        setPieceDrag({ id: pieceDebut.current.id, ordre: ordrePieces(pieceDebut.current.noms) });
+      }, 380);
+      return;
+    }
+    e.preventDefault();
+    setPieceDrag({ id, ordre: ordrePieces(noms) });
+  };
+  const mouvPiece = (e) => {
+    if (!pieceDrag && pieceDebut.current) {
+      if (Math.abs(e.clientX - pieceDebut.current.x) > 10 || Math.abs(e.clientY - pieceDebut.current.y) > 10) {
+        clearTimeout(pieceTimer.current); pieceDebut.current = null;
+      }
+      return;
+    }
+    if (!pieceDrag) return;
+    const sous = document.elementFromPoint(e.clientX, e.clientY);
+    const cible = sous && sous.closest ? sous.closest('[data-piece]') : null;
+    if (!cible) return;
+    const idCible = cible.getAttribute('data-piece');
+    if (idCible === pieceDrag.id) return;
+    const a = [...pieceDrag.ordre];
+    const de = a.indexOf(pieceDrag.id), vers = a.indexOf(idCible);
+    if (de < 0 || vers < 0) return;
+    a.splice(de, 1); a.splice(vers, 0, pieceDrag.id);
+    setPieceDrag({ ...pieceDrag, ordre: a });
+  };
+  const finPiece = () => {
+    clearTimeout(pieceTimer.current); pieceDebut.current = null;
+    if (pieceDrag) saveAccL({ ...accL, piecesOrdre: pieceDrag.ordre });
+    setPieceDrag(null);
+  };
   /** Enveloppe d'une section : drag + masque en édition, rien sinon. */
   const Sec = (zone, id, contenu) => {
     const cache = accL.caches.indexOf(id) >= 0;
@@ -5053,7 +5102,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               <button onClick={() => montreSec(id)} style={{ padding: '6px 12px', borderRadius: 9, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{tr('Réafficher')}</button>
             </div>
           : <>
-              <div style={{ pointerEvents: editMode ? 'none' : 'auto' }}>{contenu}</div>
+              {/* Contenu inerte en édition — SAUF les pièces, qui portent leur
+                * propre édition par carte (drag + taille). */}
+              <div style={{ pointerEvents: editMode && id !== 'pieces' ? 'none' : 'auto' }}>{contenu}</div>
               {editMode && <button onClick={() => cacheSec(id)} title={tr('Masquer')} style={{ position: 'absolute', top: -10, right: -10, width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-bad)', color: '#fff', boxShadow: '0 3px 10px rgba(0,0,0,.35)', fontSize: 12, fontWeight: 800, padding: 0 }}>×</button>}
             </>}
       </div>
@@ -5301,11 +5352,26 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             // (défaut), standard = deux rangées. Choix par pièce en édition
             // (coin bas-droit), persisté avec l'agencement de l'accueil.
             <div className="grid-chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 8 }}>
-              {inner.map((p, i) => {
+              {(() => {
+                const nomsInner = inner.map(p => p.name);
+                const ordre = pieceDrag ? pieceDrag.ordre : ordrePieces(nomsInner);
+                return ordre.map(n => inner.find(p => p.name === n)).filter(Boolean);
+              })().map((p, i) => {
                 const t = ((accL.tailles || {})[p.name] === 's') ? 's' : 'c';
+                const saisie = pieceDrag && pieceDrag.id === p.name;
                 return (
-                  <div key={p.name} className={t === 'c' ? 'o-chiprow1' : undefined} style={{ position: 'relative', minWidth: 0 }}>
-                    <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />
+                  <div key={p.name} data-piece={p.name} className={t === 'c' ? 'o-chiprow1' : undefined}
+                    onPointerDown={editMode ? (e) => debutPiece(e, p.name, inner.map(x => x.name)) : undefined}
+                    onPointerMove={editMode ? mouvPiece : undefined}
+                    onPointerUp={editMode ? finPiece : undefined}
+                    onPointerCancel={editMode ? finPiece : undefined}
+                    style={{ position: 'relative', minWidth: 0, opacity: saisie ? .55 : 1, transition: 'opacity .15s',
+                      ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 2, borderRadius: 14, cursor: 'grab', touchAction: 'pan-y' } : {}) }}>
+                    {/* Carte inerte en édition (comme partout) : le wrapper
+                      * garde le drag, le bouton taille reste tapable. */}
+                    <div style={editMode ? { pointerEvents: 'none', height: '100%' } : { height: '100%' }}>
+                      <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} onOpen={editMode ? null : () => onOpenRoom && onOpenRoom(p.name)} />
+                    </div>
                     {editMode && (
                       <button aria-label={tr('Taille de la carte') + ' · ' + p.name}
                         onClick={(e) => { e.stopPropagation(); saveAccL({ ...accL, tailles: { ...(accL.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } }); }}
