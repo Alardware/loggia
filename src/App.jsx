@@ -2046,7 +2046,11 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-accent-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
         border: `1px solid rgba(var(--o-accent-rgb),${lav(.26)})`,
       } : null) }}>
-      {art && <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 96, height: 96, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.13, pointerEvents: 'none' }} />}
+      {/* Pochette en fond : l'album occupe le flanc droit, fondu vers la
+        * surface côté texte — le filigrane appareil ne sert que sans pochette. */}
+      {np.art
+        ? <div aria-hidden="true" style={{ position: 'absolute', inset: 0, backgroundImage: `url("${np.art}")`, backgroundSize: 'cover', backgroundPosition: 'right center', opacity: 0.5, pointerEvents: 'none', WebkitMaskImage: 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,.45) 45%, #000 100%)', maskImage: 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,.45) 45%, #000 100%)' }} />
+        : art && <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 96, height: 96, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.13, pointerEvents: 'none' }} />}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(np.on ? 'rgba(167,139,250,.16)' : 'var(--o-s1)', np.on ? 'var(--o-purple)' : 'var(--o-text3)')}>
           {np.art ? <img src={np.art} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Fi i="tv-music" size={17} />}

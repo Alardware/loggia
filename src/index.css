@@ -109,7 +109,7 @@ html.loggia-tactile .loggia-aside.is-closed .o-nav-item { justify-content: flex-
 html.loggia-tactile .loggia-aside.is-open { transform: translateX(0); }
 html.loggia-tactile .loggia-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 90; }
 html.loggia-tactile .loggia-mobilenav { display: flex !important; }
-html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-bottom, 0px)) !important; }
+html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-bottom, 0px)) !important; padding-top: var(--o-safe-top, 0px) !important; }
 
 /* Grille DENSE des vues intégrées : une carte riche occupe deux rangées, une
  * COMPACTE une seule — deux compactes s'empilent à côté d'une grande, comme
