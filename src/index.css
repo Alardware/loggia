@@ -97,6 +97,20 @@ html.loggia-frosted body [style*="--o-surfA"] [style*="--o-surfA"] { -webkit-bac
 /* Contraste renforcé : les tokens sont posés en inline par applyLook() — une règle de
    classe ne battrait pas le style inline du preset. La classe ne sert que de marqueur. */
 /* Marges de l'écran : la glissière suit l'accent du thème, piste discrète. */
+/* ── Aperçu nouvelle interface, écrans TACTILES (téléphone ET tablette, les
+ * deux orientations) : plus de bandeau du haut, la sidebar devient un tiroir,
+ * la barre du bas prend la navigation. Posée par App (pointer: coarse + flag
+ * loggia-accueil2) — le TYPE d'appareil décide, jamais la largeur. */
+html.loggia-tactile .loggia-hdr { display: none !important; }
+html.loggia-tactile .loggia-aside { position: fixed !important; top: 0; left: 0; height: 100vh !important; overflow-y: auto !important; padding-bottom: var(--o-safe-bottom, 0px) !important; z-index: 100; transition: transform .3s ease; box-shadow: 0 0 50px rgba(0,0,0,.55); }
+html.loggia-tactile .loggia-aside.is-closed { display: flex !important; transform: translateX(-100%); width: 264px !important; }
+html.loggia-tactile .loggia-aside.is-closed .o-side-text { display: block !important; }
+html.loggia-tactile .loggia-aside.is-closed .o-nav-item { justify-content: flex-start !important; padding: 9px 8px 9px 13px !important; gap: 12px !important; }
+html.loggia-tactile .loggia-aside.is-open { transform: translateX(0); }
+html.loggia-tactile .loggia-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 90; }
+html.loggia-tactile .loggia-mobilenav { display: flex !important; }
+html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-bottom, 0px)) !important; }
+
 /* Carte élargie : deux emplacements côte à côte. La grille custom garde DEUX
  * colonnes sur mobile (cartes compactes) — le span 2 y reste donc visible. */
 .o-cvw2 { grid-column: span 2; }
