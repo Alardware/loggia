@@ -21,10 +21,35 @@ const demo = (() => {
   catch (e) { return false; }
 })();
 
+/* Le catalogue anglais pese 40 Ko que le boot francophone n'a aucune raison
+ * d'emporter : il ne se charge que si la langue resolue le demande, AVANT
+ * d'evaluer l'application — des modules appellent tr() a l'import. La
+ * resolution recopie `resoudreTot` d'i18n.js (choix explicite, sinon derniere
+ * langue servie, sinon navigateur) : i18n ne peut pas etre importe ici sans
+ * tirer la moitie du graphe dans l'amorce. Les deux doivent rester d'accord. */
+function langueProbable() {
+  const lire = (k) => {
+    try {
+      const v = localStorage.getItem(k);
+      if (v == null) return null;
+      try { return JSON.parse(v); } catch (e) { return v; }
+    } catch (e) { return null; }
+  };
+  const choix = lire('loggia-langue') || 'auto';
+  if (choix !== 'auto') return choix;
+  const memo = lire('loggia-langue-active');
+  if (memo && /^[a-z]{2}$/.test(memo)) return memo;
+  return String((typeof navigator !== 'undefined' && navigator.language) || 'fr').slice(0, 2).toLowerCase();
+}
+
 (async () => {
   if (demo) {
     try { (await import('./demo.js')).installerDemo(); }
     catch (e) { console.error('demo indisponible', e); }
+  }
+  if (langueProbable() === 'en') {
+    try { window.__loggiaCatEN = (await import('./langues/en.js')).default; }
+    catch (e) { /* reseau : le francais couvre tout */ }
   }
   await import('./boot.jsx');
 })();

@@ -267,7 +267,8 @@ export default function CielEtoile({ drift = true, exposure = 1.38, limitMag = 8
     function frame() {
       if (disposed) return;
       rafId = requestAnimationFrame(frame);
-      if (document.hidden) return;
+      // Onglet caché ou veille ambiante par-dessus : le rendu ne servirait à personne.
+      if (document.hidden || document.documentElement.classList.contains('loggia-ambient-on')) return;
       const t = clock.elapsedTime;
       clock.getDelta();
       U.uTime.value = t;
