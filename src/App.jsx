@@ -6396,10 +6396,13 @@ function ClimatContent({ hass, edit = false, onEnt }) {
 }
 
 function ClimatView({ hass, edit = false, onEnt }) {
+  // L'Ouverture vit ICI depuis le 30/08 : une seule vue pour le confort de la
+  // maison — chauffage en haut, volets en dessous. La route `volets` survit.
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <ClimatContent hass={hass} edit={edit} onEnt={onEnt} />
+      <VoletsContent hass={hass} edit={edit} onEnt={onEnt} />
     </main>
   );
 }
@@ -10391,7 +10394,7 @@ export default function App() {
     ...lightKeys, ...(cfg.cams || []).map(c => c.haid)];
   const VIEW_HAKEYS = {
     accueil: accueilKeys, lumieres: lightKeys, scenes: lightKeys,
-    climat: [...climateKeys(), 'climate.', ...cfgKeys('climate')],
+    climat: [...climateKeys(), 'climate.', ...cfgKeys('climate'), ...voletKeys(), 'cover.', ...cfgKeys('covers')],
     volets: [...voletKeys(), 'cover.', ...cfgKeys('covers')],
     energie: [...enKeys(), cfg.energy.consoNow, cfg.energy.solarOutput],
     aspirateur: vacKeys, croquettes: croqKeys(), medias: medKeys(),

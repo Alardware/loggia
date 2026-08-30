@@ -69,7 +69,8 @@ export const cl_hexRgb = (c) => HX_TOKENS[c] ? `var(${HX_TOKENS[c]})` : (typeof 
 export const HIDDEN_VIEWS = () => [
   { label: tr('Lumières'), vid: 'lumieres', icon: 'bulb', c: '#ffce73' },
   { label: tr('Climat'), vid: 'climat', icon: 'thermometer-half', c: '#ff8a4c' },
-  { label: tr('Volets'), vid: 'volets', icon: 'blinds', c: 'var(--o-accent-soft)' },
+  /* Volets a quitté la liste le 30/08/2026 : l'Ouverture vit DANS la vue
+   * Climatisation (ClimatView rend VoletsContent). La route reste. */
   /* Aspirateur et Croquettes ont quitté la liste le 30/08/2026 : la FICHE
    * APPAREIL UNIVERSELLE (tap sur la carte, vue Objets) montre tout ce que
    * l'appareil expose — la vue dédiée ne racontait rien de plus. Les routes
