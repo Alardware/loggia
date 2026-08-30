@@ -2489,7 +2489,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
             </>
           )}
 
-          {estEntite && ed.typeOf && (
+          {(estEntite || id.indexOf('zone:') === 0) && ed.typeOf && (
             <>
               <div style={etiquette}>{tr('CARTE')}</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -3401,8 +3401,11 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                 const zone = id.indexOf('zone:') === 0 ? climateZones(S).find(z => z.id === id.slice(5)) : null;
                 const lbl = roomLabelOf(room, id);
                 // Type choisi dans la fiche d'édition : la carte du catalogue
-                // remplace le rendu par défaut de la vue.
-                const card = (!zone && ed.typeOf(id)) ? <CvTyped x={{ t: ed.typeOf(id), id }} hass={hass} dc={dc} /> : dc.card(id, lbl, zone);
+                // remplace le rendu par défaut de la vue. Une ZONE climat en
+                // compacte = la ligne de son thermostat (± inline).
+                const card = (!zone && ed.typeOf(id)) ? <CvTyped x={{ t: ed.typeOf(id), id }} hass={hass} dc={dc} />
+                  : (zone && ed.typeOf(id) === 'compacte' && estClimate(zone)) ? <CvCard id={zone.haid} hass={hass} label={lbl || zone.name} onOpen={dc.ouvrir} dense />
+                    : dc.card(id, lbl, zone);
                 if (!edit) return <Anim key={id} i={ents.indexOf(id)} className={ed.estLarge(id) ? 'o-cvw2' : ''}>{card}</Anim>;
                 return <EditableCard key={id} ed={ed} id={id} nom={nomDe(id)} onEdit={setCardEdit}>{card}</EditableCard>;
               })}
@@ -3776,11 +3779,11 @@ function ObjSheet({ title, img, accent = 'var(--o-accent)', rows = [], actions =
 function ObjCard({ icon, iconBg, name, sub, status, statusColor, barLabel, barPct, barColor, barText, barLiquid, toggleOn, onToggle, actionLabel, onAction, onOpen, art, idx = 0, iconActive = false, extra = null }) {
   const tilt = useTilt(4);
   return (
-    <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-stag o-hov ' + (tilt.className || '')} role="button" tabIndex={0} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', overflow: 'hidden', borderRadius: 16, padding: '14px 15px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', cursor: 'pointer', display: 'flex', flexDirection: 'column', ...stag(idx) }}>
+    <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-stag o-hov ' + (tilt.className || '')} role="button" tabIndex={0} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', overflow: 'hidden', borderRadius: 16, padding: '12px 14px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', cursor: 'pointer', display: 'flex', flexDirection: 'column', ...stag(idx) }}>
       {/* filigrane appareil — ancré au bord droit (jamais en %, cf. plantes) */}
-      {art && <div aria-hidden="true" style={{ position: 'absolute', right: 8, bottom: -6, width: 124, height: 124, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.3, pointerEvents: 'none' }} />}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 11, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{''}<span style={{ display: 'inline-flex', animation: iconActive && !REDUCE_MOTION ? 'm-wiggle 2s ease-in-out infinite' : 'none' }}>{icon}</span></div>
+      {art && <div aria-hidden="true" style={{ position: 'absolute', right: 8, bottom: -6, width: 104, height: 104, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.3, pointerEvents: 'none' }} />}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{''}<span style={{ display: 'inline-flex', animation: iconActive && !REDUCE_MOTION ? 'm-wiggle 2s ease-in-out infinite' : 'none' }}>{icon}</span></div>
         {onToggle && (
           <span role="switch" aria-checked={!!toggleOn} aria-label={'Alimentation ' + name} tabIndex={0}
             onClick={e => { e.stopPropagation(); onToggle(); }}
@@ -3792,9 +3795,9 @@ function ObjCard({ icon, iconBg, name, sub, status, statusColor, barLabel, barPc
       </div>
       <div style={{ position: 'relative', fontSize: 14.5, fontWeight: 800 }}>{name}</div>
       <div style={{ position: 'relative', fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
-      <div style={{ position: 'relative', fontSize: 12, color: statusColor || 'var(--o-text2)', fontWeight: 700, marginTop: 7, minHeight: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><FlipText live text={String(status == null ? '' : status)} /></div>
+      <div style={{ position: 'relative', fontSize: 12, color: statusColor || 'var(--o-text2)', fontWeight: 700, marginTop: 5, minHeight: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><FlipText live text={String(status == null ? '' : status)} /></div>
       {barPct != null && (
-        <div style={{ position: 'relative', marginTop: 9 }}>
+        <div style={{ position: 'relative', marginTop: 7 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 5 }}><span>{barLabel}</span><span style={{ color: 'var(--o-text1)' }}>{barText}</span></div>
           <Gauge pct={barPct} color={barColor || 'var(--o-ok)'} liquid={!!barLiquid} />
         </div>
@@ -3802,7 +3805,7 @@ function ObjCard({ icon, iconBg, name, sub, status, statusColor, barLabel, barPc
       {extra && <div style={{ position: 'relative' }}>{extra}</div>}
       <div style={{ position: 'relative', marginTop: 'auto' }}>
         {actionLabel && (
-          <ActionBtn onClick={() => { if (onAction) onAction(); }} style={{ marginTop: 12, width: '100%', padding: '10px 10px', borderRadius: 12, border: 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontWeight: 700, fontSize: 12.5, background: 'var(--o-s2)', color: 'var(--o-text1)' }}>{actionLabel}</ActionBtn>
+          <ActionBtn onClick={() => { if (onAction) onAction(); }} style={{ marginTop: 9, width: '100%', padding: '8px 10px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontWeight: 700, fontSize: 12.5, background: 'var(--o-s2)', color: 'var(--o-text1)' }}>{actionLabel}</ActionBtn>
         )}
       </div>
     </div>
@@ -6252,7 +6255,10 @@ function ClimatContent({ hass, edit = false, onEnt }) {
                   </div>)}
               <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {bloc.cartes.map(k => {
-                  const carte = (!zoneDe(k) && ed.typeOf(k)) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k), zoneDe(k));
+                  const zk = zoneDe(k);
+                  const carte = (!zk && ed.typeOf(k)) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} />
+                    : (zk && ed.typeOf(k) === 'compacte' && estClimate(zk)) ? <CvCard id={zk.haid} hass={hass} label={ed.labelOf(k) || zk.name} onOpen={dc.ouvrir} dense />
+                      : dc.card(k, ed.labelOf(k), zk);
                   if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={climNom(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
@@ -8878,11 +8884,10 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           return null;
         })()}
       </div>
-      {/* Machines : l'illustration au centre, comme la fiche native. */}
+      {/* Machines : l'illustration en filigrane latéral — la carte standard
+        * garde la taille standard, l'illustration ne pousse rien. */}
       {!dense && (dom === 'vacuum' || dom === 'lawn_mower') && !dead && (
-        <div aria-hidden="true" style={{ display: 'flex', justifyContent: 'center', margin: '12px 0 2px' }}>
-          <div style={{ width: 94, height: 94, backgroundImage: `url("${dom === 'vacuum' ? DEVICE_ART.vacuum : DEVICE_ART.mower}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', opacity: 0.55 }} />
-        </div>
+        <div aria-hidden="true" style={{ position: 'absolute', right: 12, top: 10, width: 78, height: 78, backgroundImage: `url("${dom === 'vacuum' ? DEVICE_ART.vacuum : DEVICE_ART.mower}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', opacity: 0.3, pointerEvents: 'none' }} />
       )}
       {/* Standard lumière : la luminosité en dessous — commit au relâcher. */}
       {!dense && dom === 'light' && !dead && (a.brightness != null || (a.supported_color_modes || []).indexOf('brightness') >= 0) && (
@@ -9141,11 +9146,11 @@ function CvAgenda({ id, hass }) {
   const events = useAgenda(hass, useMemo(() => [id], [id]));
   const st = hass && hass.states ? hass.states[id] : null;
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
       <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 2 }}>{cvName(st, id)}</div>
       <div style={{ fontSize: 10.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 4 }}>{tr('Les 7 prochains jours')}</div>
       {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien de prévu')}</div>}
-      {events.slice(0, 4).map((e, i) => {
+      {events.slice(0, 3).map((e, i) => {
         const { jour, heure } = jourAgenda(e);
         return (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
@@ -9199,11 +9204,11 @@ function CvJournal({ id, hass }) {
   const st = S[id];
   const heure = (when) => { const ms = when < 1e12 ? when * 1000 : when; return new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
       <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
       <div style={{ fontSize: 10.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 4 }}>{tr('Journal')}</div>
       {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien à raconter')}</div>}
-      {events.slice(0, 5).map((e, i) => (
+      {events.slice(0, 3).map((e, i) => (
         <div key={(e.when || 0) + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
           <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{e.state != null ? etatJournal(id, e.state, S) : (e.message || '')}{e.n > 1 ? ' ·×' + e.n : ''}</span>
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{heure(e.when)}</span>
@@ -9334,15 +9339,15 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   const cvW = (x) => (x && typeof x === 'object' && x.w === 2) ? 2 : 1;
   /* Hauteur en RANGÉES de la grille dense : une compacte tient sur une, une
    * standard sur deux — deux compactes s'empilent donc à côté d'une standard. */
-  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 3, agenda: 3, journal: 3 };
+  /* DEUX tailles, pas trois : compacte (1 rangée) ou standard (2 rangées).
+   * Toute carte non compacte DOIT tenir dans la standard — le graphique, le
+   * journal et les machines se compriment plutôt que de déborder. */
+  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2 };
   const cvRowsDe = (x) => {
     if (typeof x === 'string') return 1;
     const d = String(x.id || '').split('.')[0];
     if (x.t === 'riche') {
-      // La hauteur suit les contrôles du domaine : les machines (illustration +
-      // boutons + vitesse) sont hautes, un simple toggle ne l'est pas.
-      if (d === 'vacuum' || d === 'lawn_mower') return 3;
-      if (['climate', 'cover', 'media_player', 'valve', 'light'].indexOf(d) >= 0) return 2;
+      if (['climate', 'cover', 'media_player', 'valve', 'light', 'vacuum', 'lawn_mower'].indexOf(d) >= 0) return 2;
       return 1;
     }
     return CV_ROWS[x.t] || 2;
