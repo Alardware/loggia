@@ -396,6 +396,8 @@ export default {
   'Largeur double': 'Double width',
   'LARGEUR': 'WIDTH',
   'CARTE': 'CARD',
+  'Horloge': 'Clock',
+  'Ajouter une horloge': 'Add a clock',
   '« Auto » : le rendu habituel de cette vue.': '"Auto": the usual rendering of this view.',
   'Simple': 'Single',
   'Double': 'Double',
