@@ -828,6 +828,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const entMissing = (hass && hass.states) ? entIds.filter(id => !hass.states[id]) : [];
   const [cvEditing, setCvEditing] = useState(null); // null | 'new' | objet vue custom
   // Veille : diaporama photos + réveil caméra — par appareil, lus par AmbientOverlay au montage.
+  // Aperçu du nouvel accueil : par appareil, réversible — l'ancien reste le défaut.
+  const [acc2, setAcc2] = useState(() => { try { return JSON.parse(localStorage.getItem('loggia-accueil2') || 'false') === true; } catch (e) { return false; } });
   const [ambPhotos, setAmbPhotos] = useState(() => { try { return localStorage.getItem('loggia-ambphotos') === '1'; } catch (e) { return false; } });
   const toggleAmbPhotos = () => setAmbPhotos(v => { const n = !v; try { localStorage.setItem('loggia-ambphotos', n ? '1' : '0'); } catch (e) {} return n; });
   const [ambMotion, setAmbMotion] = useState(() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch (e) { return false; } });
@@ -1146,6 +1148,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </OptRow>
             <OptRow title="Barre de navigation" desc="Accès rapide en bas de l'écran, sur mobile uniquement.">
               <Tgl on={!!navbar} cb={onToggleNavbar} label="Barre de navigation mobile" />
+            </OptRow>
+            <OptRow title={tr('Nouvel accueil (aperçu)')} desc={tr('Essaie la future page d’accueil — favoris épinglés, pièces denses — sur cet appareil seulement. Réversible d’un tap ; l’accueil actuel reste le défaut.')}>
+              <Tgl on={acc2} cb={() => { const v = !acc2; setAcc2(v); try { localStorage.setItem('loggia-accueil2', JSON.stringify(v)); } catch (e) {} }} label={tr('Nouvel accueil (aperçu)')} />
             </OptRow>
             <OptRow title="Page d'accueil"
               desc={accueilDefaut === true
