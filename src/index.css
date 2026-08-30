@@ -132,7 +132,7 @@ html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-
 .grid-chips { grid-auto-flow: row dense; grid-auto-rows: 88px; }
 .grid-chips > * { grid-row: span 2; }
 .grid-chips > .o-chiprow1 { grid-row: span 1; }
-.grid-chips > * > .o-piece { height: 100%; box-sizing: border-box; }
+.grid-chips .o-piece { height: 100%; box-sizing: border-box; }
 @media (max-width: 640px) { .grid-chips { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
 
 /* Mobile : le contrôle (Seg large, champ…) écrasait la colonne de texte à un
