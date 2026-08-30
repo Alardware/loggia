@@ -68,6 +68,15 @@ class LoggiaErrorBoundary extends React.Component {
             >
               Repartir sans les vues custom
             </button>
+            {/* Filet n° 1 bis : recharger avec le thème et le look d'usine — un
+                preset ou un accent corrompu casse le rendu aussi sûrement
+                qu'une vue. Même règle : UN chargement, configuration intacte. */}
+            <button
+              onClick={() => { try { sessionStorage.setItem('loggia_safe_nolook', '1'); } catch (e) {} window.location.reload(); }}
+              style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.16)', color: '#e6ecf5' }}
+            >
+              Repartir sans le thème
+            </button>
             {/* Filet n° 2 : tout effacer. Confirmation native — ici, plus rien du
                 dashboard n'est montable, donc pas de BottomSheet. */}
             <button
