@@ -581,6 +581,7 @@ export default {
   'Effets animés': 'Animated effects',
   'Effets météo animés': 'Animated weather effects',
   'Mode édition': 'Edit mode',
+  'Quitter l’édition': 'Exit edit mode',
   'Suivre le thème Home Assistant': 'Follow the Home Assistant theme',
   'Langue': 'Language',
   'Suivre HA': 'Follow HA',
