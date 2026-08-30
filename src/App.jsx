@@ -185,7 +185,7 @@ const NAV = [
 const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scènes': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Aspirateur': 'aspirateur', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Caméras': 'cameras', 'Système': 'systeme', 'Paramètres': 'parametres' };
 const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'aspirateur', 'croquettes', 'medias', 'meteo', 'objets', 'securite', 'systeme', 'parametres']);
 
-function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAutorisees = null }) {
+function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAutorisees = null, editMode = false, onToggleEdit = null }) {
   // Permissions par profil : `null` = tout (admins et profils sans restriction).
   const permis = (vid) => !vuesAutorisees || vid === 'accueil' || vid === 'parametres' || vuesAutorisees.has(vid);
   // Une vue que l'installation ne peut pas remplir ne figure pas dans le menu.
@@ -270,6 +270,14 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
       )}
       {NAV.filter(g => g.reglages).map(groupeNav)}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto', paddingTop: 14, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+        {/* Mode édition depuis le tiroir : le crayon du bandeau du haut
+          * n'existe plus quand le bandeau est masqué (aperçu tactile). */}
+        {onToggleEdit && (
+          <button onClick={onToggleEdit} aria-pressed={editMode}
+            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', borderRadius: 11, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: '1px solid ' + (editMode ? 'rgba(var(--o-accent-rgb),.45)' : 'var(--o-bd2)'), background: editMode ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: editMode ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
+            <Fi i="pencil" size={13} /><span className="o-side-text">{editMode ? tr('Quitter l’édition') : tr('Mode édition')}</span>
+          </button>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', borderRadius: 11, background: `rgba(${ha ? ha.alarmRgb : '140,152,180'},.1)`, border: `1px solid rgba(${ha ? ha.alarmRgb : '140,152,180'},.22)` }}><svg width="16" height="16" viewBox="0 0 24 24" fill={`rgb(${ha ? ha.alarmRgb : '140,152,180'})`}><path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5z" /></svg><span className="o-side-text" style={{ fontSize: 12.5, fontWeight: 700, color: `rgb(${ha ? ha.alarmRgb : '140,152,180'})` }}><FlipText text={ha ? ha.alarmTxt : 'Alarme · …'} /></span></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 4px 0' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: ha && !ha.online ? '0 0 7px var(--o-bad)' : '0 0 7px var(--o-ok)', animation: ha && !ha.online ? 'pulse 1.2s infinite' : 'none' }} /><div className="o-side-text" style={{ lineHeight: 1.2 }}><div style={{ fontSize: 12, fontWeight: 700, color: ha && !ha.online ? 'var(--o-bad)' : undefined }}>{ha && !ha.online ? tr('Home Assistant · Hors ligne') : tr('Home Assistant · En ligne')}</div><div style={{ fontSize: 10, color: 'var(--o-text3)', fontWeight: 600 }}>{haHost()}</div></div></div>
       </div>
@@ -2468,6 +2476,29 @@ function useLayoutEditor(cfgKey, scope, derived) {
 
   // Les positions de la grille sont mesurees une fois : elle ne bouge pas
   // pendant le geste, ces reperes restent donc justes sans remesurer.
+  /* AU DOIGT, saisir exige un APPUI LONG (~380 ms, vibration à la prise) :
+   * sans lui, chaque défilement déplaçait des cartes — « infaisable sur
+   * mobile ». Un doigt qui bouge avant l'échéance défile, c'est tout. */
+  const saisir = (d) => {
+    d.parti = true;
+    // La copie qui suivra le pointeur. On retire ses commandes : un fantome
+    // ne se clique pas, et un « × » flottant sous le curseur prete a confusion.
+    d.fantome = d.hote.cloneNode(true);
+    Array.prototype.slice.call(d.fantome.querySelectorAll('[data-drag-ui]')).forEach(n => n.remove());
+    const r = d.hote.getBoundingClientRect();
+    const st = d.fantome.style;
+    st.position = 'fixed'; st.left = r.left + 'px'; st.top = r.top + 'px';
+    st.width = r.width + 'px'; st.height = r.height + 'px'; st.margin = '0';
+    st.pointerEvents = 'none'; st.zIndex = '9999'; st.opacity = '.85';
+    st.transform = 'scale(1.02)'; st.transition = 'none';
+    st.boxShadow = '0 18px 44px rgba(0,0,0,.5)';
+    d.doc.body.appendChild(d.fantome);
+    // Une fois saisi, la page ne défile plus sous la carte.
+    d.bloque = (ev) => { try { ev.preventDefault(); } catch (x) {} };
+    try { d.doc.addEventListener('touchmove', d.bloque, { passive: false }); } catch (x) {}
+    setDragId(d.id);
+    setDragOver(ids.indexOf(d.id));
+  };
   const dragStart = (id, e) => {
     const grid = gridRef.current;
     const hote = e.currentTarget && e.currentTarget.parentNode;
@@ -2480,36 +2511,37 @@ function useLayoutEditor(cfgKey, scope, derived) {
       const b = el.getBoundingClientRect();
       return { id: el.getAttribute('data-id'), cx: b.left + b.width / 2, cy: b.top + b.height / 2 };
     });
-
-    dragRef.current = { id, cases, hote, doc, fantome: null, x0: e.clientX, y0: e.clientY, cible: ids.indexOf(id), parti: false };
+    const tactile = e.pointerType === 'touch';
+    const d = { id, cases, hote, doc, fantome: null, x0: e.clientX, y0: e.clientY, cible: ids.indexOf(id), parti: false, tactile, pret: !tactile };
+    dragRef.current = d;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {}
-    e.preventDefault();
-    e.stopPropagation();
+    if (tactile) {
+      d.timer = setTimeout(() => {
+        const dd = dragRef.current;
+        if (!dd || dd !== d) return;
+        dd.pret = true;
+        try { if (navigator.vibrate) navigator.vibrate(35); } catch (x) {}
+        saisir(dd);
+      }, 380);
+    } else {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   };
 
   const dragMove = (e) => {
     const d = dragRef.current;
     if (!d) return;
     const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+    if (d.tactile && !d.pret) {
+      // Le doigt bouge avant l'échéance : c'est un défilement, pas une prise.
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) { clearTimeout(d.timer); dragRef.current = null; }
+      return;
+    }
     if (!d.parti) {
       // En deca du seuil, l'intention est de cliquer, pas de deplacer.
       if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
-      d.parti = true;
-      // La copie qui suivra le pointeur. On retire ses commandes : un fantome
-      // ne se clique pas, et un « × » flottant sous le curseur prete a
-      // confusion.
-      d.fantome = d.hote.cloneNode(true);
-      Array.prototype.slice.call(d.fantome.querySelectorAll('[data-drag-ui]')).forEach(n => n.remove());
-      const r = d.hote.getBoundingClientRect();
-      const st = d.fantome.style;
-      st.position = 'fixed'; st.left = r.left + 'px'; st.top = r.top + 'px';
-      st.width = r.width + 'px'; st.height = r.height + 'px'; st.margin = '0';
-      st.pointerEvents = 'none'; st.zIndex = '9999'; st.opacity = '.85';
-      st.transform = 'scale(1.02)'; st.transition = 'none';
-      st.boxShadow = '0 18px 44px rgba(0,0,0,.5)';
-      d.doc.body.appendChild(d.fantome);
-      setDragId(d.id);
-      setDragOver(ids.indexOf(d.id));
+      saisir(d);
     }
     // Ecriture directe du style : un rendu React a chaque mouvement saccaderait.
     d.fantome.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(1.02)';
@@ -2529,6 +2561,8 @@ function useLayoutEditor(cfgKey, scope, derived) {
     setDragId(null);
     setDragOver(-1);
     if (!d) return false;
+    clearTimeout(d.timer);
+    try { if (d.bloque) d.doc.removeEventListener('touchmove', d.bloque); } catch (x) {}
     if (!d.parti) return true;
     try { if (d.fantome) d.fantome.remove(); } catch (x) {}
     const from = ids.indexOf(d.id);
@@ -2674,7 +2708,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, children }) {
         }}
         title={tr('Cliquer pour modifier · glisser pour déplacer (flèches ← →)')}
         aria-label={'Modifier ou déplacer ' + (nom || id)}
-        style={{ position: 'absolute', inset: 0, zIndex: 2, borderRadius: 'var(--o-radius,20px)', touchAction: 'none', cursor: saisie ? 'grabbing' : 'grab' }} />
+        style={{ position: 'absolute', inset: 0, zIndex: 2, borderRadius: 'var(--o-radius,20px)', touchAction: 'pan-y', cursor: saisie ? 'grabbing' : 'grab' }} />
       <button data-drag-ui="1" onClick={() => ed.remove(id)} title="Retirer" aria-label={'Retirer ' + (nom || id)}
         style={{ position: 'absolute', ...(plat ? { top: '50%', right: 7, transform: 'translateY(-50%)' } : { top: -9, right: -9 }), zIndex: 3, width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--o-bad)', color: '#fff', fontSize: 15, fontWeight: 800, lineHeight: 1, boxShadow: '0 3px 10px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>×</button>
       {!plat && ed.basculerLarge && (
@@ -4913,14 +4947,33 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     return [...sauve, ...base.filter(s => sauve.indexOf(s) < 0)];
   };
   const [secDrag, setSecDrag] = useState(null); // { zone, id, ordre }
+  // Au doigt : appui long (380 ms, vibration) avant de saisir une section.
+  const secTimer = useRef(null);
+  const secDebut = useRef(null);
   const debutSec = (e, zone, id) => {
     if (!editMode) return;
     if (e.target.closest && e.target.closest('button, [role="switch"], input')) return;
-    e.preventDefault();
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) {}
+    if (e.pointerType === 'touch') {
+      secDebut.current = { x: e.clientX, y: e.clientY, zone, id };
+      clearTimeout(secTimer.current);
+      secTimer.current = setTimeout(() => {
+        if (!secDebut.current) return;
+        try { if (navigator.vibrate) navigator.vibrate(35); } catch (er) {}
+        setSecDrag({ zone: secDebut.current.zone, id: secDebut.current.id, ordre: ordreDe(secDebut.current.zone) });
+      }, 380);
+      return;
+    }
+    e.preventDefault();
     setSecDrag({ zone, id, ordre: ordreDe(zone) });
   };
   const mouvSec = (e) => {
+    if (!secDrag && secDebut.current) {
+      if (Math.abs(e.clientX - secDebut.current.x) > 10 || Math.abs(e.clientY - secDebut.current.y) > 10) {
+        clearTimeout(secTimer.current); secDebut.current = null;
+      }
+      return;
+    }
     if (!secDrag) return;
     const sous = document.elementFromPoint(e.clientX, e.clientY);
     const cible = sous && sous.closest ? sous.closest('[data-sec]') : null;
@@ -4934,6 +4987,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     setSecDrag({ ...secDrag, ordre: a });
   };
   const finSec = () => {
+    clearTimeout(secTimer.current); secDebut.current = null;
     if (secDrag) saveAccL({ ...accL, [secDrag.zone]: secDrag.ordre });
     setSecDrag(null);
   };
@@ -4952,7 +5006,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
         onPointerCancel={editMode ? finSec : undefined}
         style={{ position: 'relative', minWidth: 0,
           opacity: saisie ? .55 : cache ? .4 : 1, transition: 'opacity .15s',
-          ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 4, borderRadius: 14, cursor: 'grab', touchAction: 'none' } : {}) }}>
+          ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 4, borderRadius: 14, cursor: 'grab', touchAction: 'pan-y' } : {}) }}>
         {cache
           ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
               <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--o-text3)' }}>{ACC_NOMS()[id]} · {tr('masquée')}</span>
@@ -9572,15 +9626,38 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   const [dragCle, setDragCle] = useState(null);
   const [ordreDrag, setOrdreDrag] = useState(null);
   const grilleRef = useRef(null);
+  /* Au doigt : APPUI LONG (380 ms, vibration) avant de saisir — sinon le
+   * défilement déplaçait les cartes. Un doigt qui bouge avant l'échéance
+   * défile normalement. */
+  const dragTimer = useRef(null);
+  const dragDebut = useRef(null);
   const debutDrag = (e, x) => {
     if (!edit) return;
     if (e.target.closest && e.target.closest('button')) return; // ×, coin
-    e.preventDefault();
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) {}
+    if (e.pointerType === 'touch') {
+      dragDebut.current = { x: e.clientX, y: e.clientY, cle: cvKey(x) };
+      clearTimeout(dragTimer.current);
+      dragTimer.current = setTimeout(() => {
+        if (!dragDebut.current) return;
+        try { if (navigator.vibrate) navigator.vibrate(35); } catch (er) {}
+        setDragCle(dragDebut.current.cle);
+        setOrdreDrag([...cv.ents]);
+      }, 380);
+      return;
+    }
+    e.preventDefault();
     setDragCle(cvKey(x));
     setOrdreDrag([...cv.ents]);
   };
   const mouvDrag = (e) => {
+    if (dragCle == null && dragDebut.current) {
+      // Avant l'échéance : un mouvement franc = défilement, on lâche.
+      if (Math.abs(e.clientX - dragDebut.current.x) > 10 || Math.abs(e.clientY - dragDebut.current.y) > 10) {
+        clearTimeout(dragTimer.current); dragDebut.current = null;
+      }
+      return;
+    }
     if (dragCle == null || !ordreDrag) return;
     const sous = document.elementFromPoint(e.clientX, e.clientY);
     const cible = sous && sous.closest ? sous.closest('[data-cvk]') : null;
@@ -9596,6 +9673,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
     setOrdreDrag(a);
   };
   const finDrag = () => {
+    clearTimeout(dragTimer.current); dragDebut.current = null;
     if (dragCle != null && ordreDrag) setEnts(ordreDrag);
     setDragCle(null); setOrdreDrag(null);
   };
@@ -9658,7 +9736,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
               onPointerCancel={edit ? finDrag : undefined}
               style={{ position: 'relative', minWidth: 0, gridRow: 'span ' + cvRowsDe(x),
               opacity: saisie ? .55 : 1, transform: saisie ? 'scale(.97)' : 'none', transition: 'opacity .15s, transform .15s',
-              ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'none' } : {}) }}>
+              ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'pan-y' } : {}) }}>
               {/* En édition, la carte est INERTE : la saisir la déplace, ses contrôles ne s'actionnent pas. */}
               <div className="o-cvfit" style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
                 <CvTyped x={x} hass={hass} dc={dc} />
@@ -10871,7 +10949,7 @@ export default function App() {
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
       {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12.5, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 12, padding: '10px 16px', fontSize: 12.5, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
-      <Sidebar view={view} vuesAutorisees={vuesAutorisees} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} open={navOpen} customViews={customViews} ha={(() => {
+      <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={isAdmin ? () => setEditMode(e => !e) : null} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} open={navOpen} customViews={customViews} ha={(() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
         let devCount = 0;
         if (ok) { const doms = ['light.', 'switch.', 'media_player.', 'camera.', 'climate.', 'cover.', 'vacuum.', 'lawn_mower.']; for (const id in hass.states) { if (doms.some(d => id.indexOf(d) === 0) && hass.states[id] && hass.states[id].state !== 'unavailable') devCount++; } }
