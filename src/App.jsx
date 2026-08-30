@@ -6397,7 +6397,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
         </ViewEditBar>
       )}
       {(edit || ed.ids.length > 0) && (
-        <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>Zones</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={16} color="#ff8a4c" />Zones</div>
       )}
       <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {climBlocs.map((bloc, bi) => {
@@ -6581,17 +6581,23 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
     <div className="loggia-content" style={{ padding: embarque ? '0 28px 40px' : '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
       {!embarque && edit && <ViewEditBar onEnt={onEnt} texte={tr('Mode édition : clique un volet pour le modifier, glisse-le pour le déplacer.')} />}
       {embarque
-        ? <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <span style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Volets')}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{openCount ? (openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })) : tr('tous fermés')}</span>
-            <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
+        /* L'intertitre de la vue Appareils : icône + titre serif — et les
+         * chips de MODE à droite, seule commande qui n'a pas de carte. */
+        ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
+              <Fi i="blinds" size={16} color="var(--o-purple)" />{tr('Volets')}
+            </span>
+            <span style={{ flex: 1 }} />
+            {voletModes(S).length > 0 && voletMode() && voletModes(S).map(m => (
+              <button key={m.id} onClick={() => pickMode(m.id)} style={barBtn(mode === m.id)}>{m.label}</button>
+            ))}
           </div>
         : <ViewHead titre={tr('Volets')}
             sous={(covers.length > 1 ? tr('{n} volets', { n: covers.length }) : tr('{n} volet', { n: covers.length })) + (mode ? ' · ' + String(mode).toLowerCase() : '')}
             badge={openCount ? (openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })) : tr('tous fermés')}
             rgb={openCount ? '52,211,153' : '140,152,180'} />}
 
-      <ViewBar panel={panel} onPanel={togglePanel}>
+      {!embarque && <ViewBar panel={panel} onPanel={togglePanel}>
         <BarGroup label={tr('Volets')}>
           <button onClick={allOpen} style={barBtn(false)}>{tr('Ouvrir')}</button>
           <button onClick={() => { const ids = voletCovers(S).map(c => c.haid).filter(Boolean); if (ids.length) call('cover', 'stop_cover', { entity_id: ids }); }} style={barBtn(false)}>{tr('Stop')}</button>
@@ -6602,7 +6608,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
             {voletModes(S).map(m => <button key={m.id} onClick={() => pickMode(m.id)} style={barBtn(mode === m.id)}>{m.label}</button>)}
           </BarGroup>
         )}
-      </ViewBar>
+      </ViewBar>}
 
       {!embarque && panel && <PresCard titre="Tous les volets" lead={tr('Vue d’ensemble de la position et du pilotage')}
         badge={openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })} rgb="52,211,153">
@@ -6622,7 +6628,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
           {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{tr("Rétablir l'automatique")}</button>}
         </ViewEditBar>
       )}
-      {(edit || ed.ids.length > 0) && (
+      {!embarque && (edit || ed.ids.length > 0) && (
         <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Volet par volet')}</div>
       )}
       <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
