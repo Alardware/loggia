@@ -827,6 +827,11 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const entIds = [...ent.rooms.flatMap(r => [r.temp, r.humidity, r.co2]), ent.energy.consoNow, ent.energy.surplusNow, ent.energy.solarOutput, ent.alarm, ...ent.people.map(x => x.haid), ...ent.switches.map(x => x.haid), ...ent.cams.map(x => x.haid), ...ent.medias.flatMap(x => [x.haid, x.ma])].filter(Boolean);
   const entMissing = (hass && hass.states) ? entIds.filter(id => !hass.states[id]) : [];
   const [cvEditing, setCvEditing] = useState(null); // null | 'new' | objet vue custom
+  // Veille : diaporama photos + réveil caméra — par appareil, lus par AmbientOverlay au montage.
+  const [ambPhotos, setAmbPhotos] = useState(() => { try { return localStorage.getItem('loggia-ambphotos') === '1'; } catch (e) { return false; } });
+  const toggleAmbPhotos = () => setAmbPhotos(v => { const n = !v; try { localStorage.setItem('loggia-ambphotos', n ? '1' : '0'); } catch (e) {} return n; });
+  const [ambMotion, setAmbMotion] = useState(() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch (e) { return false; } });
+  const toggleAmbMotion = () => setAmbMotion(v => { const n = !v; try { localStorage.setItem('loggia-ambmotion', n ? '1' : '0'); } catch (e) {} return n; });
   // Synchro entre origines (WiFi/IP locale vs Nabu Casa) : export/import du localStorage Loggia.
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncTxt, setSyncTxt] = useState('');
@@ -1172,6 +1177,12 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <Seg value={ambPlage} disabled={!ambient}
                 opts={[['toujours', tr('Toujours')], ['nuit', tr('Nuit')], ['jour', tr('Journée')]]}
                 onPick={v => onAmbPlage && onAmbPlage(v)} />
+            </OptRow>
+            <OptRow title={tr('Photos en veille')} desc={tr('Diaporama des images du dossier media de Home Assistant, en fond de veille — une photo toutes les 30 secondes, jamais un service externe.')}>
+              <Tgl on={ambPhotos} cb={toggleAmbPhotos} label={tr('Photos en veille')} />
+            </OptRow>
+            <OptRow title={tr('Réveil par la caméra')} desc={tr("La caméra de la tablette réveille l'écran quand quelqu'un passe. Tout reste local — rien n'est envoyé ni enregistré. Nécessite un accès HTTPS (Nabu Casa) et l'autorisation caméra.")}>
+              <Tgl on={ambMotion} cb={toggleAmbMotion} label={tr('Réveil par la caméra')} />
             </OptRow>
           </AppCard>
 
