@@ -371,8 +371,8 @@ function ActionBtn({ onClick, style, children, doneLabel = '✓ Envoyé' }) {
     setDone(true); clearTimeout(tRef.current); tRef.current = setTimeout(() => setDone(false), 900);
   };
   return (
-    <button ref={ref} onClick={handle} className="o-actbtn" style={{ position: 'relative', overflow: 'hidden', ...style }}>
-      <span style={{ display: 'inline-block', transition: 'opacity .18s, transform .18s', opacity: done ? 0 : 1, transform: done ? 'translateY(-6px)' : 'none' }}>{children}</span>
+    <button ref={ref} onClick={handle} className="o-actbtn" style={{ position: 'relative', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', ...style }}>
+      <span style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'bottom', transition: 'opacity .18s, transform .18s', opacity: done ? 0 : 1, transform: done ? 'translateY(-6px)' : 'none' }}>{children}</span>
       {done && <span className="o-actbtn-done" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-ok)', fontWeight: 800 }}>{doneLabel}</span>}
     </button>
   );
@@ -1766,17 +1766,13 @@ function RoomPilotSheet({ zone, hass, onClose }) {
             <button key={opt} onClick={() => { if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', opt); else call('input_select', 'select_option', { entity_id: zone.modeEnt, option: opt }); }} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-warn2-rgb),.5)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-warn2-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-warn2)' : 'var(--o-text1)' }}>{zoneModeLabel(zone, opt)}</button>
           ); })}
         </div>
-        {/* Préréglages du thermostat (Turbo, Comfort, Overnight…) : comme la
-          * fiche native — ils viennent de l'entité, leurs noms aussi. */}
+        {/* Préréglage du thermostat (Turbo, Comfort, Overnight…) : le sélecteur
+          * de la fiche native — les noms viennent de l'entité. */}
         {estClimate(zone) && (() => { const at = (S && S[zone.haid] && S[zone.haid].attributes) || {}; return Array.isArray(at.preset_modes) && at.preset_modes.length > 0 && (
-          <>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 8px' }}>{tr('PRÉRÉGLAGE')}</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {at.preset_modes.slice(0, 8).map(p => { const on = at.preset_mode === p; return (
-                <button key={p} aria-pressed={on} onClick={() => commander(hass, zone.haid, 'set_preset_mode', p)} style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{p}</button>
-              ); })}
-            </div>
-          </>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+            <MenuDeroulant icone="settings-sliders" etiquette={tr('Préréglage')} valeur={at.preset_mode && at.preset_mode !== 'unknown' ? at.preset_mode : null}
+              options={at.preset_modes.slice(0, 10)} surChoix={(p) => commander(hass, zone.haid, 'set_preset_mode', p)} />
+          </div>
         ); })()}
         {(zone.tempSensor || estClimate(zone)) && (<>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '18px 0 9px' }}>{tr('TEMPÉRATURE · 24 H')}</div>
@@ -2084,17 +2080,12 @@ function RoomClimateSheet({ id, hass, onClose }) {
             <button key={m} onClick={() => commander(hass, id, 'set_hvac_mode', m)} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 13, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-text)' : 'var(--o-s1)', color: on ? 'var(--o-bg)' : 'var(--o-text1)' }}>{tr(MODE_FR[m]) || m}</button>
           ); })}
         </div>
-        {/* Préréglages du thermostat (Turbo, Comfort, Overnight…) : comme la
-          * fiche native — ils viennent de l'entité, leurs noms aussi. */}
+        {/* Préréglage du thermostat : le sélecteur de la fiche native. */}
         {Array.isArray(a.preset_modes) && a.preset_modes.length > 0 && (
-          <>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 8px' }}>{tr('PRÉRÉGLAGE')}</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {a.preset_modes.slice(0, 8).map(p => { const on = a.preset_mode === p; return (
-                <button key={p} aria-pressed={on} onClick={() => commander(hass, id, 'set_preset_mode', p)} style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{p}</button>
-              ); })}
-            </div>
-          </>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+            <MenuDeroulant icone="settings-sliders" etiquette={tr('Préréglage')} valeur={a.preset_mode && a.preset_mode !== 'unknown' ? a.preset_mode : null}
+              options={a.preset_modes.slice(0, 10)} surChoix={(p) => commander(hass, id, 'set_preset_mode', p)} />
+          </div>
         )}
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '18px 0 9px' }}>{tr('TEMPÉRATURE · 24 H')}</div>
         <Courbe24 points={ptsTemp} couleur="#ff8a4c" unite="°" />
@@ -2696,7 +2687,7 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
     const btn = { width: 30, height: 30, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer', flexShrink: 0 };
     controle = (<>
       <button style={btn} aria-label={'− ' + label} onClick={() => !isNaN(v) && poser(v - pas)}>−</button>
-      <span style={{ minWidth: 56, textAlign: 'center', fontSize: 13.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{isNaN(v) ? '—' : Math.round(v * 100) / 100}{a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}</span>
+      <span style={{ minWidth: 44, textAlign: 'center', fontSize: 13.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{isNaN(v) ? '—' : Math.round(v * 100) / 100}{a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}</span>
       <button style={btn} aria-label={'+ ' + label} onClick={() => !isNaN(v) && poser(v + pas)}>+</button>
     </>);
   } else if (dom === 'select' || dom === 'input_select') {
@@ -2812,10 +2803,17 @@ function FicheAppareil({ id, hass, onClose }) {
   const config = libres.filter(x => x.m.category === 'config');
   const diag = libres.filter(x => x.m.category === 'diagnostic');
   const triNom = (a, b) => String(nomCourt(a)).localeCompare(String(nomCourt(b)), 'fr');
+  // Chaque section se replie d'un tap sur son titre — une fiche chargée
+  // (tondeuse : 15 commandes) se parcourt sans noyer l'essentiel.
+  const [replies, setReplies] = useState({});
   const section = (titre2, liste) => liste.length > 0 && (
     <>
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 2px' }}>{titre2}</div>
-      {liste.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={H} nom={nomCourt(x)} surEpingle={basculer} epingle={eps.indexOf(x.id) >= 0} />)}
+      <button onClick={() => setReplies(r => ({ ...r, [titre2]: !r[titre2] }))} aria-expanded={!replies[titre2]}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', padding: 0, margin: '16px 0 2px', cursor: 'pointer' }}>
+        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{titre2 + (replies[titre2] ? ' · ' + liste.length : '')}</span>
+        <Fi i={replies[titre2] ? 'angle-down' : 'angle-up'} size={11} color="var(--o-text3)" />
+      </button>
+      {!replies[titre2] && liste.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={H} nom={nomCourt(x)} surEpingle={basculer} epingle={eps.indexOf(x.id) >= 0} />)}
     </>
   );
   return (
@@ -3381,6 +3379,10 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
         })()}
         {/* Journal de la pièce : sous les appareils, hors mode édition. */}
         {!edit && <RoomActivityCard hass={hass} ids={ents.filter(k => k.indexOf('sect:') !== 0 && k.indexOf('zone:') !== 0)} />}
+        {/* Les fiches des cartes (lumière, volet, climat…) : dc.card pose
+          * l'état, dc.sheets MONTE la fiche — sans lui, taper une carte ne
+          * faisait rien (« popup inactif », retour du 30/08). */}
+        {dc.sheets}
         {addSheet && <RoomAddSheet room={room} hass={hass} present={ents} onToggle={ed.toggle} onClose={() => setAddSheet(false)} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
         {comfort && piece && <RoomComfortModal piece={piece} hass={hass} onClose={() => setComfort(false)} />}
@@ -8714,9 +8716,34 @@ function CvTemplateCard({ def, hass }) {
 }
 
 const FAN_FR = () => ({ quiet: tr('Silencieux'), normal: 'Normal', max: 'Max', max_plus: 'Max+', standard: 'Normal', strong: tr('Fort') });
+/* Sélecteur compact façon fiche native : un bouton qui dit la valeur courante,
+ * un menu dépoli qui liste les autres. Partagé : vitesse d'aspiration,
+ * préréglages de thermostat — partout où des chips feraient brouillon. */
+function MenuDeroulant({ icone = null, etiquette, valeur, options, surChoix, rendre = (v) => v }) {
+  const [ouvert, setOuvert] = useState(false);
+  return (
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+      <button onClick={() => setOuvert(o => !o)} aria-haspopup="listbox" aria-expanded={ouvert}
+        style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 13px', borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', textAlign: 'left' }}>
+        {icone && <Fi i={icone} size={14} color="var(--o-text2)" />}
+        <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{etiquette}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{valeur != null ? rendre(valeur) : '—'}</span>
+        </span>
+      </button>
+      {ouvert && (
+        <div role="listbox" style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 30, minWidth: 158, padding: 6, borderRadius: 13, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: '0 12px 30px rgba(0,0,0,.45)' }}>
+          {options.map(v => { const act = valeur === v; return (
+            <button key={v} role="option" aria-selected={act} onClick={() => { surChoix(v); setOuvert(false); }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', background: act ? 'rgba(var(--o-accent-rgb),.16)' : 'transparent', color: act ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{rendre(v)}</button>
+          ); })}
+        </div>
+      )}
+    </div>
+  );
+}
 function CvCard({ id, hass, label = null, onOpen = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
-  const [fanOuvert, setFanOuvert] = useState(false);
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
   const dom = cvDomain(id);
   const ico = dom === 'switch' ? (cvEstLumiere(id) ? 'bulb' : null) : CV_DOM_ICON[dom] || 'bolt'; // null = prise, SVG maison
@@ -8819,27 +8846,10 @@ function CvCard({ id, hass, label = null, onOpen = null }) {
           </div>
         );
       })()}
-      {/* Vitesse d'aspiration : le sélecteur de la fiche native — un bouton qui
-        * dit la vitesse courante, un menu qui liste les autres. Les chips en
-        * rangée faisaient brouillon. */}
       {dom === 'vacuum' && !dead && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
-        <div style={{ position: 'relative', marginTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => setFanOuvert(o => !o)} aria-haspopup="listbox" aria-expanded={fanOuvert}
-            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 13px', borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', textAlign: 'left' }}>
-            <Fi i="wind" size={14} color="var(--o-text2)" />
-            <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('Vitesse')}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 700 }}>{FAN_FR()[a.fan_speed] || a.fan_speed || '—'}</span>
-            </span>
-          </button>
-          {fanOuvert && (
-            <div role="listbox" style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 30, minWidth: 158, padding: 6, borderRadius: 13, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: '0 12px 30px rgba(0,0,0,.45)' }}>
-              {a.fan_speed_list.map(v => { const act = a.fan_speed === v; return (
-                <button key={v} role="option" aria-selected={act} onClick={() => { call('vacuum', 'set_fan_speed', { fan_speed: v }); setFanOuvert(false); }}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: act ? 'rgba(var(--o-accent-rgb),.16)' : 'transparent', color: act ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{FAN_FR()[v] || v}</button>
-              ); })}
-            </div>
-          )}
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+          <MenuDeroulant icone="wind" etiquette={tr('Vitesse')} valeur={a.fan_speed} options={a.fan_speed_list}
+            rendre={(v) => FAN_FR()[v] || v} surChoix={(v) => call('vacuum', 'set_fan_speed', { fan_speed: v })} />
         </div>
       )}
       {dom === 'valve' && !dead && (
@@ -9203,6 +9213,15 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   };
   const liste = ordreDrag || cv.ents;
   const editBtn = { width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-surfA)', color: 'var(--o-text1)', boxShadow: '0 3px 10px rgba(0,0,0,.35)', fontSize: 12, fontWeight: 800, padding: 0 };
+  /* Largeur d'une carte : 1 (défaut) ou 2 emplacements côte à côte. Portée par
+   * l'entrée typée (`w: 2`) ; une chaîne nue élargie devient sa forme typée. */
+  const cvW = (x) => (x && typeof x === 'object' && x.w === 2) ? 2 : 1;
+  const basculerW = (x) => {
+    const suiv = typeof x === 'string'
+      ? { t: 'compacte', id: x, w: 2 }
+      : (x.w === 2 ? (({ w, ...reste }) => reste)(x) : { ...x, w: 2 });
+    setEnts(cv.ents.map(y => cvKey(y) === cvKey(x) ? suiv : y));
+  };
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
@@ -9228,7 +9247,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           {liste.map((x) => {
             const saisie = dragCle === cvKey(x);
             return (
-            <div key={cvKey(x)} data-cvk={cvKey(x)}
+            <div key={cvKey(x)} data-cvk={cvKey(x)} className={cvW(x) === 2 ? 'o-cvw2' : undefined}
               onPointerDown={edit ? (e) => debutDrag(e, x) : undefined}
               onPointerMove={edit ? mouvDrag : undefined}
               onPointerUp={edit ? finDrag : undefined}
@@ -9243,6 +9262,8 @@ function CustomView({ cv, hass, edit = false, onSave }) {
               {edit && (
                 <>
                   <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...editBtn, position: 'absolute', top: -9, right: -9, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                  <button onClick={() => basculerW(x)} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={cvW(x) === 2}
+                    style={{ ...editBtn, position: 'absolute', top: -9, left: -9, ...(cvW(x) === 2 ? { background: 'var(--o-accent)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
                   {cvEstTpl(x) && <button onClick={() => setTplEdit(x)} title={tr('Modifier')} style={{ ...editBtn, position: 'absolute', top: -9, right: 24 }}><Fi i="pencil" size={11} /></button>}
                 </>
               )}

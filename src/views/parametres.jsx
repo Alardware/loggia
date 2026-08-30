@@ -162,14 +162,14 @@ function AlertesTele({ hass, cardSt }) {
         </div>
         <Tgl on={cfg.actif} cb={() => save({ actif: !cfg.actif })} label={tr('Activer les alertes')} />
       </div>
-      <div style={{ ...ligne, marginTop: 14 }}>
+      <div className="o-optrow" style={{ ...ligne, marginTop: 14 }}>
         {lbl(tr('Téléphone cible'), tr('Le service notify de l’app compagnon'))}
         <input list="loggia-notify-svcs" value={cfg.service} onChange={e => save({ service: e.target.value.trim() })} placeholder="mobile_app_…"
           style={{ ...cvInp, maxWidth: 260, padding: '9px 12px', fontSize: 13 }} />
         <datalist id="loggia-notify-svcs">{services.map(s => <option key={s} value={s} />)}</datalist>
       </div>
       {CATS.map(([k, t, d]) => (
-        <div key={k} style={ligne}>
+        <div key={k} className="o-optrow" style={ligne}>
           {lbl(t, d)}
           <Tgl on={!!cfg.categories[k]} cb={() => save({ categories: { ...cfg.categories, [k]: !cfg.categories[k] } })} label={t} />
         </div>
