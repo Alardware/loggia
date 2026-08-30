@@ -47,11 +47,11 @@ export function useTilt(max = 4) {
 // <Anim i base>…</Anim> : enveloppe tilt (pointeur fin) + entrée en cascade, sans toucher au JSX de la carte.
 // Conteneur de carte. L'apparition en cascade a été retirée (21/08) : les cartes
 // s'affichent immédiatement. i/base sont conservés pour ne pas toucher les ~200 appels.
-export function Anim({ i = 0, base = 0, children, style }) {
+export function Anim({ i = 0, base = 0, children, style, className = '' }) {
   const tilt = useTilt(4);
   return (
     <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel}
-      className={'o-hov ' + (tilt.className || '')} style={{ position: 'relative', borderRadius: 'var(--o-radius,20px)', minWidth: 0, ...style }}>
+      className={'o-hov ' + (tilt.className || '') + (className ? ' ' + className : '')} style={{ position: 'relative', borderRadius: 'var(--o-radius,20px)', minWidth: 0, ...style }}>
       {children}
     </div>
   );
