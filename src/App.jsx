@@ -1854,6 +1854,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={13} color="#ff8a4c" />{zone.name.toUpperCase()}</span>
+          {estClimate(zone) && <BoutonEpingle id={zone.haid} />}
           {zone.autoEnt && <span onClick={() => call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt })} role="switch" tabIndex={0} aria-label={(z.auto ? 'Désactiver' : 'Activer') + ' la programmation automatique'} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt }); } }} aria-checked={!!z.auto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><span style={{ fontSize: 12, fontWeight: 700, color: z.auto ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>Auto</span><span style={{ width: 42, height: 24, borderRadius: 12, background: z.auto ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: z.auto ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span></span>}
         </div>
         <div style={{ position: 'relative', width: 230, height: 230, margin: '10px auto 0' }}>
@@ -1966,6 +1967,7 @@ function RoomMediaSheet({ id, hass, onClose }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
               <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: onArt ? 'rgba(255,255,255,.16)' : 'var(--o-s1)', border: 'none', color: tMain, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
               <span style={{ flex: 1, fontSize: 12.5, fontWeight: 800, color: tSub, letterSpacing: '.03em' }}>{(medPlayers().find(p => p.haid === id) || {}).name || id}</span>
+              <BoutonEpingle id={id} />
               {np.source && <span style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(255,255,255,.94)', color: '#15181f', fontSize: 10.5, fontWeight: 800 }}>{np.source}</span>}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -2093,6 +2095,7 @@ function RoomCoverSheet({ id, hass, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ flex: 1, fontSize: 19, fontWeight: 700 }}>{a.friendly_name || id}</span>
+          <BoutonEpingle id={id} />
           <span style={{ fontSize: 20, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-purple)' }}>{pos}%</span>
         </div>
         {/* visuel du volet + rail */}
@@ -2169,6 +2172,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={13} color="#ff8a4c" />{(a.friendly_name || id).toUpperCase()}</span>
+          <BoutonEpingle id={id} />
         </div>
         <div style={{ position: 'relative', width: 230, height: 230, margin: '10px auto 0' }}>
           <svg width="230" height="230" viewBox="0 0 130 130" style={{ position: 'absolute', inset: 0, transform: 'rotate(135deg)' }}>
@@ -2240,6 +2244,7 @@ function RoomLightSheet({ light, hass, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ flex: 1, fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{light.name}</span>
+          <BoutonEpingle id={light.id} />
           <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + (light.name || light.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }} onClick={toggle} style={{ width: 48, height: 27, borderRadius: 14, background: on ? '#FF2D78' : 'rgba(150,162,184,.2)', position: 'relative', cursor: 'pointer', flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 24 : 3, width: 21, height: 21, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span>
         </div>
         <div style={{ textAlign: 'center', margin: '18px 0 16px' }}>
@@ -2898,6 +2903,20 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
  * dire ce qui compte. Une entité épinglée remonte en tête de fiche ET s'invite
  * sur la carte de son appareil. Partagé maison via la configuration (cfgSet). */
 const lireEpingles = () => { const v = cfgVal('loggia_epingles', null); return Array.isArray(v) ? v : []; };
+/* La punaise des FICHES DE DOMAINE (lumière, volet, climat, média, capteur) :
+ * épingle l'entité de la fiche — favoris de l'accueil et carte de l'appareil.
+ * La fiche appareil universelle a la sienne, ligne par ligne. */
+function BoutonEpingle({ id }) {
+  const [eps, setEps] = useState(lireEpingles);
+  const on = eps.indexOf(id) >= 0;
+  const tap = () => { const s = on ? eps.filter(x => x !== id) : eps.concat(id); setEps(s); cfgSet({ loggia_epingles: s.length ? s : null }); };
+  return (
+    <button onClick={tap} title={on ? tr('Désépingler') : tr('Épingler sur la carte')} aria-pressed={on}
+      style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>
+      <Fi i="thumbtack" size={13} />
+    </button>
+  );
+}
 function Epingles({ pourId, hass, max = 3, avecAncre = false }) {
   const { index } = useLoggia();
   const S = (hass && hass.states) || {};
@@ -3100,6 +3119,7 @@ function SensorSheet({ id, hass, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ flex: 1, fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</span>
+          <BoutonEpingle id={id} />
         </div>
         <div style={{ textAlign: 'center', margin: '16px 0 18px' }}>
           <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>{isNaN(n) ? (st ? st.state : '—') : Math.round(n * 10) / 10}</span>
@@ -6397,7 +6417,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
         </ViewEditBar>
       )}
       {(edit || ed.ids.length > 0) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={16} color="#ff8a4c" />Zones</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={16} color="#ff8a4c" />{tr('Thermostats')}</div>
       )}
       <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {climBlocs.map((bloc, bi) => {
