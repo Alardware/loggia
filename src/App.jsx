@@ -2642,15 +2642,33 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
   const label = nom || (a.friendly_name || id).replace(/^[^:]*: ?/, '');
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
   const mort = !st || st.state === 'unavailable';
+  /* Optimisme : l'écran répond au doigt, Home Assistant confirme après.
+   * Sans lui, chaque clic attend l'aller-retour Zigbee PUIS le poll — mou.
+   * `opt` s'efface dès que l'état publié bouge ; filet 8 s si rien ne revient. */
+  const [opt, setOpt] = useState(null);
+  const commitRef = useRef(null);
+  const filetRef = useRef(null);
+  const etatHass = st ? st.state : null;
+  useEffect(() => { setOpt(null); clearTimeout(filetRef.current); }, [etatHass]);
+  useEffect(() => () => { clearTimeout(commitRef.current); clearTimeout(filetRef.current); }, []);
+  const poserOpt = (v) => { setOpt(v); clearTimeout(filetRef.current); filetRef.current = setTimeout(() => setOpt(null), 8000); };
   let controle = null, wrap = false;
   if (dom === 'switch' || dom === 'input_boolean' || dom === 'siren') {
-    const on = !!st && st.state === 'on';
-    controle = <span role="switch" aria-checked={on} tabIndex={0} aria-label={label} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', 'toggle'); } }} onClick={() => call('homeassistant', 'toggle')} style={{ width: 42, height: 24, borderRadius: 12, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .3s cubic-bezier(.34,1.56,.64,1)' }} /></span>;
+    const on = opt != null ? opt === 'on' : (!!st && st.state === 'on');
+    const basculer = () => { poserOpt(on ? 'off' : 'on'); call('homeassistant', 'toggle'); };
+    controle = <span role="switch" aria-checked={on} tabIndex={0} aria-label={label} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); basculer(); } }} onClick={basculer} style={{ width: 42, height: 24, borderRadius: 12, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .3s cubic-bezier(.34,1.56,.64,1)' }} /></span>;
   } else if (dom === 'number' || dom === 'input_number') {
-    const v = st ? parseFloat(st.state) : NaN;
+    const v = opt != null ? +opt : (st ? parseFloat(st.state) : NaN);
     const pas = a.step != null ? +a.step : 1;
     const borne = (x) => Math.min(a.max != null ? +a.max : Infinity, Math.max(a.min != null ? +a.min : -Infinity, x));
-    const poser = (x) => call(dom, 'set_value', { value: Math.round(borne(x) * 100) / 100 });
+    // Des clics rapprochés ne partent qu'une fois : la valeur bouge à l'écran,
+    // l'appel de service attend 450 ms de calme — comme les sliders au pointerup.
+    const poser = (x) => {
+      const nv = Math.round(borne(x) * 100) / 100;
+      poserOpt(nv);
+      clearTimeout(commitRef.current);
+      commitRef.current = setTimeout(() => call(dom, 'set_value', { value: nv }), 450);
+    };
     const btn = { width: 30, height: 30, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer', flexShrink: 0 };
     controle = (<>
       <button style={btn} aria-label={'− ' + label} onClick={() => !isNaN(v) && poser(v - pas)}>−</button>
@@ -2659,11 +2677,12 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
     </>);
   } else if (dom === 'select' || dom === 'input_select') {
     const opts = Array.isArray(a.options) ? a.options : [];
+    const cur = opt != null ? opt : (st ? st.state : null);
     wrap = true;
     controle = (
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '70%' }}>
-        {opts.slice(0, 8).map(o => { const on = st && st.state === o; return (
-          <button key={o} onClick={() => call(dom, 'select_option', { option: o })} aria-pressed={on}
+        {opts.slice(0, 8).map(o => { const on = cur === o; return (
+          <button key={o} onClick={() => { poserOpt(o); call(dom, 'select_option', { option: o }); }} aria-pressed={on}
             style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{o}</button>
         ); })}
       </div>
@@ -2750,6 +2769,10 @@ function FicheAppareil({ id, hass, onClose }) {
     });
   }
   if (!soeurs.length) soeurs.push({ id, m: meta || {} });
+  // La fiche vit à son rythme : le poll de la vue derrière ne connaît pas ces
+  // entités-là — sans cet abonnement, un stepper resterait figé après le clic.
+  const hassLive = useHass(soeurs.map(x => x.id));
+  const H = hassLive || hass;
   const domDe = (e) => String(e).split('.')[0];
   const nomCourt = (x) => (x.m && x.m.name) || ((S[x.id] && S[x.id].attributes && S[x.id].attributes.friendly_name) || x.id);
   const nomApp = (meta && meta.device) || cvName(S[id], id);
@@ -2768,7 +2791,7 @@ function FicheAppareil({ id, hass, onClose }) {
   const section = (titre2, liste) => liste.length > 0 && (
     <>
       <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 2px' }}>{titre2}</div>
-      {liste.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={hass} nom={nomCourt(x)} surEpingle={basculer} epingle={eps.indexOf(x.id) >= 0} />)}
+      {liste.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={H} nom={nomCourt(x)} surEpingle={basculer} epingle={eps.indexOf(x.id) >= 0} />)}
     </>
   );
   return (
@@ -2783,7 +2806,7 @@ function FicheAppareil({ id, hass, onClose }) {
         </div>
         {pilotables.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-            {pilotables.slice(0, 3).map(x => <CvCard key={x.id} id={x.id} hass={hass} onOpen={x.id !== id ? dc.ouvrir : null} />)}
+            {pilotables.slice(0, 3).map(x => <CvCard key={x.id} id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />)}
           </div>
         )}
         {section(tr('ÉPINGLES'), epinglees)}
@@ -2794,7 +2817,7 @@ function FicheAppareil({ id, hass, onClose }) {
             <button onClick={() => setDiagOuvert(o => !o)} style={{ marginTop: 16, padding: '8px 13px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', alignSelf: 'flex-start' }}>
               {(diagOuvert ? tr('Masquer') : tr('Afficher')) + ' ' + tr('{n} diagnostics', { n: diag.length })}
             </button>
-            {diagOuvert && diag.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={hass} nom={nomCourt(x)} surEpingle={basculer} />)}
+            {diagOuvert && diag.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={H} nom={nomCourt(x)} surEpingle={basculer} />)}
           </>
         )}
         {dc.sheets}
@@ -10004,7 +10027,9 @@ export default function App() {
   // TYPÉES ({ t, id }), sans quoi une jauge ou un gros interrupteur ne se
   // redessinait jamais. Seuls les templates restent dehors : leur souscription
   // `render_template` pousse toute seule.
-  const haKeys = [...GLOBAL_KEYS, ...(activeCv ? activeCv.ents.map(x => cvId(x)) : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
+  // Les épingles vivent sur les cartes de n'importe quelle vue : sans les
+  // interroger, une valeur épinglée resterait figée jusqu'à un tick fortuit.
+  const haKeys = [...GLOBAL_KEYS, ...lireEpingles(), ...(activeCv ? activeCv.ents.map(x => cvId(x)) : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
   // Capteurs de puissance au jitter continu : signature arrondie à 10 W → pas de re-render global à chaque tick.
   // Un capteur de puissance jitter en continu chez N'IMPORTE QUI : c'est sa
   // `device_class` qui le dit, pas son nom. Cette liste portait un identifiant
