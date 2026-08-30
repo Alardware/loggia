@@ -2653,7 +2653,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, children }) {
   const saisie = ed.dragId === id;
   const visee = !!ed.dragId && ed.dragOver === ed.ids.indexOf(id) && !saisie;
   return (
-    <div data-id={id} className={ed.estLarge && ed.estLarge(id) ? 'o-cvw2' : undefined} style={{
+    <div data-id={id} className={[(ed.estLarge && ed.estLarge(id)) ? 'o-cvw2' : '', (ed.typeOf && (ed.typeOf(id) === 'compacte' || ed.typeOf(id) === 'horloge')) ? 'o-cvrow1' : ''].join(' ').trim() || undefined} style={{
       position: 'relative', borderRadius: 'var(--o-radius,20px)',
       outline: visee ? '2px dashed var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.45)',
       outlineOffset: 3,
@@ -3528,7 +3528,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                   : <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
                       <Fi i="apps" size={16} color="var(--o-ok)" />{nomDe(bloc.titre)}
                     </div>)}
-                <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
+                <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
               {bloc.cartes.map(id => {
                 const zone = id.indexOf('zone:') === 0 ? climateZones(S).find(z => z.id === id.slice(5)) : null;
                 const lbl = roomLabelOf(room, id);
@@ -3538,7 +3538,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                 const card = (!zone && ed.typeOf(id)) ? <CvTyped x={{ t: ed.typeOf(id), id }} hass={hass} dc={dc} />
                   : (zone && ed.typeOf(id) === 'compacte' && estClimate(zone)) ? <CvCard id={zone.haid} hass={hass} label={lbl || zone.name} onOpen={dc.ouvrir} dense />
                     : dc.card(id, lbl, zone);
-                if (!edit) return <Anim key={id} i={ents.indexOf(id)} className={ed.estLarge(id) ? 'o-cvw2' : ''}>{card}</Anim>;
+                if (!edit) return <Anim key={id} i={ents.indexOf(id)} className={[(ed.estLarge(id) ? 'o-cvw2' : ''), (ed.typeOf(id) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{card}</Anim>;
                 return <EditableCard key={id} ed={ed} id={id} nom={nomDe(id)} onEdit={setCardEdit}>{card}</EditableCard>;
               })}
                 </div>
@@ -5610,10 +5610,10 @@ function LumieresContent({ hass, edit = false, onEnt }) {
                     <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
                     <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{allumees}/{cartes.length}</span>
                   </div>)}
-              <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
+              <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {cartes.map(k => {
                   const carte = ed.typeOf(k) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
+                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={[(ed.estLarge(k) ? 'o-cvw2' : ''), (ed.typeOf(k) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
               </div>
@@ -6435,13 +6435,13 @@ function ClimatContent({ hass, edit = false, onEnt }) {
                     <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(climNom(bloc.titre)).toUpperCase()}</span>
                     <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
                   </div>)}
-              <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
+              <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {bloc.cartes.map(k => {
                   const zk = zoneDe(k);
                   const carte = (!zk && ed.typeOf(k)) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} />
                     : (zk && ed.typeOf(k) === 'compacte' && estClimate(zk)) ? <CvCard id={zk.haid} hass={hass} label={ed.labelOf(k) || zk.name} onOpen={dc.ouvrir} dense />
                       : dc.card(k, ed.labelOf(k), zk);
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
+                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={[(ed.estLarge(k) ? 'o-cvw2' : ''), (ed.typeOf(k) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={climNom(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
               </div>
@@ -6667,10 +6667,10 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
                     <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(nomDe(bloc.titre)).toUpperCase()}</span>
                     <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
                   </div>)}
-              <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
+              <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {bloc.cartes.map(k => {
                   const carte = ed.typeOf(k) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
+                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={[(ed.estLarge(k) ? 'o-cvw2' : ''), (ed.typeOf(k) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
               </div>
@@ -8238,10 +8238,10 @@ function MediasContent({ hass, edit = false, onEnt }) {
                     <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(nomDe(bloc.titre)).toUpperCase()}</span>
                     <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
                   </div>)}
-              <div className="grid-roomdev" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
+              <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
                 {bloc.cartes.map(k => {
                   const carte = ed.typeOf(k) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
+                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={[(ed.estLarge(k) ? 'o-cvw2' : ''), (ed.typeOf(k) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
                 })}
               </div>

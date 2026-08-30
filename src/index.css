@@ -111,6 +111,14 @@ html.loggia-tactile .loggia-backdrop { display: block; position: fixed; inset: 0
 html.loggia-tactile .loggia-mobilenav { display: flex !important; }
 html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-bottom, 0px)) !important; }
 
+/* Grille DENSE des vues intégrées : une carte riche occupe deux rangées, une
+ * COMPACTE une seule — deux compactes s'empilent à côté d'une grande, comme
+ * dans les vues custom. */
+.grid-dense { grid-auto-flow: row dense; grid-auto-rows: 88px; }
+.grid-dense > * { grid-row: span 2; }
+.grid-dense > .o-cvrow1 { grid-row: span 1; }
+.grid-dense .o-rmcard, .grid-dense .o-piece { height: 100%; box-sizing: border-box; }
+
 /* Carte élargie : deux emplacements côte à côte. La grille custom garde DEUX
  * colonnes sur mobile (cartes compactes) — le span 2 y reste donc visible. */
 .o-cvw2 { grid-column: span 2; }
