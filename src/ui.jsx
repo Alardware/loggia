@@ -225,20 +225,49 @@ export const cvId = (x) => (typeof x === 'string' ? x : cvEstTpl(x) ? null : x &
 
 /** Petit formulaire d'ajout d'une carte template (partage entre les deux
  *  editeurs de vues : celui en place et celui des Parametres). */
-export function TplForm({ onAdd }) {
-  const [nom, setNom] = useState('');
-  const [src, setSrc] = useState('');
+export function TplForm({ onAdd, hass = null, initial = null }) {
+  const [nom, setNom] = useState(initial ? (initial.name || '') : '');
+  const [src, setSrc] = useState(initial ? (initial.src || '') : '');
   const ok = src.trim().length > 0;
+  /* Aperçu LIVE : le même render_template que la carte, débouncé à la frappe —
+   * on voit le résultat (ou l'erreur Jinja) avant d'ajouter, pas après. */
+  const [apOut, setApOut] = useState(null);
+  const [apErr, setApErr] = useState(null);
+  const conn = hass && hass.connection;
+  useEffect(() => {
+    setApOut(null); setApErr(null);
+    const s = src.trim();
+    if (!s || !conn) return;
+    let unsub = null, mort = false;
+    const t = setTimeout(() => {
+      conn.subscribeMessage((msg) => {
+        if (mort || !msg) return;
+        if (msg.error) { setApErr(String(msg.error)); return; }
+        setApErr(null); setApOut(msg.result != null ? String(msg.result) : '');
+      }, { type: 'render_template', template: s, report_errors: true })
+        .then(u => { if (mort) { try { u(); } catch (e) {} } else unsub = u; })
+        .catch(e => { if (!mort) setApErr(String((e && e.message) || e)); });
+    }, 700);
+    return () => { mort = true; clearTimeout(t); if (unsub) { try { unsub(); } catch (e) {} } };
+  }, [src, conn]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <input value={nom} onChange={e => setNom(e.target.value)} placeholder={tr('Titre de la carte (optionnel)')} style={cvInp} />
       <textarea value={src} onChange={e => setSrc(e.target.value)} rows={4} spellCheck={false}
         placeholder={"{{ now().strftime('%H:%M') }}"}
         style={{ ...cvInp, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, resize: 'vertical', minHeight: 88 }} />
+      {ok && conn && (
+        <div style={{ padding: '9px 13px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('APERÇU')}</div>
+          {apErr
+            ? <div style={{ fontSize: 12, fontWeight: 600, color: '#f87171', marginTop: 3, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 72, overflow: 'auto' }}>{apErr}</div>
+            : <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 3, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 72, overflowY: 'auto', opacity: apOut == null ? .45 : 1 }}>{apOut == null ? '…' : (apOut === '' ? '—' : apOut)}</div>}
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ flex: 1, fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Jinja, évalué par Home Assistant. La carte se met à jour en direct.')}</span>
-        <button disabled={!ok} onClick={() => { if (!ok) return; onAdd({ t: 'tpl', id: 'tpl_' + Math.random().toString(36).slice(2, 8), name: nom.trim(), src: src.trim() }); setNom(''); setSrc(''); }}
-          style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: ok ? 'pointer' : 'default', opacity: ok ? 1 : .5, flexShrink: 0 }}>{tr('Ajouter')}</button>
+        <button disabled={!ok} onClick={() => { if (!ok) return; onAdd({ t: 'tpl', id: initial ? initial.id : 'tpl_' + Math.random().toString(36).slice(2, 8), name: nom.trim(), src: src.trim() }); if (!initial) { setNom(''); setSrc(''); } }}
+          style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: ok ? 'pointer' : 'default', opacity: ok ? 1 : .5, flexShrink: 0 }}>{initial ? tr('Enregistrer') : tr('Ajouter')}</button>
       </div>
     </div>
   );

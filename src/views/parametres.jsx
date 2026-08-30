@@ -102,12 +102,15 @@ function AlertesTele({ hass, cardSt }) {
   const [cfg, setCfg] = useState(null);
   const [services, setServices] = useState([]);
   const [msg, setMsg] = useState('');
+  const [journal, setJournal] = useState([]);
   useEffect(() => {
     if (!h) { setCfg(ALERTES_DEF()); return; }
     h.callWS({ type: 'loggia/config/get' }).then(r => {
       const c = (r && r.config && r.config.loggia_alertes) || {};
       const d = ALERTES_DEF();
       setCfg({ ...d, ...c, categories: { ...d.categories, ...(c.categories || {}) } });
+      const j = r && r.config && r.config.loggia_alertes_journal;
+      if (Array.isArray(j)) setJournal(j);
     }).catch(() => setCfg(ALERTES_DEF()));
     // La liste des cibles possibles : les services notify de l'installation.
     h.callWS({ type: 'get_services' }).then(r => {
@@ -176,6 +179,23 @@ function AlertesTele({ hass, cardSt }) {
         <button onClick={test} style={{ padding: '9px 16px', borderRadius: 11, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Envoyer un test')}</button>
       </div>
       {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-accent-soft)', marginTop: 4 }}>{msg}</div>}
+      {journal.length > 0 && (<>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 4px' }}>{tr('DERNIERS ENVOIS')}</div>
+        {journal.slice(0, 8).map((j, i) => {
+          let rel = '';
+          try { const m = (Date.now() - new Date(j.quand).getTime()) / 60000; rel = m < 1 ? tr("à l'instant") : m < 60 ? 'il y a ' + Math.round(m) + ' min' : m < 1440 ? 'il y a ' + Math.round(m / 60) + ' h' : 'il y a ' + Math.round(m / 1440) + ' j'; } catch (e) { /* date illisible */ }
+          return (
+            <div key={(j.quand || '') + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+              <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: 'var(--o-bad)' }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{j.message} : {j.nom}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{j.entite}</div>
+              </div>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0 }}>{rel}</span>
+            </div>
+          );
+        })}
+      </>)}
       <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 12 }}>{tr("Les catégories se reconnaissent à la classe des capteurs (device_class) — rien à désigner à la main. Anti-rafale : 5 min par capteur, sauf l'alarme.")}</div>
     </div>
   );
@@ -428,7 +448,7 @@ function CvEditor({ cv, hass, onSave, onClose }) {
         </div>}
         <EntPicker hass={hass} exclude={ents.filter(x => typeof x === 'string')} onPick={(id) => setEnts(prev => prev.indexOf(id) < 0 ? [...prev, id] : prev)} />
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
-        <TplForm onAdd={(t) => setEnts(prev => [...prev, t])} />
+        <TplForm hass={getHass()} onAdd={(t) => setEnts(prev => [...prev, t])} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
           <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Annuler</button>
           <button onClick={save} style={{ padding: '11px 20px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: name.trim() ? 1 : .5 }}>Enregistrer</button>
@@ -664,7 +684,7 @@ export function ViewEntSheet({ view, hass, onClose }) {
   );
 }
 
-export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews }) {
+export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews }) {
   /* La section ouverte survit au rechargement, comme la vue elle-meme.
    *
    * Changer de langue recharge la page : on revenait au sommaire des sections,
@@ -1127,6 +1147,11 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <Seg value={String(ambient || 0)}
                 opts={[['0', 'Off'], ['1', '1 min'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']]}
                 onPick={v => onAmbient && onAmbient(parseInt(v, 10) || 0)} />
+            </OptRow>
+            <OptRow title={tr('Plage de la veille')} desc={tr("Quand la veille a le droit de s'afficher. La nuit (23 h – 6 h) elle baisse d'un ton, et l'horloge dérive doucement pour ménager l'écran.")}>
+              <Seg value={ambPlage} disabled={!ambient}
+                opts={[['toujours', tr('Toujours')], ['nuit', tr('Nuit')], ['jour', tr('Journée')]]}
+                onPick={v => onAmbPlage && onAmbPlage(v)} />
             </OptRow>
           </AppCard>
 

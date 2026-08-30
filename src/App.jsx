@@ -391,7 +391,7 @@ function useWide(bp) {
   }, [bp]);
   return w;
 }
-function SearchSheet({ onClose, onNav, customViews = [], rooms = [] }) {
+function SearchSheet({ onClose, onNav, customViews = [], rooms = [], isAdmin = false }) {
   const { views: avail } = useLoggia();
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
@@ -404,6 +404,43 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [] }) {
   HIDDEN_VIEWS().forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: tr('Vues'), label: tr(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
   customViews.forEach(cv => { if (match(cv.name)) results.push({ group: tr('Vues'), label: cv.name, icon: <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" />, act: (close) => { onNav('cv:' + cv.id); close(); } }); });
   quickScenes().forEach(s => { if (!match(s.name)) return; results.push({ group: tr('Scènes'), label: s.name, sub: s.sub, icon: <Fi i={s.icon} color="var(--o-purple)" />, run: true, act: (close) => { try { const h = getHass(); if (h && h.callService) h.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); } catch (e) {} close(); } }); });
+  // Appareils : par nom, dès deux caractères tapés — le déluge n'aide personne.
+  // Les togglables se basculent sur place ; les autres mènent à leur vue.
+  if (nq.length >= 2) {
+    const h = getHass();
+    const S = (h && h.states) || {};
+    const DOMS = { light: 'bulb', switch: 'bolt', climate: 'thermometer-half', cover: 'blinds', media_player: 'tv-music', vacuum: 'broom', fan: 'wind' };
+    const VUE_DOM = { climate: 'climat', cover: 'volets', media_player: 'medias', vacuum: 'aspirateur' };
+    let n = 0;
+    for (const id in S) {
+      if (n >= 8) break;
+      const dom = id.split('.')[0];
+      if (!DOMS[dom]) continue;
+      const st = S[id];
+      if (!st || st.state === 'unavailable') continue;
+      const nom = (st.attributes && st.attributes.friendly_name) || id;
+      if (!match(nom)) continue;
+      n++;
+      const togglable = dom === 'light' || dom === 'switch' || dom === 'fan';
+      results.push({
+        group: tr('Appareils'), label: nom, sub: id, run: togglable, runLabel: tr('Basculer'),
+        icon: <Fi i={DOMS[dom]} color="var(--o-cyan)" />,
+        act: (close) => {
+          if (togglable) { try { h.callService('homeassistant', 'toggle', { entity_id: id }); } catch (e) {} }
+          else if (VUE_DOM[dom]) onNav(VUE_DOM[dom]);
+          close();
+        },
+      });
+    }
+  }
+  // Réglages : chaque section des Paramètres se trouve par son nom — la
+  // mémoire de session `loggia-par-section` fait atterrir au bon endroit.
+  if (isAdmin) {
+    [['users', tr('Utilisateurs')], ['apparence', tr('Apparence')], ['entites', tr('Entités')], ['vues', tr('Vues')], ['auto', tr('Automatisations')], ['alertes', tr('Alertes')], ['maj', tr('Mises à jour')], ['connexion', tr('Connexion HA')], ['about', tr('À propos')]].forEach(([id, label]) => {
+      if (!match(label)) return;
+      results.push({ group: tr('Réglages'), label, icon: <Fi i="settings" color="var(--o-text2)" />, act: (close) => { try { sessionStorage.setItem('loggia-par-section', id); } catch (e) {} onNav('parametres'); close(); } });
+    });
+  }
   const selIdx = results.length ? Math.min(sel, results.length - 1) : -1;
   useEffect(() => { setSel(0); }, [nq]);
   useEffect(() => { try { const el = listRef.current && listRef.current.querySelector('[data-sel="1"]'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); } catch (e) {} }, [selIdx]);
@@ -442,7 +479,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [] }) {
                       {r.sub && <div style={{ fontSize: 12, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.sub}</div>}
                     </div>
                     {r.run
-                      ? <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', borderRadius: 999, padding: '3px 10px', flexShrink: 0 }}>{tr('Exécuter')}</span>
+                      ? <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', borderRadius: 999, padding: '3px 10px', flexShrink: 0 }}>{r.runLabel || tr('Exécuter')}</span>
                       : <Fi i="angle-right" size={13} color="var(--o-text3)" />}
                   </div>
                 </div>
@@ -473,6 +510,11 @@ function Header() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+  // Appui long sur le chip lumières (voir plus bas) : minuteur + drapeau pour
+  // que le clic qui SUIT un appui long ne navigue pas en plus d'avoir éteint.
+  const chipTimer = useRef(0);
+  const chipLong = useRef(false);
+  useEffect(() => () => clearTimeout(chipTimer.current), []);
   /* Vu = PERSISTÉ (par appareil) : l'ancien état React s'évaporait à chaque
    * rechargement et le point rouge revenait pour des notifications déjà lues.
    * On retient la signature du contenu lu ; ouvrir le panneau marque tout vu. */
@@ -518,7 +560,7 @@ function Header() {
   return (
     <>
     {/* hors du <header> : son transform (auto-hide) ferait de lui le containing block du position:fixed du sheet */}
-    {searchOpen && <SearchSheet onClose={() => setSearchOpen(false)} onNav={onNav} customViews={customViews} rooms={rooms} />}
+    {searchOpen && <SearchSheet onClose={() => setSearchOpen(false)} onNav={onNav} customViews={customViews} rooms={rooms} isAdmin={isAdmin} />}
     <header className="loggia-hdr" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 'calc(14px + var(--o-safe-top,0px)) 28px 14px', borderBottom: '1px solid var(--o-s1)', position: 'sticky', top: 0, background: 'var(--o-header)', backdropFilter: 'blur(12px)', zIndex: 40, transform: hidden ? 'translateY(-100%)' : 'translateY(0)', transition: 'transform .3s ease', willChange: 'transform' }}>
       <button onClick={onToggleNav} title={tr('Afficher / masquer le menu')} style={{ width: 42, height: 42, borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 }}><Ico name="menu-burger" size={20} /></button>
       <div className="o-hdr-search" role="button" tabIndex={0} aria-label="Rechercher (Ctrl+K)" onClick={() => setSearchOpen(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSearchOpen(true); } }} style={{ flex: 1, maxWidth: 420, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 12, padding: '10px 14px', cursor: 'pointer' }}>
@@ -527,9 +569,25 @@ function Header() {
         <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', background: 'var(--o-bd2)', border: '1px solid var(--o-bd2)', borderRadius: 6, padding: '2px 7px' }}>{IS_MAC ? '⌘K' : 'Ctrl K'}</span>
       </div>
       <div style={{ flex: 1 }} />
-      {/* Chip « n allumées » : l'état lumineux de la maison, d'un regard, où qu'on soit. */}
+      {/* Chip « n allumées » : l'état lumineux de la maison, d'un regard, où
+          qu'on soit. Un appui LONG éteint tout — le geste du départ, sans
+          chercher la scène. Le clic court navigue, comme avant. */}
       {ctx.lightsOn > 0 && (
-        <button className="o-hdr-lights" onClick={() => onNav && onNav('lumieres')} title={tr('Voir les lumières')}
+        <button className="o-hdr-lights"
+          onPointerDown={() => { chipLong.current = false; clearTimeout(chipTimer.current); chipTimer.current = setTimeout(() => {
+            chipLong.current = true;
+            try {
+              const h = getHass(); if (!h || !h.callService) return;
+              const S = h.states || {};
+              const ids = Object.keys(S).filter(id => (id.indexOf('light.') === 0 || switchLights().indexOf(id) >= 0) && S[id] && S[id].state === 'on');
+              if (ids.length) h.callService('homeassistant', 'turn_off', { entity_id: ids });
+            } catch (e) { /* le poll dira l'état réel */ }
+          }, 650); }}
+          onPointerUp={() => clearTimeout(chipTimer.current)}
+          onPointerLeave={() => clearTimeout(chipTimer.current)}
+          onPointerCancel={() => clearTimeout(chipTimer.current)}
+          onClick={() => { if (chipLong.current) { chipLong.current = false; return; } onNav && onNav('lumieres'); }}
+          title={tr('Voir les lumières — appui long : tout éteindre')}
           style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 999, cursor: 'pointer', flexShrink: 0, background: 'rgba(var(--o-gold-rgb),.13)', border: '1px solid rgba(var(--o-gold-rgb),.32)', color: 'var(--o-warn)', fontSize: 12.5, fontWeight: 800 }}>
           <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-warn)', boxShadow: '0 0 8px var(--o-warn)' }} />
           <FlipText text={ctx.lightsOn > 1 ? tr('{n} allumées', { n: ctx.lightsOn }) : tr('{n} allumée', { n: ctx.lightsOn })} />
@@ -746,7 +804,16 @@ function readComputedHaTheme(hass) {
   } catch (e) {}
   return null;
 }
+/* Safe mode « sans thème » : posé par l'écran d'erreur (boot.jsx), consommé
+ * ici — il ne vaut que pour UN chargement et ne touche pas à la configuration.
+ * Un preset ou un look corrompu ne doit pas condamner le dashboard. */
+const SAFE_NOLOOK = (() => {
+  try { if (sessionStorage.getItem('loggia_safe_nolook')) { sessionStorage.removeItem('loggia_safe_nolook'); return true; } } catch (e) { /* rien */ }
+  return false;
+})();
+
 function readLook() {
+  if (SAFE_NOLOOK) return { ...LOOK_DEF };
   try {
     const L = { ...LOOK_DEF, ...(JSON.parse(window.localStorage.getItem('loggia_look') || 'null') || {}) };
     if (L.fond !== 'photo') L.fond = 'aucun'; // les degrades retires retombent sur « aucun »
@@ -1821,7 +1888,13 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
   const art = /echo/i.test(artKey) ? DEVICE_ART.echo : /apple|atv|tv/i.test(artKey) ? DEVICE_ART.appletv : null;
   const mort = !S || !S[id] || S[id].state === 'unavailable';
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || (a && a.friendly_name) || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, position: 'relative', overflow: 'hidden', cursor: onOpen ? 'pointer' : 'default' }}>
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || (a && a.friendly_name) || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, position: 'relative', overflow: 'hidden', cursor: onOpen ? 'pointer' : 'default',
+      // Teinte d'état : un lecteur EN LECTURE lave sa surface d'accent, comme la
+      // lumière de son or — l'activité se voit avant de lire le titre.
+      ...(np.playing && LAVIS ? {
+        background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-accent-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
+        border: `1px solid rgba(var(--o-accent-rgb),${lav(.26)})`,
+      } : null) }}>
       {art && <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 96, height: 96, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.13, pointerEvents: 'none' }} />}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(np.on ? 'rgba(167,139,250,.16)' : 'var(--o-s1)', np.on ? 'var(--o-purple)' : 'var(--o-text3)')}>
@@ -2718,8 +2791,21 @@ function etatJournal(id, st, S) {
   return st + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
 }
 
+/* Regroupe les répétitions CONSÉCUTIVES d'une même entité : un lecteur qui
+ * change de titre toutes les trois minutes noyait le journal — une ligne
+ * portée « ×n », datée du dernier événement, raconte la même chose. */
+function grouperJournal(events, cle = (e) => e.entity_id) {
+  const out = [];
+  for (const e of events) {
+    const d = out[out.length - 1];
+    if (d && cle(d) != null && cle(d) === cle(e)) { d.n = (d.n || 1) + 1; continue; }
+    out.push({ ...e, n: 1 });
+  }
+  return out;
+}
+
 function RoomActivityCard({ hass, ids }) {
-  const events = useRoomLogbook(hass, ids);
+  const events = grouperJournal(useRoomLogbook(hass, ids));
   if (!events.length) return null;
   const S = (hass && hass.states) || {};
   const heure = (when) => { const ms = when < 1e12 ? when * 1000 : when; const d = new Date(ms); return d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
@@ -2733,7 +2819,7 @@ function RoomActivityCard({ hass, ids }) {
           <div key={(e.when || 0) + '|' + e.entity_id + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none' }}>
             <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: actif(e) ? 'var(--o-warn)' : 'var(--o-text3)', boxShadow: actif(e) ? '0 0 7px var(--o-warn)' : 'none' }} />
             <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.name || (S[e.entity_id] && S[e.entity_id].attributes && S[e.entity_id].attributes.friendly_name) || e.entity_id}</span>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: actif(e) ? 'var(--o-warn)' : 'var(--o-text2)', whiteSpace: 'nowrap' }}>{e.state != null ? etatJournal(e.entity_id, e.state, S) : (e.message || '')}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: actif(e) ? 'var(--o-warn)' : 'var(--o-text2)', whiteSpace: 'nowrap' }}>{e.state != null ? etatJournal(e.entity_id, e.state, S) : (e.message || '')}{e.n > 1 ? ' ·×' + e.n : ''}</span>
             <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0, minWidth: 38, textAlign: 'right' }}>{heure(e.when)}</span>
           </div>
         ))}
@@ -3832,6 +3918,19 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
   }, []);
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => { const iv = setInterval(() => setClock(new Date()), 10000); return () => clearInterval(iv); }, []);
+  /* Anti burn-in : le bloc entier derive de quelques pixels chaque minute — un
+   * OLED garde la trace d'une horloge immobile. La derive est lente (6 s) pour
+   * ne pas se voir ; en reduced-motion elle saute sans transition, le burn-in
+   * ne negocie pas. */
+  const [decal, setDecal] = useState({ x: 0, y: 0 });
+  useEffect(() => {
+    const bouge = () => setDecal({ x: Math.round((Math.random() - 0.5) * 48), y: Math.round((Math.random() - 0.5) * 32) });
+    const iv = setInterval(bouge, 60000);
+    return () => clearInterval(iv);
+  }, []);
+  // La nuit, la veille baisse encore d'un ton : personne ne la regarde, et une
+  // chambre n'a pas besoin d'une lanterne.
+  const nuit = clock.getHours() >= 23 || clock.getHours() < 6;
   const hm = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const capit = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   const dateStr = capit(clock.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }));
@@ -3839,7 +3938,8 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
   const chip = { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)', fontSize: 14.5, fontWeight: 700, color: '#aeb9cc' };
   const pt = (c) => <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: c, boxShadow: '0 0 8px ' + c }} />;
   return (
-    <div role="button" aria-label={tr('Toucher pour réveiller')} style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070b', color: '#e8edf5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', animation: REDUCE_MOTION ? 'none' : 'o-ambient-in 1s ease', userSelect: 'none' }}>
+    <div role="button" aria-label={tr('Toucher pour réveiller')} style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070b', color: '#e8edf5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', animation: REDUCE_MOTION ? 'none' : 'o-ambient-in 1s ease', userSelect: 'none' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transform: `translate(${decal.x}px, ${decal.y}px)`, opacity: nuit ? .55 : 1, transition: REDUCE_MOTION ? 'opacity 2s ease' : 'transform 6s ease, opacity 2s ease' }}>
       <div style={{ fontSize: 'clamp(72px, 17vw, 170px)', fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{hm}</div>
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 'clamp(17px, 2.6vw, 24px)', color: '#8b95a7' }}>{dateStr}</div>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 22px', borderRadius: 18, background: 'rgba(255,255,255,.035)', marginTop: 18, overflow: 'hidden' }}>
@@ -3860,6 +3960,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
           {rouges.map((n, i) => <span key={i} style={{ ...chip, color: '#f87171', borderColor: 'rgba(248,113,113,.3)', background: 'rgba(248,113,113,.08)' }}>{pt('#f87171')}{n[1]} · {n[2]}</span>)}
         </div>
       )}
+    </div>
     </div>
   );
 }
@@ -8492,7 +8593,9 @@ function CvAlarm({ id, hass }) {
 
 /* Journal : les dernières entrées du logbook pour CETTE entité. */
 function CvJournal({ id, hass }) {
-  const events = useRoomLogbook(hass, useMemo(() => [id], [id]));
+  // Journal d'UNE entité : ne fusionner que les états identiques qui se
+  // répètent — fusionner par entité viderait la carte de son sujet.
+  const events = grouperJournal(useRoomLogbook(hass, useMemo(() => [id], [id])), (e) => (e.entity_id || '') + '|' + (e.state != null ? e.state : e.message));
   const S = (hass && hass.states) || {};
   const st = S[id];
   const heure = (when) => { const ms = when < 1e12 ? when * 1000 : when; return new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
@@ -8503,7 +8606,7 @@ function CvJournal({ id, hass }) {
       {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien à raconter')}</div>}
       {events.slice(0, 5).map((e, i) => (
         <div key={(e.when || 0) + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-          <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{e.state != null ? etatJournal(id, e.state, S) : (e.message || '')}</span>
+          <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{e.state != null ? etatJournal(id, e.state, S) : (e.message || '')}{e.n > 1 ? ' ·×' + e.n : ''}</span>
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{heure(e.when)}</span>
         </div>
       ))}
@@ -8576,8 +8679,10 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   // renommage inline.
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  // Carte template en cours d'édition (crayon en mode édition) — TplForm prérempli, l'id survit.
+  const [tplEdit, setTplEdit] = useState(null);
   const [nameDraft, setNameDraft] = useState(cv.name);
-  useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); }, [cv.id, edit]);
+  useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); setTplEdit(null); }, [cv.id, edit]);
   const setEnts = (ents) => onSave && onSave({ ...cv, ents });
   const dc = useDomainCards(hass);
   // Choix du TYPE à l'ajout : l'entité cliquée dont on attend le choix.
@@ -8659,6 +8764,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
               {edit && (
                 <>
                   <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...editBtn, position: 'absolute', top: -9, right: -9, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                  {cvEstTpl(x) && <button onClick={() => setTplEdit(x)} title={tr('Modifier')} style={{ ...editBtn, position: 'absolute', top: -9, right: 24 }}><Fi i="pencil" size={11} /></button>}
                 </>
               )}
             </div>
@@ -8672,6 +8778,14 @@ function CustomView({ cv, hass, edit = false, onSave }) {
         </div>
         {!edit && !cv.ents.length && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13.5, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Vue vide — active le crayon (en haut) pour ajouter des cartes.')}</div>}
         {dc.sheets}
+        {tplEdit && (
+          <BottomSheet onClose={() => setTplEdit(null)}>
+            {close => (<>
+              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>{tr('Modifier la carte template')}</div>
+              <TplForm hass={hass} initial={tplEdit} onAdd={(t) => { setEnts(cv.ents.map(y => cvKey(y) === cvKey(tplEdit) ? t : y)); close(); }} />
+            </>)}
+          </BottomSheet>
+        )}
         {adding && (
           <BottomSheet onClose={() => setAdding(false)}>
             {close => (<>
@@ -8700,7 +8814,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
               <EntPicker hass={hass} exclude={[]} onPick={(id) => { if (cvTypesPour(id).length > 1) setPickCarte(id); else setEnts([...cv.ents, id]); }} autoFocus />
               <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Choisis une entité, puis la carte qui lui va.')}</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '18px 0 8px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
-              <TplForm onAdd={(t) => setEnts([...cv.ents, t])} />
+              <TplForm hass={hass} onAdd={(t) => setEnts([...cv.ents, t])} />
               </>)}
             </>)}
           </BottomSheet>
@@ -8712,12 +8826,12 @@ function CustomView({ cv, hass, edit = false, onSave }) {
 
 
 
-function ParametresView({ themeMode, loggiaTheme, haTheme, onMode, onPickTheme, onFollowHa, navbar, onToggleNavbar, wxFx, onToggleWxFx, ambient = 0, onAmbient, cielEtoile, onToggleCiel, navMargin, navAuto, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin, topAuto, onTopOffset, onTopOffsetReset, hass, users, userIdx, isAdmin, onAddUser, onUpdateUser, onDeleteUser, customViews, onSaveCustomViews }) {
+function ParametresView({ themeMode, loggiaTheme, haTheme, onMode, onPickTheme, onFollowHa, navbar, onToggleNavbar, wxFx, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, cielEtoile, onToggleCiel, navMargin, navAuto, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin, topAuto, onTopOffset, onTopOffsetReset, hass, users, userIdx, isAdmin, onAddUser, onUpdateUser, onDeleteUser, customViews, onSaveCustomViews }) {
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <Suspense fallback={<div className="loggia-content" style={{ padding: '26px 28px 56px' }} />}>
-      <ParametresContent onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} customViews={customViews} onSaveCustomViews={onSaveCustomViews} />
+      <ParametresContent onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} customViews={customViews} onSaveCustomViews={onSaveCustomViews} />
       </Suspense>
     </main>
   );
@@ -9587,8 +9701,11 @@ export default function App() {
   useEffect(() => {
     try {
       const m = localStorage.getItem('loggia-mode'); if (m === 'light' || m === 'dark') setThemeMode(m);
-      const t = localStorage.getItem('loggia-theme'); if (t != null) setLoggiaTheme(t);
-      const h = localStorage.getItem('loggia-ha'); if (h != null) setHaTheme(h);
+      // Safe mode « sans thème » : preset et suivi HA restent aux défauts pour ce chargement.
+      if (!SAFE_NOLOOK) {
+        const t = localStorage.getItem('loggia-theme'); if (t != null) setLoggiaTheme(t);
+        const h = localStorage.getItem('loggia-ha'); if (h != null) setHaTheme(h);
+      }
     } catch (e) {}
   }, []);
   const [look, setLook] = useState(readLook);
@@ -9596,7 +9713,8 @@ export default function App() {
   useEffect(() => {
     const run = () => setLightMode(!applyTheme({ mode: themeMode, loggiaTheme, haTheme, look }, getHass()));
     run();
-    try { localStorage.setItem('loggia-mode', themeMode); localStorage.setItem('loggia-theme', loggiaTheme); localStorage.setItem('loggia-ha', haTheme); } catch (e) {}
+    // En safe mode, ne RIEN réécrire : les défauts affichés écraseraient le thème enregistré.
+    if (!SAFE_NOLOOK) { try { localStorage.setItem('loggia-mode', themeMode); localStorage.setItem('loggia-theme', loggiaTheme); localStorage.setItem('loggia-ha', haTheme); } catch (e) {} }
     // Suivre HA : hass.themes peut charger après coup / l'actif peut changer → on réapplique en boucle
     if (haTheme === 'FOLLOW') { const iv = setInterval(run, 1500); return () => clearInterval(iv); }
   }, [themeMode, loggiaTheme, haTheme, look]);
@@ -9651,6 +9769,13 @@ export default function App() {
   const fondPhotoActif = look.fond === 'photo' ? lireFondPhoto() : null;
   const [ambient, setAmbient] = useState(() => { try { return parseInt(localStorage.getItem('loggia-ambient') || '0', 10) || 0; } catch (e) { return 0; } });
   const onAmbient = (min) => { setAmbient(min); try { localStorage.setItem('loggia-ambient', String(min)); } catch (e) {} };
+  // Plage de la veille : « toujours », « nuit » (21 h – 8 h) ou « jour » — trois
+  // choix nets plutôt que deux champs d'heure. Par appareil, comme le délai.
+  const [ambPlage, setAmbPlage] = useState(() => { try { return localStorage.getItem('loggia-ambientplage') || 'toujours'; } catch (e) { return 'toujours'; } });
+  const onAmbPlage = (v) => { setAmbPlage(v); try { localStorage.setItem('loggia-ambientplage', v); } catch (e) {} };
+  const hNow = new Date().getHours();
+  const enNuit = hNow >= 21 || hNow < 8;
+  const plageOk = ambPlage === 'toujours' || (ambPlage === 'nuit' ? enNuit : !enNuit);
   const [idle, setIdle] = useState(false);
   useEffect(() => {
     if (!ambient) { setIdle(false); return; }
@@ -9796,7 +9921,7 @@ export default function App() {
           background: (lightMode ? 'linear-gradient(rgba(240,244,250,.6),rgba(240,244,250,.6)), ' : 'linear-gradient(rgba(5,7,11,.55),rgba(5,7,11,.55)), ')
             + `url("${fondPhotoActif}") center center / cover no-repeat var(--o-bg)` }} />
       )}
-      {idle && ambient > 0 && <AmbientOverlay wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} lightsOn={lightsOn} notifs={notifs}
+      {idle && ambient > 0 && plageOk && <AmbientOverlay wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} lightsOn={lightsOn} notifs={notifs}
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
       {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12.5, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 12, padding: '10px 16px', fontSize: 12.5, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
@@ -9823,7 +9948,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && isAdmin} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && isAdmin} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && isAdmin} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && isAdmin} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'parametres' ? <ParametresView themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && isAdmin} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && isAdmin} /> : <Dashboard editMode={editMode} onEnt={isAdmin ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} />}
+        : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && isAdmin} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && isAdmin} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && isAdmin} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && isAdmin} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'parametres' ? <ParametresView themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && isAdmin} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && isAdmin} /> : <Dashboard editMode={editMode} onEnt={isAdmin ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} onMenu={() => setNavOpen(o => !o)} />}
       {entSheet && editMode && isAdmin && <Suspense fallback={null}><ViewEntSheet view={view} hass={hass} onClose={() => setEntSheet(false)} /></Suspense>}

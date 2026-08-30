@@ -208,6 +208,17 @@ class LoggiaStore:
         data = await self._load()
         return data["shared"].get(key, default)
 
+    async def async_set_shared(self, key: str, value: Any) -> None:
+        """Ecriture SERVEUR d'une cle commune (journal des alertes).
+
+        Reservee aux modules du composant : le client, lui, passe par
+        async_set_user qui verifie le role. Meme verrou que le reste.
+        """
+        async with self._lock:
+            data = await self._load()
+            data["shared"][key] = value
+            await self._store.async_save(data)
+
     async def async_get_user(self, user_id: str) -> dict[str, Any]:
         """Configuration vue par un utilisateur : le commun, puis le sien.
 
