@@ -1606,7 +1606,30 @@ function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
 
 /* Distributeur de croquettes, même gabarit : patte en haut à gauche, RÉSERVOIR
  * en haut à droite, nom et prochaine ration sous l'icône, Distribuer en bas. */
-function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onOpen, extra = null }) {
+function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onOpen, extra = null, chip = false }) {
+  // Compacte 1×1 : gabarit CvCard dense — réservoir à droite, ration en mini.
+  if (chip) {
+    return (
+      <div className="o-piece o-cvdense" role="button" tabIndex={0} aria-label={'Ouvrir ' + nom}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
+        onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
+        <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,206,115,.14)', color: '#ffce73' }}><Fi i="paw" size={15} /></span>
+          <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prochaine || sub || '—'}</div>
+          </div>
+          {pct != null && <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: pct < 25 ? 'var(--o-bad)' : 'var(--o-text2)' }}>{pct}%</span>}
+          {onFeed && (
+            <button aria-label={tr('Distribuer une ration')} onClick={(e) => { e.stopPropagation(); onFeed(); }}
+              style={{ width: 38, height: 26, borderRadius: 9, border: 'none', background: 'var(--o-accent)', color: '#fff', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Ico name="bowl-rice" color="#fff" size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="o-rmcard" role="button" tabIndex={0} aria-label={'Ouvrir ' + nom}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
@@ -10229,8 +10252,11 @@ function BiblioView() {
       <Titre i="settings-sliders" c="var(--o-accent-soft)" t={tr('Machines et objets')} />
       <Rangee>
         <Item l={tr('Aspirateur')}>{dc.card('vacuum.biblio')}</Item>
+        <Item l={tr('Aspirateur (compacte)')} h={88}><CvCard id="vacuum.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Tondeuse')}>{dc.card('lawn_mower.biblio')}</Item>
+        <Item l={tr('Tondeuse (compacte)')} h={88}><CvCard id="lawn_mower.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Distributeur')}><RoomFeederCard nom={tr('Croquettes')} sub={tr('Réservoir aux trois quarts')} pct={74} prochaine="18:00 · 18 g" onFeed={() => {}} onOpen={() => {}} /></Item>
+        <Item l={tr('Distributeur (compacte)')} h={88}><RoomFeederCard chip nom={tr('Croquettes')} pct={74} prochaine="18:00 · 18 g" onFeed={() => {}} onOpen={() => {}} /></Item>
         <Item l={tr('Plante (standard)')}><RoomPlantCard nom="Monstera" sub={tr('Salon, près de la fenêtre')} hum={38} verdict={tr('À arroser bientôt')} verdictCol="var(--o-warn)" lux={820} cond={640} temp={22} img="dracaena" onOpen={() => {}} /></Item>
         <Item l={tr('Plante (compacte)')} h={88}><RoomPlantCard chip nom="Monstera" hum={38} verdict={tr('À arroser bientôt')} verdictCol="var(--o-warn)" img="dracaena" onOpen={() => {}} /></Item>
       </Rangee>

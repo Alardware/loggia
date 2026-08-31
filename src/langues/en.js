@@ -614,6 +614,9 @@ export default {
   'Tout ou rien (non dimmable)': 'On/off only (not dimmable)',
   'Plante (standard)': 'Plant (standard)',
   'Plante (compacte)': 'Plant (compact)',
+  'Aspirateur (compacte)': 'Vacuum (compact)',
+  'Tondeuse (compacte)': 'Mower (compact)',
+  'Distributeur (compacte)': 'Feeder (compact)',
   'Compacte (étroite)': 'Compact (narrow)',
   'Compacte (large)': 'Compact (wide)',
   // Cartes agrégats
