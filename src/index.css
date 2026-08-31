@@ -134,6 +134,9 @@ html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-
 @container (max-width: 270px) {
   .o-cvclim .o-cvtxt { display: none; }
   .o-cvclim .o-cvrow { justify-content: space-between; }
+  /* Carte lumière étroite (mobile) : les préréglages cèdent — la glissière
+   * et le pourcentage suffisent. */
+  .o-lightpresets { display: none !important; }
 }
 
 /* Pièces de l'accueil v2 : mêmes rangées de 88 px que les vues custom —
