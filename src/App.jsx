@@ -4070,10 +4070,26 @@ function CamLive({ hass, haid, online = true }) {
   );
 }
 
+/* Popup caméra : le flux en grand, dans la feuille habituelle. */
+function CamSheet({ haid, nom, hass, onClose }) {
+  return (
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 12 }}>{nom}</div>
+        <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', aspectRatio: '16/9', background: '#0b0f16' }}>
+          <CamLive hass={hass} haid={haid} online={true} />
+        </div>
+      </>)}
+    </BottomSheet>
+  );
+}
 function CameraTile({ c }) {
   const live = !!(c.haid && c.hass);
   const t = new Date(), hhmm = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
-  const ctrl = { width: 36, height: 36, borderRadius: 11, background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' };
+  // Un seul bouton : agrandir en popup — le flux est DÉJÀ en direct, le
+  // bouton caméra ne racontait rien (retour 31/08).
+  const [grand, setGrand] = useState(false);
+  const ctrl = { width: 36, height: 36, borderRadius: 11, background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer', padding: 0 };
   return (
     <div style={{ position: 'relative', borderRadius: 'var(--o-radius,20px)', overflow: 'hidden', aspectRatio: '16/9', background: c.grad, border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
       {live && <CamLive hass={c.hass} haid={c.haid} online={c.online} />}
@@ -4082,11 +4098,33 @@ function CameraTile({ c }) {
       <div style={{ position: 'absolute', top: 13, right: 14, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.85)', textShadow: '0 1px 4px rgba(0,0,0,.5)' }}>{hhmm}</div>
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '30px 16px 14px', background: 'linear-gradient(to top,rgba(0,0,0,.72),transparent)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div><div style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>{c.label}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,.82)' }}>{c.sub}</div></div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <span style={ctrl}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></span>
-          <span style={ctrl}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5zM1 5h15v14H1z" /></svg></span>
-        </div>
+        {live && (
+          <button aria-label={tr('Agrandir')} onClick={() => setGrand(true)} style={ctrl}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></button>
+        )}
       </div>
+      {grand && <CamSheet haid={c.haid} nom={c.label} hass={c.hass} onClose={() => setGrand(false)} />}
+    </div>
+  );
+}
+/* Carte caméra STANDARD (1×1) du catalogue : le flux dans une case de
+ * grille, badge LIVE, nom en pied, l'agrandissement en popup. */
+function CvCamera({ id, hass, label = null }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const nom = label || cvName(st, id);
+  const online = !!st && st.state !== 'unavailable';
+  const vivant = !!(hass && hass.connection);
+  const [grand, setGrand] = useState(false);
+  return (
+    <div className={'o-piece' + (!online ? ' o-panne' : '')} style={{ position: 'relative', height: '100%', minHeight: 172, borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', background: 'linear-gradient(160deg,#16202e,#0b0f16)', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
+      {vivant
+        ? <CamLive hass={hass} haid={id} online={online} />
+        : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text3)' }}><Fi i="video-camera" size={30} /></div>}
+      <div className="o-livebadge" style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: '#fff' }}><span className="o-livedot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#f87171' }} />LIVE</div>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '24px 12px 10px', background: 'linear-gradient(to top,rgba(0,0,0,.72),transparent)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</span>
+        <button aria-label={tr('Agrandir')} onClick={() => setGrand(true)} style={{ width: 30, height: 30, borderRadius: 9, background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></button>
+      </div>
+      {grand && <CamSheet haid={id} nom={nom} hass={hass} onClose={() => setGrand(false)} />}
     </div>
   );
 }
@@ -9592,9 +9630,10 @@ function cvTypesPour(id) {
   if (d === 'weather') return ['compacte', 'meteo'];
   if (d === 'calendar') return ['agenda', 'compacte'];
   if (d === 'alarm_control_panel') return ['compacte', 'alarme', 'alarmeseule', 'riche'];
+  if (d === 'camera') return ['camera', 'compacte'];
   return ['compacte', 'riche'];
 }
-const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)'), activite: tr('Activité récente') });
+const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)'), activite: tr('Activité récente'), camera: tr('Caméra') });
 
 /* Horloge : l'heure de la maison, sans entité — la carte se suffit. */
 function CvClock() {
@@ -9793,10 +9832,12 @@ function CvActivite({ hass, demoEvents = null }) {
   const nomDe = (id) => ((S[id] || {}).attributes || {}).friendly_name || String(id).split('.')[1];
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Activité récente')}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)' }}>{new Date().toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
       </div>
+      {/* De l'AIR entre l'en-tête et les lignes — règle dure, comme partout. */}
+      <div style={{ flex: 1, minHeight: 12 }} />
       {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien à raconter')}</div>}
       {events.slice(0, 4).map((e, i) => (
         <div key={(e.when || 0) + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 0' }}>
@@ -10222,6 +10263,7 @@ function CvTyped({ x, hass, dc }) {
   if (t === 'agenda') return <CvAgenda id={id} hass={hass} />;
   if (t === 'alarme') return <CvAlarm id={id} hass={hass} />;
   if (t === 'alarmeseule') return <CvAlarm id={id} hass={hass} sans />;
+  if (t === 'camera') return <CvCamera id={id} hass={hass} />;
   if (t === 'journal') return <CvJournal id={id} hass={hass} />;
   return <CvCard id={id} hass={hass} onOpen={dc.ouvrir} />;
 }
@@ -10378,6 +10420,7 @@ function BiblioView() {
 
       <Titre i="shield-check" c="var(--o-ok)" t={tr('Sécurité et divers')} />
       <Rangee>
+        <Item l={tr('Caméra (standard 1×1)')}><CvCamera id="camera.biblio_entree" hass={hb} /></Item>
         <Item l={tr('Carte personne')}><CvPerson id="person.biblio" hass={hb} /></Item>
         <Item l={tr('Alarme')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} /></Item>
         <Item l={tr('Alarme (seule)')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} sans /></Item>
@@ -10388,7 +10431,7 @@ function BiblioView() {
       </Rangee>
 
       <div style={{ marginTop: 26, fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
-        {tr('Absentes ici : agenda, journal, météo et caméras — elles vivent des données du vrai serveur. Les graphiques montrent un historique factice.')}
+        {tr('Absentes ici : agenda, journal et météo — elles vivent des données du vrai serveur. Graphiques et activité montrent un historique factice ; la caméra son vrai flux.')}
       </div>
       {dc.sheets}
     </main>
@@ -10479,7 +10522,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   /* DEUX tailles, pas trois : compacte (1 rangée) ou standard (2 rangées).
    * Toute carte non compacte DOIT tenir dans la standard — le graphique, le
    * journal et les machines se compriment plutôt que de déborder. */
-  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2 };
+  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2, camera: 2 };
   const cvRowsDe = (x) => {
     if (typeof x === 'string') return 1;
     const d = String(x.id || '').split('.')[0];
