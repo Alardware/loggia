@@ -9367,9 +9367,11 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
             <button style={mini} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }}>−</button>
             <button style={mini} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature + .5); }}>+</button>
           </>);
+          // Volet : pilules rectangulaires sans filet, comme la maquette.
+          const pilule = { ...mini, width: 38, borderRadius: 9, border: 'none', height: 26 };
           if (dom === 'cover') return (<>
-            <button style={mini} aria-label={tr('Ouvrir') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'open_cover'); }}><Fi i="angle-up" size={13} /></button>
-            <button style={mini} aria-label={tr('Fermer') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'close_cover'); }}><Fi i="angle-down" size={13} /></button>
+            <button style={pilule} aria-label={tr('Ouvrir') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'open_cover'); }}><Fi i="angle-up" size={13} /></button>
+            <button style={pilule} aria-label={tr('Fermer') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'close_cover'); }}><Fi i="angle-down" size={13} /></button>
           </>);
           if (dom === 'vacuum' || dom === 'lawn_mower') return (
             <button style={miniAccent} title={on ? tr('Renvoyer au dock') : (dom === 'vacuum' ? tr('Démarrer le nettoyage') : tr('Lancer la tonte'))} onClick={(e) => { e.stopPropagation(); call(dom, on ? (dom === 'vacuum' ? 'return_to_base' : 'dock') : (dom === 'vacuum' ? 'start' : 'start_mowing')); }}><Fi i={on ? 'home' : 'play'} size={12} /></button>
