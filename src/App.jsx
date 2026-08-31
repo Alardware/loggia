@@ -9552,7 +9552,9 @@ const PlugIcon = ({ size = 19 }) => (
  * (les contrôles du domaine en dessous) — puis les spécialisées du domaine. */
 function cvTypesPour(id) {
   const d = String(id).split('.')[0];
-  if (d === 'light' || d === 'switch' || d === 'fan') return ['compacte', 'riche', 'gros', 'journal'];
+  // Le « gros interrupteur » a quitté le catalogue le 31/08/2026 (retour
+  // d'essai) — les cartes déjà posées continuent de se rendre (CvTyped).
+  if (d === 'light' || d === 'switch' || d === 'fan') return ['compacte', 'riche', 'journal'];
   if (d === 'cover' || d === 'climate' || d === 'media_player' || d === 'vacuum' || d === 'lawn_mower' || d === 'valve' || d === 'humidifier' || d === 'lock' || d === 'siren' || d === 'water_heater') return ['compacte', 'riche', 'journal'];
   if (d === 'scene' || d === 'script' || d === 'button' || d === 'input_button' || d === 'automation') return ['compacte', 'riche'];
   if (d === 'sensor') return ['compacte', 'chiffre', 'jauge', 'graph', 'journal'];
@@ -10180,7 +10182,6 @@ function BiblioView() {
         <Item l={tr('Standard (lumière)')}>{dc.card('light.biblio_rgb')}</Item>
         <Item l={tr('Tout ou rien (non dimmable)')}>{dc.card('light.biblio_simple')}</Item>
         <Item l={tr('Prise')} h={88}><CvCard id="switch.biblio_prise" hass={hb} onOpen={dc.ouvrir} dense /></Item>
-        <Item l={tr('Gros bouton')}><CvBigToggle id="light.biblio_rgb" hass={hb} /></Item>
       </Rangee>
 
       <Titre i="thermometer-half" c="#ff8a4c" t={tr('Climat')} />
