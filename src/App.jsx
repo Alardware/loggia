@@ -9435,11 +9435,14 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           if (dom === 'climate') {
             const base = ovT != null ? ovT : a.temperature;
             const bouge = (d) => { if (base == null) return; const v = commander(hass, id, 'set_temperature', base + d, 'temperature'); poseT(v != null ? v : base + d); };
-            return (<>
-              <button style={mini} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); bouge(-0.5); }}>−</button>
-              <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', flexShrink: 0, minWidth: 34, textAlign: 'center' }}>{base != null ? base + '°' : '—'}</span>
-              <button style={mini} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); bouge(0.5); }}>+</button>
-            </>);
+            // Groupe serré, ancré à droite — l'espace libre reste à gauche.
+            return (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7, marginLeft: 'auto', flexShrink: 0 }}>
+                <button style={mini} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); bouge(-0.5); }}>−</button>
+                <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 34, textAlign: 'center' }}>{base != null ? base + '°' : '—'}</span>
+                <button style={mini} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); bouge(0.5); }}>+</button>
+              </span>
+            );
           }
           if (dom === 'cover') return (<>
             <button style={mini} aria-label={tr('Ouvrir') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'open_cover'); }}><Fi i="angle-up" size={13} /></button>
