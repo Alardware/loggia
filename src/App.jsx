@@ -1682,8 +1682,9 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
       // Teinte d'état : volet ouvert = lavis VIOLET, gradué par la position — le bleu accent restait trop proche des autres cartes.
       ...(pos > 0 && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-purple-rgb),${lav(.10 + pos * .0012)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
-        border: `1px solid rgba(var(--o-purple-rgb),${lav(.26)})`,
-      } : null) }}>
+      } : null),
+      // Sans bordure, comme la carte lumière : l'ombre et le lavis suffisent.
+      border: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ ...RM_ICO(pos > 0 ? 'rgba(var(--o-purple-rgb),.16)' : 'var(--o-s1)', pos > 0 ? 'var(--o-purple)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden' }}>
           {/* store qui descend dans le chip : hauteur = part fermée, suit la position en douceur */}
@@ -1694,10 +1695,11 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
       <div>
         <div style={RM_NAME}>{titre || a.friendly_name || id}</div>
         <div style={RM_SUB}>{label}</div>
-        <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => { e.stopPropagation(); drag(e); }} {...kbSlider('Position ' + (a.friendly_name || id), pos, (nv) => { setOv(nv); commander(hass, id, 'set_position', nv); })} style={{ padding: '10px 0 12px', cursor: 'pointer', touchAction: 'none' }}>
-          <div style={{ position: 'relative', height: 6, borderRadius: 4, background: 'var(--o-bd1)' }}>
-            <div data-fill style={{ position: 'absolute', inset: '0 auto 0 0', width: pos + '%', background: 'linear-gradient(90deg,var(--o-purple),rgba(var(--o-purple-rgb),.6))', borderRadius: 4, transition: 'width .25s' }} />
-            <span data-knob style={{ position: 'absolute', top: '50%', left: `calc(${pos}% - 8px)`, transform: 'translateY(-50%)', width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,.4)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
+        {/* Glissière épaisse, même dessin que la carte lumière : le remplissage
+          * violet EST la position — plus de bouton-curseur à attraper. */}
+        <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => { e.stopPropagation(); drag(e); }} {...kbSlider('Position ' + (a.friendly_name || id), pos, (nv) => { setOv(nv); commander(hass, id, 'set_position', nv); })} style={{ margin: '8px 0 7px', cursor: 'ew-resize', touchAction: 'none' }}>
+          <div style={{ position: 'relative', height: 24, borderRadius: 12, overflow: 'hidden', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+            <div data-fill style={{ position: 'absolute', inset: '0 auto 0 0', width: pos + '%', background: 'linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))', borderRadius: 12, transition: 'width .25s' }} />
           </div>
         </div>
         {/* Les mêmes trois gestes que la carte compacte : ouvrir, stop, fermer — le slider règle le reste. */}
