@@ -9756,41 +9756,47 @@ function CvAlarm({ id, hass }) {
   ];
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      {/* GABARIT MAISON — règle dure : icône hg SEULE, état hd, TITRE SOUS
+        * L'ICÔNE avec de l'air. Jamais côte à côte, maquette ou pas. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(col, .16), color: col }}><Fi i="shield-check" size={15} /></span>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
-          <div style={{ fontSize: 12, fontWeight: 800, color: col }}>{txt}</div>
+        <span style={{ fontSize: 11, fontWeight: 800, color: col }}>{txt}</span>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <div style={RM_NAME}>{cvName(st, id)}</div>
+        <div style={{ display: 'flex', gap: 7, margin: '7px 0 6px' }}>
+          {CHIPS.map(([lbl, svc, actif]) => (
+            <button key={svc} onClick={() => call(svc)}
+              style={{ flex: 1, padding: '6px 4px', borderRadius: 9, border: 'none', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
+              {lbl}
+            </button>
+          ))}
         </div>
+        {/* Le tour de la maison : ouvrants et caméras, en rangées à fond.
+          * Les caméras viennent de la CONFIGURATION d'abord (comme la vue
+          * Sécurité), la découverte camera.* en repli. */}
+        {(() => {
+          const S = (hass && hass.states) || {};
+          const os = ouvrantsDe(S);
+          const ouverts = os.filter(o => o.on).length;
+          const cfgCams = (() => { try { const c = cfgVal('loggia_cameras', null); return Array.isArray(c) ? c.map(x => x && x.haid).filter(Boolean) : []; } catch (e) { return []; } })();
+          const camIds = cfgCams.length ? cfgCams : Object.keys(S).filter(cid => cid.indexOf('camera.') === 0);
+          const cams = camIds.filter(cid => S[cid] && S[cid].state !== 'unavailable').length;
+          const ligne = (l, v, c) => (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 10px', borderRadius: 9, background: 'var(--o-s1)' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{l}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: c }}>{v}</span>
+            </div>
+          );
+          if (!os.length && !camIds.length) return null;
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {os.length > 0 && ligne(tr('Ouvrants'), ouverts === 0 ? tr('{n} fermés', { n: os.length }) : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts }), ouverts ? 'var(--o-warn)' : 'var(--o-ok)')}
+              {camIds.length > 0 && ligne(tr('Caméras'), tr('{n} en ligne', { n: cams }), 'var(--o-text2)')}
+            </div>
+          );
+        })()}
       </div>
-      <div style={{ display: 'flex', gap: 7, margin: '10px 0 8px' }}>
-        {CHIPS.map(([lbl, svc, actif]) => (
-          <button key={svc} onClick={() => call(svc)}
-            style={{ flex: 1, padding: '7px 4px', borderRadius: 9, border: 'none', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
-            {lbl}
-          </button>
-        ))}
-      </div>
-      {/* Le tour de la maison : ouvrants et caméras, en rangées à fond. */}
-      {(() => {
-        const S = (hass && hass.states) || {};
-        const os = ouvrantsDe(S);
-        const ouverts = os.filter(o => o.on).length;
-        const cams = Object.keys(S).filter(cid => cid.indexOf('camera.') === 0 && S[cid].state !== 'unavailable').length;
-        const ligne = (l, v, c) => (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 10px', borderRadius: 9, background: 'var(--o-s1)' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{l}</span>
-            <span style={{ fontSize: 11.5, fontWeight: 800, color: c }}>{v}</span>
-          </div>
-        );
-        if (!os.length && !cams) return null;
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {os.length > 0 && ligne(tr('Ouvrants'), ouverts === 0 ? tr('{n} fermés', { n: os.length }) : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts }), ouverts ? 'var(--o-warn)' : 'var(--o-ok)')}
-            {cams > 0 && ligne(tr('Caméras'), tr('{n} en ligne', { n: cams }), 'var(--o-text2)')}
-          </div>
-        );
-      })()}
     </div>
   );
 }
@@ -10145,6 +10151,8 @@ function biblioStates() {
     'sensor.biblio_solaire': s(486, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.biblio_reseau': s(298, { friendly_name: 'Import réseau', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.biblio_conso_jour': s(7.4, { friendly_name: 'Conso du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'camera.biblio_entree': s('idle', { friendly_name: 'Caméra entrée' }),
+    'camera.biblio_jardin': s('idle', { friendly_name: 'Caméra jardin' }),
   };
 }
 function BiblioView() {
