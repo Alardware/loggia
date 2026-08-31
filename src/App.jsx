@@ -9591,10 +9591,10 @@ function cvTypesPour(id) {
   if (d === 'person') return ['compacte', 'personne', 'journal'];
   if (d === 'weather') return ['compacte', 'meteo'];
   if (d === 'calendar') return ['agenda', 'compacte'];
-  if (d === 'alarm_control_panel') return ['compacte', 'alarme', 'riche'];
+  if (d === 'alarm_control_panel') return ['compacte', 'alarme', 'alarmeseule', 'riche'];
   return ['compacte', 'riche'];
 }
-const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air') });
+const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)') });
 
 /* Horloge : l'heure de la maison, sans entité — la carte se suffit. */
 function CvClock() {
@@ -9768,10 +9768,22 @@ function CvAgenda({ id, hass }) {
 
 /* Alarme : l'état et les trois gestes. Le désarmement passe par le service ;
  * si le panneau exige un code, Home Assistant refusera — comme partout. */
-function CvAlarm({ id, hass }) {
+function CvAlarm({ id, hass, sans = false }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const s = st ? st.state : null;
-  const call = (svc) => { try { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id }); } catch (e) {} };
+  const aAl = (st && st.attributes) || {};
+  const call = (svc, code) => { try { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id, ...(code ? { code } : {}) }); } catch (e) {} };
+  // Si le panneau exige un code (code_format), on le demande avant d'agir :
+  // Home Assistant refuserait silencieusement sans lui.
+  const codeRequis = !!aAl.code_format;
+  const codePourArm = codeRequis && aAl.code_arm_required !== false;
+  const [demande, setDemande] = useState(null); // { svc } en attente de code
+  const [code, setCode] = useState('');
+  const agir = (svc) => {
+    const faut = svc === 'alarm_disarm' ? codeRequis : codePourArm;
+    if (faut) { setDemande({ svc }); setCode(''); } else call(svc);
+  };
+  const valider = () => { if (demande && code) { call(demande.svc, code); setDemande(null); setCode(''); } };
   const [txt, col] = s === 'disarmed' ? [tr('Désarmée'), 'var(--o-ok)']
     : s === 'triggered' ? [tr('ALERTE'), 'var(--o-bad)']
       : (s === 'arming' || s === 'pending') ? [tr('Activation en cours…'), 'var(--o-warn2)']
@@ -9793,18 +9805,30 @@ function CvAlarm({ id, hass }) {
       </div>
       <div style={{ marginTop: 8 }}>
         <div style={RM_NAME}>{cvName(st, id)}</div>
-        <div style={{ display: 'flex', gap: 7, margin: '7px 0 6px' }}>
-          {CHIPS.map(([lbl, svc, actif]) => (
-            <button key={svc} onClick={() => call(svc)}
-              style={{ flex: 1, padding: '6px 4px', borderRadius: 9, border: 'none', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
-              {lbl}
-            </button>
-          ))}
-        </div>
-        {/* Le tour de la maison : ouvrants et caméras, en rangées à fond.
-          * Les caméras viennent de la CONFIGURATION d'abord (comme la vue
-          * Sécurité), la découverte camera.* en repli. */}
-        {(() => {
+        {demande ? (
+          <div style={{ display: 'flex', gap: 7, margin: '7px 0 6px', alignItems: 'center' }}>
+            <input type="password" inputMode="numeric" autoFocus value={code} onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') valider(); if (e.key === 'Escape') setDemande(null); }}
+              placeholder={tr('Code')} aria-label={tr('Code')}
+              style={{ flex: 1, minWidth: 0, padding: '6px 10px', borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
+            <button onClick={valider} style={{ padding: '6px 12px', borderRadius: 9, border: 'none', background: 'var(--o-accent)', color: '#fff', fontWeight: 800, fontSize: 11.5, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
+            <button onClick={() => setDemande(null)} aria-label={tr('Annuler')} style={{ width: 30, height: 30, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>✕</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 7, margin: '7px 0 6px' }}>
+            {CHIPS.map(([lbl, svc, actif]) => (
+              <button key={svc} onClick={() => agir(svc)}
+                style={{ flex: 1, padding: '6px 4px', borderRadius: 9, border: 'none', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* Le tour de la maison : ouvrants et caméras — sauf en version
+          * « seule » (sans capteurs). Les caméras viennent de la
+          * CONFIGURATION d'abord (comme la vue Sécurité), la découverte
+          * camera.* en repli. */}
+        {!sans && (() => {
           const S = (hass && hass.states) || {};
           const os = ouvrantsDe(S);
           const ouverts = os.filter(o => o.on).length;
@@ -9895,14 +9919,13 @@ function CvHistory({ id, hass, demoPoints = null }) {
           <path d={chemin} fill="none" stroke="var(--o-accent)" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
         </svg>
       )}
+      {/* Barres en éléments pleins, coins nets — la dernière porte l'accent. */}
       {barres && barres.length > 0 && (
-        <svg viewBox="0 0 100 40" preserveAspectRatio="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, width: '100%', height: '58%' }}>
-          {barres.map((v, i) => {
-            const n = barres.length, larg = 100 / n;
-            const h = Math.max(0.8, (v / bmax) * 34);
-            return <rect key={i} x={(i * larg + larg * 0.15).toFixed(2)} y={(40 - h).toFixed(2)} width={(larg * 0.7).toFixed(2)} height={h.toFixed(2)} rx="0.6" fill={i === barres.length - 1 ? 'var(--o-accent)' : 'rgba(var(--o-accent-rgb),.45)'} />;
-          })}
-        </svg>
+        <div aria-hidden="true" style={{ position: 'absolute', left: 10, right: 10, bottom: 8, height: '52%', display: 'flex', alignItems: 'flex-end', gap: 3 }}>
+          {barres.map((v, i) => (
+            <div key={i} style={{ flex: 1, minWidth: 0, height: Math.max(4, (v / bmax) * 100) + '%', borderRadius: 4, background: i === barres.length - 1 ? 'var(--o-accent)' : 'rgba(var(--o-accent-rgb),.35)' }} />
+          ))}
+        </div>
       )}
       <div style={{ position: 'relative', fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
       <div style={{ position: 'relative', fontSize: 26, fontWeight: 800, marginTop: 2 }}>{isNaN(cur) ? '—' : Math.round(cur * 10) / 10}<span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 4 }}>{a.unit_of_measurement || ''}</span></div>
@@ -10144,6 +10167,7 @@ function CvTyped({ x, hass, dc }) {
   if (t === 'meteo') return <CvWeather id={id} hass={hass} />;
   if (t === 'agenda') return <CvAgenda id={id} hass={hass} />;
   if (t === 'alarme') return <CvAlarm id={id} hass={hass} />;
+  if (t === 'alarmeseule') return <CvAlarm id={id} hass={hass} sans />;
   if (t === 'journal') return <CvJournal id={id} hass={hass} />;
   return <CvCard id={id} hass={hass} onOpen={dc.ouvrir} />;
 }
@@ -10296,6 +10320,7 @@ function BiblioView() {
       <Rangee>
         <Item l={tr('Carte personne')}><CvPerson id="person.biblio" hass={hb} /></Item>
         <Item l={tr('Alarme')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} /></Item>
+        <Item l={tr('Alarme (seule)')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} sans /></Item>
         <Item l={tr('Serrure')} h={88}><CvCard id="lock.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Vanne')} h={88}><CvCard id="valve.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Scène')} h={88}><CvCard id="scene.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
@@ -10394,7 +10419,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   /* DEUX tailles, pas trois : compacte (1 rangée) ou standard (2 rangées).
    * Toute carte non compacte DOIT tenir dans la standard — le graphique, le
    * journal et les machines se compriment plutôt que de déborder. */
-  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2 };
+  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2 };
   const cvRowsDe = (x) => {
     if (typeof x === 'string') return 1;
     const d = String(x.id || '').split('.')[0];
