@@ -1796,32 +1796,73 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const off = mode === 'off';
   const heating = a.hvac_action === 'heating';
   const mort = !st || st.state === 'unavailable';
-  const MODE_FR = { off: tr('ARRÊT'), heat: tr('CONFORT'), cool: tr('FROID'), auto: 'AUTO', heat_cool: 'AUTO', dry: tr('SEC'), fan_only: tr('VENTIL') };
   const all = a.hvac_modes || ['off', 'heat'];
+  // Préréglages universels : Confort et Éco d'abord (quel que soit leur nom
+  // exact chez l'intégration), le reste de la liste ensuite.
+  const PRESET_FR = { comfort: tr('CONFORT'), eco: tr('ÉCO'), away: tr('ABSENT'), home: tr('PRÉSENT'), boost: 'BOOST', sleep: tr('NUIT') };
+  const presets = Array.isArray(a.preset_modes) ? a.preset_modes.filter(p => p && String(p).toLowerCase() !== 'none') : [];
+  const rang = (p) => { const k = String(p).toLowerCase(); return k.indexOf('comfort') >= 0 || k.indexOf('confort') >= 0 ? 0 : k.indexOf('eco') >= 0 ? 1 : 2; };
+  // Confort et Éco, puis ARRÊT (le mode off du thermostat, pas un préréglage).
+  const chips = [...presets].sort((x, y) => rang(x) - rang(y)).slice(0, 2);
+  const libPreset = (p) => PRESET_FR[String(p).toLowerCase()] || String(p).toUpperCase();
+  // Toggle AUTO (coin haut-droit) : bascule le mode auto/heat_cool du thermostat.
+  const modeAuto = all.find(m => m === 'auto' || m === 'heat_cool') || null;
+  const autoOn = mode === 'auto' || mode === 'heat_cool';
+  const modeManuel = all.find(m => m !== 'off' && m !== 'auto' && m !== 'heat_cool') || 'heat';
   const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('climate', svc, { entity_id: id, ...(data || {}) }); } catch (e) {} };
   // Les bornes viennent de l'entite, pas d'une constante : la climatisation de
   // l'installation d'essai monte a 35, la ou le code plafonnait a 30. Le pas
   // aussi lui appartient. On affiche ce qui a ete envoye, pas ce qui a ete
   // demande — sinon la consigne affichee mentirait des qu'elle est bornee.
   const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
-  const nextMode = () => { const i = all.indexOf(mode); commander(hass, id, 'set_hvac_mode', all[(i + 1) % all.length]); };
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
       ...(heating && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-warn2-rgb),${lav(.16)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
-        border: `1px solid rgba(var(--o-warn2-rgb),${lav(.28)})`,
-      } : null) }}>
+      } : null),
+      // Sans bordure, comme lumière et volet.
+      border: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.16)', off ? 'var(--o-text3)' : heating ? 'var(--o-warn2)' : '#ff8a4c')}><Fi i="thermometer-half" size={17} /></span>
-        <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title="Changer de mode" style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'var(--o-bw,1px) solid ' + (off ? 'var(--o-bd2)' : 'rgba(var(--o-warn2-rgb),.3)'), background: off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-warn2)' }}>{tr(MODE_FR[mode]) || String(mode).toUpperCase()}</button>
+        {modeAuto && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: autoOn ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>AUTO</span>
+            <span role="switch" aria-checked={autoOn} aria-label={'Auto ' + (label || a.friendly_name || id)} tabIndex={0}
+              onClick={() => commander(hass, id, 'set_hvac_mode', autoOn ? modeManuel : modeAuto)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); commander(hass, id, 'set_hvac_mode', autoOn ? modeManuel : modeAuto); } }}
+              style={{ width: 38, height: 22, borderRadius: 11, background: autoOn ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}>
+              <span style={{ position: 'absolute', top: 3, left: autoOn ? 19 : 3, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
+            </span>
+          </span>
+        )}
       </div>
       <div>
-        <div className="o-rmbig" style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1.1 }}>{target}<span style={{ fontSize: 20 }}>°</span></div>
-        <div style={RM_SUB}>{label || a.friendly_name || id}{cur != null ? ' · ' + tr('actuel {n}°', { n: cur }) : ''}</div>
-        <div style={{ display: 'flex', gap: 7, marginTop: 11 }}>
-          <button onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 17, padding: '7px 6px' }}>−</button>
-          <button onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 17, padding: '7px 6px' }}>+</button>
+        {/* Gabarit maison : le nom sous l'icône, puis − consigne + et les
+          * préréglages universels (Confort, Éco) en chips. */}
+        <div style={RM_NAME}>{label || a.friendly_name || id}</div>
+        <div style={RM_SUB}>{cur != null ? tr('actuel {n}°', { n: cur }) : ' '}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
+          <button aria-label={'− ' + (label || a.friendly_name || id)} onClick={(e) => { e.stopPropagation(); setT(-0.5); }}
+            style={{ width: 36, height: 32, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', fontSize: 17, fontWeight: 800, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>−</button>
+          <div className="o-rmbig" style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1.1, whiteSpace: 'nowrap' }}>{target}<span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--o-text3)' }}> °C</span></div>
+          <button aria-label={'+ ' + (label || a.friendly_name || id)} onClick={(e) => { e.stopPropagation(); setT(0.5); }}
+            style={{ width: 36, height: 32, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', fontSize: 17, fontWeight: 800, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>+</button>
+        </div>
+        <div style={{ display: 'flex', gap: 7, marginTop: 8 }}>
+          {chips.map((p) => {
+            const actif = !off && a.preset_mode === p;
+            return (
+              <button key={p} onClick={(e) => { e.stopPropagation(); if (off) commander(hass, id, 'set_hvac_mode', modeManuel); call('set_preset_mode', { preset_mode: p }); }}
+                style={{ flex: 1, padding: '6px 4px', borderRadius: 9, border: 'none', fontSize: 11, fontWeight: 800, letterSpacing: '.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
+                {libPreset(p)}
+              </button>
+            );
+          })}
+          <button onClick={(e) => { e.stopPropagation(); commander(hass, id, 'set_hvac_mode', off ? modeManuel : 'off'); }}
+            style={{ flex: 1, padding: '6px 4px', borderRadius: 9, border: 'none', fontSize: 11, fontWeight: 800, letterSpacing: '.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: off ? 'var(--o-accent)' : 'var(--o-s1)', color: off ? '#fff' : 'var(--o-text2)' }}>
+            {tr('ARRÊT')}
+          </button>
         </div>
       </div>
     </div>
@@ -9361,17 +9402,17 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
         {/* Compacte : le contrôle PRIMAIRE du domaine reste sur la ligne —
           * discret, pour laisser le nom respirer. */}
         {dense && !dead && (() => {
-          const mini = { width: 28, height: 28, borderRadius: '50%', border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, padding: 0 };
-          const miniAccent = { ...mini, border: 'none', background: 'var(--o-accent)', color: '#fff' };
+          // Pilules rectangulaires sans filet, le dessin de la maquette —
+          // le même pour tous les minis de la compacte.
+          const mini = { width: 38, height: 26, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, padding: 0 };
+          const miniAccent = { ...mini, background: 'var(--o-accent)', color: '#fff' };
           if (dom === 'climate') return (<>
             <button style={mini} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }}>−</button>
             <button style={mini} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature + .5); }}>+</button>
           </>);
-          // Volet : pilules rectangulaires sans filet, comme la maquette.
-          const pilule = { ...mini, width: 38, borderRadius: 9, border: 'none', height: 26 };
           if (dom === 'cover') return (<>
-            <button style={pilule} aria-label={tr('Ouvrir') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'open_cover'); }}><Fi i="angle-up" size={13} /></button>
-            <button style={pilule} aria-label={tr('Fermer') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'close_cover'); }}><Fi i="angle-down" size={13} /></button>
+            <button style={mini} aria-label={tr('Ouvrir') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'open_cover'); }}><Fi i="angle-up" size={13} /></button>
+            <button style={mini} aria-label={tr('Fermer') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'close_cover'); }}><Fi i="angle-down" size={13} /></button>
           </>);
           if (dom === 'vacuum' || dom === 'lawn_mower') return (
             <button style={miniAccent} title={on ? tr('Renvoyer au dock') : (dom === 'vacuum' ? tr('Démarrer le nettoyage') : tr('Lancer la tonte'))} onClick={(e) => { e.stopPropagation(); call(dom, on ? (dom === 'vacuum' ? 'return_to_base' : 'dock') : (dom === 'vacuum' ? 'start' : 'start_mowing')); }}><Fi i={on ? 'home' : 'play'} size={12} /></button>
@@ -9791,7 +9832,7 @@ function biblioStates() {
     'light.biblio_rgb': s('on', { friendly_name: 'Lampe salon', brightness: 178, rgb_color: [255, 170, 60], supported_color_modes: ['rgb', 'color_temp'] }),
     'light.biblio_simple': s('on', { friendly_name: 'Plafonnier couloir', supported_color_modes: ['onoff'] }),
     'switch.biblio_prise': s('on', { friendly_name: 'Prise cafetière' }),
-    'climate.biblio': s('heat', { friendly_name: 'Thermostat séjour', current_temperature: 20.6, temperature: 21.5, hvac_action: 'heating', hvac_modes: ['off', 'heat', 'cool'], preset_modes: ['eco', 'comfort', 'away'], preset_mode: 'comfort', min_temp: 7, max_temp: 30, target_temp_step: .5 }),
+    'climate.biblio': s('heat', { friendly_name: 'Thermostat séjour', current_temperature: 20.6, temperature: 21.5, hvac_action: 'heating', hvac_modes: ['off', 'heat', 'cool', 'auto'], preset_modes: ['eco', 'comfort', 'away'], preset_mode: 'comfort', min_temp: 7, max_temp: 30, target_temp_step: .5 }),
     'cover.biblio': s('open', { friendly_name: 'Volet chambre', current_position: 65, supported_features: 15 }),
     'media_player.biblio': s('playing', { friendly_name: 'Enceinte bureau', media_title: 'Clair de Lune', media_artist: 'Debussy', media_album_name: 'Suite bergamasque', volume_level: .4, supported_features: 20925, entity_picture: BIBLIO_ART }),
     'vacuum.biblio': s('docked', { friendly_name: 'Aspirateur', battery_level: 87, supported_features: 4 | 8 | 16 | 512 | 8192, fan_speed: 'standard', fan_speed_list: ['quiet', 'standard', 'turbo'] }),
