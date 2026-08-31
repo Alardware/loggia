@@ -1478,6 +1478,32 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const ovRevertRef = useRef(0);
   useEffect(() => () => clearTimeout(ovRevertRef.current), []);
   const toggle = (e) => { e.stopPropagation(); flash(accent); setOv(!on); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); try { if (hass && hass.callService) hass.callService('homeassistant', on ? 'turn_off' : 'turn_on', { entity_id: id }); } catch (er) {} };
+  // Luminosité optimiste : fenêtre fixe 4 s (l'écho Zigbee rejoue l'ancienne valeur).
+  const [ovBri, setOvBri] = useState(null);
+  const ovBriRef = useRef(0);
+  useEffect(() => () => clearTimeout(ovBriRef.current), []);
+  const poseBri = (pct) => {
+    setOvBri(pct); setOv(pct > 0);
+    clearTimeout(ovBriRef.current); ovBriRef.current = setTimeout(() => { setOvBri(null); setOv(null); }, 4000);
+    try { if (hass && hass.callService) { if (pct > 0) hass.callService('light', 'turn_on', { entity_id: id, brightness_pct: pct }); else hass.callService('light', 'turn_off', { entity_id: id }); } } catch (er) {}
+  };
+  const briAff = ovBri != null ? ovBri : (on ? bri : 0);
+  // Glissière épaisse : peinture DOM directe pendant le geste, commit au relâcher.
+  const glisse = (e) => {
+    if (!adjustable) return;
+    e.stopPropagation(); e.preventDefault();
+    const el = e.currentTarget, fill = el.querySelector('[data-fill]'), r = el.getBoundingClientRect();
+    const calc = (x) => Math.max(0, Math.min(100, Math.round((x - r.left) / r.width * 100)));
+    let v = calc(e.clientX);
+    const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = v + '%'; } };
+    paint(); try { el.setPointerCapture(e.pointerId); } catch (er) {}
+    el.onpointermove = (ev) => { v = calc(ev.clientX); paint(); };
+    const end = () => { el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; };
+    el.onpointerup = () => { end(); poseBri(v); };
+    el.onpointercancel = () => { end(); if (fill) fill.style.width = briAff + '%'; };
+  };
+  const grade = prise ? 'var(--o-accent)' : (rgb && color) ? color : null; // null = dégradé doré
+  const PRESETS = [[tr('Nuit'), 25], [tr('Doux'), 60], [tr('Plein'), 100]];
   return (
     <button ref={flashRef} className={'o-light-card o-rmcard' + (mort ? ' o-panne' : '')} onClick={() => { if (adjustable && onOpen) onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed }); else if (onFiche) onFiche(id); }}
       style={{ ...RM_CARD, alignItems: 'stretch', textAlign: 'left', width: '100%', cursor: (adjustable || onFiche) ? 'pointer' : 'default', overflow: 'hidden',
@@ -1492,8 +1518,27 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
       </div>
       <div>
         <div style={RM_NAME}>{label || a.friendly_name || id}</div>
-        <div style={{ ...RM_SUB, color: on ? (prise ? 'var(--o-accent-soft)' : 'var(--o-warn)') : 'var(--o-text3)' }}>{on ? (adjustable ? tr('{n} % de luminosité', { n: bri }) : tr('Allumé')) : tr('Éteint')}</div>
-        {adjustable && <div style={{ height: 3, borderRadius: 2, background: 'var(--o-bd1)', marginTop: 10, overflow: 'hidden' }}><div style={{ height: '100%', width: (on ? bri : 0) + '%', background: accent, borderRadius: 2, transition: 'width .3s' }} /></div>}
+        <div style={{ ...RM_SUB, color: on ? (prise ? 'var(--o-accent-soft)' : 'var(--o-warn)') : 'var(--o-text3)' }}>{on ? (adjustable ? tr('{n} % de luminosité', { n: briAff }) : tr('Allumé')) : tr('Éteint')}</div>
+        {/* Glissière épaisse + préréglages, le même bas de carte pour toutes
+          * les lumières — GRISÉ quand la lampe ne se règle pas. */}
+        {!prise && <>
+          <span onPointerDown={glisse} role={adjustable ? 'slider' : undefined} aria-label={adjustable ? tr('Luminosité') + ' ' + (label || a.friendly_name || id) : undefined}
+            aria-valuenow={adjustable ? briAff : undefined} aria-valuemin={0} aria-valuemax={100} tabIndex={adjustable ? 0 : -1}
+            onKeyDown={adjustable ? (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); poseBri(Math.max(0, Math.min(100, briAff + (e.key === 'ArrowRight' ? 5 : -5)))); } } : undefined}
+            style={{ display: 'block', height: 24, borderRadius: 12, marginTop: 8, overflow: 'hidden', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', opacity: adjustable ? 1 : .35, cursor: adjustable ? 'ew-resize' : 'default', touchAction: 'none' }}>
+            <span data-fill style={{ display: 'block', height: '100%', width: (adjustable ? briAff : (on ? 100 : 0)) + '%', borderRadius: 13, background: grade ? grade : 'linear-gradient(90deg,#ffce73,#f59e0b)', transition: 'width .3s' }} />
+          </span>
+          <span style={{ display: 'flex', gap: 7, marginTop: 7 }}>
+            {PRESETS.map(([nom, pct]) => (
+              <span key={nom} role="button" tabIndex={adjustable ? 0 : -1} aria-disabled={!adjustable} aria-label={nom + ' ' + pct + '%'}
+                onClick={adjustable ? (e) => { e.stopPropagation(); poseBri(pct); } : (e) => e.stopPropagation()}
+                onKeyDown={adjustable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); poseBri(pct); } } : undefined}
+                style={{ flex: 1, textAlign: 'center', padding: '6px 4px', borderRadius: 9, fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', opacity: adjustable ? 1 : .35, cursor: adjustable ? 'pointer' : 'default' }}>
+                {nom} {pct}%
+              </span>
+            ))}
+          </span>
+        </>}
       </div>
     </button>
   );
@@ -9740,7 +9785,7 @@ function biblioStates() {
   const s = (state, attributes) => ({ state: String(state), attributes: attributes || {}, last_changed: il_y_a(12), last_updated: il_y_a(12) });
   return {
     'light.biblio_rgb': s('on', { friendly_name: 'Lampe salon', brightness: 178, rgb_color: [255, 170, 60], supported_color_modes: ['rgb', 'color_temp'] }),
-    'light.biblio_simple': s('off', { friendly_name: 'Plafonnier couloir', supported_color_modes: ['brightness'] }),
+    'light.biblio_simple': s('on', { friendly_name: 'Plafonnier couloir', supported_color_modes: ['onoff'] }),
     'switch.biblio_prise': s('on', { friendly_name: 'Prise cafetière' }),
     'climate.biblio': s('heat', { friendly_name: 'Thermostat séjour', current_temperature: 20.6, temperature: 21.5, hvac_action: 'heating', hvac_modes: ['off', 'heat', 'cool'], preset_modes: ['eco', 'comfort', 'away'], preset_mode: 'comfort', min_temp: 7, max_temp: 30, target_temp_step: .5 }),
     'cover.biblio': s('open', { friendly_name: 'Volet chambre', current_position: 65, supported_features: 15 }),
@@ -9797,7 +9842,7 @@ function BiblioView() {
       <Rangee>
         <Item l={tr('Compacte')}><CvCard id="light.biblio_rgb" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Standard (lumière)')}>{dc.card('light.biblio_rgb')}</Item>
-        <Item l={tr('Interrupteur simple')}>{dc.card('light.biblio_simple')}</Item>
+        <Item l={tr('Tout ou rien (non dimmable)')}>{dc.card('light.biblio_simple')}</Item>
         <Item l={tr('Prise')}><CvCard id="switch.biblio_prise" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Gros bouton')}><CvBigToggle id="light.biblio_rgb" hass={hb} /></Item>
       </Rangee>
