@@ -9341,12 +9341,34 @@ function MenuDeroulant({ icone = null, etiquette, valeur, options, surChoix, ren
 /* `dense` : la COMPACTE — une seule ligne (icône, nom, état) et le contrôle
  * primaire à droite, JAMAIS de rangée de contrôles dessous. La pleine, elle,
  * est la STANDARD : mêmes en-têtes, les contrôles du domaine en dessous. */
+/* L'icône suit l'ENTITÉ, pas seulement son domaine : device_class du capteur,
+ * type de luminaire, état du moment (porte ouverte/fermée, chauffe en cours).
+ * Tous les glyphes sont vérifiés dans uicons-regular-rounded.css. */
+function cvIcoEntite(dom, id, st, name) {
+  const a = (st && st.attributes) || {};
+  const dc = a.device_class || '';
+  const s = st ? st.state : null;
+  if (dom === 'light') return LIGHT_TYPE_ICON[lightType({ id, name })] || 'bulb';
+  if (dom === 'climate') return a.hvac_action === 'heating' ? 'flame' : a.hvac_action === 'cooling' ? 'snowflake' : 'thermometer-half';
+  if (dom === 'sensor') return ({ temperature: 'thermometer-half', humidity: 'humidity', carbon_dioxide: 'smog', pm25: 'smog', pm10: 'smog', aqi: 'smog', power: 'bolt', energy: 'bolt', voltage: 'bolt', current: 'bolt', illuminance: 'brightness', battery: 'battery-half', pressure: 'dashboard', gas: 'flame', moisture: 'raindrops' })[dc] || 'chart-line-up';
+  if (dom === 'binary_sensor') return dc === 'door' ? (s === 'on' ? 'door-open' : 'door-closed') : ({ window: 'window-alt', garage_door: 'garage', motion: 'radar', occupancy: 'radar', presence: 'radar', smoke: 'smoke', moisture: 'raindrops', gas: 'flame' })[dc] || 'radar';
+  if (dom === 'cover') return (dc === 'garage' || dc === 'gate') ? 'garage' : dc === 'window' ? 'window-alt' : 'blinds';
+  if (dom === 'media_player') return dc === 'tv' ? 'screen' : 'tv-music';
+  if (dom === 'valve') return 'water';
+  if (dom === 'lock') return 'lock';
+  return CV_DOM_ICON[dom] || 'bolt';
+}
 function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
+  // Consigne optimiste de la compacte climat (fenêtre fixe 4 s, comme partout).
+  const [ovT, setOvT] = useState(null);
+  const ovTRef = useRef(0);
+  useEffect(() => () => clearTimeout(ovTRef.current), []);
+  const poseT = (v) => { setOvT(v); clearTimeout(ovTRef.current); ovTRef.current = setTimeout(() => setOvT(null), 4000); };
   const dom = cvDomain(id);
-  const ico = dom === 'switch' ? (cvEstLumiere(id) ? 'bulb' : null) : CV_DOM_ICON[dom] || 'bolt'; // null = prise, SVG maison
   const name = label || cvName(st, id);
+  const ico = dom === 'switch' ? (cvEstLumiere(id) ? 'bulb' : null) : cvIcoEntite(dom, id, st, name); // null = prise, SVG maison
   const s = st ? st.state : null;
   const a = (st && st.attributes) || {};
   const dead = !st || s === 'unavailable' || s === 'unknown';
@@ -9382,15 +9404,19 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   else if (runnable || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—'; // scene/script/button : état = date de dernière exécution
   else stateTxt = String(s);
   return (
-    <div className={'o-piece' + (dead ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? 'Ouvrir ' + name : undefined}
+    <div className={'o-piece' + (dense ? ' o-cvdense' : '') + (dense && dom === 'climate' ? ' o-cvclim' : '') + (dead ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? 'Ouvrir ' + name : undefined}
       onClick={ouvrable ? () => onOpen(id) : undefined}
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
       style={{ position: 'relative', background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? (teinte ? hx(teinte, .3) : 'rgba(var(--o-accent-rgb),.3)') : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: dense ? 9 : 11 }}>
+      <div className="o-cvrow" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: dense ? 9 : 11 }}>
         <span style={{ width: dense ? 34 : 40, height: dense ? 34 : 40, borderRadius: dense ? 10 : 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinte || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{ico ? <Fi i={ico} size={dense ? 15 : 17} /> : <PlugIcon size={dense ? 15 : 17} />}</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: on ? (teinte ? teinteTxt : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stateTxt}</div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: on ? (teinte ? teinteTxt : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {/* Compacte climat : la consigne vit entre les boutons — le
+              * sous-titre ne garde que la température relevée. */}
+            {dense && dom === 'climate' && a.current_temperature != null ? tr('actuel {n}°', { n: a.current_temperature }) : stateTxt}
+          </div>
         </div>
         {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + name} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={(e) => { e.stopPropagation(); call('homeassistant', on ? 'turn_off' : 'turn_on'); }} style={{ width: 44, height: 25, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
         {runnable && !dead && <button onClick={(e) => { e.stopPropagation(); call(runnable[0], runnable[1]); }} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
@@ -9406,10 +9432,16 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           // le même pour tous les minis de la compacte.
           const mini = { width: 38, height: 26, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, padding: 0 };
           const miniAccent = { ...mini, background: 'var(--o-accent)', color: '#fff' };
-          if (dom === 'climate') return (<>
-            <button style={mini} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }}>−</button>
-            <button style={mini} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature + .5); }}>+</button>
-          </>);
+          // Climat : la consigne ENTRE les deux boutons, comme la maquette.
+          if (dom === 'climate') {
+            const base = ovT != null ? ovT : a.temperature;
+            const bouge = (d) => { if (base == null) return; const v = commander(hass, id, 'set_temperature', base + d, 'temperature'); poseT(v != null ? v : base + d); };
+            return (<>
+              <button style={mini} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); bouge(-0.5); }}>−</button>
+              <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', flexShrink: 0, minWidth: 34, textAlign: 'center' }}>{base != null ? base + '°' : '—'}</span>
+              <button style={mini} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); bouge(0.5); }}>+</button>
+            </>);
+          }
           if (dom === 'cover') return (<>
             <button style={mini} aria-label={tr('Ouvrir') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'open_cover'); }}><Fi i="angle-up" size={13} /></button>
             <button style={mini} aria-label={tr('Fermer') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'close_cover'); }}><Fi i="angle-down" size={13} /></button>
@@ -9894,7 +9926,8 @@ function BiblioView() {
 
       <Titre i="thermometer-half" c="#ff8a4c" t={tr('Climat')} />
       <Rangee>
-        <Item l={tr('Compacte')}><CvCard id="climate.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Compacte (étroite)')}><CvCard id="climate.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Compacte (large)')} w={340}><CvCard id="climate.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Standard')}>{dc.card('climate.biblio')}</Item>
       </Rangee>
 

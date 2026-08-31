@@ -127,6 +127,15 @@ html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-
  * colonnes pour que compactes et largeur double gardent un sens. */
 .grid-custom { grid-auto-flow: row dense; grid-auto-rows: 88px; }
 @media (max-width: 640px) { .grid-custom { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
+/* Compacte : la carte S'ADAPTE à sa largeur (container query), comme les
+ * tuiles Home Assistant. Sur une carte climat étroite, le nom s'efface —
+ * l'icône porte l'identité, la place revient au « − consigne + ». */
+.o-cvdense { container-type: inline-size; }
+@container (max-width: 270px) {
+  .o-cvclim .o-cvtxt { display: none; }
+  .o-cvclim .o-cvrow { justify-content: space-between; }
+}
+
 /* Pièces de l'accueil v2 : mêmes rangées de 88 px que les vues custom —
  * standard = 2 rangées, compacte (.o-chiprow1) = 1. */
 .grid-chips { grid-auto-flow: row dense; grid-auto-rows: 88px; }
