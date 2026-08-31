@@ -122,7 +122,10 @@ export function resolveAlarm({ caps, userCfg = {} } = {}) {
   const list = (caps && caps.devices && caps.devices.alarm_control_panel) || [];
   if (!list.length) return { available: false, reason: 'aucun panneau d alarme' };
   const chosen = userPick(userCfg, 'loggia_alarm');
-  const main = (chosen && list.find(v => v.id === chosen)) || list[0];
+  // Le choix de l'utilisateur prime MÊME s'il manque à la liste classée : un
+  // panneau logiciel (Alarmo…) peut échapper au classement par appareil, et
+  // l'ignorer renverrait les commandes vers l'autre système (UniFi Protect…).
+  const main = (chosen && (list.find(v => v.id === chosen) || { id: chosen, name: chosen })) || list[0];
   return { available: true, main: main.id, name: main.name, choices: list.map(v => ({ id: v.id, name: v.name })) };
 }
 

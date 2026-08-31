@@ -5377,7 +5377,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     out.push(lum === 0 ? tr('Tout est éteint') : lum === 1 ? tr('{n} lumière allumée', { n: 1 }) : tr('{n} lumières allumées', { n: lum }));
     const ouv = ouvrantsDe(S).filter(o => o.on).length;
     if (ouv > 0) out.push(ouv === 1 ? tr('{n} ouvrant ouvert', { n: 1 }) : tr('{n} ouvrants ouverts', { n: ouv }));
-    const al = Object.keys(S).find(x => x.indexOf('alarm_control_panel.') === 0 && S[x] && S[x].state !== 'unavailable');
+    // L'entité configurée d'abord (Alarmo…) — le premier panneau trouvé sinon.
+    const cfgAl = secAlarm();
+    const al = (cfgAl && S[cfgAl] && S[cfgAl].state !== 'unavailable') ? cfgAl
+      : Object.keys(S).find(x => x.indexOf('alarm_control_panel.') === 0 && S[x] && S[x].state !== 'unavailable');
     if (al) {
       const st = S[al].state;
       if (st === 'triggered') { out.push(tr('Alarme déclenchée')); alerte = true; }
@@ -8884,7 +8887,11 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   const alarmCfg = useEntities('alarm', null);
   const rAlarm = (resolved && resolved.alarm && resolved.alarm.available) ? resolved.alarm : null;
   const rCams = (resolved && resolved.cameras && resolved.cameras.available) ? resolved.cameras.list : [];
-  const alarmId = (alarmCfg && S[alarmCfg]) ? alarmCfg : (secAlarm() && S[secAlarm()]) ? secAlarm() : (rAlarm ? rAlarm.main : null);
+  // Le choix FRAIS de l'utilisateur (Paramètres → Entités, `loggia_alarm`)
+  // prime sur l'héritage `loggia_entities.alarm` : l'ancien ordre gardait la
+  // vieille entité (UniFi Protect…) après un changement de panneau (Alarmo),
+  // et les commandes partaient vers le mauvais système.
+  const alarmId = (secAlarm() && S[secAlarm()]) ? secAlarm() : (alarmCfg && S[alarmCfg]) ? alarmCfg : (rAlarm ? rAlarm.main : null);
   // Une seule source : la résolution, qui prend déjà la liste de l'utilisateur
   // quand il en a une, et la complète par les détecteurs du même appareil.
   const camList = rCams.map(c => ({

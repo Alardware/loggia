@@ -1780,6 +1780,25 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               </div>
             </div>
           )}
+
+          {/* Liens du projet : navigation volontaire au clic — rien n'est
+            * chargé depuis GitHub tant qu'on ne tape pas. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
+            {[
+              [tr('Dépôt GitHub'), 'Alardware/loggia', 'https://github.com/Alardware/loggia'],
+              [tr('Journal des versions'), tr('nouveautés et correctifs'), 'https://github.com/Alardware/loggia/releases'],
+              [tr('Signaler un problème'), tr('ouvrir un ticket'), 'https://github.com/Alardware/loggia/issues'],
+            ].map(([titre, sous, url]) => (
+              <a key={url} href={url} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '14px 16px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', textDecoration: 'none' }}>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{titre}</span>
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{sous}</span>
+                </span>
+                <Fi i="arrow-up-right" size={12} color="var(--o-text3)" />
+              </a>
+            ))}
+          </div>
         </>
         );
       })()}
