@@ -9730,6 +9730,130 @@ function CvTyped({ x, hass, dc }) {
   return <CvCard id={id} hass={hass} onOpen={dc.ouvrir} />;
 }
 
+/* ── Bibliothèque de cartes ──────────────────────────────────────────────────
+ * Catalogue de TOUTES les cartes de Loggia sur données FICTIVES : on y voit
+ * chaque famille même sans posséder les entités. Sert de banc d'essai pour
+ * itérer sur le design. Le hass est un faux local — aucun appel ne part. */
+const BIBLIO_ART = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E';
+function biblioStates() {
+  const il_y_a = (min) => new Date(Date.now() - min * 60000).toISOString();
+  const s = (state, attributes) => ({ state: String(state), attributes: attributes || {}, last_changed: il_y_a(12), last_updated: il_y_a(12) });
+  return {
+    'light.biblio_rgb': s('on', { friendly_name: 'Lampe salon', brightness: 178, rgb_color: [255, 170, 60], supported_color_modes: ['rgb', 'color_temp'] }),
+    'light.biblio_simple': s('off', { friendly_name: 'Plafonnier couloir', supported_color_modes: ['brightness'] }),
+    'switch.biblio_prise': s('on', { friendly_name: 'Prise cafetière' }),
+    'climate.biblio': s('heat', { friendly_name: 'Thermostat séjour', current_temperature: 20.6, temperature: 21.5, hvac_action: 'heating', hvac_modes: ['off', 'heat', 'cool'], preset_modes: ['eco', 'comfort', 'away'], preset_mode: 'comfort', min_temp: 7, max_temp: 30, target_temp_step: .5 }),
+    'cover.biblio': s('open', { friendly_name: 'Volet chambre', current_position: 65, supported_features: 15 }),
+    'media_player.biblio': s('playing', { friendly_name: 'Enceinte bureau', media_title: 'Clair de Lune', media_artist: 'Debussy', media_album_name: 'Suite bergamasque', volume_level: .4, supported_features: 20925, entity_picture: BIBLIO_ART }),
+    'vacuum.biblio': s('docked', { friendly_name: 'Aspirateur', battery_level: 87, supported_features: 4 | 8 | 16 | 512 | 8192, fan_speed: 'standard', fan_speed_list: ['quiet', 'standard', 'turbo'] }),
+    'lawn_mower.biblio': s('docked', { friendly_name: 'Tondeuse', battery_level: 64, supported_features: 1 | 2 | 4 }),
+    'sensor.biblio_temp': s(21.4, { friendly_name: 'Température séjour', unit_of_measurement: '°C', device_class: 'temperature' }),
+    'sensor.biblio_co2': s(640, { friendly_name: 'CO₂ séjour', unit_of_measurement: 'ppm', device_class: 'carbon_dioxide' }),
+    'sensor.biblio_puissance': s(1840, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power', min: 0, max: 3000 }),
+    'person.biblio': s('home', { friendly_name: 'Camille' }),
+    'alarm_control_panel.biblio': s('disarmed', { friendly_name: 'Alarme maison' }),
+    'lock.biblio': s('locked', { friendly_name: 'Serrure entrée' }),
+    'valve.biblio': s('open', { friendly_name: 'Vanne arrosage' }),
+    'scene.biblio': s(il_y_a(95), { friendly_name: 'Scène cinéma' }),
+    'binary_sensor.biblio_porte': s('off', { friendly_name: "Porte d'entrée", device_class: 'door' }),
+  };
+}
+function BiblioView() {
+  // hass figé au montage : les cartes optimistes bougent toutes seules,
+  // aucune confirmation ne viendra (et n'a pas à venir) d'un vrai serveur.
+  const [S] = useState(biblioStates);
+  const hb = useMemo(() => ({ states: S, connected: true, callService: () => {}, callApi: () => Promise.resolve([]), callWS: () => Promise.resolve(null) }), [S]);
+  const dc = useDomainCards(hb);
+  const pieceDemo = {
+    name: 'Séjour', bg: 'rgba(96,165,250,.16)', tc: '#60a5fa',
+    icon: <Fi i="home" color="#60a5fa" size={17} />, box: 44, rad: 13,
+    live: { temp: 21.4, hum: 47 }, status: { kind: 'repos' }, badge: '612 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)',
+  };
+  const Titre = ({ i, c, t }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '26px 0 12px' }}>
+      <Fi i={i} size={16} color={c} />
+      <span style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 21, fontWeight: 500 }}>{t}</span>
+    </div>
+  );
+  const Item = ({ l, w = 250, children }) => (
+    <div style={{ width: w, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)', textTransform: 'uppercase' }}>{l}</span>
+      <div style={{ minWidth: 0 }}>{children}</div>
+    </div>
+  );
+  const Rangee = ({ children }) => <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' }}>{children}</div>;
+  return (
+    <main className="loggia-main" style={{ flex: 1, minWidth: 0, padding: '26px 28px 40px', overflowX: 'hidden' }}>
+      <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Bibliothèque')}</h1>
+      <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{tr('Toutes les cartes de Loggia, sur données fictives — rien ne pilote la maison ici.')}</div>
+
+      <Titre i="door-open" c="#60a5fa" t={tr('Pièces')} />
+      <Rangee>
+        <Item l={tr('Compacte')} w={250}><div style={{ height: 88 }}><PieceCard p={pieceDemo} chip lights={[{ on: false }]} mains={[]} onOpen={null} /></div></Item>
+        <Item l={tr('Standard')} w={250}><PieceCard p={pieceDemo} compact lights={[{ on: true }, { on: false }]} mains={[{ on: true }]} onToggleLights={() => {}} onOpen={null} /></Item>
+      </Rangee>
+
+      <Titre i="bulb" c="var(--o-warn)" t={tr('Lumières et prises')} />
+      <Rangee>
+        <Item l={tr('Compacte')}><CvCard id="light.biblio_rgb" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Standard (lumière)')}>{dc.card('light.biblio_rgb')}</Item>
+        <Item l={tr('Interrupteur simple')}>{dc.card('light.biblio_simple')}</Item>
+        <Item l={tr('Prise')}><CvCard id="switch.biblio_prise" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Gros bouton')}><CvBigToggle id="light.biblio_rgb" hass={hb} /></Item>
+      </Rangee>
+
+      <Titre i="thermometer-half" c="#ff8a4c" t={tr('Climat')} />
+      <Rangee>
+        <Item l={tr('Compacte')}><CvCard id="climate.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Standard')}>{dc.card('climate.biblio')}</Item>
+      </Rangee>
+
+      <Titre i="blinds" c="var(--o-purple)" t={tr('Volets')} />
+      <Rangee>
+        <Item l={tr('Compacte')}><CvCard id="cover.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Standard')}>{dc.card('cover.biblio')}</Item>
+      </Rangee>
+
+      <Titre i="tv-music" c="var(--o-purple)" t={tr('Médias')} />
+      <Rangee>
+        <Item l={tr('Compacte')}><CvCard id="media_player.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Standard (pochette en fond)')}>{dc.card('media_player.biblio')}</Item>
+      </Rangee>
+
+      <Titre i="settings-sliders" c="var(--o-accent-soft)" t={tr('Machines et objets')} />
+      <Rangee>
+        <Item l={tr('Aspirateur')}>{dc.card('vacuum.biblio')}</Item>
+        <Item l={tr('Tondeuse')}>{dc.card('lawn_mower.biblio')}</Item>
+        <Item l={tr('Distributeur')}><RoomFeederCard nom={tr('Croquettes')} sub={tr('Réservoir aux trois quarts')} pct={74} prochaine="18:00 · 18 g" onFeed={() => {}} onOpen={() => {}} /></Item>
+        <Item l={tr('Plante')}><RoomPlantCard nom="Monstera" sub={tr('Salon, près de la fenêtre')} hum={38} verdict={tr('À arroser bientôt')} verdictCol="var(--o-warn)" lux={820} cond={tr('Lumière correcte')} onOpen={() => {}} /></Item>
+      </Rangee>
+
+      <Titre i="stats" c="var(--o-ok)" t={tr('Capteurs et chiffres')} />
+      <Rangee>
+        <Item l={tr('Compacte')}><CvCard id="sensor.biblio_temp" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Chiffre')}><CvBigSensor id="sensor.biblio_co2" hass={hb} /></Item>
+        <Item l={tr('Jauge')}><CvGauge id="sensor.biblio_puissance" hass={hb} /></Item>
+        <Item l={tr('Horloge')}><CvClock /></Item>
+      </Rangee>
+
+      <Titre i="shield-check" c="var(--o-ok)" t={tr('Sécurité et divers')} />
+      <Rangee>
+        <Item l={tr('Carte personne')}><CvPerson id="person.biblio" hass={hb} /></Item>
+        <Item l={tr('Alarme')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} /></Item>
+        <Item l={tr('Serrure')}><CvCard id="lock.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Vanne')}><CvCard id="valve.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Scène')}><CvCard id="scene.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Ouverture')}><CvCard id="binary_sensor.biblio_porte" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+      </Rangee>
+
+      <div style={{ marginTop: 26, fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
+        {tr('Absentes ici : graphique, agenda, journal, météo et caméras — elles vivent des données du vrai serveur.')}
+      </div>
+      {dc.sheets}
+    </main>
+  );
+}
+
 function CustomView({ cv, hass, edit = false, onSave }) {
   // Mode édition en place : la CARTE ENTIÈRE se saisit et se déplace (ses
   // contrôles sont inertes pendant l'édition), le COIN bas-droit s'étire pour
@@ -9939,12 +10063,12 @@ function CustomView({ cv, hass, edit = false, onSave }) {
 
 
 
-function ParametresView({ themeMode, loggiaTheme, haTheme, onMode, onPickTheme, onFollowHa, navbar, onToggleNavbar, wxFx, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, cielEtoile, onToggleCiel, navMargin, navAuto, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin, topAuto, onTopOffset, onTopOffsetReset, hass, users, userIdx, isAdmin, onAddUser, onUpdateUser, onDeleteUser, customViews, onSaveCustomViews }) {
+function ParametresView({ themeMode, loggiaTheme, haTheme, onMode, onPickTheme, onFollowHa, navbar, onToggleNavbar, wxFx, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, cielEtoile, onToggleCiel, navMargin, navAuto, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin, topAuto, onTopOffset, onTopOffsetReset, hass, users, userIdx, isAdmin, onAddUser, onUpdateUser, onDeleteUser, customViews, onSaveCustomViews, onNav = null }) {
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <Suspense fallback={<div className="loggia-content" style={{ padding: '26px 28px 56px' }} />}>
-      <ParametresContent onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} customViews={customViews} onSaveCustomViews={onSaveCustomViews} />
+      <ParametresContent onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} customViews={customViews} onSaveCustomViews={onSaveCustomViews} onNav={onNav} />
       </Suspense>
     </main>
   );
@@ -11099,7 +11223,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && isAdmin} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && isAdmin} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && isAdmin} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && isAdmin} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'parametres' ? <ParametresView themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && isAdmin} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && isAdmin} /> : <Dashboard editMode={editMode} onEnt={isAdmin ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
+        : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && isAdmin} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && isAdmin} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && isAdmin} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && isAdmin} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && isAdmin} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && isAdmin} /> : <Dashboard editMode={editMode} onEnt={isAdmin ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} onMenu={() => setNavOpen(o => !o)} />}
       {entSheet && editMode && isAdmin && <Suspense fallback={null}><ViewEntSheet view={view} hass={hass} onClose={() => setEntSheet(false)} /></Suspense>}

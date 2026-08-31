@@ -76,7 +76,9 @@ test('aucun identifiant d’entité n’est écrit en dur dans le code exécuté
     const trouves = sansCommentaires(texte).match(ENTITE_LITTERALE) || [];
     // Un domaine seul suivi d'un point (`'light.'`) est un préfixe de filtre,
     // pas une entité : il vaut pour toutes les lampes de n'importe qui.
-    const vrais = [...new Set(trouves.filter(s => !/^['"`][a-z_]+\.['"`]$/.test(s)))];
+    // `*.biblio*` est le préfixe RÉSERVÉ aux entités fictives de la
+    // Bibliothèque de cartes : elles n'existent sur aucune installation.
+    const vrais = [...new Set(trouves.filter(s => !/^['"`][a-z_]+\.['"`]$/.test(s) && !/\.biblio(_[a-z0-9_]+)?['"`]$/.test(s)))];
     if (vrais.length) fautes.push(`${nom} : ${vrais.join(', ')}`);
   });
   assert.deepEqual(fautes, [],
