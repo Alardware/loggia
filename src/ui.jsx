@@ -77,6 +77,10 @@ export const HIDDEN_VIEWS = () => [
    * restent : un appareil qui a mémorisé cette vue l'affiche encore. */
   { label: tr('Médias'), vid: 'medias', icon: 'tv-music', c: 'var(--o-purple)' },
   { label: tr('Météo'), vid: 'meteo', icon: 'cloud-sun', c: 'var(--o-cyan)' },
+  // Bibliothèque de cartes (31/08/2026) : catalogue sur données fictives —
+  // activable dans le menu comme les autres vues secondaires, sinon
+  // accessible par la recherche et Paramètres → Vues.
+  { label: tr('Bibliothèque'), vid: 'biblio', icon: 'apps-add', c: 'var(--o-accent-soft)' },
 ];
 
 // Vues retirées de la sidebar mais toujours routables (Pièces/Objets les couvrent) — exposées dans la recherche ⌘K.
