@@ -9742,9 +9742,9 @@ function CvAlarm({ id, hass }) {
     : s === 'triggered' ? [tr('ALERTE'), 'var(--o-bad)']
       : (s === 'arming' || s === 'pending') ? [tr('Activation en cours…'), 'var(--o-warn2)']
         : s ? [tr('Armée'), 'var(--o-warn2)'] : ['—', 'var(--o-text3)'];
-  const btn = { flex: 1, padding: '9px 6px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' };
+  const btn = { flex: 1, padding: '8px 6px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' };
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
         <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(col, .16), color: col }}><Fi i="shield-check" size={17} /></span>
         <div style={{ minWidth: 0 }}>
@@ -9764,14 +9764,14 @@ function CvAlarm({ id, hass }) {
         const ouverts = os.filter(o => o.on).length;
         const cams = Object.keys(S).filter(cid => cid.indexOf('camera.') === 0 && S[cid].state !== 'unavailable').length;
         const ligne = (l, v, c) => (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{l}</span>
             <span style={{ fontSize: 11.5, fontWeight: 800, color: c }}>{v}</span>
           </div>
         );
         if (!os.length && !cams) return null;
         return (
-          <div style={{ marginTop: 9 }}>
+          <div style={{ marginTop: 7 }}>
             {os.length > 0 && ligne(tr('Ouvrants'), ouverts === 0 ? tr('Tout fermé') : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts }), ouverts ? 'var(--o-warn)' : 'var(--o-ok)')}
             {cams > 0 && ligne(tr('Caméras'), tr('{n} en ligne', { n: cams }), 'var(--o-text2)')}
           </div>
@@ -9897,7 +9897,7 @@ function CvAir({ hass }) {
     </div>
   );
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Qualité air')}</span>
         <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: hx(col, .14), color: col }}>{txt}</span>
@@ -9925,7 +9925,9 @@ function CvPresence({ hass, gens = null }) {
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
       <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>{tr('Présence')}</div>
       {liste.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Personne de configuré')}</div>}
-      {liste.slice(0, 4).map((p) => (
+      {/* Trois lignes au plus : le FORMAT STANDARD (2 rangées de 88 px) est
+        * une règle dure — une quatrième personne déborderait la carte. */}
+      {liste.slice(0, 3).map((p) => (
         <div key={p.haid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
           <span style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 11, fontWeight: 800, color: 'var(--o-text2)', opacity: p.home ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -9981,7 +9983,7 @@ function CvEnergie({ hass, roles = null }) {
     </div>
   );
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Énergie maison')}</span>
         {part != null && <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: 'rgba(52,211,153,.14)', color: 'var(--o-ok)' }}>{tr('Solaire')} {part} %</span>}
