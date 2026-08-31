@@ -1693,8 +1693,9 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
         <span style={{ fontSize: 15, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos}%</span>
       </div>
       <div>
+        {/* Pas de sous-titre : le pourcentage vit en haut à droite et la
+          * glissière montre la position — le titre respire sous l'icône. */}
         <div style={RM_NAME}>{titre || a.friendly_name || id}</div>
-        <div style={RM_SUB}>{label}</div>
         {/* Glissière épaisse, même dessin que la carte lumière : le remplissage
           * violet EST la position — plus de bouton-curseur à attraper. */}
         <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => { e.stopPropagation(); drag(e); }} {...kbSlider('Position ' + (a.friendly_name || id), pos, (nv) => { setOv(nv); commander(hass, id, 'set_position', nv); })} style={{ margin: '8px 0 7px', cursor: 'ew-resize', touchAction: 'none' }}>
@@ -1841,7 +1842,6 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
         {/* Gabarit maison : le nom sous l'icône, puis − consigne + et les
           * préréglages universels (Confort, Éco) en chips. */}
         <div style={RM_NAME}>{label || a.friendly_name || id}</div>
-        <div style={RM_SUB}>{cur != null ? tr('actuel {n}°', { n: cur }) : ' '}</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
           <button aria-label={'− ' + (label || a.friendly_name || id)} onClick={(e) => { e.stopPropagation(); setT(-0.5); }}
             style={{ width: 36, height: 32, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', fontSize: 17, fontWeight: 800, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>−</button>
