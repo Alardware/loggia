@@ -139,6 +139,9 @@ html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-
   .o-lightpresets { display: none !important; }
 }
 
+/* Bibliothèque : chaque exemplaire remplit son gabarit (88 ou 184 px). */
+.o-bibitem > * { height: 100%; box-sizing: border-box; }
+
 /* Pièces de l'accueil v2 : mêmes rangées de 88 px que les vues custom —
  * standard = 2 rangées, compacte (.o-chiprow1) = 1. */
 .grid-chips { grid-auto-flow: row dense; grid-auto-rows: 88px; }
