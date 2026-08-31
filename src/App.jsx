@@ -1000,38 +1000,40 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
   useEffect(() => () => clearTimeout(ovRevertRef.current), []);
   const doToggle = () => { flash(p.tc || 'var(--o-accent)'); if (realOn != null) { setOv(!(ov != null ? ov : realOn)); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); } onToggleLights && onToggleLights(); };
   if (chip) {
-    // Pièce COMPACTE : mêmes dimensions que la CvCard dense (une rangée de
-    // 88 px) — icône 34, nom + état dessous, switch 44×25 à droite.
+    // Pièce COMPACTE, direction « teinte pièce » (choix 31/08) : la couleur de
+    // la pièce baigne la carte (son lavis en dégradé), icône NUE sans boîte,
+    // température forte à droite, switch 44×25. Une rangée de 88 px.
     const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
     const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
     const canToggle = !!(mains && mains.length && onToggleLights);
     const temp = p.live && p.live.temp != null ? (Math.round(p.live.temp * 10) / 10).toLocaleString('fr-FR') + '°' : null;
     const etat = lights ? (n > 0 ? (n > 1 ? tr('{n} lampes allumées', { n }) : tr('{n} lampe allumée', { n })) : tr('Tout éteint')) : '—';
     return (
-      <div className="o-piece" onClick={onOpen} role="button" tabIndex={0}
+      <div className="o-piece o-piecechip" onClick={onOpen} role="button" tabIndex={0}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-        style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer',
-          background: on ? `linear-gradient(180deg,rgba(var(--o-gold-rgb),${lav(.12)}),transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
+        style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 11, padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', overflow: 'hidden',
+          background: `linear-gradient(160deg,${p.bg},rgba(0,0,0,0) 65%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
           border: 'none',
           boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 'var(--o-radius,18px)', pointerEvents: 'none' }} />
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.bg }}>{p.icon}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-            <div style={{ fontSize: 11.5, fontWeight: 600, color: on ? 'var(--o-warn)' : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {temp ? <span style={{ color: p.tc, fontWeight: 800 }}>{temp}</span> : null}{temp ? ' · ' : ''}{etat}
-            </div>
+        <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>{cloneElement(p.icon, { size: 24 })}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: on ? 'var(--o-warn)' : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {/* Chip étroite (mobile 2 col) : la température quitte la droite et
+              * revient ici, le nom garde sa place — bascule par container query. */}
+            {temp && <span className="o-chip-temp-i"><span style={{ color: p.tc, fontWeight: 800 }}>{temp}</span> · </span>}{etat}
           </div>
-          {canToggle && (
-            <span role="switch" aria-checked={on} aria-label={'Lumières ' + p.name} tabIndex={0}
-              onClick={e => { e.stopPropagation(); doToggle(); }}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-              style={{ width: 44, height: 25, borderRadius: 13, position: 'relative', cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-bd1)', transition: 'background .25s' }}>
-              <span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
-            </span>
-          )}
         </div>
+        {temp && <span className="o-chip-temp-d" style={{ fontSize: 19, fontWeight: 800, color: p.tc, flexShrink: 0 }}>{temp}</span>}
+        {canToggle && (
+          <span role="switch" aria-checked={on} aria-label={'Lumières ' + p.name} tabIndex={0}
+            onClick={e => { e.stopPropagation(); doToggle(); }}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
+            style={{ width: 44, height: 25, borderRadius: 13, position: 'relative', cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-bd1)', transition: 'background .25s' }}>
+            <span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
+          </span>
+        )}
       </div>
     );
   }
@@ -1040,29 +1042,40 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
     const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
     const canToggle = !!(mains && mains.length && onToggleLights);
     return (
-      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-piecestd o-stag o-hov ' + (tilt.className || '')} onClick={onOpen} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', borderRadius: 15, padding: '14px 15px 12px',
-        // Halo d'une pièce éclairée. Les cartes de luminaires en ont un, pas
-        // celles de l'accueil : d'un coup d'œil, on ne voyait pas quelles pièces
-        // étaient allumées, alors que c'est ce qu'on y cherche. Même teinte que
-        // l'interrupteur allumé, et l'ombre habituelle reste dessous pour ne pas
-        // aplatir la carte.
-        // Sans filet 1px (retour 31/08) : le halo doux garde l'état allumé.
+      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-piecestd o-stag o-hov ' + (tilt.className || '')} onClick={onOpen} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: 15, padding: '14px 15px 12px', overflow: 'hidden',
+        // Direction « teinte pièce » (choix 31/08) : le lavis de la pièce
+        // baigne la surface en permanence, l'icône est nue, la température en
+        // héros. Le halo doré reste le signal « pièce éclairée » — le lavis
+        // doré d'état a cédé sa place à la teinte de la pièce.
+        background: `linear-gradient(160deg,${p.bg},rgba(0,0,0,0) 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
         boxShadow: on
           ? '0 0 20px 2px rgba(var(--o-gold-rgb),.18), var(--o-shadow,0 14px 36px rgba(0,0,0,.36))'
           : 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))',
-        // Teinte d'état : au halo s'ajoute un lavis doré sur la surface même.
-        ...(on && LAVIS ? { background: `linear-gradient(160deg,rgba(var(--o-gold-rgb),${lav(.13)}),rgba(var(--o-gold-rgb),0) 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
         transition: 'box-shadow .3s ease, background .3s ease',
         cursor: 'pointer', ...stag(idx) }}>
         {/* calque de flash séparé : ne touche ni au transform du tilt ni au box-shadow de la carte */}
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 15, pointerEvents: 'none' }} />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 11, background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{p.icon}</div>
-          {/* Minis d'action : volets et clim de la pièce, sans l'ouvrir. Volet
-            * violet quand ouvert, clim ROUGE quand en marche (flocon si elle
-            * refroidit). Des `button` : le drag d'édition les ignore. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {(covers || clim) && <div className="o-piece-minis" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <span style={{ display: 'flex', alignItems: 'center', minHeight: 38 }}>{cloneElement(p.icon, { size: 34 })}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+            <span style={{ fontSize: 26, fontWeight: 800, color: p.tc, lineHeight: 1 }}>{p.live ? (p.live.temp != null ? <Num v={p.live.temp} d={1} suffix="°" /> : '—') : <Skel w={52} h={22} />}</span>
+            {p.live && p.badge && <span style={{ fontSize: 10.5, fontWeight: 800, color: p.bc, background: p.bbg, padding: '2px 8px', borderRadius: 9 }}>{p.badge}</span>}
+          </div>
+        </div>
+        <div style={{ fontSize: 15.5, fontWeight: 800, marginTop: 12 }}>{p.name}</div>
+        <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {lights ? <FlipText text={n > 0 ? (n > 1 ? tr('{n} lampes allumées', { n }) : tr('{n} lampe allumée', { n })) : tr('Tout éteint')} /> : <Skel w={92} h={12} />}
+          {p.live && p.live.hum != null ? <> · <Num v={p.live.hum} suffix="%" /></> : null}
+        </div>
+        {cheminTemp && (
+          <svg viewBox="0 0 100 16" preserveAspectRatio="none" aria-hidden="true" style={{ display: 'block', width: '100%', height: 14, marginTop: 6, opacity: .5 }}>
+            <path d={cheminTemp} fill="none" stroke={p.tc || 'var(--o-accent)'} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+          </svg>
+        )}
+        {/* Pied : minis d'action (volets violet, clim ROUGE — des `button`, le
+          * drag d'édition les ignore) à gauche, switch lumière à droite. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8 }}>
+          {(covers || clim) ? <div className="o-piece-minis" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {covers && (
               <button type="button" aria-label={tr('Volets') + ' ' + p.name} title={covers.open ? tr('Fermer les volets') : tr('Ouvrir les volets')}
                 onClick={e => { e.stopPropagation(); flash('var(--o-purple)'); covers.onToggle(); }}
@@ -1077,28 +1090,16 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
                 <Ico name={clim.froid ? 'snowflake' : 'flame'} size={14} />
               </button>
             )}
-            </div>}
-            {canToggle && (
-              <span role="switch" aria-checked={on} aria-label={'Lumières ' + p.name} tabIndex={0}
-                onClick={e => { e.stopPropagation(); doToggle(); }}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-                style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
-                <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
-              </span>
-            )}
-          </div>
+          </div> : <span />}
+          {canToggle && (
+            <span role="switch" aria-checked={on} aria-label={'Lumières ' + p.name} tabIndex={0}
+              onClick={e => { e.stopPropagation(); doToggle(); }}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
+              style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
+              <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
+            </span>
+          )}
         </div>
-        <div style={{ fontSize: 15, fontWeight: 800 }}>{p.name}</div>
-        <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '2px 0 10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lights ? <FlipText text={n > 0 ? (n > 1 ? tr('{n} lampes allumées', { n }) : tr('{n} lampe allumée', { n })) : tr('Tout éteint')} /> : <Skel w={92} h={12} />}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingTop: 9 }}>
-          <span style={{ color: p.tc, fontSize: 15.5, fontWeight: 800 }}>{p.live ? (p.live.temp != null ? <Num v={p.live.temp} d={1} suffix="°" /> : '—') : <Skel w={40} h={15} />}</span>· {p.live ? (p.live.hum != null ? <Num v={p.live.hum} suffix="%" /> : '—') : <Skel w={28} h={12} />}
-          {p.live && p.badge && <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 800, color: p.bc, background: p.bbg, padding: '2px 8px', borderRadius: 999 }}>{p.badge}</span>}
-        </div>
-        {cheminTemp && (
-          <svg viewBox="0 0 100 16" preserveAspectRatio="none" aria-hidden="true" style={{ display: 'block', width: '100%', height: 14, marginTop: 6, opacity: .5 }}>
-            <path d={cheminTemp} fill="none" stroke={p.tc || 'var(--o-accent)'} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
-          </svg>
-        )}
       </div>
     );
   }
@@ -5106,6 +5107,38 @@ function jourAgenda(e) {
   return { jour, heure };
 }
 
+/* Héros « En ce moment » : une seule carte → nue ; plusieurs → glissière à la
+ * page (scroll-snap, défilement au doigt) et petits points sous la carte. Le
+ * libellé de droite suit la carte visible. */
+function HeroSlider({ ids, dc }) {
+  const ref = useRef(null);
+  const [idx, setIdx] = useState(0);
+  const i2 = Math.max(0, Math.min(ids.length - 1, idx));
+  // Le clic pose l'index sans attendre l'événement scroll : la glissière le
+  // confirmera, mais les points répondent tout de suite.
+  const va = (i) => { setIdx(i); const el = ref.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' }); };
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <div style={sectionTitle}>{tr('En ce moment')}</div>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{String(ids[i2]).indexOf('media_player.') === 0 ? tr('Lecture en cours') : tr('Chauffage')}</span>
+      </div>
+      <div ref={ref} className="o-heroslider" onScroll={e => { const el = e.currentTarget; setIdx(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
+        style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none' }}>
+        {ids.map(id => <div key={id} className="o-hero" style={{ flex: '0 0 100%', minWidth: 0, height: 184, scrollSnapAlign: 'start' }}>{dc.card(id)}</div>)}
+      </div>
+      {ids.length > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 7, marginTop: 9 }}>
+          {ids.map((id, i) => (
+            <button key={id} type="button" aria-label={tr('Carte {n}', { n: i + 1 })} onClick={() => va(i)}
+              style={{ width: i === i2 ? 18 : 6, height: 6, borderRadius: 999, border: 'none', padding: 0, cursor: 'pointer', background: i === i2 ? 'var(--o-accent)' : 'var(--o-bd1)', transition: 'all .25s' }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
 const ACC_MAIN = ['heros', 'scenes', 'pieces', 'cameras'];
@@ -5499,21 +5532,22 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     return { open, onToggle: () => { try { dashHass.callService('cover', open ? 'close_cover' : 'open_cover', { entity_id: ex.covers }); } catch (e) {} } };
   };
   // ── Héros contextuel : « ce qui compte maintenant » ──────────────────────
-  // Le lecteur si la musique joue (le plus récent si plusieurs), sinon le
-  // thermostat actif (celui qui chauffe/refroidit d'abord), sinon rien — la
-  // section n'existe alors pas du tout. Cartes et fiches du catalogue (dc).
+  // TOUS les candidats, par intérêt : les lecteurs qui jouent (les plus
+  // récents d'abord), puis les thermostats actifs (ceux qui chauffent ou
+  // refroidissent avant les autres). Aucun → la section n'existe pas du tout.
+  // Plusieurs → glissière à la page, points sous la carte (HeroSlider).
   const dc = useDomainCards(dashHass);
-  const heroId = useMemo(() => {
+  const heroIds = useMemo(() => {
     const S = dashHass && dashHass.states;
-    if (!S) return null;
+    if (!S) return [];
     try {
-      const joue = medPlayers().map(m => m.haid).filter(id => S[id] && mpRead(S, id).playing);
-      if (joue.length) return joue.sort((x, y) => String(S[y].last_changed || '').localeCompare(String(S[x].last_changed || '')))[0];
+      const joue = medPlayers().map(m => m.haid).filter(id => S[id] && mpRead(S, id).playing)
+        .sort((x, y) => String(S[y].last_changed || '').localeCompare(String(S[x].last_changed || '')));
       const zs = climateZones(S).filter(z => estClimate(z) && z.haid && S[z.haid] && S[z.haid].state !== 'off' && S[z.haid].state !== 'unavailable');
       const travaille = (z) => ['heating', 'cooling'].indexOf((S[z.haid].attributes || {}).hvac_action) >= 0 ? 0 : 1;
       zs.sort((za, zb) => travaille(za) - travaille(zb));
-      return zs.length ? zs[0].haid : null;
-    } catch (e) { return null; }
+      return [...new Set([...joue, ...zs.map(z => z.haid)])].slice(0, 6);
+    } catch (e) { return []; }
   }, [dashHass]);
   const roomClimInfo = (name) => {
     const ex = roomExtras && roomExtras[rmNorm(name)];
@@ -5766,15 +5800,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           // Une section sans rien à montrer (pas de caméra, agenda vide) n'existe
           // pas du tout — ni wrapper, ni place dans l'édition.
           const secsMain = {
-            heros: heroId ? (
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <div style={sectionTitle}>{tr('En ce moment')}</div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{heroId.indexOf('media_player.') === 0 ? tr('Lecture en cours') : tr('Chauffage')}</span>
-                </div>
-                <div className="o-hero" style={{ height: 184 }}>{dc.card(heroId)}</div>
-              </div>
-            ) : null,
+            heros: heroIds.length ? <HeroSlider ids={heroIds} dc={dc} /> : null,
             scenes: <QuickScenes hass={dashHass} />,
             pieces: <>{piecesHeader}{piecesGrid}</>,
             cameras: cams.length > 0 ? <>{camsHeader}{camsGrid}</> : null,
@@ -10554,7 +10580,7 @@ function BiblioView() {
       <Titre i="door-open" c="#60a5fa" t={tr('Pièces')} />
       <Rangee>
         <Item l={tr('Compacte')} h={88}><PieceCard p={pieceDemo} chip lights={[{ on: false }]} mains={[]} onOpen={null} /></Item>
-        <Item l={tr('Standard')}><PieceCard p={pieceDemo} compact lights={[{ on: true }, { on: false }]} mains={[{ on: true }]} onToggleLights={() => {}} onOpen={null} /></Item>
+        <Item l={tr('Standard')}><PieceCard p={pieceDemo} compact lights={[{ on: true }, { on: false }]} mains={[{ on: true }]} onToggleLights={() => {}} covers={{ open: true, onToggle: () => {} }} clim={{ on: true, froid: false, onToggle: () => {} }} onOpen={null} /></Item>
       </Rangee>
 
       <Titre i="bulb" c="var(--o-warn)" t={tr('Lumières et prises')} />

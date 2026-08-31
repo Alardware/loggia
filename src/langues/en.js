@@ -957,6 +957,7 @@ export default {
   'Bon après-midi': 'Good afternoon',
   'Bonjour': 'Good morning',
   'En ce moment': 'Right now',
+  'Carte {n}': 'Card {n}',
   'Ouvrir les volets': 'Open the blinds',
   'Fermer les volets': 'Close the blinds',
   'Allumer le chauffage': 'Turn the heating on',
