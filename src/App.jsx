@@ -1511,7 +1511,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
         // sinon le bas de carte restait un alpha .22 sur le fond de page — faux-transparent
         // en mode opaque, et un rendu différent d'un matériau à l'autre (retour user 29/08).
         background: on && LAVIS ? `linear-gradient(180deg,transparent 28%,${hx(accent, lav(.22))}), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
-        border: on && LAVIS ? `1px solid ${hx(accent, lav(.3))}` : 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+        border: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ ...RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accent : 'var(--o-text3)'), boxShadow: on ? `0 0 ${Math.round(6 + bri * 0.22)}px ${Math.round(bri * 0.05)}px ${hx(accent, 0.18 + bri * 0.004)}` : 'none', transition: 'box-shadow .6s ease' }}>{prise ? <PlugIcon size={19} /> : <LightIcon type={ltype} size={19} />}</span>
         <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + (label || a.friendly_name || id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }} onClick={toggle} style={{ width: 46, height: 26, borderRadius: 13, background: on ? '#FF2D78' : 'rgba(150,162,184,.2)', position: 'relative', cursor: 'pointer', flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span>
