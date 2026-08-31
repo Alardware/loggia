@@ -9857,8 +9857,11 @@ function CvJournal({ id, hass }) {
 /* Graphique 24 h : l'historique du capteur en filigrane, la valeur en clair.
  * L'API historique de HA est un GET (pattern des autres lectures d'historique
  * du fichier) : relecture au montage puis toutes les cinq minutes. */
-function CvHistory({ id, hass }) {
-  const points = useHistorique24(hass, id);
+function CvHistory({ id, hass, demoPoints = null }) {
+  // La bibliothèque injecte un historique FACTICE : le hook tourne quand
+  // même (ordre des hooks), ses données sont simplement ignorées.
+  const pointsReels = useHistorique24(hass, id);
+  const points = demoPoints !== null ? demoPoints : pointsReels;
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const mort = !st || st.state === 'unavailable';
@@ -10183,6 +10186,8 @@ function biblioStates() {
     'sensor.biblio_conso_jour': s(7.4, { friendly_name: 'Conso du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
     'camera.biblio_entree': s('idle', { friendly_name: 'Caméra entrée' }),
     'camera.biblio_jardin': s('idle', { friendly_name: 'Caméra jardin' }),
+    'binary_sensor.biblio_mouvement': s('on', { friendly_name: 'Mouvement couloir', device_class: 'motion' }),
+    'sensor.biblio_energie_hist': s(7.4, { friendly_name: 'Énergie maison', unit_of_measurement: 'kWh', device_class: 'energy' }),
   };
 }
 function BiblioView() {
@@ -10265,7 +10270,11 @@ function BiblioView() {
       <Titre i="stats" c="var(--o-ok)" t={tr('Capteurs et chiffres')} />
       <Rangee>
         <Item l={tr('Compacte')} h={88}><CvCard id="sensor.biblio_temp" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Compacte (binaire)')} h={88}><CvCard id="binary_sensor.biblio_mouvement" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Chiffre')}><CvBigSensor id="sensor.biblio_co2" hass={hb} /></Item>
+        <Item l={tr('Chiffre (lettres)')}><CvBigSensor id="binary_sensor.biblio_mouvement" hass={hb} /></Item>
+        <Item l={tr('Graphique (courbe)')}><CvHistory id="sensor.biblio_temp" hass={hb} demoPoints={(() => { const t0 = Date.now() - 86400000; return Array.from({ length: 48 }, (_, i) => ({ t: t0 + i * 1800000, v: Math.round((22 + Math.sin(i / 6.5) * 1.3 - i * 0.01) * 10) / 10 })); })()} /></Item>
+        <Item l={tr('Graphique (barres, énergie)')}><CvHistory id="sensor.biblio_energie_hist" hass={hb} demoPoints={(() => { const t0 = Date.now() - 86400000; let v = 0; return Array.from({ length: 48 }, (_, i) => { const h = new Date(t0 + i * 1800000).getHours(); v += h < 7 ? 0.03 : h < 18 ? 0.18 : 0.09; return { t: t0 + i * 1800000, v: Math.round(v * 100) / 100 }; }); })()} /></Item>
         <Item l={tr('Horloge')} h={88}><CvClock /></Item>
       </Rangee>
 
@@ -10294,7 +10303,7 @@ function BiblioView() {
       </Rangee>
 
       <div style={{ marginTop: 26, fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
-        {tr('Absentes ici : graphique, agenda, journal, météo et caméras — elles vivent des données du vrai serveur.')}
+        {tr('Absentes ici : agenda, journal, météo et caméras — elles vivent des données du vrai serveur. Les graphiques montrent un historique factice.')}
       </div>
       {dc.sheets}
     </main>
