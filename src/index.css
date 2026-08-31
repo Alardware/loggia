@@ -133,7 +133,6 @@ html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-
 .o-cvdense { container-type: inline-size; }
 @container (max-width: 270px) {
   .o-cvclim .o-cvtxt { display: none; }
-  .o-cvclim .o-cvrow { justify-content: space-between; }
   /* Carte lumière étroite (mobile) : les préréglages cèdent — la glissière
    * et le pourcentage suffisent. */
   .o-lightpresets { display: none !important; }
