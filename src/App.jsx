@@ -1845,13 +1845,14 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
       ...(heating && LAVIS ? {
-        background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-warn2-rgb),${lav(.16)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
+        background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-bad-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
       } : null),
       // Sans bordure, comme lumière et volet.
       border: 'none' }}>
+      {/* Allumé = ROUGE (retour d'essai) : l'ambre warn2 rendait jaune. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.16)', off ? 'var(--o-text3)' : heating ? 'var(--o-warn2)' : '#ff8a4c')}><Fi i="thermometer-half" size={17} /></span>
-        <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title="Changer de mode" style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'none', background: off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-warn2)' }}>{tr(MODE_FR[mode]) || String(mode).toUpperCase()}</button>
+        <span style={RM_ICO(off ? 'var(--o-s1)' : 'rgba(var(--o-bad-rgb),.14)', off ? 'var(--o-text3)' : 'var(--o-bad)')}><Fi i="thermometer-half" size={17} /></span>
+        <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title="Changer de mode" style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'none', background: off ? 'var(--o-s1)' : 'rgba(var(--o-bad-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-bad)' }}>{tr(MODE_FR[mode]) || String(mode).toUpperCase()}</button>
       </div>
       <div>
         <div className="o-rmbig" style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1.1 }}>{target}<span style={{ fontSize: 20 }}>°</span></div>
@@ -9891,25 +9892,29 @@ function CvAir({ hass }) {
     : air.co2V < 800 ? [tr('Bon'), 'var(--o-ok)']
       : air.co2V < 1200 ? [tr('Moyen'), 'var(--o-warn)'] : [tr('Mauvais'), 'var(--o-bad)'];
   const tuile = (l, v) => v != null && (
-    <div style={{ flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 10, background: 'var(--o-s1)' }}>
+    <div style={{ flex: 1, minWidth: 0, padding: '5px 9px', borderRadius: 9, background: 'var(--o-s1)' }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{l}</div>
       <div style={{ fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap' }}>{v}</div>
     </div>
   );
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Qualité air')}</span>
+      {/* Gabarit maison : icône hg, verdict hd, TITRE SOUS L'ICÔNE. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={RM_ICO(hx(col, .14), col)}><Fi i="smog" size={16} /></span>
         <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: hx(col, .14), color: col }}>{txt}</span>
       </div>
-      <div style={{ fontSize: 27, fontWeight: 800, marginTop: 4 }}>{air.co2V != null ? air.co2V : '—'}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 5 }}>ppm CO₂</span></div>
-      <div style={{ height: 5, borderRadius: 3, background: 'var(--o-bd1)', margin: '9px 0 10px', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: Math.min(100, (air.co2V || 0) / 20) + '%', background: col, borderRadius: 3, transition: 'width .3s' }} />
-      </div>
-      <div style={{ display: 'flex', gap: 7, marginTop: 'auto' }}>
-        {tuile('COV', air.vocV != null ? air.vocV + ' ppb' : null)}
-        {tuile('PM2.5', air.pmV != null ? air.pmV + ' µg' : null)}
-        {tuile(tr('Humidité'), air.humV != null ? air.humV + ' %' : null)}
+      <div style={{ marginTop: 8 }}>
+        <div style={RM_NAME}>{tr('Qualité air')}</div>
+        <div style={{ fontSize: 18, fontWeight: 800, marginTop: 1 }}>{air.co2V != null ? air.co2V : '—'}<span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 5 }}>ppm CO₂</span></div>
+        <div style={{ height: 5, borderRadius: 3, background: 'var(--o-bd1)', margin: '6px 0 7px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: Math.min(100, (air.co2V || 0) / 20) + '%', background: col, borderRadius: 3, transition: 'width .3s' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 7 }}>
+          {tuile('COV', air.vocV != null ? air.vocV + ' ppb' : null)}
+          {tuile('PM2.5', air.pmV != null ? air.pmV + ' µg' : null)}
+          {tuile(tr('Humidité'), air.humV != null ? air.humV + ' %' : null)}
+        </div>
       </div>
     </div>
   );
@@ -9921,22 +9926,27 @@ function CvPresence({ hass, gens = null }) {
     const st = S[p.haid];
     return { ...p, home: !!st && st.state === 'home', lc: st && st.last_changed };
   });
+  const maison = liste.filter(p => p.home).length;
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
-      <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>{tr('Présence')}</div>
-      {liste.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Personne de configuré')}</div>}
-      {/* Trois lignes au plus : le FORMAT STANDARD (2 rangées de 88 px) est
-        * une règle dure — une quatrième personne déborderait la carte. */}
-      {liste.slice(0, 3).map((p) => (
-        <div key={p.haid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-          <span style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 11, fontWeight: 800, color: 'var(--o-text2)', opacity: p.home ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)' }}>{(p.home ? tr('À la maison') : 'Absent') + (p.lc ? ' · ' + relTime(p.lc).toLowerCase() : '')}</div>
+      {/* Gabarit maison : icône hg, compteur hd, TITRE SOUS L'ICÔNE. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={RM_ICO(maison ? 'rgba(52,211,153,.14)' : 'var(--o-s1)', maison ? 'var(--o-ok)' : 'var(--o-text3)')}><Fi i="users" size={16} /></span>
+        {liste.length > 0 && <span style={{ fontSize: 11, fontWeight: 800, color: maison ? 'var(--o-ok)' : 'var(--o-text3)' }}>{maison + ' / ' + liste.length}</span>}
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <div style={RM_NAME}>{tr('Présence')}</div>
+        {liste.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Personne de configuré')}</div>}
+        {/* Trois lignes au plus : le FORMAT STANDARD (2 rangées de 88 px) est
+          * une règle dure — une quatrième personne déborderait la carte. */}
+        {liste.slice(0, 3).map((p) => (
+          <div key={p.haid} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '3px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', marginTop: 2 }}>
+            <span style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 9, fontWeight: 800, color: 'var(--o-text2)', opacity: p.home ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<span style={{ fontWeight: 600, color: 'var(--o-text3)' }}> · {p.home ? tr('À la maison') : 'Absent'}</span></span>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', boxShadow: p.home ? '0 0 6px rgba(52,211,153,.6)' : 'none' }} />
           </div>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', boxShadow: p.home ? '0 0 6px rgba(52,211,153,.6)' : 'none' }} />
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -9951,18 +9961,22 @@ function CvOuvrants({ hass }) {
   const tri = [...os].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0));
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Ouvrants')}</span>
+      {/* Gabarit maison : icône hg, verdict hd, TITRE SOUS L'ICÔNE. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={RM_ICO(ouverts ? 'rgba(var(--o-warn-rgb),.16)' : 'var(--o-s1)', ouverts ? 'var(--o-warn)' : 'var(--o-text3)')}><Fi i={ouverts ? 'door-open' : 'door-closed'} size={16} /></span>
         <span style={{ fontSize: 11, fontWeight: 800, color: ouverts ? 'var(--o-warn)' : 'var(--o-ok)' }}>{os.length === 0 ? '—' : ouverts === 0 ? tr('Tout fermé') : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts })}</span>
       </div>
-      {os.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Aucun capteur d’ouverture')}</div>}
-      {tri.slice(0, 3).map((o) => (
-        <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-          <Fi i={o.on && o.dc === 'door' ? 'door-open' : icoDe(o.dc)} size={13} color={o.on ? 'var(--o-warn)' : 'var(--o-text3)'} />
-          <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.nom}</span>
-          <span style={{ fontSize: 11, fontWeight: 800, flexShrink: 0, color: o.on ? 'var(--o-warn)' : 'var(--o-ok)' }}>{o.on ? (tr('Ouvert') + (o.lc ? ' ' + relTime(o.lc).toLowerCase() : '')) : tr('Fermée')}</span>
-        </div>
-      ))}
+      <div style={{ marginTop: 10 }}>
+        <div style={RM_NAME}>{tr('Ouvrants')}</div>
+        {os.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Aucun capteur d’ouverture')}</div>}
+        {tri.slice(0, 3).map((o) => (
+          <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '3px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', marginTop: 2 }}>
+            <Fi i={o.on && o.dc === 'door' ? 'door-open' : icoDe(o.dc)} size={12} color={o.on ? 'var(--o-warn)' : 'var(--o-text3)'} />
+            <span style={{ flex: 1, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.nom}</span>
+            <span style={{ fontSize: 11, fontWeight: 800, flexShrink: 0, color: o.on ? 'var(--o-warn)' : 'var(--o-ok)' }}>{o.on ? (tr('Ouvert') + (o.lc ? ' ' + relTime(o.lc).toLowerCase() : '')) : tr('Fermée')}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -9977,26 +9991,30 @@ function CvEnergie({ hass, roles = null }) {
   const part = maison && sol != null ? Math.round(Math.min(100, sol / maison * 100)) : null;
   const jour = lit(EN.consoJour);
   const tuile = (l, v, c) => v != null && (
-    <div style={{ flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 10, background: 'var(--o-s1)' }}>
+    <div style={{ flex: 1, minWidth: 0, padding: '5px 9px', borderRadius: 9, background: 'var(--o-s1)' }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{l}</div>
       <div style={{ fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap', color: c || 'var(--o-text)' }}>{v}</div>
     </div>
   );
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Énergie maison')}</span>
+      {/* Gabarit maison : icône hg, part solaire hd, TITRE SOUS L'ICÔNE. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={RM_ICO('rgba(var(--o-accent-rgb),.14)', 'var(--o-accent-soft)')}><Fi i="bolt" size={16} /></span>
         {part != null && <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: 'rgba(52,211,153,.14)', color: 'var(--o-ok)' }}>{tr('Solaire')} {part} %</span>}
       </div>
-      <div style={{ fontSize: 27, fontWeight: 800, marginTop: 4 }}>{maison != null ? maison : '—'}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 5 }}>W</span></div>
-      <div style={{ display: 'flex', height: 5, borderRadius: 3, background: 'var(--o-bd1)', margin: '9px 0 10px', overflow: 'hidden' }}>
-        <div style={{ width: (part || 0) + '%', background: 'var(--o-ok)', transition: 'width .3s' }} />
-        <div style={{ width: (100 - (part || 0)) + '%', background: 'var(--o-accent)', opacity: .8, transition: 'width .3s' }} />
-      </div>
-      <div style={{ display: 'flex', gap: 7, marginTop: 'auto' }}>
-        {tuile(tr('Solaire'), sol != null ? Math.round(sol) + ' W' : null, 'var(--o-ok)')}
-        {tuile(tr('Réseau'), grid != null ? Math.round(grid) + ' W' : null, 'var(--o-accent-soft)')}
-        {tuile(tr("Aujourd'hui"), jour != null ? Math.round(jour * 10) / 10 + ' kWh' : null)}
+      <div style={{ marginTop: 8 }}>
+        <div style={RM_NAME}>{tr('Énergie maison')}</div>
+        <div style={{ fontSize: 18, fontWeight: 800, marginTop: 1 }}>{maison != null ? maison : '—'}<span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 5 }}>W</span></div>
+        <div style={{ display: 'flex', height: 5, borderRadius: 3, background: 'var(--o-bd1)', margin: '6px 0 7px', overflow: 'hidden' }}>
+          <div style={{ width: (part || 0) + '%', background: 'var(--o-ok)', transition: 'width .3s' }} />
+          <div style={{ width: (100 - (part || 0)) + '%', background: 'var(--o-accent)', opacity: .8, transition: 'width .3s' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 7 }}>
+          {tuile(tr('Solaire'), sol != null ? Math.round(sol) + ' W' : null, 'var(--o-ok)')}
+          {tuile(tr('Réseau'), grid != null ? Math.round(grid) + ' W' : null, 'var(--o-accent-soft)')}
+          {tuile(tr("Aujourd'hui"), jour != null ? Math.round(jour * 10) / 10 + ' kWh' : null)}
+        </div>
       </div>
     </div>
   );
@@ -10019,27 +10037,28 @@ function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
     );
   }
   const tuile = (l, v) => v != null && (
-    <div style={{ flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 10, background: 'var(--o-s1)' }}>
+    <div style={{ flex: 1, minWidth: 0, padding: '5px 9px', borderRadius: 9, background: 'var(--o-s1)' }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{l}</div>
       <div style={{ fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap' }}>{v}</div>
     </div>
   );
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-purple-rgb),.16)', color: 'var(--o-purple)' }}><Fi i="soap" size={17} /></span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)' }}>{etat}</div>
+      {/* Gabarit maison : icône hg, temps restant hd, TITRE SOUS L'ICÔNE. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={RM_ICO('rgba(var(--o-purple-rgb),.16)', 'var(--o-purple)')}><Fi i="soap" size={16} /></span>
+        {restant && <span style={{ fontSize: 13, fontWeight: 800, flexShrink: 0, color: 'var(--o-purple)' }}>{restant}</span>}
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <div style={RM_NAME}>{nom}</div>
+        <div style={{ ...RM_SUB, color: 'var(--o-purple)' }}>{etat}</div>
+        <div style={{ height: 5, borderRadius: 3, background: 'var(--o-bd1)', margin: '7px 0 7px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: Math.min(100, pct || 0) + '%', background: 'var(--o-purple)', borderRadius: 3, transition: 'width .3s' }} />
         </div>
-        {restant && <span style={{ fontSize: 15, fontWeight: 800, flexShrink: 0, color: 'var(--o-purple)' }}>{restant}</span>}
-      </div>
-      <div style={{ height: 5, borderRadius: 3, background: 'var(--o-bd1)', margin: '14px 0 10px', overflow: 'hidden', marginTop: 'auto' }}>
-        <div style={{ height: '100%', width: Math.min(100, pct || 0) + '%', background: 'var(--o-purple)', borderRadius: 3, transition: 'width .3s' }} />
-      </div>
-      <div style={{ display: 'flex', gap: 7 }}>
-        {tuile(tr('Fin prévue'), fin)}
-        {tuile(tr('Conso cycle'), conso)}
+        <div style={{ display: 'flex', gap: 7 }}>
+          {tuile(tr('Fin prévue'), fin)}
+          {tuile(tr('Conso cycle'), conso)}
+        </div>
       </div>
     </div>
   );
