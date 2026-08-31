@@ -123,6 +123,8 @@ export function installerDemo() {
   // ── 2. La maison ──────────────────────────────────────────────────────────
   const states = etatsInitiaux();
   const toucher = (id, patch, attrs) => {
+    // entity_id à la manière de HA : une chaîne ou un tableau d'ids.
+    if (Array.isArray(id)) { id.forEach(x => toucher(x, patch, attrs)); return; }
     const cur = states[id]; if (!cur) return;
     states[id] = { state: patch != null ? String(patch) : cur.state, attributes: { ...cur.attributes, ...(attrs || {}) }, last_updated: maintenant(), last_changed: maintenant() };
     el.hass = { ...el.hass, states };
