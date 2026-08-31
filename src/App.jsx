@@ -9744,7 +9744,7 @@ function CvAlarm({ id, hass }) {
         : s ? [tr('Armée'), 'var(--o-warn2)'] : ['—', 'var(--o-text3)'];
   const btn = { flex: 1, padding: '8px 6px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' };
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
         <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(col, .16), color: col }}><Fi i="shield-check" size={17} /></span>
         <div style={{ minWidth: 0 }}>
@@ -9897,7 +9897,7 @@ function CvAir({ hass }) {
     </div>
   );
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Qualité air')}</span>
         <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: hx(col, .14), color: col }}>{txt}</span>
@@ -9922,7 +9922,7 @@ function CvPresence({ hass, gens = null }) {
     return { ...p, home: !!st && st.state === 'home', lc: st && st.last_changed };
   });
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>{tr('Présence')}</div>
       {liste.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Personne de configuré')}</div>}
       {/* Trois lignes au plus : le FORMAT STANDARD (2 rangées de 88 px) est
@@ -9950,7 +9950,7 @@ function CvOuvrants({ hass }) {
   // Les ouverts d'abord : c'est eux qu'on cherche.
   const tri = [...os].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0));
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
         <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Ouvrants')}</span>
         <span style={{ fontSize: 11, fontWeight: 800, color: ouverts ? 'var(--o-warn)' : 'var(--o-ok)' }}>{os.length === 0 ? '—' : ouverts === 0 ? tr('Tout fermé') : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts })}</span>
@@ -9983,7 +9983,7 @@ function CvEnergie({ hass, roles = null }) {
     </div>
   );
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Énergie maison')}</span>
         {part != null && <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: 'rgba(52,211,153,.14)', color: 'var(--o-ok)' }}>{tr('Solaire')} {part} %</span>}
@@ -10025,7 +10025,7 @@ function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
     </div>
   );
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-purple-rgb),.16)', color: 'var(--o-purple)' }}><Fi i="soap" size={17} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
