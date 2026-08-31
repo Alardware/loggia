@@ -1692,9 +1692,10 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
           <Ico name="blinds" size={18} /></span>
         <span style={{ fontSize: 15, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos}%</span>
       </div>
-      <div>
+      <div style={{ marginTop: 14 }}>
         {/* Pas de sous-titre : le pourcentage vit en haut à droite et la
-          * glissière montre la position — le titre respire sous l'icône. */}
+          * glissière montre la position — le titre respire sous l'icône,
+          * avec le même air que les cartes machines. */}
         <div style={RM_NAME}>{titre || a.friendly_name || id}</div>
         {/* Glissière épaisse, même dessin que la carte lumière : le remplissage
           * violet EST la position — plus de bouton-curseur à attraper. */}
@@ -1838,7 +1839,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
           </span>
         )}
       </div>
-      <div>
+      <div style={{ marginTop: 14 }}>
         {/* Gabarit maison : le nom sous l'icône, puis − consigne + et les
           * préréglages universels (Confort, Éco) en chips. */}
         <div style={RM_NAME}>{label || a.friendly_name || id}</div>
