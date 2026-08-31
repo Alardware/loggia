@@ -9811,15 +9811,16 @@ function CvAlarm({ id, hass }) {
           const cfgCams = (() => { try { const c = cfgVal('loggia_cameras', null); return Array.isArray(c) ? c.map(x => x && x.haid).filter(Boolean) : []; } catch (e) { return []; } })();
           const camIds = cfgCams.length ? cfgCams : Object.keys(S).filter(cid => cid.indexOf('camera.') === 0);
           const cams = camIds.filter(cid => S[cid] && S[cid].state !== 'unavailable').length;
+          // Lignes nues, sans fond ni contour (retour 31/08).
           const ligne = (l, v, c) => (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 10px', borderRadius: 9, background: 'var(--o-s1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 0' }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{l}</span>
               <span style={{ fontSize: 11.5, fontWeight: 800, color: c }}>{v}</span>
             </div>
           );
           if (!os.length && !camIds.length) return null;
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               {os.length > 0 && ligne(tr('Ouvrants'), ouverts === 0 ? tr('{n} fermés', { n: os.length }) : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts }), ouverts ? 'var(--o-warn)' : 'var(--o-ok)')}
               {camIds.length > 0 && ligne(tr('Caméras'), tr('{n} en ligne', { n: cams }), 'var(--o-text2)')}
             </div>
