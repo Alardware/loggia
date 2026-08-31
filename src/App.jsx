@@ -650,7 +650,7 @@ function Header() {
 }
 
 const sectionTitle = { fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
-const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)' };
+const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none' };
 
 // "couleur CSS (hex/rgb) → 'r,g,b'" pour alimenter les tokens rgba(var(--o-accent-rgb),...)
 function cssToRgb(c) {
@@ -1009,7 +1009,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
         style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer',
           background: on ? `linear-gradient(180deg,rgba(var(--o-gold-rgb),${lav(.12)}),transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
-          border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-gold-rgb),.3)' : 'var(--o-bd2)'),
+          border: 'none',
           boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 'var(--o-radius,18px)', pointerEvents: 'none' }} />
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -1043,8 +1043,9 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         // étaient allumées, alors que c'est ce qu'on y cherche. Même teinte que
         // l'interrupteur allumé, et l'ombre habituelle reste dessous pour ne pas
         // aplatir la carte.
+        // Sans filet 1px (retour 31/08) : le halo doux garde l'état allumé.
         boxShadow: on
-          ? '0 0 0 1px rgba(var(--o-gold-rgb),.34), 0 0 20px 2px rgba(var(--o-gold-rgb),.18), var(--o-shadow,0 14px 36px rgba(0,0,0,.36))'
+          ? '0 0 20px 2px rgba(var(--o-gold-rgb),.18), var(--o-shadow,0 14px 36px rgba(0,0,0,.36))'
           : 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))',
         // Teinte d'état : au halo s'ajoute un lavis doré sur la surface même.
         ...(on && LAVIS ? { background: `linear-gradient(160deg,rgba(var(--o-gold-rgb),${lav(.13)}),rgba(var(--o-gold-rgb),0) 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
@@ -1447,7 +1448,8 @@ const roomEntities = (hass, roomName) => applyRoomLayout(roomName, roomEntitiesB
 
 /* Cartes de la vue Pièce — style Loggia, format de la maquette : tuiles de même hauteur,
    une seule grille, actions au pied de carte. Autonomes : pilotent une entité par son id. */
-const RM_CARD = { display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 172, padding: 16, borderRadius: 'var(--o-radius,20px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))', transition: 'all .3s' };
+// SANS BORDURE (retour 31/08, toutes les cartes) : l'ombre et le lavis suffisent.
+const RM_CARD = { display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 172, padding: 16, borderRadius: 'var(--o-radius,20px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))', transition: 'all .3s' };
 const RM_ICO = (bg, col) => ({ width: 38, height: 38, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: bg, color: col });
 const RM_BTN = { flex: 1, padding: '9px 6px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
 const RM_NAME = { fontSize: 14.5, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
@@ -1643,7 +1645,7 @@ function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, temp, im
     return (
       <div className="o-piece o-cvdense" role="button" tabIndex={0} aria-label={'Ouvrir ' + nom}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-        onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
+        onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           {portrait(34)}
           <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
@@ -1854,7 +1856,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
         <span style={RM_ICO(off ? 'var(--o-s1)' : 'rgba(var(--o-bad-rgb),.14)', off ? 'var(--o-text3)' : 'var(--o-bad)')}><Fi i="thermometer-half" size={17} /></span>
         <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title="Changer de mode" style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'none', background: off ? 'var(--o-s1)' : 'rgba(var(--o-bad-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-bad)' }}>{tr(MODE_FR[mode]) || String(mode).toUpperCase()}</button>
       </div>
-      <div>
+      <div style={{ marginTop: 14 }}>
         <div className="o-rmbig" style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1.1 }}>{target}<span style={{ fontSize: 20 }}>°</span></div>
         <div style={RM_SUB}>{label || a.friendly_name || id}{cur != null ? ' · ' + tr('actuel {n}°', { n: cur }) : ''}</div>
         <div style={{ display: 'flex', gap: 7, marginTop: 11 }}>
@@ -2165,7 +2167,6 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
       // lumière de son or — l'activité se voit avant de lire le titre.
       ...(np.playing && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-accent-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
-        border: `1px solid rgba(var(--o-accent-rgb),${lav(.26)})`,
       } : null) }}>
       {/* Pochette en fond : l'album occupe le flanc droit, fondu vers la
         * surface côté texte — le filigrane appareil ne sert que sans pochette. */}
@@ -7374,7 +7375,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const hpArc = Math.round(251 * hpPct / 100);
   const hpOff = useDrawArc(251 - hpArc, 251); // arc HP qui se dessine depuis 0
   const seg = on => ({ padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: on ? 'var(--o-accent)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)' });
-  const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' };
+  const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', borderRadius: 'var(--o-radius,20px)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' };
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -9373,8 +9374,9 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   // Chaque domaine garde sa teinte des vues intégrées : lumière = sa couleur RGB ou l'or,
   // climat = le rouge de la vue Climatisation — l'accent bleu pour le reste.
   const rgbHex = dom === 'light' && a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
-  const teinte = cvEstLumiere(id) ? (rgbHex || '#FFCC44') : dom === 'climate' ? 'var(--o-warn2)' : dom === 'cover' ? 'var(--o-purple)' : null;
-  const teinteTxt = rgbHex || (cvEstLumiere(id) ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-warn2)' : dom === 'cover' ? 'var(--o-purple)' : 'var(--o-accent-soft)');
+  // Climat = ROUGE (retour d'essai 31/08) : l'ambre warn2 rendait jaune.
+  const teinte = cvEstLumiere(id) ? (rgbHex || '#FFCC44') : dom === 'climate' ? 'var(--o-bad)' : dom === 'cover' ? 'var(--o-purple)' : null;
+  const teinteTxt = rgbHex || (cvEstLumiere(id) ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-bad)' : dom === 'cover' ? 'var(--o-purple)' : 'var(--o-accent-soft)');
   const acc = on ? 'var(--o-accent)' : 'var(--o-text3)';
   const togglable = ['light', 'switch', 'input_boolean', 'fan', 'humidifier', 'siren'].indexOf(dom) >= 0;
   // Cliquable comme la carte riche : la fiche du domaine s'ouvre (lumière réglable seulement — un simple toggle n'a pas de fiche).
@@ -9404,7 +9406,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
     <div className={'o-piece' + (dense ? ' o-cvdense' : '') + (dense && dom === 'climate' ? ' o-cvclim' : '') + (dead ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? 'Ouvrir ' + name : undefined}
       onClick={ouvrable ? () => onOpen(id) : undefined}
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
-      style={{ position: 'relative', background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (on ? (teinte ? hx(teinte, .3) : 'rgba(var(--o-accent-rgb),.3)') : 'var(--o-bd2)'), borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
+      style={{ position: 'relative', background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
       <div className="o-cvrow" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: dense ? 9 : 11 }}>
         <span style={{ width: dense ? 34 : 40, height: dense ? 34 : 40, borderRadius: dense ? 10 : 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinte || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{ico ? <Fi i={ico} size={dense ? 15 : 17} /> : <PlugIcon size={dense ? 15 : 17} />}</span>
         <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
@@ -9531,7 +9533,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
  * entité admet plusieurs cartes, le sheet d'ajout les propose. Chaque entrée
  * typée de `cv.ents` s'écrit { t, id } ; la chaîne nue reste la compacte. */
 
-const CV_CADRE = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' };
+const CV_CADRE = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' };
 
 /* Un switch n'est une lumière que s'il est déclaré interrupteur-lumière ;
  * sinon c'est une prise ou un appareil : icône prise, teinte accent — pas l'or. */
@@ -9659,8 +9661,8 @@ function CvBigToggle({ id, hass }) {
   const toggle = () => { try { if (hass && hass.callService) hass.callService('homeassistant', 'toggle', { entity_id: id }); } catch (e) {} };
   return (
     <button className={'o-piece' + (mort ? ' o-panne' : '')} onClick={toggle} disabled={mort}
-      style={{ ...CV_CADRE, height: '100%', minHeight: 150, maxHeight: 178, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 9, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
-        ...(on ? { background: `linear-gradient(160deg,rgba(${rgbTok},${lav(.22)}),transparent 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`, border: `1px solid rgba(${rgbTok},${lav(.35)})` } : {}) }}>
+      style={{ ...CV_CADRE, height: '100%', minHeight: 150, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 9, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
+        ...(on ? { background: `linear-gradient(160deg,rgba(${rgbTok},${lav(.22)}),transparent 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : {}) }}>
       <span style={{ width: 52, height: 52, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? `rgba(${rgbTok},.2)` : 'var(--o-s1)', color: on ? txtCol : 'var(--o-text3)', boxShadow: on ? `0 0 22px rgba(${rgbTok},.4)` : 'none', transition: 'all .25s', flexShrink: 0 }}>
         {String(id).indexOf('switch.') === 0 && !lum ? <PlugIcon size={23} /> : <Fi i="power" size={23} />}
       </span>
@@ -10024,7 +10026,7 @@ function CvEnergie({ hass, roles = null }) {
 function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
   if (chip) {
     return (
-      <div className="o-piece o-cvdense" style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
+      <div className="o-piece o-cvdense" style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
         <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-purple-rgb),.16)', color: 'var(--o-purple)' }}><Fi i="soap" size={15} /></span>
           <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
@@ -10151,10 +10153,13 @@ function BiblioView() {
       <span style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 21, fontWeight: 500 }}>{t}</span>
     </div>
   );
-  const Item = ({ l, w = 250, children }) => (
+  /* Chaque exemplaire vit dans un gabarit à hauteur FIXE, comme dans les
+   * vraies grilles : compacte = 88 px, standard = 184 px. La vitrine montre
+   * exactement ce que les vues montreront. */
+  const Item = ({ l, w = 250, h = 184, children }) => (
     <div style={{ width: w, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
       <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)', textTransform: 'uppercase' }}>{l}</span>
-      <div style={{ minWidth: 0 }}>{children}</div>
+      <div className="o-bibitem" style={{ minWidth: 0, height: h }}>{children}</div>
     </div>
   );
   const Rangee = ({ children }) => <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' }}>{children}</div>;
@@ -10165,35 +10170,35 @@ function BiblioView() {
 
       <Titre i="door-open" c="#60a5fa" t={tr('Pièces')} />
       <Rangee>
-        <Item l={tr('Compacte')} w={250}><div style={{ height: 88 }}><PieceCard p={pieceDemo} chip lights={[{ on: false }]} mains={[]} onOpen={null} /></div></Item>
-        <Item l={tr('Standard')} w={250}><PieceCard p={pieceDemo} compact lights={[{ on: true }, { on: false }]} mains={[{ on: true }]} onToggleLights={() => {}} onOpen={null} /></Item>
+        <Item l={tr('Compacte')} h={88}><PieceCard p={pieceDemo} chip lights={[{ on: false }]} mains={[]} onOpen={null} /></Item>
+        <Item l={tr('Standard')}><PieceCard p={pieceDemo} compact lights={[{ on: true }, { on: false }]} mains={[{ on: true }]} onToggleLights={() => {}} onOpen={null} /></Item>
       </Rangee>
 
       <Titre i="bulb" c="var(--o-warn)" t={tr('Lumières et prises')} />
       <Rangee>
-        <Item l={tr('Compacte')}><CvCard id="light.biblio_rgb" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Compacte')} h={88}><CvCard id="light.biblio_rgb" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Standard (lumière)')}>{dc.card('light.biblio_rgb')}</Item>
         <Item l={tr('Tout ou rien (non dimmable)')}>{dc.card('light.biblio_simple')}</Item>
-        <Item l={tr('Prise')}><CvCard id="switch.biblio_prise" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Prise')} h={88}><CvCard id="switch.biblio_prise" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Gros bouton')}><CvBigToggle id="light.biblio_rgb" hass={hb} /></Item>
       </Rangee>
 
       <Titre i="thermometer-half" c="#ff8a4c" t={tr('Climat')} />
       <Rangee>
-        <Item l={tr('Compacte (étroite)')}><CvCard id="climate.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
-        <Item l={tr('Compacte (large)')} w={340}><CvCard id="climate.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Compacte (étroite)')} h={88}><CvCard id="climate.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Compacte (large)')} w={340} h={88}><CvCard id="climate.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Standard')}>{dc.card('climate.biblio')}</Item>
       </Rangee>
 
       <Titre i="blinds" c="var(--o-purple)" t={tr('Volets')} />
       <Rangee>
-        <Item l={tr('Compacte')}><CvCard id="cover.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Compacte')} h={88}><CvCard id="cover.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Standard')}>{dc.card('cover.biblio')}</Item>
       </Rangee>
 
       <Titre i="tv-music" c="var(--o-purple)" t={tr('Médias')} />
       <Rangee>
-        <Item l={tr('Compacte')}><CvCard id="media_player.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Compacte')} h={88}><CvCard id="media_player.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Standard (pochette en fond)')}>{dc.card('media_player.biblio')}</Item>
       </Rangee>
 
@@ -10203,15 +10208,15 @@ function BiblioView() {
         <Item l={tr('Tondeuse')}>{dc.card('lawn_mower.biblio')}</Item>
         <Item l={tr('Distributeur')}><RoomFeederCard nom={tr('Croquettes')} sub={tr('Réservoir aux trois quarts')} pct={74} prochaine="18:00 · 18 g" onFeed={() => {}} onOpen={() => {}} /></Item>
         <Item l={tr('Plante (standard)')}><RoomPlantCard nom="Monstera" sub={tr('Salon, près de la fenêtre')} hum={38} verdict={tr('À arroser bientôt')} verdictCol="var(--o-warn)" lux={820} cond={640} temp={22} img="dracaena" onOpen={() => {}} /></Item>
-        <Item l={tr('Plante (compacte)')}><div style={{ height: 88 }}><RoomPlantCard chip nom="Monstera" hum={38} verdict={tr('À arroser bientôt')} verdictCol="var(--o-warn)" img="dracaena" onOpen={() => {}} /></div></Item>
+        <Item l={tr('Plante (compacte)')} h={88}><RoomPlantCard chip nom="Monstera" hum={38} verdict={tr('À arroser bientôt')} verdictCol="var(--o-warn)" img="dracaena" onOpen={() => {}} /></Item>
       </Rangee>
 
       <Titre i="stats" c="var(--o-ok)" t={tr('Capteurs et chiffres')} />
       <Rangee>
-        <Item l={tr('Compacte')}><CvCard id="sensor.biblio_temp" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Compacte')} h={88}><CvCard id="sensor.biblio_temp" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Chiffre')}><CvBigSensor id="sensor.biblio_co2" hass={hb} /></Item>
         <Item l={tr('Jauge')}><CvGauge id="sensor.biblio_puissance" hass={hb} /></Item>
-        <Item l={tr('Horloge')}><CvClock /></Item>
+        <Item l={tr('Horloge')} h={88}><CvClock /></Item>
       </Rangee>
 
       <Titre i="apps" c="var(--o-accent-soft)" t={tr('Cartes maison (agrégats)')} />
@@ -10224,7 +10229,7 @@ function BiblioView() {
 
       <Titre i="soap" c="var(--o-purple)" t={tr('Électroménager')} />
       <Rangee>
-        <Item l={tr('Compacte')}><div style={{ height: 88 }}><ApplianceCard chip nom={tr('Lave-linge')} etat={tr('Essorage')} restant="34 min" /></div></Item>
+        <Item l={tr('Compacte')} h={88}><ApplianceCard chip nom={tr('Lave-linge')} etat={tr('Essorage')} restant="34 min" /></Item>
         <Item l={tr('Standard')} w={280}><ApplianceCard nom={tr('Lave-linge')} etat={tr('Coton 40° · essorage')} pct={72} restant="34 min" fin="13:38" conso="0,6 kWh" /></Item>
       </Rangee>
 
@@ -10232,10 +10237,10 @@ function BiblioView() {
       <Rangee>
         <Item l={tr('Carte personne')}><CvPerson id="person.biblio" hass={hb} /></Item>
         <Item l={tr('Alarme')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} /></Item>
-        <Item l={tr('Serrure')}><CvCard id="lock.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
-        <Item l={tr('Vanne')}><CvCard id="valve.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
-        <Item l={tr('Scène')}><CvCard id="scene.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
-        <Item l={tr('Ouverture')}><CvCard id="binary_sensor.biblio_porte" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Serrure')} h={88}><CvCard id="lock.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Vanne')} h={88}><CvCard id="valve.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Scène')} h={88}><CvCard id="scene.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
+        <Item l={tr('Ouverture')} h={88}><CvCard id="binary_sensor.biblio_porte" hass={hb} onOpen={dc.ouvrir} dense /></Item>
       </Rangee>
 
       <div style={{ marginTop: 26, fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
