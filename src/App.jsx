@@ -1505,7 +1505,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const grade = prise ? 'var(--o-accent)' : (rgb && color) ? color : null; // null = dégradé doré
   const PRESETS = [[tr('Nuit'), 25], [tr('Doux'), 60], [tr('Plein'), 100]];
   return (
-    <button ref={flashRef} className={'o-light-card o-rmcard' + (mort ? ' o-panne' : '')} onClick={() => { if (adjustable && onOpen) onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed }); else if (onFiche) onFiche(id); }}
+    <button ref={flashRef} className={'o-light-card o-rmcard o-cvdense' + (mort ? ' o-panne' : '')} onClick={() => { if (adjustable && onOpen) onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed }); else if (onFiche) onFiche(id); }}
       style={{ ...RM_CARD, alignItems: 'stretch', textAlign: 'left', width: '100%', cursor: (adjustable || onFiche) ? 'pointer' : 'default', overflow: 'hidden',
         // Le lavis est une COUCHE posée sur la surface, jamais la surface elle-même :
         // sinon le bas de carte restait un alpha .22 sur le fond de page — faux-transparent
@@ -1528,7 +1528,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
             style={{ display: 'block', height: 24, borderRadius: 12, marginTop: 8, overflow: 'hidden', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', opacity: adjustable ? 1 : .35, cursor: adjustable ? 'ew-resize' : 'default', touchAction: 'none' }}>
             <span data-fill style={{ display: 'block', height: '100%', width: (adjustable ? briAff : (on ? 100 : 0)) + '%', borderRadius: 13, background: grade ? grade : 'linear-gradient(90deg,#ffce73,#f59e0b)', transition: 'width .3s' }} />
           </span>
-          <span style={{ display: 'flex', gap: 7, marginTop: 7 }}>
+          <span className="o-lightpresets" style={{ display: 'flex', gap: 7, marginTop: 7 }}>
             {PRESETS.map(([nom, pct]) => (
               <span key={nom} role="button" tabIndex={adjustable ? 0 : -1} aria-disabled={!adjustable} aria-label={nom + ' ' + pct + '%'}
                 onClick={adjustable ? (e) => { e.stopPropagation(); poseBri(pct); } : (e) => e.stopPropagation()}
@@ -1629,27 +1629,60 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onOpen, extra = null
 
 /* Capteur de plante, même gabarit : pousse en haut à gauche, HUMIDITÉ en haut
  * à droite (à la couleur du verdict), nom et verdict sous l'icône. */
-function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, onOpen }) {
+function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, temp, img = null, onOpen, chip = false }) {
+  // L'icône pousse du gabarit maison ; l'illustration de la plante vit en
+  // FILIGRANE au fond de la carte, comme sur la vue Objets.
+  const portrait = (taille) => (
+    <span style={{ width: taille, height: taille, borderRadius: taille > 40 ? 13 : 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(52,211,153,.14)', color: 'var(--o-ok)' }}><Fi i="seedling" size={taille > 40 ? 17 : 15} /></span>
+  );
+  const filigrane = img && PLANT_ART[img] && (
+    <span aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -10, width: 120, height: 120, backgroundImage: `url("${PLANT_ART[img]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.14, pointerEvents: 'none' }} />
+  );
+  // Compacte 1×1 : gabarit CvCard dense — l'humidité à la couleur du verdict.
+  if (chip) {
+    return (
+      <div className="o-piece o-cvdense" role="button" tabIndex={0} aria-label={'Ouvrir ' + nom}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
+        onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
+        <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          {portrait(34)}
+          <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: verdictCol || 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{verdict || sub || '—'}</div>
+          </div>
+          {hum != null && <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: verdictCol || 'var(--o-text2)' }}>{Math.round(hum)}%</span>}
+        </div>
+      </div>
+    );
+  }
+  // Standard 2×1 : les capteurs en GRILLE DE DEUX, une jauge par métrique —
+  // humidité au verdict, lumière, température, engrais (conductivité).
+  const jauge = (i, col, pct, titre) => (
+    <div title={titre} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+      <Fi i={i} size={11} color={col} />
+      <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--o-bd1)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: Math.max(0, Math.min(100, pct || 0)) + '%', background: col, borderRadius: 2, transition: 'width .3s' }} />
+      </div>
+    </div>
+  );
   return (
     <div className="o-rmcard" role="button" tabIndex={0} aria-label={'Ouvrir ' + nom}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO('rgba(52,211,153,.14)', 'var(--o-ok)')}><Fi i="seedling" size={16} /></span>
+      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', position: 'relative', overflow: 'hidden' }}>
+      {filigrane}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        {portrait(34)}
         {hum != null && <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: verdictCol || 'var(--o-text2)' }}>{Math.round(hum)}%</span>}
       </div>
-      <div>
+      <div style={{ position: 'relative', marginTop: 14 }}>
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: verdictCol || 'var(--o-text3)' }}>{verdict || sub || '—'}</div>
-        <div style={{ height: 4, borderRadius: 2, background: 'var(--o-bd1)', marginTop: 10, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: Math.max(0, Math.min(100, hum || 0)) + '%', background: verdictCol || 'var(--o-ok)', borderRadius: 2, transition: 'width .3s' }} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px 14px', marginTop: 10 }}>
+          {hum != null && jauge('raindrops', verdictCol || 'var(--o-ok)', hum, tr('Humidité') + ' ' + Math.round(hum) + ' %')}
+          {lux != null && jauge('brightness', 'var(--o-warn)', lux / 10, tr('Luminosité') + ' ' + Math.round(lux) + ' lx')}
+          {temp != null && jauge('thermometer-half', '#ff8a4c', temp / 0.35, Math.round(temp) + ' °C')}
+          {cond != null && jauge('leaf', 'var(--o-ok)', cond / 20, Math.round(cond) + ' µS/cm')}
         </div>
-        {(lux != null || cond != null) && (
-          <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)' }}>
-            {lux != null && <span><Fi i="brightness" size={10} /> {lux}</span>}
-            {cond != null && <span>{cond}</span>}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1799,24 +1832,15 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const heating = a.hvac_action === 'heating';
   const mort = !st || st.state === 'unavailable';
   const all = a.hvac_modes || ['off', 'heat'];
-  // Préréglages universels : Confort et Éco d'abord (quel que soit leur nom
-  // exact chez l'intégration), le reste de la liste ensuite.
-  const PRESET_FR = { comfort: tr('CONFORT'), eco: tr('ÉCO'), away: tr('ABSENT'), home: tr('PRÉSENT'), boost: 'BOOST', sleep: tr('NUIT') };
-  const presets = Array.isArray(a.preset_modes) ? a.preset_modes.filter(p => p && String(p).toLowerCase() !== 'none') : [];
-  const rang = (p) => { const k = String(p).toLowerCase(); return k.indexOf('comfort') >= 0 || k.indexOf('confort') >= 0 ? 0 : k.indexOf('eco') >= 0 ? 1 : 2; };
-  // Confort et Éco, puis ARRÊT (le mode off du thermostat, pas un préréglage).
-  const chips = [...presets].sort((x, y) => rang(x) - rang(y)).slice(0, 2);
-  const libPreset = (p) => PRESET_FR[String(p).toLowerCase()] || String(p).toUpperCase();
-  // Toggle AUTO (coin haut-droit) : bascule le mode auto/heat_cool du thermostat.
-  const modeAuto = all.find(m => m === 'auto' || m === 'heat_cool') || null;
-  const autoOn = mode === 'auto' || mode === 'heat_cool';
-  const modeManuel = all.find(m => m !== 'off' && m !== 'auto' && m !== 'heat_cool') || 'heat';
-  const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('climate', svc, { entity_id: id, ...(data || {}) }); } catch (e) {} };
+  // Retour au dessin d'origine (retour d'essai) : chip mode en haut-droit,
+  // consigne en grand à gauche, boutons − + larges — sans bordure seulement.
+  const MODE_FR = { off: tr('ARRÊT'), heat: tr('CONFORT'), cool: tr('FROID'), auto: 'AUTO', heat_cool: 'AUTO', dry: tr('SEC'), fan_only: tr('VENTIL') };
   // Les bornes viennent de l'entite, pas d'une constante : la climatisation de
   // l'installation d'essai monte a 35, la ou le code plafonnait a 30. Le pas
   // aussi lui appartient. On affiche ce qui a ete envoye, pas ce qui a ete
   // demande — sinon la consigne affichee mentirait des qu'elle est bornee.
   const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
+  const nextMode = () => { const i = all.indexOf(mode); commander(hass, id, 'set_hvac_mode', all[(i + 1) % all.length]); };
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
@@ -1827,43 +1851,14 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
       border: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.16)', off ? 'var(--o-text3)' : heating ? 'var(--o-warn2)' : '#ff8a4c')}><Fi i="thermometer-half" size={17} /></span>
-        {modeAuto && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={(e) => e.stopPropagation()}>
-            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: autoOn ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>AUTO</span>
-            <span role="switch" aria-checked={autoOn} aria-label={'Auto ' + (label || a.friendly_name || id)} tabIndex={0}
-              onClick={() => commander(hass, id, 'set_hvac_mode', autoOn ? modeManuel : modeAuto)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); commander(hass, id, 'set_hvac_mode', autoOn ? modeManuel : modeAuto); } }}
-              style={{ width: 38, height: 22, borderRadius: 11, background: autoOn ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}>
-              <span style={{ position: 'absolute', top: 3, left: autoOn ? 19 : 3, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
-            </span>
-          </span>
-        )}
+        <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title="Changer de mode" style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'none', background: off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-warn2)' }}>{tr(MODE_FR[mode]) || String(mode).toUpperCase()}</button>
       </div>
-      <div style={{ marginTop: 14 }}>
-        {/* Gabarit maison : le nom sous l'icône, puis − consigne + et les
-          * préréglages universels (Confort, Éco) en chips. */}
-        <div style={RM_NAME}>{label || a.friendly_name || id}</div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
-          <button aria-label={'− ' + (label || a.friendly_name || id)} onClick={(e) => { e.stopPropagation(); setT(-0.5); }}
-            style={{ width: 36, height: 32, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', fontSize: 17, fontWeight: 800, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>−</button>
-          <div className="o-rmbig" style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1.1, whiteSpace: 'nowrap' }}>{target}<span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--o-text3)' }}> °C</span></div>
-          <button aria-label={'+ ' + (label || a.friendly_name || id)} onClick={(e) => { e.stopPropagation(); setT(0.5); }}
-            style={{ width: 36, height: 32, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', fontSize: 17, fontWeight: 800, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>+</button>
-        </div>
-        <div style={{ display: 'flex', gap: 7, marginTop: 8 }}>
-          {chips.map((p) => {
-            const actif = !off && a.preset_mode === p;
-            return (
-              <button key={p} onClick={(e) => { e.stopPropagation(); if (off) commander(hass, id, 'set_hvac_mode', modeManuel); call('set_preset_mode', { preset_mode: p }); }}
-                style={{ flex: 1, padding: '6px 4px', borderRadius: 9, border: 'none', fontSize: 11, fontWeight: 800, letterSpacing: '.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
-                {libPreset(p)}
-              </button>
-            );
-          })}
-          <button onClick={(e) => { e.stopPropagation(); commander(hass, id, 'set_hvac_mode', off ? modeManuel : 'off'); }}
-            style={{ flex: 1, padding: '6px 4px', borderRadius: 9, border: 'none', fontSize: 11, fontWeight: 800, letterSpacing: '.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: off ? 'var(--o-accent)' : 'var(--o-s1)', color: off ? '#fff' : 'var(--o-text2)' }}>
-            {tr('ARRÊT')}
-          </button>
+      <div>
+        <div className="o-rmbig" style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1.1 }}>{target}<span style={{ fontSize: 20 }}>°</span></div>
+        <div style={RM_SUB}>{label || a.friendly_name || id}{cur != null ? ' · ' + tr('actuel {n}°', { n: cur }) : ''}</div>
+        <div style={{ display: 'flex', gap: 7, marginTop: 11 }}>
+          <button onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 17, padding: '7px 6px' }}>−</button>
+          <button onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 17, padding: '7px 6px' }}>+</button>
         </div>
       </div>
     </div>
@@ -4448,7 +4443,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
               const pl = plantDe(k);
               const v = pl ? plantVerdict(pl.hum) : null;
               carte = pl ? <RoomPlantCard nom={nomDe(k)} sub={pl.room} hum={pl.hum} verdict={v.t} verdictCol={v.c}
-                lux={pl.lux != null ? fmtV(pl.lux, ' lx') : null} cond={pl.cond != null ? fmtV(pl.cond, ' µS') : null}
+                lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img}
                 onOpen={() => setSheet({ type: 'plant', pl })} /> : null;
             } else {
               // Ajout libre : la carte du catalogue si un type est choisi,
@@ -9565,7 +9560,7 @@ function cvTypesPour(id) {
   if (d === 'alarm_control_panel') return ['compacte', 'alarme', 'riche'];
   return ['compacte', 'riche'];
 }
-const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge') });
+const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air') });
 
 /* Horloge : l'heure de la maison, sans entité — la carte se suffit. */
 function CvClock() {
@@ -9762,6 +9757,26 @@ function CvAlarm({ id, hass }) {
         <button style={btn} onClick={() => call('alarm_arm_home')}>{tr('Présent')}</button>
         <button style={{ ...btn, background: 'rgba(52,211,153,.12)', color: 'var(--o-ok)', borderColor: 'rgba(52,211,153,.3)' }} onClick={() => call('alarm_disarm')}>{tr('Désarmer')}</button>
       </div>
+      {/* Le tour de la maison en deux lignes : ouvrants et caméras. */}
+      {(() => {
+        const S = (hass && hass.states) || {};
+        const os = ouvrantsDe(S);
+        const ouverts = os.filter(o => o.on).length;
+        const cams = Object.keys(S).filter(cid => cid.indexOf('camera.') === 0 && S[cid].state !== 'unavailable').length;
+        const ligne = (l, v, c) => (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{l}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 800, color: c }}>{v}</span>
+          </div>
+        );
+        if (!os.length && !cams) return null;
+        return (
+          <div style={{ marginTop: 9 }}>
+            {os.length > 0 && ligne(tr('Ouvrants'), ouverts === 0 ? tr('Tout fermé') : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts }), ouverts ? 'var(--o-warn)' : 'var(--o-ok)')}
+            {cams > 0 && ligne(tr('Caméras'), tr('{n} en ligne', { n: cams }), 'var(--o-text2)')}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -9798,16 +9813,27 @@ function CvHistory({ id, hass }) {
   const a = (st && st.attributes) || {};
   const mort = !st || st.state === 'unavailable';
   const cur = st ? parseFloat(st.state) : NaN;
-  let chemin = '', aire = '', vmin = null, vmax = null;
+  // L'ÉNERGIE (kWh, compteur croissant) se raconte en BARRES par heure —
+  // chaque barre est le delta du compteur sur l'heure. Le reste en courbe.
+  const estEnergie = a.device_class === 'energy' || /Wh$/.test(a.unit_of_measurement || '');
+  let chemin = '', aire = '', vmin = null, vmax = null, barres = null, totalJour = null;
   if (points && points.length > 1) {
-    const t0 = points[0].t, t1 = points[points.length - 1].t || t0 + 1;
-    vmin = Math.min(...points.map(p => p.v)); vmax = Math.max(...points.map(p => p.v));
-    const spread = (vmax - vmin) || 1;
-    const X = (t) => ((t - t0) / (t1 - t0 || 1)) * 100;
-    const Y = (v) => 34 - ((v - vmin) / spread) * 28;
-    chemin = points.map((p, i) => (i ? 'L' : 'M') + X(p.t).toFixed(1) + ' ' + Y(p.v).toFixed(1)).join(' ');
-    aire = chemin + ` L 100 40 L 0 40 Z`;
+    if (estEnergie) {
+      const seaux = new Map();
+      points.forEach(p => { const h = Math.floor(p.t / 3600000); const b = seaux.get(h) || { min: p.v, max: p.v }; b.min = Math.min(b.min, p.v); b.max = Math.max(b.max, p.v); seaux.set(h, b); });
+      barres = [...seaux.keys()].sort((x, y) => x - y).map(h => Math.max(0, seaux.get(h).max - seaux.get(h).min));
+      totalJour = barres.reduce((s, v) => s + v, 0);
+    } else {
+      const t0 = points[0].t, t1 = points[points.length - 1].t || t0 + 1;
+      vmin = Math.min(...points.map(p => p.v)); vmax = Math.max(...points.map(p => p.v));
+      const spread = (vmax - vmin) || 1;
+      const X = (t) => ((t - t0) / (t1 - t0 || 1)) * 100;
+      const Y = (v) => 34 - ((v - vmin) / spread) * 28;
+      chemin = points.map((p, i) => (i ? 'L' : 'M') + X(p.t).toFixed(1) + ' ' + Y(p.v).toFixed(1)).join(' ');
+      aire = chemin + ` L 100 40 L 0 40 Z`;
+    }
   }
+  const bmax = barres && barres.length ? Math.max(...barres, 0.001) : 1;
   return (
     <div className={'o-piece' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 150, position: 'relative', overflow: 'hidden', opacity: mort ? .55 : 1 }}>
       {chemin && (
@@ -9816,10 +9842,202 @@ function CvHistory({ id, hass }) {
           <path d={chemin} fill="none" stroke="var(--o-accent)" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
         </svg>
       )}
+      {barres && barres.length > 0 && (
+        <svg viewBox="0 0 100 40" preserveAspectRatio="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, width: '100%', height: '58%' }}>
+          {barres.map((v, i) => {
+            const n = barres.length, larg = 100 / n;
+            const h = Math.max(0.8, (v / bmax) * 34);
+            return <rect key={i} x={(i * larg + larg * 0.15).toFixed(2)} y={(40 - h).toFixed(2)} width={(larg * 0.7).toFixed(2)} height={h.toFixed(2)} rx="0.6" fill={i === barres.length - 1 ? 'var(--o-accent)' : 'rgba(var(--o-accent-rgb),.45)'} />;
+          })}
+        </svg>
+      )}
       <div style={{ position: 'relative', fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
       <div style={{ position: 'relative', fontSize: 26, fontWeight: 800, marginTop: 2 }}>{isNaN(cur) ? '—' : Math.round(cur * 10) / 10}<span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 4 }}>{a.unit_of_measurement || ''}</span></div>
       <div style={{ position: 'relative', marginTop: 'auto', fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)' }}>
-        {points === null ? tr('Chargement…') : points.length < 2 ? tr("Pas d'historique sur 24 h") : (tr('min {a} · max {b}', { a: Math.round(vmin * 10) / 10, b: Math.round(vmax * 10) / 10 }))}
+        {points === null ? tr('Chargement…') : points.length < 2 ? tr("Pas d'historique sur 24 h")
+          : estEnergie ? tr('{n} sur 24 h', { n: Math.round(totalJour * 10) / 10 + ' ' + (a.unit_of_measurement || 'kWh') })
+            : (tr('min {a} · max {b}', { a: Math.round(vmin * 10) / 10, b: Math.round(vmax * 10) / 10 }))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Cartes AGRÉGATS (sans entité d'ancrage, comme l'horloge) ────────────────
+ * Elles lisent la maison entière : découverte par device_class ou
+ * configuration existante — zéro YAML, sources injectables pour la biblio. */
+const OUVRANT_DCS = ['door', 'window', 'garage_door', 'opening', 'gate'];
+const ouvrantsDe = (S) => Object.keys(S || {})
+  .filter(id => id.indexOf('binary_sensor.') === 0 && S[id] && S[id].state !== 'unavailable')
+  .map(id => ({ id, dc: (S[id].attributes || {}).device_class, on: S[id].state === 'on', nom: (S[id].attributes || {}).friendly_name || id, lc: S[id].last_changed }))
+  .filter(o => OUVRANT_DCS.indexOf(o.dc) >= 0);
+const airDe = (S) => {
+  const par = (dcs) => Object.keys(S || {}).filter(id => id.indexOf('sensor.') === 0 && S[id] && dcs.indexOf((S[id].attributes || {}).device_class) >= 0 && !isNaN(parseFloat(S[id].state)));
+  const maxDe = (ids) => ids.length ? ids.reduce((m, id) => parseFloat(S[id].state) > parseFloat(S[m].state) ? id : m, ids[0]) : null;
+  const moyDe = (ids) => ids.length ? ids.reduce((s, id) => s + parseFloat(S[id].state), 0) / ids.length : null;
+  const co2 = maxDe(par(['carbon_dioxide']));
+  return {
+    co2, co2V: co2 ? Math.round(parseFloat(S[co2].state)) : null,
+    vocV: (() => { const v = maxDe(par(['volatile_organic_compounds', 'volatile_organic_compounds_parts'])); return v ? Math.round(parseFloat(S[v].state)) : null; })(),
+    pmV: (() => { const v = maxDe(par(['pm25'])); return v ? Math.round(parseFloat(S[v].state)) : null; })(),
+    humV: (() => { const v = moyDe(par(['humidity'])); return v != null ? Math.round(v) : null; })(),
+  };
+};
+/* Qualité d'air : le CO₂ le plus haut de la maison en vedette, verdict en
+ * badge, les autres mesures en sous-tuiles. */
+function CvAir({ hass }) {
+  const S = (hass && hass.states) || {};
+  const air = airDe(S);
+  const [txt, col] = air.co2V == null ? ['—', 'var(--o-text3)']
+    : air.co2V < 800 ? [tr('Bon'), 'var(--o-ok)']
+      : air.co2V < 1200 ? [tr('Moyen'), 'var(--o-warn)'] : [tr('Mauvais'), 'var(--o-bad)'];
+  const tuile = (l, v) => v != null && (
+    <div style={{ flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 10, background: 'var(--o-s1)' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{l}</div>
+      <div style={{ fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap' }}>{v}</div>
+    </div>
+  );
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Qualité air')}</span>
+        <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: hx(col, .14), color: col }}>{txt}</span>
+      </div>
+      <div style={{ fontSize: 27, fontWeight: 800, marginTop: 4 }}>{air.co2V != null ? air.co2V : '—'}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 5 }}>ppm CO₂</span></div>
+      <div style={{ height: 5, borderRadius: 3, background: 'var(--o-bd1)', margin: '9px 0 10px', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: Math.min(100, (air.co2V || 0) / 20) + '%', background: col, borderRadius: 3, transition: 'width .3s' }} />
+      </div>
+      <div style={{ display: 'flex', gap: 7, marginTop: 'auto' }}>
+        {tuile('COV', air.vocV != null ? air.vocV + ' ppb' : null)}
+        {tuile('PM2.5', air.pmV != null ? air.pmV + ' µg' : null)}
+        {tuile(tr('Humidité'), air.humV != null ? air.humV + ' %' : null)}
+      </div>
+    </div>
+  );
+}
+/* Présence : toute la maisonnée en lignes — avatar, où, depuis quand. */
+function CvPresence({ hass, gens = null }) {
+  const S = (hass && hass.states) || {};
+  const liste = (gens || peopleList()).map(p => {
+    const st = S[p.haid];
+    return { ...p, home: !!st && st.state === 'home', lc: st && st.last_changed };
+  });
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
+      <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>{tr('Présence')}</div>
+      {liste.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Personne de configuré')}</div>}
+      {liste.slice(0, 4).map((p) => (
+        <div key={p.haid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+          <span style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 11, fontWeight: 800, color: 'var(--o-text2)', opacity: p.home ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)' }}>{(p.home ? tr('À la maison') : 'Absent') + (p.lc ? ' · ' + relTime(p.lc).toLowerCase() : '')}</div>
+          </div>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', boxShadow: p.home ? '0 0 6px rgba(52,211,153,.6)' : 'none' }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+/* Ouvrants : portes, fenêtres, garage — l'état de chaque ouverture, et le
+ * verdict d'ensemble en tête. */
+function CvOuvrants({ hass }) {
+  const S = (hass && hass.states) || {};
+  const os = ouvrantsDe(S);
+  const ouverts = os.filter(o => o.on).length;
+  const icoDe = (dc) => dc === 'window' ? 'window-alt' : (dc === 'garage_door' || dc === 'gate') ? 'garage' : 'door-closed';
+  // Les ouverts d'abord : c'est eux qu'on cherche.
+  const tri = [...os].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0));
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Ouvrants')}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: ouverts ? 'var(--o-warn)' : 'var(--o-ok)' }}>{os.length === 0 ? '—' : ouverts === 0 ? tr('Tout fermé') : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts })}</span>
+      </div>
+      {os.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Aucun capteur d’ouverture')}</div>}
+      {tri.slice(0, 3).map((o) => (
+        <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+          <Fi i={o.on && o.dc === 'door' ? 'door-open' : icoDe(o.dc)} size={13} color={o.on ? 'var(--o-warn)' : 'var(--o-text3)'} />
+          <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.nom}</span>
+          <span style={{ fontSize: 11, fontWeight: 800, flexShrink: 0, color: o.on ? 'var(--o-warn)' : 'var(--o-ok)' }}>{o.on ? (tr('Ouvert') + (o.lc ? ' ' + relTime(o.lc).toLowerCase() : '')) : tr('Fermée')}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+/* Énergie maison : la consommation du moment en vedette, la part solaire en
+ * badge, les flux en sous-tuiles. Les rôles viennent du tableau Énergie. */
+function CvEnergie({ hass, roles = null }) {
+  const S = (hass && hass.states) || {};
+  const EN = roles || enHaids();
+  const lit = (id) => { const st = id && S[id]; const v = st ? parseFloat(st.state) : NaN; return isNaN(v) ? null : v; };
+  const sol = lit(EN.solarNow), grid = lit(EN.gridNow);
+  const maison = sol != null || grid != null ? Math.max(0, Math.round((sol || 0) + Math.max(0, grid || 0))) : null;
+  const part = maison && sol != null ? Math.round(Math.min(100, sol / maison * 100)) : null;
+  const jour = lit(EN.consoJour);
+  const tuile = (l, v, c) => v != null && (
+    <div style={{ flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 10, background: 'var(--o-s1)' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{l}</div>
+      <div style={{ fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap', color: c || 'var(--o-text)' }}>{v}</div>
+    </div>
+  );
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Énergie maison')}</span>
+        {part != null && <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: 'rgba(52,211,153,.14)', color: 'var(--o-ok)' }}>{tr('Solaire')} {part} %</span>}
+      </div>
+      <div style={{ fontSize: 27, fontWeight: 800, marginTop: 4 }}>{maison != null ? maison : '—'}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 5 }}>W</span></div>
+      <div style={{ display: 'flex', height: 5, borderRadius: 3, background: 'var(--o-bd1)', margin: '9px 0 10px', overflow: 'hidden' }}>
+        <div style={{ width: (part || 0) + '%', background: 'var(--o-ok)', transition: 'width .3s' }} />
+        <div style={{ width: (100 - (part || 0)) + '%', background: 'var(--o-accent)', opacity: .8, transition: 'width .3s' }} />
+      </div>
+      <div style={{ display: 'flex', gap: 7, marginTop: 'auto' }}>
+        {tuile(tr('Solaire'), sol != null ? Math.round(sol) + ' W' : null, 'var(--o-ok)')}
+        {tuile(tr('Réseau'), grid != null ? Math.round(grid) + ' W' : null, 'var(--o-accent-soft)')}
+        {tuile(tr("Aujourd'hui"), jour != null ? Math.round(jour * 10) / 10 + ' kWh' : null)}
+      </div>
+    </div>
+  );
+}
+/* Électroménager : cycle en cours — progression, fin prévue, consommation.
+ * À PROPS pour l'instant (biblio) : le branchement config viendra. */
+function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
+  if (chip) {
+    return (
+      <div className="o-piece o-cvdense" style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
+        <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-purple-rgb),.16)', color: 'var(--o-purple)' }}><Fi i="soap" size={15} /></span>
+          <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-purple)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{etat}</div>
+          </div>
+          {restant && <span style={{ fontSize: 14, fontWeight: 800, flexShrink: 0 }}>{restant}</span>}
+        </div>
+      </div>
+    );
+  }
+  const tuile = (l, v) => v != null && (
+    <div style={{ flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 10, background: 'var(--o-s1)' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{l}</div>
+      <div style={{ fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap' }}>{v}</div>
+    </div>
+  );
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-purple-rgb),.16)', color: 'var(--o-purple)' }}><Fi i="soap" size={17} /></span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)' }}>{etat}</div>
+        </div>
+        {restant && <span style={{ fontSize: 15, fontWeight: 800, flexShrink: 0, color: 'var(--o-purple)' }}>{restant}</span>}
+      </div>
+      <div style={{ height: 5, borderRadius: 3, background: 'var(--o-bd1)', margin: '14px 0 10px', overflow: 'hidden', marginTop: 'auto' }}>
+        <div style={{ height: '100%', width: Math.min(100, pct || 0) + '%', background: 'var(--o-purple)', borderRadius: 3, transition: 'width .3s' }} />
+      </div>
+      <div style={{ display: 'flex', gap: 7 }}>
+        {tuile(tr('Fin prévue'), fin)}
+        {tuile(tr('Conso cycle'), conso)}
       </div>
     </div>
   );
@@ -9841,6 +10059,10 @@ function CvTyped({ x, hass, dc }) {
   // générique pleine pour le reste (machines, prises…).
   if (t === 'riche') return dc.card(id);
   if (t === 'horloge') return <CvClock />;
+  if (t === 'presence') return <CvPresence hass={hass} />;
+  if (t === 'ouvrants') return <CvOuvrants hass={hass} />;
+  if (t === 'energiemaison') return <CvEnergie hass={hass} />;
+  if (t === 'air') return <CvAir hass={hass} />;
   if (t === 'chiffre') return ouvre(<CvBigSensor id={id} hass={hass} />);
   if (t === 'jauge') return ouvre(<CvGauge id={id} hass={hass} />);
   if (t === 'graph') return ouvre(<CvHistory id={id} hass={hass} />);
@@ -9879,6 +10101,16 @@ function biblioStates() {
     'valve.biblio': s('open', { friendly_name: 'Vanne arrosage' }),
     'scene.biblio': s(il_y_a(95), { friendly_name: 'Scène cinéma' }),
     'binary_sensor.biblio_porte': s('off', { friendly_name: "Porte d'entrée", device_class: 'door' }),
+    // Agrégats : de quoi nourrir Présence, Ouvrants, Qualité d'air, Énergie.
+    'person.biblio_2': s('not_home', { friendly_name: 'Alex' }),
+    'binary_sensor.biblio_fenetre': s('off', { friendly_name: 'Fenêtre chambre', device_class: 'window' }),
+    'binary_sensor.biblio_garage': s('on', { friendly_name: 'Garage', device_class: 'garage_door' }),
+    'sensor.biblio_voc': s(78, { friendly_name: 'COV bureau', unit_of_measurement: 'ppb', device_class: 'volatile_organic_compounds' }),
+    'sensor.biblio_pm25': s(6, { friendly_name: 'PM2.5 bureau', unit_of_measurement: 'µg/m³', device_class: 'pm25' }),
+    'sensor.biblio_hum': s(47, { friendly_name: 'Humidité séjour', unit_of_measurement: '%', device_class: 'humidity' }),
+    'sensor.biblio_solaire': s(486, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power' }),
+    'sensor.biblio_reseau': s(298, { friendly_name: 'Import réseau', unit_of_measurement: 'W', device_class: 'power' }),
+    'sensor.biblio_conso_jour': s(7.4, { friendly_name: 'Conso du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
   };
 }
 function BiblioView() {
@@ -9949,7 +10181,8 @@ function BiblioView() {
         <Item l={tr('Aspirateur')}>{dc.card('vacuum.biblio')}</Item>
         <Item l={tr('Tondeuse')}>{dc.card('lawn_mower.biblio')}</Item>
         <Item l={tr('Distributeur')}><RoomFeederCard nom={tr('Croquettes')} sub={tr('Réservoir aux trois quarts')} pct={74} prochaine="18:00 · 18 g" onFeed={() => {}} onOpen={() => {}} /></Item>
-        <Item l={tr('Plante')}><RoomPlantCard nom="Monstera" sub={tr('Salon, près de la fenêtre')} hum={38} verdict={tr('À arroser bientôt')} verdictCol="var(--o-warn)" lux={820} cond={tr('Lumière correcte')} onOpen={() => {}} /></Item>
+        <Item l={tr('Plante (standard)')}><RoomPlantCard nom="Monstera" sub={tr('Salon, près de la fenêtre')} hum={38} verdict={tr('À arroser bientôt')} verdictCol="var(--o-warn)" lux={820} cond={640} temp={22} img="dracaena" onOpen={() => {}} /></Item>
+        <Item l={tr('Plante (compacte)')}><div style={{ height: 88 }}><RoomPlantCard chip nom="Monstera" hum={38} verdict={tr('À arroser bientôt')} verdictCol="var(--o-warn)" img="dracaena" onOpen={() => {}} /></div></Item>
       </Rangee>
 
       <Titre i="stats" c="var(--o-ok)" t={tr('Capteurs et chiffres')} />
@@ -9958,6 +10191,20 @@ function BiblioView() {
         <Item l={tr('Chiffre')}><CvBigSensor id="sensor.biblio_co2" hass={hb} /></Item>
         <Item l={tr('Jauge')}><CvGauge id="sensor.biblio_puissance" hass={hb} /></Item>
         <Item l={tr('Horloge')}><CvClock /></Item>
+      </Rangee>
+
+      <Titre i="apps" c="var(--o-accent-soft)" t={tr('Cartes maison (agrégats)')} />
+      <Rangee>
+        <Item l={tr('Qualité air')} w={280}><CvAir hass={hb} /></Item>
+        <Item l={tr('Présence maison')} w={280}><CvPresence hass={hb} gens={[{ name: 'Camille', haid: 'person.biblio', img: null }, { name: 'Alex', haid: 'person.biblio_2', img: null }]} /></Item>
+        <Item l={tr('Ouvrants')} w={280}><CvOuvrants hass={hb} /></Item>
+        <Item l={tr('Énergie maison')} w={280}><CvEnergie hass={hb} roles={{ solarNow: 'sensor.biblio_solaire', gridNow: 'sensor.biblio_reseau', consoJour: 'sensor.biblio_conso_jour' }} /></Item>
+      </Rangee>
+
+      <Titre i="soap" c="var(--o-purple)" t={tr('Électroménager')} />
+      <Rangee>
+        <Item l={tr('Compacte')}><div style={{ height: 88 }}><ApplianceCard chip nom={tr('Lave-linge')} etat={tr('Essorage')} restant="34 min" /></div></Item>
+        <Item l={tr('Standard')} w={280}><ApplianceCard nom={tr('Lave-linge')} etat={tr('Coton 40° · essorage')} pct={72} restant="34 min" fin="13:38" conso="0,6 kWh" /></Item>
       </Rangee>
 
       <Titre i="shield-check" c="var(--o-ok)" t={tr('Sécurité et divers')} />
@@ -10062,7 +10309,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   /* DEUX tailles, pas trois : compacte (1 rangée) ou standard (2 rangées).
    * Toute carte non compacte DOIT tenir dans la standard — le graphique, le
    * journal et les machines se compriment plutôt que de déborder. */
-  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2 };
+  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2 };
   const cvRowsDe = (x) => {
     if (typeof x === 'string') return 1;
     const d = String(x.id || '').split('.')[0];
@@ -10170,10 +10417,19 @@ function CustomView({ cv, hass, edit = false, onSave }) {
               })() : (<>
               <EntPicker hass={hass} exclude={[]} onPick={(id) => { if (cvTypesPour(id).length > 1) setPickCarte(id); else setEnts([...cv.ents, id]); }} autoFocus />
               <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Choisis une entité, puis la carte qui lui va.')}</div>
-              <button onClick={() => { setEnts([...cv.ents, { t: 'horloge', id: 'horloge:' + Date.now() }]); close(); }}
-                style={{ marginTop: 14, padding: '9px 14px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <Fi i="clock" size={13} />{tr('Ajouter une horloge')}
-              </button>
+              {/* Cartes sans entité d'ancrage : elles lisent la maison entière. */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+                {[['horloge', 'clock', tr('Ajouter une horloge')],
+                  ['presence', 'users', tr('Présence maison')],
+                  ['ouvrants', 'door-open', tr('Ouvrants')],
+                  ['energiemaison', 'bolt', tr('Énergie maison')],
+                  ['air', 'smog', tr('Qualité air')]].map(([t, ic, lbl]) => (
+                  <button key={t} onClick={() => { setEnts([...cv.ents, { t, id: t + ':' + Date.now() }]); close(); }}
+                    style={{ padding: '9px 14px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <Fi i={ic} size={13} />{lbl}
+                  </button>
+                ))}
+              </div>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '18px 0 8px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
               <TplForm hass={hass} onAdd={(t) => setEnts([...cv.ents, t])} />
               </>)}
@@ -11010,7 +11266,17 @@ export default function App() {
   // `render_template` pousse toute seule.
   // Les épingles vivent sur les cartes de n'importe quelle vue : sans les
   // interroger, une valeur épinglée resterait figée jusqu'à un tick fortuit.
-  const haKeys = [...GLOBAL_KEYS, ...lireEpingles(), ...(activeCv ? activeCv.ents.map(x => cvId(x)) : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
+  // Les cartes AGRÉGATS (présence, ouvrants, air, énergie) lisent la maison
+  // entière : leurs sources entrent au poll par préfixe, sinon elles figent.
+  const cvAggKeys = (x) => {
+    const t = x && x.t;
+    if (t === 'presence') return ['person.'];
+    if (t === 'ouvrants') return ['binary_sensor.'];
+    if (t === 'air') return ['sensor.'];
+    if (t === 'energiemaison') return enKeys();
+    return [cvId(x)];
+  };
+  const haKeys = [...GLOBAL_KEYS, ...lireEpingles(), ...(activeCv ? activeCv.ents.flatMap(cvAggKeys) : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
   // Capteurs de puissance au jitter continu : signature arrondie à 10 W → pas de re-render global à chaque tick.
   // Un capteur de puissance jitter en continu chez N'IMPORTE QUI : c'est sa
   // `device_class` qui le dit, pas son nom. Cette liste portait un identifiant
