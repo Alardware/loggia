@@ -974,7 +974,10 @@ const PIECES = [
   { name: 'Extérieur', bg: 'rgba(52,211,153,.16)', box: 36, rad: 11, icon: <Ico name="tree" color="var(--o-ok)" size={22} />, status: { kind: 'ext' }, temp: '6.2°', tc: 'var(--o-accent-soft)', hum: '84%', badge: 'Vent 12', bc: 'var(--o-text2)', bbg: 'var(--o-bd3)' },
 ];
 
-function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, mains = null, onToggleLights, idx = 0 }) {
+// Mini-pilule d'action des tuiles pièces — même gabarit 38×26 r9 que les
+// minis des cartes denses.
+const MINI_PIECE = { width: 38, height: 26, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 };
+function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, mains = null, onToggleLights, covers = null, clim = null, idx = 0 }) {
   // Format compact (PC ≥1180) : compteur = luminaires non-« Ampoule » ; interrupteur = plafonnier(s) SEULS
   const tilt = useTilt(4);
   const [flashRef, flash] = useFlash();
@@ -1037,7 +1040,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
     const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
     const canToggle = !!(mains && mains.length && onToggleLights);
     return (
-      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-stag o-hov ' + (tilt.className || '')} onClick={onOpen} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', borderRadius: 15, padding: '14px 15px 12px',
+      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-piecestd o-stag o-hov ' + (tilt.className || '')} onClick={onOpen} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', borderRadius: 15, padding: '14px 15px 12px',
         // Halo d'une pièce éclairée. Les cartes de luminaires en ont un, pas
         // celles de l'accueil : d'un coup d'œil, on ne voyait pas quelles pièces
         // étaient allumées, alors que c'est ce qu'on y cherche. Même teinte que
@@ -1055,14 +1058,35 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 15, pointerEvents: 'none' }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <div style={{ width: 36, height: 36, borderRadius: 11, background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{p.icon}</div>
-          {canToggle && (
-            <span role="switch" aria-checked={on} aria-label={'Lumières ' + p.name} tabIndex={0}
-              onClick={e => { e.stopPropagation(); doToggle(); }}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-              style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
-              <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
-            </span>
-          )}
+          {/* Minis d'action : volets et clim de la pièce, sans l'ouvrir. Volet
+            * violet quand ouvert, clim ROUGE quand en marche (flocon si elle
+            * refroidit). Des `button` : le drag d'édition les ignore. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {(covers || clim) && <div className="o-piece-minis" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {covers && (
+              <button type="button" aria-label={tr('Volets') + ' ' + p.name} title={covers.open ? tr('Fermer les volets') : tr('Ouvrir les volets')}
+                onClick={e => { e.stopPropagation(); flash('var(--o-purple)'); covers.onToggle(); }}
+                style={{ ...MINI_PIECE, ...(covers.open ? { background: 'rgba(var(--o-purple-rgb),.18)', color: 'var(--o-purple)' } : null), transition: 'background .2s, color .2s' }}>
+                <Ico name="blinds" size={14} />
+              </button>
+            )}
+            {clim && (
+              <button type="button" aria-label={tr('Chauffage') + ' ' + p.name} title={clim.on ? tr('Éteindre le chauffage') : tr('Allumer le chauffage')}
+                onClick={e => { e.stopPropagation(); flash('var(--o-bad)'); clim.onToggle(); }}
+                style={{ ...MINI_PIECE, ...(clim.on ? { background: 'rgba(var(--o-bad-rgb),.16)', color: 'var(--o-bad)' } : null), transition: 'background .2s, color .2s' }}>
+                <Ico name={clim.froid ? 'snowflake' : 'flame'} size={14} />
+              </button>
+            )}
+            </div>}
+            {canToggle && (
+              <span role="switch" aria-checked={on} aria-label={'Lumières ' + p.name} tabIndex={0}
+                onClick={e => { e.stopPropagation(); doToggle(); }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
+                style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
+                <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
+              </span>
+            )}
+          </div>
         </div>
         <div style={{ fontSize: 15, fontWeight: 800 }}>{p.name}</div>
         <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '2px 0 10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lights ? <FlipText text={n > 0 ? (n > 1 ? tr('{n} lampes allumées', { n }) : tr('{n} lampe allumée', { n })) : tr('Tout éteint')} /> : <Skel w={92} h={12} />}</div>
@@ -5084,9 +5108,9 @@ function jourAgenda(e) {
 
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
-const ACC_MAIN = ['scenes', 'pieces', 'cameras'];
+const ACC_MAIN = ['heros', 'scenes', 'pieces', 'cameras'];
 const ACC_RAIL = ['etats', 'rappels', 'agenda'];
-const ACC_NOMS = () => ({ scenes: tr('Scènes rapides'), pieces: tr('Pièces'), cameras: tr('Caméras'), etats: tr('En cours'), rappels: tr('Rappels'), agenda: tr('Agenda') });
+const ACC_NOMS = () => ({ heros: tr('En ce moment'), scenes: tr('Scènes rapides'), pieces: tr('Pièces'), cameras: tr('Caméras'), etats: tr('En cours'), rappels: tr('Rappels'), agenda: tr('Agenda') });
 
 /* FAVORIS de l'accueil (nouvel accueil) : les épingles de la maison, en chips
  * compactes 1 tap — la même CvCard dense que partout, la fiche au tap. */
@@ -5126,7 +5150,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
    * (ajoutée par une version future) se range à la fin, jamais perdue. */
   const [accL, setAccL] = useState(() => {
     const v = readLS('loggia_accueil', null) || {};
-    return { main: Array.isArray(v.main) ? v.main : null, rail: Array.isArray(v.rail) ? v.rail : null, caches: Array.isArray(v.caches) ? v.caches : [] };
+    // piecesOrdre et tailles font partie de la sauvegarde : les oublier ici
+    // rendait l'ordre et la taille des cartes pièces perdus à chaque
+    // rechargement, alors que saveAccL les écrivait bien.
+    return { main: Array.isArray(v.main) ? v.main : null, rail: Array.isArray(v.rail) ? v.rail : null, caches: Array.isArray(v.caches) ? v.caches : [],
+      piecesOrdre: Array.isArray(v.piecesOrdre) ? v.piecesOrdre : [], tailles: (v.tailles && typeof v.tailles === 'object') ? v.tailles : {} };
   });
   const saveAccL = (n) => { setAccL(n); try { localStorage.setItem('loggia_accueil', JSON.stringify(n)); } catch (e) {} };
   const ordreDe = (zone) => {
@@ -5298,6 +5326,32 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   });
   const extPiece = pieces.find(p => p.status && p.status.kind === 'ext'); // Extérieur → ouvert via la chip météo
   const avatars = (a && a.people) ? a.people.map(p => ({ img: p.img, title: `${p.name} · ${p.home ? tr('Présent') : 'Absent'}`, dim: !p.home })) : [{ grad: 'linear-gradient(135deg,#f472b6,var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,#ffb347,#f87171)' }];
+  // ── Salutation contextuelle ──────────────────────────────────────────────
+  // L'heure donne le bonjour ; la maison donne les faits — lumières allumées,
+  // ouvrants ouverts, état de l'alarme. Sans HA, des faits d'exemple gardent
+  // la vitrine vivante. L'horloge météo re-rend déjà chaque minute : l'heure
+  // lue ici reste juste sans minuterie propre.
+  const heure = new Date().getHours();
+  const salut = heure < 5 ? tr('Bonne nuit') : heure < 12 ? tr('Bonjour') : heure < 18 ? tr('Bon après-midi') : heure < 23 ? tr('Bonsoir') : tr('Bonne nuit');
+  const faits = useMemo(() => {
+    const hs = a && a.hass;
+    const S = hs && hs.states;
+    if (!S) return { txt: [tr('{n} lumières allumées', { n: 2 }), tr('{n} ouvrant ouvert', { n: 1 })], alerte: false };
+    const out = [];
+    let alerte = false;
+    let lum = 0;
+    try { for (const l of discoverLights(hs, a && a.index)) if (l.on) lum++; } catch (e) {}
+    out.push(lum === 0 ? tr('Tout est éteint') : lum === 1 ? tr('{n} lumière allumée', { n: 1 }) : tr('{n} lumières allumées', { n: lum }));
+    const ouv = ouvrantsDe(S).filter(o => o.on).length;
+    if (ouv > 0) out.push(ouv === 1 ? tr('{n} ouvrant ouvert', { n: 1 }) : tr('{n} ouvrants ouverts', { n: ouv }));
+    const al = Object.keys(S).find(x => x.indexOf('alarm_control_panel.') === 0 && S[x] && S[x].state !== 'unavailable');
+    if (al) {
+      const st = S[al].state;
+      if (st === 'triggered') { out.push(tr('Alarme déclenchée')); alerte = true; }
+      else out.push(st === 'disarmed' ? tr('Alarme désarmée') : tr('Alarme armée'));
+    }
+    return { txt: out, alerte };
+  }, [a]);
   // HA absent → vitrine de demo ; HA present sans camera → aucune camera, pas d'exemple
   const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => ({ label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: CAMERAS()[i % CAMERAS().length].grad, glow: CAMERAS()[i % CAMERAS().length].glow, sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: cam.online ? 'var(--o-ok)' : '#f87171' }} />{cam.online ? 'Direct' : 'Hors ligne'}</>), haid: cam.haid, online: cam.online, hass: a.hass })) : CAMERAS();
   const _dWallE = { label: tr('Aspirateur'), iconKey: 'vacuum', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
@@ -5412,6 +5466,69 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     const svc = ms.some(l => l.on) ? 'turn_off' : 'turn_on';
     try { dashHass.callService('homeassistant', svc, { entity_id: ms.map(l => l.id) }); } catch (e) {}
   };
+  // ── Volets et clim par pièce : les minis des tuiles ──────────────────────
+  // Agir sans ouvrir la pièce. Double chemin de rattachement, comme les
+  // lumières : la ZONE HA de la pièce (byArea) d'abord, le nom ensuite —
+  // voletCovers et climateZones savent déjà d'où viennent leurs entités
+  // (config ou découverte). Le fil pilote (zones sans entité climate) n'a pas
+  // de bascule sûre en un geste : seules les entités climate réelles ont un
+  // mini.
+  const roomExtras = useMemo(() => {
+    const S = dashHass && dashHass.states;
+    if (!S) return null;
+    const m = {};
+    try {
+      const covs = voletCovers(S).filter(c => c.haid && S[c.haid]);
+      const zones = climateZones(S).filter(z => estClimate(z) && z.haid && S[z.haid]);
+      for (const nom of noms) {
+        const target = rmNorm(nom);
+        const r = a && a.rooms && a.rooms.find(x => (x.name || x.room) === nom);
+        const parZone = (r && r.area && a.index && a.index.byArea && a.index.byArea.get(r.area)) || [];
+        const covers = covs.filter(c => parZone.indexOf(c.haid) >= 0 || rmNorm(c.name).indexOf(target) >= 0).map(c => c.haid);
+        const zc = zones.find(z => parZone.indexOf(z.haid) >= 0 || rmNorm(z.room || '') === target || rmNorm(z.name || '').indexOf(target) >= 0);
+        m[target] = { covers, clim: zc ? zc.haid : null };
+      }
+    } catch (e) { return null; }
+    return m;
+  }, [dashHass, a]);
+  const roomCoversInfo = (name) => {
+    const ex = roomExtras && roomExtras[rmNorm(name)];
+    if (!ex || !ex.covers.length) return null;
+    const S = dashHass.states;
+    const open = ex.covers.some(id => { const st = S[id]; return st && (st.state === 'open' || st.state === 'opening'); });
+    return { open, onToggle: () => { try { dashHass.callService('cover', open ? 'close_cover' : 'open_cover', { entity_id: ex.covers }); } catch (e) {} } };
+  };
+  // ── Héros contextuel : « ce qui compte maintenant » ──────────────────────
+  // Le lecteur si la musique joue (le plus récent si plusieurs), sinon le
+  // thermostat actif (celui qui chauffe/refroidit d'abord), sinon rien — la
+  // section n'existe alors pas du tout. Cartes et fiches du catalogue (dc).
+  const dc = useDomainCards(dashHass);
+  const heroId = useMemo(() => {
+    const S = dashHass && dashHass.states;
+    if (!S) return null;
+    try {
+      const joue = medPlayers().map(m => m.haid).filter(id => S[id] && mpRead(S, id).playing);
+      if (joue.length) return joue.sort((x, y) => String(S[y].last_changed || '').localeCompare(String(S[x].last_changed || '')))[0];
+      const zs = climateZones(S).filter(z => estClimate(z) && z.haid && S[z.haid] && S[z.haid].state !== 'off' && S[z.haid].state !== 'unavailable');
+      const travaille = (z) => ['heating', 'cooling'].indexOf((S[z.haid].attributes || {}).hvac_action) >= 0 ? 0 : 1;
+      zs.sort((za, zb) => travaille(za) - travaille(zb));
+      return zs.length ? zs[0].haid : null;
+    } catch (e) { return null; }
+  }, [dashHass]);
+  const roomClimInfo = (name) => {
+    const ex = roomExtras && roomExtras[rmNorm(name)];
+    if (!ex || !ex.clim) return null;
+    const st = dashHass.states[ex.clim];
+    if (!st || st.state === 'unavailable') return null;
+    const on = st.state !== 'off';
+    const froid = st.state === 'cool' || ((st.attributes || {}).hvac_action === 'cooling');
+    return { on, froid, onToggle: () => {
+      // Rallumer : le premier mode que l'entité connaît, le chauffage d'abord.
+      const modes = (st.attributes || {}).hvac_modes || [];
+      const cible = on ? 'off' : (['heat', 'auto', 'heat_cool', 'cool'].find(mo => modes.indexOf(mo) >= 0) || 'heat');
+      try { dashHass.callService('climate', 'set_hvac_mode', { entity_id: ex.clim, hvac_mode: cible }); } catch (e) {}
+    } };
+  };
 
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -5436,9 +5553,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           )}
           <div className="o-banner-row" style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'nowrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Bon après-midi')}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{salut}</span>
               <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 34, fontWeight: 500, lineHeight: 1 }}>{userName}</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-ok)', boxShadow: '0 0 8px var(--o-ok)', animation: 'pulse 2.4s infinite' }} />Maison · Calme · {a ? (a.inTemp != null ? a.inTemp.toFixed(1) + '°C' : '—') : <Skel w={44} h={12} />}</span>
+              <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: faits.alerte ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: faits.alerte ? '0 0 8px var(--o-bad)' : '0 0 8px var(--o-ok)', animation: 'pulse 2.4s infinite' }} />{faits.txt.join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span>
             </div>
             <div className="o-banner-wx" style={{ display: 'flex', flexDirection: 'column-reverse', alignItems: 'flex-end', gap: 10, flexShrink: 0 }}>
               {/* La vue Météo dit tout ce que cette vignette resume : elle est
@@ -5518,7 +5635,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
                     {/* Carte inerte en édition (comme partout) : le wrapper
                       * garde le drag, le bouton taille reste tapable. */}
                     <div style={editMode ? { pointerEvents: 'none', height: '100%' } : { height: '100%' }}>
-                      <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} onOpen={editMode ? null : () => onOpenRoom && onOpenRoom(p.name)} />
+                      <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} onOpen={editMode ? null : () => onOpenRoom && onOpenRoom(p.name)} />
                     </div>
                     {editMode && (
                       <button aria-label={tr('Taille de la carte') + ' · ' + p.name}
@@ -5533,7 +5650,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             </div>
           ) : (
             <div className="grid-pieces" style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(auto-fill,minmax(205px,1fr))' : 'repeat(3,1fr)', gap: wide ? 12 : 16 }}>
-              {inner.map((p, i) => <PieceCard key={p.name} p={p} idx={i} compact lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />)}
+              {inner.map((p, i) => <PieceCard key={p.name} p={p} idx={i} compact lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />)}
             </div>
           );
           const camsGrid = (
@@ -5649,6 +5766,15 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           // Une section sans rien à montrer (pas de caméra, agenda vide) n'existe
           // pas du tout — ni wrapper, ni place dans l'édition.
           const secsMain = {
+            heros: heroId ? (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div style={sectionTitle}>{tr('En ce moment')}</div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{heroId.indexOf('media_player.') === 0 ? tr('Lecture en cours') : tr('Chauffage')}</span>
+                </div>
+                <div className="o-hero" style={{ height: 184 }}>{dc.card(heroId)}</div>
+              </div>
+            ) : null,
             scenes: <QuickScenes hass={dashHass} />,
             pieces: <>{piecesHeader}{piecesGrid}</>,
             cameras: cams.length > 0 ? <>{camsHeader}{camsGrid}</> : null,
@@ -5683,6 +5809,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           ? <OutdoorModal piece={pop} hass={a && a.hass} mode={weatherMode || 'clouds'} label={weatherLabel} weatherTemp={weatherTemp} sunset={a && a.sunsetHM} onClose={() => setRoomPop(null)} />
           : <RoomComfortModal piece={pop} hass={a && a.hass} onClose={() => setRoomPop(null)} />;
       })()}
+      {/* Fiches des cartes du catalogue (héros « En ce moment »). */}
+      {dc.sheets}
     </main>
   );
 }
