@@ -9557,7 +9557,9 @@ function cvTypesPour(id) {
   if (d === 'light' || d === 'switch' || d === 'fan') return ['compacte', 'riche', 'journal'];
   if (d === 'cover' || d === 'climate' || d === 'media_player' || d === 'vacuum' || d === 'lawn_mower' || d === 'valve' || d === 'humidifier' || d === 'lock' || d === 'siren' || d === 'water_heater') return ['compacte', 'riche', 'journal'];
   if (d === 'scene' || d === 'script' || d === 'button' || d === 'input_button' || d === 'automation') return ['compacte', 'riche'];
-  if (d === 'sensor') return ['compacte', 'chiffre', 'jauge', 'graph', 'journal'];
+  // La jauge a quitté le catalogue le 31/08/2026 (« il est moche ») — les
+  // cartes déjà posées continuent de se rendre (CvTyped).
+  if (d === 'sensor') return ['compacte', 'chiffre', 'graph', 'journal'];
   if (d === 'binary_sensor') return ['compacte', 'chiffre', 'journal'];
   if (d === 'person') return ['compacte', 'personne', 'journal'];
   if (d === 'weather') return ['compacte', 'meteo'];
@@ -10233,7 +10235,6 @@ function BiblioView() {
       <Rangee>
         <Item l={tr('Compacte')} h={88}><CvCard id="sensor.biblio_temp" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Chiffre')}><CvBigSensor id="sensor.biblio_co2" hass={hb} /></Item>
-        <Item l={tr('Jauge')}><CvGauge id="sensor.biblio_puissance" hass={hb} /></Item>
         <Item l={tr('Horloge')} h={88}><CvClock /></Item>
       </Rangee>
 
