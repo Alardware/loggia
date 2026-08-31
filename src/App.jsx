@@ -9821,7 +9821,7 @@ function CvAlarm({ id, hass, sans = false }) {
           <div style={{ display: 'flex', gap: 7, margin: '7px 0 6px' }}>
             {CHIPS.map(([lbl, svc, actif]) => (
               <button key={svc} onClick={() => agir(svc)}
-                style={{ flex: 1, padding: '6px 4px', borderRadius: 9, border: 'none', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
+                style={{ flex: 1, padding: sans ? '10px 4px' : '6px 4px', borderRadius: 9, border: 'none', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
                 {lbl}
               </button>
             ))}
@@ -9901,8 +9901,15 @@ function CvHistory({ id, hass, demoPoints = null }) {
     if (estEnergie) {
       const seaux = new Map();
       points.forEach(p => { const h = Math.floor(p.t / 3600000); const b = seaux.get(h) || { min: p.v, max: p.v }; b.min = Math.min(b.min, p.v); b.max = Math.max(b.max, p.v); seaux.set(h, b); });
-      barres = [...seaux.keys()].sort((x, y) => x - y).map(h => Math.max(0, seaux.get(h).max - seaux.get(h).min));
-      totalJour = barres.reduce((s, v) => s + v, 0);
+      const parHeure = [...seaux.keys()].sort((x, y) => x - y).map(h => Math.max(0, seaux.get(h).max - seaux.get(h).min));
+      // DIX barres au plus : des heures regroupées en tranches larges — vingt-
+      // quatre barres fines « ressemblaient à rien » (retour d'essai).
+      const N = Math.min(10, parHeure.length);
+      barres = Array.from({ length: N }, (_, i) => {
+        const de = Math.floor(i * parHeure.length / N), a = Math.floor((i + 1) * parHeure.length / N);
+        return parHeure.slice(de, a).reduce((s, v) => s + v, 0);
+      });
+      totalJour = parHeure.reduce((s, v) => s + v, 0);
     } else {
       const t0 = points[0].t, t1 = points[points.length - 1].t || t0 + 1;
       vmin = Math.min(...points.map(p => p.v)); vmax = Math.max(...points.map(p => p.v));
@@ -9924,9 +9931,9 @@ function CvHistory({ id, hass, demoPoints = null }) {
       )}
       {/* Barres en éléments pleins, coins nets — la dernière porte l'accent. */}
       {barres && barres.length > 0 && (
-        <div aria-hidden="true" style={{ position: 'absolute', left: 10, right: 10, bottom: 8, height: '52%', display: 'flex', alignItems: 'flex-end', gap: 3 }}>
+        <div aria-hidden="true" style={{ position: 'absolute', left: 12, right: 12, bottom: 10, height: '48%', display: 'flex', alignItems: 'flex-end', gap: 6 }}>
           {barres.map((v, i) => (
-            <div key={i} style={{ flex: 1, minWidth: 0, height: Math.max(4, (v / bmax) * 100) + '%', borderRadius: 4, background: i === barres.length - 1 ? 'var(--o-accent)' : 'rgba(var(--o-accent-rgb),.35)' }} />
+            <div key={i} style={{ flex: 1, minWidth: 0, height: Math.max(8, (v / bmax) * 100) + '%', borderRadius: 6, background: i === barres.length - 1 ? 'var(--o-accent)' : 'rgba(var(--o-accent-rgb),.35)' }} />
           ))}
         </div>
       )}
