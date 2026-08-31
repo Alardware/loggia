@@ -9628,12 +9628,12 @@ function cvTypesPour(id) {
   if (d === 'binary_sensor') return ['compacte', 'chiffre', 'journal'];
   if (d === 'person') return ['compacte', 'personne', 'journal'];
   if (d === 'weather') return ['compacte', 'meteo'];
-  if (d === 'calendar') return ['agenda', 'compacte'];
+  if (d === 'calendar') return ['agenda', 'calendrier', 'compacte'];
   if (d === 'alarm_control_panel') return ['compacte', 'alarme', 'alarmeseule', 'riche'];
   if (d === 'camera') return ['camera', 'compacte'];
   return ['compacte', 'riche'];
 }
-const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)'), activite: tr('Activité récente'), camera: tr('Caméra') });
+const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)'), activite: tr('Activité récente'), camera: tr('Caméra'), calendrier: tr('Calendrier'), localisation: tr('Localisation') });
 
 /* Horloge : l'heure de la maison, sans entité — la carte se suffit. */
 function CvClock() {
@@ -10233,6 +10233,82 @@ function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
   );
 }
 
+/* Calendrier : le mois en grille — aujourd'hui à l'accent, un point sous
+ * les jours qui portent un événement (7 prochains jours connus). */
+function CvCalendrier({ id, hass }) {
+  const events = useAgenda(hass, useMemo(() => [id], [id]));
+  const st = hass && hass.states ? hass.states[id] : null;
+  const auj = new Date();
+  const an = auj.getFullYear(), mois = auj.getMonth();
+  const premier = new Date(an, mois, 1);
+  const nbJours = new Date(an, mois + 1, 0).getDate();
+  const decal = (premier.getDay() + 6) % 7; // lundi en tête
+  const marques = new Set(events.map(e => { const d = new Date(e.start.dateTime || (e.start.date + 'T00:00:00')); return d.getFullYear() === an && d.getMonth() === mois ? d.getDate() : null; }).filter(Boolean));
+  const cases = [...Array.from({ length: decal }, () => null), ...Array.from({ length: nbJours }, (_, i) => i + 1)];
+  const titreMois = auj.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, textTransform: 'capitalize' }}>{titreMois}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)' }}>{cvName(st, id)}</span>
+      </div>
+      <div style={{ flex: 1, minHeight: 8 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 1, textAlign: 'center' }}>
+        {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((j, i) => <span key={'e' + i} style={{ fontSize: 8.5, fontWeight: 800, color: 'var(--o-text3)' }}>{j}</span>)}
+        {cases.map((j, i) => j == null ? <span key={'v' + i} /> : (
+          <span key={'j' + i} style={{ position: 'relative', fontSize: 9.5, fontWeight: j === auj.getDate() ? 800 : 600, lineHeight: '16px', borderRadius: '50%', justifySelf: 'center', width: 16, height: 16, background: j === auj.getDate() ? 'var(--o-accent)' : 'transparent', color: j === auj.getDate() ? '#fff' : 'var(--o-text1)' }}>
+            {j}
+            {marques.has(j) && j !== auj.getDate() && <span style={{ position: 'absolute', left: '50%', bottom: -2, transform: 'translateX(-50%)', width: 3, height: 3, borderRadius: '50%', background: 'var(--o-accent-soft)' }} />}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+/* Localisation : la maison au centre, chacun placé par distance et cap —
+ * AUCUNE tuile externe (règle du projet), l'échelle est logarithmique. */
+function CvCarte({ hass, gensDemo = null }) {
+  const S = (hass && hass.states) || {};
+  const home = (() => { const z = S['zone.home']; const za = (z && z.attributes) || {}; return (za.latitude != null) ? { lat: za.latitude, lon: za.longitude } : null; })();
+  const gens = (gensDemo || peopleList()).map(p => {
+    const st = S[p.haid]; const a = (st && st.attributes) || {};
+    return { ...p, home: !!st && st.state === 'home', lat: a.latitude, lon: a.longitude };
+  });
+  const km = (a, b) => { const R = 6371, dLa = (b.lat - a.lat) * Math.PI / 180, dLo = (b.lon - a.lon) * Math.PI / 180; const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+  const cap = (a, b) => Math.atan2((b.lon - a.lon) * Math.cos(b.lat * Math.PI / 180), b.lat - a.lat);
+  const maison = gens.filter(g => g.home).length;
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Localisation')}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: maison ? 'var(--o-ok)' : 'var(--o-text3)' }}>{gens.length ? maison + ' / ' + gens.length + ' ' + tr('à la maison') : '—'}</span>
+      </div>
+      <div style={{ flex: 1, position: 'relative', marginTop: 8, borderRadius: 12, background: 'radial-gradient(circle at 50% 50%, rgba(var(--o-accent-rgb),.08), transparent 70%), var(--o-s1)', overflow: 'hidden' }}>
+        {/* cercles de distance (échelle log : ~1 km, ~10 km) */}
+        {[34, 62].map((r) => <span key={r} aria-hidden="true" style={{ position: 'absolute', left: '50%', top: '50%', width: r * 2, height: r * 2, transform: 'translate(-50%,-50%)', borderRadius: '50%', border: '1px dashed var(--o-bd1)' }} />)}
+        <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 26, height: 26, borderRadius: '50%', background: 'rgba(var(--o-accent-rgb),.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-accent-soft)' }}><Fi i="home" size={13} /></span>
+        {gens.map((g, i) => {
+          let x = 50, y = 50, dist = null;
+          if (!g.home && home && g.lat != null && g.lon != null) {
+            dist = km(home, { lat: g.lat, lon: g.lon });
+            const r = Math.min(72, 16 + 30 * Math.log10(1 + dist));
+            const c = cap(home, { lat: g.lat, lon: g.lon });
+            x = 50 + (r * Math.sin(c)) / 2.2; y = 50 - (r * Math.cos(c)) / 1.4;
+          } else if (g.home) { x = 50 + (i % 2 ? 9 : -9); y = 58; }
+          else return null; // absent sans position : rien à placer
+          return (
+            <span key={g.haid} title={g.name + (dist != null ? ' · ' + Math.round(dist) + ' km' : '')}
+              style={{ position: 'absolute', left: x + '%', top: y + '%', transform: 'translate(-50%,-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: g.img ? `url("${g.img}") center/cover` : 'var(--o-surfA)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: 'var(--o-text1)', boxShadow: g.home ? '0 0 0 2px var(--o-ok)' : '0 0 0 2px var(--o-bd1)' }}>{!g.img && g.name.slice(0, 2).toUpperCase()}</span>
+              <span style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{g.name}{dist != null ? ' · ' + Math.round(dist) + ' km' : ''}</span>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** La carte d'une entrée de vue custom, selon sa forme et son type. */
 function CvTyped({ x, hass, dc }) {
   if (cvEstTpl(x)) return <CvTemplateCard def={x} hass={hass} />;
@@ -10264,6 +10340,8 @@ function CvTyped({ x, hass, dc }) {
   if (t === 'alarme') return <CvAlarm id={id} hass={hass} />;
   if (t === 'alarmeseule') return <CvAlarm id={id} hass={hass} sans />;
   if (t === 'camera') return <CvCamera id={id} hass={hass} />;
+  if (t === 'calendrier') return <CvCalendrier id={id} hass={hass} />;
+  if (t === 'localisation') return <CvCarte hass={hass} />;
   if (t === 'journal') return <CvJournal id={id} hass={hass} />;
   return <CvCard id={id} hass={hass} onOpen={dc.ouvrir} />;
 }
@@ -10307,6 +10385,9 @@ function biblioStates() {
     'camera.biblio_entree': s('idle', { friendly_name: 'Caméra entrée' }),
     'camera.biblio_jardin': s('idle', { friendly_name: 'Caméra jardin' }),
     'binary_sensor.biblio_mouvement': s('on', { friendly_name: 'Mouvement couloir', device_class: 'motion' }),
+    'calendar.biblio': s('off', { friendly_name: 'Maison' }),
+    'zone.home': s('1', { friendly_name: 'Maison', latitude: 46.98, longitude: 1.92, radius: 100 }),
+    'person.biblio_3': s('not_home', { friendly_name: 'Marie', latitude: 47.06, longitude: 2.05 }),
     'sensor.biblio_energie_hist': s(7.4, { friendly_name: 'Énergie maison', unit_of_measurement: 'kWh', device_class: 'energy' }),
   };
 }
@@ -10404,6 +10485,8 @@ function BiblioView() {
         <Item l={tr('Présence maison')} w={280}><CvPresence hass={hb} gens={[{ name: 'Camille', haid: 'person.biblio', img: null }, { name: 'Alex', haid: 'person.biblio_2', img: null }]} /></Item>
         <Item l={tr('Ouvrants')} w={280}><CvOuvrants hass={hb} /></Item>
         <Item l={tr('Énergie maison')} w={280}><CvEnergie hass={hb} roles={{ solarNow: 'sensor.biblio_solaire', gridNow: 'sensor.biblio_reseau', consoJour: 'sensor.biblio_conso_jour' }} /></Item>
+        <Item l={tr('Calendrier')} w={280}><CvCalendrier id="calendar.biblio" hass={hb} /></Item>
+        <Item l={tr('Localisation')} w={280}><CvCarte hass={hb} gensDemo={[{ name: 'Camille', haid: 'person.biblio', img: null }, { name: 'Marie', haid: 'person.biblio_3', img: null }]} /></Item>
         <Item l={tr('Activité récente')} w={280}><CvActivite hass={hb} demoEvents={(() => { const t0 = Date.now(); return [
           { entity_id: 'cover.biblio', state: 'closed', when: t0 - 6 * 60000 },
           { entity_id: 'vacuum.biblio', state: 'docked', when: t0 - 82 * 60000 },
@@ -10522,7 +10605,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   /* DEUX tailles, pas trois : compacte (1 rangée) ou standard (2 rangées).
    * Toute carte non compacte DOIT tenir dans la standard — le graphique, le
    * journal et les machines se compriment plutôt que de déborder. */
-  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2, camera: 2 };
+  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2, camera: 2, calendrier: 2, localisation: 2 };
   const cvRowsDe = (x) => {
     if (typeof x === 'string') return 1;
     const d = String(x.id || '').split('.')[0];
@@ -10637,7 +10720,8 @@ function CustomView({ cv, hass, edit = false, onSave }) {
                   ['ouvrants', 'door-open', tr('Ouvrants')],
                   ['energiemaison', 'bolt', tr('Énergie maison')],
                   ['air', 'smog', tr('Qualité air')],
-                  ['activite', 'pulse', tr('Activité récente')]].map(([t, ic, lbl]) => (
+                  ['activite', 'pulse', tr('Activité récente')],
+                  ['localisation', 'marker', tr('Localisation')]].map(([t, ic, lbl]) => (
                   <button key={t} onClick={() => { setEnts([...cv.ents, { t, id: t + ':' + Date.now() }]); close(); }}
                     style={{ padding: '9px 14px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                     <Fi i={ic} size={13} />{lbl}
@@ -11488,6 +11572,7 @@ export default function App() {
     if (t === 'ouvrants') return ['binary_sensor.'];
     if (t === 'air') return ['sensor.'];
     if (t === 'activite') return ['binary_sensor.', 'cover.', 'vacuum.', 'lawn_mower.', 'lock.'];
+    if (t === 'localisation') return ['person.', 'zone.home', 'device_tracker.'];
     if (t === 'energiemaison') return enKeys();
     return [cvId(x)];
   };
