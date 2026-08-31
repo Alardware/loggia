@@ -10237,30 +10237,30 @@ function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
  * les jours qui portent un événement (7 prochains jours connus). */
 function CvCalendrier({ id, hass }) {
   const events = useAgenda(hass, useMemo(() => [id], [id]));
-  const st = hass && hass.states ? hass.states[id] : null;
   const auj = new Date();
-  const an = auj.getFullYear(), mois = auj.getMonth();
-  const premier = new Date(an, mois, 1);
-  const nbJours = new Date(an, mois + 1, 0).getDate();
-  const decal = (premier.getDay() + 6) % 7; // lundi en tête
-  const marques = new Set(events.map(e => { const d = new Date(e.start.dateTime || (e.start.date + 'T00:00:00')); return d.getFullYear() === an && d.getMonth() === mois ? d.getDate() : null; }).filter(Boolean));
-  const cases = [...Array.from({ length: decal }, () => null), ...Array.from({ length: nbJours }, (_, i) => i + 1)];
-  const titreMois = auj.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+  // La SEMAINE courante (lundi → dimanche) : le mois entier étouffait dans le
+  // format standard — la référence « April 21 » respire mieux (retour 31/08).
+  const lundi = new Date(auj); lundi.setHours(0, 0, 0, 0); lundi.setDate(auj.getDate() - ((auj.getDay() + 6) % 7));
+  const semaine = Array.from({ length: 7 }, (_, i) => { const d = new Date(lundi); d.setDate(lundi.getDate() + i); return d; });
+  const cleJour = (d) => d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+  const marques = new Set(events.map(e => cleJour(new Date(e.start.dateTime || (e.start.date + 'T00:00:00')))));
+  const mois = auj.toLocaleDateString(locale(), { month: 'long' });
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 13.5, fontWeight: 700, textTransform: 'capitalize' }}>{titreMois}</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)' }}>{cvName(st, id)}</span>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 25, fontWeight: 400, textTransform: 'capitalize', letterSpacing: '-.01em' }}>{mois}</span>
+        <span style={{ fontSize: 34, fontWeight: 800, lineHeight: 1, letterSpacing: '-.02em' }}>{auj.getDate()}</span>
       </div>
-      <div style={{ flex: 1, minHeight: 8 }} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 1, textAlign: 'center' }}>
-        {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((j, i) => <span key={'e' + i} style={{ fontSize: 8.5, fontWeight: 800, color: 'var(--o-text3)' }}>{j}</span>)}
-        {cases.map((j, i) => j == null ? <span key={'v' + i} /> : (
-          <span key={'j' + i} style={{ position: 'relative', fontSize: 9.5, fontWeight: j === auj.getDate() ? 800 : 600, lineHeight: '16px', borderRadius: '50%', justifySelf: 'center', width: 16, height: 16, background: j === auj.getDate() ? 'var(--o-accent)' : 'transparent', color: j === auj.getDate() ? '#fff' : 'var(--o-text1)' }}>
-            {j}
-            {marques.has(j) && j !== auj.getDate() && <span style={{ position: 'absolute', left: '50%', bottom: -2, transform: 'translateX(-50%)', width: 3, height: 3, borderRadius: '50%', background: 'var(--o-accent-soft)' }} />}
-          </span>
-        ))}
+      <div style={{ flex: 1, minHeight: 10 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', rowGap: 4, textAlign: 'center' }}>
+        {semaine.map((d, i) => <span key={'e' + i} style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', color: 'var(--o-text3)', textTransform: 'uppercase' }}>{d.toLocaleDateString(locale(), { weekday: 'narrow' })}</span>)}
+        {semaine.map((d, i) => {
+          const cJour = d.toDateString() === auj.toDateString();
+          return (
+            <span key={'j' + i} style={{ fontSize: 12.5, fontWeight: cJour ? 800 : 600, lineHeight: '24px', width: 24, height: 24, borderRadius: '50%', justifySelf: 'center', background: cJour ? 'var(--o-accent)' : 'transparent', color: cJour ? '#fff' : 'var(--o-text1)' }}>{d.getDate()}</span>
+          );
+        })}
+        {semaine.map((d, i) => <span key={'p' + i} style={{ height: 4, display: 'flex', justifyContent: 'center' }}>{marques.has(cleJour(d)) && <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--o-accent-soft)' }} />}</span>)}
       </div>
     </div>
   );
