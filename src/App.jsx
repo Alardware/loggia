@@ -9747,37 +9747,46 @@ function CvAlarm({ id, hass }) {
     : s === 'triggered' ? [tr('ALERTE'), 'var(--o-bad)']
       : (s === 'arming' || s === 'pending') ? [tr('Activation en cours…'), 'var(--o-warn2)']
         : s ? [tr('Armée'), 'var(--o-warn2)'] : ['—', 'var(--o-text3)'];
-  const btn = { flex: 1, padding: '8px 6px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' };
+  // Trois états, trois chips — l'ACTIVE reflète l'état du panneau, en accent
+  // plein, sans filet (maquette Claude Design 31/08).
+  const CHIPS = [
+    [tr('Désarmé'), 'alarm_disarm', s === 'disarmed'],
+    [tr('Maison'), 'alarm_arm_home', s === 'armed_home'],
+    [tr('Absent'), 'alarm_arm_away', s === 'armed_away' || s === 'armed_vacation'],
+  ];
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(col, .16), color: col }}><Fi i="shield-check" size={17} /></span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(col, .16), color: col }}><Fi i="shield-check" size={15} /></span>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
-          <div style={{ fontSize: 12.5, fontWeight: 800, color: col }}>{txt}</div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: col }}>{txt}</div>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 7, marginTop: 10 }}>
-        <button style={btn} onClick={() => call('alarm_arm_away')}>{tr('Absent')}</button>
-        <button style={btn} onClick={() => call('alarm_arm_home')}>{tr('Présent')}</button>
-        <button style={{ ...btn, background: 'rgba(52,211,153,.12)', color: 'var(--o-ok)', borderColor: 'rgba(52,211,153,.3)' }} onClick={() => call('alarm_disarm')}>{tr('Désarmer')}</button>
+      <div style={{ display: 'flex', gap: 7, margin: '10px 0 8px' }}>
+        {CHIPS.map(([lbl, svc, actif]) => (
+          <button key={svc} onClick={() => call(svc)}
+            style={{ flex: 1, padding: '7px 4px', borderRadius: 9, border: 'none', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
+            {lbl}
+          </button>
+        ))}
       </div>
-      {/* Le tour de la maison en deux lignes : ouvrants et caméras. */}
+      {/* Le tour de la maison : ouvrants et caméras, en rangées à fond. */}
       {(() => {
         const S = (hass && hass.states) || {};
         const os = ouvrantsDe(S);
         const ouverts = os.filter(o => o.on).length;
         const cams = Object.keys(S).filter(cid => cid.indexOf('camera.') === 0 && S[cid].state !== 'unavailable').length;
         const ligne = (l, v, c) => (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{l}</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 10px', borderRadius: 9, background: 'var(--o-s1)' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{l}</span>
             <span style={{ fontSize: 11.5, fontWeight: 800, color: c }}>{v}</span>
           </div>
         );
         if (!os.length && !cams) return null;
         return (
-          <div style={{ marginTop: 7 }}>
-            {os.length > 0 && ligne(tr('Ouvrants'), ouverts === 0 ? tr('Tout fermé') : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts }), ouverts ? 'var(--o-warn)' : 'var(--o-ok)')}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {os.length > 0 && ligne(tr('Ouvrants'), ouverts === 0 ? tr('{n} fermés', { n: os.length }) : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts }), ouverts ? 'var(--o-warn)' : 'var(--o-ok)')}
             {cams > 0 && ligne(tr('Caméras'), tr('{n} en ligne', { n: cams }), 'var(--o-text2)')}
           </div>
         );
