@@ -704,7 +704,7 @@ export function ViewEntSheet({ view, hass, onClose }) {
   );
 }
 
-export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews }) {
+export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews, onNav = null }) {
   /* La section ouverte survit au rechargement, comme la vue elle-meme.
    *
    * Changer de langue recharge la page : on revenait au sommaire des sections,
@@ -1445,6 +1445,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <SecBar>
           <SecGroup label={tr('Vue personnalisée')}><button onClick={() => setCvEditing('new')} style={secBtn(false)}>{tr('Créer une vue')}</button></SecGroup>
+          {onNav && <SecGroup label={tr('Catalogue')}><button onClick={() => onNav('biblio')} style={secBtn(false)}>{tr('Bibliothèque de cartes')}</button></SecGroup>}
         </SecBar>
         {panel && (
           <SecCard title="Organisation du menu" tag={hiddenNames.length ? hiddenNames.length + ' MASQUÉE' + (hiddenNames.length > 1 ? 'S' : '') : 'TOUTES VISIBLES'} tagCol={hiddenNames.length ? 'warn' : 'ok'}
