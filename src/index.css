@@ -139,12 +139,21 @@ html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-
 }
 /* Héros « En ce moment » : la carte du catalogue remplit le gabarit 184 px. */
 .o-hero > * { height: 100%; box-sizing: border-box; }
+.o-heroslider::-webkit-scrollbar { display: none; }
 /* Tuile pièce standard : les minis volets/clim cèdent quand la carte est
  * étroite (mobile 2 colonnes) — icône et interrupteur gardent la place. */
 .o-piecestd { container-type: inline-size; }
 @container (max-width: 199px) {
   /* !important : le display:flex est posé inline par la carte. */
   .o-piecestd .o-piece-minis { display: none !important; }
+}
+/* Chip pièce : à l'étroit, la température quitte la droite (o-chip-temp-d)
+ * et revient dans la ligne d'état (o-chip-temp-i) — le nom garde sa place. */
+.o-piecechip { container-type: inline-size; }
+.o-piecechip .o-chip-temp-i { display: none; }
+@container (max-width: 209px) {
+  .o-piecechip .o-chip-temp-d { display: none !important; }
+  .o-piecechip .o-chip-temp-i { display: inline; }
 }
 
 /* Bibliothèque : chaque exemplaire remplit son gabarit (88 ou 184 px). */
