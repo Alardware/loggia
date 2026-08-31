@@ -9803,8 +9803,11 @@ function CvAlarm({ id, hass, sans = false }) {
         <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(col, .16), color: col }}><Fi i="shield-check" size={15} /></span>
         <span style={{ fontSize: 11, fontWeight: 800, color: col }}>{txt}</span>
       </div>
-      <div style={{ marginTop: 8 }}>
+      <div style={{ marginTop: 8, ...(sans ? { flex: 1, display: 'flex', flexDirection: 'column' } : {}) }}>
         <div style={RM_NAME}>{cvName(st, id)}</div>
+        {/* Version « seule » : les chips descendent au pied de la carte,
+          * comme les boutons des cartes machines. */}
+        {sans && <div style={{ flex: 1 }} />}
         {demande ? (
           <div style={{ display: 'flex', gap: 7, margin: '7px 0 6px', alignItems: 'center' }}>
             <input type="password" inputMode="numeric" autoFocus value={code} onChange={(e) => setCode(e.target.value)}
