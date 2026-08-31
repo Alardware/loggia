@@ -9594,7 +9594,7 @@ function cvTypesPour(id) {
   if (d === 'alarm_control_panel') return ['compacte', 'alarme', 'alarmeseule', 'riche'];
   return ['compacte', 'riche'];
 }
-const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)') });
+const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)'), activite: tr('Activité récente') });
 
 /* Horloge : l'heure de la maison, sans entité — la carte se suffit. */
 function CvClock() {
@@ -9741,27 +9741,70 @@ function CvWeather({ id, hass }) {
   );
 }
 
-/* Agenda : les prochains événements d'UN calendrier. */
+/* Agenda : les prochains événements d'UN calendrier — rangées à fond, la
+ * prochaine échéance mise en avant (maquette Claude Design 31/08). */
 function CvAgenda({ id, hass }) {
   const events = useAgenda(hass, useMemo(() => [id], [id]));
   const st = hass && hass.states ? hass.states[id] : null;
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
-      <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 2 }}>{cvName(st, id)}</div>
-      <div style={{ fontSize: 10.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 4 }}>{tr('Les 7 prochains jours')}</div>
+      <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 8 }}>{cvName(st, id)} · {tr('7 prochains jours')}</div>
       {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien de prévu')}</div>}
-      {events.slice(0, 3).map((e, i) => {
-        const { jour, heure } = jourAgenda(e);
-        return (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.summary}</div>
-              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text2)' }}>{jour}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {events.slice(0, 3).map((e, i) => {
+          const { jour, heure } = jourAgenda(e);
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 10, background: i === 0 ? 'rgba(var(--o-accent-rgb),.1)' : 'var(--o-s1)' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.summary}</div>
+                <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text2)' }}>{jour}</div>
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, color: i === 0 ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{heure || tr('Tâche')}</span>
             </div>
-            <span style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, color: 'var(--o-accent-soft)' }}>{heure}</span>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+/* Activité récente : le journal de la MAISON — ouvrants, machines, volets,
+ * serrures, alarme, capteurs muets — en pastilles colorées par domaine. */
+function CvActivite({ hass, demoEvents = null }) {
+  const S = (hass && hass.states) || {};
+  const ids = useMemo(() => {
+    const doms = ['cover.', 'vacuum.', 'lawn_mower.', 'lock.', 'alarm_control_panel.'];
+    const l = Object.keys(S).filter(id => doms.some(d => id.indexOf(d) === 0)
+      || (id.indexOf('binary_sensor.') === 0 && ['door', 'window', 'garage_door', 'opening', 'connectivity', 'motion'].indexOf((S[id].attributes || {}).device_class) >= 0));
+    return l.slice(0, 40);
+  }, [hass]);
+  const reels = grouperJournal(useRoomLogbook(hass, ids));
+  const events = demoEvents !== null ? demoEvents : reels;
+  const pastille = (id) => {
+    const dom = String(id).split('.')[0];
+    const dcE = ((S[id] || {}).attributes || {}).device_class;
+    if (dcE === 'connectivity') return 'var(--o-text3)';
+    if (dom === 'cover') return 'var(--o-purple)';
+    if (dom === 'vacuum' || dom === 'lawn_mower') return 'var(--o-ok)';
+    if (dom === 'binary_sensor') return 'var(--o-warn)';
+    if (dom === 'lock' || dom === 'alarm_control_panel') return 'var(--o-accent-soft)';
+    return 'var(--o-accent-soft)';
+  };
+  const heure = (when) => { const ms = when < 1e12 ? when * 1000 : when; const d = new Date(ms); const auj = new Date(); return d.toDateString() === auj.toDateString() ? d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString(locale(), { weekday: 'short' }); };
+  const nomDe = (id) => ((S[id] || {}).attributes || {}).friendly_name || String(id).split('.')[1];
+  return (
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{tr('Activité récente')}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)' }}>{new Date().toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
+      </div>
+      {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien à raconter')}</div>}
+      {events.slice(0, 4).map((e, i) => (
+        <div key={(e.when || 0) + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 0' }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: pastille(e.entity_id) }} />
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.message || (nomDe(e.entity_id) + ' ' + etatJournal(e.entity_id, e.state, S).toLowerCase())}{e.n > 1 ? ' ·×' + e.n : ''}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, color: 'var(--o-text3)' }}>{heure(e.when)}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -10166,6 +10209,7 @@ function CvTyped({ x, hass, dc }) {
   if (t === 'riche') return dc.card(id);
   if (t === 'horloge') return <CvClock />;
   if (t === 'presence') return <CvPresence hass={hass} />;
+  if (t === 'activite') return <CvActivite hass={hass} />;
   if (t === 'ouvrants') return <CvOuvrants hass={hass} />;
   if (t === 'energiemaison') return <CvEnergie hass={hass} />;
   if (t === 'air') return <CvAir hass={hass} />;
@@ -10318,6 +10362,12 @@ function BiblioView() {
         <Item l={tr('Présence maison')} w={280}><CvPresence hass={hb} gens={[{ name: 'Camille', haid: 'person.biblio', img: null }, { name: 'Alex', haid: 'person.biblio_2', img: null }]} /></Item>
         <Item l={tr('Ouvrants')} w={280}><CvOuvrants hass={hb} /></Item>
         <Item l={tr('Énergie maison')} w={280}><CvEnergie hass={hb} roles={{ solarNow: 'sensor.biblio_solaire', gridNow: 'sensor.biblio_reseau', consoJour: 'sensor.biblio_conso_jour' }} /></Item>
+        <Item l={tr('Activité récente')} w={280}><CvActivite hass={hb} demoEvents={(() => { const t0 = Date.now(); return [
+          { entity_id: 'cover.biblio', state: 'closed', when: t0 - 6 * 60000 },
+          { entity_id: 'vacuum.biblio', state: 'docked', when: t0 - 82 * 60000 },
+          { entity_id: 'binary_sensor.biblio_garage', state: 'on', when: t0 - 109 * 60000 },
+          { entity_id: 'binary_sensor.biblio_porte', state: 'off', when: t0 - 26 * 3600000 },
+        ]; })()} /></Item>
       </Rangee>
 
       <Titre i="soap" c="var(--o-purple)" t={tr('Électroménager')} />
@@ -10429,7 +10479,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   /* DEUX tailles, pas trois : compacte (1 rangée) ou standard (2 rangées).
    * Toute carte non compacte DOIT tenir dans la standard — le graphique, le
    * journal et les machines se compriment plutôt que de déborder. */
-  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2 };
+  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2 };
   const cvRowsDe = (x) => {
     if (typeof x === 'string') return 1;
     const d = String(x.id || '').split('.')[0];
@@ -10543,7 +10593,8 @@ function CustomView({ cv, hass, edit = false, onSave }) {
                   ['presence', 'users', tr('Présence maison')],
                   ['ouvrants', 'door-open', tr('Ouvrants')],
                   ['energiemaison', 'bolt', tr('Énergie maison')],
-                  ['air', 'smog', tr('Qualité air')]].map(([t, ic, lbl]) => (
+                  ['air', 'smog', tr('Qualité air')],
+                  ['activite', 'pulse', tr('Activité récente')]].map(([t, ic, lbl]) => (
                   <button key={t} onClick={() => { setEnts([...cv.ents, { t, id: t + ':' + Date.now() }]); close(); }}
                     style={{ padding: '9px 14px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                     <Fi i={ic} size={13} />{lbl}
@@ -11393,6 +11444,7 @@ export default function App() {
     if (t === 'presence') return ['person.'];
     if (t === 'ouvrants') return ['binary_sensor.'];
     if (t === 'air') return ['sensor.'];
+    if (t === 'activite') return ['binary_sensor.', 'cover.', 'vacuum.', 'lawn_mower.', 'lock.'];
     if (t === 'energiemaison') return enKeys();
     return [cvId(x)];
   };
