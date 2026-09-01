@@ -587,27 +587,8 @@ function Header() {
       {/* Chip « n allumées » : l'état lumineux de la maison, d'un regard, où
           qu'on soit. Un appui LONG éteint tout — le geste du départ, sans
           chercher la scène. Le clic court navigue, comme avant. */}
-      {ctx.lightsOn > 0 && (
-        <button className="o-hdr-lights"
-          onPointerDown={() => { chipLong.current = false; clearTimeout(chipTimer.current); chipTimer.current = setTimeout(() => {
-            chipLong.current = true;
-            try {
-              const h = getHass(); if (!h || !h.callService) return;
-              const S = h.states || {};
-              const ids = Object.keys(S).filter(id => (id.indexOf('light.') === 0 || switchLights().indexOf(id) >= 0) && S[id] && S[id].state === 'on');
-              if (ids.length) h.callService('homeassistant', 'turn_off', { entity_id: ids });
-            } catch (e) { /* le poll dira l'état réel */ }
-          }, 650); }}
-          onPointerUp={() => clearTimeout(chipTimer.current)}
-          onPointerLeave={() => clearTimeout(chipTimer.current)}
-          onPointerCancel={() => clearTimeout(chipTimer.current)}
-          onClick={() => { if (chipLong.current) { chipLong.current = false; return; } onNav && onNav('lumieres'); }}
-          title={tr('Voir les lumières — appui long : tout éteindre')}
-          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 999, cursor: 'pointer', flexShrink: 0, background: 'rgba(var(--o-gold-rgb),.13)', border: '1px solid rgba(var(--o-gold-rgb),.32)', color: 'var(--o-warn)', fontSize: 12.5, fontWeight: 800 }}>
-          <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-warn)', boxShadow: '0 0 8px var(--o-warn)' }} />
-          <FlipText text={ctx.lightsOn > 1 ? tr('{n} allumées', { n: ctx.lightsOn }) : tr('{n} allumée', { n: ctx.lightsOn })} />
-        </button>
-      )}
+      {/* La pilule « N allumées » a quitté l'en-tête (retour 01/09) : la
+          carte Chips et les résumés le disent déjà. */}
       <div className="o-hdr-date" style={{ textAlign: 'right', lineHeight: 1.15 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{dateStr}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}><FlipText text={timeStr} /></div></div>
       <div className="o-hdr-div" style={{ width: 1, height: 30, background: 'var(--o-bd1)' }} />
       <div data-hdr-menu style={{ display: 'flex', alignItems: 'center', gap: 9, position: 'relative' }}>
@@ -5267,7 +5248,8 @@ function FavorisAccueil({ hass, edit = false }) {
               </button>
             )}
           </div>}
-      {adding && <CarteAjoutSheet hass={hass} onClose={() => setAdding(false)} onPose={(e) => poser([...eps, e])} />}
+      {/* Une carte chips arrive vide : on enchaîne sur son compositeur. */}
+      {adding && <CarteAjoutSheet hass={hass} onClose={() => setAdding(false)} onPose={(e) => { poser([...eps, e]); if (cvTypeDe(e) === 'chips') setChipsEdit(e); }} />}
       {retype && <CarteAjoutSheet hass={hass} remplace={retype} onClose={() => setRetype(null)} onPose={(e) => poser(eps.map(y => cvKey(y) === cvKey(retype) ? e : y))} />}
       {chipsEdit && <ChipsEditSheet x={chipsEdit} hass={hass} onClose={() => setChipsEdit(null)}
         onSave={(n) => { setChipsEdit(n); poser(eps.map(y => cvKey(y) === cvKey(chipsEdit) ? n : y)); }} />}
@@ -10152,13 +10134,13 @@ function chipVif(id, st) {
 }
 function CvChips({ x = null, hass, dc = null, demo = null }) {
   const S = (hass && hass.states) || {};
-  /* Deux visages, comme les chips de Home Assistant : une carte COMPOSÉE quand
-   * on lui a choisi des entités (chacune cliquable, elle ouvre sa fiche), et
-   * le résumé automatique de la maison tant qu'on ne lui a rien dit. */
-  const ids = (x && Array.isArray(x.ids)) ? x.ids.filter(i => S[i]) : null;
+  /* Une carte chips, c'est SES entités : celles qu'on lui a choisies, chacune
+   * cliquable. Le résumé automatique de la maison a été retiré (retour
+   * 01/09) — il donnait des pastilles muettes que personne n'avait demandées. */
+  const ids = (x && Array.isArray(x.ids)) ? x.ids.filter(i => S[i]) : [];
   const chips = useMemo(() => {
     if (demo) return demo;
-    if (ids) return ids.map(id => {
+    return ids.map(id => {
       const st = S[id];
       const vif = chipVif(id, st);
       const d = String(id).split('.')[0];
@@ -10168,45 +10150,23 @@ function CvChips({ x = null, hass, dc = null, demo = null }) {
             : 'var(--o-accent-soft)';
       return { id, ic: cvIcoEntite(d, id, st, cvName(st, id)) || 'bolt', txt: chipTexte(id, st), col, vif };
     });
-    const out = [];
-    try {
-      let lum = 0;
-      for (const l of discoverLights(hass, null)) if (l.on) lum++;
-      out.push({ ic: 'bulb', txt: String(lum), col: lum ? 'var(--o-warn)' : 'var(--o-text3)', vif: lum > 0 });
-      const ouvrants = ouvrantsDe(S);
-      if (ouvrants.length) { const ouv = ouvrants.filter(o => o.on).length; out.push({ ic: 'door-open', txt: String(ouv), col: ouv ? 'var(--o-purple)' : 'var(--o-text3)', vif: ouv > 0 }); }
-      const cfgAl = secAlarm();
-      const al = (cfgAl && S[cfgAl]) ? cfgAl : Object.keys(S).find(x => x.indexOf('alarm_control_panel.') === 0 && S[x] && S[x].state !== 'unavailable');
-      if (al) {
-        const s = S[al].state;
-        out.push({ ic: 'shield-check', txt: s === 'disarmed' ? tr('Désarmée') : s === 'triggered' ? tr('ALERTE') : tr('Armée'),
-          col: s === 'triggered' ? 'var(--o-bad)' : s === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn2)', vif: s !== 'disarmed' });
-      }
-      const gens = peopleList().filter(p => p && p.haid && S[p.haid]);
-      if (gens.length) {
-        const ici = gens.filter(p => S[p.haid].state === 'home').length;
-        out.push({ ic: 'users', txt: ici + '/' + gens.length, col: ici ? 'var(--o-ok)' : 'var(--o-text3)', vif: ici > 0 });
-      }
-      const air = airDe(S);
-      if (air && air.co2 != null) { const st = co2Style(air.co2); out.push({ ic: 'smog', txt: Math.round(air.co2) + ' ppm', col: st.bc, vif: air.co2 >= 900 }); }
-      if (air && air.hum != null) out.push({ ic: 'raindrops', txt: Math.round(air.hum) + ' %', col: 'var(--o-cyan)', vif: false });
-    } catch (e) { /* une maison incomplète donne moins de pastilles, pas une erreur */ }
-    return out;
-  }, [hass, demo, ids && ids.join('|')]);
+  }, [hass, demo, ids.join('|')]);
   const ouvrir = (c) => { if (c.id && dc && dc.ouvrir) dc.ouvrir(c.id); };
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
-      {/* CENTRÉES (retour 01/09), et elles défilent plutôt que de rétrécir :
-        * une pastille illisible ne dit rien, et la rangée doit tenir sur
-        * 88 px quelle que soit la largeur. */}
+    /* `justifyContent: center` sur le CADRE, pas sur la rangée : CV_CADRE
+     * empile en COLONNE, la rangée était donc collée en haut (retour 01/09).
+     * C'est l'axe principal de la colonne qui centre verticalement. */
+    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', justifyContent: 'center', overflow: 'hidden' }}>
+      {/* Elles défilent plutôt que de rétrécir : une pastille illisible ne dit
+        * rien, et la rangée doit tenir sur 88 px quelle que soit la largeur. */}
       <div className="o-chipsrow" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, overflowX: 'auto', scrollbarWidth: 'none', width: '100%' }}>
         {chips.length === 0 && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Aucune pastille — le crayon en ajoute.')}</span>}
         {chips.map((c, i) => {
           const st = { display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '7px 11px', borderRadius: 9, whiteSpace: 'nowrap', fontSize: 12.5, fontWeight: 800, border: 'none', background: c.vif ? hx(c.col, .14) : 'var(--o-s1)', color: c.vif ? c.col : 'var(--o-text2)' };
           const dedans = <>{<Fi i={c.ic} size={12} color={c.vif ? c.col : 'var(--o-text3)'} />}{c.txt}</>;
-          // Une pastille d'entité ouvre sa fiche ; le résumé automatique ne
-          // pointe vers rien de précis et reste inerte.
-          return c.id && dc
+          // Chaque pastille ouvre la fiche de son entité — la vitrine de la
+          // bibliothèque est le seul cas sans fiche à ouvrir.
+          return c.id
             ? <button key={c.id} onClick={(e) => { e.stopPropagation(); ouvrir(c); }} title={cvName(S[c.id], c.id)} style={{ ...st, cursor: 'pointer' }}>{dedans}</button>
             : <span key={i} style={st}>{dedans}</span>;
         })}
@@ -11001,13 +10961,8 @@ function BiblioView() {
         <Item l={tr('Alarme')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} /></Item>
         <Item l={tr('Alarme (seule)')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} sans /></Item>
         <Item l={tr('Alarme (compacte)')} h={88}><CvCard id="alarm_control_panel.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
-        <Item l={tr('Chips')} w={340} h={88}><CvChips hass={hb} demo={[
-          { ic: 'bulb', txt: '3', col: 'var(--o-warn)', vif: true },
-          { ic: 'door-open', txt: '1', col: 'var(--o-purple)', vif: true },
-          { ic: 'shield-check', txt: tr('Désarmée'), col: 'var(--o-ok)', vif: false },
-          { ic: 'users', txt: '2/3', col: 'var(--o-ok)', vif: true },
-          { ic: 'smog', txt: '640 ppm', col: 'var(--o-warn)', vif: false },
-        ]} /></Item>
+        <Item l={tr('Chips')} w={340} h={88}><CvChips hass={hb} dc={dc}
+          x={{ t: 'chips', id: 'chips:biblio', ids: ['light.biblio_rgb', 'cover.biblio', 'climate.biblio', 'alarm_control_panel.biblio', 'sensor.biblio_co2'] }} /></Item>
         <Item l={tr('Serrure')} h={88}><CvCard id="lock.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Vanne')} h={88}><CvCard id="valve.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Scène')} h={88}><CvCard id="scene.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
@@ -11370,7 +11325,8 @@ function CustomView({ cv, hass, edit = false, onSave }) {
             </>)}
           </BottomSheet>
         )}
-        {adding && <CarteAjoutSheet hass={hass} onClose={() => setAdding(false)} onPose={(e) => setEnts([...cv.ents, e])} />}
+        {/* Une carte chips arrive vide : on enchaîne sur son compositeur. */}
+        {adding && <CarteAjoutSheet hass={hass} onClose={() => setAdding(false)} onPose={(e) => { setEnts([...cv.ents, e]); if (cvTypeDe(e) === 'chips') setChipsEdit(e); }} />}
         {retype && <CarteAjoutSheet hass={hass} remplace={retype} onClose={() => setRetype(null)} onPose={(e) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(retype) ? e : y))} />}
         {chipsEdit && <ChipsEditSheet x={chipsEdit} hass={hass} onClose={() => setChipsEdit(null)}
           onSave={(n) => { setChipsEdit(n); setEnts(cv.ents.map(y => cvKey(y) === cvKey(chipsEdit) ? n : y)); }} />}
