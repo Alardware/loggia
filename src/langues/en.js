@@ -59,6 +59,8 @@ export default {
   'prés.': 'present',
   'En cours': 'Running',
   'Volets, robots et sécurité': 'Blinds, robots and security',
+  'Volets, robots et appareils': 'Blinds, robots and appliances',
+  'OUVRANTS OUVERTS': 'DOORS & WINDOWS OPEN',
   'TOUT AU REPOS': 'ALL IDLE',
   'ACTIF': 'ACTIVE',
   'ACTIFS': 'ACTIVE',
