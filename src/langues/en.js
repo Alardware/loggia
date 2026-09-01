@@ -444,6 +444,8 @@ export default {
   'Armer': 'Arm',
   'Vacances': 'Vacation',
   'Par entité': 'By entity',
+  'Chips': 'Chips',
+  'Rien à résumer': 'Nothing to sum up',
   'Quelle entité pour cette carte ?': 'Which entity for this card?',
   'Choisis une entité : les cartes qu’elle accepte s’affichent ensuite.': 'Pick an entity — the cards it accepts appear next.',
   'Par carte': 'By card',
