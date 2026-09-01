@@ -5197,8 +5197,8 @@ function HeroSlider({ ids, dc }) {
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
 const ACC_MAIN = ['favoris', 'heros', 'scenes', 'pieces', 'cameras'];
-const ACC_RAIL = ['etats', 'rappels', 'agenda'];
-const ACC_NOMS = () => ({ favoris: tr('Favoris'), heros: tr('En ce moment'), scenes: tr('Scènes rapides'), pieces: tr('Pièces'), cameras: tr('Caméras'), etats: tr('En cours'), rappels: tr('Rappels'), agenda: tr('Agenda') });
+const ACC_RAIL = ['etats', 'rappels', 'calendrier', 'agenda'];
+const ACC_NOMS = () => ({ favoris: tr('Favoris'), heros: tr('En ce moment'), scenes: tr('Scènes rapides'), pieces: tr('Pièces'), cameras: tr('Caméras'), etats: tr('En cours'), rappels: tr('Rappels'), calendrier: tr('Calendrier'), agenda: tr('Agenda') });
 
 /* FAVORIS de l'accueil : les cartes que le foyer a choisies, posées ICI.
  *
@@ -5960,7 +5960,19 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             pieces: <>{piecesHeader}{piecesGrid}</>,
             cameras: cams.length > 0 ? <>{camsHeader}{camsGrid}</> : null,
           };
-          const secsRail = { etats: railEtats, rappels: railRappels, agenda: railAgenda };
+          /* Le calendrier du mois, sous les rappels : l'agenda dit CE QUI
+            * vient, lui dit QUAND — sans entité `calendar`, il n'existe pas. */
+          const calRailId = (() => {
+            const S = (dashHass && dashHass.states) || null;
+            if (!S) return null;
+            return Object.keys(S).find(x => x.indexOf('calendar.') === 0 && S[x] && S[x].state !== 'unavailable') || null;
+          })();
+          const railCal = calRailId ? (
+            <div>
+              <div style={{ height: 184 }} className="o-hero"><CvCalendrier id={calRailId} hass={dashHass} /></div>
+            </div>
+          ) : null;
+          const secsRail = { etats: railEtats, rappels: railRappels, calendrier: railCal, agenda: railAgenda };
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
           const renduRail = ordreDe('rail').map(id => secsRail[id] ? Sec('rail', id, secsRail[id]) : null).filter(Boolean);
           if (!wide) return (
