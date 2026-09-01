@@ -3022,6 +3022,9 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
    * Zigbee2MQTT rejoue parfois l'ancienne valeur après la confirmation, et
    * suivre ce rapport retardé faisait clignoter 1 → 2 → 1 à l'écran. */
   const [opt, setOpt] = useState(null);
+  // Alarme : le code demandé en place, quand le panneau l'exige.
+  const [demandeCode, setDemandeCode] = useState(null);
+  const [codeSaisi, setCodeSaisi] = useState('');
   const commitRef = useRef(null);
   const filetRef = useRef(null);
   useEffect(() => () => { clearTimeout(commitRef.current); clearTimeout(filetRef.current); }, []);
@@ -3059,6 +3062,41 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
           <button key={o} onClick={() => { poserOpt(o); call(dom, 'select_option', { option: o }); }} aria-pressed={on}
             style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{o}</button>
         ); })}
+      </div>
+    );
+  } else if (dom === 'alarm_control_panel') {
+    /* Alarme : les trois gestes, et le code quand le panneau l'exige — sans
+     * quoi Home Assistant refuse la commande sans un mot. */
+    const cur = opt != null ? opt : (st ? st.state : null);
+    const codeF = !!a.code_format;
+    const modes = [
+      [tr('Désarmé'), 'alarm_disarm', cur === 'disarmed'],
+      [tr('Maison'), 'alarm_arm_home', cur === 'armed_home'],
+      [tr('Absent'), 'alarm_arm_away', cur === 'armed_away' || cur === 'armed_vacation'],
+    ];
+    const etatApres = { alarm_disarm: 'disarmed', alarm_arm_home: 'armed_home', alarm_arm_away: 'armed_away' };
+    const agir = (svc) => {
+      const faut = svc === 'alarm_disarm' ? codeF : (codeF && a.code_arm_required !== false);
+      if (faut) { setDemandeCode({ svc }); setCodeSaisi(''); return; }
+      poserOpt(etatApres[svc]); call('alarm_control_panel', svc);
+    };
+    wrap = true;
+    controle = demandeCode ? (
+      <div style={{ display: 'flex', gap: 7, alignItems: 'center', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+        <input type="password" inputMode="numeric" autoFocus value={codeSaisi} onChange={(e) => setCodeSaisi(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && codeSaisi) { poserOpt(etatApres[demandeCode.svc]); call('alarm_control_panel', demandeCode.svc, { code: codeSaisi }); setDemandeCode(null); setCodeSaisi(''); } if (e.key === 'Escape') setDemandeCode(null); }}
+          placeholder={tr('Code')} aria-label={tr('Code')}
+          style={{ flex: 1, minWidth: 0, maxWidth: 130, padding: '6px 10px', borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
+        <button onClick={() => { if (!codeSaisi) return; poserOpt(etatApres[demandeCode.svc]); call('alarm_control_panel', demandeCode.svc, { code: codeSaisi }); setDemandeCode(null); setCodeSaisi(''); }}
+          style={{ padding: '6px 12px', borderRadius: 9, border: 'none', background: 'var(--o-accent)', color: '#fff', fontWeight: 800, fontSize: 11.5, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
+        <button onClick={() => setDemandeCode(null)} aria-label={tr('Annuler')} style={{ width: 28, height: 28, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>✕</button>
+      </div>
+    ) : (
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {modes.map(([lab, svc, actif]) => (
+          <button key={svc} onClick={() => agir(svc)} aria-pressed={actif}
+            style={{ padding: '5px 11px', borderRadius: 9, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, border: 'none', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text1)' }}>{lab}</button>
+        ))}
       </div>
     );
   } else if (dom === 'button' || dom === 'input_button' || dom === 'scene' || dom === 'script') {
@@ -3266,9 +3304,13 @@ function FicheAppareil({ id, hass, onClose }) {
         </div>
         {pilotables.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
+            {/* Alarme : la carte à trois modes (et le code si le panneau
+              * l'exige) — la compacte ne porte que le geste rapide. */}
             {pilotables.slice(0, 3).map(x => (domDe(x.id) === 'vacuum' || domDe(x.id) === 'lawn_mower')
               ? <FicheMachineHero key={x.id} id={x.id} hass={H} />
-              : <CvCard key={x.id} id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />)}
+              : domDe(x.id) === 'alarm_control_panel'
+                ? <CvAlarm key={x.id} id={x.id} hass={H} sans />
+                : <CvCard key={x.id} id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />)}
           </div>
         )}
         {section(tr('ÉPINGLES'), epinglees, true)}
@@ -9597,7 +9639,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   // Presque tout s'ouvre : les domaines à fiche dédiée, et tout appareil du
   // registre via la fiche universelle. Seuls les capteurs texte restent muets.
   const ouvrable = !dead && !!onOpen && ((dom === 'sensor' && !isNaN(parseFloat(s)))
-    || ['light', 'climate', 'cover', 'media_player', 'vacuum', 'lawn_mower', 'fan', 'lock', 'switch', 'humidifier', 'valve', 'water_heater', 'siren', 'binary_sensor', 'input_boolean'].indexOf(dom) >= 0);
+    || ['light', 'climate', 'cover', 'media_player', 'vacuum', 'lawn_mower', 'fan', 'lock', 'switch', 'humidifier', 'valve', 'water_heater', 'siren', 'binary_sensor', 'input_boolean', 'alarm_control_panel'].indexOf(dom) >= 0);
   const runnable = { scene: ['scene', 'turn_on', 'Activer'], script: ['script', 'turn_on', tr('Exécuter')], button: ['button', 'press', 'Appuyer'], input_button: ['input_button', 'press', 'Appuyer'], automation: ['automation', 'trigger', tr('Exécuter')] }[dom];
   let stateTxt;
   if (dead) stateTxt = tr('Indisponible');
@@ -9606,6 +9648,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   else if (dom === 'climate') stateTxt = (a.current_temperature != null ? a.current_temperature + '°' : '—') + (a.temperature != null ? ' → ' + a.temperature + '°' : '') + (s !== 'off' ? '' : ' · Éteint');
   else if (dom === 'cover') stateTxt = s === 'opening' ? 'Ouverture…' : s === 'closing' ? 'Fermeture…' : on ? (tr('Ouvert') + (a.current_position != null && a.current_position < 100 ? ' · ' + a.current_position + '%' : '')) : tr('Fermé');
   else if (dom === 'lock') stateTxt = s === 'locked' ? 'Verrouillée' : s === 'unlocked' ? 'Déverrouillée' : s;
+  else if (dom === 'alarm_control_panel') stateTxt = s === 'disarmed' ? tr('Désarmée') : s === 'triggered' ? tr('ALERTE') : (s === 'arming' || s === 'pending') ? tr('Activation en cours…') : s === 'armed_home' ? tr('Maison') : s === 'armed_night' ? tr('Nuit') : tr('Armée');
   else if (dom === 'media_player') stateTxt = s === 'playing' ? (a.media_title || tr('Lecture')) : s === 'paused' ? tr('En pause') : s === 'off' ? tr('Éteint') : tr('Inactif');
   else if (dom === 'binary_sensor') stateTxt = s === 'on' ? tr('Détecté') : 'RAS';
   else if (dom === 'vacuum' || dom === 'lawn_mower') stateTxt = ({ docked: tr('Sur la base'), cleaning: tr('Nettoyage'), mowing: tr('Tonte'), returning: tr('Retour à la base'), paused: tr('En pause'), idle: tr('Inactif'), error: tr('Erreur') })[s] || String(s);
@@ -9632,6 +9675,23 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
         {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + name} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={(e) => { e.stopPropagation(); call('homeassistant', on ? 'turn_off' : 'turn_on'); }} style={{ width: 44, height: 25, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
         {runnable && !dead && <button onClick={(e) => { e.stopPropagation(); call(runnable[0], runnable[1]); }} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
         {dom === 'lock' && !dead && <button onClick={(e) => { e.stopPropagation(); call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ padding: '7px 12px', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{s === 'locked' ? 'Déverrouiller' : 'Verrouiller'}</button>}
+        {/* Alarme : le geste attendu, comme la serrure — armer quand elle
+          * dort, désarmer sinon. Si le panneau réclame un code, le bouton
+          * ouvre la fiche plutôt que d'échouer en silence. */}
+        {dom === 'alarm_control_panel' && !dead && (() => {
+          const dormante = s === 'disarmed';
+          const codeVoulu = dormante ? (!!a.code_format && a.code_arm_required !== false) : !!a.code_format;
+          const [bg, col] = dormante ? ['rgba(var(--o-accent-rgb),.14)', 'var(--o-accent-soft)']
+            : s === 'triggered' ? ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)']
+              : ['rgba(var(--o-ok-rgb),.14)', 'var(--o-ok)'];
+          return (
+            <button onClick={(e) => {
+              e.stopPropagation();
+              if (codeVoulu) { if (onOpen) onOpen(id); return; }
+              call('alarm_control_panel', dormante ? 'alarm_arm_away' : 'alarm_disarm');
+            }} style={{ padding: '7px 12px', borderRadius: 10, background: bg, border: 'none', color: col, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{dormante ? tr('Armer') : tr('Désarmer')}</button>
+          );
+        })()}
         {/* Batterie des machines dans l'en-tête, comme la carte de référence. */}
         {(dom === 'vacuum' || dom === 'lawn_mower') && !dead && a.battery_level != null && (
           <span style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: a.battery_level < 20 ? 'var(--o-bad)' : a.battery_level < 50 ? 'var(--o-warn)' : 'var(--o-text2)' }}>{Math.round(a.battery_level)}%</span>
@@ -10657,6 +10717,7 @@ function BiblioView() {
         <Item l={tr('Carte personne')}><CvPerson id="person.biblio" hass={hb} /></Item>
         <Item l={tr('Alarme')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} /></Item>
         <Item l={tr('Alarme (seule)')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} sans /></Item>
+        <Item l={tr('Alarme (compacte)')} h={88}><CvCard id="alarm_control_panel.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Serrure')} h={88}><CvCard id="lock.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Vanne')} h={88}><CvCard id="valve.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Scène')} h={88}><CvCard id="scene.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
