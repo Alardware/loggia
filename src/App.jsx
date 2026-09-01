@@ -3069,12 +3069,8 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
      * quoi Home Assistant refuse la commande sans un mot. */
     const cur = opt != null ? opt : (st ? st.state : null);
     const codeF = !!a.code_format;
-    const modes = [
-      [tr('Désarmé'), 'alarm_disarm', cur === 'disarmed'],
-      [tr('Maison'), 'alarm_arm_home', cur === 'armed_home'],
-      [tr('Absent'), 'alarm_arm_away', cur === 'armed_away' || cur === 'armed_vacation'],
-    ];
-    const etatApres = { alarm_disarm: 'disarmed', alarm_arm_home: 'armed_home', alarm_arm_away: 'armed_away' };
+    const modes = armChips(a, cur); // ceux que le panneau offre vraiment
+    const etatApres = { alarm_disarm: 'disarmed', alarm_arm_home: 'armed_home', alarm_arm_away: 'armed_away', alarm_arm_night: 'armed_night', alarm_arm_vacation: 'armed_vacation' };
     const agir = (svc) => {
       const faut = svc === 'alarm_disarm' ? codeF : (codeF && a.code_arm_required !== false);
       if (faut) { setDemandeCode({ svc }); setCodeSaisi(''); return; }
@@ -9037,9 +9033,11 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Alarme')} <span style={{ color: 'var(--o-text3)' }}>{alarmShort}</span></span>
           <div style={{ display: 'flex', gap: 4 }}>
+            {/* Les armements proposés sont ceux du panneau : un mode qu'il
+              * n'a pas configuré n'a pas de bouton. */}
             <button onClick={() => callAlarm('alarm_disarm', 'off')} style={armBtn(alarm === 'off', [52, 211, 153])}>{tr('Désarmer')}</button>
-            <button onClick={() => callAlarm('alarm_arm_away', 'away')} style={armBtn(alarm === 'away', [248, 113, 113])}>{tr('Absent')}</button>
-            <button onClick={() => callAlarm('alarm_arm_home', 'home')} style={armBtn(alarm === 'home', [255, 179, 71])}>{tr('Présent')}</button>
+            {(alarmFeat ? !!(alarmFeat & 2) : true) && <button onClick={() => callAlarm('alarm_arm_away', 'away')} style={armBtn(alarm === 'away', [248, 113, 113])}>{tr('Absent')}</button>}
+            {(alarmFeat ? !!(alarmFeat & 1) : true) && <button onClick={() => callAlarm('alarm_arm_home', 'home')} style={armBtn(alarm === 'home', [255, 179, 71])}>{tr('Présent')}</button>}
           </div>
         </div>
         {canNight && (
@@ -9681,6 +9679,12 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
         {dom === 'alarm_control_panel' && !dead && (() => {
           const dormante = s === 'disarmed';
           const codeVoulu = dormante ? (!!a.code_format && a.code_arm_required !== false) : !!a.code_format;
+          // L'armement du bouton suit le panneau : le premier mode qu'il offre
+          // (absent d'abord, le plus courant). Aucun mode déclaré → pas de
+          // bouton d'armement, la fiche reste la voie.
+          const armements = armChips(a, s).filter(c => c[1] !== 'alarm_disarm');
+          const svcArm = (armements.find(c => c[1] === 'alarm_arm_away') || armements[0] || [])[1] || null;
+          if (dormante && !svcArm) return null;
           const [bg, col] = dormante ? ['rgba(var(--o-accent-rgb),.14)', 'var(--o-accent-soft)']
             : s === 'triggered' ? ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)']
               : ['rgba(var(--o-ok-rgb),.14)', 'var(--o-ok)'];
@@ -9688,7 +9692,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
             <button onClick={(e) => {
               e.stopPropagation();
               if (codeVoulu) { if (onOpen) onOpen(id); return; }
-              call('alarm_control_panel', dormante ? 'alarm_arm_away' : 'alarm_disarm');
+              call('alarm_control_panel', dormante ? svcArm : 'alarm_disarm');
             }} style={{ padding: '7px 12px', borderRadius: 10, background: bg, border: 'none', color: col, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{dormante ? tr('Armer') : tr('Désarmer')}</button>
           );
         })()}
@@ -10060,8 +10064,31 @@ function CvActivite({ hass, demoEvents = null }) {
   );
 }
 
-/* Alarme : l'état et les trois gestes. Le désarmement passe par le service ;
- * si le panneau exige un code, Home Assistant refusera — comme partout. */
+/* Armements RÉELLEMENT offerts par un panneau, lus dans `supported_features`
+ * (bits Home Assistant : 1 = maison, 2 = absent, 4 = nuit, 32 = vacances).
+ * Alarmo ne déclare que les modes configurés : n'afficher que ceux-là évite
+ * de proposer un geste qui ne ferait rien. Un panneau muet sur ses capacités
+ * garde les deux armements courants — mieux vaut deux boutons de trop qu'une
+ * carte sans aucun geste.
+ * Renvoie [libellé, service, actif] — « Désarmé » d'abord, toujours. */
+function armChips(attrs, etat) {
+  const f = +((attrs || {}).supported_features) || 0;
+  const out = [[tr('Désarmé'), 'alarm_disarm', etat === 'disarmed']];
+  const veut = (bit) => (f ? !!(f & bit) : bit === 1 || bit === 2);
+  if (veut(1)) out.push([tr('Maison'), 'alarm_arm_home', etat === 'armed_home']);
+  if (veut(2)) out.push([tr('Absent'), 'alarm_arm_away', etat === 'armed_away']);
+  if (veut(4)) out.push([tr('Nuit'), 'alarm_arm_night', etat === 'armed_night']);
+  if (veut(32)) out.push([tr('Vacances'), 'alarm_arm_vacation', etat === 'armed_vacation']);
+  // Un panneau armé dans un mode qu'il ne déclare pas ne doit pas paraître
+  // désarmé : sa chip rejoint la liste plutôt que de mentir.
+  const connus = { armed_home: [1, tr('Maison'), 'alarm_arm_home'], armed_away: [2, tr('Absent'), 'alarm_arm_away'], armed_night: [4, tr('Nuit'), 'alarm_arm_night'], armed_vacation: [32, tr('Vacances'), 'alarm_arm_vacation'] }[etat];
+  if (connus && !out.some(c => c[1] === connus[2])) out.push([connus[1], connus[2], true]);
+  return out;
+}
+
+/* Alarme : l'état et les gestes que le panneau offre. Le désarmement passe par
+ * le service ; si le panneau exige un code, Home Assistant refusera — comme
+ * partout. */
 function CvAlarm({ id, hass, sans = false }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const s = st ? st.state : null;
@@ -10082,13 +10109,10 @@ function CvAlarm({ id, hass, sans = false }) {
     : s === 'triggered' ? [tr('ALERTE'), 'var(--o-bad)']
       : (s === 'arming' || s === 'pending') ? [tr('Activation en cours…'), 'var(--o-warn2)']
         : s ? [tr('Armée'), 'var(--o-warn2)'] : ['—', 'var(--o-text3)'];
-  // Trois états, trois chips — l'ACTIVE reflète l'état du panneau, en accent
-  // plein, sans filet (maquette Claude Design 31/08).
-  const CHIPS = [
-    [tr('Désarmé'), 'alarm_disarm', s === 'disarmed'],
-    [tr('Maison'), 'alarm_arm_home', s === 'armed_home'],
-    [tr('Absent'), 'alarm_arm_away', s === 'armed_away' || s === 'armed_vacation'],
-  ];
+  // Les chips SUIVENT le panneau : `supported_features` dit quels armements
+  // existent (Alarmo n'expose que les modes configurés). Proposer « Maison »
+  // à un panneau qui l'ignore, c'est promettre un geste sans effet.
+  const CHIPS = armChips(aAl, s);
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       {/* GABARIT MAISON — règle dure : icône hg SEULE, état hd, TITRE SOUS

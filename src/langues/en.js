@@ -439,6 +439,7 @@ export default {
   'Tout réafficher': 'Show all again',
   'Désarmer': 'Disarm',
   'Armer': 'Arm',
+  'Vacances': 'Vacation',
   'Rétablir': 'Restore',
   "Rétablir l'automatique": 'Restore automatic',
   'Rétablir les défauts': 'Restore defaults',
