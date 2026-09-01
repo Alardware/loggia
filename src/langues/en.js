@@ -445,6 +445,11 @@ export default {
   'Vacances': 'Vacation',
   'Par entité': 'By entity',
   'Chips': 'Chips',
+  'Composer les pastilles': 'Compose the chips',
+  'AJOUTER UNE PASTILLE': 'ADD A CHIP',
+  'Aucune pastille — le crayon en ajoute.': 'No chip yet — the pencil adds some.',
+  'Sans pastille choisie, la carte résume la maison : lumières, ouvrants, alarme, présence, air.':
+    'With no chip chosen, the card sums up the home: lights, doors, alarm, presence, air.',
   'Rien à résumer': 'Nothing to sum up',
   'Quelle entité pour cette carte ?': 'Which entity for this card?',
   'Choisis une entité : les cartes qu’elle accepte s’affichent ensuite.': 'Pick an entity — the cards it accepts appear next.',
