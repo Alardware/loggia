@@ -443,6 +443,11 @@ export default {
   'Désarmer': 'Disarm',
   'Armer': 'Arm',
   'Vacances': 'Vacation',
+  'Par entité': 'By entity',
+  'Par carte': 'By card',
+  'Changer la carte': 'Change the card',
+  'Rien encore : passe en mode édition pour ajouter des cartes, ou épingle un appareil depuis sa fiche.':
+    'Nothing yet — switch to edit mode to add cards, or pin a device from its page.',
   'Rétablir': 'Restore',
   "Rétablir l'automatique": 'Restore automatic',
   'Rétablir les défauts': 'Restore defaults',

@@ -3140,8 +3140,10 @@ const lireEpingles = () => { const v = cfgVal('loggia_epingles', null); return A
  * La fiche appareil universelle a la sienne, ligne par ligne. */
 function BoutonEpingle({ id }) {
   const [eps, setEps] = useState(lireEpingles);
-  const on = eps.indexOf(id) >= 0;
-  const tap = () => { const s = on ? eps.filter(x => x !== id) : eps.concat(id); setEps(s); cfgSet({ loggia_epingles: s.length ? s : null }); };
+  // Un favori peut être une chaîne (carte compacte) ou une entrée typée
+  // {t, id} depuis que la section s'édite : on compare donc l'ENTITÉ.
+  const on = eps.some(x => cvId(x) === id);
+  const tap = () => { const s = on ? eps.filter(x => cvId(x) !== id) : eps.concat(id); setEps(s); cfgSet({ loggia_epingles: s.length ? s : null }); };
   return (
     <button onClick={tap} title={on ? tr('Désépingler') : tr('Épingler sur la carte')} aria-pressed={on}
       style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>
@@ -3233,7 +3235,8 @@ function FicheAppareil({ id, hass, onClose }) {
   // Épingles : état local pour un retour visuel immédiat, cfgSet pour la maison.
   const [eps, setEps] = useState(lireEpingles);
   const basculer = (eid) => {
-    const suiv = eps.indexOf(eid) >= 0 ? eps.filter(x => x !== eid) : eps.concat(eid);
+    // Comparaison par ENTITÉ : un favori peut être une entrée typée.
+    const suiv = eps.some(x => cvId(x) === eid) ? eps.filter(x => cvId(x) !== eid) : eps.concat(eid);
     setEps(suiv);
     cfgSet({ loggia_epingles: suiv.length ? suiv : null });
   };
@@ -5168,27 +5171,63 @@ function HeroSlider({ ids, dc }) {
 
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
-const ACC_MAIN = ['heros', 'scenes', 'pieces', 'cameras'];
+const ACC_MAIN = ['favoris', 'heros', 'scenes', 'pieces', 'cameras'];
 const ACC_RAIL = ['etats', 'rappels', 'agenda'];
-const ACC_NOMS = () => ({ heros: tr('En ce moment'), scenes: tr('Scènes rapides'), pieces: tr('Pièces'), cameras: tr('Caméras'), etats: tr('En cours'), rappels: tr('Rappels'), agenda: tr('Agenda') });
+const ACC_NOMS = () => ({ favoris: tr('Favoris'), heros: tr('En ce moment'), scenes: tr('Scènes rapides'), pieces: tr('Pièces'), cameras: tr('Caméras'), etats: tr('En cours'), rappels: tr('Rappels'), agenda: tr('Agenda') });
 
-/* FAVORIS de l'accueil (nouvel accueil) : les épingles de la maison, en chips
- * compactes 1 tap — la même CvCard dense que partout, la fiche au tap. */
-function FavorisAccueil({ hass }) {
+/* FAVORIS de l'accueil : les cartes que le foyer a choisies, posées ICI.
+ *
+ * Elles se composaient jusqu'au 01/09 par la seule punaise des fiches — pour
+ * poser une carte on devait créer une vue bidon, y ajouter l'entité, puis
+ * l'épingler. La section s'édite désormais comme une vue : « + » pour ajouter
+ * (par entité ou par carte), crayon pour changer le dessin, largeur, retrait,
+ * et la saisie pour réordonner. Le format d'une entrée est celui des vues
+ * personnalisées — une chaîne nue vaut toujours compacte, donc les épingles
+ * déjà posées restent valides. */
+function FavorisAccueil({ hass, edit = false }) {
   const dc = useDomainCards(hass);
   const S = (hass && hass.states) || {};
-  const eps = lireEpingles().filter(id => S[id]);
+  const [eps, setEps] = useState(lireEpingles);
+  useEffect(() => { setEps(lireEpingles()); }, [edit]);
+  const poser = (l) => { setEps(l); cfgSet({ loggia_epingles: l.length ? l : null }); };
+  const [adding, setAdding] = useState(false);
+  const [retype, setRetype] = useState(null);
+  // Une entité disparue ne doit pas laisser un trou : on la saute au rendu,
+  // sans la retirer de la configuration (elle peut revenir).
+  const liste = eps.filter(x => cvEstTpl(x) || !cvId(x).includes('.') || S[cvId(x)]);
+  const vide = !liste.length;
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={sectionTitle}>{tr('Favoris')}</div>
-        {eps.length > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{eps.length}</span>}
+        {!vide && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{liste.length}</span>}
       </div>
-      {eps.length === 0
-        ? <div style={{ padding: '14px 16px', borderRadius: 14, background: 'var(--o-s2)', border: '1px dashed var(--o-bd1)', fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Épingle des entités depuis la fiche d’un appareil (la punaise) : elles apparaîtront ici.')}</div>
-        : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 10 }}>
-            {eps.slice(0, 12).map(id => <CvCard key={id} id={id} hass={hass} onOpen={dc.ouvrir} dense />)}
+      {vide && !edit
+        ? <div style={{ padding: '14px 16px', borderRadius: 14, background: 'var(--o-s2)', border: '1px dashed var(--o-bd1)', fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Rien encore : passe en mode édition pour ajouter des cartes, ou épingle un appareil depuis sa fiche.')}</div>
+        : <div className="grid-custom" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: edit ? 16 : 10 }}>
+            {liste.map(x => (
+              <div key={cvKey(x)} className={cvW(x) === 2 ? 'o-cvw2' : undefined} style={{ position: 'relative', minWidth: 0, gridRow: 'span ' + cvRowsDe(x) }}>
+                <div className="o-cvfit" style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
+                  <CvTyped x={x} hass={hass} dc={dc} />
+                </div>
+                {edit && (
+                  <EditBarre>
+                    <button onClick={() => setRetype(x)} title={tr('Changer la carte')} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
+                    <button onClick={() => poser(eps.map(y => cvKey(y) === cvKey(x) ? cvAvecW(x) : y))} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={cvW(x) === 2}
+                      style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
+                    <button onClick={() => poser(eps.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                  </EditBarre>
+                )}
+              </div>
+            ))}
+            {edit && (
+              <button onClick={() => setAdding(true)} style={{ minHeight: 88, borderRadius: 'var(--o-radius,18px)', border: '2px dashed rgba(var(--o-accent-rgb),.45)', background: 'rgba(var(--o-accent-rgb),.06)', color: 'var(--o-accent-soft)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 13 }}>
+                <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>{tr('Ajouter une carte')}
+              </button>
+            )}
           </div>}
+      {adding && <CarteAjoutSheet hass={hass} onClose={() => setAdding(false)} onPose={(e) => poser([...eps, e])} />}
+      {retype && <CarteAjoutSheet hass={hass} remplace={retype} onClose={() => setRetype(null)} onPose={(e) => poser(eps.map(y => cvKey(y) === cvKey(retype) ? e : y))} />}
       {dc.sheets}
     </div>
   );
@@ -5331,17 +5370,28 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
         onPointerCancel={editMode ? finSec : undefined}
         style={{ position: 'relative', minWidth: 0,
           opacity: saisie ? .55 : cache ? .4 : 1, transition: 'opacity .15s',
-          ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 4, borderRadius: 14, cursor: 'grab', touchAction: 'pan-y' } : {}) }}>
+          /* En édition, le cadre est DANS le flux (padding) au lieu de flotter
+           * autour : des boutons hors-boîte mordaient la section voisine et le
+           * compteur de l'en-tête (retour 01/09). */
+          ...(editMode ? { border: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', padding: saisie ? '9px 11px' : '10px 12px', borderRadius: 16, cursor: 'grab', touchAction: 'pan-y' } : {}) }}>
         {cache
           ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
               <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--o-text3)' }}>{ACC_NOMS()[id]} · {tr('masquée')}</span>
               <button onClick={() => montreSec(id)} style={{ padding: '6px 12px', borderRadius: 9, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{tr('Réafficher')}</button>
             </div>
           : <>
-              {/* Contenu inerte en édition — SAUF les pièces, qui portent leur
-                * propre édition par carte (drag + taille). */}
-              <div style={{ pointerEvents: editMode && id !== 'pieces' ? 'none' : 'auto' }}>{contenu}</div>
-              {editMode && <button onClick={() => cacheSec(id)} title={tr('Masquer')} style={{ position: 'absolute', top: -10, right: -10, width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-bad)', color: '#fff', boxShadow: '0 3px 10px rgba(0,0,0,.35)', fontSize: 12, fontWeight: 800, padding: 0 }}>×</button>}
+              {/* Bandeau d'outils de la section, EN FLUX au-dessus d'elle :
+                * poignée, nom, masquage — rien ne recouvre plus le contenu. */}
+              {editMode && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <Fi i="menu-burger" size={12} color="var(--o-text3)" />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ACC_NOMS()[id] || id}</span>
+                  <button onClick={() => cacheSec(id)} title={tr('Masquer')} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                </div>
+              )}
+              {/* Contenu inerte en édition — SAUF les sections qui portent
+                * leur propre édition par carte (pièces, favoris). */}
+              <div style={{ pointerEvents: editMode && id !== 'pieces' && id !== 'favoris' ? 'none' : 'auto' }}>{contenu}</div>
             </>}
       </div>
     );
@@ -5664,7 +5714,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           </div>}
         </div>
 
-        {v2 && <FavorisAccueil hass={dashHass} />}
+        {/* Les favoris sont une SECTION comme les autres depuis le 01/09 :
+            déplaçable, masquable, et éditable en place (voir secsMain). */}
 
         {/* SECTIONS PERSONNALISABLES — scènes rapides, pièces, caméras, et le rail.
             PC ≥1180 : rail accolé à droite. Mobile/tablette : empilement. */}
@@ -5701,12 +5752,17 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
                     <div style={editMode ? { pointerEvents: 'none', height: '100%' } : { height: '100%' }}>
                       <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} onOpen={editMode ? null : () => onOpenRoom && onOpenRoom(p.name)} />
                     </div>
+                    {/* Barre d'outils de la carte, en haut à droite sur fond
+                      * opaque : le bouton de taille recouvrait l'interrupteur
+                      * dans le coin bas-droit (retour 01/09). */}
                     {editMode && (
-                      <button aria-label={tr('Taille de la carte') + ' · ' + p.name}
-                        onClick={(e) => { e.stopPropagation(); saveAccL({ ...accL, tailles: { ...(accL.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } }); }}
-                        style={{ position: 'absolute', right: 7, bottom: 7, width: 26, height: 26, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.16)', border: '1px solid rgba(var(--o-accent-rgb),.35)', color: 'var(--o-accent-soft)', zIndex: 2 }}>
-                        <Fi i="resize" size={12} />
-                      </button>
+                      <EditBarre>
+                        <button aria-label={tr('Taille de la carte') + ' · ' + p.name} title={tr('Taille de la carte')}
+                          onClick={(e) => { e.stopPropagation(); saveAccL({ ...accL, tailles: { ...(accL.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } }); }}
+                          style={{ ...EDIT_BTN, background: 'rgba(var(--o-accent-rgb),.16)', color: 'var(--o-accent-soft)' }}>
+                          <Fi i="resize" size={12} />
+                        </button>
+                      </EditBarre>
                     )}
                   </div>
                 );
@@ -5830,6 +5886,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           // Une section sans rien à montrer (pas de caméra, agenda vide) n'existe
           // pas du tout — ni wrapper, ni place dans l'édition.
           const secsMain = {
+            // Les favoris s'éditent EUX-MÊMES (leurs cartes ont leur barre
+            // d'outils) : la section reste donc vivante en mode édition.
+            favoris: v2 ? <FavorisAccueil hass={dashHass} edit={editMode} /> : null,
             heros: heroIds.length ? <HeroSlider ids={heroIds} dc={dc} /> : null,
             scenes: <QuickScenes hass={dashHass} />,
             pieces: <>{piecesHeader}{piecesGrid}</>,
@@ -10802,21 +10861,130 @@ function BiblioView() {
   );
 }
 
+/* ── LES BRIQUES DE L'ÉDITION, partagées par toutes les grilles ─────────────
+ * Vues personnalisées et Favoris posent les mêmes cartes, avec les mêmes
+ * gestes : elles doivent donc parler la même langue. Ces helpers vivaient
+ * dans CustomView, où les Favoris ne pouvaient pas les atteindre. */
+
+/* Largeur d'une carte : 1 (défaut) ou 2 emplacements côte à côte. Portée par
+ * l'entrée typée (`w: 2`) ; une chaîne nue élargie devient sa forme typée. */
+const cvW = (x) => (x && typeof x === 'object' && x.w === 2) ? 2 : 1;
+/* DEUX tailles, pas trois : compacte (1 rangée de 88 px) ou standard (2).
+ * Toute carte non compacte DOIT tenir dans la standard — le graphique, le
+ * journal et les machines se compriment plutôt que de déborder. */
+const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2, camera: 2, calendrier: 2, localisation: 2 };
+const cvRowsDe = (x) => {
+  if (typeof x === 'string') return 1;
+  const d = String(x.id || '').split('.')[0];
+  if (x.t === 'riche') {
+    if (['climate', 'cover', 'media_player', 'valve', 'light', 'vacuum', 'lawn_mower'].indexOf(d) >= 0) return 2;
+    return 1;
+  }
+  return CV_ROWS[x.t] || 2;
+};
+/* Bascule de largeur : une chaîne nue élargie se promeut en forme typée. */
+const cvAvecW = (x) => (typeof x === 'string'
+  ? { t: 'compacte', id: x, w: 2 }
+  : (x.w === 2 ? (({ w, ...reste }) => reste)(x) : { ...x, w: 2 }));
+/* Même entité, autre dessin : la largeur choisie survit au changement. */
+const cvRetype = (x, t) => {
+  const id = typeof x === 'string' ? x : x.id;
+  const large = cvW(x) === 2;
+  if (t === 'compacte' && !large) return id;
+  return { t, id, ...(large ? { w: 2 } : {}) };
+};
+/* Le type d'une entrée posée, pour cocher le bon dessin dans la feuille. */
+const cvTypeDe = (x) => (typeof x === 'string' ? 'compacte' : (x.t || 'compacte'));
+
+/* Barre d'outils d'une carte en édition : DANS la carte, jamais débordante —
+ * des boutons flottant hors du cadre mordaient la carte voisine et le contenu
+ * (retour 01/09). Fond opaque : elle reste lisible sur n'importe quelle carte. */
+function EditBarre({ children }) {
+  return (
+    <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 6, display: 'flex', gap: 4, padding: 3, borderRadius: 11, background: 'var(--o-surfA)', boxShadow: '0 4px 14px rgba(0,0,0,.45)' }}>{children}</div>
+  );
+}
+const EDIT_BTN = { width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 12, fontWeight: 800, padding: 0 };
+
+/* La feuille d'AJOUT, commune aux vues personnalisées et aux Favoris.
+ * Deux entrées comme Home Assistant : « Par entité » (on choisit l'appareil,
+ * puis son dessin) et « Par carte » (les cartes qui lisent la maison entière,
+ * et le template). `pose` sert aussi à CHANGER une carte déjà posée : on lui
+ * passe l'entrée à remplacer, la feuille s'ouvre alors sur ses dessins. */
+function CarteAjoutSheet({ hass, onClose, onPose, remplace = null }) {
+  const [onglet, setOnglet] = useState('entite');
+  const [pick, setPick] = useState(remplace ? (typeof remplace === 'string' ? remplace : remplace.id) : null);
+  const noms = CV_TYPE_NOMS();
+  const AGREGATS = [['horloge', 'clock', tr('Horloge')], ['presence', 'users', tr('Présence maison')], ['ouvrants', 'door-open', tr('Ouvrants')],
+    ['energiemaison', 'bolt', tr('Énergie maison')], ['air', 'smog', tr('Qualité air')], ['activite', 'pulse', tr('Activité récente')], ['localisation', 'marker', tr('Localisation')]];
+  const tab = (id, lbl) => (
+    <button onClick={() => { setOnglet(id); setPick(null); }} style={{ flex: 1, padding: '10px 8px', borderRadius: 11, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 800, background: onglet === id ? 'rgba(var(--o-accent-rgb),.14)' : 'transparent', color: onglet === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lbl}</button>
+  );
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (<>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+          <span style={{ fontSize: 18, fontWeight: 700 }}>{remplace ? tr('Changer la carte') : tr('Ajouter une carte')}</span>
+        </div>
+        {pick ? (() => {
+          /* Le dessin se choisit ICI — à l'ajout comme au changement. */
+          const st = hass && hass.states ? hass.states[pick] : null;
+          const actuel = remplace ? cvTypeDe(remplace) : null;
+          return (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{tr('Quelle carte pour {nom} ?', { nom: cvName(st, pick) })}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {cvTypesPour(pick).map(t => {
+                  const vif = actuel ? t === actuel : t === 'compacte';
+                  return (
+                    <button key={t} onClick={() => { onPose(remplace ? cvRetype(remplace, t) : (t === 'compacte' ? pick : { t, id: pick })); if (remplace) close(); else setPick(null); }}
+                      style={{ padding: '10px 15px', borderRadius: 11, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, background: vif ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', border: '1px solid ' + (vif ? 'var(--o-accent)' : 'var(--o-bd1)'), color: vif ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{noms[t]}</button>
+                  );
+                })}
+              </div>
+              {!remplace && <button onClick={() => setPick(null)} style={{ marginTop: 12, padding: '8px 14px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('Annuler')}</button>}
+            </div>
+          );
+        })() : (<>
+          {!remplace && <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 13, background: 'var(--o-s2)', marginBottom: 14 }}>{tab('entite', tr('Par entité'))}{tab('carte', tr('Par carte'))}</div>}
+          {onglet === 'entite' ? (<>
+            <EntPicker hass={hass} exclude={[]} onPick={(id) => setPick(id)} autoFocus />
+            <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Choisis une entité, puis la carte qui lui va.')}</div>
+          </>) : (<>
+            {/* Cartes sans entité d'ancrage : elles lisent la maison entière. */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {AGREGATS.map(([t, ic, lbl]) => (
+                <button key={t} onClick={() => { onPose({ t, id: t + ':' + Date.now() }); close(); }}
+                  style={{ padding: '9px 14px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Fi i={ic} size={13} />{lbl}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '18px 0 8px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
+            <TplForm hass={hass} onAdd={(t) => { onPose(t); close(); }} />
+          </>)}
+        </>)}
+      </>)}
+    </BottomSheet>
+  );
+}
+
 function CustomView({ cv, hass, edit = false, onSave }) {
   // Mode édition en place : la CARTE ENTIÈRE se saisit et se déplace (ses
-  // contrôles sont inertes pendant l'édition), le COIN bas-droit s'étire pour
-  // choisir le format, la croix retire. Tuile « + Ajouter une carte »,
-  // renommage inline.
+  // contrôles sont inertes pendant l'édition), la barre d'outils de la carte
+  // porte le changement de dessin, la largeur et le retrait. Tuile
+  // « + Ajouter une carte », renommage inline.
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
   // Carte template en cours d'édition (crayon en mode édition) — TplForm prérempli, l'id survit.
   const [tplEdit, setTplEdit] = useState(null);
   const [nameDraft, setNameDraft] = useState(cv.name);
-  useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); setTplEdit(null); }, [cv.id, edit]);
+  // Carte posée dont on change le dessin (crayon).
+  const [retype, setRetype] = useState(null);
+  useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); setTplEdit(null); setRetype(null); }, [cv.id, edit]);
   const setEnts = (ents) => onSave && onSave({ ...cv, ents });
   const dc = useDomainCards(hass);
-  // Choix du TYPE à l'ajout : l'entité cliquée dont on attend le choix.
-  const [pickCarte, setPickCarte] = useState(null);
   /* ── Déplacement : saisir la carte ─────────────────────────────────────────
    * Pointer capture sur le wrapper ; au mouvement, la carte sous le doigt
    * (elementFromPoint → wrapper [data-cvk]) désigne la place d'insertion. La
@@ -10877,31 +11045,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
     setDragCle(null); setOrdreDrag(null);
   };
   const liste = ordreDrag || cv.ents;
-  const editBtn = { width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-surfA)', color: 'var(--o-text1)', boxShadow: '0 3px 10px rgba(0,0,0,.35)', fontSize: 12, fontWeight: 800, padding: 0 };
-  /* Largeur d'une carte : 1 (défaut) ou 2 emplacements côte à côte. Portée par
-   * l'entrée typée (`w: 2`) ; une chaîne nue élargie devient sa forme typée. */
-  const cvW = (x) => (x && typeof x === 'object' && x.w === 2) ? 2 : 1;
-  /* Hauteur en RANGÉES de la grille dense : une compacte tient sur une, une
-   * standard sur deux — deux compactes s'empilent donc à côté d'une standard. */
-  /* DEUX tailles, pas trois : compacte (1 rangée) ou standard (2 rangées).
-   * Toute carte non compacte DOIT tenir dans la standard — le graphique, le
-   * journal et les machines se compriment plutôt que de déborder. */
-  const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2, camera: 2, calendrier: 2, localisation: 2 };
-  const cvRowsDe = (x) => {
-    if (typeof x === 'string') return 1;
-    const d = String(x.id || '').split('.')[0];
-    if (x.t === 'riche') {
-      if (['climate', 'cover', 'media_player', 'valve', 'light', 'vacuum', 'lawn_mower'].indexOf(d) >= 0) return 2;
-      return 1;
-    }
-    return CV_ROWS[x.t] || 2;
-  };
-  const basculerW = (x) => {
-    const suiv = typeof x === 'string'
-      ? { t: 'compacte', id: x, w: 2 }
-      : (x.w === 2 ? (({ w, ...reste }) => reste)(x) : { ...x, w: 2 });
-    setEnts(cv.ents.map(y => cvKey(y) === cvKey(x) ? suiv : y));
-  };
+  const basculerW = (x) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(x) ? cvAvecW(x) : y));
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
@@ -10941,12 +11085,15 @@ function CustomView({ cv, hass, edit = false, onSave }) {
                 <CvTyped x={x} hass={hass} dc={dc} />
               </div>
               {edit && (
-                <>
-                  <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...editBtn, position: 'absolute', top: -9, right: -9, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                <EditBarre>
+                  {/* Le crayon change le DESSIN d'une carte posée — il fallait
+                    * la retirer et la reposer (retour 01/09). Un template garde
+                    * son propre éditeur. */}
+                  <button onClick={() => (cvEstTpl(x) ? setTplEdit(x) : setRetype(x))} title={tr('Changer la carte')} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
                   <button onClick={() => basculerW(x)} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={cvW(x) === 2}
-                    style={{ ...editBtn, position: 'absolute', bottom: -9, right: -9, ...(cvW(x) === 2 ? { background: 'var(--o-accent)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
-                  {cvEstTpl(x) && <button onClick={() => setTplEdit(x)} title={tr('Modifier')} style={{ ...editBtn, position: 'absolute', top: -9, right: 24 }}><Fi i="pencil" size={11} /></button>}
-                </>
+                    style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
+                  <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                </EditBarre>
               )}
             </div>
             );
@@ -10967,54 +11114,8 @@ function CustomView({ cv, hass, edit = false, onSave }) {
             </>)}
           </BottomSheet>
         )}
-        {adding && (
-          <BottomSheet onClose={() => setAdding(false)}>
-            {close => (<>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-                <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-                <span style={{ fontSize: 18, fontWeight: 700 }}>{tr('Ajouter une carte')}</span>
-              </div>
-              {pickCarte ? (() => {
-                /* Le type se choisit ICI, à l'ajout — jamais par un geste
-                 * implicite. La compacte reste le premier choix. */
-                const noms = CV_TYPE_NOMS();
-                const st = hass && hass.states ? hass.states[pickCarte] : null;
-                return (
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{tr('Quelle carte pour {nom} ?', { nom: cvName(st, pickCarte) })}</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {cvTypesPour(pickCarte).map(t => (
-                        <button key={t} onClick={() => { setEnts([...cv.ents, t === 'compacte' ? pickCarte : { t, id: pickCarte }]); setPickCarte(null); }}
-                          style={{ padding: '10px 15px', borderRadius: 11, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, background: t === 'compacte' ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', border: '1px solid ' + (t === 'compacte' ? 'var(--o-accent)' : 'var(--o-bd1)'), color: t === 'compacte' ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{noms[t]}</button>
-                      ))}
-                    </div>
-                    <button onClick={() => setPickCarte(null)} style={{ marginTop: 12, padding: '8px 14px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('Annuler')}</button>
-                  </div>
-                );
-              })() : (<>
-              <EntPicker hass={hass} exclude={[]} onPick={(id) => { if (cvTypesPour(id).length > 1) setPickCarte(id); else setEnts([...cv.ents, id]); }} autoFocus />
-              <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Choisis une entité, puis la carte qui lui va.')}</div>
-              {/* Cartes sans entité d'ancrage : elles lisent la maison entière. */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
-                {[['horloge', 'clock', tr('Ajouter une horloge')],
-                  ['presence', 'users', tr('Présence maison')],
-                  ['ouvrants', 'door-open', tr('Ouvrants')],
-                  ['energiemaison', 'bolt', tr('Énergie maison')],
-                  ['air', 'smog', tr('Qualité air')],
-                  ['activite', 'pulse', tr('Activité récente')],
-                  ['localisation', 'marker', tr('Localisation')]].map(([t, ic, lbl]) => (
-                  <button key={t} onClick={() => { setEnts([...cv.ents, { t, id: t + ':' + Date.now() }]); close(); }}
-                    style={{ padding: '9px 14px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    <Fi i={ic} size={13} />{lbl}
-                  </button>
-                ))}
-              </div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '18px 0 8px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
-              <TplForm hass={hass} onAdd={(t) => setEnts([...cv.ents, t])} />
-              </>)}
-            </>)}
-          </BottomSheet>
-        )}
+        {adding && <CarteAjoutSheet hass={hass} onClose={() => setAdding(false)} onPose={(e) => setEnts([...cv.ents, e])} />}
+        {retype && <CarteAjoutSheet hass={hass} remplace={retype} onClose={() => setRetype(null)} onPose={(e) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(retype) ? e : y))} />}
       </div>
     </main>
   );
@@ -11870,7 +11971,9 @@ export default function App() {
     if (t === 'energiemaison') return enKeys();
     return [cvId(x)];
   };
-  const haKeys = [...GLOBAL_KEYS, ...lireEpingles(), ...(activeCv ? activeCv.ents.flatMap(cvAggKeys) : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
+  // Les favoris suivent le même format que les vues : une entrée peut être
+  // typée, voire un agrégat — `cvAggKeys` sait en tirer les clés à suivre.
+  const haKeys = [...GLOBAL_KEYS, ...lireEpingles().flatMap(cvAggKeys), ...(activeCv ? activeCv.ents.flatMap(cvAggKeys) : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
   // Capteurs de puissance au jitter continu : signature arrondie à 10 W → pas de re-render global à chaque tick.
   // Un capteur de puissance jitter en continu chez N'IMPORTE QUI : c'est sa
   // `device_class` qui le dit, pas son nom. Cette liste portait un identifiant
