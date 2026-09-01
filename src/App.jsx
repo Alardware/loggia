@@ -2751,6 +2751,9 @@ function useLayoutEditor(cfgKey, scope, derived) {
  */
 function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
   const [val, setVal] = useState(ed.labelOf(id) || '');
+  // Les aperçus rendent de vraies cartes : elles ont besoin des fiches du
+  // catalogue, même si on ne les ouvre pas depuis la feuille.
+  const dcEdit = useDomainCards(hass);
   const estSection = id.indexOf('sect:') === 0;
   // Un poste de consommation s'appelle `dev:<entity_id>` : le prefixe cachait
   // l'entite au test, et la fiche ne proposait alors que le nom.
@@ -2806,13 +2809,27 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
           {(estEntite || id.indexOf('zone:') === 0) && ed.typeOf && (
             <>
               <div style={etiquette}>{tr('CARTE')}</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {(() => { const noms = CV_TYPE_NOMS(); const choix = ed.typeOf(id); return [[null, tr('Auto')], ...cvTypesPour(brut).map(t => [t, noms[t] || t])].map(([t, lbl2]) => { const on = choix === t; return (
-                  <button key={String(t)} aria-pressed={on} onClick={() => ed.setType(id, t)}
-                    style={{ padding: '7px 12px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{lbl2}</button>
-                ); }); })()}
+              {/* On MONTRE les cartes possibles, au vrai gabarit et avec les
+                * vraies valeurs — comme la feuille d'ajout de l'accueil et des
+                * vues personnalisées (retour 01/09 : « un aperçu des cartes
+                * disponibles »). « Auto » garde le rendu habituel de la vue. */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: 10 }}>
+                {(() => {
+                  const noms = CV_TYPE_NOMS();
+                  const choix = ed.typeOf(id);
+                  return (
+                    <>
+                      <button aria-pressed={choix == null} onClick={() => ed.setType(id, null)}
+                        style={{ minHeight: 88, borderRadius: 15, cursor: 'pointer', fontSize: 12.5, fontWeight: 800, border: '1px solid ' + (choix == null ? 'var(--o-accent)' : 'var(--o-bd2)'), background: choix == null ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: choix == null ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{tr('Auto')}</button>
+                      {estEntite && cvTypesPour(brut).map(t => (
+                        <CarteApercu key={t} lbl={noms[t] || t} hass={hass} dc={dcEdit} actif={choix === t}
+                          x={t === 'compacte' ? brut : { t, id: brut }} onClick={() => ed.setType(id, t)} />
+                      ))}
+                    </>
+                  );
+                })()}
               </div>
-              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('« Auto » : le rendu habituel de cette vue.')}</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', margin: '8px 2px 0' }}>{tr('« Auto » : le rendu habituel de cette vue.')}</div>
             </>
           )}
           {!estSection && ed.estLarge && (
@@ -10906,20 +10923,73 @@ function EditBarre({ children }) {
 }
 const EDIT_BTN = { width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 12, fontWeight: 800, padding: 0 };
 
+/* Les domaines qu'une carte accepte — l'inverse de `cvTypesPour`, pour la
+ * galerie : une carte choisie d'abord ne doit proposer que les entités
+ * qu'elle sait dessiner. `null` = toutes. */
+const CV_DOMAINES = {
+  graph: ['sensor'], chiffre: ['sensor', 'binary_sensor'], personne: ['person'], meteo: ['weather'],
+  agenda: ['calendar'], calendrier: ['calendar'], alarme: ['alarm_control_panel'], alarmeseule: ['alarm_control_panel'], camera: ['camera'],
+};
+/* La galerie : toutes les cartes de la maison, dans l'ordre où on les cherche.
+ * `ex` est l'entité FICTIVE qui sert d'aperçu (états de la bibliothèque). */
+const CV_GALERIE = () => [
+  { t: 'compacte', lbl: tr('Compacte'), ex: 'light.biblio_rgb' },
+  { t: 'riche', lbl: tr('Standard'), ex: 'light.biblio_rgb' },
+  { t: 'graph', lbl: tr('Graphique 24 h'), ex: 'sensor.biblio_temp' },
+  { t: 'chiffre', lbl: tr('Grand chiffre'), ex: 'sensor.biblio_co2' },
+  { t: 'journal', lbl: tr('Journal'), ex: 'light.biblio_rgb' },
+  { t: 'personne', lbl: tr('Présence'), ex: 'person.biblio' },
+  { t: 'camera', lbl: tr('Caméra'), ex: 'camera.biblio_entree' },
+  { t: 'alarme', lbl: tr('Alarme'), ex: 'alarm_control_panel.biblio' },
+  { t: 'alarmeseule', lbl: tr('Alarme (seule)'), ex: 'alarm_control_panel.biblio' },
+  { t: 'calendrier', lbl: tr('Calendrier'), ex: 'calendar.biblio' },
+  { t: 'agenda', lbl: tr('Agenda'), ex: 'calendar.biblio' },
+  { t: 'meteo', lbl: tr('Météo'), ex: null },
+  { t: 'horloge', lbl: tr('Horloge'), ex: null, seule: true },
+  { t: 'presence', lbl: tr('Présence maison'), ex: null, seule: true },
+  { t: 'ouvrants', lbl: tr('Ouvrants'), ex: null, seule: true },
+  { t: 'energiemaison', lbl: tr('Énergie maison'), ex: null, seule: true },
+  { t: 'air', lbl: tr('Qualité air'), ex: null, seule: true },
+  { t: 'activite', lbl: tr('Activité récente'), ex: null, seule: true },
+  { t: 'localisation', lbl: tr('Localisation'), ex: null, seule: true },
+];
+
+/* Un APERÇU de carte, au vrai gabarit (88 ou 184) et inerte : on regarde,
+ * on ne pilote pas. Les vignettes de la galerie tournent sur les états
+ * fictifs de la bibliothèque, celles d'une entité choisie sur ses vraies
+ * données — ce qu'on voit est ce qu'on posera. */
+function CarteApercu({ x, hass, dc, lbl, actif = false, onClick }) {
+  const h = cvRowsDe(x) === 1 ? 88 : 184;
+  return (
+    <button onClick={onClick} aria-pressed={actif} style={{ display: 'block', width: '100%', textAlign: 'left', padding: 8, borderRadius: 15, cursor: 'pointer', background: actif ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent)' : 'var(--o-bd2)') }}>
+      <span style={{ display: 'block', fontSize: 11, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: actif ? 'var(--o-accent-soft)' : 'var(--o-text3)', margin: '0 2px 7px' }}>{lbl}</span>
+      <span className="o-cvfit" style={{ display: 'block', height: h, pointerEvents: 'none', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)' }}>
+        <CvTyped x={x} hass={hass} dc={dc} />
+      </span>
+    </button>
+  );
+}
+
 /* La feuille d'AJOUT, commune aux vues personnalisées et aux Favoris.
  * Deux entrées comme Home Assistant : « Par entité » (on choisit l'appareil,
- * puis son dessin) et « Par carte » (les cartes qui lisent la maison entière,
- * et le template). `pose` sert aussi à CHANGER une carte déjà posée : on lui
- * passe l'entrée à remplacer, la feuille s'ouvre alors sur ses dessins. */
+ * puis on VOIT les cartes qu'il accepte) et « Par carte » (la bibliothèque :
+ * on choisit un dessin, puis l'entité qui ira dedans). Elle sert aussi à
+ * CHANGER une carte posée : on lui passe l'entrée à remplacer. */
 function CarteAjoutSheet({ hass, onClose, onPose, remplace = null }) {
   const [onglet, setOnglet] = useState('entite');
   const [pick, setPick] = useState(remplace ? (typeof remplace === 'string' ? remplace : remplace.id) : null);
-  const noms = CV_TYPE_NOMS();
-  const AGREGATS = [['horloge', 'clock', tr('Horloge')], ['presence', 'users', tr('Présence maison')], ['ouvrants', 'door-open', tr('Ouvrants')],
-    ['energiemaison', 'bolt', tr('Énergie maison')], ['air', 'smog', tr('Qualité air')], ['activite', 'pulse', tr('Activité récente')], ['localisation', 'marker', tr('Localisation')]];
+  // Carte choisie AVANT son entité (galerie) : on attend alors l'entité.
+  const [carteAttente, setCarteAttente] = useState(null);
+  const dc = useDomainCards(hass);
+  // Maison fictive de la bibliothèque : les vignettes de la galerie vivent
+  // dessus, sans toucher à la vraie installation.
+  const [Sb] = useState(biblioStates);
+  const hb = useMemo(() => ({ states: Sb, connected: true, callService: () => {}, callApi: () => Promise.resolve([]), callWS: () => Promise.resolve(null) }), [Sb]);
+  const dcb = useDomainCards(hb);
   const tab = (id, lbl) => (
-    <button onClick={() => { setOnglet(id); setPick(null); }} style={{ flex: 1, padding: '10px 8px', borderRadius: 11, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 800, background: onglet === id ? 'rgba(var(--o-accent-rgb),.14)' : 'transparent', color: onglet === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lbl}</button>
+    <button onClick={() => { setOnglet(id); setPick(null); setCarteAttente(null); }} style={{ flex: 1, padding: '10px 8px', borderRadius: 11, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 800, background: onglet === id ? 'rgba(var(--o-accent-rgb),.14)' : 'transparent', color: onglet === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lbl}</button>
   );
+  const grille = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: 10 };
   return (
     <BottomSheet onClose={onClose}>
       {close => (<>
@@ -10927,21 +10997,26 @@ function CarteAjoutSheet({ hass, onClose, onPose, remplace = null }) {
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ fontSize: 18, fontWeight: 700 }}>{remplace ? tr('Changer la carte') : tr('Ajouter une carte')}</span>
         </div>
-        {pick ? (() => {
-          /* Le dessin se choisit ICI — à l'ajout comme au changement. */
+        {carteAttente ? (<>
+          {/* Carte choisie dans la galerie : reste à dire QUELLE entité. */}
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{tr('Quelle entité pour cette carte ?')}</div>
+          <EntPicker hass={hass} exclude={[]} domaines={CV_DOMAINES[carteAttente] || null} autoFocus
+            onPick={(id) => { onPose(carteAttente === 'compacte' ? id : { t: carteAttente, id }); close(); }} />
+          <button onClick={() => setCarteAttente(null)} style={{ marginTop: 12, padding: '8px 14px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('Annuler')}</button>
+        </>) : pick ? (() => {
+          /* Entité choisie : on MONTRE les cartes qu'elle accepte, au vrai
+           * gabarit et avec ses vraies valeurs. */
           const st = hass && hass.states ? hass.states[pick] : null;
           const actuel = remplace ? cvTypeDe(remplace) : null;
           return (
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{tr('Quelle carte pour {nom} ?', { nom: cvName(st, pick) })}</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {cvTypesPour(pick).map(t => {
-                  const vif = actuel ? t === actuel : t === 'compacte';
-                  return (
-                    <button key={t} onClick={() => { onPose(remplace ? cvRetype(remplace, t) : (t === 'compacte' ? pick : { t, id: pick })); if (remplace) close(); else setPick(null); }}
-                      style={{ padding: '10px 15px', borderRadius: 11, cursor: 'pointer', fontWeight: 700, fontSize: 12.5, background: vif ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', border: '1px solid ' + (vif ? 'var(--o-accent)' : 'var(--o-bd1)'), color: vif ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{noms[t]}</button>
-                  );
-                })}
+              <div style={grille}>
+                {cvTypesPour(pick).map(t => (
+                  <CarteApercu key={t} lbl={CV_TYPE_NOMS()[t]} hass={hass} dc={dc} actif={actuel ? t === actuel : false}
+                    x={t === 'compacte' ? pick : { t, id: pick }}
+                    onClick={() => { onPose(remplace ? cvRetype(remplace, t) : (t === 'compacte' ? pick : { t, id: pick })); close(); }} />
+                ))}
               </div>
               {!remplace && <button onClick={() => setPick(null)} style={{ marginTop: 12, padding: '8px 14px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('Annuler')}</button>}
             </div>
@@ -10950,15 +11025,14 @@ function CarteAjoutSheet({ hass, onClose, onPose, remplace = null }) {
           {!remplace && <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 13, background: 'var(--o-s2)', marginBottom: 14 }}>{tab('entite', tr('Par entité'))}{tab('carte', tr('Par carte'))}</div>}
           {onglet === 'entite' ? (<>
             <EntPicker hass={hass} exclude={[]} onPick={(id) => setPick(id)} autoFocus />
-            <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Choisis une entité, puis la carte qui lui va.')}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Choisis une entité : les cartes qu’elle accepte s’affichent ensuite.')}</div>
           </>) : (<>
-            {/* Cartes sans entité d'ancrage : elles lisent la maison entière. */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {AGREGATS.map(([t, ic, lbl]) => (
-                <button key={t} onClick={() => { onPose({ t, id: t + ':' + Date.now() }); close(); }}
-                  style={{ padding: '9px 14px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <Fi i={ic} size={13} />{lbl}
-                </button>
+            {/* La bibliothèque : chaque carte se voit avant d'être posée. */}
+            <div style={grille}>
+              {CV_GALERIE().filter(c => c.seule || c.ex).map(c => (
+                <CarteApercu key={c.t} lbl={c.lbl} hass={hb} dc={dcb}
+                  x={c.seule ? { t: c.t, id: c.t + ':apercu' } : (c.t === 'compacte' ? c.ex : { t: c.t, id: c.ex })}
+                  onClick={() => { if (c.seule) { onPose({ t: c.t, id: c.t + ':' + Date.now() }); close(); } else setCarteAttente(c.t); }} />
               ))}
             </div>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '18px 0 8px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>

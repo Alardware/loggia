@@ -403,14 +403,21 @@ export const CV_DOM_ICON = { light: 'bulb', switch: 'bolt', input_boolean: 'bolt
 
 export const cvDomain = (id) => id.slice(0, id.indexOf('.'));
 
-export function EntPicker({ hass, exclude = [], onPick, autoFocus = false }) {
+export function EntPicker({ hass, exclude = [], onPick, autoFocus = false, domaines = null }) {
   const [q, setQ] = useState('');
   const all = useMemo(() => {
     if (!hass || !hass.states) return [];
     return Object.keys(hass.states).map(id => ({ id, name: cvName(hass.states[id], id), dom: cvDomain(id) })).sort((a, b) => a.name.localeCompare(b.name));
   }, [hass]);
   const ql = q.trim().toLowerCase();
-  const results = ql ? all.filter(e => (e.id.toLowerCase().indexOf(ql) >= 0 || e.name.toLowerCase().indexOf(ql) >= 0) && exclude.indexOf(e.id) < 0).slice(0, 30) : [];
+  /* `domaines` : une carte choisie d'abord (galerie) ne va qu'avec certains
+   * domaines — inutile de proposer une lampe à une carte de calendrier. Sans
+   * filtre, la recherche exige au moins une lettre ; avec filtre, la liste
+   * s'ouvre déjà sur ce qui convient. */
+  const dom = (e) => !domaines || domaines.indexOf(e.dom) >= 0;
+  const results = (ql || domaines)
+    ? all.filter(e => dom(e) && (!ql || e.id.toLowerCase().indexOf(ql) >= 0 || e.name.toLowerCase().indexOf(ql) >= 0) && exclude.indexOf(e.id) < 0).slice(0, 30)
+    : [];
   return (
     <>
       <input value={q} onChange={e => setQ(e.target.value)} placeholder={tr('Rechercher une entité (nom ou id)…')} spellCheck={false} autoFocus={autoFocus} style={cvInp} />

@@ -444,6 +444,8 @@ export default {
   'Armer': 'Arm',
   'Vacances': 'Vacation',
   'Par entité': 'By entity',
+  'Quelle entité pour cette carte ?': 'Which entity for this card?',
+  'Choisis une entité : les cartes qu’elle accepte s’affichent ensuite.': 'Pick an entity — the cards it accepts appear next.',
   'Par carte': 'By card',
   'Changer la carte': 'Change the card',
   'Rien encore : passe en mode édition pour ajouter des cartes, ou épingle un appareil depuis sa fiche.':
