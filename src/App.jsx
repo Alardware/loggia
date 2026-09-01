@@ -2862,6 +2862,26 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
  * edition on range ses cartes, on ne pilote pas ses appareils : les deux gestes
  * ne doivent pas se disputer le meme pointeur.
  */
+/* « Ajouter une carte » dans une vue intégrée : la même feuille que l'accueil
+ * et les vues personnalisées (par entité ou par carte, avec aperçus). La vue
+ * accueille n'importe quelle carte du catalogue — son rendu passe déjà par
+ * `CvTyped` dès qu'un type est posé. */
+function BoutonCarteLibre({ ed, hass, style }) {
+  const [ouvert, setOuvert] = useState(false);
+  const poser = (e) => {
+    const id = typeof e === 'string' ? e : e.id;
+    const t = typeof e === 'string' ? 'compacte' : e.t;
+    // Ajout FRANC : `toggle` retirerait une carte déjà présente.
+    if (ed.ids.indexOf(id) < 0) ed.toggle(id);
+    if (ed.setType) ed.setType(id, t);
+    setOuvert(false);
+  };
+  return (<>
+    <button onClick={() => setOuvert(true)} style={style}>{tr('Ajouter une carte')}</button>
+    {ouvert && <CarteAjoutSheet hass={hass} onClose={() => setOuvert(false)} onPose={poser} />}
+  </>);
+}
+
 /** `plat` : un intertitre ne fait que ~35 px de haut — un « × » debordant de
  *  9 px y mord sur l'element du dessus. On le rentre alors dans le cadre. */
 function EditableCard({ ed, id, nom, onEdit, plat = false, children }) {
@@ -3877,6 +3897,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
               </span>
               <button onClick={() => setAddSheet(true)} style={btn(true)}>{tr('Ajouter un appareil')}</button>
               <button onClick={addSection} style={btn(false)}>{tr('Ajouter un titre')}</button>
+              <BoutonCarteLibre ed={ed} hass={hass} style={btn(false)} />
               {ed.edits > 0 && <button onClick={ed.reset} style={btn(false)}>{tr("Rétablir l'automatique")}</button>}
               {hidden.length > 0 && <button onClick={unhideAll} style={btn(false)}>{tr('Tout réafficher')}</button>}
             </div>
@@ -4608,6 +4629,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
               </span>
               <button onClick={() => setObjAdd(true)} style={btn(true)}>{tr('Ajouter un appareil')}</button>
               <button onClick={addSection} style={btn(false)}>{tr('Ajouter un titre')}</button>
+              <BoutonCarteLibre ed={ed} hass={hass} style={btn(false)} />
               {ed.edits > 0 && <button onClick={ed.reset} style={btn(false)}>{tr("Rétablir l'automatique")}</button>}
             </div>
           );
@@ -6236,6 +6258,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
             + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
           <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{tr('Ajouter une lumière')}</button>
           <button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>
+          <BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} />
           {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{tr("Rétablir l'automatique")}</button>}
         </ViewEditBar>
       )}
@@ -7064,6 +7087,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
           texte={ed.edits ? 'Ces zones sont personnalisées.' : 'Ces zones suivent la détection automatique.'}>
           <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{tr('Ajouter un thermostat')}</button>
           <button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>
+          <BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} />
           {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{tr("Rétablir l'automatique")}</button>}
         </ViewEditBar>
       )}
@@ -7296,6 +7320,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
             + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
           <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{tr('Ajouter un volet')}</button>
           <button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>
+          <BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} />
           {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{tr("Rétablir l'automatique")}</button>}
         </ViewEditBar>
       )}
@@ -7793,6 +7818,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
             texte={'Mode édition : clique un poste pour le modifier, glisse-le pour le déplacer.'
               + (ed.edits ? ' Ces postes sont personnalisés.' : ' Ces postes suivent la détection automatique.')}>
             <button onClick={() => setEnAdd(true)} style={editBtn(true)}>{tr('Ajouter un poste')}</button>
+            <BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} />
             {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{tr("Rétablir l'automatique")}</button>}
           </ViewEditBar>
         )}
@@ -8867,6 +8893,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
             + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
           <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{tr('Ajouter un lecteur')}</button>
           <button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>
+          <BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} />
           {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{tr("Rétablir l'automatique")}</button>}
         </ViewEditBar>
       )}
