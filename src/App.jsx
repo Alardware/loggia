@@ -981,16 +981,8 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
   // Format compact (PC ≥1180) : compteur = luminaires non-« Ampoule » ; interrupteur = plafonnier(s) SEULS
   const tilt = useTilt(4);
   const [flashRef, flash] = useFlash();
-  /* Mini-courbe de température : la journée de la pièce d'un coup d'œil.
-   * Le cache 5 min du hook évite de mitrailler l'API à chaque navigation. */
-  const ptsTemp = useHistorique24(getHass(), (compact && p.live && p.live.tempId) || null);
-  let cheminTemp = '';
-  if (ptsTemp && ptsTemp.length > 1) {
-    const t0 = ptsTemp[0].t, t1 = ptsTemp[ptsTemp.length - 1].t || t0 + 1;
-    const vmin = Math.min(...ptsTemp.map(q => q.v)), vmax = Math.max(...ptsTemp.map(q => q.v));
-    const spread = (vmax - vmin) || 1;
-    cheminTemp = ptsTemp.map((q, i2) => (i2 ? 'L' : 'M') + (((q.t - t0) / (t1 - t0 || 1)) * 100).toFixed(1) + ' ' + (vmax === vmin ? 8 : 14 - ((q.v - vmin) / spread) * 12).toFixed(1)).join(' ');
-  }
+  // La mini-courbe 24 h a été retirée (retour 01/09) : la teinte de la pièce
+  // et la température suffisent, et l'historique n'est plus interrogé.
   // Optimiste : l'interrupteur bascule tout de suite, puis se réconcilie avec HA au poll suivant
   const realOn = (mains && mains.length) ? mains.some(l => l.on) : null;
   const [ov, setOv] = useState(null);
@@ -1045,12 +1037,10 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
       <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-piecestd o-stag o-hov ' + (tilt.className || '')} onClick={onOpen} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: 15, padding: '14px 15px 12px', overflow: 'hidden',
         // Direction « teinte pièce » (choix 31/08) : le lavis de la pièce
         // baigne la surface en permanence, l'icône est nue, la température en
-        // héros. Le halo doré reste le signal « pièce éclairée » — le lavis
-        // doré d'état a cédé sa place à la teinte de la pièce.
+        // héros. Sans halo doré (retour 01/09) : l'interrupteur allumé dit
+        // déjà que la pièce est éclairée.
         background: `linear-gradient(160deg,${p.bg},rgba(0,0,0,0) 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
-        boxShadow: on
-          ? '0 0 20px 2px rgba(var(--o-gold-rgb),.18), var(--o-shadow,0 14px 36px rgba(0,0,0,.36))'
-          : 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))',
+        boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))',
         transition: 'box-shadow .3s ease, background .3s ease',
         cursor: 'pointer', ...stag(idx) }}>
         {/* calque de flash séparé : ne touche ni au transform du tilt ni au box-shadow de la carte */}
@@ -1067,11 +1057,6 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
           {lights ? <FlipText text={n > 0 ? (n > 1 ? tr('{n} lampes allumées', { n }) : tr('{n} lampe allumée', { n })) : tr('Tout éteint')} /> : <Skel w={92} h={12} />}
           {p.live && p.live.hum != null ? <> · <Num v={p.live.hum} suffix="%" /></> : null}
         </div>
-        {cheminTemp && (
-          <svg viewBox="0 0 100 16" preserveAspectRatio="none" aria-hidden="true" style={{ display: 'block', width: '100%', height: 14, marginTop: 6, opacity: .5 }}>
-            <path d={cheminTemp} fill="none" stroke={p.tc || 'var(--o-accent)'} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
-          </svg>
-        )}
         {/* Pied : minis d'action (volets violet, clim ROUGE — des `button`, le
           * drag d'édition les ignore) à gauche, switch lumière à droite. */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8 }}>
