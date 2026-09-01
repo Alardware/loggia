@@ -1045,7 +1045,11 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         cursor: 'pointer', ...stag(idx) }}>
         {/* calque de flash séparé : ne touche ni au transform du tilt ni au box-shadow de la carte */}
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 15, pointerEvents: 'none' }} />
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        {/* En-tête à hauteur RÉSERVÉE (49 = température 26 + 5 + badge 18) :
+          * avec ou sans badge d'air, le nom et le pied tombent au même endroit
+          * — sinon deux pièces voisines n'ont pas le même rythme (retour
+          * 01/09). */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', minHeight: 49 }}>
           <span style={{ display: 'flex', alignItems: 'center', minHeight: 38 }}>{cloneElement(p.icon, { size: 34 })}</span>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
             <span style={{ fontSize: 26, fontWeight: 800, color: p.tc, lineHeight: 1 }}>{p.live ? (p.live.temp != null ? <Num v={p.live.temp} d={1} suffix="°" /> : '—') : <Skel w={52} h={22} />}</span>
