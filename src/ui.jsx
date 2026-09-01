@@ -370,7 +370,15 @@ export function BottomSheet({ onClose, children }) {
     h.onpointerup = up; h.onpointercancel = up;
   };
   return (
-    <div onPointerDown={(e) => { partiDuVoile.current = e.target === e.currentTarget; }}
+    /* Les événements POINTEUR s'arrêtent au voile : une feuille ouverte depuis
+     * une section en mode édition vit dans le wrapper de cette section, dont
+     * le glisser-déposer capturait le pointeur — le clic sur une ligne de la
+     * feuille partait alors à la section et l'ajout ne se faisait jamais
+     * (retour 01/09). Les gestes internes (poignée, boutons) sont plus bas
+     * dans l'arbre : ils continuent de fonctionner. */
+    <div onPointerDown={(e) => { e.stopPropagation(); partiDuVoile.current = e.target === e.currentTarget; }}
+      onPointerMove={(e) => e.stopPropagation()}
+      onPointerUp={(e) => e.stopPropagation()}
       onClick={(e) => { if (e.target === e.currentTarget && partiDuVoile.current) close(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.32)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', animation: closing ? 'o-fadeOut .3s ease forwards' : 'o-fadeIn .25s ease' }}>
       <div ref={sheetRef} className="o-sheet" role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
