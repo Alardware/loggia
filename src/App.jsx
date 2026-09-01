@@ -3634,8 +3634,13 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   const live = piece && piece.live;
   const onOpenComfort = () => setComfort(true);
   // ── Réglages rapides + carte Ambiance (maquette Claude Design « Loggia Vues », 21/08) ──
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-roompanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-roompanel', nv ? '1' : '0'); } catch (e) {} return nv; });
+  /* Une clé PAR PIÈCE : la clé unique refermait le panneau de toutes les
+   * pièces d'un coup, et l'on croyait le réglage partagé par tout le
+   * dashboard (retour 01/09). Chaque vue a déjà la sienne. */
+  const panelKey = 'loggia-roompanel:' + (room || '');
+  const [panel, setPanel] = useState(() => { try { return localStorage.getItem(panelKey) !== '0'; } catch (e) { return true; } });
+  useEffect(() => { try { setPanel(localStorage.getItem(panelKey) !== '0'); } catch (e) { setPanel(true); } }, [panelKey]);
+  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem(panelKey, nv ? '1' : '0'); } catch (e) {} return nv; });
   const S = (hass && hass.states) || {};
   const dom = (id) => id.slice(0, id.indexOf('.'));
   const call = (d, svc, data) => { try { if (hass && hass.callService) hass.callService(d, svc, data); } catch (e) {} };
@@ -5226,9 +5231,11 @@ function FavorisAccueil({ hass, edit = false }) {
       </div>
       {vide && !edit
         ? <div style={{ padding: '14px 16px', borderRadius: 14, background: 'var(--o-s2)', border: '1px dashed var(--o-bd1)', fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Rien encore : passe en mode édition pour ajouter des cartes, ou épingle un appareil depuis sa fiche.')}</div>
-        : <div className="grid-custom" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: edit ? 16 : 10 }}>
+        /* Les favoris DÉFILENT (retour 01/09) : ils s'ajoutent sans repousser
+         * le reste de l'accueil, et la rangée reste d'un seul tenant. */
+        : <div className="o-favrow" style={{ display: 'flex', gap: edit ? 16 : 10, overflowX: 'auto', scrollSnapType: 'x proximity', paddingBottom: 2 }}>
             {liste.map(x => (
-              <div key={cvKey(x)} className={cvW(x) === 2 ? 'o-cvw2' : undefined} style={{ position: 'relative', minWidth: 0, gridRow: 'span ' + cvRowsDe(x) }}>
+              <div key={cvKey(x)} style={{ position: 'relative', flex: '0 0 auto', width: cvW(x) === 2 ? 466 : 225, height: cvRowsDe(x) === 1 ? 88 : 184, scrollSnapAlign: 'start' }}>
                 <div className="o-cvfit" style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
                   <CvTyped x={x} hass={hass} dc={dc} />
                 </div>
@@ -5243,7 +5250,7 @@ function FavorisAccueil({ hass, edit = false }) {
               </div>
             ))}
             {edit && (
-              <button onClick={() => setAdding(true)} style={{ minHeight: 88, borderRadius: 'var(--o-radius,18px)', border: '2px dashed rgba(var(--o-accent-rgb),.45)', background: 'rgba(var(--o-accent-rgb),.06)', color: 'var(--o-accent-soft)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 13 }}>
+              <button onClick={() => setAdding(true)} style={{ flex: '0 0 auto', width: 190, height: 88, borderRadius: 'var(--o-radius,18px)', border: '2px dashed rgba(var(--o-accent-rgb),.45)', background: 'rgba(var(--o-accent-rgb),.06)', color: 'var(--o-accent-soft)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 7, fontWeight: 700, fontSize: 13 }}>
                 <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>{tr('Ajouter une carte')}
               </button>
             )}
@@ -9030,9 +9037,26 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   // Optimiste avec filet : si HA n'a pas confirmé sous 6s (appel rejeté, code requis…), on revient à l'état réel.
   const alarmRevertRef = useRef(null);
   useEffect(() => () => clearTimeout(alarmRevertRef.current), []);
-  const callAlarm = (svc, mode) => {
+  /* Le code du panneau, demandé AVANT d'agir : sans lui, Home Assistant
+   * refusait la commande en silence et l'écran revenait en arrière au bout de
+   * six secondes, sans un mot (retour 01/09). */
+  const [demandeCode, setDemandeCode] = useState(null); // { svc, mode }
+  const [codeAlarme, setCodeAlarme] = useState('');
+  const armer = (svc) => {
+    const mode = { alarm_disarm: 'off', alarm_arm_away: 'away', alarm_arm_home: 'home', alarm_arm_night: 'night', alarm_arm_vacation: 'away' }[svc] || 'away';
+    const aAl = (alarmId && S[alarmId] && S[alarmId].attributes) || {};
+    const faut = svc === 'alarm_disarm' ? !!aAl.code_format : (!!aAl.code_format && aAl.code_arm_required !== false);
+    if (faut) { setDemandeCode({ svc, mode }); setCodeAlarme(''); return; }
+    callAlarm(svc, mode);
+  };
+  const validerCode = () => {
+    if (!demandeCode || !codeAlarme) return;
+    callAlarm(demandeCode.svc, demandeCode.mode, codeAlarme);
+    setDemandeCode(null); setCodeAlarme('');
+  };
+  const callAlarm = (svc, mode, code) => {
     setAlarm(mode);
-    try { if (hass && hass.callService && alarmId) hass.callService('alarm_control_panel', svc, { entity_id: alarmId }); } catch (e) {}
+    try { if (hass && hass.callService && alarmId) hass.callService('alarm_control_panel', svc, { entity_id: alarmId, ...(code ? { code } : {}) }); } catch (e) {}
     clearTimeout(alarmRevertRef.current);
     alarmRevertRef.current = setTimeout(() => { const cur = getHass(); const st = (cur && cur.states && alarmId && cur.states[alarmId]) ? cur.states[alarmId].state : null; const m = (st === 'armed_away' || st === 'armed_vacation') ? 'away' : st === 'armed_home' ? 'home' : st === 'armed_night' ? 'night' : st === 'triggered' ? 'triggered' : (st === 'arming' || st === 'pending') ? mode : 'off'; setAlarm(m); }, 6000);
   };
@@ -9096,8 +9120,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-secpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   // Bitmask AlarmControlPanelEntityFeature de HA : ARM_HOME=1, ARM_AWAY=2, ARM_NIGHT=4.
   // On n'affiche « Nuit » que si le panneau la gere — sinon l'appel serait rejete.
-  const alarmFeat = (alarmId && S[alarmId] && S[alarmId].attributes && +S[alarmId].attributes.supported_features) || 0;
-  const canNight = !!(alarmFeat & 4);
+  // (Les modes offerts sont lus par `armChips` : plus de test de bits ici.)
   // Décompte d'armement : le temps qui reste pour sortir, battu à la seconde.
   const cptAlarme = armCompte(alarmId ? S[alarmId] : null);
   useSeconde(!!cptAlarme);
@@ -9123,26 +9146,35 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
 
       {/* réglages rapides : armement + mode nuit */}
       <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
+        {/* Un seul groupe de MODES, ceux que le panneau offre — « Nuit »
+          * était un interrupteur alors que les états s'excluent, et le groupe
+          * n'affichait alors aucune sélection. Le code est demandé ici quand
+          * le panneau l'exige : il était simplement ignoré (retour 01/09). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Alarme')} <span style={{ color: 'var(--o-text3)' }}>{alarmShort}</span></span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {/* Les armements proposés sont ceux du panneau : un mode qu'il
-              * n'a pas configuré n'a pas de bouton. */}
-            <button onClick={() => callAlarm('alarm_disarm', 'off')} style={armBtn(alarm === 'off', [52, 211, 153])}>{tr('Désarmer')}</button>
-            {(alarmFeat ? !!(alarmFeat & 2) : true) && <button onClick={() => callAlarm('alarm_arm_away', 'away')} style={armBtn(alarm === 'away', [248, 113, 113])}>{tr('Absent')}</button>}
-            {(alarmFeat ? !!(alarmFeat & 1) : true) && <button onClick={() => callAlarm('alarm_arm_home', 'home')} style={armBtn(alarm === 'home', [255, 179, 71])}>{tr('Présent')}</button>}
-          </div>
-        </div>
-        {canNight && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Nuit')}</span>
-            <span onClick={() => callAlarm(alarm === 'night' ? 'alarm_disarm' : 'alarm_arm_night', alarm === 'night' ? 'off' : 'night')} role="switch" aria-checked={alarm === 'night'} aria-label={tr('Mode nuit')} tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); callAlarm(alarm === 'night' ? 'alarm_disarm' : 'alarm_arm_night', alarm === 'night' ? 'off' : 'night'); } }}
-              style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 11, cursor: 'pointer', background: alarm === 'night' ? 'var(--o-accent)' : 'var(--o-s4)', border: alarm === 'night' ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}>
-              <span style={{ position: 'absolute', top: 2, left: alarm === 'night' ? 19 : 2, width: 17, height: 17, borderRadius: '50%', background: '#fff', transition: 'left .2s cubic-bezier(.4,1.3,.5,1)' }} />
+          {demandeCode ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <input type="password" inputMode="numeric" autoFocus value={codeAlarme} onChange={(e) => setCodeAlarme(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') validerCode(); if (e.key === 'Escape') setDemandeCode(null); }}
+                placeholder={tr('Code')} aria-label={tr('Code')}
+                style={{ width: 118, padding: '6px 10px', borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
+              <button onClick={validerCode} style={{ padding: '6px 12px', borderRadius: 9, border: 'none', background: 'var(--o-accent)', color: '#fff', fontWeight: 800, fontSize: 11.5, cursor: 'pointer' }}>{tr('Valider')}</button>
+              <button onClick={() => setDemandeCode(null)} aria-label={tr('Annuler')} style={{ width: 28, height: 28, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer' }}>✕</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {armChips(alarmId ? (S[alarmId] || {}).attributes || {} : {}, alarmRaw).map(([lbl, svc, actif]) => {
+                const rgb = svc === 'alarm_disarm' ? [52, 211, 153] : svc === 'alarm_arm_away' ? [248, 113, 113] : svc === 'alarm_arm_night' ? [124, 92, 255] : [255, 179, 71];
+                return <button key={svc} onClick={() => armer(svc)} aria-pressed={actif} style={armBtn(actif, rgb)}>{lbl}</button>;
+              })}
+            </div>
+          )}
+          {cptAlarme && (
+            <span aria-hidden="true" style={{ width: 74, height: 4, borderRadius: 3, background: 'var(--o-s1)', overflow: 'hidden', flexShrink: 0 }}>
+              <span style={{ display: 'block', height: '100%', width: Math.round((cptAlarme.reste / cptAlarme.total) * 100) + '%', background: 'var(--o-warn2)', transition: 'width 1s linear' }} />
             </span>
-          </div>
-        )}
+          )}
+        </div>
         <span style={{ flex: 1 }} />
         <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
       </div>

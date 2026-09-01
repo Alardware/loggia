@@ -111,8 +111,13 @@ html.loggia-tactile .loggia-backdrop { display: block; position: fixed; inset: 0
 html.loggia-tactile .loggia-mobilenav { display: flex !important; }
 /* Sans la barre du haut, le contenu commence au ras de l'écran : les titres
  * touchaient le bord (et l'encoche). On garde donc l'air du haut EN PLUS de
- * la zone sûre, au lieu de le remplacer. */
+ * la zone sûre, au lieu de le remplacer. C'est la TABLETTE qui en manquait :
+ * sur téléphone la marge d'origine suffisait, et 28 px enfonçaient le titre
+ * trop bas (retour 01/09) — d'où le retour à 16 px sous 640. */
 html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-bottom, 0px)) !important; padding-top: calc(28px + var(--o-safe-top, 0px)) !important; }
+@media (max-width: 640px) {
+  html.loggia-tactile .loggia-content { padding-top: calc(16px + var(--o-safe-top, 0px)) !important; }
+}
 /* Les feuilles du bas s'arrêtent AU-DESSUS de la barre de navigation : sans
  * cela, leurs derniers boutons se cachaient derrière elle. */
 html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) !important; max-height: calc(94vh - var(--o-navh, 60px)) !important; }
@@ -143,6 +148,12 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
    * et le pourcentage suffisent. */
   .o-lightpresets { display: none !important; }
 }
+/* Favoris : une rangée qui défile, barre discrète (elle ne doit pas manger la
+ * carte suivante ni sauter aux yeux). */
+.o-favrow { scrollbar-width: thin; }
+.o-favrow::-webkit-scrollbar { height: 5px; }
+.o-favrow::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 3px; }
+.o-favrow::-webkit-scrollbar-track { background: transparent; }
 /* Héros « En ce moment » : la carte du catalogue remplit le gabarit 184 px. */
 .o-hero > * { height: 100%; box-sizing: border-box; }
 .o-heroslider::-webkit-scrollbar { display: none; }
