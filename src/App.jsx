@@ -9009,11 +9009,15 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   // On n'affiche « Nuit » que si le panneau la gere — sinon l'appel serait rejete.
   const alarmFeat = (alarmId && S[alarmId] && S[alarmId].attributes && +S[alarmId].attributes.supported_features) || 0;
   const canNight = !!(alarmFeat & 4);
-  const alarmWord = arming ? tr('activation en cours') : triggered ? tr('déclenchée') : alarm === 'unknown' ? tr('état inconnu')
+  // Décompte d'armement : le temps qui reste pour sortir, battu à la seconde.
+  const cptAlarme = armCompte(alarmId ? S[alarmId] : null);
+  useSeconde(!!cptAlarme);
+  const armMot = cptAlarme ? tr('activation dans {n} s', { n: cptAlarme.reste }) : tr('activation en cours');
+  const alarmWord = arming ? armMot : triggered ? tr('déclenchée') : alarm === 'unknown' ? tr('état inconnu')
     : alarm === 'away' ? tr('armée · absent') : alarm === 'home' ? tr('armée · présent') : alarm === 'night' ? tr('armée · nuit') : tr('désarmée');
-  const alarmShort = arming ? tr('activation…') : triggered ? tr('déclenchée') : alarm === 'unknown' ? tr('inconnue')
+  const alarmShort = arming ? (cptAlarme ? cptAlarme.reste + ' s' : tr('activation…')) : triggered ? tr('déclenchée') : alarm === 'unknown' ? tr('inconnue')
     : alarm === 'away' ? tr('absent') : alarm === 'home' ? tr('présent') : alarm === 'night' ? tr('nuit') : tr('prête');
-  const alarmDesc = arming ? tr('Activation en cours…') : triggered ? tr('Intrusion détectée — vérifier immédiatement') : alarm === 'unknown' ? tr('État inconnu — connexion à vérifier') : alarm === 'off' ? tr('Prête · tous les capteurs au repos') : alarm === 'away' ? tr('Surveillance totale active') : alarm === 'night' ? tr('Mode nuit — périmètre et zones de repos') : tr('Périmètre surveillé');
+  const alarmDesc = arming ? (cptAlarme ? tr('Activation dans {n} s — le temps de sortir', { n: cptAlarme.reste }) : tr('Activation en cours…')) : triggered ? tr('Intrusion détectée — vérifier immédiatement') : alarm === 'unknown' ? tr('État inconnu — connexion à vérifier') : alarm === 'off' ? tr('Prête · tous les capteurs au repos') : alarm === 'away' ? tr('Surveillance totale active') : alarm === 'night' ? tr('Mode nuit — périmètre et zones de repos') : tr('Périmètre surveillé');
   const presentNames = people.filter(p => p.home).map(p => p.name).join(', ');
 
   return (
@@ -9622,6 +9626,9 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   const s = st ? st.state : null;
   const a = (st && st.attributes) || {};
   const dead = !st || s === 'unavailable' || s === 'unknown';
+  // Alarme en cours d'armement : le temps restant, battu à la seconde.
+  const cptAlarme = dom === 'alarm_control_panel' ? armCompte(st) : null;
+  useSeconde(!!cptAlarme);
   const on = !dead && (dom === 'cover' ? (s === 'open' || s === 'opening') : dom === 'lock' ? s === 'unlocked' : dom === 'media_player' ? s === 'playing' : dom === 'climate' ? s !== 'off' : dom === 'vacuum' ? (s === 'cleaning' || s === 'returning') : dom === 'lawn_mower' ? (s === 'mowing' || s === 'returning') : dom === 'valve' ? s === 'open' : s === 'on');
   // Chaque domaine garde sa teinte des vues intégrées : lumière = sa couleur RGB ou l'or,
   // climat = le rouge de la vue Climatisation — l'accent bleu pour le reste.
@@ -9646,7 +9653,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   else if (dom === 'climate') stateTxt = (a.current_temperature != null ? a.current_temperature + '°' : '—') + (a.temperature != null ? ' → ' + a.temperature + '°' : '') + (s !== 'off' ? '' : ' · Éteint');
   else if (dom === 'cover') stateTxt = s === 'opening' ? 'Ouverture…' : s === 'closing' ? 'Fermeture…' : on ? (tr('Ouvert') + (a.current_position != null && a.current_position < 100 ? ' · ' + a.current_position + '%' : '')) : tr('Fermé');
   else if (dom === 'lock') stateTxt = s === 'locked' ? 'Verrouillée' : s === 'unlocked' ? 'Déverrouillée' : s;
-  else if (dom === 'alarm_control_panel') stateTxt = s === 'disarmed' ? tr('Désarmée') : s === 'triggered' ? tr('ALERTE') : (s === 'arming' || s === 'pending') ? tr('Activation en cours…') : s === 'armed_home' ? tr('Maison') : s === 'armed_night' ? tr('Nuit') : tr('Armée');
+  else if (dom === 'alarm_control_panel') stateTxt = s === 'disarmed' ? tr('Désarmée') : s === 'triggered' ? tr('ALERTE') : (s === 'arming' || s === 'pending') ? (cptAlarme ? tr('Activation dans {n} s', { n: cptAlarme.reste }) : tr('Activation en cours…')) : s === 'armed_home' ? tr('Maison') : s === 'armed_night' ? tr('Nuit') : tr('Armée');
   else if (dom === 'media_player') stateTxt = s === 'playing' ? (a.media_title || tr('Lecture')) : s === 'paused' ? tr('En pause') : s === 'off' ? tr('Éteint') : tr('Inactif');
   else if (dom === 'binary_sensor') stateTxt = s === 'on' ? tr('Détecté') : 'RAS';
   else if (dom === 'vacuum' || dom === 'lawn_mower') stateTxt = ({ docked: tr('Sur la base'), cleaning: tr('Nettoyage'), mowing: tr('Tonte'), returning: tr('Retour à la base'), paused: tr('En pause'), idle: tr('Inactif'), error: tr('Erreur') })[s] || String(s);
@@ -10064,6 +10071,36 @@ function CvActivite({ hass, demoEvents = null }) {
   );
 }
 
+/* Décompte d'un panneau qui s'arme (ou qui laisse le temps de désarmer).
+ *
+ * Home Assistant ne normalise pas ce délai : Alarmo publie `delay` (le total
+ * de la phase en cours, en secondes), les autres nomment cela `arming_time`,
+ * `delay_time` ou `pending_time`. On prend le premier connu et on le compte
+ * depuis `last_changed`, l'instant où la phase a commencé. Sans délai publié,
+ * pas de décompte inventé — la carte dit simplement l'activation en cours.
+ * Renvoie { reste, total } en secondes, ou null. */
+function armCompte(st) {
+  if (!st || (st.state !== 'arming' && st.state !== 'pending')) return null;
+  const a = st.attributes || {};
+  const total = [a.delay, a.arming_time, a.delay_time, a.pending_time]
+    .map(v => (v == null ? NaN : +v)).find(v => !isNaN(v) && v > 0);
+  if (total == null) return null;
+  const debut = Date.parse(st.last_changed || st.last_updated || '');
+  if (isNaN(debut)) return null;
+  const reste = Math.ceil(total - (Date.now() - debut) / 1000);
+  return { reste: Math.max(0, Math.min(total, reste)), total };
+}
+/* Un battement par seconde, seulement quand quelque chose décompte : sans
+ * `actif`, aucun minuteur ne tourne. */
+function useSeconde(actif) {
+  const [, tic] = useState(0);
+  useEffect(() => {
+    if (!actif) return undefined;
+    const iv = setInterval(() => tic(n => n + 1), 1000);
+    return () => clearInterval(iv);
+  }, [actif]);
+}
+
 /* Armements RÉELLEMENT offerts par un panneau, lus dans `supported_features`
  * (bits Home Assistant : 1 = maison, 2 = absent, 4 = nuit, 32 = vacances).
  * Alarmo ne déclare que les modes configurés : n'afficher que ceux-là évite
@@ -10105,9 +10142,12 @@ function CvAlarm({ id, hass, sans = false }) {
     if (faut) { setDemande({ svc }); setCode(''); } else call(svc);
   };
   const valider = () => { if (demande && code) { call(demande.svc, code); setDemande(null); setCode(''); } };
+  // Le temps qu'il reste pour sortir (ou pour désarmer), battu à la seconde.
+  const cpt = armCompte(st);
+  useSeconde(!!cpt);
   const [txt, col] = s === 'disarmed' ? [tr('Désarmée'), 'var(--o-ok)']
     : s === 'triggered' ? [tr('ALERTE'), 'var(--o-bad)']
-      : (s === 'arming' || s === 'pending') ? [tr('Activation en cours…'), 'var(--o-warn2)']
+      : (s === 'arming' || s === 'pending') ? [cpt ? tr('Activation dans {n} s', { n: cpt.reste }) : tr('Activation en cours…'), 'var(--o-warn2)']
         : s ? [tr('Armée'), 'var(--o-warn2)'] : ['—', 'var(--o-text3)'];
   // Les chips SUIVENT le panneau : `supported_features` dit quels armements
   // existent (Alarmo n'expose que les modes configurés). Proposer « Maison »
@@ -10123,6 +10163,12 @@ function CvAlarm({ id, hass, sans = false }) {
       </div>
       <div style={{ marginTop: 8, ...(sans ? { flex: 1, display: 'flex', flexDirection: 'column' } : {}) }}>
         <div style={RM_NAME}>{cvName(st, id)}</div>
+        {/* Le temps qui reste, vu d'un coup d'œil : la barre se vide. */}
+        {cpt && (
+          <div aria-hidden="true" style={{ height: 4, borderRadius: 3, background: 'var(--o-s1)', overflow: 'hidden', margin: '8px 0 2px' }}>
+            <div style={{ height: '100%', width: Math.round((cpt.reste / cpt.total) * 100) + '%', background: col, transition: 'width 1s linear' }} />
+          </div>
+        )}
         {/* Version « seule » : les chips descendent au pied de la carte,
           * comme les boutons des cartes machines. */}
         {sans && <div style={{ flex: 1 }} />}
