@@ -149,8 +149,12 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .o-lightpresets { display: none !important; }
 }
 /* Favoris : une rangée qui défile, barre discrète (elle ne doit pas manger la
- * carte suivante ni sauter aux yeux). */
-.o-favrow { scrollbar-width: thin; }
+ * carte suivante ni sauter aux yeux).
+ * Le padding donne de l'air à l'OMBRE des cartes : `overflow-x: auto` rogne
+ * aussi verticalement, et l'ombre coupée net dessinait un liseré sombre
+ * autour de chaque carte (retour 01/09). Les marges négatives annulent ce
+ * padding pour que rien ne bouge dans la page. */
+.o-favrow { scrollbar-width: thin; padding: 14px 3px 10px; margin: -14px -3px -4px; }
 .o-favrow::-webkit-scrollbar { height: 5px; }
 .o-favrow::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 3px; }
 .o-favrow::-webkit-scrollbar-track { background: transparent; }

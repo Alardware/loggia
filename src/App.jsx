@@ -5233,7 +5233,7 @@ function FavorisAccueil({ hass, edit = false }) {
         ? <div style={{ padding: '14px 16px', borderRadius: 14, background: 'var(--o-s2)', border: '1px dashed var(--o-bd1)', fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Rien encore : passe en mode édition pour ajouter des cartes, ou épingle un appareil depuis sa fiche.')}</div>
         /* Les favoris DÉFILENT (retour 01/09) : ils s'ajoutent sans repousser
          * le reste de l'accueil, et la rangée reste d'un seul tenant. */
-        : <div className="o-favrow" style={{ display: 'flex', gap: edit ? 16 : 10, overflowX: 'auto', scrollSnapType: 'x proximity', paddingBottom: 2 }}>
+        : <div className="o-favrow" style={{ display: 'flex', gap: edit ? 16 : 10, overflowX: 'auto', scrollSnapType: 'x proximity' }}>
             {liste.map(x => (
               <div key={cvKey(x)} style={{ position: 'relative', flex: '0 0 auto', width: cvW(x) === 2 ? 466 : 225, height: cvRowsDe(x) === 1 ? 88 : 184, scrollSnapAlign: 'start' }}>
                 <div className="o-cvfit" style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
