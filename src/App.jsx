@@ -9927,23 +9927,25 @@ const PlugIcon = ({ size = 19 }) => (
  * (les contrôles du domaine en dessous) — puis les spécialisées du domaine. */
 function cvTypesPour(id) {
   const d = String(id).split('.')[0];
+  // La CHIP ferme chaque liste : c'est la plus petite carte du catalogue, une
+  // pastille pour une entité (retour 01/09).
   // Le « gros interrupteur » a quitté le catalogue le 31/08/2026 (retour
   // d'essai) — les cartes déjà posées continuent de se rendre (CvTyped).
-  if (d === 'light' || d === 'switch' || d === 'fan') return ['compacte', 'riche', 'journal'];
-  if (d === 'cover' || d === 'climate' || d === 'media_player' || d === 'vacuum' || d === 'lawn_mower' || d === 'valve' || d === 'humidifier' || d === 'lock' || d === 'siren' || d === 'water_heater') return ['compacte', 'riche', 'journal'];
-  if (d === 'scene' || d === 'script' || d === 'button' || d === 'input_button' || d === 'automation') return ['compacte', 'riche'];
+  if (d === 'light' || d === 'switch' || d === 'fan') return ['compacte', 'riche', 'journal', 'chip'];
+  if (d === 'cover' || d === 'climate' || d === 'media_player' || d === 'vacuum' || d === 'lawn_mower' || d === 'valve' || d === 'humidifier' || d === 'lock' || d === 'siren' || d === 'water_heater') return ['compacte', 'riche', 'journal', 'chip'];
+  if (d === 'scene' || d === 'script' || d === 'button' || d === 'input_button' || d === 'automation') return ['compacte', 'riche', 'chip'];
   // La jauge a quitté le catalogue le 31/08/2026 (« il est moche ») — les
   // cartes déjà posées continuent de se rendre (CvTyped).
-  if (d === 'sensor') return ['compacte', 'chiffre', 'graph', 'journal'];
-  if (d === 'binary_sensor') return ['compacte', 'chiffre', 'journal'];
-  if (d === 'person') return ['compacte', 'personne', 'journal'];
-  if (d === 'weather') return ['compacte', 'meteo'];
-  if (d === 'calendar') return ['agenda', 'calendrier', 'compacte'];
-  if (d === 'alarm_control_panel') return ['compacte', 'alarme', 'alarmeseule', 'riche'];
+  if (d === 'sensor') return ['compacte', 'chiffre', 'graph', 'journal', 'chip'];
+  if (d === 'binary_sensor') return ['compacte', 'chiffre', 'journal', 'chip'];
+  if (d === 'person') return ['compacte', 'personne', 'journal', 'chip'];
+  if (d === 'weather') return ['compacte', 'meteo', 'chip'];
+  if (d === 'calendar') return ['agenda', 'calendrier', 'compacte', 'chip'];
+  if (d === 'alarm_control_panel') return ['compacte', 'alarme', 'alarmeseule', 'riche', 'chip'];
   if (d === 'camera') return ['camera', 'compacte'];
-  return ['compacte', 'riche'];
+  return ['compacte', 'riche', 'chip'];
 }
-const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)'), activite: tr('Activité récente'), camera: tr('Caméra'), calendrier: tr('Calendrier'), localisation: tr('Localisation'), chips: tr('Chips') });
+const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)'), activite: tr('Activité récente'), camera: tr('Caméra'), calendrier: tr('Calendrier'), localisation: tr('Localisation'), chips: tr('Chips (groupe)'), chip: tr('Chip') });
 
 /* Horloge : l'heure de la maison, sans entité — la carte se suffit. */
 function CvClock() {
@@ -10132,6 +10134,37 @@ function chipVif(id, st) {
   if (d === 'sensor') return false;
   return s === 'on';
 }
+/* UNE CHIP, une entité, une carte — la plus petite du catalogue.
+ *
+ * Elle ne remplit pas sa case : une pastille de 48 px flotte au milieu de la
+ * rangée, comme les chips de Home Assistant posées seules. On en pose autant
+ * qu'on veut, côte à côte ; c'est le format que Guillaume demandait (retour
+ * 01/09 : « une vraie chip par entité et non rassemblé dans une carte »). */
+function CvChip({ id, hass, dc = null }) {
+  const S = (hass && hass.states) || {};
+  const st = S[id];
+  const d = String(id).split('.')[0];
+  const vif = chipVif(id, st);
+  const col = d === 'cover' ? 'var(--o-purple)' : d === 'climate' ? 'var(--o-bad)'
+    : (d === 'light' || d === 'switch') ? 'var(--o-warn)'
+      : d === 'alarm_control_panel' ? (st && st.state === 'triggered' ? 'var(--o-bad)' : st && st.state === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn2)')
+        : 'var(--o-accent-soft)';
+  const val = chipTexte(id, st);
+  const nom = cvName(st, id);
+  return (
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center' }}>
+      <button onClick={(e) => { e.stopPropagation(); if (dc && dc.ouvrir) dc.ouvrir(id); }} title={nom}
+        style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', minWidth: 0, height: 48, padding: '0 14px', borderRadius: 14, border: 'none', cursor: 'pointer',
+          background: vif ? hx(col, .16) : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
+          color: vif ? col : 'var(--o-text2)', boxShadow: 'var(--o-shadow,0 8px 20px rgba(0,0,0,.26))' }}>
+        <Fi i={cvIcoEntite(d, id, st, nom) || 'bolt'} size={15} color={vif ? col : 'var(--o-text3)'} />
+        <span style={{ flex: 1, minWidth: 0, textAlign: 'left', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--o-text1)' }}>{nom}</span>
+        {val ? <span style={{ fontSize: 12.5, fontWeight: 800, flexShrink: 0 }}>{val}</span> : null}
+      </button>
+    </div>
+  );
+}
+
 function CvChips({ x = null, hass, dc = null, demo = null }) {
   const S = (hass && hass.states) || {};
   /* Une carte chips, c'est SES entités : celles qu'on lui a choisies, chacune
@@ -10794,6 +10827,7 @@ function CvTyped({ x, hass, dc }) {
   if (t === 'camera') return <CvCamera id={id} hass={hass} />;
   if (t === 'calendrier') return <CvCalendrier id={id} hass={hass} />;
   if (t === 'localisation') return <CvCarte hass={hass} />;
+  if (t === 'chip') return <CvChip id={id} hass={hass} dc={dc} />;
   if (t === 'chips') return <CvChips x={x} hass={hass} dc={dc} />;
   if (t === 'journal') return <CvJournal id={id} hass={hass} />;
   return <CvCard id={id} hass={hass} onOpen={dc.ouvrir} />;
@@ -10961,8 +10995,8 @@ function BiblioView() {
         <Item l={tr('Alarme')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} /></Item>
         <Item l={tr('Alarme (seule)')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} sans /></Item>
         <Item l={tr('Alarme (compacte)')} h={88}><CvCard id="alarm_control_panel.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
-        <Item l={tr('Chips')} w={340} h={88}><CvChips hass={hb} dc={dc}
-          x={{ t: 'chips', id: 'chips:biblio', ids: ['light.biblio_rgb', 'cover.biblio', 'climate.biblio', 'alarm_control_panel.biblio', 'sensor.biblio_co2'] }} /></Item>
+        <Item l={tr('Chip')} h={88}><CvChip id="light.biblio_rgb" hass={hb} dc={dc} /></Item>
+        <Item l={tr('Chip (capteur)')} h={88}><CvChip id="sensor.biblio_co2" hass={hb} dc={dc} /></Item>
         <Item l={tr('Serrure')} h={88}><CvCard id="lock.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Vanne')} h={88}><CvCard id="valve.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Scène')} h={88}><CvCard id="scene.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
@@ -10988,7 +11022,7 @@ const cvW = (x) => (x && typeof x === 'object' && x.w === 2) ? 2 : 1;
 /* DEUX tailles, pas trois : compacte (1 rangée de 88 px) ou standard (2).
  * Toute carte non compacte DOIT tenir dans la standard — le graphique, le
  * journal et les machines se compriment plutôt que de déborder. */
-const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2, camera: 2, calendrier: 2, localisation: 2, chips: 1 };
+const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2, camera: 2, calendrier: 2, localisation: 2, chips: 1, chip: 1 };
 const cvRowsDe = (x) => {
   if (typeof x === 'string') return 1;
   const d = String(x.id || '').split('.')[0];
@@ -11051,7 +11085,7 @@ const CV_GALERIE = () => [
   { t: 'air', lbl: tr('Qualité air'), ex: null, seule: true },
   { t: 'activite', lbl: tr('Activité récente'), ex: null, seule: true },
   { t: 'localisation', lbl: tr('Localisation'), ex: null, seule: true },
-  { t: 'chips', lbl: tr('Chips'), ex: null, seule: true },
+  { t: 'chip', lbl: tr('Chip'), ex: 'light.biblio_rgb' },
 ];
 
 /* Un APERÇU de carte, au vrai gabarit (88 ou 184) et inerte : on regarde,
