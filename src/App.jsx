@@ -5511,6 +5511,20 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   const wide = useWide(1180);
   const wideXL = useWide(1440); // tablette paysage (1180-1439) : rail plus étroit, cartes pièces prioritaires
   const dashHass = a && a.hass;
+  // Le panneau d'alarme du rail : celui de la configuration d'abord.
+  const alarmRailId = (() => {
+    const S = (dashHass && dashHass.states) || null;
+    if (!S) return null;
+    const c = secAlarm();
+    if (c && S[c]) return c;
+    return Object.keys(S).find(x => x.indexOf('alarm_control_panel.') === 0 && S[x] && S[x].state !== 'unavailable') || null;
+  })();
+  // Ouvrants de la maison, pour la bannière : combien sont ouverts sur combien.
+  const ouvStat = useMemo(() => {
+    const S = (dashHass && dashHass.states) || null;
+    if (!S) return { ouverts: 0, total: 0 };
+    try { const l = ouvrantsDe(S); return { ouverts: l.filter(o => o.on).length, total: l.length }; } catch (e) { return { ouverts: 0, total: 0 }; }
+  }, [dashHass]);
   // lumières par pièce (compteur + interrupteur des cartes compactes) — une seule passe par render.
   // On ignore les entités dont le NOM AFFICHÉ commence/contient « Ampoule » (membres individuels
   // des luminaires) : seul le nom compte, pas l'entity_id (ex. le lampadaire peut avoir un id
@@ -5725,7 +5739,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               </div>
             </div>
           </div>
-          {!v2 && <div style={{ position: 'relative', display: 'flex', gap: 10, marginTop: 38, overflowX: 'auto', paddingBottom: 4 }}>
+          {<div style={{ position: 'relative', display: 'flex', gap: 10, marginTop: v2 ? 26 : 38, overflowX: 'auto', paddingBottom: 4 }}>
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
               <Ico name="bolt" color="var(--o-ok)" size={17} />
               <div><div style={{ fontSize: 16, fontWeight: 800, color: a && a.metricExport ? a.metricExport.color : 'var(--o-ok)', lineHeight: 1.1 }}>{a && a.metricExport ? <Num v={a.metricExport.raw} prefix={a.metricExport.sign} fmt={fmtWatts} /> : <Skel w={64} h={16} />}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a && a.metricExport ? a.metricExport.label: tr('EXPORT RÉSEAU')}</div></div>
@@ -5736,8 +5750,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               <div><div style={{ fontSize: 16, fontWeight: 800, color: 'var(--o-accent-soft)', lineHeight: 1.1 }}>{a ? (a.maxCo2 != null ? <Num v={a.maxCo2} /> : '—') : <Skel w={40} h={16} />}<span style={{ fontSize: 11, color: 'var(--o-text2)' }}> ppm</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('QUALITÉ AIR')} · {a && a.maxCo2 != null ? tr(airLabel(a.maxCo2)) : tr('BON')}</div></div>
             </div>
             <div style={metricDiv} />
+            {/* Les OUVRANTS ont pris la place de la température (retour
+              * 01/09) : la chaleur de la maison se lit sur chaque tuile pièce,
+              * une fenêtre restée ouverte ne se lit nulle part. */}
             <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
-              <div style={{ fontSize: 15, fontWeight: 800 }}>{a ? (a.inTemp != null ? <><Num v={a.inTemp} d={1} />°</> : '—') : <Skel w={42} h={15} />}<span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}> · {a ? (a.inHum != null ? <><Num v={a.inHum} />%</> : '—') : <Skel w={26} h={11} />}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('INTÉRIEUR · HUMIDITÉ')}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: ouvStat.ouverts ? 'var(--o-purple)' : 'var(--o-text1)' }}>{ouvStat.total ? <><Num v={ouvStat.ouverts} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {ouvStat.total}</span></> : (a ? '—' : <Skel w={34} h={15} />)}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('OUVRANTS OUVERTS')}</div>
             </div>
             <div style={metricDiv} />
             <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
@@ -5860,21 +5877,38 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           ) : null;
           const OKRGB = '52,211,153', AMBRGB = '251,191,36';
           const etatsRows = [];
-          // Nouvel accueil : les métriques quittent la bannière et deviennent
-          // des résumés cliquables — Lumières en tête, Énergie en pied.
-          if (v2) etatsRows.push(railRow('lum', tr('Lumières'), tr('LUMIÈRES ALLUMÉES').toLowerCase(), a ? (a.lightsOn + ' / ' + a.lightsTotal) : '—', a && a.lightsOn ? 'var(--o-warn)' : 'var(--o-text3)', 'lumieres'));
+          /* L'ARMEMENT en tête du rail : c'est le geste du départ et du
+            * retour, il ne devrait pas demander d'ouvrir une vue. Les modes
+            * proposés sont ceux du panneau ; s'il réclame un code, on ouvre
+            * la vue Sécurité, qui sait le demander. */
+          if (alarmRailId) {
+            const stAl = (dashHass && dashHass.states) ? dashHass.states[alarmRailId] : null;
+            const aAl = (stAl && stAl.attributes) || {};
+            etatsRows.push(
+              <div key="armer" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 0 10px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+                {armChips(aAl, stAl && stAl.state).map(([lbl, svc, actif]) => (
+                  <button key={svc} onClick={() => {
+                    const faut = svc === 'alarm_disarm' ? !!aAl.code_format : (!!aAl.code_format && aAl.code_arm_required !== false);
+                    if (faut) { if (onNav) onNav('securite'); return; }
+                    try { if (dashHass && dashHass.callService) dashHass.callService('alarm_control_panel', svc, { entity_id: alarmRailId }); } catch (e) {}
+                  }} aria-pressed={actif}
+                    style={{ flex: 1, padding: '8px 4px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>{lbl}</button>
+                ))}
+              </div>
+            );
+          }
+          /* Le rail ne redit pas la bannière (retour 01/09) : lumières,
+            * sécurité, qualité d'air et énergie y sont déjà chiffrées. Il
+            * garde ce qui RACONTE quelque chose — volets, robots, appareils. */
           etatsRows.push(railRow('vol', tr('Mode volets'), tr('Auto lever/coucher'), (a && a.sunsetHM) ? a.sunsetHM : '21:42', 'var(--o-accent-soft)', 'climat'));
           if (mWallE && (!a || hasEnt((loggiaEnt('vacuum', {}) || {}).etat))) etatsRows.push(railRow('we', mWallE.label, mWallE.phase, mWallE.valueText, mWallE.barColor || mWallE.color, 'objets'));
           if (mLuba && (!a || hasEnt(mowerId(a && a.states)))) etatsRows.push(railRow('lu', mLuba.label, mLuba.phase, mLuba.valueText, mLuba.barColor || mLuba.color, 'objets'));
           if (mLv && (!a || hasEnt(notifIds().dishwasher))) etatsRows.push(railRow('lv', mLv.label, mLv.phase, mLv.valueText, mLv.color, 'objets'));
-          etatsRows.push(railRow('sec', tr('Sécurité'), (a ? a.camOnline + '/' + a.camTotal : '3/3') + ' ' + tr('caméras en ligne'), (a && a.alarmArmed) ? tr('Armée') : tr('Désarmée'), (a && a.alarmArmed) ? 'var(--o-warn2)' : 'var(--o-ok)', 'securite'));
-          if (v2 && a && a.metricExport) etatsRows.push(railRow('nrj', tr('Énergie'), a.metricExport.label.toLowerCase(), fmtWatts(a.metricExport.raw), a.metricExport.color, 'energie'));
-          if (v2 && a) etatsRows.push(railRow('air', tr('Qualité air'), a.maxCo2 != null ? tr(airLabel(a.maxCo2)).toLowerCase() : '—', a.maxCo2 != null ? Math.round(a.maxCo2) + ' ppm' : '—', 'var(--o-accent-soft)', 'pieces'));
           const nActifs = [mWallE, mLuba, mLv].filter(m => m && m.active).length;
           const rappelsRows = [];
           if (!a || (a.repasIn && a.repasLabel)) rappelsRows.push(railRow('rep', tr('Repas chat'), a ? a.repasLabel : 'Collation après-midi · 18g', a ? a.repasIn.replace('DANS ', '').toLowerCase() : '1h38', 'var(--o-warn)'));
           if (mPb) rappelsRows.push(railRow('pb', tr('Poubelles'), mPb.valueText, mPb.phase, mPb.color));
-          const railEtats = railPanel(v2 ? tr('Résumés') : tr('En cours'), v2 ? tr('Toute la maison, une ligne par domaine — tape pour ouvrir') : tr('Volets, robots et sécurité'), nActifs ? nActifs + ' ' + (nActifs > 1 ? tr('ACTIFS') : tr('ACTIF')) : tr('TOUT AU REPOS'), nActifs ? '79,140,255' : OKRGB, etatsRows);
+          const railEtats = railPanel(tr('En cours'), tr('Volets, robots et appareils'), nActifs ? nActifs + ' ' + (nActifs > 1 ? tr('ACTIFS') : tr('ACTIF')) : tr('TOUT AU REPOS'), nActifs ? '79,140,255' : OKRGB, etatsRows);
           const railRappels = railPanel(tr('Rappels'), tr('Repas du chat et ramassage'), null, AMBRGB, rappelsRows);
           // Agenda : les prochains evenements des calendriers HA. Pas de
           // calendrier, ou rien sous sept jours → pas de carte.
