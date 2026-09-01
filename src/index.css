@@ -154,7 +154,11 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
  * aussi verticalement, et l'ombre coupée net dessinait un liseré sombre
  * autour de chaque carte (retour 01/09). Les marges négatives annulent ce
  * padding pour que rien ne bouge dans la page. */
-.o-favrow { scrollbar-width: thin; padding: 14px 3px 10px; margin: -14px -3px -4px; }
+/* SANS ombre dans la rangée : côte à côte, les ombres des cartes se
+ * rejoignaient en une bande sombre continue sur la bannière claire (retour
+ * 01/09). Leur fond les détache déjà. */
+.o-favrow { scrollbar-width: thin; padding: 2px 3px 6px; margin: -2px -3px 0; }
+.o-favrow .o-piece, .o-favrow .o-cvfit > *, .o-favrow button { box-shadow: none !important; }
 .o-favrow::-webkit-scrollbar { height: 5px; }
 .o-favrow::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 3px; }
 .o-favrow::-webkit-scrollbar-track { background: transparent; }
