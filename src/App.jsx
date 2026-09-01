@@ -11335,8 +11335,21 @@ function MobileNav({ view, onNav, onMenu }) {
     { id: 'securite', label: tr('Sécurité'), icon: 'shield-check' },
   ].filter(it => isViewAvailable(avail, it.id));
   const cell = (on) => ({ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '9px 4px 7px', background: 'none', border: 'none', cursor: 'pointer', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)', fontSize: 10.5, fontWeight: 700, WebkitTapHighlightColor: 'transparent' });
+  /* Sa hauteur RÉELLE, mesurée, pour que les feuilles du bas s'arrêtent
+   * au-dessus d'elle : elle varie avec la zone sûre et la taille du texte,
+   * une valeur écrite en dur mentirait sur un appareil ou l'autre. */
+  const navRef = useRef(null);
+  useEffect(() => {
+    const el = navRef.current;
+    const poser = () => { try { document.documentElement.style.setProperty('--o-navh', Math.round(el ? el.getBoundingClientRect().height : 0) + 'px'); } catch (e) {} };
+    poser();
+    let ro = null;
+    try { ro = new ResizeObserver(poser); if (el) ro.observe(el); } catch (e) {}
+    window.addEventListener('resize', poser);
+    return () => { window.removeEventListener('resize', poser); if (ro) ro.disconnect(); try { document.documentElement.style.setProperty('--o-navh', '0px'); } catch (e) {} };
+  }, []);
   return (
-    <nav className="loggia-mobilenav" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, alignItems: 'stretch', background: 'var(--o-header)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', paddingBottom: 'calc(var(--o-safe-bottom, 0px) + 6px)', boxShadow: '0 -8px 24px rgba(0,0,0,.22)' }}>
+    <nav ref={navRef} className="loggia-mobilenav" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, alignItems: 'stretch', background: 'var(--o-header)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', paddingBottom: 'calc(var(--o-safe-bottom, 0px) + 6px)', boxShadow: '0 -8px 24px rgba(0,0,0,.22)' }}>
       {items.map(it => { const on = view === it.id; return (
         <button key={it.id} onClick={() => onNav(it.id)} style={cell(on)}>
           {on && <span style={{ position: 'absolute', top: 0, width: 28, height: 3, borderRadius: '0 0 3px 3px', background: 'var(--o-accent)' }} />}
