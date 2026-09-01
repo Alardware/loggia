@@ -109,7 +109,13 @@ html.loggia-tactile .loggia-aside.is-closed .o-nav-item { justify-content: flex-
 html.loggia-tactile .loggia-aside.is-open { transform: translateX(0); }
 html.loggia-tactile .loggia-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 90; }
 html.loggia-tactile .loggia-mobilenav { display: flex !important; }
-html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-bottom, 0px)) !important; padding-top: var(--o-safe-top, 0px) !important; }
+/* Sans la barre du haut, le contenu commence au ras de l'écran : les titres
+ * touchaient le bord (et l'encoche). On garde donc l'air du haut EN PLUS de
+ * la zone sûre, au lieu de le remplacer. */
+html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-bottom, 0px)) !important; padding-top: calc(28px + var(--o-safe-top, 0px)) !important; }
+/* Les feuilles du bas s'arrêtent AU-DESSUS de la barre de navigation : sans
+ * cela, leurs derniers boutons se cachaient derrière elle. */
+html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) !important; max-height: calc(94vh - var(--o-navh, 60px)) !important; }
 
 /* Grille DENSE des vues intégrées : une carte riche occupe deux rangées, une
  * COMPACTE une seule — deux compactes s'empilent à côté d'une grande, comme

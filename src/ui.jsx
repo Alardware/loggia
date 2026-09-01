@@ -373,7 +373,7 @@ export function BottomSheet({ onClose, children }) {
     <div onPointerDown={(e) => { partiDuVoile.current = e.target === e.currentTarget; }}
       onClick={(e) => { if (e.target === e.currentTarget && partiDuVoile.current) close(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.32)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', animation: closing ? 'o-fadeOut .3s ease forwards' : 'o-fadeIn .25s ease' }}>
-      <div ref={sheetRef} role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
+      <div ref={sheetRef} className="o-sheet" role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
           // Piège de focus : Tab boucle dans la feuille — derrière, la page vit
