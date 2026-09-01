@@ -12126,19 +12126,43 @@ export default function App() {
    * part. */
   useEffect(() => {
     const cle = 'loggia-defilement';
+    /* Le navigateur restaure AUSSI la position, et il le fait APRÈS nous : sa
+     * valeur (souvent zéro, la page n'étant pas encore remplie au moment du
+     * rechargement) écrasait la nôtre. On lui retire la main. */
+    try { if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'; } catch (e) {}
     let t = 0;
-    const noter = () => {
-      clearTimeout(t);
-      t = setTimeout(() => {
-        try { window.sessionStorage.setItem(cle, String(document.documentElement.scrollTop || 0)); } catch (e) {}
-      }, 150);
-    };
+    const ecrire = () => { try { window.sessionStorage.setItem(cle, String(document.documentElement.scrollTop || 0)); } catch (e) {} };
+    const noter = () => { clearTimeout(t); t = setTimeout(ecrire, 150); };
     window.addEventListener('scroll', noter, { passive: true });
+    /* Un réglage enregistré recharge la page : la position doit être écrite
+     * AVANT le départ, sans attendre les 150 ms du débounce — sinon on
+     * revenait en haut (retour 01/09). */
+    window.addEventListener('pagehide', ecrire);
+    window.addEventListener('beforeunload', ecrire);
     const y = (() => { try { return +window.sessionStorage.getItem(cle) || 0; } catch (e) { return 0; } })();
-    if (y > 0) requestAnimationFrame(() => requestAnimationFrame(() => {
-      try { window.scrollTo({ top: y, behavior: 'auto' }); } catch (e) {}
-    }));
-    return () => { clearTimeout(t); window.removeEventListener('scroll', noter); };
+    /* La page se remplit par morceaux (vues paresseuses, données qui
+     * arrivent) : on retente jusqu'à ce qu'elle soit assez haute pour
+     * accueillir la position, puis on s'arrête. Deux images ne suffisaient
+     * pas toujours. */
+    let essais = 0, tid = 0;
+    const restaurer = () => {
+      if (y <= 0 || essais > 24) return;
+      essais++;
+      try {
+        if (document.documentElement.scrollHeight - window.innerHeight >= y) { window.scrollTo({ top: y, behavior: 'auto' }); return; }
+      } catch (e) {}
+      tid = setTimeout(restaurer, 60);
+    };
+    /* `setTimeout` et non `requestAnimationFrame` : un onglet en arrière-plan
+     * ne peint pas, ses images ne viennent jamais, et la position n'était
+     * alors jamais rendue (retour 01/09). */
+    if (y > 0) tid = setTimeout(restaurer, 0);
+    return () => {
+      clearTimeout(t); clearTimeout(tid);
+      window.removeEventListener('scroll', noter);
+      window.removeEventListener('pagehide', ecrire);
+      window.removeEventListener('beforeunload', ecrire);
+    };
   }, []);
   // Vues personnalisées (créées dans Paramètres → Vues, admin) — live, persistées.
   const [customViews, setCustomViews] = useState(() => {
