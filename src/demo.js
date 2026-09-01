@@ -143,7 +143,7 @@ export function installerDemo() {
       if (service === 'set_temperature') toucher(id, null, { temperature: data.temperature });
       else if (service === 'set_hvac_mode') toucher(id, data.hvac_mode, { hvac_action: data.hvac_mode === 'off' ? 'off' : 'heating' });
     } else if (domaine === 'alarm_control_panel') {
-      toucher(id || 'alarm_control_panel.maison', service === 'alarm_disarm' ? 'disarmed' : service === 'alarm_arm_home' ? 'armed_home' : 'armed_away');
+      toucher(id || 'alarm_control_panel.maison', { alarm_disarm: 'disarmed', alarm_arm_home: 'armed_home', alarm_arm_night: 'armed_night', alarm_arm_vacation: 'armed_vacation' }[service] || 'armed_away');
     } else if (domaine === 'media_player' && service === 'media_play_pause') {
       toucher(id, states[id] && states[id].state === 'playing' ? 'paused' : 'playing');
     }
