@@ -4,14 +4,28 @@
  * Partages entre l'Accueil et la vue Meteo chargee a la demande. Extraits
  * de App.jsx pour qu'un morceau differe n'ait pas a le reimporter.
  */
-import wxClearDay from '@bybas/weather-icons/production/fill/all/clear-day.svg';
-import wxClearNight from '@bybas/weather-icons/production/fill/all/clear-night.svg';
-import wxPartly from '@bybas/weather-icons/production/fill/all/partly-cloudy-day.svg';
-import wxCloudy from '@bybas/weather-icons/production/fill/all/cloudy.svg';
-import wxRain from '@bybas/weather-icons/production/fill/all/rain.svg';
-import wxSnow from '@bybas/weather-icons/production/fill/all/snow.svg';
-import wxStorm from '@bybas/weather-icons/production/fill/all/thunderstorms.svg';
-import wxWind from '@bybas/weather-icons/production/fill/all/wind.svg';
+/* Meteocons, la serie COMPLETE fournie le 02/09 (www/weather_icons) : les
+ * memes dessins que le paquet npm, mais dans leur version d'origine — six
+ * animations sur la pluie la ou la version optimisee n'en gardait qu'une, et
+ * huit conditions de plus (brouillard, grele, gresil, tornade, aube,
+ * crepuscule, pluie d'orage, pluie battante). Embarquees dans le bundle
+ * plutot que servies depuis  : la demo et une installation neuve les
+ * ont aussi. */
+import wxClearDay from './assets/wx/clear-day.svg';
+import wxClearNight from './assets/wx/clear-night.svg';
+import wxPartly from './assets/wx/partly-cloudy-day.svg';
+import wxPartlyNight from './assets/wx/partly-cloudy-night.svg';
+import wxCloudy from './assets/wx/cloudy.svg';
+import wxRain from './assets/wx/rain.svg';
+import wxRainFort from './assets/wx/extreme-rain.svg';
+import wxSnow from './assets/wx/snow.svg';
+import wxSleet from './assets/wx/sleet.svg';
+import wxHail from './assets/wx/hail.svg';
+import wxStorm from './assets/wx/thunderstorms.svg';
+import wxStormRain from './assets/wx/thunderstorms-rain.svg';
+import wxWind from './assets/wx/wind.svg';
+import wxFog from './assets/wx/fog.svg';
+import wxTornado from './assets/wx/tornado.svg';
 import { loggiaEnt, LOGGIA_RESOLVED } from './state.js';
 import { REDUCE_MOTION } from './ui.jsx';
 import { tr, trHA } from './i18n.js';
@@ -37,7 +51,11 @@ export const WX_ICON = { sun: 'sun', partly: 'cloud-sun', clouds: 'clouds', wind
 export const WX_ICOLOR = { sun: 'var(--o-gold)', partly: '#9fb4d6', clouds: '#9fb4d6', wind: '#9fb4d6', rain: 'var(--o-accent-soft)', snow: '#bcd6f0', storm: 'var(--o-purple)', night: '#aeb9e0' };
 
 // Icônes météo Meteocons (basmilius) animées via <object> (les animations CSS du SVG tournent).
-const WX_METEO = { sun: wxClearDay, partly: wxPartly, clouds: wxCloudy, wind: wxWind, rain: wxRain, snow: wxSnow, storm: wxStorm, night: wxClearNight };
+const WX_METEO = {
+  sun: wxClearDay, partly: wxPartly, partlynight: wxPartlyNight, clouds: wxCloudy, wind: wxWind,
+  rain: wxRain, pluieforte: wxRainFort, snow: wxSnow, gresil: wxSleet, grele: wxHail,
+  storm: wxStorm, storrain: wxStormRain, night: wxClearNight, brouillard: wxFog, tornade: wxTornado,
+};
 
 export function WeatherIco({ wx, size = 42 }) {
   return <object type="image/svg+xml" data={WX_METEO[wx] || wxCloudy} width={size} height={size} tabIndex={-1} aria-label={tr('météo')} style={{ pointerEvents: 'none', display: 'block' }} />;

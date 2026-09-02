@@ -213,15 +213,22 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
 @keyframes o-wxm-flash { 0%,86%,100% { opacity: 0; } 88% { opacity: .55; } 90% { opacity: .08; } 92% { opacity: .38; } 94% { opacity: 0; } }
 @keyframes o-wxm-glow { 0%,100% { opacity: .5; transform: scale(1); } 50% { opacity: .85; transform: scale(1.12); } }
 @keyframes o-wxm-wind { 0% { transform: translateX(-30px); opacity: 0; } 18% { opacity: .55; } 82% { opacity: .55; } 100% { transform: translateX(160px); opacity: 0; } }
-/* ── Effets des cartes de JOUR (vue Météo) ────────────────────────────────
- * Les `o-wxm-*` ci-dessus sont taillees pour la vignette de l'accueil, large
- * de 140 px : dans une carte de prevision, deux fois plus grande, leurs
- * nuages passaient en barres floues et la pluie s'arretait au milieu
- * (retour 02/09). Memes principes, mais aux dimensions de la carte. */
-@keyframes o-wxj-fall { 0% { transform: translateY(-20px); opacity: 0; } 14% { opacity: .75; } 86% { opacity: .75; } 100% { transform: translateY(180px); opacity: 0; } }
-@keyframes o-wxj-snow { 0% { transform: translate(0,-16px); opacity: 0; } 15% { opacity: .85; } 85% { opacity: .85; } 100% { transform: translate(16px,176px); opacity: 0; } }
-@keyframes o-wxj-drift { 0% { transform: translateX(-90px); } 100% { transform: translateX(240px); } }
-@keyframes o-wxj-wind { 0% { transform: translateX(-60px); opacity: 0; } 20% { opacity: .5; } 80% { opacity: .5; } 100% { transform: translateX(230px); opacity: 0; } }
+/* ── Effets meteo animes (src/wxeffects.jsx) ──────────────────────────────
+ * Maquette WeatherEffects fournie le 02/09 : soleil a rayons, nuages qui
+ * derivent, gouttes qui eclaboussent, eclairs en zigzag, etoiles. Les
+ *  plus haut restent celles de la petite vignette de l'accueil. */
+@keyframes we-spin { to { transform: rotate(360deg); } }
+@keyframes we-sunpulse { 0%,100% { transform: scale(1); box-shadow: 0 0 30px rgba(255,206,90,.75); } 50% { transform: scale(1.05); box-shadow: 0 0 46px rgba(255,216,110,.95); } }
+@keyframes we-clouddrift { from { transform: translateX(-14px); } to { transform: translateX(16px); } }
+@keyframes we-leafblow { 0% { transform: translate(-30px,0) rotate(0deg); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translate(360px,-26px) rotate(380deg); opacity: 0; } }
+@keyframes we-rdrop { 0% { transform: translateY(-10px); } 75% { transform: translateY(var(--we-fall)); } 100% { transform: translateY(var(--we-fall)); } }
+@keyframes we-rstem { 0%,62% { opacity: 1; } 75%,100% { opacity: 0; } }
+@keyframes we-rsplat { 0%,78% { opacity: .9; transform: scale(0); } 90% { opacity: .55; transform: scale(1); } 100% { opacity: 0; transform: scale(1.5); } }
+@keyframes we-snowfall { 0% { transform: translateY(0) translateX(0); opacity: 0; } 12% { opacity: .95; } 100% { transform: translateY(245px) translateX(16px); opacity: .12; } }
+@keyframes we-twinkle { 0%,100% { opacity: .9; } 50% { opacity: .12; } }
+@keyframes we-lightning { 0%,100% { opacity: 0; } 2% { opacity: 1; } 5% { opacity: .15; } 7% { opacity: .9; } 10% { opacity: 0; } 54% { opacity: 0; } 56% { opacity: .85; } 58% { opacity: .1; } 60% { opacity: 0; } }
+@keyframes we-lightning2 { 0%,100% { opacity: 0; } 38% { opacity: 0; } 40% { opacity: .9; } 43% { opacity: .1; } 45% { opacity: .7; } 48% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { [data-we] * { animation: none !important; } }
 /* Mode ambiant : le fondu d'entrée de l'écran de veille. */
 @keyframes o-ambient-in { from { opacity: 0; } to { opacity: 1; } }
 /* Vues custom : la carte REMPLIT sa cellule de grille — sans quoi étirer le

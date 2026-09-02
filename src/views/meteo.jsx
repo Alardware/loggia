@@ -18,8 +18,9 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 const WeatherGL = lazy(() => import('../wx3d.jsx'));
 import { REDUCE_MOTION, Fi, Anim, ViewEditBar } from '../ui.jsx';
 import { WX_PRESETS } from '../wxpresets.js';
-import { WX_ICON, WX_ICOLOR, WX_BG, haWeatherMode, haWeatherLabel, weatherEntity } from '../wxutil.jsx';
+import { WX_ICON, WX_ICOLOR, WX_BG, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from '../wxutil.jsx';
 import { tr } from '../i18n.js';
+import WeatherEffects from '../wxeffects.jsx';
 
 /* ── Cartes de detail, au gabarit de l'application Meteo d'Apple ────────────
  *
@@ -31,7 +32,7 @@ import { tr } from '../i18n.js';
  */
 function WxCarte({ icone, titre, couleur, valeur, unite, mot, children }) {
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '15px 17px 16px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', display: 'flex', flexDirection: 'column', height: 186 }}>
+    <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', borderRadius: 'var(--o-radius,20px)', padding: '15px 17px 16px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', display: 'flex', flexDirection: 'column', height: 186 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>
         <Fi i={icone} size={12} color={couleur} />{titre.toUpperCase()}
       </div>
@@ -194,51 +195,6 @@ function WxRessenti({ reel, ressenti }) {
   );
 }
 
-/* Effets de fond d'une carte de JOUR.
- *
- * `WxMini` anime la vignette de l'accueil, large de 140 px : reprise telle
- * quelle dans une carte deux fois plus grande, sa dérive de nuages passait en
- * barres floues au-dessus du titre et sa pluie s'arrêtait au milieu (retour
- * 02/09). Mêmes principes — quelques spans en transform et opacity, coupés
- * par prefers-reduced-motion — mais dessinés aux dimensions de la carte, et
- * repoussés vers le BAS pour laisser le texte tranquille.
- */
-function WxJourFx({ mode }) {
-  const S = { position: 'absolute', pointerEvents: 'none' };
-  const gouttes = (n, couleur, epais, anim) => Array.from({ length: n }, (_, i) => (
-    <span key={i} style={{ ...S, top: -10, left: (7 + i * 29) % 96 + '%', width: epais, height: 11, borderRadius: 2, background: couleur, animation: `${anim} ${1.5 + (i % 4) * .4}s linear ${i * .21}s infinite` }} />
-  ));
-  // Un nuage : deux bouffées floues, pour que ce soit une forme et non un trait.
-  const nuage = (i, haut, taille, opacite, duree) => (
-    <span key={'n' + i} style={{ ...S, top: haut, left: -70, width: taille, height: taille * .42, borderRadius: taille, background: `rgba(205,220,240,${opacite})`, filter: 'blur(9px)', animation: `o-wxj-drift ${duree}s linear ${-i * (duree / 2.2)}s infinite` }} />
-  );
-  let scene = null;
-  if (mode === 'rain') scene = gouttes(9, 'rgba(160,200,255,.7)', 1.6, 'o-wxj-fall');
-  else if (mode === 'storm') scene = (<>
-    {gouttes(7, 'rgba(180,170,255,.65)', 1.6, 'o-wxj-fall')}
-    <span style={{ ...S, inset: 0, background: 'radial-gradient(70% 60% at 70% 0%, rgba(215,205,255,.85), rgba(215,205,255,0) 70%)', animation: 'o-wxm-flash 6.4s linear infinite' }} />
-  </>);
-  else if (mode === 'snow') scene = Array.from({ length: 9 }, (_, i) => (
-    <span key={i} style={{ ...S, top: -10, left: (5 + i * 27) % 94 + '%', width: 4, height: 4, borderRadius: '50%', background: 'rgba(240,248,255,.9)', animation: `o-wxj-snow ${3.4 + (i % 3) * .9}s linear ${i * .42}s infinite` }} />
-  ));
-  else if (mode === 'sun') scene = (<>
-    <span style={{ ...S, top: -34, right: -26, width: 116, height: 116, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,205,100,.5), rgba(255,205,100,0) 68%)', animation: 'o-wxm-glow 4.4s ease-in-out infinite' }} />
-    {nuage(0, 104, 92, .07, 34)}
-  </>);
-  else if (mode === 'night') scene = Array.from({ length: 9 }, (_, i) => (
-    <span key={i} style={{ ...S, top: 14 + (i * 19) % 118, left: (8 + i * 23) % 92 + '%', width: 2.5, height: 2.5, borderRadius: '50%', background: '#dfe9ff', boxShadow: '0 0 6px rgba(200,220,255,.9)', animation: `o-wxm-twinkle ${2.2 + (i % 4) * .7}s ease-in-out ${i * .43}s infinite` }} />
-  ));
-  else if (mode === 'wind') scene = Array.from({ length: 4 }, (_, i) => (
-    <span key={i} style={{ ...S, top: 62 + i * 21, left: 0, width: 40 + i * 9, height: 1.5, borderRadius: 2, background: 'rgba(190,210,235,.5)', animation: `o-wxj-wind ${2.6 + i * .5}s linear ${i * .6}s infinite` }} />
-  ));
-  else if (mode === 'partly') scene = (<>
-    <span style={{ ...S, top: -26, right: -18, width: 92, height: 92, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,205,100,.30), rgba(255,205,100,0) 68%)', animation: 'o-wxm-glow 5.6s ease-in-out infinite' }} />
-    {nuage(0, 78, 104, .10, 30)}{nuage(1, 112, 78, .07, 42)}
-  </>);
-  else if (mode === 'clouds') scene = (<>{nuage(0, 70, 116, .12, 28)}{nuage(1, 104, 88, .09, 39)}{nuage(2, 132, 68, .06, 48)}</>);
-  if (!scene) return null;
-  return <span aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'var(--o-radius,20px)' }}>{scene}</span>;
-}
 
 /* Carte d'un JOUR de la semaine : sa propre animation en fond — pluie qui
  * tombe, etoiles, halo — et le degrade de sa condition. C'est la demande du
@@ -248,15 +204,22 @@ function WxJour({ f, nom, mode, effets, deg, n }) {
   const pluie = n(f.precipitation);
   const proba = n(f.precipitation_probability);
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', height: 156, borderRadius: 'var(--o-radius,20px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', background: WX_BG[mode] || WX_BG.clouds, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', padding: '15px 16px', display: 'flex', flexDirection: 'column' }}>
-      {effets && <WxJourFx mode={mode} />}
+    <div style={{ position: 'relative', overflow: 'hidden', height: 168, borderRadius: 'var(--o-radius,20px)', border: 'none', background: WX_BG[mode] || WX_BG.clouds, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', padding: '15px 16px', display: 'flex', flexDirection: 'column' }}>
+      {/* `offsetY` pousse les ornements sous le titre : les nuages de la
+        * maquette, dessinés pour un grand panneau, tombaient sinon en plein
+        * sur le nom du jour. L'ombre de texte fait le reste — un nuage blanc
+        * qui dérive passera toujours quelque part. */}
+      {effets && <WeatherEffects weather={mode} k={0.52} fadeStart={34} densite={0.55} offsetY={30} />}
+      {/* Un voile sombre sur le tiers haut : quelle que soit l'ambiance, un
+        * nuage blanc finit toujours par passer sous le nom du jour. */}
+      <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: '52%', background: 'linear-gradient(180deg,rgba(6,12,24,.58),rgba(6,12,24,0))' }} />
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '.04em' }}>{nom}</span>
-        <Fi i={WX_ICON[mode] || 'clouds'} size={20} color={WX_ICOLOR[mode] || '#9fb4d6'} />
+        <span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '.04em', textShadow: '0 1px 6px rgba(6,12,24,.75)' }}>{nom}</span>
+        <WeatherIco wx={mode} size={38} />
       </div>
-      <div style={{ position: 'relative', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{haWeatherLabel(String(f.condition))}</div>
+      <div style={{ position: 'relative', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text1)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 6px rgba(6,12,24,.7)' }}>{haWeatherLabel(String(f.condition))}</div>
       <div style={{ position: 'relative', marginTop: 'auto', display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1 }}>{deg(mx)}</span>
+        <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, textShadow: '0 2px 10px rgba(6,12,24,.6)' }}>{deg(mx)}</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{deg(mn)}</span>
       </div>
       {(pluie != null || proba != null) && (
@@ -447,7 +410,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
                     {prochaines.map((f, i) => (
                       <div key={i} style={{ flex: 1, minWidth: 0, textAlign: 'center', padding: '9px 4px', borderRadius: 12, background: 'var(--o-s2)' }}>
                         <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)' }}>{heure(f.datetime)}</div>
-                        <div style={{ margin: '5px 0 4px' }}><Fi i={WX_ICON[modeDe(f)] || 'clouds'} size={15} color={WX_ICOLOR[modeDe(f)] || '#9fb4d6'} /></div>
+                        <div style={{ margin: '3px 0 2px', display: 'flex', justifyContent: 'center' }}><WeatherIco wx={modeDe(f)} size={30} /></div>
                         <div style={{ fontSize: 12.5, fontWeight: 800 }}>{deg(n(f.temperature))}</div>
                       </div>
                     ))}
