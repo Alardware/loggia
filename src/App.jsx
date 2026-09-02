@@ -7459,6 +7459,103 @@ const EN_FORECAST = [
 
 const EN_LAYOUT_KEY = 'loggia_enlayout';
 
+/* Sources de puissance sur 24 h — plusieurs séries dans une même échelle.
+ *
+ * `SysArea` ne trace qu'une courbe et recale son échelle sur elle : deux
+ * courbes tracées ainsi ne seraient pas comparables. Ici l'échelle est
+ * COMMUNE, le zéro est une ligne (le réseau passe en négatif quand on
+ * exporte), et le survol donne l'heure et les valeurs, comme le tableau de
+ * bord Énergie de Home Assistant.
+ */
+function EnPuissances({ series, h = 190 }) {
+  const [survol, setSurvol] = useState(null);
+  const vives = (series || []).filter(s => s.pts && s.pts.length > 1);
+  if (!vives.length) return <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('historique indisponible')}</div>;
+  // Fenêtre commune : du plus ancien point au plus récent, toutes séries mêlées.
+  const tous = vives.flatMap(s => s.pts);
+  const t0 = Math.min(...tous.map(p => p.t)), t1 = Math.max(...tous.map(p => p.t));
+  const dt = (t1 - t0) || 1;
+  const vals = tous.map(p => p.v);
+  const haut = Math.max(0, ...vals), bas = Math.min(0, ...vals);
+  const span = (haut - bas) || 1;
+  const W = 320, PAD = 8;
+  const x = (t) => ((t - t0) / dt) * W;
+  const y = (v) => PAD + (1 - (v - bas) / span) * (h - PAD * 2);
+  const yZero = y(0);
+  const chemin = (pts) => 'M ' + pts.map(p => x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' L ');
+  // Repères d'heures : quatre traits, c'est assez pour situer sans charger.
+  const heures = [0, .25, .5, .75, 1].map(f => ({ f, d: new Date(t0 + dt * f) }));
+  const surPointeur = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    if (!r.width) return;
+    const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    const t = t0 + dt * f;
+    setSurvol({ f, t, vals: vives.map(s => ({ nom: s.nom, couleur: s.couleur, v: prochePoint(s.pts, t) })) });
+  };
+  return (
+    <div style={{ position: 'relative' }} onMouseMove={surPointeur} onMouseLeave={() => setSurvol(null)}>
+      <svg viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height: h, display: 'block', overflow: 'visible' }}>
+        {[0, .5, 1].map(f => <line key={f} x1="0" x2={W} y1={PAD + f * (h - PAD * 2)} y2={PAD + f * (h - PAD * 2)} stroke="var(--o-bd3)" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+        <line x1="0" x2={W} y1={yZero} y2={yZero} stroke="var(--o-text3)" strokeWidth="1" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+        {vives.map(s => (
+          <g key={s.nom}>
+            <path d={`${chemin(s.pts)} L ${x(s.pts[s.pts.length - 1].t)} ${yZero} L ${x(s.pts[0].t)} ${yZero} Z`} fill={s.couleur} opacity=".14" />
+            <path d={chemin(s.pts)} fill="none" stroke={s.couleur} strokeWidth="1.7" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+          </g>
+        ))}
+        {survol && <line x1={survol.f * W} x2={survol.f * W} y1="0" y2={h} stroke="var(--o-accent)" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>
+        {heures.map(({ f, d }) => <span key={f}>{String(d.getHours()).padStart(2, '0')}h</span>)}
+      </div>
+      {/* La bulle suit le curseur mais reste dans la carte. */}
+      {survol && (
+        <div style={{ position: 'absolute', top: 6, left: `clamp(0px, calc(${(survol.f * 100).toFixed(1)}% - 70px), calc(100% - 140px))`, width: 140, padding: '8px 10px', borderRadius: 10, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', pointerEvents: 'none' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, marginBottom: 4 }}>{new Date(survol.t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</div>
+          {survol.vals.map(v => (
+            <div key={v.nom} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: v.couleur, flexShrink: 0 }} />
+              <span style={{ flex: 1, color: 'var(--o-text2)' }}>{v.nom}</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{v.v == null ? '—' : (v.v / 1000).toFixed(2).replace('.', ',') + ' kW'}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 8 }}>
+        {vives.map(s => (
+          <span key={s.nom} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: 'var(--o-text2)' }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: s.couleur }} />{s.nom}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+/** Valeur d'une série à un instant : le point le plus proche, sans interpoler. */
+function prochePoint(pts, t) {
+  let best = null, d = Infinity;
+  for (const p of pts) { const e = Math.abs(p.t - t); if (e < d) { d = e; best = p; } }
+  return best ? best.v : null;
+}
+
+/* Jauge en demi-cercle, le cadran du tableau de bord Énergie : un taux, un
+ * mot. Rien à l'intérieur qui ne soit le chiffre. */
+function EnDemiJauge({ pct, label, couleur, aide = null }) {
+  const v = pct == null ? null : Math.max(0, Math.min(100, Math.round(pct)));
+  const R = 46, C = Math.PI * R; // demi-cercle
+  return (
+    <div style={{ flex: '1 1 150px', minWidth: 0, padding: '16px 14px 14px', borderRadius: 'var(--o-radius,16px)', background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', textAlign: 'center' }} title={aide || undefined}>
+      <svg viewBox="0 0 110 62" style={{ width: '100%', maxWidth: 150, height: 62, display: 'block', margin: '0 auto' }}>
+        <path d={`M 9 55 A ${R} ${R} 0 0 1 101 55`} fill="none" stroke="var(--o-s4)" strokeWidth="11" strokeLinecap="round" />
+        {v != null && <path d={`M 9 55 A ${R} ${R} 0 0 1 101 55`} fill="none" stroke={couleur} strokeWidth="11" strokeLinecap="round"
+          strokeDasharray={`${(C * v / 100).toFixed(1)} ${C.toFixed(1)}`} style={{ transition: 'stroke-dasharray .8s cubic-bezier(.22,.61,.36,1)' }} />}
+        <text x="55" y="52" textAnchor="middle" fontSize="22" fontWeight="800" fill="var(--o-text)" style={{ fontVariantNumeric: 'tabular-nums' }}>{v == null ? '—' : v + ' %'}</text>
+      </svg>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.3 }}>{label}</div>
+    </div>
+  );
+}
+
 function EnergieContent({ hass, edit = false, onEnt }) {
   const [range, setRange] = useState('jour');
   const S = (hass && hass.states) || null;
@@ -7533,6 +7630,52 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const hcPct = totalToday > 0 ? Math.round(hcToday / totalToday * 100) : 0;
   const hpPct = totalToday > 0 ? Math.round(hpToday / totalToday * 100) : 0;
   const hcActive = (() => { const e = S && S[EN.hcActive]; return e ? e.state === 'on' : false; })();
+
+  /* ── Sources de puissance et cadrans, à droite du schéma ───────────────────
+   *
+   * Trois séries sur 24 h : le RÉSEAU d'abord (le flux net du compteur, qui
+   * passe sous zéro quand on exporte), le solaire, la consommation de la
+   * maison. Chacune n'est tracée que si son capteur existe.
+   */
+  const puissIds = [EN.consoNow || EN.gridNow, EN.solarNow || EN.solarOutput, EN.consoMaison].filter(Boolean);
+  const puissHist = useSysHist(hass, puissIds, 24, 0);
+  const puissSeries = [
+    { id: EN.consoNow || EN.gridNow, nom: tr('Réseau'), couleur: 'var(--o-accent)' },
+    { id: EN.solarNow || EN.solarOutput, nom: tr('Solaire'), couleur: 'var(--o-gold)' },
+    { id: EN.consoMaison, nom: tr('Consommation'), couleur: 'var(--o-text2)' },
+  ].filter(s => s.id && puissHist[s.id]).map(s => ({ ...s, pts: puissHist[s.id] }));
+
+  /* Autosuffisance : la part de la consommation couverte par le solaire. Le
+   * capteur du package si l'installation en publie un, sinon les kWh du jour —
+   * ce que produit la maison MOINS ce qu'elle renvoie au réseau, rapporté à
+   * tout ce qu'elle a consommé. */
+  const injJour = avail(EN.injectionJour) ? num(EN.injectionJour) : null;
+  const autoPct = autosuff != null ? autosuff : (tauxAutoconso != null ? tauxAutoconso : (() => {
+    if (prodJour == null || totalToday == null) return null;
+    const solaireConsomme = Math.max(0, prodJour - (injJour || 0));
+    const conso = totalToday + solaireConsomme;
+    return conso > 0 ? Math.round(solaireConsomme / conso * 100) : null;
+  })());
+
+  /* Part bas-carbone : Electricity Maps (ou CO2 Signal) publie le pourcentage
+   * d'énergies FOSSILES du réseau. Le solaire de la maison est bas-carbone par
+   * construction ; on pondère donc les deux sources par leurs kWh du jour.
+   * Sans cette intégration, pas de cadran — on ne devine pas un mix. */
+  const fossilePct = (() => {
+    if (!S) return null;
+    const id = Object.keys(S).find(k => k.indexOf('sensor.') === 0 && /fossil/i.test(k)
+      && S[k].attributes && S[k].attributes.unit_of_measurement === '%');
+    if (!id) return null;
+    const v = parseFloat(S[id].state);
+    return isNaN(v) ? null : v;
+  })();
+  const basCarbonePct = (() => {
+    if (fossilePct == null || totalToday == null) return null;
+    const solaireConsomme = prodJour != null ? Math.max(0, prodJour - (injJour || 0)) : 0;
+    const conso = totalToday + solaireConsomme;
+    if (conso <= 0) return null;
+    return Math.round((totalToday * (100 - fossilePct) / 100 + solaireConsomme) / conso * 100);
+  })();
   const hcPrice = num(EN.hcPrice, 0), hpPrice = num(EN.hpPrice, 0);
   const hcCost = hcToday * hcPrice, hpCost = hpToday * hpPrice;
   const bill = (() => { const e = S && S[EN.bill]; if (!e) return null; const n = parseFloat(e.state); return isNaN(n) ? null : n; })();
@@ -7571,7 +7714,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
         <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: exporting ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s2)', color: exporting ? 'var(--o-ok)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: exporting ? 'var(--o-ok)' : 'var(--o-text3)' }} />{exporting ? tr('SURPLUS') + ' ' + fmtW(surplusW) : tr('PAS DE SURPLUS')}</span>
       </div>
 
-      <div className="grid-ehero" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 18, alignItems: 'stretch' }}>
+      <div className="grid-ehero" style={{ display: 'grid', gridTemplateColumns: (puissSeries.length > 0 || autoPct != null || basCarbonePct != null) ? 'minmax(0,1.45fr) minmax(300px,1fr)' : 'minmax(0,1fr)', gap: 18, alignItems: 'stretch' }}>
         <Anim i={0}><div style={{ position: 'relative', overflow: 'hidden', height: '100%', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
             <div><div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Maison · Temps réel')}</div><div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 24, fontWeight: 500, marginTop: 2 }}>{solarActive ? tr('Production solaire active') : tr('Consommation réseau')}</div></div>
@@ -7592,6 +7735,29 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           </div>
         </div></Anim>
 
+        {/* À DROITE du schéma sur PC et tablette, dessous sur mobile (le CSS
+          * repasse `grid-ehero` sur une colonne) : les sources de puissance sur
+          * 24 h, puis les deux cadrans du tableau de bord Énergie. La colonne
+          * n'existe pas si la maison ne publie ni historique ni taux. */}
+        {(puissSeries.length > 0 || autoPct != null || basCarbonePct != null) && (
+          <Anim i={1}><div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%' }}>
+            {puissSeries.length > 0 && (
+              <div style={{ flex: 1, minHeight: 0, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Sources de puissance')}</div>
+                <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 20, fontWeight: 500, margin: '2px 0 10px' }}>{tr('Les dernières 24 heures')}</div>
+                <EnPuissances series={puissSeries} />
+              </div>
+            )}
+            {(autoPct != null || basCarbonePct != null) && (
+              <div style={{ display: 'flex', gap: 12 }}>
+                {autoPct != null && <EnDemiJauge pct={autoPct} label={tr('Autosuffisance')} couleur="var(--o-gold)"
+                  aide={tr('Part de la consommation couverte par la production de la maison')} />}
+                {basCarbonePct != null && <EnDemiJauge pct={basCarbonePct} label={tr('Électricité bas-carbone consommée')} couleur="var(--o-ok)"
+                  aide={tr('Solaire de la maison et part non fossile du réseau')} />}
+              </div>
+            )}
+          </div></Anim>
+        )}
       </div>
 
       {/* réglages rapides : période d'analyse et tarif courant */}
@@ -11385,9 +11551,20 @@ export default function App() {
     }
     return cles.length + ':' + vivantes;
   })();
+  /* Le composant serveur fait foi, mais il n'est pas toujours là : sans
+   * composant installé — et en démonstration — la configuration vit dans le
+   * stockage de l'appareil. La DISPONIBILITÉ des vues ne lisait que le
+   * serveur : une vue configurée en local restait masquée pour toujours, avec
+   * le message « le tableau de bord Énergie n'est pas configuré » sous les
+   * yeux de quelqu'un qui venait justement de la configurer. */
+  const cfgVues = useMemo(() => {
+    const local = {};
+    LOGGIA_SYNC_KEYS.forEach(k => { const v = readLS(k, null); if (v != null) local[k] = v; });
+    return { ...local, ...(serverCfg || {}) };
+  }, [serverCfg, sigEntites]);
   const loggiaRuntime = useMemo(
-    () => buildRuntime({ discovery, userCfg: serverCfg, states: (getHass() || {}).states || {} }),
-    [discovery.ready, discovery.caps, serverCfg, sigEntites]
+    () => buildRuntime({ discovery, userCfg: cfgVues, states: (getHass() || {}).states || {} }),
+    [discovery.ready, discovery.caps, cfgVues, sigEntites]
   );
   setLoggiaState({ resolved: loggiaRuntime.resolved || null });
   // Ecriture d'un reglage : serveur si le composant repond, localStorage sinon.

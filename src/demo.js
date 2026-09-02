@@ -42,6 +42,11 @@ function etatsInitiaux() {
     'sensor.production_solaire': s(1840, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.reseau': s(-460, { friendly_name: 'Réseau', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.surplus': s(460, { friendly_name: 'Surplus', unit_of_measurement: 'W', device_class: 'power' }),
+    // Les kWh du jour : sans eux, pas de bilan ni de cadran d'autosuffisance.
+    'sensor.conso_jour': s(6.16, { friendly_name: 'Consommation du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.production_jour': s(4.32, { friendly_name: 'Production du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.injection_jour': s(0.96, { friendly_name: 'Injection du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.part_fossile_reseau': s(38, { friendly_name: 'Part fossile du réseau', unit_of_measurement: '%' }),
     'person.camille': s('home', { friendly_name: 'Camille' }),
     'person.alex': s('not_home', { friendly_name: 'Alex' }),
     'media_player.salon': s('playing', { friendly_name: 'Enceinte salon', media_title: 'Clair de Lune', media_artist: 'Debussy', volume_level: .35, supported_features: 20925, entity_picture: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E' }),
@@ -75,12 +80,15 @@ function configDemo() {
       room: nom,
       haid: { temp: 'sensor.' + cle + '_temperature', humidity: 'sensor.' + cle + '_humidite', co2: co2 != null ? 'sensor.' + cle + '_co2' : null },
     })),
+    // `loggia_energyHaids` est la cle que lisent `enHaids()` ET la disponibilite
+    // des vues : sans elle, la vue Energie restait masquee en demonstration.
+    loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour' },
     loggia_entities: {
       weather: ['weather.maison', 'sun.sun'],
       alarm: 'alarm_control_panel.maison',
       cameras: [],
       people: [{ name: 'Camille', haid: 'person.camille' }, { name: 'Alex', haid: 'person.alex' }],
-      energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus' },
+      energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour' },
     },
     // Deux profils : la demo doit exercer les DEUX branches, admin comprise.
     loggia_users: [{ name: 'Démo', role: 'Admin', c: 'var(--o-accent)' }, { name: 'Invité', role: 'Famille', c: 'var(--o-purple)' }],
@@ -95,6 +103,36 @@ function configDemo() {
 }
 
 /* Un agenda pour la carte de l'accueil : demain, et les jours d'après. */
+/* Historique factice, au format de l'API REST de Home Assistant.
+ *
+ * Sans lui, toutes les courbes de la démo affichaient « historique
+ * indisponible » : la démo montrait un dashboard sans mémoire. On fabrique
+ * donc 24 h de points autour de la valeur ACTUELLE du capteur — une marche
+ * lente, plus une bosse de journée pour ce qui suit le soleil, et rien
+ * d'inventé pour un capteur qui n'existe pas.
+ */
+function historiqueDemo(chemin, states) {
+  const m = String(chemin).match(/filter_entity_id=([^&]+)/);
+  const id = m ? decodeURIComponent(m[1]) : null;
+  const cur = id && states[id] ? parseFloat(states[id].state) : NaN;
+  if (!id || isNaN(cur)) return [];
+  const d = String(chemin).match(/history\/period\/([^?]+)/);
+  const t0 = d ? Date.parse(decodeURIComponent(d[1])) : Date.now() - 86400000;
+  const t1 = Date.now();
+  const solaire = /solaire|solar|production/i.test(id);
+  const pas = (t1 - t0) / 48;
+  const pts = [];
+  for (let i = 0; i <= 48; i++) {
+    const t = t0 + pas * i;
+    const heure = new Date(t).getHours() + new Date(t).getMinutes() / 60;
+    // Le solaire suit le jour ; le reste ondule doucement autour de sa valeur.
+    const jour = Math.max(0, Math.sin((heure - 6) / 12 * Math.PI));
+    const v = solaire ? cur * jour * (0.8 + 0.4 * Math.sin(i)) : cur * (0.7 + 0.6 * Math.sin(i / 3.7) + 0.15 * Math.sin(i));
+    pts.push({ state: String(Math.round(v * 100) / 100), last_changed: new Date(t).toISOString() });
+  }
+  return [pts];
+}
+
 function calendrierDemo() {
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
@@ -167,6 +205,7 @@ export function installerDemo() {
     callService,
     callApi: (methode, chemin) => {
       if (methode === 'GET' && String(chemin).indexOf('calendars/') === 0) return Promise.resolve(calendrierDemo());
+      if (methode === 'GET' && String(chemin).indexOf('history/period/') === 0) return Promise.resolve(historiqueDemo(String(chemin), states));
       return Promise.resolve({});
     },
     auth: { data: { access_token: null } },
