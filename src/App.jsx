@@ -8923,7 +8923,8 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
 
 function MeteoView({ hass, edit = false, onEnt, wxFx = true }) {
   return (
-    <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+    // `position: relative` : le ciel de la vue s'y ancre, comme sur l'accueil.
+    <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <Header />
       <Suspense fallback={<div className="loggia-content" style={{ padding: '26px 28px 56px' }} />}>
         <MeteoContent hass={hass} edit={edit} onEnt={onEnt} wxFx={wxFx} />
