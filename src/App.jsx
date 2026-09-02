@@ -3633,14 +3633,11 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   const unhideAll = () => { try { localStorage.removeItem('loggia_roomhidden'); } catch (e) {} setHidden([]); };
   const live = piece && piece.live;
   const onOpenComfort = () => setComfort(true);
-  // ── Réglages rapides + carte Ambiance (maquette Claude Design « Loggia Vues », 21/08) ──
-  /* Une clé PAR PIÈCE : la clé unique refermait le panneau de toutes les
-   * pièces d'un coup, et l'on croyait le réglage partagé par tout le
-   * dashboard (retour 01/09). Chaque vue a déjà la sienne. */
-  const panelKey = 'loggia-roompanel:' + (room || '');
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem(panelKey) !== '0'; } catch (e) { return true; } });
-  useEffect(() => { try { setPanel(localStorage.getItem(panelKey) !== '0'); } catch (e) { setPanel(true); } }, [panelKey]);
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem(panelKey, nv ? '1' : '0'); } catch (e) {} return nv; });
+  // ── Barre de contrôles de la pièce ──
+  /* La carte Ambiance et son bouton de repli ont disparu (retour 02/09) : elle
+   * répétait ce que les cartes disent déjà, en pleine hauteur d'écran. Seul
+   * l'historique du confort, qui n'existait nulle part ailleurs, rejoint la
+   * barre. */
   const S = (hass && hass.states) || {};
   const dom = (id) => id.slice(0, id.indexOf('.'));
   const call = (d, svc, data) => { try { if (hass && hass.callService) hass.callService(d, svc, data); } catch (e) {} };
@@ -3769,71 +3766,16 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
               </div>
             )}
             <span style={{ flex: 1 }} />
-            <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
+            {/* L'historique du confort n'avait qu'une porte : la carte Ambiance,
+              * partie avec les panneaux de réglages. Elle passe donc dans la
+              * barre, à la place du bouton qui repliait la carte. */}
+            {live && (live.temp != null || live.hum != null || live.co2 != null) && (
+              <button onClick={onOpenComfort} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: 'var(--o-bw,1px) solid var(--o-bd1)', background: 'var(--o-s2)', color: 'var(--o-text2)' }}><Fi i="chart-line-up" size={13} /><span className="o-barlabel">{tr('Historique du confort')}</span></button>
+            )}
           </div>
         )}
 
         {/* carte Ambiance : mesures et état de la pièce (repliable par le bouton du bandeau) */}
-        {panel && (live || mediaAct || coverIds.length > 0) && (
-          <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>Ambiance</div>
-              {(() => {
-                const tag = heatOn
-                  ? { t: /po[eê]le|granul/i.test((heatOn.attributes || {}).friendly_name || '') ? 'POÊLE ACTIF' : 'CHAUFFAGE ACTIF', c: 'var(--o-warn2)', soft: 'rgba(var(--o-warn2-rgb),.14)' }
-                  : lightsOn.length ? { t: lightsOn.length > 1 ? tr('{n} LAMPES ALLUMÉES', { n: lightsOn.length }) : tr('{n} LAMPE ALLUMÉE', { n: lightsOn.length }), c: 'var(--o-warn)', soft: 'rgba(var(--o-warn-rgb),.14)' }
-                    : null;
-                return tag ? <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, background: tag.soft, color: tag.c, fontSize: 11, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: tag.c }} />{tag.t}</span> : null;
-              })()}
-            </div>
-            <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{ents.length > 1 ? tr('{n} appareils dans cette pièce', { n: ents.length }) : tr('{n} appareil dans cette pièce', { n: ents.length })}{lastChange ? ' · dernier changement ' + lastChange : ''}</div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {/* Capteur declare mais muet : on le signale au lieu de masquer la
-                  ligne. Sans cela, une integration en panne — un jeton cloud
-                  expire, par exemple — ressemble a une piece sans capteur. */}
-              {live && live.temp == null && live.tempId && (
-                <AmbRow label={tr('Température')} desc={'Capteur ' + room + ' — aucune valeur reçue'}>
-                  <AmbVal v="indisponible" col="var(--o-warn2)" />
-                </AmbRow>
-              )}
-              {live && live.hum == null && live.humId && (
-                <AmbRow label={tr('Humidité')} desc={tr('Le capteur ne répond pas')}>
-                  <AmbVal v="indisponible" col="var(--o-warn2)" />
-                </AmbRow>
-              )}
-              {live && live.temp != null && (
-                <AmbRow label={tr('Température')} desc={'Capteur ' + room + (heatOn && (heatOn.attributes || {}).temperature != null ? ' · cible ' + Math.round(heatOn.attributes.temperature) + ' °C' : '')}>
-                  <AmbVal v={live.temp.toFixed(1).replace('.', ',') + ' °C'} col={live.temp < 17 ? 'var(--o-cold)' : live.temp > 26 ? 'var(--o-warn2)' : 'var(--o-text)'} />
-                </AmbRow>
-              )}
-              {live && live.hum != null && (
-                <AmbRow label={tr('Humidité')} desc="Confortable entre 40 et 60 %">
-                  <AmbGauge v={Math.round(live.hum) + ' %'} pct={Math.min(100, live.hum)} col={live.hum < 30 || live.hum > 65 ? 'var(--o-warn2)' : 'var(--o-ok)'} />
-                </AmbRow>
-              )}
-              {live && live.co2 != null && (
-                <AmbRow label="CO₂" desc={tr('Aérer au-delà de 1 000 ppm')}>
-                  <AmbGauge v={Math.round(live.co2) + ' ppm'} pct={Math.min(100, live.co2 / 2000 * 100)} col={live.co2 > 1000 ? 'var(--o-bad)' : live.co2 > 800 ? 'var(--o-warn2)' : 'var(--o-ok)'} />
-                </AmbRow>
-              )}
-              {coverIds.length > 0 && (
-                <AmbRow label={coverIds.length > 1 ? tr('Volets') : tr('Volet')} desc={coverPct != null ? (covOn ? 'Ouvert à ' + coverPct + ' %' : tr('Fermé')) + ' · ' + (coverIds.length > 1 ? tr('{n} volets', { n: coverIds.length }) : tr('{n} volet', { n: coverIds.length })) : (covOn ? tr('Ouvert') : tr('Fermé'))}>
-                  <AmbVal v={covOn ? (coverPct != null ? coverPct + ' %' : tr('Ouvert')) : tr('Fermé')} col={covOn ? 'var(--o-accent-soft)' : 'var(--o-text3)'} />
-                </AmbRow>
-              )}
-              {mediaAct && (
-                <AmbRow label={tr('Média')} desc={mediaSub}>
-                  <AmbVal v={mediaTitle} col="var(--o-accent-soft)" />
-                </AmbRow>
-              )}
-              {live && (live.temp != null || live.hum != null || live.co2 != null) && (
-                <AmbRow label="Historique du confort" desc={tr('Courbes sur 24 h : température, humidité et CO₂')}>
-                  <button onClick={onOpenComfort} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd1)', color: 'var(--o-text1)' }}><Fi i="chart-line-up" size={13} />{tr('Ouvrir')}</button>
-                </AmbRow>
-              )}
-            </div>
-          </div>
-        )}
 
         {ents.length > 0 && <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Appareils de la pièce')}</div>}
         {/* appareils de la pièce — mêmes cartes que les vues dédiées */}
@@ -4442,8 +4384,6 @@ function ObjetsView({ hass, onNav, edit = false }) {
     }
   });
   // Bandeau + carte de synthèse repliables (patron Atrium, 21/08)
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-objpanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-objpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   const actifs = (vacCleaning ? 1 : 0) + (lubaMow ? 1 : 0) + (nextMeal ? 1 : 0) + medias.filter(x => x.np.on).length;
   const total = 3 + medias.length;
   const plantVerdict = (hum) => hum == null ? { t: '—', c: 'var(--o-text3)' } : hum < 15 ? { t: 'Sol sec · à arroser', c: 'var(--o-warn2)' } : hum > 60 ? { t: 'Sol très humide', c: 'var(--o-cold)' } : { t: 'Humidité correcte', c: 'var(--o-ok)' };
@@ -4473,34 +4413,8 @@ function ObjetsView({ hass, onNav, edit = false }) {
             <button onClick={() => call('lawn_mower', lubaMow ? 'dock' : 'start_mowing', { entity_id: lubaId })} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, background: lubaMow ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: lubaMow ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lubaMow ? 'Rentrer' : 'Tondre'}</button>
           </div>
           <span style={{ flex: 1 }} />
-          <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
         </div>
 
-        {panel && (
-          <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>Appareils autonomes</div>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: (vacCleaning || lubaMow) ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: (vacCleaning || lubaMow) ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: (vacCleaning || lubaMow) ? 'var(--o-accent)' : 'var(--o-text3)' }} />{(vacCleaning || lubaMow) ? 'EN COURS' : 'RIEN EN COURS'}</span>
-            </div>
-            <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>Robots, distributeur et plantes suivis en continu</div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <EnRow label={((objVacMain && S && S[objVacMain] && S[objVacMain].attributes && S[objVacMain].attributes.friendly_name) || tr('Aspirateur'))} desc={vacEtat + (vacBat != null ? ' · batterie ' + Math.round(vacBat) + ' %' : '')}>
-                <EnVal v={vacCleaning ? 'En nettoyage' : tr('Sur la base')} col={vacCleaning ? 'var(--o-accent-soft)' : 'var(--o-text3)'} />
-              </EnRow>
-              <EnRow label={((lubaId && S && S[lubaId] && S[lubaId].attributes && S[lubaId].attributes.friendly_name) || tr('Tondeuse'))} desc={lubaTxt + (lubaBat != null ? ' · batterie ' + Math.round(lubaBat) + ' %' : '')}>
-                <EnVal v={lubaMow ? Math.round(lubaProg) + ' %' : tr('Sur la base')} col={lubaMow ? 'var(--o-ok)' : 'var(--o-text3)'} />
-              </EnRow>
-              <EnRow label={tr('Croquettes')} desc={nextMeal ? 'Prochain repas ' + nextMeal.time + ' · ' + nextMeal.g + ' g' : 'Plus de repas programme aujourd’hui'}>
-                <EnGauge v={croqPct + ' %'} pct={croqPct} col={croqPct < 20 ? 'var(--o-bad)' : croqPct < 40 ? 'var(--o-warn2)' : 'var(--o-ok)'} />
-              </EnRow>
-              {plants.length > 0 && (
-                <EnRow label="Plantes" desc={plantsDry ? (plantsDry > 1 ? tr('{n} plantes sous le seuil d’humidité', { n: plantsDry }) : tr('{n} plante sous le seuil d’humidité', { n: plantsDry })) : 'Toutes au-dessus du seuil d’humidite'}>
-                  <EnVal v={plants.length + (plants.length > 1 ? ' suivies' : ' suivie')} col={plantsDry ? 'var(--o-warn2)' : 'var(--o-ok)'} />
-                </EnRow>
-              )}
-            </div>
-          </div>
-        )}
 
         <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('État des appareils')}</div>
 
@@ -4967,16 +4881,14 @@ function ViewHead({ titre, sous, badge, rgb = '52,211,153' }) {
   );
 }
 /** Barre de reglages rapides, exactement celle de Securite. */
-function ViewBar({ children, panel, onPanel }) {
+/* La barre d'une vue ne porte plus que ses CONTRÔLES. Les panneaux de synthèse
+ * repliables et leur bouton « Réglages de la vue » ont disparu (retour 02/09) :
+ * ils redisaient ce que les cartes montrent déjà et coûtaient une pleine
+ * hauteur d'écran sur mobile. */
+function ViewBar({ children }) {
   return (
     <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
       {children}
-      <span style={{ flex: 1 }} />
-      {onPanel && (
-        <button onClick={onPanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>
-          <Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span>
-        </button>
-      )}
     </div>
   );
 }
@@ -6216,8 +6128,6 @@ function LumieresContent({ hass, edit = false, onEnt }) {
   const dc = useDomainCards(hass);
   const [cardEdit, setCardEdit] = useState(null);
   const [addSheet, setAddSheet] = useState(false);
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-lumpanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-lumpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   const origineDe = (k) => {
     if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
     const st = hass && hass.states && hass.states[k];
@@ -6246,7 +6156,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
         badge={onCount ? (onCount > 1 ? tr('{n} allumées', { n: onCount }) : tr('{n} allumée', { n: onCount })) : tr('tout éteint')}
         rgb={onCount ? '255,206,115' : '140,152,180'} />
 
-      <ViewBar panel={panel} onPanel={togglePanel}>
+      <ViewBar>
         <BarGroup label={tr('Lumières')} sous={lights.length + ' luminaires'}>
           <button onClick={() => setAll(false)} style={barBtn(false)}>{tr('Tout éteindre')}</button>
           <button onClick={() => setAll(true)} style={barBtn(false)}>{tr('Tout allumer')}</button>
@@ -6261,22 +6171,6 @@ function LumieresContent({ hass, edit = false, onEnt }) {
       </ViewBar>
 
 
-      {panel && <PresCard titre={tr('Contrôle général')} lead="Les réglages s’appliquent à toutes les lumières allumées"
-        badge={onCount ? (onCount > 1 ? tr('{n} allumées', { n: onCount }) : tr('{n} allumée', { n: onCount })) : tr('tout éteint')}
-        rgb={onCount ? '255,206,115' : '140,152,180'}>
-        <PresLigne titre={tr('Luminaires allumés')}
-          sous={(() => {
-            const p = presentRooms.filter(r => lights.some(l => l.room === r && l.on));
-            return p.length ? p.slice(0, 3).join(', ') : 'Aucune pièce éclairée';
-          })()}
-          valeur={onCount + ' / ' + lights.length} couleur={onCount ? 'var(--o-warn)' : 'var(--o-text3)'}
-          part={lights.length ? Math.round(onCount * 100 / lights.length) : 0} />
-        {onCount > 0 && (
-          <PresLigne titre={tr('Luminosité moyenne')} sous={tr('Sur les luminaires allumés')}
-            valeur={Math.round(lights.filter(l => l.on).reduce((a, l) => a + (l.bri || 0), 0) / onCount) + ' %'}
-            couleur="var(--o-accent-soft)" />
-        )}
-      </PresCard>}
 
       {edit && (
         <ViewEditBar onEnt={onEnt}
@@ -6643,8 +6537,6 @@ function ScenesContent({ hass }) {
     if (selScene) applyScene({ scene_name: selScene.name, color1: selScene.colors[0], color2: selScene.colors[1], color3: selScene.colors[2], color4: selScene.colors[3], color5: selScene.colors[4], brightness_pct: v });
     else { const ids = dimmableLights(hass); if (ids.length) call('light', 'turn_on', { entity_id: ids, brightness_pct: v }); }
   };
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-scenepanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-scenepanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   const totalScenes = Object.values(HUE_SCENES).reduce((n, c) => n + c.scenes.length, 0);
   const lastApplied = (S && S[hueScripts().active] && S[hueScripts().active].last_changed) || null;
   const lastRel = (() => {
@@ -6700,28 +6592,9 @@ function ScenesContent({ hass }) {
           </div>
         </QuickBox>
         <span style={{ flex: 1 }} />
-        <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
       </div>
 
       {/* carte Appliquer une scène */}
-      {panel && (
-        <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Appliquer une scène')}</div>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontSize: 11, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent)' }} />{(HUE_ROOMS().find(r => r.id === room) || { label: room }).label.toUpperCase()}</span>
-          </div>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{tr("La scène s'applique au groupe de la pièce sélectionnée")}</div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', flexWrap: 'wrap' }}>
-              <div style={{ flex: '1 1 190px', minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{lit ? 'Scène active' : 'Dernière appliquée'}</div>
-                <div style={{ fontSize: 11.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{room}{lastRel ? ' · ' + lastRel : ''}</div>
-              </div>
-              <span style={{ fontSize: 15, fontWeight: 800, marginLeft: 'auto', color: lit ? 'var(--o-accent-soft)' : 'var(--o-text3)', whiteSpace: 'nowrap' }}><FlipText live text={sel || tr('Aucune')} /></span>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* grille des scènes de la collection : l'IMAGE Hue reste la vignette */}
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{(HUE_CATS.find(c => c.id === cat) || {}).label}</div>
@@ -7024,8 +6897,6 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   };
   const climNom = (k) => ed.labelOf(k) || climOrigine(k);
   const addSection = () => ed.toggle('sect:' + Date.now().toString(36));
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-climpanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-climpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   const climBlocs = [];
   ed.ids.forEach(k => {
     if (k.indexOf('sect:') === 0) climBlocs.push({ titre: k, cartes: [] });
@@ -7059,7 +6930,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
         rgb={zone && t.mode === 'confort' ? '255,138,76' : zone && t.mode === 'eco' ? '52,211,153' : '140,152,180'} />
 
       {zone && (
-        <ViewBar panel={panel} onPanel={togglePanel}>
+        <ViewBar>
           <BarGroup label="Consigne" sous={t.name}>
             <button onClick={() => dec(t.id)} style={barBtn(false)}>−</button>
             <span style={{ fontSize: 12.5, fontWeight: 800, color: '#ff8a4c', minWidth: 52, textAlign: 'center' }}>{String(t.target).replace('.', ',')} °C</span>
@@ -7078,31 +6949,6 @@ function ClimatContent({ hass, edit = false, onEnt }) {
         </ViewBar>
       )}
 
-      {panel && zone && (
-        <PresCard titre={t.name} lead={tr('Réglage détaillé en cliquant la carte de la zone')}
-          badge={t.mode === 'off' ? tr('à l’arrêt') : tr(t.mode)}
-          rgb={t.mode === 'confort' ? '255,138,76' : t.mode === 'eco' ? '52,211,153' : '140,152,180'}>
-          {t.current != null && (
-            <PresLigne titre="Température actuelle"
-              sous={t.target != null ? tr('Écart de') + ' ' + String(Math.round(Math.abs(t.current - t.target) * 10) / 10).replace('.', ',') + ' °C ' + tr('avec la consigne') : tr('Relevé de la zone')}
-              valeur={String(t.current).replace('.', ',') + ' °C'} couleur="var(--o-accent-soft)" />
-          )}
-          {t.target != null && <PresLigne titre="Consigne" sous={tr('Réglable dans la barre ci-dessus')} valeur={String(t.target).replace('.', ',') + ' °C'} couleur="#ff8a4c" />}
-          {airTemp != null && (
-            <PresLigne titre="Confort thermique" sous={'Idéal entre 20 et 22 °C' + (airRoom.room ? ' · ' + airRoom.room : '')}
-              valeur={fmt1(airTemp) + ' °C · ' + tCat.l} couleur={tCat.c}
-              barre={<JaugeGrad pct={(airTemp - 15) * 100 / 13} grad="linear-gradient(90deg,var(--o-cyan) 0%,var(--o-ok) 35%,var(--o-ok) 65%,#ff8a4c 100%)" />} />
-          )}
-          {airHum != null && (
-            <PresLigne titre={tr('Humidité')} sous={'Confortable entre 40 et 60 %' + (airRoom.room ? ' · ' + airRoom.room : '')}
-              valeur={Math.round(airHum) + ' % · ' + hCat.l} couleur={hCat.c}
-              barre={<JaugeGrad pct={(airHum - 20) * 100 / 60} grad="linear-gradient(90deg,#ff8a4c 0%,var(--o-ok) 35%,var(--o-ok) 65%,var(--o-cyan) 100%)" />} />
-          )}
-          {thermos.length > 1 && (
-            <PresLigne titre={tr('Autres zones')} sous={thermos.filter(z => z.id !== t.id).map(z => z.name).join(', ')} valeur={tr('{n} zones', { n: thermos.length })} />
-          )}
-        </PresCard>
-      )}
 
 
 
@@ -7257,8 +7103,6 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
     }
   });
 
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-volpanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-volpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
   const haidOf = (id) => (voletCovers(S).find(c => c.id === id) || {}).haid;
   const upCover = (id, pos) => setCovers(cs => cs.map(c => c.id === id ? { ...c, pos: Math.max(0, Math.min(100, Math.round(pos))) } : c));
@@ -7318,7 +7162,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
             badge={openCount ? (openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })) : tr('tous fermés')}
             rgb={openCount ? '52,211,153' : '140,152,180'} />}
 
-      {!embarque && <ViewBar panel={panel} onPanel={togglePanel}>
+      {!embarque && <ViewBar>
         <BarGroup label={tr('Volets')}>
           <button onClick={allOpen} style={barBtn(false)}>{tr('Ouvrir')}</button>
           <button onClick={() => { const ids = voletCovers(S).map(c => c.haid).filter(Boolean); if (ids.length) call('cover', 'stop_cover', { entity_id: ids }); }} style={barBtn(false)}>{tr('Stop')}</button>
@@ -7331,13 +7175,6 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
         )}
       </ViewBar>}
 
-      {!embarque && panel && <PresCard titre="Tous les volets" lead={tr('Vue d’ensemble de la position et du pilotage')}
-        badge={openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })} rgb="52,211,153">
-        <PresLigne titre={tr('Position moyenne')} sous={covers.length > 1 ? tr('{n} volets suivis', { n: covers.length }) : tr('{n} volet suivi', { n: covers.length })}
-          valeur={Math.round(covers.reduce((n, c) => n + (c.pos || 0), 0) / Math.max(1, covers.length)) + ' %'}
-          part={Math.round(covers.reduce((n, c) => n + (c.pos || 0), 0) / Math.max(1, covers.length))} couleur="var(--o-accent)" />
-        {mode && <PresLigne titre={tr('Mode')} sous={(voletModes(S).find(m => m.id === mode) || {}).desc || tr('Pilotage courant')} valeur={mode} couleur="var(--o-accent-soft)" />}
-      </PresCard>}
 
 
       {edit && (
@@ -7739,8 +7576,6 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       : { label: 'Facture', tag: 'MOIS', tagCol: 'var(--o-text2)', val: eur(bill), valCol: 'var(--o-purple)', col: 'var(--o-purple)', bar: '60%', bd: 'rgba(167,139,250,.18)', icon: 'piggy-bank', ic: 'var(--o-purple)', art: VIEW_ART.piggy },
   ];
   // Bandeau de réglages repliable (patron Atrium) — ne masque QUE la carte de bilan.
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-enpanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-enpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   const RANGES = [['jour', 'Jour'], ['semaine', 'Semaine'], ['mois', 'Mois']];
   const kwhFmt = (v) => v == null ? '—' : v.toFixed(1).replace('.', ',') + ' kWh';
   const impToday = avail(EN.consoReseauToday) ? num(EN.consoReseauToday) : (totalToday || null);
@@ -7797,46 +7632,9 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           <span style={{ fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', color: (tarifTxt === 'HC' || hcActive) ? 'var(--o-ok)' : 'var(--o-warn2)' }}>{(tarifTxt === 'HC' || hcActive) ? 'Heures creuses' : 'Heures pleines'}{prixActuel != null ? ' · ' + prixActuel.toFixed(4).replace('.', ',') + ' €' : ''}</span>
         </div>
         <span style={{ flex: 1 }} />
-        <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
       </div>
 
       {/* Bilan instantané : les chiffres du moment, en lignes denses */}
-      {panel && (
-        <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Bilan instantané')}</div>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: (tarifTxt === 'HC' || hcActive) ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.14)', color: (tarifTxt === 'HC' || hcActive) ? 'var(--o-ok)' : 'var(--o-warn2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: (tarifTxt === 'HC' || hcActive) ? 'var(--o-ok)' : 'var(--o-warn2)' }} />{(tarifTxt === 'HC' || hcActive) ? 'TARIF CREUX' : 'TARIF PLEIN'}</span>
-          </div>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{tr("Relevé temps réel du compteur et de l'onduleur")}{aboPct != null ? ' · ' + tr('{n} % du 7 kVA souscrit', { n: aboPct }) : ''}</div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <EnRow label={tr('Consommation')} desc={tr('Compteur électrique · temps réel')}>
-              <EnVal v={consoAvail ? fmtW(consoW) : '—'} col="var(--o-text)" />
-            </EnRow>
-            <EnRow label="Production solaire" desc={solarActive ? 'Onduleur · en production' : 'Onduleur · nuit ou capteur indisponible'}>
-              <EnVal v={solarAvail ? fmtW(solarW) : '—'} col={solarActive ? 'var(--o-gold)' : 'var(--o-text3)'} />
-            </EnRow>
-            {(tauxAutoconso != null || autosuff != null) && (
-              <EnRow label={tr('Autoconsommation')} desc={tr('Part de la production consommée sur place')}>
-                <EnGauge v={(tauxAutoconso != null ? tauxAutoconso : autosuff) + ' %'} pct={tauxAutoconso != null ? tauxAutoconso : autosuff} col={(tauxAutoconso != null ? tauxAutoconso : autosuff) > 0 ? 'var(--o-ok)' : 'var(--o-text3)'} />
-              </EnRow>
-            )}
-            <EnRow label={tr('Réseau')} desc={exporting ? tr('Injection vers le réseau') : tr('Soutirage depuis le réseau')}>
-              <EnVal v={fmtW(gridNetW)} col={exporting ? 'var(--o-ok)' : 'var(--o-bad)'} />
-            </EnRow>
-            <EnRow label={tr("Aujourd'hui")} desc={(impToday != null ? tr('Importé') + ' ' + kwhFmt(impToday) : tr('Import inconnu')) + (expToday != null ? ' · exporté ' + kwhFmt(expToday) : '')}>
-              <EnVal v={impToday != null ? kwhFmt(impToday) : '—'} col="var(--o-accent-soft)" />
-            </EnRow>
-            <EnRow label={tr('Coût estimé')} desc={coutMois != null ? tr('Mois en cours') + ' : ' + eur(coutMois) : tr('Journée en cours')}>
-              <EnVal v={eur(coutJour != null ? coutJour : (hcCost + hpCost))} col="var(--o-warn)" />
-            </EnRow>
-            {ecoJour != null && (
-              <EnRow label={tr('Économie solaire')} desc={tr('Estimation du jour, production autoconsommée')}>
-                <EnVal v={eur(ecoJour)} col="var(--o-ok)" />
-              </EnRow>
-            )}
-          </div>
-        </div>
-      )}
 
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>Postes de consommation</div>
         {edit && (
@@ -7983,8 +7781,6 @@ function AspirateurContent({ hass }) {
   const batColor = battery == null ? 'var(--o-text3)' : battery > 40 ? 'var(--o-ok)' : battery > 15 ? '#ffb347' : '#f87171';
   const onBase = raw ? raw === 'docked' : stTxt(entVac.onBase) === 'on';
   // Bandeau + carte de synthese repliables (patron Atrium)
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-vacpanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-vacpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   const stateTag = onBlue ? tr('NETTOYAGE EN COURS') : paused ? tr('EN PAUSE') : onBase ? tr('SUR LA BASE') : tr('AU REPOS');
   const stateCol = onBlue ? 'var(--o-accent)' : paused ? '#ffb347' : 'var(--o-ok)';
   const stateRgb = onBlue ? 'var(--o-accent-rgb)' : paused ? '255,179,71' : 'var(--o-ok-rgb)';
@@ -8070,67 +7866,8 @@ function AspirateurContent({ hass }) {
           </div>
         </div>
         <span style={{ flex: 1 }} />
-        <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
       </div>
 
-      {panel && <Anim i={0}><div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>Nettoyage</div>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: maint === 'OK' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(255,179,71,.16)', color: maint === 'OK' ? 'var(--o-ok)' : '#ffb347' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: maint === 'OK' ? 'var(--o-ok)' : '#ffb347' }} />{maint === 'OK' ? 'ENTRETIEN À JOUR' : 'ENTRETIEN REQUIS'}</span>
-        </div>
-        <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{sousTitre}</div>
-        <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
-          <VacRow label={tr('État')} desc={etat}>
-            <span style={{ fontSize: 15, fontWeight: 800, color: stateCol }}><FlipText live text={onBlue ? tr('En cours') : paused ? tr('En pause') : onBase ? tr('Sur la base') : tr('Au repos')} /></span>
-          </VacRow>
-          <VacRow label="Batterie" desc={battery == null ? 'Capteur indisponible' : battery > 40 ? 'Autonomie confortable' : battery > 15 ? tr('À surveiller') : 'Recharge nécessaire'}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: batColor }}><FlipText live text={battery != null ? battery + ' %' : '—'} /></span>
-              <Gauge pct={battery || 0} color={batColor} h={3} style={{ width: 160 }} />
-            </div>
-          </VacRow>
-          <SelRow id={auto.workMode} label="Mode de travail" desc={tr('Ce que le robot fait pendant son passage')} />
-          <SelRow id={auto.waterFlow} label={tr('Débit d’eau')} desc={tr('Quantité d’eau envoyée à la serpillière')} />
-          {mopPose != null && (
-            <VacRow label={tr('Serpillière')} desc={mopPose === 'on' ? 'Module posé sur le robot' : 'Module retiré — aspiration seule'}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: mopPose === 'on' ? 'var(--o-cyan)' : 'var(--o-text3)' }}>{mopPose === 'on' ? 'Fixée' : 'Retirée'}</span>
-            </VacRow>
-          )}
-          {CONSOMMABLES.map(c => (
-            <VacRow key={c.cle} label={c.nom} desc={c.v == null ? 'Capteur indisponible' : c.desc}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-                <span style={{ fontSize: 15, fontWeight: 800, color: c.v == null ? 'var(--o-text3)' : c.v < 20 ? 'var(--o-bad)' : c.col }}>
-                  {c.v == null ? '—' : Math.round(c.v) + ' %'}
-                </span>
-                {c.v != null && <Gauge pct={Math.max(0, Math.min(100, c.v))} color={c.v < 20 ? 'var(--o-bad)' : c.col} h={3} style={{ width: 160 }} />}
-              </div>
-            </VacRow>
-          ))}
-          <VacRow label="Session du jour" desc={tr('Surface parcourue et durée du dernier passage')}>
-            <span style={{ fontSize: 15, fontWeight: 800 }}>{(surface != null ? surface + ' m²' : '—') + ' · ' + (duree || '—')}</span>
-          </VacRow>
-          {derniere && (
-            <VacRow label="Dernier passage" desc={picked.length ? picked.map(r => r.name).join(', ') : 'Passage complet'}>
-              <span style={{ fontSize: 15, fontWeight: 800 }}>{derniere}</span>
-            </VacRow>
-          )}
-          {(auto.areaTotal || auto.count || auto.durTotal) && (
-            <VacRow label={tr('Depuis la mise en service')} desc={tr('Totaux tenus par le robot')}>
-              <span style={{ fontSize: 15, fontWeight: 800 }}>
-                {[valUnite(auto.areaTotal), auto.count && sNum(auto.count) != null ? sNum(auto.count) + ' passages' : null, valUnite(auto.durTotal)].filter(Boolean).join(' · ') || '—'}
-              </span>
-            </VacRow>
-          )}
-          {enPanne && (
-            <VacRow label={tr('Erreur')} desc={tr('Signalée par le robot')}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-bad)' }}>{vacOption(erreur)}</span>
-            </VacRow>
-          )}
-          <VacRow label={tr('Zones ciblées')} desc={picked.length ? picked.map(r => r.name).join(' · ') : 'Aucune zone sélectionnée — le robot nettoie tout'}>
-            <span style={{ fontSize: 15, fontWeight: 800, color: picked.length ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>{picked.length ? picked.length + ' / ' + rooms.length : 'toutes'}</span>
-          </VacRow>
-        </div>
-      </div></Anim>}
 
       <div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,22px)', padding: 18, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Carte du logement')}</div><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', padding: '4px 11px', borderRadius: 999 }}>Live · 10s</span></div>
@@ -8290,8 +8027,6 @@ function CroquettesContent({ hass }) {
   const mealMin = (t) => { const [h, mm] = t.split(':').map(Number); return h * 60 + mm; };
   const upcoming = meals.filter(m => m.on && mealMin(m.time) > nowMin).sort((a, b) => mealMin(a.time) - mealMin(b.time))[0];
   // ── Patron Atrium (21/08) : bandeau de réglages + carte Distributeur + repas du jour ──
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-croqpanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-croqpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   // Ration = poids d'une portion du distributeur (entité number, réglable)
   const setPortionWeight = (nv) => {
     const v = Math.max(2, Math.min(30, nv));
@@ -8351,33 +8086,9 @@ function CroquettesContent({ hass }) {
           <button onClick={refill} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', background: 'var(--o-s1)', color: 'var(--o-text1)' }}>Marquer rempli</button>
         </div>
         <span style={{ flex: 1 }} />
-        <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
       </div>
 
       {/* carte Distributeur */}
-      {panel && (
-        <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>Distributeur</div>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: online ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s2)', color: online ? 'var(--o-ok)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: online ? 'var(--o-ok)' : 'var(--o-text3)' }} />{online ? 'EN LIGNE' : tr('HORS LIGNE')}</span>
-          </div>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{upcoming ? upcoming.label + ' à ' + upcoming.time + ' · ' + upcoming.g + ' g' : 'Programme terminé'} · {onCount} repas par jour</div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <EnRow label={tr('Réservoir')} desc={autonomy != null ? (autonomy > 1 ? tr('Environ {n} jours d’autonomie', { n: autonomy }) : tr('Environ {n} jour d’autonomie', { n: autonomy })) : 'Niveau estimé, remis à 100 % au remplissage'}>
-              <EnGauge v={reservoirG != null ? level + ' %' : '—'} pct={level} col={level < 20 ? 'var(--o-bad)' : level < 40 ? 'var(--o-warn2)' : 'var(--o-ok)'} />
-            </EnRow>
-            <EnRow label="Distribué aujourd'hui" desc={done.length + ' repas sur ' + onCount + (distribuees ? ' · compteur ' + distribuees + ' g' : '')}>
-              <EnVal v={doneG + ' g'} col="var(--o-text)" />
-            </EnRow>
-            <EnRow label="Prochain repas" desc={upcoming ? upcoming.label: tr('Aucun repas restant aujourd’hui')}>
-              <EnVal v={upcoming ? relTo(upcoming.time) : '—'} col={upcoming ? 'var(--o-warn2)' : 'var(--o-text3)'} />
-            </EnRow>
-            <EnRow label="Ration quotidienne" desc={'Somme des ' + onCount + ' repas activés'}>
-              <EnVal v={dayG + ' g'} col="var(--o-accent-soft)" />
-            </EnRow>
-          </div>
-        </div>
-      )}
 
       {/* Repas du jour : une carte par repas, cliquable pour activer/désactiver */}
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>Repas du jour</div>
@@ -8722,8 +8433,6 @@ function MediasContent({ hass, edit = false, onEnt }) {
   const sel = lecteurs.find(p => p.id === selId) || lecteurs[0] || null;
   const np = rd(sel);
   const selEstTv = !!(sel && medEstTv(hass, sel.haid));
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-medpanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-medpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   const derivedVols = Object.fromEntries(lecteurs.map(p => { const st = rd1(p.haid); return [p.id, st.hasVol ? st.vol : 0]; }));
   const vsig = lecteurs.map(p => derivedVols[p.id]).join(',');
   const [vols, setVols] = useState(derivedVols);
@@ -8828,7 +8537,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
           + (sel ? ' · ' + sel.name + ' ' + (np.playing ? tr('en lecture') : tr('au repos')) : '')}
         badge={np.playing ? tr('en lecture') : tr('au repos')} rgb={np.playing ? '52,211,153' : '140,152,180'} />
 
-      <ViewBar panel={panel} onPanel={togglePanel}>
+      <ViewBar>
         <BarGroup label={tr('Lecture')} sous={sel ? sel.name : null}>
           {peut(hass, sel && sel.haid, 'previous_track') && (
             <button onClick={() => commander(hass, sel && sel.haid, 'previous_track')} style={barBtn(false)}>{tr('Précédent')}</button>)}
@@ -8855,27 +8564,6 @@ function MediasContent({ hass, edit = false, onEnt }) {
 
 
 
-      {panel && (() => {
-        const att = (sel && S && S[sel.haid] && S[sel.haid].attributes) || {};
-        const source = att.source || att.app_name || null;
-        const autres = lecteurs.filter(x => !sel || x.id !== sel.id);
-        const repos = autres.filter(x => !rd(x).playing).length;
-        return (
-          <PresCard titre={(sel && sel.name) || tr('Lecteurs')}
-            lead={(np.playing ? tr('Lecture en cours') : tr('Au repos')) + (np.hasVol ? ' · ' + tr('volume {n} %', { n: Math.round(np.vol) }) : '')}
-            badge={np.playing ? tr('en lecture') : tr('au repos')} rgb={np.playing ? '52,211,153' : '140,152,180'}>
-            <PresLigne titre="Progression"
-              sous={np.title ? (np.artist ? np.title + ' · ' + np.artist : np.title) : tr('Aucun média en cours sur ce lecteur')}
-              valeur={np.title ? (np.playing ? tr('en lecture') : 'en pause') : '—'}
-              couleur={np.title ? 'var(--o-accent-soft)' : 'var(--o-text3)'} />
-            <PresLigne titre="Source" sous={source ? 'Entrée active du lecteur' : 'Aucune source active'}
-              valeur={source || '—'} couleur={source ? 'var(--o-gold)' : 'var(--o-text3)'} />
-            <PresLigne titre={tr('Autres lecteurs')}
-              sous={autres.map(x => x.name || x.id).slice(0, 3).join(', ') || tr('Aucun autre lecteur')}
-              valeur={autres.length ? tr('{n} au repos sur {t}', { n: repos, t: autres.length }) : '—'} />
-          </PresCard>
-        );
-      })()}
 
       {/* « Lancer sur » et la telecommande, cote a cote. */}
       <div className="grid-medlaunch" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) minmax(260px,1fr)', gap: 18, alignItems: 'start' }}>
@@ -9151,8 +8839,6 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
     </div>
   );
   // Bandeau + carte de synthese repliables (patron Atrium)
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-secpanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-secpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   // Bitmask AlarmControlPanelEntityFeature de HA : ARM_HOME=1, ARM_AWAY=2, ARM_NIGHT=4.
   // On n'affiche « Nuit » que si le panneau la gere — sinon l'appel serait rejete.
   // (Les modes offerts sont lus par `armChips` : plus de test de bits ici.)
@@ -9223,49 +8909,32 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
           )}
         </div>
         <span style={{ flex: 1 }} />
-        <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
       </div>
 
-      {panel && <Anim i={0}><div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Surveillance')}</div>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, background: ca(statusCol, .14), color: cs(statusCol), fontSize: 11, fontWeight: 800, flexShrink: 0 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: cs(statusCol), animation: triggered ? 'pulse 1.2s infinite' : 'pulse 2.4s infinite' }} /><FlipText text={statusTxt} /></span>
-        </div>
-        <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{heroTitle} · {camOnline}/{camTotal} {camTotal > 1 ? tr('caméras') : tr('caméra')} · {homeCount ? (homeCount > 1 ? tr('{n} présents', { n: homeCount }) : tr('{n} présent', { n: homeCount })) : tr('personne à la maison')}</div>
-        <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
-          <SecRow label={tr('Alarme')} desc={alarmDesc}>
-            <span style={{ fontSize: 15, fontWeight: 800, color: cs(statusCol) }}><FlipText live text={alarmShort} /></span>
-          </SecRow>
-          <SecRow label={tr('Caméras')} desc={cams.map(c => c.label).join(' · ') || tr('Aucune caméra configurée')}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: camOnline === camTotal ? 'var(--o-text)' : '#ffb347' }}><FlipText live text={camOnline + '/' + camTotal + ' ' + tr('en ligne')} /></span>
-              <Gauge pct={camPct} color={camOnline === camTotal ? 'var(--o-ok)' : '#ffb347'} h={3} style={{ width: 160 }} />
-            </div>
-          </SecRow>
-          <SecRow label={tr('Mouvement')} desc={anyMotion ? tr('Détection en cours sur une caméra') : tr('Toutes les zones sont calmes')}>
-            <span style={{ fontSize: 15, fontWeight: 800, color: anyMotion ? '#ffb347' : 'var(--o-text)' }}><FlipText live text={anyMotion ? tr('Détecté') : tr('Aucun')} /></span>
-          </SecRow>
-          <SecRow label={tr('Présence')} desc={homeCount ? tr(homeCount > 1 ? '{noms} sont à la maison' : '{noms} est à la maison', { noms: presentNames }) : tr('Personne à la maison')}>
-            <span style={{ fontSize: 15, fontWeight: 800 }}><FlipText live text={homeCount ? (homeCount > 1 ? tr('{n} présents', { n: homeCount }) : tr('{n} présent', { n: homeCount })) : tr('Personne')} /></span>
-          </SecRow>
-          {activite && (
-            <SecRow label={tr('Activité · 24 h')} desc={tr('Détections caméra par heure, heure courante en vert')}>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, width: 210, height: 34 }}>
-                {activite.map((c, h) => {
-                  const cur = h === 23;
-                  const quand = new Date(Date.now() - (23 - h) * 3600000);
-                  return <div key={h} title={String(quand.getHours()).padStart(2, '0') + 'h · ' + c} style={{ flex: 1, height: (c === 0 ? 12 : 26 + (c / maxC) * 74) + '%', minHeight: 3, borderRadius: 2, background: c === 0 ? 'var(--o-bd3)' : (cur ? 'var(--o-ok)' : (c >= 4 ? '#ffb347' : 'rgba(52,211,153,.55)')) }} />;
-                })}
-              </div>
-            </SecRow>
-          )}
-        </div>
-      </div></Anim>}
+
+      {/* Ce que le panneau de synthèse disait en lignes, les cartes le disent
+        * mieux : les ouvrants un par un, qui est là, et ce qui a bougé. Les
+        * mêmes cartes que dans les pièces (retour 02/09). Présence seulement
+        * si la maison suit quelqu'un ; ouvrants seulement s'il y en a. */}
+      {(ouvrantsDe(S).length > 0 || people.length > 0) && (
+        <>
+          <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Ouvrants et présence')}</div>
+          <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 14, alignItems: 'stretch' }}>
+            {ouvrantsDe(S).length > 0 && <Anim i={0}><div style={{ height: 184 }}><CvOuvrants hass={hass} /></div></Anim>}
+            {people.length > 0 && <Anim i={1}><div style={{ height: 184 }}><CvPresence hass={hass} /></div></Anim>}
+          </div>
+        </>
+      )}
 
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Caméras en direct')}</div>
       <div className="grid-sec-cams" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         {cams.map((c, i) => <Anim key={c.haid || c.id} i={i} base={140}><CameraTile c={c} /></Anim>)}
       </div>
+
+      {/* Le journal de ce qui touche à la sécurité : ouvrants, mouvements,
+        * alarme et caméras — la carte des pièces, restreinte à ces entités. */}
+      <RoomActivityCard hass={hass} max={12} titre={tr('Journal de la sécurité')} sous={tr('Ouvrants, mouvements et alarme — 24 h, en direct')}
+        ids={[...ouvrantsDe(S).map(o => o.id), ...(alarmId ? [alarmId] : []), ...camList.map(c => c.haid).filter(Boolean), ...people.map(p => p.haid).filter(Boolean)]} />
     </div>
   );
 }
@@ -9438,6 +9107,45 @@ function SysArea({ pts, color, fill, h = 64 }) {
   );
 }
 
+/* La machine hôte, au gabarit d'Atrium : logo et nom en tête, le chiffre qui
+ * compte en très gros, le reste en deux lignes serrées, l'état en pied. Une
+ * carte plutôt qu'un panneau repliable — elle tient dans un écran de mobile. */
+function SysCarteHote({ nom, logo, online, cpu, mem, disque, temp, uptime, courbe, courbeLbl, col }) {
+  const pc = (v) => v == null ? null : Math.round(v) + ' %';
+  const ligne1 = [pc(mem) && pc(mem) + ' ' + tr('ram'), pc(disque) && pc(disque) + ' ' + tr('disque')].filter(Boolean).join(' · ');
+  const ligne2 = [temp != null && Math.round(temp) + ' °C ' + tr('température'), uptime && uptime !== '—' && uptime + ' ' + tr('uptime')].filter(Boolean).join(' · ');
+  return (
+    <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', maxWidth: 460 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(3,169,244,.14)' }}>
+          {logo ? <img src={logo} alt="" draggable={false} style={{ width: 28, height: 26, objectFit: 'contain' }} /> : <Fi i="home" size={20} color="var(--o-accent-soft)" />}
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 15.5, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600 }}>Home Assistant</div>
+        </div>
+      </div>
+      <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 14, background: 'var(--o-s2)' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: col }}>{pc(cpu) || '—'}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('cpu')}</span>
+        </div>
+        {ligne1 && <div style={{ marginTop: 9, fontSize: 12.5, fontWeight: 700, color: 'var(--o-text1)' }}>{ligne1}</div>}
+        {ligne2 && <div style={{ marginTop: 3, fontSize: 12.5, fontWeight: 700, color: 'var(--o-text1)' }}>{ligne2}</div>}
+        {courbe && courbe.length > 1 && (
+          <div style={{ marginTop: 11 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 3 }}>{courbeLbl}</div>
+            <SysArea pts={courbe} color={col} fill="rgba(var(--o-ok-rgb),.08)" h={30} />
+          </div>
+        )}
+      </div>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 13, padding: '4px 11px', borderRadius: 999, fontSize: 11, fontWeight: 800, background: online ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-bad-rgb),.16)', color: online ? 'var(--o-ok)' : 'var(--o-bad)' }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: online ? 'var(--o-ok)' : 'var(--o-bad)' }} />{online ? tr('en ligne') : tr('hors ligne')}
+      </span>
+    </div>
+  );
+}
+
 function SystemeContent({ hass }) {
   const S = (hass && hass.states) || {};
   const num = id => { const s = S[id]; if (!s) return null; const v = parseFloat(s.state); return isNaN(v) ? null : v; };
@@ -9471,54 +9179,29 @@ function SystemeContent({ hass }) {
   const hDisk = num(SYS.host.disk) != null ? num(SYS.host.disk) : num(SYS.host.diskAlt);
   const hUp = fmtUptime(stateRaw(SYS.host.uptime));
   const hOnline = onl(SYS.host.online) || has(SYS.host.cpu);
-  // Unraid Nebula
-  const nCpu = num(SYS.nebula.cpu), nTemp = num(SYS.nebula.temp), nDisk = num(SYS.nebula.disk);
-  const nMem = num(SYS.nebula.memPct);
-  const nUp = fmtUptime(stateRaw(SYS.nebula.uptime));
-  const nOnline = onl(SYS.nebula.online) || has(SYS.nebula.cpu);
-  // UniFi UCG Max
-  const uCpu = num(SYS.ucg.cpu), uMem = num(SYS.ucg.mem), uTemp = num(SYS.ucg.temp), uClients = num(SYS.ucg.clients);
-  const uUp = fmtUptime(stateRaw(SYS.ucg.uptime));
-  const uOnline = has(SYS.ucg.cpu) || uClients != null;
-
-  // Les noms viennent de l'appareil trouvé (ou de la configuration) ; seule
-  // l'identité visuelle — icône, couleur — reste écrite ici.
-  const machines = sysMachines().map(m => ({ ...m, name: sysNames()[m.key] || m.name })).map(m => {
-    if (m.key === 'host') return { ...m, online: hOnline, l: tr('En service') + ' ' + hUp, r: `CPU ${fmtPct(hCpu)} · RAM ${fmtPct(hMemPct)}`, bar: (hMemPct || 0) + '%' };
-    if (m.key === 'nebula') return { ...m, online: nOnline, l: `CPU ${fmtPct(nCpu)}`, r: nTemp != null ? `${Math.round(nTemp)}°C · ${nUp}` : `Uptime ${nUp}`, bar: (nCpu || 0) + '%' };
-    return { ...m, online: uOnline, l: uClients != null ? tr('{n} clients', { n: uClients }) : tr('Réseau'), r: `CPU ${fmtPct(uCpu)} · ${uTemp != null ? Math.round(uTemp) + '°C' : uUp}`, bar: (uMem || 0) + '%' };
-  });
-  const machinesOnline = machines.filter(m => m.online).length;
-  const allOnline = machinesOnline === machines.length;
-  const loads = [hCpu, hMemPct, hDisk, uCpu, uMem].filter(v => v != null);
-  const health = loads.length ? Math.max(0, Math.round(100 - Math.max(...loads))) : (allOnline ? 100 : 50);
-  const statusCol = allOnline ? [52, 211, 153] : [255, 179, 71];
-  const cs = a => `rgb(${a.join(',')})`, ca = (a, al) => `rgba(${a.join(',')},${al})`;
-  const horsLigne = machines.length - machinesOnline;
-  const heroTitle = allOnline ? tr('Tous les systèmes opérationnels')
-    : horsLigne > 1 ? tr('{n} systèmes hors ligne', { n: horsLigne }) : tr('{n} système hors ligne', { n: horsLigne });
+  /* Une seule machine : celle qui porte Home Assistant (retour 02/09). Le NAS
+   * et la passerelle ont leur propre tableau de bord ailleurs ; les suivre ici
+   * ne faisait que rallonger la page. */
+  const machinesOnline = hOnline ? 1 : 0;
   // ── v6 (design Claude Design 21/08) : période, refresh, machine détaillée, history réel, journal ──
   const [period, setPeriod] = useState(1); // heures : 1 | 24 | 168
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastFetch, setLastFetch] = useState(() => new Date());
   const doRefresh = () => { setRefreshKey(k => k + 1); setLastFetch(new Date()); };
-  const [detail, setDetail] = useState('host');
-  const HIST_IDS = [SYS.host.cpu, SYS.host.memUsed, SYS.nebula.cpu, SYS.ucg.cpu, SYS.ucg.mem];
+  const HIST_IDS = [SYS.host.cpu, SYS.host.memUsed];
   const hist = useSysHist(hass, HIST_IDS, period, refreshKey);
   const perLbl = period === 1 ? tr('{n} h', { n: 1 }) : period === 24 ? tr('{n} h', { n: 24 }) : tr('{n} j', { n: 7 });
   // Alertes calculées sur les seuils réels
   const alerts = [];
   if (hMemPct != null && hMemPct >= 85) alerts.push({ key: 'hmem', m: sysNames().host, target: 'host', sev: hMemPct >= 92 ? 'bad' : 'warn', txt: tr('Mémoire à {n} %', { n: hMemPct }) + (hUsed != null && hFree != null ? ` (${Math.round(hUsed)} / ${Math.round(hUsed + hFree)} ${hMemUnit})` : '') + ' ' + tr('— le cœur risque un redémarrage forcé.') });
   if (hDisk != null && hDisk >= 85) alerts.push({ key: 'hdisk', m: sysNames().host, target: 'host', sev: hDisk >= 92 ? 'bad' : 'warn', txt: tr('Partition /data à {n} % — prévoir une purge de la base ou des sauvegardes.', { n: Math.round(hDisk) }) });
-  if ((uCpu != null && uCpu >= 85) || (uMem != null && uMem >= 85)) alerts.push({ key: 'ucg', m: sysNames().ucg, target: 'ucg', sev: 'warn', txt: tr('Processeur à {c} et mémoire à {m} — débit du LAN encore nominal.', { c: fmtPct(uCpu), m: fmtPct(uMem) }) });
-  if ((nCpu != null && nCpu >= 85) || (nMem != null && nMem >= 85)) alerts.push({ key: 'ncpu', m: sysNames().nebula, target: 'nebula', sev: 'warn', txt: tr('Processeur à {c} et mémoire à {m} — vérifier les conteneurs actifs.', { c: fmtPct(nCpu), m: fmtPct(nMem) }) });
-  machines.forEach(m => { if (!m.online) alerts.push({ key: 'off' + m.key, m: m.name, target: m.key, sev: 'bad', txt: tr('Machine hors ligne — dernier état inconnu.') }); });
+  if (!hOnline) alerts.push({ key: 'offhost', m: sysNames().host, target: 'host', sev: 'bad', txt: tr('Machine hors ligne — dernier état inconnu.') });
   // Journal : logbook HA sur les entités système suivies (24 h), meilleur effort
   const [logbook, setLogbook] = useState(null);
   useEffect(() => {
     let alive = true;
     if (!hass || !hass.callApi) { setLogbook(null); return undefined; }
-    const ids = [...HIST_IDS, SYS.host.online, SYS.nebula.online, ...Object.keys((hass.states || {})).filter(id => id.indexOf('update.') === 0)].filter(Boolean);
+    const ids = [...HIST_IDS, SYS.host.online, ...Object.keys((hass.states || {})).filter(id => id.indexOf('update.') === 0)].filter(Boolean);
     const start = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
     hass.callApi('GET', 'logbook/' + start + '?entity=' + encodeURIComponent(ids.slice(0, 30).join(',')))
       .then(res => { if (alive) setLogbook(Array.isArray(res) ? res.slice(-8).reverse() : null); })
@@ -9526,47 +9209,9 @@ function SystemeContent({ hass }) {
     return () => { alive = false; };
   }, [hass ? 1 : 0, refreshKey]);
 
-  // ── Patron Atrium (22/08) : bandeau Alimentation + carte machine detaillee + cartes facon Objets ──
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-syspanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-syspanel', nv ? '1' : '0'); } catch (e) {} return nv; });
+  // ── Patron Atrium (22/08) : bandeau Alimentation, machine HAOS, journaux ──
   const relFetch = (() => { const sec = Math.round((Date.now() - lastFetch.getTime()) / 1000); if (sec < 60) return tr('il y a {n} s', { n: sec }); const mn = Math.round(sec / 60); return mn < 60 ? tr('il y a {n} min', { n: mn }) : tr('il y a {n} h', { n: Math.round(mn / 60) }); })();
   const lvlCol = (v, warn = 70, bad = 86) => v == null ? 'var(--o-text3)' : v >= bad ? 'var(--o-bad)' : v >= warn ? 'var(--o-warn2)' : 'var(--o-ok)';
-  const MACH = [
-    { key: 'host', logo: BRAND_ICONS.haos, name: SYSN.host, sub: 'Home Assistant OS' + (hUp && hUp !== '—' ? ' · ' + hUp : ''), online: hOnline,
-      ico: 'home', icoBg: 'rgba(3,169,244,.14)', icoCol: 'var(--o-accent-soft)',
-      barLabel: tr('Mémoire'), barPct: hMemPct, barText: hMemPct != null ? hMemPct + ' %' : '—',
-      status: hMemPct != null && hMemPct >= 85 ? tr('Mémoire élevée') + ' · ' + hMemPct + ' %' : tr('Fonctionnement normal'),
-      rows: [
-        [tr('Processeur'), tr('Charge moyenne du CPU'), hCpu != null ? Math.round(hCpu) + ' %' : '—', hCpu, 85],
-        [tr('Mémoire'), hUsed != null && hFree != null ? Math.round(hUsed) + ' / ' + Math.round(hUsed + hFree) + ' ' + hMemUnit : tr('RAM utilisée'), hMemPct != null ? hMemPct + ' %' : '—', hMemPct, 85],
-        [tr('Disque /data'), tr('Partition de données'), hDisk != null ? Math.round(hDisk) + ' %' : '—', hDisk, 85],
-        [tr('Température CPU'), tr("Seuil d'alerte à 75 °C"), hTemp != null ? Math.round(hTemp) + ' °C' : '—', null, null, hTemp],
-      ],
-      spark: hist[SYS.host.memUsed], sparkLbl: tr('mémoire'), level: hMemPct },
-    { key: 'nebula', logo: BRAND_ICONS.unraid, name: SYSN.nebula, sub: tr('Serveur de stockage') + (nUp && nUp !== '—' ? ' · ' + nUp : ''), online: nOnline,
-      ico: 'database', icoBg: 'rgba(227,41,41,.14)', icoCol: '#ffb347',
-      barLabel: nMem != null ? tr('Mémoire') : tr('Processeur'), barPct: nMem != null ? nMem : nCpu, barText: (nMem != null ? Math.round(nMem) : nCpu != null ? Math.round(nCpu) : null) != null ? Math.round(nMem != null ? nMem : nCpu) + ' %' : '—',
-      status: Math.max(nCpu || 0, nMem || 0) >= 85 ? tr('Ressources sous tension') : tr('Fonctionnement normal'),
-      rows: [
-        [tr('Processeur'), tr('Charge CPU'), nCpu != null ? Math.round(nCpu) + ' %' : '—', nCpu, 85],
-        [tr('Mémoire'), tr('RAM du serveur'), nMem != null ? Math.round(nMem) + ' %' : '—', nMem, 85],
-        [tr('Température CPU'), tr("Seuil d'alerte à 75 °C"), nTemp != null ? Math.round(nTemp) + ' °C' : '—', null, null, nTemp],
-        [tr('Stockage'), tr('Grappe de disques'), nDisk != null ? Math.round(nDisk) + ' %' : tr('non exposée'), nDisk, 85],
-      ],
-      spark: hist[SYS.nebula.cpu], sparkLbl: tr('charge'), level: Math.max(nCpu || 0, nMem || 0) },
-    { key: 'ucg', logo: BRAND_ICONS.unifi, name: SYSN.ucg, sub: tr('Passerelle réseau') + (uUp && uUp !== '—' ? ' · ' + uUp : ''), online: uOnline,
-      ico: 'wifi', icoBg: 'rgba(5,89,201,.16)', icoCol: 'var(--o-cyan)',
-      barLabel: tr('Mémoire'), barPct: uMem, barText: uMem != null ? Math.round(uMem) + ' %' : '—',
-      status: (uCpu != null && uCpu >= 85) || (uMem != null && uMem >= 85) ? tr('Ressources sous tension') : tr('Fonctionnement normal'),
-      rows: [
-        [tr('Processeur'), tr('Charge CPU'), uCpu != null ? Math.round(uCpu) + ' %' : '—', uCpu, 85],
-        [tr('Mémoire'), tr('RAM de la passerelle'), uMem != null ? Math.round(uMem) + ' %' : '—', uMem, 85],
-        [tr('Clients réseau'), tr('Appareils connectés'), uClients != null ? Math.round(uClients) : tr('non exposés'), null, null],
-        [tr('Température'), tr("Seuil d'alerte à 75 °C"), uTemp != null ? Math.round(uTemp) + ' °C' : tr('non exposée'), null, null, uTemp],
-      ],
-      spark: hist[SYS.ucg.cpu], sparkLbl: tr('processeur'), level: Math.max(uCpu || 0, uMem || 0) },
-  ];
-  const sel = MACH.find(m => m.key === detail) || MACH[0];
   const powerActions = [
     { id: 'ha', label: tr('Redémarrer HA'), desc: tr('Relance le cœur sans toucher à la machine · ~40 s'), col: '255,179,71', run: () => power('ha', 'homeassistant', 'restart') },
     { id: 'reboot', label: tr('Redémarrer'), desc: tr('Redémarrage complet de la machine · 2 à 3 min hors ligne'), col: '255,179,71', run: () => power('reboot', 'hassio', 'host_reboot') },
@@ -9604,49 +9249,15 @@ function SystemeContent({ hass }) {
         </div>
         <button onClick={doRefresh} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}><Fi i="refresh" size={13} />{tr('Rafraîchir')}</button>
         <span style={{ flex: 1 }} />
-        <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
       </div>
 
-      {panel && (
-        <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{sel.name}</div>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: sel.level != null && sel.level >= 70 ? 'rgba(var(--o-warn2-rgb),.14)' : 'rgba(var(--o-ok-rgb),.14)', color: sel.level != null && sel.level >= 70 ? 'var(--o-warn2)' : 'var(--o-ok)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: sel.level != null && sel.level >= 70 ? 'var(--o-warn2)' : 'var(--o-ok)' }} />{sel.barLabel.toUpperCase()} {sel.barText}</span>
-          </div>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{sel.sub}{sel.level != null && sel.level >= 85 ? ' · ' + tr('le cœur risque un redémarrage forcé') : ''}</div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {sel.rows.map(([lb, desc, val, pct, warn, degres]) => (
-              <EnRow key={lb} label={lb} desc={desc}>
-                {pct != null
-                  ? <EnGauge v={val} pct={pct} col={lvlCol(pct, warn || 70)} />
-                  : <EnVal v={val} col={degres != null && degres >= 75 ? 'var(--o-warn2)' : 'var(--o-text)'} />}
-              </EnRow>
-            ))}
-            <EnRow label={sel.sparkLbl.charAt(0).toUpperCase() + sel.sparkLbl.slice(1) + ' · ' + perLbl} desc={tr('Relevé Home Assistant sur la période choisie')}>
-              <div style={{ width: 210 }}><SysArea pts={sel.spark} color={lvlCol(sel.level)} fill={sel.level != null && sel.level >= 70 ? 'rgba(248,113,113,.09)' : 'rgba(var(--o-ok-rgb),.08)'} h={34} /></div>
-            </EnRow>
-          </div>
-        </div>
-      )}
-
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Machines')}</div>
-      <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 14 }}>
-        {MACH.map((m, mi) => (
-          <ObjCard key={m.key} idx={mi}
-            // Pas de `iconActive` : il fait fretiller l'icone sans fin, et une
-            // machine allumee l'est en permanence. L'animation est reservee a
-            // ce qui est reellement en action ; ici l'etat se lit deja dans la
-            // ligne de statut, en couleur.
-            icon={m.logo ? <img src={m.logo} alt="" draggable={false} style={{ width: 28, height: 24, objectFit: 'contain' }} /> : <Fi i={m.ico} size={19} color={m.icoCol} />} iconBg={m.icoBg}
-            name={m.name} sub={m.sub}
-            status={m.online ? m.status : tr('Hors ligne')}
-            statusColor={!m.online ? 'var(--o-bad)' : (m.level != null && m.level >= 85 ? 'var(--o-warn2)' : 'var(--o-ok)')}
-            barLabel={m.barLabel} barPct={m.barPct} barColor={lvlCol(m.barPct)} barText={m.barText}
-            actionLabel={detail === m.key ? tr('Détail affiché') : tr('Voir le détail')}
-            onAction={() => { setDetail(m.key); setPanel(true); }}
-          />
-        ))}
-      </div>
+      {/* La machine qui porte Home Assistant, dans le gabarit d'Atrium : le
+        * chiffre qui compte en grand, le reste en une ligne, l'état en pied.
+        * Le détail repliable a disparu avec les panneaux de réglages. */}
+      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Machine')}</div>
+      <SysCarteHote nom={SYSN.host} logo={BRAND_ICONS.haos} online={hOnline}
+        cpu={hCpu} mem={hMemPct} disque={hDisk} temp={hTemp} uptime={hUp}
+        courbe={hist[SYS.host.memUsed]} courbeLbl={tr('Mémoire') + ' · ' + perLbl} col={lvlCol(hMemPct)} />
 
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Journal système')}</div>
       <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '18px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
@@ -10433,10 +10044,10 @@ function RailArm({ id, hass, onNav }) {
           if (faut) { if (onNav) onNav('securite'); return; }
           try { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id }); } catch (e) {}
         }} aria-pressed={actif}
-          style={{ position: 'relative', flex: 1, padding: '8px 4px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
+          style={{ position: 'relative', flex: 1, padding: '11px 6px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
           {lbl}
           {/* Le décompte se lit ici aussi : le tour du mode visé se referme. */}
-          {cpt && svcVise === svc && <ArmAnneau pct={100 - (cpt.reste / cpt.total) * 100} />}
+          {cpt && svcVise === svc && <ArmAnneau pct={100 - (cpt.reste / cpt.total) * 100} r={10} />}
         </button>
       ))}
     </div>
