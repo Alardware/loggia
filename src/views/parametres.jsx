@@ -16,6 +16,7 @@ import { cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_ENT, LOGGIA_RESO
 import { CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS, BottomSheet, EntPicker, CV_DOM_ICON, cvDomain, FOND_PHOTO_CLE, lireFondPhoto, compresserImage } from '../ui.jsx';
 import { useLoggia } from '../runtime.js';
 import { viewReason } from '../views.js';
+import { autoFamille } from '../autos.js';
 import { weatherEntity } from '../wxutil.jsx';
 import { tr, choixLangue, languesDisponibles } from '../i18n.js';
 
@@ -723,8 +724,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // avec son motif : mieux vaut expliquer que faire disparaître sans un mot.
   const { views: availViews } = useLoggia();
   const [open, setOpen] = useState({});
-  const [panel, setPanel] = useState(() => { try { return localStorage.getItem('loggia-parpanel') !== '0'; } catch (e) { return true; } });
-  const togglePanel = () => setPanel(v => { const nv = !v; try { localStorage.setItem('loggia-parpanel', nv ? '1' : '0'); } catch (e) {} return nv; });
   // Loggia est-il la page ouverte au démarrage, sur ce compte ?
   // true = oui · false = non · null = impossible à savoir (page parente
   // inaccessible, ou Home Assistant qui ne répond pas).
@@ -829,7 +828,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const [cvEditing, setCvEditing] = useState(null); // null | 'new' | objet vue custom
   // Veille : diaporama photos + réveil caméra — par appareil, lus par AmbientOverlay au montage.
   // Aperçu du nouvel accueil : par appareil, réversible — l'ancien reste le défaut.
-  const [acc2, setAcc2] = useState(() => { try { return JSON.parse(localStorage.getItem('loggia-accueil2') || 'false') === true; } catch (e) { return false; } });
   const [ambPhotos, setAmbPhotos] = useState(() => { try { return localStorage.getItem('loggia-ambphotos') === '1'; } catch (e) { return false; } });
   const toggleAmbPhotos = () => setAmbPhotos(v => { const n = !v; try { localStorage.setItem('loggia-ambphotos', n ? '1' : '0'); } catch (e) {} return n; });
   const [ambMotion, setAmbMotion] = useState(() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch (e) { return false; } });
@@ -913,7 +911,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
       {children}
       <span style={{ flex: 1 }} />
-      <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
     </div>
   );
   const SecGroup = ({ label, children }) => (
@@ -965,38 +962,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               </div>
             </div>
             <span style={{ flex: 1 }} />
-            <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
           </div>
 
-          {panel && (
-            <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>{tr("État de l'installation")}</div>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent)' }} />{tr('THÈME')} {(PRESET_META().find(x => x.id === loggiaTheme) || PRESET_META()[0]).name.toUpperCase()}</span>
-              </div>
-              <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{tr("Les modifications s'appliquent immédiatement à cet appareil")}</div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <EnRow label={tr('Connexion')} desc={hass ? 'Session empruntée à Home Assistant · ' + Object.keys(hass.states || {}).length + ' entités' : 'Session Home Assistant introuvable'}>
-                  <EnVal v={(lat != null && lat >= 0) ? lat + ' ms' : (hass ? 'active' : 'absente')} col={hass ? 'var(--o-ok)' : 'var(--o-bad)'} />
-                </EnRow>
-                {isAdmin && (
-                  <EnRow label={tr('Automatisations')} desc={autos.length + ' automatisations Home Assistant'}>
-                    <EnVal v={autos.filter(a => a.on).length + ' / ' + autos.length} col="var(--o-text)" />
-                  </EnRow>
-                )}
-                {isAdmin && (
-                  <EnRow label={tr('Entités du dashboard')} desc={entMissing.length ? (entMissing.length > 1 ? tr('{n} introuvables sur', { n: entMissing.length }) : tr('{n} introuvable sur', { n: entMissing.length })) + ' ' + tr('{n} configurées', { n: entIds.length }) : tr('{n} entités configurées, toutes résolues', { n: entIds.length })}>
-                    <EnVal v={entMissing.length ? entMissing.length + ' en erreur' : tr('toutes résolues')} col={entMissing.length ? 'var(--o-bad)' : 'var(--o-ok)'} />
-                  </EnRow>
-                )}
-                {isAdmin && (
-                  <EnRow label={tr('Mises à jour')} desc={upsAvail ? 'Firmwares et modules en attente' : upsTotal + ' modules suivis'}>
-                    <EnVal v={upsAvail ? upsAvail + ' en attente' : 'à jour'} col={upsAvail ? 'var(--o-warn2)' : 'var(--o-ok)'} />
-                  </EnRow>
-                )}
-              </div>
-            </div>
-          )}
 
           <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Toutes les sections')}</div>
           <div className="grid-parsections" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 14 }}>
@@ -1039,20 +1006,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
           </SecGroup>
         </SecBar>
-        {panel && (() => {
-          const pm = PRESET_META().find(x => x.id === loggiaTheme) || PRESET_META()[0];
-          const formes = [look.radius, look.shadow ? 'ombres' : 'à plat', look.hairline ? 'liserés' : 'sans liseré'].join(' · ');
-          return (
-            <SecCard title={tr('Thème actif')} tag={haTheme === 'FOLLOW' ? 'SUIVI DE HA' : 'CHOIX MANUEL'} tagCol={haTheme === 'FOLLOW' ? 'warn' : 'ok'}
-              sub="Réglages visuels, propres à cet appareil. L'aperçu à droite suit vos choix.">
-              <EnRow label="Palette" desc={pm.desc}><EnVal v={pm.name} col="var(--o-accent-soft)" /></EnRow>
-              <EnRow label="Mode d'affichage" desc={haTheme === 'FOLLOW' ? 'Imposé par le thème actif de Home Assistant' : 'Clair ou foncé, appliqué au thème choisi'}><EnVal v={themeMode === 'auto' ? tr('Auto (appareil)') : themeMode === 'light' ? 'Clair' : 'Foncé'} col="var(--o-text)" /></EnRow>
-              <EnRow label={tr('Effets animés')} desc={wxFx ? 'Ciel météo suivant la condition et l’heure réelles' : 'Bannière fixe, aucun rendu animé'}><EnVal v={wxFx ? tr('Météo') : 'Désactivés'} col={wxFx ? 'var(--o-ok)' : 'var(--o-text3)'} /></EnRow>
-              <EnRow label={tr('Matière & formes')} desc={formes}><EnVal v={look.contrast ? 'contraste renforcé' : 'contraste normal'} col="var(--o-text)" /></EnRow>
-              <EnRow label="Interface mobile" desc={'Marge du haut ' + (topAuto ? 'auto' : Math.round(topMargin) + ' px') + (navbar ? ' · marge du bas ' + (navAuto ? 'auto' : Math.round(navMargin) + ' px') : '')}><EnVal v={navbar ? 'Barre de navigation' : 'Sans barre'} col={navbar ? 'var(--o-text)' : 'var(--o-text3)'} /></EnRow>
-            </SecCard>
-          );
-        })()}
         <div className="grid-appar" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 264px', gap: 18, alignItems: 'start' }}>
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>{(() => {
         const notFollow = haTheme !== 'FOLLOW';
@@ -1150,7 +1103,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <Tgl on={!!navbar} cb={onToggleNavbar} label="Barre de navigation mobile" />
             </OptRow>
             <OptRow title={tr('Nouvel accueil (aperçu)')} desc={tr('Essaie la future page d’accueil — favoris épinglés, pièces denses — sur cet appareil seulement. Réversible d’un tap ; l’accueil actuel reste le défaut.')}>
-              <Tgl on={acc2} cb={() => { const v = !acc2; setAcc2(v); try { localStorage.setItem('loggia-accueil2', JSON.stringify(v)); } catch (e) {} }} label={tr('Nouvel accueil (aperçu)')} />
             </OptRow>
             <OptRow title="Page d'accueil"
               desc={accueilDefaut === true
@@ -1212,9 +1164,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </OptRow>
             <OptRow title={tr('Liserés')} desc={tr('Trait de 1 px autour des cartes et des tableaux.')}>
               <Tgl on={!!look.hairline} cb={() => onLook({ hairline: !look.hairline })} label={tr('Liserés')} />
-            </OptRow>
-            <OptRow title={tr('Contraste renforcé')} desc={tr('Éclaircit les textes secondaires et marque les séparateurs.')}>
-              <Tgl on={!!look.contrast} cb={() => onLook({ contrast: !look.contrast })} label={tr('Contraste renforcé')} />
             </OptRow>
             <OptRow title={tr("Teinte d'état")} desc={tr('Les cartes actives — lampe allumée, volet ouvert, chauffage en marche — se lavent de leur couleur.')}>
               <Seg value={look.tint || 'douce'}
@@ -1292,21 +1241,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <SecTgl on={!!haDraft.fallback} cb={toggleFallback} label={tr('Proposer la bascule Nabu Casa')} />
           </SecGroup>
         </SecBar>
-        {panel && (
-          <SecCard title="Serveur" tag={hass ? null : tr('HORS LIGNE')} tagCol="bad"
-            sub="Loggia n'a pas de compte : il utilise votre session Home Assistant">
-            <EnRow label="URL locale" desc={tr('Adresse utilisée sur le réseau domestique')}><EnVal v={(haDraft.local || '—').replace(/^https?:\/\//, '')} col="var(--o-text)" /></EnRow>
-            <EnRow label="URL distante" desc="Nabu Casa"><EnVal v={(haDraft.remote || 'non renseignée').replace(/^https?:\/\//, '')} col={haDraft.remote ? 'var(--o-text)' : 'var(--o-text3)'} /></EnRow>
-            <EnRow label="Latence" desc={tr('Mesurée sur le dernier appel')}><EnVal v={latBusy ? '…' : lat == null ? '—' : lat < 0 ? 'échec' : lat + ' ms'} col={(lat != null && lat >= 0 && lat < 120) ? 'var(--o-ok)' : (lat != null && lat >= 120) ? 'var(--o-warn2)' : 'var(--o-text3)'} /></EnRow>
-            <EnRow label={tr('Entités synchronisées')} desc={'Rafraîchies toutes les ' + Math.round((haDraft.pollMs || 2000) / 1000) + ' s'}><EnVal v={hass && hass.states ? String(Object.keys(hass.states).length) : '—'} col={hass ? 'var(--o-ok)' : 'var(--o-text3)'} /></EnRow>
-            <EnRow label="Utilisateur" desc="Session Home Assistant en cours"><EnVal v={(hass && hass.user && hass.user.name) || '—'} col="var(--o-text)" /></EnRow>
-            {!hass && haDraft.fallback && haDraft.remote ? (
-              <EnRow label={tr('Réseau local muet')} desc="Rouvrir Loggia par l'adresse Nabu Casa">
-                <button onClick={() => { try { (window.top || window).location.href = haDraft.remote; } catch (e) { window.location.href = haDraft.remote; } }} style={{ padding: '7px 13px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Ouvrir via Nabu Casa</button>
-              </EnRow>
-            ) : null}
-          </SecCard>
-        )}
 
         <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', overflow: 'hidden', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 20px', background: 'var(--o-s4)', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
@@ -1370,19 +1304,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <SecBar>
           {isAdmin && <SecGroup label="Profils"><button onClick={() => setEditing({ i: null })} style={secBtn(false)}>{tr('Ajouter un profil')}</button></SecGroup>}
         </SecBar>
-        {panel && (() => {
-          const me = users[userIdx] || {};
-          const nAdm = users.filter(u => u.role === 'Admin').length;
-          return (
-            <SecCard title={tr('Identité')} tag={String(me.role || '—').toUpperCase()} tagCol={me.role === 'Admin' ? 'warn' : 'ok'}
-              sub={tr('Profil actif sur cet appareil — reconnu depuis la session Home Assistant')}>
-              <EnRow label={tr('Nom affiché')} desc="Visible sur l'écran de profils et dans l'en-tête"><EnVal v={me.name || '—'} col="var(--o-text)" /></EnRow>
-              <EnRow label="Rattachement" desc={tr('Ce que le profil affiche sous son nom')}><EnVal v={me.sub || '—'} col="var(--o-accent-soft)" /></EnRow>
-              <EnRow label="Droits" desc={me.role === 'Admin' ? 'Réglages, alimentation et édition des vues' : 'Lecture et commandes courantes seulement'}><EnVal v={me.role === 'Admin' ? 'complets' : 'limités'} col={me.role === 'Admin' ? 'var(--o-warn2)' : 'var(--o-ok)'} /></EnRow>
-              <EnRow label="Profils du foyer" desc={(nAdm > 1 ? tr('{n} administrateurs', { n: nAdm }) : tr('{n} administrateur', { n: nAdm })) + ' · ' + (users.length - nAdm) + ' famille'}><EnVal v={String(users.length)} col="var(--o-text)" /></EnRow>
-            </SecCard>
-          );
-        })()}
         <div style={cardSt}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><div style={{ fontSize: 16, fontWeight: 700 }}>Utilisateurs ({users.length})</div></div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '-12px 0 12px' }}>Profils locaux à cet appareil — l'utilisateur Home Assistant connecté est reconnu automatiquement.</div>
@@ -1447,17 +1368,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <SecGroup label={tr('Vue personnalisée')}><button onClick={() => setCvEditing('new')} style={secBtn(false)}>{tr('Créer une vue')}</button></SecGroup>
           {onNav && <SecGroup label={tr('Catalogue')}><button onClick={() => onNav('biblio')} style={secBtn(false)}>{tr('Bibliothèque de cartes')}</button></SecGroup>}
         </SecBar>
-        {panel && (
-          <SecCard title="Organisation du menu" tag={hiddenNames.length ? hiddenNames.length + ' MASQUÉE' + (hiddenNames.length > 1 ? 'S' : '') : 'TOUTES VISIBLES'} tagCol={hiddenNames.length ? 'warn' : 'ok'}
-            sub={tr('Ce qui apparaît dans le menu latéral, et ce que tu as créé toi-même')}>
-            <EnRow label={tr('Vues intégrées')} desc={tr('Accueil, Pièces, Scènes, Objets, Énergie, Sécurité, Système')}>
-              <EnGauge v={(BUILTIN_VIEWS.length - hiddenNames.length) + ' / ' + BUILTIN_VIEWS.length} pct={(BUILTIN_VIEWS.length - hiddenNames.length) / BUILTIN_VIEWS.length * 100} col="var(--o-accent)" />
-            </EnRow>
-            <EnRow label={tr('Vues secondaires')} desc={tr('Lumières, Climat, Volets, Aspirateur, Croquettes, Médias')}><EnVal v={nExtra + ' / ' + HIDDEN_VIEWS().length} col={nExtra ? 'var(--o-accent-soft)' : 'var(--o-text3)'} /></EnRow>
-            <EnRow label={tr('Masquées')} desc={hiddenNames.length ? hiddenNames.join(' · ') : 'Aucune vue retirée du menu'}><EnVal v={String(hiddenNames.length)} col={hiddenNames.length ? 'var(--o-warn2)' : 'var(--o-text3)'} /></EnRow>
-            <EnRow label="Mes vues" desc={tr('Créées avec tes entités, éditables à tout moment')}><EnVal v={customViews.length ? String(customViews.length) : 'aucune'} col={customViews.length ? 'var(--o-ok)' : 'var(--o-text3)'} /></EnRow>
-          </SecCard>
-        )}
         <div style={cardSt}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Vues intégrées')}</div><span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.05em' }}>visibilité du menu latéral</span></div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 6px' }}>Masque celles que tu n'utilises pas, ou réactive une vue retirée. La barre mobile garde ses raccourcis.</div>
@@ -1495,7 +1405,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         const norm = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
         const q = norm(autoQ.trim());
         const filtered = autos.filter(a => (!q || norm(a.name).indexOf(q) >= 0) && (autoFilter === 'all' || (autoFilter === 'on') === a.on));
-        const grpOf = (a) => { const w = (a.name.trim().split(/[\s:–—-]+/)[0] || '').replace(/[^0-9A-Za-zÀ-ɏ]/g, ''); return w.length > 2 ? w[0].toUpperCase() + w.slice(1).toLowerCase() : 'Divers'; };
+        // Le classement vit dans `autos.js`, avec ses tests : le premier mot du
+        // nom faisait deux familles pour « Lumière » et « Lumières », et rangeait
+        // « Force veilleuse » sous « Force » (retour 02/09).
+        const grpOf = (a) => autoFamille(a.name);
         const groups = [];
         filtered.forEach(a => { const g = grpOf(a); let e = groups.find(x => x.g === g); if (!e) { e = { g, items: [] }; groups.push(e); } e.items.push(a); });
         groups.sort((x, y) => x.g.localeCompare(y.g));
@@ -1520,16 +1433,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
           </SecGroup>
         </SecBar>
-        {panel && (
-          <SecCard title="Vue d'ensemble" tag={onCount ? onCount + ' ACTIVES' : 'TOUTES INACTIVES'} tagCol={onCount ? 'ok' : 'warn'}
-            sub={tr('Les automatisations restent créées et modifiées dans Home Assistant')}>
-            <EnRow label="En service" desc={tr('Part des automatisations activées')}>
-              <EnGauge v={onCount + ' / ' + autos.length} pct={autos.length ? onCount / autos.length * 100 : 0} col="var(--o-accent)" />
-            </EnRow>
-            <EnRow label="Domaines" desc="Regroupement d'après le premier mot du nom"><EnVal v={String(groups.length)} col="var(--o-text)" /></EnRow>
-            <EnRow label={tr('Dernière exécution')} desc={tr('Automatisation déclenchée le plus récemment')}><EnVal v={lastRun ? autoRel(lastRun) : '—'} col="var(--o-accent-soft)" /></EnRow>
-          </SecCard>
-        )}
         <div style={cardSt}>
           <div style={{ display: 'flex', gap: 8, margin: '10px 0 14px', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ flex: '1 1 200px', position: 'relative' }}>
@@ -1569,15 +1472,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
           </SecGroup>
         </SecBar>
-        {panel && (
-          <SecCard title={tr('Liaison des capteurs')} tag={entMissing.length ? entMissing.length + ' INTROUVABLE' + (entMissing.length > 1 ? 'S' : '') : 'TOUTES RÉSOLUES'} tagCol={entMissing.length ? 'bad' : 'ok'}
-            sub={tr('Une entité vide masque simplement la donnée sur les cartes concernées')}>
-            <EnRow label={tr('Pièces')} desc={tr('Température, humidité et CO₂ par pièce')}><EnVal v={ent.rooms.length + ' pièces'} col="var(--o-text)" /></EnRow>
-            <EnRow label={tr('Énergie')} desc="Consommation, production, surplus et batterie"><EnVal v={Object.keys(ent.energy).length + ' capteurs'} col="var(--o-text)" /></EnRow>
-            <EnRow label={tr('Présence, caméras, médias')} desc={ent.people.length + ' personnes · ' + ent.cams.length + ' caméras · ' + ent.medias.length + ' lecteurs'}><EnVal v={(ent.people.length + ent.cams.length + ent.medias.length) + ' entités'} col="var(--o-text)" /></EnRow>
-            <EnRow label="Introuvables" desc={entMissing.length ? 'Probablement renommées dans HA : ' + entMissing.slice(0, 3).join(' · ') + (entMissing.length > 3 ? '…' : '') : tr('Toutes les entités configurées répondent')}><EnVal v={String(entMissing.length)} col={entMissing.length ? 'var(--o-bad)' : 'var(--o-ok)'} /></EnRow>
-          </SecCard>
-        )}
         <div style={cardSt}>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
             <button onClick={() => {
@@ -1656,16 +1550,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
           </SecGroup>
         </SecBar>
-        {panel && (
-          <SecCard title={tr('État des mises à jour')} tag={upsAvail ? tr('{n} EN ATTENTE', { n: upsAvail }) : tr('TOUT EST À JOUR')} tagCol={upsAvail ? 'warn' : 'ok'}
-            sub="Cœur, modules complémentaires et firmwares — l'installation peut redémarrer le service concerné">
-            <EnRow label="En attente" desc={upsAvail ? ups.filter(u => u.avail).map(u => u.name).slice(0, 3).join(' · ') + (upsAvail > 3 ? '…' : '') : 'Aucune mise à jour disponible'}><EnVal v={String(upsAvail)} col={upsAvail ? 'var(--o-warn2)' : 'var(--o-ok)'} /></EnRow>
-            <EnRow label={tr('À jour')} desc={tr('Modules suivis dont la version est la plus récente')}>
-              <EnGauge v={(upsTotal - upsAvail) + ' / ' + upsTotal} pct={upsTotal ? (upsTotal - upsAvail) / upsTotal * 100 : 100} col="var(--o-ok)" />
-            </EnRow>
-            <EnRow label={tr('Dernière vérification')} desc={tr('Demande de rafraîchissement envoyée à Home Assistant')}><EnVal v={updCheckTs ? autoRel(updCheckTs) : '—'} col="var(--o-text3)" /></EnRow>
-          </SecCard>
-        )}
         <div style={cardSt}>
           {ups.length === 0
             ? <div style={{ padding: '26px 0 14px', textAlign: 'center' }}>
@@ -1738,48 +1622,47 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               </div>
             </div>
             <span style={{ flex: 1 }} />
-            <button onClick={togglePanel} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: panel ? 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.44)' : 'var(--o-bw,1px) solid var(--o-bd1)', background: panel ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: panel ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}><Fi i="sliders-v" size={13} /><span className="o-barlabel">{panel ? tr('Masquer les réglages') : tr('Réglages de la vue')}</span></button>
           </div>
 
-          {panel && (
-            <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>Installation</div>
-                {(() => {
-                  const inst = installationReelle();
-                  // Sans entite de suivi, aucun badge : mieux vaut ne rien dire
-                  // que d'annoncer « a jour » sans l'avoir verifie.
-                  if (inst.aJour === null) return null;
-                  const bon = inst.aJour;
-                  const col = bon ? 'var(--o-ok)' : 'var(--o-warn2)';
-                  const rgb = bon ? 'var(--o-ok-rgb)' : 'var(--o-warn2-rgb)';
-                  return (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: 'rgba(' + rgb + ',.14)', color: col }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: col }} />
-                      {bon ? tr('À JOUR') : (inst.disponible ? 'v' + inst.disponible + ' DISPONIBLE' : 'MISE À JOUR')}
-                    </span>
-                  );
-                })()}
-              </div>
-              <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{tr('Tableau de bord domotique auto-hébergé pour Home Assistant')}</div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {(() => {
-                  const inst = installationReelle();
-                  return (
-                    <EnRow label="Version" desc={inst.suiviPar ? 'Suivie par ' + inst.suiviPar : 'Lue dans le composant installé'}>
-                      <EnVal v={inst.version || '—'} col={inst.version ? 'var(--o-ok)' : 'var(--o-text3)'} />
-                    </EnRow>
-                  );
-                })()}
-                <EnRow label="Socle technique" desc="Construit et servi depuis Home Assistant"><EnVal v="React + Vite" col="var(--o-text)" /></EnRow>
-                <EnRow label="Typographie" desc={tr('Auto-hébergée, sans CDN')}><EnVal v="Manrope / Newsreader" col="var(--o-text)" /></EnRow>
-                <EnRow label={tr('Entités suivies')} desc={entIds.length + ' configurées sur ' + entCount + ' disponibles'}><EnVal v={String(entCount)} col="var(--o-accent-soft)" /></EnRow>
-                <EnRow label="Cache local" desc={tr('États des entités et réglages de cet appareil')}>
-                  <EnVal v={cacheKb != null ? (cacheKb >= 1024 ? (cacheKb / 1024).toFixed(1).replace('.', ',') + ' Mo' : cacheKb + ' Ko') : '—'} col="var(--o-text)" />
-                </EnRow>
-              </div>
+          {/* Toujours affiché : la carte de l'installation N'EST PAS un réglage,
+            * c'est la réponse à « quelle version ai-je ? » (retour 02/09). */}
+          <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Installation</div>
+              {(() => {
+                const inst = installationReelle();
+                // Sans entite de suivi, aucun badge : mieux vaut ne rien dire
+                // que d'annoncer « a jour » sans l'avoir verifie.
+                if (inst.aJour === null) return null;
+                const bon = inst.aJour;
+                const col = bon ? 'var(--o-ok)' : 'var(--o-warn2)';
+                const rgb = bon ? 'var(--o-ok-rgb)' : 'var(--o-warn2-rgb)';
+                return (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: 'rgba(' + rgb + ',.14)', color: col }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: col }} />
+                    {bon ? tr('À JOUR') : (inst.disponible ? 'v' + inst.disponible + ' DISPONIBLE' : 'MISE À JOUR')}
+                  </span>
+                );
+              })()}
             </div>
-          )}
+            <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{tr('Tableau de bord domotique auto-hébergé pour Home Assistant')}</div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {(() => {
+                const inst = installationReelle();
+                return (
+                  <EnRow label="Version" desc={inst.suiviPar ? 'Suivie par ' + inst.suiviPar : 'Lue dans le composant installé'}>
+                    <EnVal v={inst.version || '—'} col={inst.version ? 'var(--o-ok)' : 'var(--o-text3)'} />
+                  </EnRow>
+                );
+              })()}
+              <EnRow label="Socle technique" desc="Construit et servi depuis Home Assistant"><EnVal v="React + Vite" col="var(--o-text)" /></EnRow>
+              <EnRow label="Typographie" desc={tr('Auto-hébergée, sans CDN')}><EnVal v="Manrope / Newsreader" col="var(--o-text)" /></EnRow>
+              <EnRow label={tr('Entités suivies')} desc={entIds.length + ' configurées sur ' + entCount + ' disponibles'}><EnVal v={String(entCount)} col="var(--o-accent-soft)" /></EnRow>
+              <EnRow label="Cache local" desc={tr('États des entités et réglages de cet appareil')}>
+                <EnVal v={cacheKb != null ? (cacheKb >= 1024 ? (cacheKb / 1024).toFixed(1).replace('.', ',') + ' Mo' : cacheKb + ' Ko') : '—'} col="var(--o-text)" />
+              </EnRow>
+            </div>
+          </div>
 
           {/* Liens du projet : navigation volontaire au clic — rien n'est
             * chargé depuis GitHub tant qu'on ne tape pas. */}

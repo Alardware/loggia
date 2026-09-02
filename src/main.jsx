@@ -46,12 +46,11 @@ function langueProbable() {
   if (demo) {
     try { (await import('./demo.js')).installerDemo(); }
     catch (e) { console.error('demo indisponible', e); }
-    /* `?accueil2` / `?mode=auto|light|dark` : réglages d'aperçu dans la démo —
-     * posés APRÈS l'installation du magasin mémoire (qui repart à neuf à
-     * chaque chargement), sinon le vrai localStorage les recevrait. */
+    /* `?mode=auto|light|dark` : réglage d'aperçu dans la démo — posé APRÈS
+     * l'installation du magasin mémoire (qui repart à neuf à chaque
+     * chargement), sinon le vrai localStorage le recevrait. */
     try {
       const q = new URLSearchParams(window.location.search);
-      if (q.has('accueil2')) localStorage.setItem('loggia-accueil2', 'true');
       const md = q.get('mode');
       if (md === 'auto' || md === 'light' || md === 'dark') localStorage.setItem('loggia-mode', md);
     } catch (e) { /* rien */ }
