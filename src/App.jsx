@@ -5174,11 +5174,6 @@ function FavorisAccueil({ hass, edit = false }) {
 }
 
 function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onOpenMeteo, onNav = null }) {
-  /* Aperçu du NOUVEL ACCUEIL (Paramètres → Apparence, par appareil) : la
-   * bannière perd sa rangée de métriques (les résumés du rail les portent),
-   * les FAVORIS (épingles) arrivent sous la bannière, les pièces se resserrent.
-   * Relu au montage — le toggle vit dans Paramètres, on revient ensuite ici. */
-  const v2 = (() => { try { return JSON.parse(localStorage.getItem('loggia-accueil2') || 'false') === true; } catch (e) { return false; } })();
   const [override, setOverride] = useState(null);
   const agenda = useAgenda(accueil && accueil.hass);
   /* ── L'accueil se compose : ordre et visibilité des sections ───────────────
@@ -5647,7 +5642,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               </div>
             </div>
           </div>
-          {<div style={{ position: 'relative', display: 'flex', gap: 10, marginTop: v2 ? 26 : 38, overflowX: 'auto', paddingBottom: 4 }}>
+          {<div style={{ position: 'relative', display: 'flex', gap: 10, marginTop: 26, overflowX: 'auto', paddingBottom: 4 }}>
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
               <Ico name="bolt" color="var(--o-ok)" size={17} />
               <div><div style={{ fontSize: 16, fontWeight: 800, color: a && a.metricExport ? a.metricExport.color : 'var(--o-ok)', lineHeight: 1.1 }}>{a && a.metricExport ? <Num v={a.metricExport.raw} prefix={a.metricExport.sign} fmt={fmtWatts} /> : <Skel w={64} h={16} />}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a && a.metricExport ? a.metricExport.label: tr('EXPORT RÉSEAU')}</div></div>
@@ -5684,7 +5679,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('{n} pièces', { n: inner.length })}</span>
             </div>
           );
-          const piecesGrid = v2 ? (
+          const piecesGrid = (
             // Deux densités comme partout : compacte = une rangée de 88 px
             // (défaut), standard = deux rangées. Choix par pièce en édition
             // (coin bas-droit), persisté avec l'agencement de l'accueil.
@@ -5725,10 +5720,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
                 );
               })}
             </div>
-          ) : (
-            <div className="grid-pieces" style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(auto-fill,minmax(205px,1fr))' : 'repeat(3,1fr)', gap: wide ? 12 : 16 }}>
-              {inner.map((p, i) => <PieceCard key={p.name} p={p} idx={i} compact lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />)}
-            </div>
           );
           const camsGrid = (
             <div className="grid-cams" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -5759,7 +5750,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           /* `vue` (nouvel accueil) : la ligne devient un RÉSUMÉ cliquable — tap
            * → la vue du domaine, chevron pour le dire. Sans vue, ligne inerte. */
           const railRow = (k, label, desc, val, col, vue = null) => {
-            const clic = v2 && vue && onNav ? () => onNav(vue) : null;
+            const clic = vue && onNav ? () => onNav(vue) : null;
             return (
               <div key={k} role={clic ? 'button' : undefined} tabIndex={clic ? 0 : undefined}
                 onClick={clic || undefined} onKeyDown={clic ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clic(); } } : undefined}
@@ -5849,7 +5840,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           const secsMain = {
             // Les favoris s'éditent EUX-MÊMES (leurs cartes ont leur barre
             // d'outils) : la section reste donc vivante en mode édition.
-            favoris: v2 ? <FavorisAccueil hass={dashHass} edit={editMode} /> : null,
+            favoris: <FavorisAccueil hass={dashHass} edit={editMode} />,
             heros: heroIds.length ? <HeroSlider ids={heroIds} dc={dc} /> : null,
             scenes: <QuickScenes hass={dashHass} />,
             pieces: <>{piecesHeader}{piecesGrid}</>,
@@ -11848,14 +11839,12 @@ export default function App() {
   const onFollowHa = () => setHaTheme(h => h === 'FOLLOW' ? '' : 'FOLLOW');
   const toggle = () => { setHaTheme(''); setThemeMode(m => m === 'light' ? 'dark' : 'light'); }; // bouton flottant = bascule clair/foncé Loggia
   const [navOpen, setNavOpen] = useState(() => { try { return (typeof window !== 'undefined' ? window.innerWidth : 1000) > 820; } catch (e) { return true; } });
-  /* Aperçu nouvelle interface (loggia-accueil2) sur écran TACTILE — téléphone
-   * ET tablette, portrait comme paysage : la classe `loggia-tactile` masque le
-   * bandeau du haut, met la sidebar en tiroir et affiche la barre du bas. Le
-   * type d'appareil (pointer: coarse) décide, jamais la largeur. */
+  /* Interface TACTILE — téléphone ET tablette, portrait comme paysage : la
+   * classe `loggia-tactile` masque le bandeau du haut, met la sidebar en
+   * tiroir et affiche la barre du bas. Le type d'appareil (pointer: coarse)
+   * décide, jamais la largeur. */
   useEffect(() => {
-    const tactile = (() => { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
-    const v2ui = (() => { try { return JSON.parse(localStorage.getItem('loggia-accueil2') || 'false') === true; } catch (e) { return false; } })();
-    const actif = tactile && v2ui;
+    const actif = (() => { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
     try { document.documentElement.classList.toggle('loggia-tactile', actif); } catch (e) {}
     if (actif) setNavOpen(false); // la sidebar devient un tiroir : fermée d'office
   }, [view]);
