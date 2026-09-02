@@ -26,6 +26,8 @@ import wxStormRain from './assets/wx/thunderstorms-rain.svg';
 import wxWind from './assets/wx/wind.svg';
 import wxFog from './assets/wx/fog.svg';
 import wxTornado from './assets/wx/tornado.svg';
+import wxAube from './assets/wx/sunrise.svg';
+import wxCrepuscule from './assets/wx/sunset.svg';
 import { loggiaEnt, LOGGIA_RESOLVED } from './state.js';
 import { REDUCE_MOTION } from './ui.jsx';
 import { tr, trHA } from './i18n.js';
@@ -45,16 +47,17 @@ export function weatherEntity(hass) {
   return null;
 }
 
-// Mode météo → icône Flaticon (condition-aware, comme V1)
-export const WX_ICON = { sun: 'sun', partly: 'cloud-sun', clouds: 'clouds', wind: 'wind', rain: 'cloud-showers-heavy', snow: 'cloud-snow', storm: 'thunderstorm', night: 'moon-stars' };
-
-export const WX_ICOLOR = { sun: 'var(--o-gold)', partly: '#9fb4d6', clouds: '#9fb4d6', wind: '#9fb4d6', rain: 'var(--o-accent-soft)', snow: '#bcd6f0', storm: 'var(--o-purple)', night: '#aeb9e0' };
+/* Les glyphes de police (, ) ont disparu le 02/09 : toute
+ * condition meteo du dashboard passe desormais par , donc par les
+ * Meteocons animees. Deux jeux d'icones pour la meme chose, c'etait un doublon
+ * qui finissait par se voir. */
 
 // Icônes météo Meteocons (basmilius) animées via <object> (les animations CSS du SVG tournent).
 const WX_METEO = {
   sun: wxClearDay, partly: wxPartly, partlynight: wxPartlyNight, clouds: wxCloudy, wind: wxWind,
   rain: wxRain, pluieforte: wxRainFort, snow: wxSnow, gresil: wxSleet, grele: wxHail,
   storm: wxStorm, storrain: wxStormRain, night: wxClearNight, brouillard: wxFog, tornade: wxTornado,
+  aube: wxAube, crepuscule: wxCrepuscule,
 };
 
 export function WeatherIco({ wx, size = 42 }) {

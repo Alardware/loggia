@@ -18,7 +18,7 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 const WeatherGL = lazy(() => import('../wx3d.jsx'));
 import { REDUCE_MOTION, Fi, Anim, ViewEditBar } from '../ui.jsx';
 import { WX_PRESETS } from '../wxpresets.js';
-import { WX_ICON, WX_ICOLOR, WX_BG, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from '../wxutil.jsx';
+import { WX_BG, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from '../wxutil.jsx';
 import { tr } from '../i18n.js';
 import WeatherEffects from '../wxeffects.jsx';
 
@@ -30,11 +30,14 @@ import WeatherEffects from '../wxeffects.jsx';
  * carte qu'on lit d'un coup d'oeil — il tient donc toute la largeur, et
  * chaque carte a la meme hauteur pour que la grille reste droite.
  */
-function WxCarte({ icone, titre, couleur, valeur, unite, mot, children }) {
+function WxCarte({ icone, ico, titre, couleur, valeur, unite, mot, children }) {
   return (
     <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', borderRadius: 'var(--o-radius,20px)', padding: '15px 17px 16px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', display: 'flex', flexDirection: 'column', height: 186 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>
-        <Fi i={icone} size={12} color={couleur} />{titre.toUpperCase()}
+      {/* Meteocon quand la carte en a une (vent, soleil, UV, visibilite),
+        * glyphe pour le reste : la serie fournie ne couvre pas l'humidite ni
+        * la pression, et une icone approximative vaut moins qu'un trait net. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: ico ? 5 : 7, fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', height: 24 }}>
+        {ico || <Fi i={icone} size={12} color={couleur} />}{titre.toUpperCase()}
       </div>
       {valeur !== undefined && (
         <div style={{ marginTop: 11 }}>
@@ -213,9 +216,10 @@ function WxJour({ f, nom, mode, effets, deg, n }) {
       {/* Un voile sombre sur le tiers haut : quelle que soit l'ambiance, un
         * nuage blanc finit toujours par passer sous le nom du jour. */}
       <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: '52%', background: 'linear-gradient(180deg,rgba(6,12,24,.58),rgba(6,12,24,0))' }} />
+      {/* Pas d'icône : la scène du fond dessine déjà le temps qu'il fera, et
+        * les deux côte à côte faisaient doublon (retour 02/09). */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '.04em', textShadow: '0 1px 6px rgba(6,12,24,.75)' }}>{nom}</span>
-        <WeatherIco wx={mode} size={38} />
       </div>
       <div style={{ position: 'relative', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text1)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 6px rgba(6,12,24,.7)' }}>{haWeatherLabel(String(f.condition))}</div>
       <div style={{ position: 'relative', marginTop: 'auto', display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -444,12 +448,12 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
             </WxCarte></Anim>
           )}
           {vent != null && (
-            <Anim i={1}><WxCarte icone="wind" titre={tr('Vent')} couleur="var(--o-cyan)">
+            <Anim i={1}><WxCarte ico={<WeatherIco wx="wind" size={24} />} titre={tr('Vent')} couleur="var(--o-cyan)">
               <WxRose bearing={bearing} vitesse={vent} rafales={rafales} unite={uVent} />
             </WxCarte></Anim>
           )}
           {(leverDuJour || coucher) && (
-            <Anim i={2}><WxCarte icone="sun" titre={tr('Soleil')} couleur="var(--o-gold)">
+            <Anim i={2}><WxCarte ico={<WeatherIco wx={new Date().getHours() < 13 ? 'aube' : 'crepuscule'} size={24} />} titre={tr('Soleil')} couleur="var(--o-gold)">
               <WxArcSoleil lever={leverDuJour} coucher={coucher} />
             </WxCarte></Anim>
           )}
@@ -463,7 +467,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
             </WxCarte></Anim>
           )}
           {uv != null && (
-            <Anim i={4}><WxCarte icone="sun" titre={tr('Indice UV')} couleur="var(--o-gold)" valeur={Math.round(uv)} mot={UV_MOTS(uv)}>
+            <Anim i={4}><WxCarte ico={<WeatherIco wx="sun" size={24} />} titre={tr('Indice UV')} couleur="var(--o-gold)" valeur={Math.round(uv)} mot={UV_MOTS(uv)}>
               <WxEchelle pct={Math.min(100, uv / 11 * 100)} grad="linear-gradient(90deg,var(--o-ok),var(--o-gold) 35%,#ff8a4c 60%,var(--o-bad) 85%,var(--o-purple))"
                 gauche="0" droite="11+" />
             </WxCarte></Anim>
@@ -481,7 +485,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
             </WxCarte></Anim>
           )}
           {visi != null && (
-            <Anim i={7}><WxCarte icone="eye" titre={tr('Visibilité')} couleur="var(--o-text2)" valeur={Math.round(visi)} unite="km"
+            <Anim i={7}><WxCarte ico={<WeatherIco wx="brouillard" size={24} />} titre={tr('Visibilité')} couleur="var(--o-text2)" valeur={Math.round(visi)} unite="km"
               mot={visi >= 10 ? tr('Dégagée.') : visi >= 4 ? tr('Réduite.') : tr('Faible — prudence sur la route.')}>
               <WxEchelle pct={Math.min(100, visi / 20 * 100)} grad="linear-gradient(90deg,#ff8a4c,var(--o-gold) 35%,var(--o-ok))" gauche="0" droite="20 km" />
             </WxCarte></Anim>
