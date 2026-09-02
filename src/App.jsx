@@ -7531,6 +7531,64 @@ function EnPuissances({ series, h = 190 }) {
     </div>
   );
 }
+/* Consommation par heure — les barres empilées du tableau de bord Énergie.
+ *
+ * Les capteurs d'énergie sont CUMULATIFS et repartent de zéro chaque nuit :
+ * l'énergie d'une heure, c'est la différence entre son dernier et son premier
+ * relevé. Une différence négative est un passage de minuit, pas une
+ * consommation négative — on la jette plutôt que de dessiner un trou.
+ */
+function enParHeure(pts) {
+  const seaux = new Map();
+  for (const p of pts) {
+    const h = Math.floor(p.t / 3600000) * 3600000;
+    const e = seaux.get(h);
+    if (!e) seaux.set(h, { min: p.v, max: p.v, t: h });
+    else { e.min = Math.min(e.min, p.v); e.max = Math.max(e.max, p.v); }
+  }
+  return [...seaux.values()].sort((a, b) => a.t - b.t).map(e => ({ t: e.t, v: Math.max(0, e.max - e.min) }));
+}
+function EnBarresConso({ series, h = 190 }) {
+  const parSerie = (series || []).map(s => ({ ...s, barres: enParHeure(s.pts || []) })).filter(s => s.barres.length);
+  if (!parSerie.length) return <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('historique indisponible')}</div>;
+  // Une colonne par heure présente dans au moins une série.
+  const heures = [...new Set(parSerie.flatMap(s => s.barres.map(b => b.t)))].sort();
+  const valeurDe = (s, t) => { const b = s.barres.find(x => x.t === t); return b ? b.v : 0; };
+  const totaux = heures.map(t => parSerie.reduce((a, s) => a + valeurDe(s, t), 0));
+  const max = Math.max(...totaux, 0.001);
+  const total = totaux.reduce((a, v) => a + v, 0);
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: h, padding: '0 1px' }}>
+        {heures.map((t, i) => (
+          <div key={t} title={new Date(t).getHours() + 'h · ' + totaux[i].toFixed(2).replace('.', ',') + ' kWh'}
+            style={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 1 }}>
+            {parSerie.map(s => {
+              const v = valeurDe(s, t);
+              if (v <= 0) return null;
+              return <div key={s.nom} style={{ height: (v / max * 100) + '%', minHeight: 2, background: s.couleur, borderRadius: 2, opacity: .88 }} />;
+            })}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>
+        {[0, .25, .5, .75, 1].map(f => {
+          const t = heures[Math.min(heures.length - 1, Math.round(f * (heures.length - 1)))];
+          return <span key={f}>{String(new Date(t).getHours()).padStart(2, '0')}h</span>;
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
+        {parSerie.map(s => (
+          <span key={s.nom} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: 'var(--o-text2)' }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: s.couleur }} />{s.nom}
+          </span>
+        ))}
+        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{total.toFixed(2).replace('.', ',')} kWh</span>
+      </div>
+    </div>
+  );
+}
+
 /** Valeur d'une série à un instant : le point le plus proche, sans interpoler. */
 function prochePoint(pts, t) {
   let best = null, d = Infinity;
@@ -7557,7 +7615,6 @@ function EnDemiJauge({ pct, label, couleur, aide = null }) {
 }
 
 function EnergieContent({ hass, edit = false, onEnt }) {
-  const [range, setRange] = useState('jour');
   const S = (hass && hass.states) || null;
   const num = (id, def = 0) => { const e = S && S[id]; if (!e || e.state == null || e.state === 'unknown' || e.state === 'unavailable') return def; const n = parseFloat(e.state); return isNaN(n) ? def : n; };
   const avail = (id) => { const e = S && S[id]; return !!(e && e.state != null && e.state !== 'unknown' && e.state !== 'unavailable' && !isNaN(parseFloat(e.state))); };
@@ -7629,7 +7686,6 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const totalToday = avail(EN.consoJour) ? num(EN.consoJour) : ((hcToday + hpToday) || num(EN.consoReseauToday));
   const hcPct = totalToday > 0 ? Math.round(hcToday / totalToday * 100) : 0;
   const hpPct = totalToday > 0 ? Math.round(hpToday / totalToday * 100) : 0;
-  const hcActive = (() => { const e = S && S[EN.hcActive]; return e ? e.state === 'on' : false; })();
 
   /* ── Sources de puissance et cadrans, à droite du schéma ───────────────────
    *
@@ -7644,6 +7700,21 @@ function EnergieContent({ hass, edit = false, onEnt }) {
     { id: EN.solarNow || EN.solarOutput, nom: tr('Solaire'), couleur: 'var(--o-gold)' },
     { id: EN.consoMaison, nom: tr('Consommation'), couleur: 'var(--o-text2)' },
   ].filter(s => s.id && puissHist[s.id]).map(s => ({ ...s, pts: puissHist[s.id] }));
+
+  /* Onglet CONSOMMATION : les mêmes 24 h, mais en kWh par heure. Les compteurs
+   * du jour séparent souvent heures creuses et heures pleines — on garde cette
+   * distinction quand elle existe, sinon le total réseau suffit. */
+  const consoIds = [EN.consoJourHc, EN.consoJourHp, EN.consoJour, EN.prodJour].filter(Boolean);
+  const consoHist = useSysHist(hass, consoIds, 24, 0);
+  const aHcHp = !!(EN.consoJourHc && consoHist[EN.consoJourHc]) || !!(EN.consoJourHp && consoHist[EN.consoJourHp]);
+  const consoSeries = [
+    { id: EN.prodJour, nom: tr('Solaire'), couleur: 'var(--o-gold)' },
+    ...(aHcHp
+      ? [{ id: EN.consoJourHc, nom: tr('Heures creuses'), couleur: 'var(--o-ok)' },
+        { id: EN.consoJourHp, nom: tr('Heures pleines'), couleur: 'var(--o-accent)' }]
+      : [{ id: EN.consoJour, nom: tr('Réseau'), couleur: 'var(--o-accent)' }]),
+  ].filter(s => s.id && consoHist[s.id]).map(s => ({ ...s, pts: consoHist[s.id] }));
+  const [ongletEn, setOngletEn] = useState('puissance');
 
   /* Autosuffisance : la part de la consommation couverte par le solaire. Le
    * capteur du package si l'installation en publie un, sinon les kWh du jour —
@@ -7694,7 +7765,6 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       : { label: 'Facture', tag: 'MOIS', tagCol: 'var(--o-text2)', val: eur(bill), valCol: 'var(--o-purple)', col: 'var(--o-purple)', bar: '60%', bd: 'rgba(167,139,250,.18)', icon: 'piggy-bank', ic: 'var(--o-purple)', art: VIEW_ART.piggy },
   ];
   // Bandeau de réglages repliable (patron Atrium) — ne masque QUE la carte de bilan.
-  const RANGES = [['jour', 'Jour'], ['semaine', 'Semaine'], ['mois', 'Mois']];
   const kwhFmt = (v) => v == null ? '—' : v.toFixed(1).replace('.', ',') + ' kWh';
   const impToday = avail(EN.consoReseauToday) ? num(EN.consoReseauToday) : (totalToday || null);
   const expToday = avail(EN.injectionJour) ? num(EN.injectionJour) : null;
@@ -7739,15 +7809,36 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           * repasse `grid-ehero` sur une colonne) : les sources de puissance sur
           * 24 h, puis les deux cadrans du tableau de bord Énergie. La colonne
           * n'existe pas si la maison ne publie ni historique ni taux. */}
-        {(puissSeries.length > 0 || autoPct != null || basCarbonePct != null) && (
+        {(puissSeries.length > 0 || consoSeries.length > 0 || autoPct != null || basCarbonePct != null) && (
           <Anim i={1}><div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%' }}>
-            {puissSeries.length > 0 && (
-              <div style={{ flex: 1, minHeight: 0, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Sources de puissance')}</div>
-                <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 20, fontWeight: 500, margin: '2px 0 10px' }}>{tr('Les dernières 24 heures')}</div>
-                <EnPuissances series={puissSeries} />
-              </div>
-            )}
+            {(puissSeries.length > 0 || consoSeries.length > 0) && (() => {
+              // Deux lectures des mêmes 24 heures : la PUISSANCE, ce qui passe à
+              // l'instant, et la CONSOMMATION, ce qui s'est accumulé. Un onglet
+              // chacune plutôt que deux cartes : c'est le même sujet.
+              const onglets = [puissSeries.length > 0 && ['puissance', tr('Puissance')], consoSeries.length > 0 && ['conso', tr('Consommation')]].filter(Boolean);
+              const actif = onglets.some(([id]) => id === ongletEn) ? ongletEn : onglets[0][0];
+              return (
+                <div style={{ flex: 1, minHeight: 0, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{actif === 'conso' ? tr('Consommation') : tr('Sources de puissance')}</div>
+                      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 20, fontWeight: 500, marginTop: 2 }}>{tr('Les dernières 24 heures')}</div>
+                    </div>
+                    {onglets.length > 1 && (
+                      <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
+                        {onglets.map(([id, lb]) => (
+                          <button key={id} onClick={() => setOngletEn(id)} aria-pressed={actif === id}
+                            style={{ padding: '5px 11px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', background: actif === id ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: actif === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    {actif === 'conso' ? <EnBarresConso series={consoSeries} /> : <EnPuissances series={puissSeries} />}
+                  </div>
+                </div>
+              );
+            })()}
             {(autoPct != null || basCarbonePct != null) && (
               <div style={{ display: 'flex', gap: 12 }}>
                 {autoPct != null && <EnDemiJauge pct={autoPct} label={tr('Autosuffisance')} couleur="var(--o-gold)"
@@ -7760,20 +7851,6 @@ function EnergieContent({ hass, edit = false, onEnt }) {
         )}
       </div>
 
-      {/* réglages rapides : période d'analyse et tarif courant */}
-      <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Période')}</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {RANGES.map(([id, lb]) => <button key={id} onClick={() => setRange(id)} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, background: range === id ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: range === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</button>)}
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Tarif</span>
-          <span style={{ fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', color: (tarifTxt === 'HC' || hcActive) ? 'var(--o-ok)' : 'var(--o-warn2)' }}>{(tarifTxt === 'HC' || hcActive) ? 'Heures creuses' : 'Heures pleines'}{prixActuel != null ? ' · ' + prixActuel.toFixed(4).replace('.', ',') + ' €' : ''}</span>
-        </div>
-        <span style={{ flex: 1 }} />
-      </div>
 
       {/* Bilan instantané : les chiffres du moment, en lignes denses */}
 
