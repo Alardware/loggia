@@ -46,6 +46,8 @@ function etatsInitiaux() {
     'sensor.conso_jour': s(6.16, { friendly_name: 'Consommation du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
     'sensor.production_jour': s(4.32, { friendly_name: 'Production du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
     'sensor.injection_jour': s(0.96, { friendly_name: 'Injection du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.conso_jour_hc': s(3.90, { friendly_name: 'Consommation heures creuses', unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.conso_jour_hp': s(2.26, { friendly_name: 'Consommation heures pleines', unit_of_measurement: 'kWh', device_class: 'energy' }),
     'sensor.part_fossile_reseau': s(38, { friendly_name: 'Part fossile du réseau', unit_of_measurement: '%' }),
     'person.camille': s('home', { friendly_name: 'Camille' }),
     'person.alex': s('not_home', { friendly_name: 'Alex' }),
@@ -82,13 +84,13 @@ function configDemo() {
     })),
     // `loggia_energyHaids` est la cle que lisent `enHaids()` ET la disponibilite
     // des vues : sans elle, la vue Energie restait masquee en demonstration.
-    loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour' },
+    loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
     loggia_entities: {
       weather: ['weather.maison', 'sun.sun'],
       alarm: 'alarm_control_panel.maison',
       cameras: [],
       people: [{ name: 'Camille', haid: 'person.camille' }, { name: 'Alex', haid: 'person.alex' }],
-      energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour' },
+      energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
     },
     // Deux profils : la demo doit exercer les DEUX branches, admin comprise.
     loggia_users: [{ name: 'Démo', role: 'Admin', c: 'var(--o-accent)' }, { name: 'Invité', role: 'Famille', c: 'var(--o-purple)' }],
@@ -120,14 +122,30 @@ function historiqueDemo(chemin, states) {
   const t0 = d ? Date.parse(decodeURIComponent(d[1])) : Date.now() - 86400000;
   const t1 = Date.now();
   const solaire = /solaire|solar|production/i.test(id);
+  // Un compteur d'ÉNERGIE ne redescend pas : il monte jusqu'à sa valeur du
+  // moment. Une puissance, elle, va et vient. Les deux courbes n'ont donc pas
+  // la même forme, et le graphe de consommation lit bien des différences.
+  const attrs = (states[id] && states[id].attributes) || {};
+  const cumul = attrs.device_class === 'energy' || /kwh/i.test(attrs.unit_of_measurement || '');
   const pas = (t1 - t0) / 48;
   const pts = [];
+  let acc = 0;
+  const parts = [];
+  for (let i = 0; i <= 48; i++) {
+    const heure = new Date(t0 + pas * i).getHours() + new Date(t0 + pas * i).getMinutes() / 60;
+    const jour = Math.max(0, Math.sin((heure - 6) / 12 * Math.PI));
+    parts.push(solaire ? jour * (0.6 + 0.5 * Math.abs(Math.sin(i))) : (0.5 + 0.5 * Math.abs(Math.sin(i / 3.7))));
+  }
+  const somme = parts.reduce((a, v) => a + v, 0) || 1;
   for (let i = 0; i <= 48; i++) {
     const t = t0 + pas * i;
-    const heure = new Date(t).getHours() + new Date(t).getMinutes() / 60;
-    // Le solaire suit le jour ; le reste ondule doucement autour de sa valeur.
-    const jour = Math.max(0, Math.sin((heure - 6) / 12 * Math.PI));
-    const v = solaire ? cur * jour * (0.8 + 0.4 * Math.sin(i)) : cur * (0.7 + 0.6 * Math.sin(i / 3.7) + 0.15 * Math.sin(i));
+    let v;
+    if (cumul) { acc += cur * parts[i] / somme; v = acc; }
+    else {
+      const heure = new Date(t).getHours() + new Date(t).getMinutes() / 60;
+      const jour = Math.max(0, Math.sin((heure - 6) / 12 * Math.PI));
+      v = solaire ? cur * jour * (0.8 + 0.4 * Math.sin(i)) : cur * (0.7 + 0.6 * Math.sin(i / 3.7) + 0.15 * Math.sin(i));
+    }
     pts.push({ state: String(Math.round(v * 100) / 100), last_changed: new Date(t).toISOString() });
   }
   return [pts];
