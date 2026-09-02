@@ -143,7 +143,14 @@ export function installerDemo() {
       if (service === 'set_temperature') toucher(id, null, { temperature: data.temperature });
       else if (service === 'set_hvac_mode') toucher(id, data.hvac_mode, { hvac_action: data.hvac_mode === 'off' ? 'off' : 'heating' });
     } else if (domaine === 'alarm_control_panel') {
-      toucher(id || 'alarm_control_panel.maison', { alarm_disarm: 'disarmed', alarm_arm_home: 'armed_home', alarm_arm_night: 'armed_night', alarm_arm_vacation: 'armed_vacation' }[service] || 'armed_away');
+      // Un vrai panneau laisse le temps de sortir : la démo passe par `arming`
+      // avec le délai et le mode visé (les attributs d'Alarmo), puis arme.
+      const cible = { alarm_disarm: 'disarmed', alarm_arm_home: 'armed_home', alarm_arm_night: 'armed_night', alarm_arm_vacation: 'armed_vacation' }[service] || 'armed_away';
+      const cid = id || 'alarm_control_panel.maison';
+      if (cible === 'disarmed') { toucher(cid, 'disarmed'); return Promise.resolve(); }
+      const delay = 20;
+      toucher(cid, 'arming', { delay, arm_mode: cible });
+      setTimeout(() => { const s = states[cid]; if (s && s.state === 'arming' && s.attributes.arm_mode === cible) toucher(cid, cible); }, delay * 1000);
     } else if (domaine === 'media_player' && service === 'media_play_pause') {
       toucher(id, states[id] && states[id].state === 'playing' ? 'paused' : 'playing');
     }
