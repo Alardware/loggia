@@ -1162,7 +1162,6 @@ function Sparkline({ points, color }) {
   );
 }
 
-
 function RoomComfortModal({ piece, hass, onClose }) {
   const live = piece.live || null;
   const parseNum = (s) => { if (s == null) return null; const n = parseFloat(String(s).replace(',', '.')); return isNaN(n) ? null : n; };
@@ -4415,7 +4414,6 @@ function ObjetsView({ hass, onNav, edit = false }) {
           <span style={{ flex: 1 }} />
         </div>
 
-
         <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('État des appareils')}</div>
 
         <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -4538,7 +4536,6 @@ function ObjetsView({ hass, onNav, edit = false }) {
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
         {/* dc.card/dc.ouvrir sans dc.sheets = fiches muettes (piège vécu). */}
         {dc.sheets}
-
 
         {sheet && sheet.type === 'media' && <RoomMediaSheet id={sheet.id} hass={hass} onClose={() => setSheet(null)} />}
         {/* Les machines ouvrent la FICHE APPAREIL UNIVERSELLE quand l'entité HA
@@ -4960,7 +4957,6 @@ function PresCard({ titre, lead, badge, rgb = '52,211,153', style, children }) {
     </div>
   );
 }
-
 
 /**
  * Habillage d'une piece : icone, couleur, teinte de fond.
@@ -5932,11 +5928,7 @@ const INITIAL_LIGHTS = [
 // App les alimente a chaque rendu ; avant la premiere reponse elles valent
 // null / {} et tout retombe sur les replis historiques.
 
-
 // Fournie par App : envoie un lot de reglages au serveur et rafraichit l'etat.
-
-
-
 
 // Piece d'un luminaire. La zone Home Assistant fait foi ; le decoupage par nom
 // ne sert que pour les installations qui n'ont pas range leurs entites.
@@ -6169,8 +6161,6 @@ function LumieresContent({ hass, edit = false, onEnt }) {
           </BarGroup>
         )}
       </ViewBar>
-
-
 
       {edit && (
         <ViewEditBar onEnt={onEnt}
@@ -6949,9 +6939,6 @@ function ClimatContent({ hass, edit = false, onEnt }) {
         </ViewBar>
       )}
 
-
-
-
       {/* Les cartes de confort ci-dessus restent : le user y tient. Les zones
           arrivent apres, ordonnables comme dans une piece. */}
       {edit && (
@@ -7174,8 +7161,6 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
           </BarGroup>
         )}
       </ViewBar>}
-
-
 
       {edit && (
         <ViewEditBar onEnt={onEnt}
@@ -7480,7 +7465,6 @@ const EN_FORECAST = [
   { day: 'LUN', kwh: '1,40', wx: 'clouds', wc: 'var(--o-cyan)' },
   { day: 'MAR', kwh: '3,80', col: 'var(--o-gold)', hot: true, wx: 'sun', wc: 'var(--o-gold)' },
 ];
-
 
 const EN_LAYOUT_KEY = 'loggia_enlayout';
 
@@ -7868,14 +7852,12 @@ function AspirateurContent({ hass }) {
         <span style={{ flex: 1 }} />
       </div>
 
-
       <div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,22px)', padding: 18, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Carte du logement')}</div><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', padding: '4px 11px', borderRadius: 999 }}>Live · 10s</span></div>
         <Suspense fallback={<div style={{ aspectRatio: '16/10', borderRadius: 'var(--o-radius,16px)', background: 'var(--o-well2)' }} />}>
           <VacPlan hass={hass} haid={idMap} zones={rooms} selection={sel} onToggle={toggleRoom} />
         </Suspense>
       </div>
-
 
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Nettoyage ciblé')}</div>
       <div className="grid-vac-map" style={{ display: 'grid', gridTemplateColumns: idCam ? 'minmax(0,1.3fr) minmax(260px,1fr)' : '1fr', gap: 18, alignItems: 'start' }}>
@@ -8168,62 +8150,6 @@ function extractNpAccent(url) {
 }
 
 const medKeys = () => medPlayers().flatMap(p => [p.haid, p.ma]).filter(Boolean);
-const MED_LOGOS = {
-  netflix: () => (
-    <g transform="translate(-9,-11)">
-      <rect x="0" y="0" width="5.4" height="22" fill="#fff" />
-      <rect x="12.6" y="0" width="5.4" height="22" fill="#fff" />
-      <path d="M0 0 L5.4 0 L18 22 L12.6 22 Z" fill="#fff" opacity=".62" />
-    </g>
-  ),
-  disney: () => (
-    <g fill="#fff">
-      <text x="-1" y="6" textAnchor="middle" fontSize="19" fontWeight="800" fontStyle="italic" fontFamily="Georgia,serif">D</text>
-      <path d="M8 -4 L11.4 -4 L11.4 -0.6 L14.8 -0.6 L14.8 2.8 L11.4 2.8 L11.4 6.2 L8 6.2 L8 2.8 L4.6 2.8 L4.6 -0.6 L8 -0.6 Z" />
-    </g>
-  ),
-  primevideo: () => (
-    <g>
-      <path d="M-13 4 Q0 13 13 4" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" />
-      <path d="M9 2.2 L14 3.4 L12.4 8" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
-      <text x="0" y="-2" textAnchor="middle" fontSize="11" fontWeight="800" fill="#fff" fontFamily="var(--o-font)">prime</text>
-    </g>
-  ),
-  appletv: () => (
-    <g fill="#fff">
-      <text x="-3" y="6" textAnchor="middle" fontSize="17" fontWeight="700" fontFamily="var(--o-font)">tv</text>
-      <path d="M8 -3 L10.6 -3 L10.6 -0.4 L13.2 -0.4 L13.2 2.2 L10.6 2.2 L10.6 4.8 L8 4.8 L8 2.2 L5.4 2.2 L5.4 -0.4 L8 -0.4 Z" />
-    </g>
-  ),
-  youtube: () => (
-    <g>
-      <rect x="-15" y="-10.5" width="30" height="21" rx="6.5" fill="#fff" />
-      <path d="M-4 -5.4 L7 0 L-4 5.4 Z" fill="#ff0000" />
-    </g>
-  ),
-  plex: () => (
-    <path d="M-7 -11 L1 -11 L9 0 L1 11 L-7 11 L1 0 Z" fill="#1c1c1e" />
-  ),
-  spotify: () => (
-    <g>
-      <circle cx="0" cy="0" r="14" fill="#fff" />
-      <g fill="none" stroke="#1db954" strokeLinecap="round">
-        <path d="M-8 -5.4 Q0 -8.6 8.6 -4.2" strokeWidth="3" />
-        <path d="M-6.6 0.4 Q0 -2.2 7 1.4" strokeWidth="2.6" />
-        <path d="M-5.4 5.6 Q0 3.6 5.6 6.4" strokeWidth="2.2" />
-      </g>
-    </g>
-  ),
-};
-const MED_APPS = [
-  { id: 'plex', name: 'Plex', glyph: '›', bg: '#e5a00d' },
-  { id: 'netflix', name: 'Netflix', glyph: 'N', bg: '#e50914' },
-  { id: 'disney', name: 'Disney+', glyph: 'D+', bg: '#0c3b8c' },
-  { id: 'primevideo', name: 'Prime Video', glyph: '▶', bg: '#00a8e1' },
-  { id: 'youtube', name: 'YouTube', glyph: '▶', bg: '#ff0000' },
-  { id: 'spotify', name: 'Spotify', glyph: 'S', bg: '#1db954' },
-  { id: 'appletv', name: 'Apple TV+', glyph: 'tv+', bg: '#1c1c1e' },
-];
 const MED_INITIAL_SPK = [
   { id: 'atv', name: 'Apple TV', vol: 0, muted: true },
   { id: 'atv-s', name: 'Apple TV Séjour', vol: 0, muted: true },
@@ -8233,141 +8159,6 @@ const MED_INITIAL_SPK = [
   { id: 'enceinte-salon', name: 'Enceinte Salon', vol: 30, color: 'var(--o-purple)' },
   { id: 'echo-enfant', name: 'Enceinte · Chambre enfant', vol: 16, color: 'var(--o-cyan)' },
 ];
-
-/**
- * Televiseur (ou box) plutot qu'enceinte ?
- *
- * `device_class` ne suffit pas : plusieurs integrations, dont Apple TV,
- * declarent `speaker` sur un appareil qui pilote pourtant un ecran. On
- * interroge donc les CAPACITES avant de croire l'etiquette ; le nom ne sert
- * qu'en dernier recours.
- */
-function medEstTv(hass, haid) {
-  const st = (hass && hass.states && hass.states[haid]) || null;
-  const att = (st && st.attributes) || {};
-  if (att.device_class === 'tv') return true;
-  // Une box ou un televiseur expose presque toujours une entite `remote`.
-  if (medRemoteOf(hass, haid)) return true;
-  // SELECT_SOURCE (2048) : choisir une entree est le propre d'un appareil a
-  // ecran. Les enceintes ne l'exposent quasiment jamais.
-  if ((+att.supported_features || 0) & 2048) return true;
-  // Une liste de sources applicatives trahit un lecteur video.
-  if (Array.isArray(att.source_list) && att.source_list.length > 1) return true;
-  if (att.device_class === 'speaker') return false;
-  return /(\btv\b|télé|televiseur|chromecast|google\s*tv|apple\s*tv|shield|firestick|\bbox\b)/i.test(String(att.friendly_name || haid));
-}
-/** Entite `remote.*` du meme appareil, reperee par suffixe d'identifiant. */
-function medRemoteOf(hass, haid) {
-  const S = (hass && hass.states) || {};
-  if (!haid) return null;
-  const suffixe = haid.slice(haid.indexOf('.') + 1);
-  return S['remote.' + suffixe] ? 'remote.' + suffixe : null;
-}
-
-/**
- * Panneau telecommande. Rend toujours quelque chose : les touches, ou la
- * raison pour laquelle il n'y en a pas.
- */
-function MedRemote({ hass, sel, tvs, onPick }) {
-  const haid = sel && sel.haid;
-  const estTv = haid ? medEstTv(hass, haid) : false;
-  const rid = haid ? medRemoteOf(hass, haid) : null;
-  const att = (hass && hass.states && hass.states[haid] && hass.states[haid].attributes) || {};
-  const call = (dom, svc, data) => { try { if (hass && hass.callService) hass.callService(dom, svc, data || {}); } catch (e) {} };
-  const cmd = (c) => { if (rid) call('remote', 'send_command', { entity_id: rid, command: c }); };
-  const mp = (svc) => call('media_player', svc, { entity_id: haid });
-
-  const carte = { background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' };
-  const touche = (extra) => ({ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '11px 0', borderRadius: 12, cursor: rid ? 'pointer' : 'not-allowed', opacity: rid ? 1 : .4, fontSize: 11, fontWeight: 700, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', ...extra });
-  const rond = { position: 'absolute', width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'transparent', color: 'var(--o-text2)', cursor: rid ? 'pointer' : 'not-allowed', opacity: rid ? 1 : .4, fontSize: 15, fontWeight: 700 };
-  const petit = { position: 'static', width: 24, height: 24, borderRadius: '50%', border: 'none', background: 'transparent', fontSize: 14, fontWeight: 700, color: 'var(--o-text2)' };
-
-  const entete = (
-    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
-      <div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Télécommande')}</div>
-      <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {sel ? sel.name : '—'}{att.source ? ' · ' + att.source : ''}
-      </div>
-    </div>
-  );
-
-  if (!sel || !estTv) {
-    return (
-      <div style={carte}>
-        {entete}
-        <div style={{ textAlign: 'center', padding: '18px 6px 6px' }}>
-          <div style={{ width: 46, height: 46, borderRadius: 14, margin: '0 auto 14px', background: 'var(--o-s2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Fi i="volume" size={19} color="var(--o-accent-soft)" />
-          </div>
-          <div style={{ fontSize: 13.5, fontWeight: 700 }}>{sel ? sel.name + ' est une enceinte' : 'Aucun lecteur sélectionné'}</div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '7px 0 16px', lineHeight: 1.5 }}>
-            La télécommande n’apparaît que pour les téléviseurs. Choisis-en un pour la retrouver.
-          </div>
-          {tvs.length > 0 && (
-            <button onClick={() => onPick(tvs[0].id)} style={{ padding: '9px 16px', borderRadius: 11, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'rgba(var(--o-accent-rgb),.16)', border: '1px solid rgba(var(--o-accent-rgb),.45)', color: 'var(--o-accent-soft)' }}>
-              Passer sur {tvs[0].name}
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={carte}>
-      {entete}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 9 }}>
-        <button onClick={() => mp('turn_off')} style={touche({ cursor: 'pointer', opacity: 1, color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)' })}><Fi i="power" size={15} color="var(--o-bad)" />Veille</button>
-        <button onClick={() => cmd('HOME')} style={touche()}><Fi i="home" size={15} />Accueil</button>
-        <button onClick={() => cmd('INPUT')} style={touche()}><Fi i="exchange" size={15} />Sources</button>
-      </div>
-
-      <div style={{ position: 'relative', width: 172, height: 172, margin: '16px auto', borderRadius: '50%', background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <button onClick={() => cmd('DPAD_UP')} style={{ ...rond, top: 6, left: '50%', transform: 'translateX(-50%)' }}>∧</button>
-        <button onClick={() => cmd('DPAD_DOWN')} style={{ ...rond, bottom: 6, left: '50%', transform: 'translateX(-50%)' }}>∨</button>
-        <button onClick={() => cmd('DPAD_LEFT')} style={{ ...rond, left: 6, top: '50%', transform: 'translateY(-50%)' }}>‹</button>
-        <button onClick={() => cmd('DPAD_RIGHT')} style={{ ...rond, right: 6, top: '50%', transform: 'translateY(-50%)' }}>›</button>
-        <button onClick={() => cmd('DPAD_CENTER')} style={{ width: 64, height: 64, borderRadius: '50%', cursor: rid ? 'pointer' : 'not-allowed', opacity: rid ? 1 : .4, fontSize: 13.5, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.16)', border: '1px solid rgba(var(--o-accent-rgb),.45)', color: 'var(--o-accent-soft)' }}>OK</button>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 9 }}>
-        <button onClick={() => cmd('BACK')} style={touche()}><Fi i="arrow-left" size={15} />Retour</button>
-        <button onClick={() => cmd('MENU')} style={touche()}><Fi i="menu-burger" size={15} />Menu</button>
-        <button onClick={() => cmd('GUIDE')} style={touche()}><Fi i="list" size={15} />Guide</button>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginTop: 9 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '7px 10px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-          <button onClick={() => mp('volume_down')} style={{ ...petit, cursor: 'pointer' }}>−</button>
-          <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--o-accent-soft)', letterSpacing: '.06em' }}>VOLUME</span>
-          <button onClick={() => mp('volume_up')} style={{ ...petit, cursor: 'pointer' }}>+</button>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '7px 10px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-          <button onClick={() => cmd('CHANNEL_DOWN')} style={{ ...petit, cursor: rid ? 'pointer' : 'not-allowed', opacity: rid ? 1 : .4 }}>−</button>
-          <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--o-text3)', letterSpacing: '.06em' }}>{tr('CHAÎNE')}</span>
-          <button onClick={() => cmd('CHANNEL_UP')} style={{ ...petit, cursor: rid ? 'pointer' : 'not-allowed', opacity: rid ? 1 : .4 }}>+</button>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 9, marginTop: 9 }}>
-        {peut(hass, haid, 'mute') && (
-          <button onClick={() => commander(hass, haid, 'mute', true)} style={touche({ cursor: 'pointer', opacity: 1 })}><Fi i="volume-slash" size={14} /></button>)}
-        {peut(hass, haid, 'previous_track') && (
-          <button onClick={() => commander(hass, haid, 'previous_track')} style={touche({ cursor: 'pointer', opacity: 1 })}><Fi i="rewind" size={14} /></button>)}
-        {peut(hass, haid, 'play_pause') && (
-          <button onClick={() => commander(hass, haid, 'play_pause')} style={touche({ cursor: 'pointer', opacity: 1, background: 'rgba(var(--o-accent-rgb),.16)', border: '1px solid rgba(var(--o-accent-rgb),.45)', color: 'var(--o-accent-soft)' })}><Fi i="play" size={14} color="var(--o-accent-soft)" /></button>)}
-        {peut(hass, haid, 'next_track') && (
-          <button onClick={() => commander(hass, haid, 'next_track')} style={touche({ cursor: 'pointer', opacity: 1 })}><Fi i="forward" size={14} /></button>)}
-      </div>
-
-      {!rid && (
-        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 12, lineHeight: 1.5 }}>
-          Aucune entité <b>remote</b> pour ce lecteur : seules les commandes de lecture et de volume répondent.
-        </div>
-      )}
-    </div>
-  );
-}
 
 function MediasContent({ hass, edit = false, onEnt }) {
   // Une seule evaluation par rendu. Chaque appel relit la configuration et
@@ -8428,11 +8219,9 @@ function MediasContent({ hass, edit = false, onEnt }) {
   const anyPlaying = lecteurs.some(p => [p.haid, p.ma].filter(Boolean).some(id => { const e = S && S[id]; return e && e.state === 'playing'; }));
   useEffect(() => { if (!anyPlaying) return; const iv = setInterval(() => medTick(n => n + 1), 1000); return () => clearInterval(iv); }, [anyPlaying]);
   const playingP = lecteurs.find(p => rd(p).playing);
-  const [device, setDevice] = useState(null);
-  const selId = device || (playingP ? playingP.id : 'echo_salon');
+  const selId = playingP ? playingP.id : 'echo_salon';
   const sel = lecteurs.find(p => p.id === selId) || lecteurs[0] || null;
   const np = rd(sel);
-  const selEstTv = !!(sel && medEstTv(hass, sel.haid));
   const derivedVols = Object.fromEntries(lecteurs.map(p => { const st = rd1(p.haid); return [p.id, st.hasVol ? st.vol : 0]; }));
   const vsig = lecteurs.map(p => derivedVols[p.id]).join(',');
   const [vols, setVols] = useState(derivedVols);
@@ -8560,46 +8349,6 @@ function MediasContent({ hass, edit = false, onEnt }) {
           </BarGroup>
         )}
       </ViewBar>
-
-
-
-
-
-      {/* « Lancer sur » et la telecommande, cote a cote. */}
-      <div className="grid-medlaunch" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) minmax(260px,1fr)', gap: 18, alignItems: 'start' }}>
-        <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '16px 18px 14px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap' }}>{tr('Lancer sur')}</span>
-            {lecteurs.map(x => (
-              <button key={x.id} onClick={() => setDevice(x.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                background: sel && x.id === sel.id ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)',
-                border: sel && x.id === sel.id ? '1px solid rgba(var(--o-accent-rgb),.5)' : 'var(--o-bw,1px) solid var(--o-bd2)',
-                color: sel && x.id === sel.id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>
-                <Fi i={medEstTv(hass, x.haid) ? 'screen' : 'volume'} size={13} />{x.name}
-              </button>
-            ))}
-          </div>
-        <div className="grid-apps" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 14 }}>
-          {MED_APPS.map(a => (
-            <button key={a.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '18px 10px', borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', cursor: 'pointer', transition: 'all .2s' }}>
-              <div style={{ width: 52, height: 52, borderRadius: 14, background: a.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <svg viewBox="-16 -16 32 32" width="32" height="32" aria-hidden="true">{(MED_LOGOS[a.id] || MED_LOGOS.plex)()}</svg>
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{a.name}</span>
-            </button>
-          ))}
-        </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 14, padding: '10px 12px', borderRadius: 12, background: 'var(--o-s2)', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)' }}>
-            <Fi i={selEstTv ? 'screen' : 'volume'} size={13} color="var(--o-accent-soft)" />
-            {sel
-              ? (selEstTv
-                ? tr('Le service s’ouvre sur {nom} et la télécommande passe dessus.', { nom: sel.name })
-                : sel.name + ' est une enceinte : seules les applications audio peuvent y être envoyées.')
-              : 'Choisis un lecteur pour y envoyer un service.'}
-          </div>
-        </div>
-        <MedRemote hass={hass} sel={sel} tvs={lecteurs.filter(x => medEstTv(hass, x.haid))} onPick={setDevice} />
-      </div>
 
       {edit && (
         <ViewEditBar onEnt={onEnt}
@@ -8910,7 +8659,6 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
         </div>
         <span style={{ flex: 1 }} />
       </div>
-
 
       {/* Ce que le panneau de synthèse disait en lignes, les cartes le disent
         * mieux : les ouvrants un par un, qui est là, et ce qui a bougé. Les
@@ -11122,8 +10870,6 @@ function CustomView({ cv, hass, edit = false, onSave }) {
     </main>
   );
 }
-
-
 
 function ParametresView({ themeMode, loggiaTheme, haTheme, onMode, onPickTheme, onFollowHa, navbar, onToggleNavbar, wxFx, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, cielEtoile, onToggleCiel, navMargin, navAuto, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin, topAuto, onTopOffset, onTopOffsetReset, hass, users, userIdx, isAdmin, onAddUser, onUpdateUser, onDeleteUser, customViews, onSaveCustomViews, onNav = null }) {
   return (

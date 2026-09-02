@@ -383,7 +383,6 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .grid-pieces, .grid-etats, .grid-lights { grid-template-columns: 1fr 1fr !important; }
   /* Vue Objets mobile : appareils + plantes en 2 colonnes, cartes resserrées */
   /* Telecommande sous « Lancer sur » : cote a cote, elle serait illisible. */
-  .grid-medlaunch { grid-template-columns: 1fr !important; }
   /* Plan de l'aspirateur : une tuile large deborderait sur deux colonnes. */
   .grid-vac-plan > button { grid-column: span 1 !important; }
   .grid-vac-map { grid-template-columns: 1fr !important; }
@@ -412,7 +411,6 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .grid-edemain > div { padding: 12px 4px !important; }
   .grid-vac-cons { grid-template-columns: 1fr 1fr !important; }
   .grid-etats { gap: 10px !important; }
-  .grid-apps { grid-template-columns: repeat(3,1fr) !important; }
   .loggia-hdr { padding-left: 14px !important; padding-right: 14px !important; gap: 10px !important; }
   .grid-pieces { gap: 10px !important; }
   .o-piece { padding: 13px !important; border-radius: var(--o-radius, 16px) !important; box-shadow: var(--o-shadow, 0 6px 16px rgba(0,0,0,.28)) !important; }
