@@ -28,7 +28,7 @@ import { REDUCE_MOTION, Fi, Anim, useTilt, editBtn, ViewEditBar,
   EnRow, EnVal, EnGauge, LOOK_DEF, CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, USER_COLORS,
   FlipText, Gauge, BottomSheet, onPaintReady, PAINT_READY,
   EntPicker, CV_DOM_ICON, cvDomain } from './ui.jsx';
-import { WX_ICON, WX_ICOLOR, WX_BG, WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
+import { WX_BG, WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 const VacPlan = lazy(() => import('./vacplan.jsx'));
