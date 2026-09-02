@@ -213,6 +213,15 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
 @keyframes o-wxm-flash { 0%,86%,100% { opacity: 0; } 88% { opacity: .55; } 90% { opacity: .08; } 92% { opacity: .38; } 94% { opacity: 0; } }
 @keyframes o-wxm-glow { 0%,100% { opacity: .5; transform: scale(1); } 50% { opacity: .85; transform: scale(1.12); } }
 @keyframes o-wxm-wind { 0% { transform: translateX(-30px); opacity: 0; } 18% { opacity: .55; } 82% { opacity: .55; } 100% { transform: translateX(160px); opacity: 0; } }
+/* ── Effets des cartes de JOUR (vue Météo) ────────────────────────────────
+ * Les `o-wxm-*` ci-dessus sont taillees pour la vignette de l'accueil, large
+ * de 140 px : dans une carte de prevision, deux fois plus grande, leurs
+ * nuages passaient en barres floues et la pluie s'arretait au milieu
+ * (retour 02/09). Memes principes, mais aux dimensions de la carte. */
+@keyframes o-wxj-fall { 0% { transform: translateY(-20px); opacity: 0; } 14% { opacity: .75; } 86% { opacity: .75; } 100% { transform: translateY(180px); opacity: 0; } }
+@keyframes o-wxj-snow { 0% { transform: translate(0,-16px); opacity: 0; } 15% { opacity: .85; } 85% { opacity: .85; } 100% { transform: translate(16px,176px); opacity: 0; } }
+@keyframes o-wxj-drift { 0% { transform: translateX(-90px); } 100% { transform: translateX(240px); } }
+@keyframes o-wxj-wind { 0% { transform: translateX(-60px); opacity: 0; } 20% { opacity: .5; } 80% { opacity: .5; } 100% { transform: translateX(230px); opacity: 0; } }
 /* Mode ambiant : le fondu d'entrée de l'écran de veille. */
 @keyframes o-ambient-in { from { opacity: 0; } to { opacity: 1; } }
 /* Vues custom : la carte REMPLIT sa cellule de grille — sans quoi étirer le
