@@ -18,94 +18,207 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 const WeatherGL = lazy(() => import('../wx3d.jsx'));
 import { REDUCE_MOTION, Fi, Anim, ViewEditBar } from '../ui.jsx';
 import { WX_PRESETS } from '../wxpresets.js';
-import { WX_ICON, WX_ICOLOR, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from '../wxutil.jsx';
+import { WX_ICON, WX_ICOLOR, WX_BG, WxMini, haWeatherMode, haWeatherLabel, weatherEntity } from '../wxutil.jsx';
 import { tr } from '../i18n.js';
 
 /* ── Cartes de detail, au gabarit de l'application Meteo d'Apple ────────────
  *
- * Toutes le meme cadre : un intitule en petites capitales avec son icone, une
- * valeur qui domine, une phrase qui l'explique, et parfois un dessin. Aucune
- * n'apparait sans sa donnee — une carte vide vaut moins que pas de carte.
+ * Meme squelette pour toutes : un intitule en petites capitales, la valeur qui
+ * domine, un mot qui la juge, et un DESSIN qui occupe le pied de la carte.
+ * C'est le dessin qui fait la difference entre une fiche technique et une
+ * carte qu'on lit d'un coup d'oeil — il tient donc toute la largeur, et
+ * chaque carte a la meme hauteur pour que la grille reste droite.
  */
-function WxCarte({ icone, titre, couleur, children }) {
+function WxCarte({ icone, titre, couleur, valeur, unite, mot, children }) {
   return (
-    <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '16px 18px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 168 }}>
+    <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '15px 17px 16px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', display: 'flex', flexDirection: 'column', height: 186 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>
-        <Fi i={icone} size={12} color={couleur || 'var(--o-text3)'} />{titre.toUpperCase()}
+        <Fi i={icone} size={12} color={couleur} />{titre.toUpperCase()}
       </div>
-      {children}
+      {valeur !== undefined && (
+        <div style={{ marginTop: 11 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+            <span style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1 }}>{valeur}</span>
+            {unite && <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--o-text3)' }}>{unite}</span>}
+          </div>
+          {mot && <div style={{ fontSize: 12.5, fontWeight: 700, color: couleur, marginTop: 5 }}>{mot}</div>}
+        </div>
+      )}
+      <div style={{ marginTop: 'auto', paddingTop: 12 }}>{children}</div>
     </div>
   );
 }
-/** Grande valeur + unite, le chiffre qui porte la carte. */
-function WxValeur({ v, unite, sous }) {
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-        <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1 }}>{v}</span>
-        {unite && <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--o-text3)' }}>{unite}</span>}
-      </div>
-      {sous && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.35 }}>{sous}</div>}
-    </div>
-  );
-}
-/** Echelle degradee avec un curseur : la lecture d'Apple pour l'air et l'UV. */
-function WxEchelle({ pct, grad }) {
+
+/* Echelle graduee : la barre epaisse d'Apple, avec ses reperes et un curseur
+ * cercle. Les bornes se lisent dessous — une echelle sans bornes ne veut rien
+ * dire. */
+function WxEchelle({ pct, grad, gauche, droite }) {
   const p = Math.max(0, Math.min(100, pct));
   return (
-    <div style={{ position: 'relative', height: 6, borderRadius: 3, background: grad, marginTop: 'auto' }}>
-      <span style={{ position: 'absolute', top: -3, left: `calc(${p}% - 6px)`, width: 12, height: 12, borderRadius: '50%', background: '#fff', border: '2px solid var(--o-surfA)', boxShadow: '0 1px 4px rgba(0,0,0,.45)' }} />
+    <div>
+      <div style={{ position: 'relative', height: 9, borderRadius: 5, background: grad }}>
+        {[25, 50, 75].map(g => <span key={g} style={{ position: 'absolute', left: g + '%', top: 2, bottom: 2, width: 1, background: 'rgba(0,0,0,.28)' }} />)}
+        <span style={{ position: 'absolute', top: '50%', left: `calc(${p}% - 7px)`, width: 14, height: 14, marginTop: -7, borderRadius: '50%', background: '#fff', boxShadow: '0 0 0 2.5px var(--o-surfA), 0 2px 6px rgba(0,0,0,.5)' }} />
+      </div>
+      {(gauche || droite) && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', marginTop: 6 }}>
+          <span>{gauche}</span><span>{droite}</span>
+        </div>
+      )}
     </div>
   );
 }
-/** Rose des vents : l'aiguille pointe d'ou vient le vent, comme chez Apple. */
+
+const WX_CARDINAUX = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+/* Rose des vents : le disque gradue, l'aiguille qui montre d'ou vient le
+ * vent, et la vitesse AU CENTRE — comme la boussole d'Apple. */
 function WxRose({ bearing, vitesse, rafales, unite }) {
   const a = bearing == null ? null : ((bearing % 360) + 360) % 360;
+  const card = a == null ? null : WX_CARDINAUX[Math.round(a / 45) % 8];
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 'auto' }}>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-          <span style={{ fontSize: 26, fontWeight: 800, lineHeight: 1 }}>{vitesse == null ? '—' : Math.round(vitesse)}</span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{unite}</span>
-        </div>
-        {rafales != null && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 5 }}>{tr('Rafales {n}', { n: Math.round(rafales) })} {unite}</div>}
-      </div>
-      <svg width="66" height="66" viewBox="0 0 66 66" aria-hidden="true" style={{ flexShrink: 0 }}>
-        <circle cx="33" cy="33" r="26" fill="none" stroke="var(--o-bd3)" strokeWidth="1" />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      <svg width="104" height="104" viewBox="0 0 104 104" aria-hidden="true" style={{ flexShrink: 0, margin: '-16px 0 -10px' }}>
+        {/* graduations : un trait tous les 15 degres, plus marque aux quarts */}
+        {Array.from({ length: 24 }, (_, i) => {
+          const rad = (i * 15 - 90) * Math.PI / 180;
+          const gros = i % 6 === 0;
+          const r1 = gros ? 33 : 37, r2 = 41;
+          return <line key={i} x1={52 + Math.cos(rad) * r1} y1={52 + Math.sin(rad) * r1} x2={52 + Math.cos(rad) * r2} y2={52 + Math.sin(rad) * r2}
+            stroke={gros ? 'var(--o-text3)' : 'var(--o-bd2)'} strokeWidth={gros ? 1.6 : 1} strokeLinecap="round" />;
+        })}
         {['N', 'E', 'S', 'O'].map((c, i) => {
           const rad = (i * 90 - 90) * Math.PI / 180;
-          return <text key={c} x={33 + Math.cos(rad) * 31} y={33 + Math.sin(rad) * 31 + 3.5} textAnchor="middle" fontSize="8.5" fontWeight="800" fill="var(--o-text3)">{c}</text>;
+          return <text key={c} x={52 + Math.cos(rad) * 48} y={52 + Math.sin(rad) * 48 + 3.5} textAnchor="middle" fontSize="9.5" fontWeight="800" fill="var(--o-text2)">{c}</text>;
         })}
         {a != null && (
-          <g transform={`rotate(${a} 33 33)`}>
-            <path d="M 33 13 L 37.5 33 L 33 29 L 28.5 33 Z" fill="var(--o-cyan)" />
-            <path d="M 33 53 L 28.5 33 L 33 37 L 37.5 33 Z" fill="var(--o-bd1)" />
+          <g transform={`rotate(${a} 52 52)`}>
+            <path d="M 52 14 L 58 34 L 52 30 L 46 34 Z" fill="var(--o-cyan)" />
+            <path d="M 52 90 L 46 70 L 52 74 L 58 70 Z" fill="var(--o-bd1)" />
           </g>
         )}
-        <circle cx="33" cy="33" r="2.5" fill="var(--o-text2)" />
+        <circle cx="52" cy="52" r="21" fill="var(--o-s2)" stroke="var(--o-bd3)" strokeWidth="1" />
+        <text x="52" y="50" textAnchor="middle" fontSize="17" fontWeight="800" fill="var(--o-text)">{vitesse == null ? '—' : Math.round(vitesse)}</text>
+        <text x="52" y="62" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="var(--o-text3)">{unite}</text>
       </svg>
+      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {card && (
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em', color: 'var(--o-text3)' }}>{tr('DIRECTION')}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, marginTop: 2 }}>{card} <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{Math.round(a)}°</span></div>
+          </div>
+        )}
+        {rafales != null && (
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em', color: 'var(--o-text3)' }}>{tr('RAFALES')}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, marginTop: 2 }}>{Math.round(rafales)} <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{unite}</span></div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
-/** L'arc du jour : ou en est le soleil entre son lever et son coucher. */
+
+/* L'arc du jour : le ciel se colore de l'aube au crepuscule, le soleil est a
+ * sa place sur la courbe, et l'horizon separe le jour de la nuit. */
 function WxArcSoleil({ lever, coucher }) {
   const maintenant = Date.now();
   const l = lever ? lever.getTime() : null, c = coucher ? coucher.getTime() : null;
   const f = (l != null && c != null && c > l) ? Math.max(0, Math.min(1, (maintenant - l) / (c - l))) : null;
   const hhmm = (d) => d ? String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') : '—';
   const rad = f == null ? null : Math.PI * (1 - f);
+  const x = rad == null ? null : 60 + Math.cos(rad) * 52;
+  const y = rad == null ? null : 62 - Math.sin(rad) * 44;
+  const reste = (c != null && maintenant < c) ? Math.round((c - maintenant) / 60000) : null;
   return (
-    <div style={{ marginTop: 'auto' }}>
-      <svg viewBox="0 0 88 48" style={{ width: '100%', maxWidth: 160, height: 48, display: 'block' }} aria-hidden="true">
-        <path d="M 8 42 A 36 36 0 0 1 80 42" fill="none" stroke="var(--o-bd3)" strokeWidth="2" strokeDasharray="3 4" />
-        {f != null && <path d="M 8 42 A 36 36 0 0 1 80 42" fill="none" stroke="var(--o-gold)" strokeWidth="2"
-          strokeDasharray={`${(Math.PI * 36 * f).toFixed(1)} 999`} />}
-        <line x1="4" x2="84" y1="42" y2="42" stroke="var(--o-bd2)" strokeWidth="1" />
-        {rad != null && <circle cx={44 + Math.cos(rad) * 36} cy={42 - Math.sin(rad) * 36} r="5" fill="var(--o-gold)" />}
+    <div>
+      <svg viewBox="0 0 120 72" style={{ width: '100%', height: 74, display: 'block' }} aria-hidden="true">
+        <defs>
+          <linearGradient id="wx-arc" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#ff8a4c" /><stop offset="50%" stopColor="var(--o-gold)" /><stop offset="100%" stopColor="#ff8a4c" />
+          </linearGradient>
+        </defs>
+        <path d="M 8 62 A 52 44 0 0 1 112 62" fill="none" stroke="var(--o-bd3)" strokeWidth="2.5" strokeDasharray="2 5" strokeLinecap="round" />
+        {f != null && <path d="M 8 62 A 52 44 0 0 1 112 62" fill="none" stroke="url(#wx-arc)" strokeWidth="2.5" strokeLinecap="round"
+          pathLength="100" strokeDasharray={`${(f * 100).toFixed(1)} 100`} />}
+        <line x1="2" x2="118" y1="62" y2="62" stroke="var(--o-bd2)" strokeWidth="1" />
+        {x != null && (<>
+          <circle cx={x} cy={y} r="10" fill="var(--o-gold)" opacity=".18" />
+          <circle cx={x} cy={y} r="5.5" fill="var(--o-gold)" />
+        </>)}
       </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, fontWeight: 700, color: 'var(--o-text2)', marginTop: 4 }}>
-        <span>{tr('Lever')} {hhmm(lever)}</span><span>{tr('Coucher')} {hhmm(coucher)}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6, fontSize: 11.5, fontWeight: 700, color: 'var(--o-text2)' }}>
+        <span>{hhmm(lever)}</span>
+        {reste != null && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{reste >= 60 ? tr('encore {n} h de jour', { n: Math.round(reste / 60) }) : tr('encore {n} min', { n: reste })}</span>}
+        <span>{hhmm(coucher)}</span>
       </div>
+    </div>
+  );
+}
+
+/* Barometre : l'aiguille sur un demi-cadran de 950 a 1050 hPa. */
+function WxBarometre({ hpa }) {
+  const p = Math.max(0, Math.min(1, (hpa - 950) / 100));
+  const rad = Math.PI * (1 - p);
+  return (
+    <svg viewBox="0 0 120 64" style={{ width: '100%', height: 64, display: 'block' }} aria-hidden="true">
+      <defs>
+        <linearGradient id="wx-baro" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="var(--o-accent)" /><stop offset="100%" stopColor="var(--o-ok)" />
+        </linearGradient>
+      </defs>
+      <path d="M 12 54 A 48 48 0 0 1 108 54" fill="none" stroke="var(--o-s4)" strokeWidth="8" strokeLinecap="round" />
+      <path d="M 12 54 A 48 48 0 0 1 108 54" fill="none" stroke="url(#wx-baro)" strokeWidth="8" strokeLinecap="round" pathLength="100" strokeDasharray={`${(p * 100).toFixed(1)} 100`} />
+      <line x1="60" y1="54" x2={60 + Math.cos(rad) * 38} y2={54 - Math.sin(rad) * 38} stroke="var(--o-text)" strokeWidth="2.5" strokeLinecap="round" />
+      <circle cx="60" cy="54" r="4" fill="var(--o-text)" />
+      <text x="12" y="62" fontSize="9" fontWeight="700" fill="var(--o-text3)">950</text>
+      <text x="108" y="62" fontSize="9" fontWeight="700" fill="var(--o-text3)" textAnchor="end">1050</text>
+    </svg>
+  );
+}
+
+/* Thermometre du ressenti : les deux temperatures sur la meme reglette, pour
+ * que l'ecart se VOIE au lieu de se calculer. */
+function WxRessenti({ reel, ressenti }) {
+  const bas = Math.min(reel, ressenti) - 6, haut = Math.max(reel, ressenti) + 6;
+  const pos = (v) => ((v - bas) / ((haut - bas) || 1)) * 100;
+  return (
+    <div>
+      <div style={{ position: 'relative', height: 9, borderRadius: 5, background: 'linear-gradient(90deg,var(--o-cyan),var(--o-ok) 45%,var(--o-gold) 72%,#ff8a4c)' }}>
+        <span style={{ position: 'absolute', top: -4, left: `calc(${pos(reel)}% - 1px)`, width: 2, height: 17, borderRadius: 1, background: 'var(--o-text2)' }} />
+        <span style={{ position: 'absolute', top: '50%', left: `calc(${pos(ressenti)}% - 7px)`, width: 14, height: 14, marginTop: -7, borderRadius: '50%', background: '#fff', boxShadow: '0 0 0 2.5px var(--o-surfA), 0 2px 6px rgba(0,0,0,.5)' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', marginTop: 6 }}>
+        <span>{tr('Thermomètre')} {Math.round(reel)}°</span><span>{tr('Ressenti')} {Math.round(ressenti)}°</span>
+      </div>
+    </div>
+  );
+}
+
+/* Carte d'un JOUR de la semaine : sa propre animation en fond — pluie qui
+ * tombe, etoiles, halo — et le degrade de sa condition. C'est la demande du
+ * 02/09 : « mes cartes, mais avec leur animation correspondante ». */
+function WxJour({ f, nom, mode, effets, deg, n }) {
+  const mx = n(f.temperature), mn = n(f.templow);
+  const pluie = n(f.precipitation);
+  const proba = n(f.precipitation_probability);
+  return (
+    <div style={{ position: 'relative', overflow: 'hidden', height: 156, borderRadius: 'var(--o-radius,20px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', background: WX_BG[mode] || WX_BG.clouds, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', padding: '15px 16px', display: 'flex', flexDirection: 'column' }}>
+      {effets && <WxMini wx={mode} on />}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '.04em' }}>{nom}</span>
+        <Fi i={WX_ICON[mode] || 'clouds'} size={20} color={WX_ICOLOR[mode] || '#9fb4d6'} />
+      </div>
+      <div style={{ position: 'relative', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{haWeatherLabel(String(f.condition))}</div>
+      <div style={{ position: 'relative', marginTop: 'auto', display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1 }}>{deg(mx)}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{deg(mn)}</span>
+      </div>
+      {(pluie != null || proba != null) && (
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, fontSize: 11.5, fontWeight: 700, color: 'var(--o-cyan)' }}>
+          <Fi i="raindrops" size={12} color="var(--o-cyan)" />
+          {proba != null ? Math.round(proba) + ' %' : ''}{(proba != null && pluie) ? ' · ' : ''}{pluie ? (Math.round(pluie * 10) / 10) + ' mm' : ''}
+        </div>
+      )}
     </div>
   );
 }
@@ -179,8 +292,9 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
   const uVent = wa.wind_speed_unit || 'km/h';
   const deg = (v, u = '°') => v == null ? '—' : Math.round(v) + u;
   const heure = (iso) => { try { return new Date(iso).getHours() + ' h'; } catch (e) { return '—'; } };
-  const JOURS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
-  const jourCourt = (iso, i) => { try { return i === 0 ? tr('Auj.') : JOURS[new Date(iso).getDay()]; } catch (e) { return '—'; } };
+  const JOURS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  // Sur une carte, le jour a la place de s'écrire en entier.
+  const jourLong = (iso, i) => { try { return i === 0 ? tr("Aujourd’hui") : tr(JOURS[new Date(iso).getDay()]); } catch (e) { return '—'; } };
   /* La nuit se déduit de l'HEURE du créneau, pas de l'instant présent : une
    * prévision de 23 h dessinait un grand soleil parce qu'on demandait toujours
    * « fait-il nuit maintenant ? ». */
@@ -247,8 +361,9 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
           * ce qui vient a droite. */}
         <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--o-radius,22px)', padding: '22px 8px' }}>
           <div className="o-banner-row" style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
+            {/* Pas d'icône ici : le ciel derrière dit déjà le temps qu'il fait
+              * (retour 02/09). La place revient au chiffre. */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, minWidth: 0, flex: '1 1 300px' }}>
-              <WeatherIco wx={mode} size={72} />
               <div style={{ minWidth: 0 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{(wa.friendly_name || wId)}{depuis ? ' · ' + depuis : ''}</span>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
@@ -293,46 +408,30 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
                   </div>
                 </div>
               )}
-              {jours.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', marginBottom: 8 }}>{tr('LA SEMAINE')}</div>
-                  {(() => {
-                    /* Les barres se lisent les unes par rapport aux autres :
-                     * une seule echelle pour toute la semaine. */
-                    const mins = jours.map(f => n(f.templow)).filter(v => v != null);
-                    const maxs = jours.map(f => n(f.temperature)).filter(v => v != null);
-                    const bas = mins.length ? Math.min(...mins) : 0;
-                    const haut = maxs.length ? Math.max(...maxs) : 1;
-                    const ampli = (haut - bas) || 1;
-                    return jours.map((f, i) => {
-                      const mn = n(f.templow), mx = n(f.temperature);
-                      const g = mn != null ? (mn - bas) / ampli * 100 : 0;
-                      const l = (mn != null && mx != null) ? Math.max(6, (mx - mn) / ampli * 100) : 100;
-                      return (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '3px 0' }}>
-                          <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--o-text2)', width: 34, flexShrink: 0 }}>{jourCourt(f.datetime, i)}</span>
-                          <Fi i={WX_ICON[modeDe(f)] || 'clouds'} size={13} color={WX_ICOLOR[modeDe(f)] || '#9fb4d6'} />
-                          <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--o-text3)', width: 26, textAlign: 'right', flexShrink: 0 }}>{deg(mn)}</span>
-                          <span style={{ flex: 1, minWidth: 26, height: 4, borderRadius: 2, background: 'var(--o-s2)', position: 'relative' }}>
-                            <span style={{ position: 'absolute', left: g + '%', width: l + '%', top: 0, bottom: 0, borderRadius: 2, background: 'linear-gradient(90deg,var(--o-cyan),var(--o-gold))' }} />
-                          </span>
-                          <span style={{ fontSize: 11.5, fontWeight: 800, width: 26, textAlign: 'right', flexShrink: 0 }}>{deg(mx)}</span>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              )}
             </div>
           </div>
         </div>
 
+        {/* LA SEMAINE — une carte par jour, chacune animée par SA condition :
+          * la pluie tombe sur le jour de pluie, les étoiles brillent sur la
+          * nuit claire (retour 02/09). */}
+        {jours.length > 0 && (<>
+          <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Prévision 7 jours')}</div>
+          <div className="grid-wxdays" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(168px,1fr))', gap: 14 }}>
+            {jours.map((f, i) => (
+              <Anim key={i} i={i} base={140}>
+                <WxJour f={f} nom={jourLong(f.datetime, i)} mode={modeDe(f)} effets={effets} deg={deg} n={n} />
+              </Anim>
+            ))}
+          </div>
+        </>)}
+
         {/* CARTES DE DÉTAIL — chacune n'existe que si sa donnee existe. */}
-        <div className="grid-wxdays" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 14 }}>
+        <div className="grid-wxdays" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 14 }}>
           {air && (
-            <Anim i={0}><WxCarte icone="wind" titre={tr("Qualité de l'air")} couleur="var(--o-ok)">
-              <WxValeur v={Math.round(air.v)} sous={AIR_MOTS(air.v)} />
-              <WxEchelle pct={Math.min(100, air.v / 3)} grad="linear-gradient(90deg,var(--o-ok),var(--o-gold) 40%,#ff8a4c 65%,var(--o-bad))" />
+            <Anim i={0}><WxCarte icone="wind" titre={tr("Qualité de l'air")} couleur="var(--o-ok)" valeur={Math.round(air.v)} mot={AIR_MOTS(air.v)}>
+              <WxEchelle pct={Math.min(100, air.v / 3)} grad="linear-gradient(90deg,var(--o-ok),var(--o-gold) 40%,#ff8a4c 65%,var(--o-bad))"
+                gauche={tr('Bonne')} droite={tr('Mauvaise')} />
             </WxCarte></Anim>
           )}
           {vent != null && (
@@ -346,33 +445,36 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
             </WxCarte></Anim>
           )}
           {ressenti != null && (
-            <Anim i={3}><WxCarte icone="thermometer-half" titre={tr('Ressenti')} couleur="#ff8a4c">
-              <WxValeur v={Math.round(ressenti)} unite="°C" sous={t == null ? null
+            <Anim i={3}><WxCarte icone="thermometer-half" titre={tr('Ressenti')} couleur="#ff8a4c" valeur={Math.round(ressenti)} unite="°C"
+              mot={t == null ? null
                 : Math.abs(ressenti - t) < 1 ? tr('Comme la température réelle.')
-                  : ressenti > t ? tr('Plus chaud que le thermomètre, à cause de l’humidité.')
-                    : tr('Plus frais que le thermomètre, à cause du vent.')} />
+                  : ressenti > t ? tr('Plus chaud, à cause de l’humidité.')
+                    : tr('Plus frais, à cause du vent.')}>
+              {t != null && <WxRessenti reel={t} ressenti={ressenti} />}
             </WxCarte></Anim>
           )}
           {uv != null && (
-            <Anim i={4}><WxCarte icone="sun" titre={tr('Indice UV')} couleur="var(--o-gold)">
-              <WxValeur v={Math.round(uv)} sous={UV_MOTS(uv)} />
-              <WxEchelle pct={Math.min(100, uv / 11 * 100)} grad="linear-gradient(90deg,var(--o-ok),var(--o-gold) 35%,#ff8a4c 60%,var(--o-bad) 85%,var(--o-purple))" />
+            <Anim i={4}><WxCarte icone="sun" titre={tr('Indice UV')} couleur="var(--o-gold)" valeur={Math.round(uv)} mot={UV_MOTS(uv)}>
+              <WxEchelle pct={Math.min(100, uv / 11 * 100)} grad="linear-gradient(90deg,var(--o-ok),var(--o-gold) 35%,#ff8a4c 60%,var(--o-bad) 85%,var(--o-purple))"
+                gauche="0" droite="11+" />
             </WxCarte></Anim>
           )}
           {hum != null && (
-            <Anim i={5}><WxCarte icone="raindrops" titre={tr('Humidité')} couleur="var(--o-cyan)">
-              <WxValeur v={Math.round(hum)} unite="%" sous={hum >= 70 ? tr('Air humide.') : hum <= 30 ? tr('Air sec.') : tr('Confortable.')} />
-              <WxEchelle pct={hum} grad="linear-gradient(90deg,#ff8a4c,var(--o-ok) 45%,var(--o-cyan))" />
+            <Anim i={5}><WxCarte icone="raindrops" titre={tr('Humidité')} couleur="var(--o-cyan)" valeur={Math.round(hum)} unite="%"
+              mot={hum >= 70 ? tr('Air humide.') : hum <= 30 ? tr('Air sec.') : tr('Confortable.')}>
+              <WxEchelle pct={hum} grad="linear-gradient(90deg,#ff8a4c,var(--o-ok) 45%,var(--o-cyan))" gauche={tr('Sec')} droite={tr('Humide')} />
             </WxCarte></Anim>
           )}
           {pression != null && (
-            <Anim i={6}><WxCarte icone="gauge" titre={tr('Pression')} couleur="var(--o-text2)">
-              <WxValeur v={Math.round(pression)} unite="hPa" sous={pression >= 1020 ? tr('Anticyclone : temps stable.') : pression <= 1000 ? tr('Basse pression : perturbations.') : tr('Pression ordinaire.')} />
+            <Anim i={6}><WxCarte icone="gauge" titre={tr('Pression')} couleur="var(--o-text2)" valeur={Math.round(pression)} unite="hPa"
+              mot={pression >= 1020 ? tr('Anticyclone : temps stable.') : pression <= 1000 ? tr('Basse pression : perturbations.') : tr('Pression ordinaire.')}>
+              <WxBarometre hpa={pression} />
             </WxCarte></Anim>
           )}
           {visi != null && (
-            <Anim i={7}><WxCarte icone="eye" titre={tr('Visibilité')} couleur="var(--o-text2)">
-              <WxValeur v={Math.round(visi)} unite="km" sous={visi >= 10 ? tr('Dégagée.') : visi >= 4 ? tr('Réduite.') : tr('Faible — prudence sur la route.')} />
+            <Anim i={7}><WxCarte icone="eye" titre={tr('Visibilité')} couleur="var(--o-text2)" valeur={Math.round(visi)} unite="km"
+              mot={visi >= 10 ? tr('Dégagée.') : visi >= 4 ? tr('Réduite.') : tr('Faible — prudence sur la route.')}>
+              <WxEchelle pct={Math.min(100, visi / 20 * 100)} grad="linear-gradient(90deg,#ff8a4c,var(--o-gold) 35%,var(--o-ok))" gauche="0" droite="20 km" />
             </WxCarte></Anim>
           )}
         </div>
