@@ -22,10 +22,20 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
 const css = readFileSync(join(RACINE, 'public', 'fonts', 'uicons-regular-rounded.css'), 'utf8');
 
-/** Le contenu d'un objet littéral nommé, sans l'évaluer. */
+/** Le contenu d'un objet littéral nommé, sans l'évaluer.
+ *
+ * Un objet écrit sur UNE seule ligne (`const FI_MAP = { … };`) n'a pas de
+ * `\n};` à lui : la recherche filait alors jusqu'à la fin d'un objet situé
+ * des centaines de lignes plus bas et ramassait au passage des paires qui
+ * n'ont rien à voir. Le test se mettait à échouer au gré des déplacements de
+ * code, sans qu'aucune icône ait bougé. On s'arrête donc à la fin de la ligne
+ * quand la déclaration s'y termine. */
 function bloc(nom) {
   const i = src.indexOf('const ' + nom);
   if (i < 0) return '';
+  const finLigne = src.indexOf('\n', i);
+  const uneLigne = src.slice(i, finLigne);
+  if (uneLigne.includes('};')) return uneLigne;
   return src.slice(i, src.indexOf('\n};', i));
 }
 
