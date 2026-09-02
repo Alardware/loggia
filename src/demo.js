@@ -36,8 +36,16 @@ const PIECES = [
 
 function etatsInitiaux() {
   const states = {
-    'sun.sun': s('above_horizon', { friendly_name: 'Soleil', elevation: 34 }),
-    'weather.maison': s('partlycloudy', { friendly_name: 'Météo', temperature: 24, humidity: 52, temperature_unit: '°C' }),
+    'sun.sun': (() => {
+      const lever = new Date(); lever.setHours(7, 12, 0, 0);
+      const coucher = new Date(); coucher.setHours(20, 28, 0, 0);
+      if (coucher < new Date()) coucher.setDate(coucher.getDate() + 1);
+      if (lever < new Date()) lever.setDate(lever.getDate() + 1);
+      return s('above_horizon', { friendly_name: 'Soleil', elevation: 34, next_rising: lever.toISOString(), next_setting: coucher.toISOString() });
+    })(),
+    'weather.maison': s('partlycloudy', { friendly_name: 'Météo', temperature: 24, humidity: 52, temperature_unit: '°C',
+      apparent_temperature: 26, wind_speed: 9, wind_gust_speed: 20, wind_bearing: 281, wind_speed_unit: 'km/h',
+      pressure: 1014, uv_index: 3, visibility: 12 }),
     'alarm_control_panel.maison': s('disarmed', { friendly_name: 'Alarme' }),
     'sensor.production_solaire': s(1840, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.reseau': s(-460, { friendly_name: 'Réseau', unit_of_measurement: 'W', device_class: 'power' }),
@@ -49,6 +57,9 @@ function etatsInitiaux() {
     'sensor.conso_jour_hc': s(3.90, { friendly_name: 'Consommation heures creuses', unit_of_measurement: 'kWh', device_class: 'energy' }),
     'sensor.conso_jour_hp': s(2.26, { friendly_name: 'Consommation heures pleines', unit_of_measurement: 'kWh', device_class: 'energy' }),
     'sensor.part_fossile_reseau': s(38, { friendly_name: 'Part fossile du réseau', unit_of_measurement: '%' }),
+    // De quoi remplir les cartes de la vue Meteo : indice d'air et vigilance.
+    'sensor.qualite_air_exterieur': s(62, { friendly_name: "Qualité de l'air", device_class: 'aqi' }),
+    'sensor.vigilance_meteo': s('Jaune', { friendly_name: 'Vigilance météo', vent_violent: 'Jaune', orages: 'Jaune' }),
     'person.camille': s('home', { friendly_name: 'Camille' }),
     'person.alex': s('not_home', { friendly_name: 'Alex' }),
     'media_player.salon': s('playing', { friendly_name: 'Enceinte salon', media_title: 'Clair de Lune', media_artist: 'Debussy', volume_level: .35, supported_features: 20925, entity_picture: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E' }),
@@ -151,6 +162,30 @@ function historiqueDemo(chemin, states) {
   return [pts];
 }
 
+/* Prévisions factices, au format du service `weather.get_forecasts` : une
+ * journée qui se réchauffe puis retombe, et une semaine qui alterne. */
+function previsionsDemo(type) {
+  const CONDS = ['partlycloudy', 'sunny', 'cloudy', 'rainy', 'partlycloudy', 'sunny', 'cloudy'];
+  const out = [];
+  if (type === 'daily') {
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(); d.setDate(d.getDate() + i); d.setHours(12, 0, 0, 0);
+      out.push({ datetime: d.toISOString(), condition: CONDS[i % CONDS.length],
+        temperature: 26 - Math.round(Math.abs(Math.sin(i)) * 7), templow: 13 + Math.round(Math.cos(i) * 3),
+        precipitation: i === 3 ? 4.2 : 0, precipitation_probability: i === 3 ? 70 : 10 });
+    }
+    return out;
+  }
+  for (let i = 1; i <= 12; i++) {
+    const d = new Date(Date.now() + i * 3600000);
+    const h = d.getHours();
+    out.push({ datetime: d.toISOString(), condition: h >= 20 || h <= 6 ? 'clear-night' : CONDS[i % CONDS.length],
+      temperature: Math.round(19.5 + 6.5 * Math.sin((h - 10) / 24 * 2 * Math.PI)),
+      precipitation: 0, precipitation_probability: 5 * (i % 4) });
+  }
+  return out;
+}
+
 function calendrierDemo() {
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
@@ -219,7 +254,17 @@ export function installerDemo() {
     connected: true,
     language: 'fr',
     user: { id: 'demo', name: 'Démo', is_admin: true },
-    callWS: () => Promise.reject(new Error('démonstration : pas de composant serveur')),
+    /* Le websocket n'existe pas ici — sauf pour les PRÉVISIONS météo, que la
+     * vue Météo demande par service. Sans elles, sa bannière n'aurait ni
+     * heures ni semaine, et la démonstration montrerait une vue à moitié
+     * vide qui ne ressemble à rien de réel. */
+    callWS: (msg) => {
+      if (msg && msg.type === 'call_service' && msg.domain === 'weather' && msg.service === 'get_forecasts') {
+        const type = (msg.service_data && msg.service_data.type) || 'hourly';
+        return Promise.resolve({ response: { 'weather.maison': { forecast: previsionsDemo(type) } } });
+      }
+      return Promise.reject(new Error('démonstration : pas de composant serveur'));
+    },
     callService,
     callApi: (methode, chemin) => {
       if (methode === 'GET' && String(chemin).indexOf('calendars/') === 0) return Promise.resolve(calendrierDemo());
