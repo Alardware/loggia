@@ -5882,20 +5882,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             * proposés sont ceux du panneau ; s'il réclame un code, on ouvre
             * la vue Sécurité, qui sait le demander. */
           if (alarmRailId) {
-            const stAl = (dashHass && dashHass.states) ? dashHass.states[alarmRailId] : null;
-            const aAl = (stAl && stAl.attributes) || {};
-            etatsRows.push(
-              <div key="armer" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 0 10px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-                {armChips(aAl, stAl && stAl.state).map(([lbl, svc, actif]) => (
-                  <button key={svc} onClick={() => {
-                    const faut = svc === 'alarm_disarm' ? !!aAl.code_format : (!!aAl.code_format && aAl.code_arm_required !== false);
-                    if (faut) { if (onNav) onNav('securite'); return; }
-                    try { if (dashHass && dashHass.callService) dashHass.callService('alarm_control_panel', svc, { entity_id: alarmRailId }); } catch (e) {}
-                  }} aria-pressed={actif}
-                    style={{ flex: 1, padding: '8px 4px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>{lbl}</button>
-                ))}
-              </div>
-            );
+            etatsRows.push(<RailArm key="armer" id={alarmRailId} hass={dashHass} onNav={onNav} />);
           }
           /* Le rail ne redit pas la bannière (retour 01/09) : lumières,
             * sécurité, qualité d'air et énergie y sont déjà chiffrées. Il
@@ -9150,7 +9137,9 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   const cs = a => `rgb(${a.join(',')})`;
   const ca = (a, al) => `rgba(${a.join(',')},${al})`;
   // Bouton d'armement compact (ligne dense)
-  const armBtn = (active, rgb) => ({ padding: '7px 13px', borderRadius: 9, border: '1px solid ' + (active ? ca(rgb, .5) : 'var(--o-bd1)'), cursor: 'pointer', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap', transition: 'all .2s', background: active ? ca(rgb, .16) : 'var(--o-s2)', color: active ? cs(rgb) : 'var(--o-text1)' });
+  // `position`/`overflow` : le tour de progression se dessine dedans, et son
+  // trait déborde de moitié pour rester collé au bord.
+  const armBtn = (active, rgb) => ({ position: 'relative', overflow: 'hidden', padding: '7px 13px', borderRadius: 9, border: '1px solid ' + (active ? ca(rgb, .5) : 'var(--o-bd1)'), cursor: 'pointer', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap', transition: 'all .2s', background: active ? ca(rgb, .16) : 'var(--o-s2)', color: active ? cs(rgb) : 'var(--o-text1)' });
   // Ligne au patron Apparence : libellé + description à gauche, contrôle/valeur à droite
   const SecRow = ({ label, desc, children }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', flexWrap: 'wrap' }}>
@@ -9170,6 +9159,9 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   // Décompte d'armement : le temps qui reste pour sortir, battu à la seconde.
   const cptAlarme = armCompte(alarmId ? S[alarmId] : null);
   useSeconde(!!cptAlarme);
+  // Le bouton à cerner : le mode que le panneau prépare, ou celui qu'on vient
+  // de demander tant qu'il ne l'annonce pas.
+  const svcVise = cptAlarme ? armVise(alarmId ? S[alarmId] : null, alarm) : null;
   const armMot = cptAlarme ? tr('activation dans {n} s', { n: cptAlarme.reste }) : tr('activation en cours');
   const alarmWord = arming ? armMot : triggered ? tr('déclenchée') : alarm === 'unknown' ? tr('état inconnu')
     : alarm === 'away' ? tr('armée · absent') : alarm === 'home' ? tr('armée · présent') : alarm === 'night' ? tr('armée · nuit') : tr('désarmée');
@@ -9211,11 +9203,20 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {armChips(alarmId ? (S[alarmId] || {}).attributes || {} : {}, alarmRaw).map(([lbl, svc, actif]) => {
                 const rgb = svc === 'alarm_disarm' ? [52, 211, 153] : svc === 'alarm_arm_away' ? [248, 113, 113] : svc === 'alarm_arm_night' ? [124, 92, 255] : [255, 179, 71];
-                return <button key={svc} onClick={() => armer(svc)} aria-pressed={actif} style={armBtn(actif, rgb)}>{lbl}</button>;
+                return (
+                  <button key={svc} onClick={() => armer(svc)} aria-pressed={actif} style={armBtn(actif, rgb)}>
+                    {lbl}
+                    {/* Le temps qui reste se lit sur le tour du mode visé —
+                      * plus de barre à côté (retour 01/09). */}
+                    {cptAlarme && svcVise === svc && <ArmAnneau pct={100 - (cptAlarme.reste / cptAlarme.total) * 100} />}
+                  </button>
+                );
               })}
             </div>
           )}
-          {cptAlarme && (
+          {/* Panneau muet sur le mode qu'il prépare : aucun bouton à cerner,
+            * la barre reste le seul repère. */}
+          {cptAlarme && !svcVise && (
             <span aria-hidden="true" style={{ width: 74, height: 4, borderRadius: 3, background: 'var(--o-s1)', overflow: 'hidden', flexShrink: 0 }}>
               <span style={{ display: 'block', height: '100%', width: Math.round((cptAlarme.reste / cptAlarme.total) * 100) + '%', background: 'var(--o-warn2)', transition: 'width 1s linear' }} />
             </span>
@@ -10384,6 +10385,64 @@ function useSeconde(actif) {
   }, [actif]);
 }
 
+/* Vers QUEL mode un panneau est en train de s'armer. Alarmo l'annonce dans
+ * `arm_mode`, d'autres intégrations dans `next_state` ; à défaut on retient le
+ * mode que l'écran vient de demander (`optimiste`). Renvoie le SERVICE du
+ * bouton concerné, ou null quand le panneau ne dit rien — auquel cas on ne
+ * devine pas, on garde la barre. */
+function armVise(st, optimiste) {
+  const a = (st && st.attributes) || {};
+  const parEtat = { armed_away: 'alarm_arm_away', armed_home: 'alarm_arm_home', armed_night: 'alarm_arm_night', armed_vacation: 'alarm_arm_vacation' };
+  const dit = a.arm_mode || a.next_state || a.arming_mode || null;
+  if (dit && parEtat[dit]) return parEtat[dit];
+  return { away: 'alarm_arm_away', home: 'alarm_arm_home', night: 'alarm_arm_night' }[optimiste] || null;
+}
+
+/* La progression de l'armement tracée SUR le bouton du mode visé : le tour se
+ * referme, et le bouton est cerné quand l'alarme prend. Un rect SVG normalisé
+ * (`pathLength=100`) avance à vitesse constante le long du périmètre, ce qu'un
+ * dégradé conique ne fait pas sur une forme large. Le trait déborde de moitié,
+ * rogné par l'`overflow` du bouton : il reste collé au bord. */
+function ArmAnneau({ pct, col = 'var(--o-warn2)', r = 9 }) {
+  const p = Math.max(0, Math.min(100, pct));
+  return (
+    <svg width="100%" height="100%" aria-hidden="true" focusable="false" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      <rect x="0" y="0" width="100%" height="100%" rx={r} ry={r} fill="none" stroke={col} strokeWidth="3"
+        pathLength="100" strokeDasharray="100" strokeDashoffset={100 - p}
+        style={{ transition: 'stroke-dashoffset 1s linear' }} />
+    </svg>
+  );
+}
+
+/* L'ARMEMENT en tête du rail de l'accueil : c'est le geste du départ et du
+ * retour, il ne devrait pas demander d'ouvrir une vue. Les modes proposés sont
+ * ceux du panneau ; s'il réclame un code, on ouvre la vue Sécurité, qui sait le
+ * demander. Composant à part pour battre la seconde du décompte sans faire
+ * tictaquer tout l'accueil. */
+function RailArm({ id, hass, onNav }) {
+  const st = (hass && hass.states) ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const cpt = armCompte(st);
+  useSeconde(!!cpt);
+  const svcVise = cpt ? armVise(st, null) : null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 0 10px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+      {armChips(a, st && st.state).map(([lbl, svc, actif]) => (
+        <button key={svc} onClick={() => {
+          const faut = svc === 'alarm_disarm' ? !!a.code_format : (!!a.code_format && a.code_arm_required !== false);
+          if (faut) { if (onNav) onNav('securite'); return; }
+          try { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id }); } catch (e) {}
+        }} aria-pressed={actif}
+          style={{ position: 'relative', flex: 1, padding: '8px 4px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
+          {lbl}
+          {/* Le décompte se lit ici aussi : le tour du mode visé se referme. */}
+          {cpt && svcVise === svc && <ArmAnneau pct={100 - (cpt.reste / cpt.total) * 100} />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* Armements RÉELLEMENT offerts par un panneau, lus dans `supported_features`
  * (bits Home Assistant : 1 = maison, 2 = absent, 4 = nuit, 32 = vacances).
  * Alarmo ne déclare que les modes configurés : n'afficher que ceux-là évite
@@ -10428,6 +10487,8 @@ function CvAlarm({ id, hass, sans = false }) {
   // Le temps qu'il reste pour sortir (ou pour désarmer), battu à la seconde.
   const cpt = armCompte(st);
   useSeconde(!!cpt);
+  // Le mode que le panneau prépare : son bouton portera le tour de progression.
+  const svcVise = cpt ? armVise(st, null) : null;
   const [txt, col] = s === 'disarmed' ? [tr('Désarmée'), 'var(--o-ok)']
     : s === 'triggered' ? [tr('ALERTE'), 'var(--o-bad)']
       : (s === 'arming' || s === 'pending') ? [cpt ? tr('Activation dans {n} s', { n: cpt.reste }) : tr('Activation en cours…'), 'var(--o-warn2)']
@@ -10446,8 +10507,9 @@ function CvAlarm({ id, hass, sans = false }) {
       </div>
       <div style={{ marginTop: 8, ...(sans ? { flex: 1, display: 'flex', flexDirection: 'column' } : {}) }}>
         <div style={RM_NAME}>{cvName(st, id)}</div>
-        {/* Le temps qui reste, vu d'un coup d'œil : la barre se vide. */}
-        {cpt && (
+        {/* Le temps qui reste se lit sur le tour du mode visé (voir plus bas).
+          * Panneau muet sur ce qu'il prépare : la barre reste le repère. */}
+        {cpt && !svcVise && (
           <div aria-hidden="true" style={{ height: 4, borderRadius: 3, background: 'var(--o-s1)', overflow: 'hidden', margin: '8px 0 2px' }}>
             <div style={{ height: '100%', width: Math.round((cpt.reste / cpt.total) * 100) + '%', background: col, transition: 'width 1s linear' }} />
           </div>
@@ -10468,8 +10530,11 @@ function CvAlarm({ id, hass, sans = false }) {
           <div style={{ display: 'flex', gap: 7, margin: '7px 0 6px' }}>
             {CHIPS.map(([lbl, svc, actif]) => (
               <button key={svc} onClick={() => agir(svc)}
-                style={{ flex: 1, padding: sans ? '10px 4px' : '6px 4px', borderRadius: 9, border: 'none', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
+                style={{ position: 'relative', flex: 1, padding: sans ? '10px 4px' : '6px 4px', borderRadius: 9, border: 'none', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
                 {lbl}
+                {/* Le tour se referme au rythme du décompte : à zéro, le mode
+                  * visé est cerné — l'alarme prend. */}
+                {cpt && svcVise === svc && <ArmAnneau pct={100 - (cpt.reste / cpt.total) * 100} col={col} />}
               </button>
             ))}
           </div>
