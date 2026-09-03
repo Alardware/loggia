@@ -145,6 +145,63 @@ def test_les_jours_choisis(module):
     assert module.jour_actif(None, dimanche)
 
 
+# ── Un horaire par volet ────────────────────────────────────────────────────
+
+COVERS = ["cover.chambre", "cover.cuisine", "cover.salon"]
+
+
+def test_sans_reglage_tout_le_monde_suit_l_heure_generale(module):
+    plan = {"ouverture": {"decalage": 15}, "volets": {}}
+    assert module.groupes_horaires(plan, COVERS, "ouverture") == {15: COVERS}
+
+
+def test_un_volet_peut_ouvrir_plus_tard(module):
+    """La demande d'origine : la chambre ne s'ouvre pas au lever du soleil
+    comme le salon."""
+    plan = {"ouverture": {"decalage": 15}, "volets": {"cover.chambre": {"ouverture": 90}}}
+    groupes = module.groupes_horaires(plan, COVERS, "ouverture")
+    assert groupes == {15: ["cover.cuisine", "cover.salon"], 90: ["cover.chambre"]}
+
+
+def test_deux_volets_au_meme_horaire_partagent_leur_rendez_vous(module):
+    """Un rendez-vous par valeur distincte, pas un par volet."""
+    plan = {"ouverture": {"decalage": 0},
+            "volets": {"cover.chambre": {"ouverture": 90}, "cover.cuisine": {"ouverture": 90}}}
+    groupes = module.groupes_horaires(plan, COVERS, "ouverture")
+    assert sorted(groupes) == [0, 90]
+    assert groupes[90] == ["cover.chambre", "cover.cuisine"]
+
+
+def test_le_decalage_propre_ne_vaut_que_pour_son_sens(module):
+    """Ouvrir plus tard ne veut pas dire fermer plus tard : la chambre reprend
+    l'heure generale pour la fermeture."""
+    plan = {"ouverture": {"decalage": 0}, "fermeture": {"decalage": -20},
+            "volets": {"cover.chambre": {"ouverture": 90}}}
+    assert module.groupes_horaires(plan, COVERS, "fermeture") == {-20: COVERS}
+
+
+def test_un_volet_exclu_ne_bouge_jamais(module):
+    plan = {"ouverture": {"decalage": 0}, "volets": {"cover.chambre": {"exclu": True}}}
+    groupes = module.groupes_horaires(plan, COVERS, "ouverture")
+    assert groupes == {0: ["cover.cuisine", "cover.salon"]}
+
+
+def test_un_reglage_illisible_retombe_sur_le_general(module):
+    plan = {"ouverture": {"decalage": 10}, "volets": {"cover.chambre": {"ouverture": "plus tard"}}}
+    assert module.groupes_horaires(plan, COVERS, "ouverture") == {10: COVERS}
+
+
+def test_le_planning_prend_tous_les_volets_pas_seulement_les_orientes(creer):
+    """Les deux notions etaient confondues : le planning ne suivait que les
+    volets a qui on avait donne une orientation pour le soleil."""
+    etats = {"cover.a": FauxEtat("open", {}), "cover.b": FauxEtat("open", {})}
+    c = cfg_soleil()          # seul cover.salon y est oriente
+    c["planning"] = {"actif": True}
+    v = creer(c, etats)
+    lancer(v._async_planifie("fermer"))
+    assert v.hass.services.appels[0][2]["entity_id"] == ["cover.a", "cover.b"]
+
+
 # ── La configuration ────────────────────────────────────────────────────────
 
 def test_la_config_absente_prend_les_defauts(creer):

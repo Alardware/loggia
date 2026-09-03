@@ -61,7 +61,7 @@ HYSTERESE_DEG = 8.0
 
 DEFAUT: dict[str, Any] = {
     "planning": {"actif": False, "ouverture": {"decalage": 0}, "fermeture": {"decalage": 0},
-                 "jours": [0, 1, 2, 3, 4, 5, 6]},
+                 "jours": [0, 1, 2, 3, 4, 5, 6], "volets": {}},
     "soleil": {"actif": False, "position": 30, "elevation_min": 15, "temp_min": 25,
                "temp_entite": "", "volets": {}},
     "vent": {"actif": False, "entite": "", "seuil": 50},
@@ -95,6 +95,39 @@ def au_soleil(azimut, elevation, orientation, ouverture=90.0, elevation_min=15.0
         return ecart_azimut(azimut, orientation) <= max(0.0, float(ouverture) - float(marge))
     except (TypeError, ValueError):
         return False
+
+
+def groupes_horaires(plan, covers, sens: str) -> dict:
+    """Les volets ranges par decalage, pour un sens donne.
+
+    Le planning n'a longtemps connu qu'une heure pour toute la maison. Or on
+    ne veut pas que la chambre s'ouvre au lever du soleil comme le salon. Un
+    volet peut donc porter son propre decalage, qui REMPLACE le general, ou
+    se retirer entierement du planning.
+
+    Renvoie {minutes: [entity_id]} — un rendez-vous par valeur distincte,
+    plutot qu'un rendez-vous par volet.
+    """
+    try:
+        general = int((plan.get(sens) or {}).get("decalage") or 0)
+    except (TypeError, ValueError):
+        general = 0
+    par_volet = plan.get("volets") or {}
+    groupes: dict = {}
+    for haid in covers:
+        reglage = par_volet.get(haid) if isinstance(par_volet, dict) else None
+        if isinstance(reglage, dict):
+            if reglage.get("exclu"):
+                continue
+            propre = reglage.get(sens)
+            if propre not in (None, ""):
+                try:
+                    groupes.setdefault(int(propre), []).append(haid)
+                    continue
+                except (TypeError, ValueError):
+                    pass
+        groupes.setdefault(general, []).append(haid)
+    return groupes
 
 
 def jour_actif(jours, quand) -> bool:
@@ -155,30 +188,28 @@ class LoggiaVolets:
             return
         from homeassistant.helpers.event import async_track_sunrise, async_track_sunset
 
-        def minutes(quoi):
-            try:
-                return timedelta(minutes=int((plan.get(quoi) or {}).get("decalage") or 0))
-            except (TypeError, ValueError):
-                return timedelta(0)
+        # Un rendez-vous par decalage DISTINCT, et non un par volet : trois
+        # chambres qui s'ouvrent une heure plus tard partagent le leur.
+        covers = self._tous_les_covers()
+        for sens, poser in (("ouverture", async_track_sunrise), ("fermeture", async_track_sunset)):
+            groupes = groupes_horaires(plan, covers, sens)
+            for decalage, cibles in groupes.items():
+                self._defait_soleil.append(
+                    poser(self.hass, self._rendezvous(sens, list(cibles)), timedelta(minutes=decalage))
+                )
+            _LOGGER.info("Loggia volets : %s armee en %d groupe(s)", sens, len(groupes))
 
-        self._defait_soleil.append(
-            async_track_sunrise(self.hass, self._au_lever, minutes("ouverture"))
-        )
-        self._defait_soleil.append(
-            async_track_sunset(self.hass, self._au_coucher, minutes("fermeture"))
-        )
-        _LOGGER.info("Loggia volets : planning arme (lever %s, coucher %s)",
-                     minutes("ouverture"), minutes("fermeture"))
+    def _rendezvous(self, sens: str, cibles: list):
+        """Le rappel d'un groupe, avec les volets qu'il commande."""
+        quoi = "ouvrir" if sens == "ouverture" else "fermer"
 
-    @callback
-    def _au_lever(self, *_) -> None:
-        self.hass.async_create_task(self._async_planifie("ouvrir"))
+        @callback
+        def sonne(*_):
+            self.hass.async_create_task(self._async_planifie(quoi, cibles))
 
-    @callback
-    def _au_coucher(self, *_) -> None:
-        self.hass.async_create_task(self._async_planifie("fermer"))
+        return sonne
 
-    async def _async_planifie(self, sens: str) -> None:
+    async def _async_planifie(self, sens: str, cibles=None) -> None:
         from homeassistant.util import dt as dt_util
 
         plan = self.cfg.get("planning") or {}
@@ -188,7 +219,7 @@ class LoggiaVolets:
         # pas ce qui est deja ouvert pour cette raison.
         if self.a_l_abri:
             return
-        cibles = self._volets()
+        cibles = list(cibles) if cibles else self._tous_les_covers()
         if not cibles:
             return
         await self._async_service("open_cover" if sens == "ouvrir" else "close_cover", cibles)
@@ -222,7 +253,7 @@ class LoggiaVolets:
             return False
         if valeur >= seuil:
             if not self.a_l_abri:
-                cibles = self._volets()
+                cibles = self._tous_les_covers()
                 if cibles:
                     await self._async_service("open_cover", cibles)
                     self._noter("ouvrir", "vent", len(cibles), detail=str(valeur))
@@ -295,13 +326,17 @@ class LoggiaVolets:
             self._noter("rouvrir", "soleil", 1, detail=haid)
 
     # ── Les commandes ──────────────────────────────────────────────────────
-    def _volets(self) -> list[str]:
-        """Les volets pilotes : ceux qu'on a regles, sinon tout le domaine."""
-        regles = list((self.cfg.get("soleil") or {}).get("volets") or {})
-        if regles:
-            return regles
+    def _tous_les_covers(self) -> list:
+        """Tous les volets de l'installation.
+
+        Le planning les prend tous — un volet ajoute apres coup suit sans
+        qu'on ait a le declarer — et la table par volet dit lesquels s'en
+        ecartent. La protection solaire, elle, ne touche que ceux a qui on a
+        donne une orientation : ce sont deux notions distinctes, et les
+        confondre faisait suivre au planning les seuls volets orientes.
+        """
         try:
-            return list(self.hass.states.async_entity_ids("cover"))
+            return sorted(self.hass.states.async_entity_ids("cover"))
         except Exception:  # noqa: BLE001
             return []
 
