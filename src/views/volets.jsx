@@ -162,6 +162,58 @@ export function VoletsReglages({ hass, cardSt }) {
             <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>
               {tr('Un nombre négatif avance l’heure : −30 ferme une demi-heure avant le coucher.')}
             </div>
+            {/* Un horaire par volet : on ne veut pas que la chambre s'ouvre
+              * au lever du soleil comme le salon. Le décalage propre remplace
+              * le général ; « jamais » retire le volet du planning. */}
+            <div style={{ marginTop: 16, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingTop: 13 }}>
+              <div style={label}>{tr('Volet par volet')}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>
+                {tr('Sans rien ici, tous suivent les heures ci-dessus.')}
+              </div>
+              {covers.length === 0 && (
+                <div style={{ fontSize: 12.5, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun volet trouvé dans Home Assistant.')}</div>
+              )}
+              {covers.map(c => {
+                const r = (plan.volets || {})[c.id] || null;
+                const exclu = !!(r && r.exclu);
+                const propre = !!(r && !r.exclu && (r.ouverture != null || r.fermeture != null));
+                const poser = (v) => enregistrer({ planning: { volets: { ...(plan.volets || {}), [c.id]: v } } });
+                const retirer = () => { const v = { ...(plan.volets || {}) }; delete v[c.id]; enregistrer({ planning: { volets: v } }); };
+                return (
+                  <div key={c.id} style={{ padding: '10px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 7 }}>{c.nom}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      <button onClick={retirer} style={puce(!r)}>{tr('Comme les autres')}</button>
+                      <button onClick={() => poser({ ouverture: 60, fermeture: null })} style={puce(propre)}>{tr('Heures à lui')}</button>
+                      <button onClick={() => poser({ exclu: true })} style={puce(exclu)}>{tr('Jamais')}</button>
+                    </div>
+                    {propre && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 9 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                          <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('Ouverture')}</span>
+                          <input type="number" value={r.ouverture != null ? r.ouverture : ''} min={-120} max={240} placeholder="—"
+                            onChange={e => poser({ ...r, ouverture: e.target.value === '' ? null : Math.max(-120, Math.min(240, Number(e.target.value) || 0)) })}
+                            style={{ ...champ, width: 74 }} />
+                          <span style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min')}</span>
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                          <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('Fermeture')}</span>
+                          <input type="number" value={r.fermeture != null ? r.fermeture : ''} min={-120} max={240} placeholder="—"
+                            onChange={e => poser({ ...r, fermeture: e.target.value === '' ? null : Math.max(-120, Math.min(240, Number(e.target.value) || 0)) })}
+                            style={{ ...champ, width: 74 }} />
+                          <span style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min')}</span>
+                        </span>
+                      </div>
+                    )}
+                    {propre && (
+                      <div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600, marginTop: 6 }}>
+                        {tr('Vide = suit l’heure générale pour ce sens.')}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
             <div style={{ marginTop: 13 }}>
               <div style={label}>{tr('Les jours')}</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

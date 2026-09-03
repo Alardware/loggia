@@ -1318,4 +1318,10 @@ export default {
   'Dernières coupures': 'Recent cut-offs',
   'coupé': 'off',
   'rendu': 'back on',
+  'Sans rien ici, tous suivent les heures ci-dessus.': 'Leave this alone and they all follow the times above.',
+  'Comme les autres': 'Like the others',
+  'Heures à lui': 'Its own times',
+  'Jamais': 'Never',
+  'min': 'min',
+  'Vide = suit l’heure générale pour ce sens.': 'Empty = follows the general time for that direction.',
 };
