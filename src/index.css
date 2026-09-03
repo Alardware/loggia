@@ -707,8 +707,15 @@ html.loggia-light .o-wx-card-veil { background: linear-gradient(180deg, rgba(238
 .o-entlabel { display: none; }
 @media (max-width: 720px) {
   .o-enthead { display: none !important; }
+  /* Pas de cadre DANS le cadre : la ligne se contente d'un filet et de son
+   * air. Trois encadrements imbriques ne laissaient plus rien aux champs
+   * (retour 03/09). */
   .o-entrow { flex-direction: column !important; align-items: stretch !important; gap: 8px !important;
-    padding: 12px 12px 10px; border-radius: 14px; background: var(--o-s2); }
+    padding: 14px 0 4px; border-top: var(--o-bw,1px) solid var(--o-bd3); }
+  .o-entrow:first-child { border-top: none; padding-top: 4px; }
+  /* La carte de section respire moins sur telephone : 24 px de chaque cote,
+   * c'est 48 px pris sur 375. */
+  .o-parcard { padding: 15px !important; }
   .o-entrow > span { flex: 1 1 auto !important; flex-direction: column !important; align-items: stretch !important; gap: 4px; }
   .o-entlabel { display: block; font-size: 10px; font-weight: 800; letter-spacing: .05em;
     text-transform: uppercase; color: var(--o-text3); }

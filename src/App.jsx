@@ -8835,8 +8835,11 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
                 const rgb = svc === 'alarm_disarm' ? [52, 211, 153] : svc === 'alarm_arm_away' ? [248, 113, 113] : svc === 'alarm_arm_night' ? [124, 92, 255] : [255, 179, 71];
                 return (
                   <button key={svc} onClick={() => armer(svc)} aria-pressed={actif} style={armBtn(actif, rgb)}>
-                    {lbl}
-                    {/* Le temps qui reste se lit sur le tour du mode visé —
+                    {/* Le bouton visé COMPTE : son libellé cède la place aux
+                      * secondes qui restent, et revient une fois l'alarme
+                      * prise (retour 03/09). */}
+                    {(cptAlarme && svcVise === svc) ? cptAlarme.reste + ' s' : lbl}
+                    {/* Le temps qui reste se lit aussi sur le tour du bouton —
                       * plus de barre à côté (retour 01/09). */}
                     {cptAlarme && svcVise === svc && <ArmAnneau pct={100 - (cptAlarme.reste / cptAlarme.total) * 100} />}
                   </button>
@@ -9064,12 +9067,18 @@ function SysCarteHote({ nom, logo, online, cpu, mem, disque, temp, uptime, courb
         <span style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(3,169,244,.14)' }}>
           {logo ? <img src={logo} alt="" draggable={false} style={{ width: 28, height: 26, objectFit: 'contain' }} /> : <Fi i="home" size={20} color="var(--o-accent-soft)" />}
         </span>
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 15.5, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom}</div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600 }}>Home Assistant</div>
         </div>
+        {/* L'etat se tient A COTE du nom, jamais dessous : sur telephone il
+          * passait a la ligne et le texte venait buter sur la pastille
+          * (retour 03/09). `flexShrink` le garde entier. */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '4px 11px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: online ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-bad-rgb),.16)', color: online ? 'var(--o-ok)' : 'var(--o-bad)' }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: online ? 'var(--o-ok)' : 'var(--o-bad)' }} />{online ? tr('en ligne') : tr('hors ligne')}
+        </span>
       </div>
-      <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 14, background: 'var(--o-s2)' }}>
+      <div style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: col }}>{pc(cpu) || '—'}</span>
           <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('cpu')}</span>
@@ -9083,9 +9092,6 @@ function SysCarteHote({ nom, logo, online, cpu, mem, disque, temp, uptime, courb
           </div>
         )}
       </div>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 13, padding: '4px 11px', borderRadius: 999, fontSize: 11, fontWeight: 800, background: online ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-bad-rgb),.16)', color: online ? 'var(--o-ok)' : 'var(--o-bad)' }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: online ? 'var(--o-ok)' : 'var(--o-bad)' }} />{online ? tr('en ligne') : tr('hors ligne')}
-      </span>
     </div>
   );
 }
@@ -10006,7 +10012,7 @@ function RailArm({ id, hass }) {
       ) : armChips(a, st && st.state).map(([lbl, svc, actif]) => (
         <button key={svc} onClick={() => agir(svc)} aria-pressed={actif}
           style={{ position: 'relative', flex: 1, padding: '11px 6px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
-          {lbl}
+          {(cpt && svcVise === svc) ? cpt.reste + ' s' : lbl}
           {/* Le décompte se lit ici aussi : le tour du mode visé se referme. */}
           {cpt && svcVise === svc && <ArmAnneau pct={100 - (cpt.reste / cpt.total) * 100} r={10} />}
         </button>
@@ -10103,7 +10109,7 @@ function CvAlarm({ id, hass, sans = false }) {
             {CHIPS.map(([lbl, svc, actif]) => (
               <button key={svc} onClick={() => agir(svc)}
                 style={{ position: 'relative', flex: 1, padding: sans ? '10px 4px' : '6px 4px', borderRadius: 9, border: 'none', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
-                {lbl}
+                {(cpt && svcVise === svc) ? cpt.reste + ' s' : lbl}
                 {/* Le tour se referme au rythme du décompte : à zéro, le mode
                   * visé est cerné — l'alarme prend. */}
                 {cpt && svcVise === svc && <ArmAnneau pct={100 - (cpt.reste / cpt.total) * 100} col={col} />}
