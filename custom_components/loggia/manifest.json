@@ -1,6 +1,9 @@
 {
   "domain": "loggia",
   "name": "Loggia Dashboard",
+  "after_dependencies": [
+    "mqtt"
+  ],
   "codeowners": [
     "@Alardware"
   ],
@@ -9,9 +12,6 @@
     "http",
     "websocket_api",
     "frontend"
-  ],
-  "after_dependencies": [
-    "mqtt"
   ],
   "documentation": "https://github.com/Alardware/loggia",
   "integration_type": "service",
