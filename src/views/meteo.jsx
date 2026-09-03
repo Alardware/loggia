@@ -39,23 +39,20 @@ function WxJour({ f, nom, mode, effets, deg, n }) {
         * maquette, dessinés pour un grand panneau, tombaient sinon en plein
         * sur le nom du jour. L'ombre de texte fait le reste — un nuage blanc
         * qui dérive passera toujours quelque part. */}
-      {effets && <WeatherEffects weather={mode} k={0.52} fadeStart={62} densite={0.55} offsetY={30} />}
-      {/* Un voile sombre sur le tiers haut : quelle que soit l'ambiance, un
-        * nuage blanc finit toujours par passer sous le nom du jour. */}
-      <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: '52%', background: 'linear-gradient(180deg,rgba(6,12,24,.58),rgba(6,12,24,0))' }} />
+      {effets && <WeatherEffects weather={mode} k={0.52} fadeStart={100} densite={0.55} offsetY={30} />}
       {/* Pas d'icône : la scène du fond dessine déjà le temps qu'il fera, et
         * les deux côte à côte faisaient doublon (retour 02/09). */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '.04em', textShadow: '0 1px 6px rgba(6,12,24,.75)' }}>{nom}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '.04em', color: '#fff', textShadow: '0 1px 3px rgba(6,14,30,.85), 0 2px 12px rgba(6,14,30,.5)' }}>{nom}</span>
       </div>
-      <div style={{ position: 'relative', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text1)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 6px rgba(6,12,24,.7)' }}>{haWeatherLabel(String(f.condition))}</div>
+      <div style={{ position: 'relative', fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,.92)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 3px rgba(6,14,30,.85)' }}>{haWeatherLabel(String(f.condition))}</div>
       <div style={{ position: 'relative', marginTop: 'auto', display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, textShadow: '0 2px 10px rgba(6,12,24,.6)' }}>{deg(mx)}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{deg(mn)}</span>
+        <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, color: '#fff', textShadow: '0 2px 4px rgba(6,14,30,.8), 0 4px 16px rgba(6,14,30,.45)' }}>{deg(mx)}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,.78)', textShadow: '0 1px 3px rgba(6,14,30,.8)' }}>{deg(mn)}</span>
       </div>
       {(pluie != null || proba != null) && (
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, fontSize: 11.5, fontWeight: 700, color: 'var(--o-cyan)' }}>
-          <Fi i="raindrops" size={12} color="var(--o-cyan)" />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, fontSize: 11.5, fontWeight: 800, color: '#dff1ff', textShadow: '0 1px 3px rgba(6,14,30,.8)' }}>
+          <Fi i="raindrops" size={12} color="#dff1ff" />
           {proba != null ? Math.round(proba) + ' %' : ''}{(proba != null && pluie) ? ' · ' : ''}{pluie ? (Math.round(pluie * 10) / 10) + ' mm' : ''}
         </div>
       )}
