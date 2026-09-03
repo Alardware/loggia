@@ -42,6 +42,11 @@ def _poser_doublures() -> None:
         ("homeassistant.helpers.device_registry", ("async_get",)),
         ("homeassistant.helpers.entity_registry", ("async_get",)),
         ("homeassistant.helpers.floor_registry", ("async_get",)),
+        # `volets.py` demande l'heure locale a Home Assistant plutot qu'au
+        # systeme : la doublure renvoie l'heure du systeme, ce qui suffit a
+        # decider d'un jour de la semaine.
+        ("homeassistant.util", ()),
+        ("homeassistant.util.dt", ("now",)),
     ):
         module = types.ModuleType(nom)
         for attr in attrs:
@@ -49,6 +54,11 @@ def _poser_doublures() -> None:
         sys.modules[nom] = module
     # `@callback` decore les fonctions du composant : sans lui, l'import echoue.
     sys.modules["homeassistant.core"].callback = lambda f: f
+    # `from homeassistant.util import dt` va chercher un ATTRIBUT du paquet,
+    # pas seulement une entree de `sys.modules` : il faut relier les deux.
+    import datetime as _dt
+    sys.modules["homeassistant.util.dt"].now = _dt.datetime.now
+    sys.modules["homeassistant.util"].dt = sys.modules["homeassistant.util.dt"]
 
 
 _poser_doublures()

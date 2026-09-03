@@ -240,6 +240,41 @@ function interAffecter(msg) {
   return INTER_AFF;
 }
 
+/* Regles de volets : le planning arme, la protection solaire reglee sur deux
+ * facades, le vent au repos. De quoi voir la page telle qu'elle sera une fois
+ * remplie, plutot qu'un formulaire vide. */
+const VOL_CFG = {
+  planning: { actif: true, ouverture: { decalage: 15 }, fermeture: { decalage: -20 }, jours: [0, 1, 2, 3, 4, 5, 6] },
+  soleil: {
+    actif: true, position: 30, elevation_min: 15, temp_min: 25,
+    temp_entite: 'sensor.exterieur_temperature',
+    volets: { 'cover.salon': { orientation: 225, ouverture: 90 } },
+  },
+  vent: { actif: false, entite: '', seuil: 50 },
+};
+
+function voletsDemo(states) {
+  const sun = states['sun.sun'];
+  const at = (sun && sun.attributes) || {};
+  return {
+    config: VOL_CFG,
+    soleil: { azimut: at.azimuth != null ? at.azimuth : 214, elevation: at.elevation != null ? at.elevation : 34 },
+    abaisses: VOL_CFG.soleil.actif ? ['cover.salon'] : [],
+    a_l_abri: false,
+    journal: [
+      { quoi: 'proteger', regle: 'soleil', n: 1, detail: 'cover.salon', ts: Date.now() / 1000 - 900 },
+      { quoi: 'ouvrir', regle: 'planning', n: 6, detail: '', ts: Date.now() / 1000 - 27000 },
+    ],
+  };
+}
+
+function voletsPatch(patch) {
+  Object.keys(patch || {}).forEach(section => {
+    if (VOL_CFG[section]) Object.assign(VOL_CFG[section], patch[section]);
+  });
+  return VOL_CFG;
+}
+
 function calendrierDemo() {
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
@@ -324,6 +359,10 @@ export function installerDemo() {
       if (msg && msg.type === 'loggia/interrupteurs/etat') return Promise.resolve(interDemo());
       if (msg && msg.type === 'loggia/interrupteurs/affecter') {
         return Promise.resolve({ affectations: interAffecter(msg) });
+      }
+      if (msg && msg.type === 'loggia/volets/etat') return Promise.resolve(voletsDemo(states));
+      if (msg && msg.type === 'loggia/volets/config') {
+        return Promise.resolve({ config: voletsPatch(msg.patch) });
       }
       return Promise.reject(new Error('démonstration : pas de composant serveur'));
     },

@@ -44,6 +44,8 @@ WS_STATS = "loggia/config/stats"
 WS_DISCOVERY = "loggia/discovery"
 WS_INT_ETAT = "loggia/interrupteurs/etat"
 WS_INT_AFFECTER = "loggia/interrupteurs/affecter"
+WS_VOL_ETAT = "loggia/volets/etat"
+WS_VOL_CONFIG = "loggia/volets/config"
 
 
 def _user_info(connection: websocket_api.ActiveConnection) -> dict[str, Any]:
@@ -74,7 +76,8 @@ def _payload_too_big(patch: dict[str, Any]) -> str | None:
 
 
 @callback
-def async_register(hass: HomeAssistant, store: LoggiaStore, acces_interrupteurs=None) -> None:
+def async_register(hass: HomeAssistant, store: LoggiaStore,
+                   acces_interrupteurs=None, acces_volets=None) -> None:
     """Declare les commandes aupres du serveur WebSocket.
 
     `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
@@ -192,6 +195,32 @@ def async_register(hass: HomeAssistant, store: LoggiaStore, acces_interrupteurs=
         )
         connection.send_result(msg["id"], {"affectations": table})
 
+    # ── Regles de volets ──────────────────────────────────────────────────
+    # Meme partage que les interrupteurs : lecture ouverte, ecriture reservee
+    # aux administrateurs. Un planning de volets commande la maison entiere.
+    @websocket_api.websocket_command({vol.Required("type"): WS_VOL_ETAT})
+    @websocket_api.async_response
+    async def handle_vol_etat(hass, connection, msg):
+        volets = acces_volets() if acces_volets else None
+        if volets is None:
+            connection.send_error(msg["id"], "not_available", "regles de volets indisponibles")
+            return
+        connection.send_result(msg["id"], await volets.async_etat())
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_VOL_CONFIG, vol.Required("patch"): dict}
+    )
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_vol_config(hass, connection, msg):
+        volets = acces_volets() if acces_volets else None
+        if volets is None:
+            connection.send_error(msg["id"], "not_available", "regles de volets indisponibles")
+            return
+        connection.send_result(msg["id"], {"config": await volets.async_enregistrer(msg["patch"])})
+
+    websocket_api.async_register_command(hass, handle_vol_etat)
+    websocket_api.async_register_command(hass, handle_vol_config)
     websocket_api.async_register_command(hass, handle_int_etat)
     websocket_api.async_register_command(hass, handle_int_affecter)
     websocket_api.async_register_command(hass, handle_discovery)

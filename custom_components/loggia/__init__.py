@@ -91,7 +91,9 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             # et l'ecoute nait quelques lignes plus bas. Passer la valeur ici
             # aurait fige un `None` que plus aucun rechargement n'aurait
             # rattrape.
-            async_register_ws(hass, store, lambda: hass.data.get(DOMAIN, {}).get("interrupteurs"))
+            async_register_ws(hass, store,
+                              lambda: hass.data.get(DOMAIN, {}).get("interrupteurs"),
+                              lambda: hass.data.get(DOMAIN, {}).get("volets"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
@@ -117,6 +119,17 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["interrupteurs"] = LoggiaInterrupteurs(hass, data["store"])
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : interrupteurs sans fil indisponibles")
+
+    # Regles de volets : planning du soleil, protection solaire, mise a l'abri.
+    # Meme regime : les abonnements vivent jusqu'a l'arret du process, et une
+    # maison sans volet ne doit pas s'en trouver genee.
+    if not data.get("volets") and data.get("store"):
+        try:
+            from .volets import LoggiaVolets
+
+            data["volets"] = LoggiaVolets(hass, data["store"])
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : regles de volets indisponibles")
 
     # ── Ce qui se refait a chaque chargement : le panneau ──
     # Il se retire proprement dans `async_unload_entry`, donc il se reenregistre
