@@ -1215,4 +1215,5 @@ export default {
   'Samedi': 'Saturday',
   'Dimanche': 'Sunday',
   'à l’instant': 'just now',
+  'Me soutenir sur Ko-fi': 'Support me on Ko-fi',
 };
