@@ -86,7 +86,12 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
 
             store = LoggiaStore(hass)
             data["store"] = store
-            async_register_ws(hass, store)
+            # Acces PARESSEUX a l'ecoute des interrupteurs : les commandes
+            # WebSocket ne s'enregistrent qu'une fois pour la vie du process,
+            # et l'ecoute nait quelques lignes plus bas. Passer la valeur ici
+            # aurait fige un `None` que plus aucun rechargement n'aurait
+            # rattrape.
+            async_register_ws(hass, store, lambda: hass.data.get(DOMAIN, {}).get("interrupteurs"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
@@ -101,6 +106,17 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["alertes"] = LoggiaAlertes(hass, data["store"])
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : alertes de sûreté indisponibles")
+
+    # Interrupteurs sans fil : Zigbee2MQTT, ZHA, deCONZ. Meme regime encore —
+    # les abonnements vivent jusqu'a l'arret du process, et une installation
+    # sans interrupteur ne doit pas s'en trouver genee.
+    if not data.get("interrupteurs") and data.get("store"):
+        try:
+            from .interrupteurs import LoggiaInterrupteurs
+
+            data["interrupteurs"] = LoggiaInterrupteurs(hass, data["store"])
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : interrupteurs sans fil indisponibles")
 
     # ── Ce qui se refait a chaque chargement : le panneau ──
     # Il se retire proprement dans `async_unload_entry`, donc il se reenregistre
