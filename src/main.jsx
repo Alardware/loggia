@@ -46,13 +46,17 @@ function langueProbable() {
   if (demo) {
     try { (await import('./demo.js')).installerDemo(); }
     catch (e) { console.error('demo indisponible', e); }
-    /* `?mode=auto|light|dark` : réglage d'aperçu dans la démo — posé APRÈS
-     * l'installation du magasin mémoire (qui repart à neuf à chaque
-     * chargement), sinon le vrai localStorage le recevrait. */
+    /* `?mode=auto|light|dark` et `?lang=fr|en` : réglages d'aperçu dans la
+     * démo — posés APRÈS l'installation du magasin mémoire (qui repart à neuf
+     * à chaque chargement), sinon le vrai localStorage les recevrait.
+     * `lang` sert à VÉRIFIER une traduction : sans lui, il fallait changer la
+     * langue de Home Assistant pour voir l'anglais. */
     try {
       const q = new URLSearchParams(window.location.search);
       const md = q.get('mode');
       if (md === 'auto' || md === 'light' || md === 'dark') localStorage.setItem('loggia-mode', md);
+      const lg = q.get('lang');
+      if (lg === 'fr' || lg === 'en') localStorage.setItem('loggia-langue', JSON.stringify(lg));
     } catch (e) { /* rien */ }
   }
   if (langueProbable() === 'en') {

@@ -127,7 +127,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
     if (!wEnt || !wEnt.last_changed) return null;
     const min = Math.round((Date.now() - new Date(wEnt.last_changed).getTime()) / 60000);
     if (!isFinite(min) || min < 0) return null;
-    return min < 1 ? "à l’instant" : min < 60 ? 'il y a ' + min + ' min' : 'il y a ' + Math.round(min / 60) + ' h';
+    return min < 1 ? tr('à l’instant') : min < 60 ? tr('il y a {n} min', { n: min }) : tr('il y a {n} h', { n: Math.round(min / 60) });
   })();
 
   const carte = { background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' };
