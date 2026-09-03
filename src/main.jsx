@@ -57,6 +57,12 @@ function langueProbable() {
       if (md === 'auto' || md === 'light' || md === 'dark') localStorage.setItem('loggia-mode', md);
       const lg = q.get('lang');
       if (lg === 'fr' || lg === 'en') localStorage.setItem('loggia-langue', JSON.stringify(lg));
+      /* `?vue=energie` ou `?vue=room:Salon` : ouvrir une vue sans cliquer.
+       * La vue courante vit dans `sessionStorage`, que la demo ne remplace
+       * pas — on l'y pose avant que l'application ne la lise. Sert aux
+       * captures du README et a verifier une vue d'un seul chargement. */
+      const vu = q.get('vue');
+      if (vu && /^[a-z]+(:.{1,40})?$/.test(vu)) sessionStorage.setItem('loggia-vue', vu);
     } catch (e) { /* rien */ }
   }
   if (langueProbable() === 'en') {

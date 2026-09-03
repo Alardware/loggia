@@ -11,15 +11,90 @@ en déduit ce qu'il peut afficher. Aucun identifiant d'entité n'est écrit dans
 code : ce qui n'existe pas chez vous n'apparaît pas, et ce que vous ajoutez plus
 tard apparaît sans rien toucher.
 
-![L'accueil : pièces, températures, qualité de l'air, état de la maison](docs/accueil.png)
+![L'accueil : pièces, températures, qualité de l'air, état de la maison](docs/captures/pc-accueil.webp)
 
-Les réglages, où chaque section indique ce qu'elle a trouvé et ce qui manque :
+Le même dashboard s'adapte à l'écran qui le regarde. Dépliez le format qui est
+le vôtre :
 
-![Les réglages](docs/parametres.png)
+<details>
+<summary><b>Ordinateur</b> — 1600 × 950</summary>
+
+**L'accueil** — les pièces, l’énergie, l’agenda et ce qui joue
+
+![L'accueil — les pièces, l’énergie, l’agenda et ce qui joue, en ordinateur](docs/captures/pc-accueil.webp)
+
+**Une pièce** — le salon : ses appareils, son volet, son historique de confort
+
+![Une pièce — le salon : ses appareils, son volet, son historique de confort, en ordinateur](docs/captures/pc-piece.webp)
+
+**La météo** — la vigilance, les prochaines heures, sept jours animés
+
+![La météo — la vigilance, les prochaines heures, sept jours animés, en ordinateur](docs/captures/pc-meteo.webp)
+
+**L'énergie** — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance
+
+![L'énergie — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance, en ordinateur](docs/captures/pc-energie.webp)
+
+**Les réglages** — chaque section dit ce qu’elle a trouvé et ce qui manque
+
+![Les réglages — chaque section dit ce qu’elle a trouvé et ce qui manque, en ordinateur](docs/captures/pc-parametres.webp)
+
+</details>
+
+<details>
+<summary><b>Tablette</b> — 1024 × 1366</summary>
+
+**L'accueil** — les pièces, l’énergie, l’agenda et ce qui joue
+
+![L'accueil — les pièces, l’énergie, l’agenda et ce qui joue, en tablette](docs/captures/tablette-accueil.webp)
+
+**Une pièce** — le salon : ses appareils, son volet, son historique de confort
+
+![Une pièce — le salon : ses appareils, son volet, son historique de confort, en tablette](docs/captures/tablette-piece.webp)
+
+**La météo** — la vigilance, les prochaines heures, sept jours animés
+
+![La météo — la vigilance, les prochaines heures, sept jours animés, en tablette](docs/captures/tablette-meteo.webp)
+
+**L'énergie** — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance
+
+![L'énergie — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance, en tablette](docs/captures/tablette-energie.webp)
+
+**Les réglages** — chaque section dit ce qu’elle a trouvé et ce qui manque
+
+![Les réglages — chaque section dit ce qu’elle a trouvé et ce qui manque, en tablette](docs/captures/tablette-parametres.webp)
+
+</details>
+
+<details>
+<summary><b>Téléphone</b> — 390 × 844</summary>
+
+**L'accueil** — les pièces, l’énergie, l’agenda et ce qui joue
+
+![L'accueil — les pièces, l’énergie, l’agenda et ce qui joue, en téléphone](docs/captures/mobile-accueil.webp)
+
+**Une pièce** — le salon : ses appareils, son volet, son historique de confort
+
+![Une pièce — le salon : ses appareils, son volet, son historique de confort, en téléphone](docs/captures/mobile-piece.webp)
+
+**La météo** — la vigilance, les prochaines heures, sept jours animés
+
+![La météo — la vigilance, les prochaines heures, sept jours animés, en téléphone](docs/captures/mobile-meteo.webp)
+
+**L'énergie** — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance
+
+![L'énergie — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance, en téléphone](docs/captures/mobile-energie.webp)
+
+**Les réglages** — chaque section dit ce qu’elle a trouvé et ce qui manque
+
+![Les réglages — chaque section dit ce qu’elle a trouvé et ce qui manque, en téléphone](docs/captures/mobile-parametres.webp)
+
+</details>
 
 > Ces captures viennent d'une maison de démonstration, pas d'une installation
 > réelle : six pièces, quelques capteurs, aucune caméra — de quoi montrer le
-> rendu sans exposer le domicile de qui que ce soit.
+> rendu sans exposer le domicile de qui que ce soit. Le bandeau « données
+> factices » qu'affiche la démo a été écarté du cadre.
 
 ## Essayer sans rien installer
 
