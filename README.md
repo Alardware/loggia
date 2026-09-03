@@ -13,8 +13,10 @@ tard apparaît sans rien toucher.
 
 ![L'accueil : pièces, températures, qualité de l'air, état de la maison](docs/captures/pc-accueil.webp)
 
-Le même dashboard s'adapte à l'écran qui le regarde. Dépliez le format qui est
-le vôtre :
+Le même dashboard s'adapte à l'écran qui le regarde : sur tablette comme sur
+téléphone, le bandeau du haut disparaît, la navigation passe en bas et la
+barre latérale devient un tiroir. C'est le TYPE d'appareil qui décide, jamais
+la largeur. Dépliez le format qui est le vôtre :
 
 <details>
 <summary><b>Ordinateur</b> — 1600 × 950</summary>
@@ -42,7 +44,7 @@ le vôtre :
 </details>
 
 <details>
-<summary><b>Tablette</b> — 1024 × 1366</summary>
+<summary><b>Tablette</b> — 1366 × 1024, en paysage</summary>
 
 **L'accueil** — les pièces, l’énergie, l’agenda et ce qui joue
 
