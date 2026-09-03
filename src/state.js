@@ -46,8 +46,11 @@ export function setLoggiaState({ index, ent, resolved, cfg, save, server }) {
  * dire la meme chose, sinon un reglage serait cherche la ou il n'est pas.
  */
 const PERSONNELLES = new Set([
-  'loggia_active_user', 'loggia-navoffset', 'loggia-topoffset', 'loggia-lastseen',
-  'loggia_admin_pin',   // ne quitte jamais le navigateur
+  // Restent attachees a l'appareil : ses marges d'ecran et la trace du
+  // dernier passage. Le profil actif et le code administrateur ont rejoint la
+  // maison le 03/09 — ils differaient d'un appareil a l'autre, et meme entre
+  // l'acces local et l'acces distant, faute d'origine commune.
+  'loggia-navoffset', 'loggia-topoffset', 'loggia-lastseen',
 ]);
 export const estPersonnelle = (cle) => {
   const s = String(cle);
@@ -251,7 +254,7 @@ export function loggiaEnt(domain, fallback = null) {
   return (v == null) ? fallback : v;
 }
 
-export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_weather', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_customviews', 'loggia_users', 'loggia_lights', 'loggia_climate', 'loggia-theme', 'loggia-mode', 'loggia-ha', 'loggia-navbar', 'loggia-navoffset', 'loggia-topoffset', 'loggia-wxfx', 'loggia-ciel', 'loggia-langue'];
+export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_weather', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_customviews', 'loggia_users', 'loggia_accueil', 'loggia_look', 'loggia_active_user', 'loggia_admin_pin', 'loggia_roomlayout', 'loggia_objlayout', 'loggia_lightlayout', 'loggia_climlayout', 'loggia_coverlayout', 'loggia_enlayout', 'loggia_medlayout', 'loggia_lights', 'loggia_climate', 'loggia-theme', 'loggia-mode', 'loggia-ha', 'loggia-navbar', 'loggia-navoffset', 'loggia-topoffset', 'loggia-wxfx', 'loggia-ciel', 'loggia-langue'];
 
 export const importLoggiaConfig = (txt) => {
   const o = JSON.parse(String(txt).trim());

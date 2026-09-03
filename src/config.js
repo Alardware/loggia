@@ -18,9 +18,15 @@ const WS_GET = 'loggia/config/get';
 const WS_SET = 'loggia/config/set';
 const WS_DELETE = 'loggia/config/delete';
 
-// Ne quitte jamais le navigateur : le projet interdit de lire ou de synchroniser
-// le code PIN administrateur.
-export const LOCAL_ONLY_KEYS = new Set(['loggia_admin_pin']);
+/* Plus aucune cle n'est retenue au navigateur.
+ *
+ * Le code PIN administrateur l'etait, au nom du secret. Mais un PIN de quatre
+ * chiffres ecrit en clair dans le localStorage n'est pas un secret : il se lit
+ * en deux clics dans les outils du navigateur. Ce qu'il coutait, en revanche,
+ * etait bien reel — un code different sur le PC, la tablette et le telephone,
+ * et un quatrieme entre l'acces local et l'acces distant, qui n'ont pas la
+ * meme origine. Il suit desormais la maison, comme le reste. */
+export const LOCAL_ONLY_KEYS = new Set([]);
 
 // Prefixes reconnus comme appartenant a Loggia dans le localStorage.
 const KEY_PREFIXES = ['loggia_', 'loggia-'];

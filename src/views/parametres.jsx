@@ -206,7 +206,7 @@ function AlertesTele({ hass, cardSt }) {
 
 /* ════════════ VUES PERSONNALISÉES : cartes génériques par domaine + éditeur (admin) ════════════ */
 
-// Éditeur du code administrateur (comme V1 AdminPinEditor). Stocké localStorage 'loggia_admin_pin'.
+// Éditeur du code administrateur (comme V1 AdminPinEditor), cle 'loggia_admin_pin'.
 // Aperçu vivant du thème (Paramètres → Apparence) : il rend avec les CSS vars COURANTES,
 // donc il suit chaque clic de thème/mode sans plomberie. Valeurs réelles si hass est là.
 function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = LOOK_DEF }) {
@@ -316,7 +316,11 @@ function ResetLoggiaBtn({ compact = false }) {
 }
 
 function AdminPinEditor() {
-  const [pin, setPin] = useState(() => { try { return localStorage.getItem('loggia_admin_pin') || '0000'; } catch (e) { return '0000'; } });
+  /* Le code suit la MAISON depuis le 03/09 : il etait ecrit dans le seul
+   * navigateur, donc different sur le PC, la tablette et le telephone — et
+   * meme entre l'acces local et l'acces distant, qui n'ont pas la meme
+   * origine. Il part au composant comme le reste de la configuration. */
+  const [pin, setPin] = useState(() => String(cfgVal('loggia_admin_pin', null) || '0000'));
   const [show, setShow] = useState(false);
   const [np, setNp] = useState('');
   const [cf, setCf] = useState('');
@@ -325,7 +329,7 @@ function AdminPinEditor() {
   const save = () => {
     if (np.length !== 4) { setMsg({ ok: false, t: 'Le code doit faire 4 chiffres.' }); return; }
     if (np !== cf) { setMsg({ ok: false, t: 'Les deux codes ne correspondent pas.' }); return; }
-    try { localStorage.setItem('loggia_admin_pin', np); } catch (e) {}
+    cfgSet({ loggia_admin_pin: np });
     setPin(np); setNp(''); setCf(''); setMsg({ ok: true, t: 'Code administrateur mis à jour.' });
   };
   const inp = { width: '100%', padding: '12px 14px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 18, fontWeight: 700, letterSpacing: '.3em', textAlign: 'center', fontFamily: 'monospace' };
@@ -503,15 +507,16 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
         {addable && <button onClick={add} style={{ padding: '5px 11px', borderRadius: 9, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}>+ Ajouter</button>}
       </div>
       {desc && <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{desc}</div>}
-      <div style={{ display: 'flex', gap: 8, padding: '0 2px 5px', fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)' }}>
+      <div className="o-enthead" style={{ display: 'flex', gap: 8, padding: '0 2px 5px', fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)' }}>
         {cols.map(c => <span key={c.k} style={{ flex: c.flex || 1, minWidth: 0 }}>{c.label.toUpperCase()}</span>)}
         {addable && <span style={{ width: 30, flexShrink: 0 }} />}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
         {rows.map((r, i) => (
-          <div key={r._k || 'i' + i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div key={r._k || 'i' + i} className="o-entrow" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {cols.map(c => { const v = r[c.k] || ''; const st = check && c.domain && v ? (check(v) ? 'ok' : 'bad') : null; return (
               <span key={c.k} style={{ position: 'relative', flex: c.flex || 1, minWidth: 0, display: 'flex' }}>
+                <span className="o-entlabel">{c.label}</span>
                 <input value={v} onChange={e => set(i, c.k, e.target.value)} placeholder={c.ph || ''} list={c.domain ? 'o-dl-' + c.domain : undefined} spellCheck={false} style={{ ...entInp, width: '100%', minWidth: 0, paddingRight: st ? 24 : undefined, borderColor: st === 'bad' ? 'rgba(var(--o-bad-rgb),.55)' : undefined }} />
                 {st && <span title={st === 'ok' ? 'Entité trouvée' : 'Introuvable dans Home Assistant'} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 7, height: 7, borderRadius: '50%', background: st === 'ok' ? 'var(--o-ok)' : 'var(--o-bad)', pointerEvents: 'none' }} />}
               </span>
@@ -525,8 +530,11 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
   );
 }
 
-// Clés synchronisables entre origines (WiFi = IP locale / 5G = Nabu Casa → localStorage SÉPARÉS).
-// loggia_admin_pin exclu volontairement (PIN local à l'appareil, jamais synchronisé) ; loggia_active_user = par appareil.
+/* Le WiFi et la 5G n'ont pas la meme origine — IP locale d'un cote, Nabu Casa
+ * de l'autre — donc pas le meme localStorage : une configuration qui reste
+ * dans le navigateur change quand on sort de chez soi. Tout ce qui decrit la
+ * MAISON passe donc par le composant, code administrateur et profil actif
+ * compris depuis le 03/09. Ne restent locales que les marges d'ecran. */
 
 // Hook partagé : état + persistance de la config d'entités (onglet Entités ET édition en place sur chaque vue).
 function useEntConfig(hass) {
@@ -914,7 +922,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     </div>
   );
   const SecGroup = ({ label, children }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
+    /*  : le groupe tenait ses boutons sur une seule ligne et
+     * debordait de l'ecran d'un telephone, la barre ayant beau savoir se
+     * replier (retour 03/09). */
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', maxWidth: '100%', padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{label}</span>
       {children}
     </div>
@@ -1466,7 +1477,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       {tab === 'entites' && isAdmin && (<>
         <SecBar>
           <SecGroup label="Configuration">
-            <div style={{ display: 'flex', gap: 4 }}>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               <button onClick={saveEnt} style={secBtn(true)}>Enregistrer et recharger</button>
               <button onClick={resetEnt} style={secBtn(false)}>{tr('Rétablir les défauts')}</button>
             </div>

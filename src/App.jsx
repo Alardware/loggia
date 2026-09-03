@@ -811,7 +811,7 @@ const SAFE_NOLOOK = (() => {
 function readLook() {
   if (SAFE_NOLOOK) return { ...LOOK_DEF };
   try {
-    const L = { ...LOOK_DEF, ...(JSON.parse(window.localStorage.getItem('loggia_look') || 'null') || {}) };
+    const L = { ...LOOK_DEF, ...(cfgVal('loggia_look', null) || {}) };
     if (L.fond !== 'photo') L.fond = 'aucun'; // les degrades retires retombent sur « aucun »
     return L;
   } catch (e) { return { ...LOOK_DEF }; }
@@ -5140,14 +5140,18 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
    * `loggia_accueil`, par appareil. Une section inconnue de la sauvegarde
    * (ajoutée par une version future) se range à la fin, jamais perdue. */
   const [accL, setAccL] = useState(() => {
-    const v = readLS('loggia_accueil', null) || {};
+    const v = cfgVal('loggia_accueil', null) || {};
     // piecesOrdre et tailles font partie de la sauvegarde : les oublier ici
     // rendait l'ordre et la taille des cartes pièces perdus à chaque
     // rechargement, alors que saveAccL les écrivait bien.
     return { main: Array.isArray(v.main) ? v.main : null, rail: Array.isArray(v.rail) ? v.rail : null, caches: Array.isArray(v.caches) ? v.caches : [],
       piecesOrdre: Array.isArray(v.piecesOrdre) ? v.piecesOrdre : [], tailles: (v.tailles && typeof v.tailles === 'object') ? v.tailles : {} };
   });
-  const saveAccL = (n) => { setAccL(n); try { localStorage.setItem('loggia_accueil', JSON.stringify(n)); } catch (e) {} };
+  /* Le dashboard suit la MAISON, pas le navigateur : l'agencement part au
+   * composant. En localStorage, il changeait d'un appareil a l'autre — et meme
+   * d'un reseau a l'autre, l'acces distant n'ayant pas la meme origine que
+   * l'acces local (retour 03/09). */
+  const saveAccL = (n) => { setAccL(n); cfgSet({ loggia_accueil: n }); };
   const ordreDe = (zone) => {
     const base = zone === 'main' ? ACC_MAIN : ACC_RAIL;
     const sauve = (accL[zone] || []).filter(s => base.indexOf(s) >= 0);
@@ -5738,7 +5742,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             * proposés sont ceux du panneau ; s'il réclame un code, on ouvre
             * la vue Sécurité, qui sait le demander. */
           if (alarmRailId) {
-            etatsRows.push(<RailArm key="armer" id={alarmRailId} hass={dashHass} onNav={onNav} />);
+            etatsRows.push(<RailArm key="armer" id={alarmRailId} hass={dashHass} />);
           }
           /* Le rail ne redit pas la bannière (retour 01/09) : lumières,
             * sécurité, qualité d'air et énergie y sont déjà chiffrées. Il
@@ -9970,20 +9974,37 @@ function ArmAnneau({ pct, col = 'var(--o-warn2)', r = 9 }) {
  * ceux du panneau ; s'il réclame un code, on ouvre la vue Sécurité, qui sait le
  * demander. Composant à part pour battre la seconde du décompte sans faire
  * tictaquer tout l'accueil. */
-function RailArm({ id, hass, onNav }) {
+function RailArm({ id, hass }) {
   const st = (hass && hass.states) ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const cpt = armCompte(st);
   useSeconde(!!cpt);
   const svcVise = cpt ? armVise(st, null) : null;
+  /* Le panneau réclame un code ? On le demande ICI. Le rail renvoyait vers la
+   * vue Sécurité : appuyer sur « Désarmé » changeait d'écran au lieu de
+   * désarmer, et tout était à refaire là-bas (retour 03/09). */
+  const [demande, setDemande] = useState(null);
+  const [code, setCode] = useState('');
+  const call = (svc, c) => { try { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id, ...(c ? { code: c } : {}) }); } catch (e) {} };
+  const agir = (svc) => {
+    const faut = svc === 'alarm_disarm' ? !!a.code_format : (!!a.code_format && a.code_arm_required !== false);
+    if (faut) { setDemande(svc); setCode(''); return; }
+    call(svc);
+  };
+  const valider = () => { if (demande && code) { call(demande, code); setDemande(null); setCode(''); } };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 0 10px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-      {armChips(a, st && st.state).map(([lbl, svc, actif]) => (
-        <button key={svc} onClick={() => {
-          const faut = svc === 'alarm_disarm' ? !!a.code_format : (!!a.code_format && a.code_arm_required !== false);
-          if (faut) { if (onNav) onNav('securite'); return; }
-          try { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id }); } catch (e) {}
-        }} aria-pressed={actif}
+      {demande ? (
+        <>
+          <input type="password" inputMode="numeric" autoFocus value={code} onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') valider(); if (e.key === 'Escape') setDemande(null); }}
+            placeholder={tr('Code')} aria-label={tr('Code')}
+            style={{ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 14, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
+          <button onClick={valider} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'var(--o-accent)', color: '#fff', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
+          <button onClick={() => setDemande(null)} aria-label={tr('Annuler')} style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>✕</button>
+        </>
+      ) : armChips(a, st && st.state).map(([lbl, svc, actif]) => (
+        <button key={svc} onClick={() => agir(svc)} aria-pressed={actif}
           style={{ position: 'relative', flex: 1, padding: '11px 6px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
           {lbl}
           {/* Le décompte se lit ici aussi : le tour du mode visé se referme. */}
@@ -11844,7 +11865,7 @@ export default function App() {
     try { if (sessionStorage.getItem('loggia_safe_nocv')) { sessionStorage.removeItem('loggia_safe_nocv'); return []; } } catch (e) {}
     const v = readLS('loggia_customviews', []); return Array.isArray(v) ? v.filter(x => x && x.id && x.name) : [];
   });
-  const saveCustomViews = (list) => { try { localStorage.setItem('loggia_customviews', JSON.stringify(list)); } catch (e) {} setCustomViews(list); };
+  const saveCustomViews = (list) => { cfgSet({ loggia_customviews: list }); setCustomViews(list); };
   const [editMode, setEditMode] = useState(false);
   // L'édition est réservée aux admins : si le profil actif n'est plus admin, on coupe le mode édition.
   // (le bouton crayon du Header est déjà admin-only ; ceci couvre le switch de profil pendant l'édition)
@@ -12007,7 +12028,7 @@ export default function App() {
   // (thème/mode/suivi HA lus paresseusement à l'initialisation des states —
   //  les relire ici arrivait après leur première réécriture.)
   const [look, setLook] = useState(readLook);
-  const onLook = (patch) => setLook(l => { const n = { ...l, ...patch }; try { localStorage.setItem('loggia_look', JSON.stringify(n)); } catch (e) {} return n; });
+  const onLook = (patch) => setLook(l => { const n = { ...l, ...patch }; cfgSet({ loggia_look: n }); return n; });
   useEffect(() => {
     // « Auto » : le clair/foncé suit l'APPAREIL (prefers-color-scheme) — et le
     // suit en direct quand l'OS bascule au coucher du soleil.
@@ -12153,7 +12174,7 @@ export default function App() {
   // `cfgSet` ecrit le serveur ET le localStorage. Avec le seul localStorage,
   // les profils restaient prisonniers de l'appareil qui les avait crees.
   const persistUsers = (a) => { try { cfgSet({ loggia_users: a }); } catch (e) {} setUsers(a); };
-  const [userIdx, setUserIdx] = useState(() => { try { const v = parseInt(localStorage.getItem('loggia_active_user'), 10); return (v >= 0 && v < users.length) ? v : 0; } catch (e) { return 0; } });
+  const [userIdx, setUserIdx] = useState(() => { try { const v = parseInt(cfgVal('loggia_active_user', null), 10); return (v >= 0 && v < users.length) ? v : 0; } catch (e) { return 0; } });
   // La configuration serveur arrive APRES le premier rendu. Sans cette
   // resynchronisation, `users` resterait celui du localStorage de l'appareil,
   // et les profils crees ailleurs n'apparaitraient jamais.
@@ -12183,8 +12204,8 @@ export default function App() {
     let n = 0; for (const id in S) { if (id.indexOf('light.') === 0 && S[id] && S[id].state === 'on') n++; }
     return n;
   }, [hass]);
-  const adminPin = (() => { try { return localStorage.getItem('loggia_admin_pin') || '0000'; } catch (e) { return '0000'; } })();
-  const applyUser = (i) => { try { localStorage.setItem('loggia_active_user', String(i)); const u = users[i]; if (u && u.name) { const m = JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); m[u.name] = Date.now(); localStorage.setItem('loggia-lastseen', JSON.stringify(m)); } } catch (e) {} setUserIdx(i); };
+  const adminPin = String(cfgVal('loggia_admin_pin', null) || '0000');
+  const applyUser = (i) => { cfgSet({ loggia_active_user: String(i) }); try { const u = users[i]; if (u && u.name) { const m = JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); m[u.name] = Date.now(); localStorage.setItem('loggia-lastseen', JSON.stringify(m)); } } catch (e) {} setUserIdx(i); };
   const switchUser = (i) => { if (i === userIdx) return; if (users[i] && users[i].role === 'Admin') setPinTarget(i); else applyUser(i); };
   const isAdmin = !!(users[userIdx] && users[userIdx].role === 'Admin');
   /* Permissions par profil : le set des vues autorisées du profil actif, ou
