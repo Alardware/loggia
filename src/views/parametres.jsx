@@ -1691,6 +1691,19 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               </a>
             ))}
           </div>
+
+          {/* Ko-fi : meme regle que les liens ci-dessus, rien n'est charge
+            * depuis ko-fi.com tant qu'on ne tape pas — la tasse est dessinee
+            * ici plutot que servie par leur CDN. */}
+          <a href="https://ko-fi.com/alardware" target="_blank" rel="noopener noreferrer"
+            style={{ display: 'inline-flex', alignSelf: 'center', alignItems: 'center', gap: 10, padding: '13px 26px', borderRadius: 999, background: '#72a4f2', color: '#152744', fontSize: 14.5, fontWeight: 800, textDecoration: 'none', boxShadow: '0 10px 26px rgba(114,164,242,.26)' }}>
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+              <path d="M3 6.6h13v6.6a6.5 6.5 0 0 1-13 0z" fill="#fff" />
+              <path d="M16.4 8.2h1.9a2.9 2.9 0 0 1 0 5.8h-1.9" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+              <path d="M9.5 16.5C6.4 14.3 5.1 13 5.1 11.6A2.4 2.4 0 0 1 9.5 10.6 2.4 2.4 0 0 1 13.9 11.6C13.9 13 12.6 14.3 9.5 16.5Z" fill="#ff5f5f" />
+            </svg>
+            {tr('Me soutenir sur Ko-fi')}
+          </a>
         </>
         );
       })()}
