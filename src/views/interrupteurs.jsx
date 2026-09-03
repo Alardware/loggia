@@ -14,6 +14,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { BottomSheet, EntPicker, cvName } from '../ui.jsx';
 import { tr } from '../i18n.js';
+import { entityCaps } from '../capabilities.js';
 
 /* Les gestes proposés. `homeassistant.turn_on` et ses voisins marchent sur
  * TOUS les domaines — une lampe, une prise, un volet — là où `light.turn_on`
@@ -36,18 +37,51 @@ const GESTES = () => [
 ];
 
 /* Retrouve le geste d'une affectation déjà posée, pour rouvrir le formulaire
- * là où on l'avait laissé. L'ordre compte : « monter la luminosité » et
- * « allumer » partagent leur service, seul `brightness_step_pct` les sépare. */
+ * là où on l'avait laissé.
+ *
+ * Un même geste s'écrit de deux façons : « Allumer » vaut
+ * `homeassistant.turn_on` en général, et `light.turn_on` dès qu'on lui a donné
+ * une luminosité ou une couleur — que seul le domaine `light` sait recevoir.
+ * Le pas de luminosité, lui, distingue « monter » de « allumer » sur le même
+ * service. */
+const PAR_ID = (id) => GESTES().find(g => g.id === id) || null;
+
 function gesteDe(geste) {
   if (!geste || !geste.service) return null;
   const pas = (geste.data || {}).brightness_step_pct;
-  for (const g of GESTES()) {
-    if (g.libre || g.service !== geste.service) continue;
-    const attendu = (g.extra || {}).brightness_step_pct;
-    if (attendu !== undefined ? attendu === pas : pas === undefined) return g;
-  }
-  return null;
+  if (pas === 10) return PAR_ID('plus');
+  if (pas === -10) return PAR_ID('moins');
+  const s = geste.service;
+  if (s === 'homeassistant.toggle' || s === 'light.toggle') return PAR_ID('toggle');
+  if (s === 'homeassistant.turn_on' || s === 'light.turn_on') return PAR_ID('on');
+  if (s === 'homeassistant.turn_off' || s === 'light.turn_off') return PAR_ID('off');
+  if (s === 'scene.turn_on') return PAR_ID('scene');
+  if (s === 'script.turn_on') return PAR_ID('script');
+  return null;   // service libre
 }
+
+/* Ce qu'un bouton déclenche, en français plutôt qu'en nom de service. */
+function resume(gestes, hass) {
+  return gestes.map(g => {
+    const nom = (gesteDe(g) || {}).nom || g.service;
+    const d = g.data || {};
+    const bouts = [];
+    if (d.entity_id) {
+      const st = hass && hass.states && hass.states[d.entity_id];
+      bouts.push(st ? cvName(st, d.entity_id) : d.entity_id);
+    }
+    if (d.brightness_pct != null) bouts.push(d.brightness_pct + ' %');
+    if (Array.isArray(d.rgb_color)) bouts.push(tr('couleur'));
+    if (d.color_temp_kelvin != null) bouts.push(d.color_temp_kelvin + ' K');
+    return nom + (bouts.length ? ' → ' + bouts.join(' · ') : '');
+  }).join(' · ');
+}
+
+const enHex = (rgb) => '#' + rgb.map(v => Math.max(0, Math.min(255, v | 0)).toString(16).padStart(2, '0')).join('');
+const enRgb = (hex) => {
+  const n = parseInt(String(hex).slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
 
 function depuis(ts) {
   const s = Math.max(0, Math.round(Date.now() / 1000 - (ts || 0)));
@@ -180,9 +214,7 @@ export function InterrupteursSection({ hass, cardSt }) {
                     <span style={{ minWidth: 0, flex: 1 }}>
                       <code style={{ fontSize: 12, fontWeight: 700 }}>{btn}</code>
                       <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginTop: 3, color: gestes.length ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>
-                        {gestes.length
-                          ? gestes.map(g => ((g.data && g.data.entity_id) ? g.service + ' → ' + g.data.entity_id : g.service)).join(' · ')
-                          : tr('rien pour l’instant')}
+                        {gestes.length ? resume(gestes, hass) : tr('rien pour l’instant')}
                       </span>
                     </span>
                     <span style={{ display: 'flex', gap: 7, flexShrink: 0 }}>
@@ -217,36 +249,70 @@ export function InterrupteursSection({ hass, cardSt }) {
   );
 }
 
-/* Le formulaire : un geste, une cible. Un seul geste par bouton — le format de
- * stockage en accepte plusieurs (c'est une liste), mais rien ne les demande
- * encore, et un formulaire à plusieurs lignes coûterait plus qu'il ne
- * rapporte. */
+/* Le formulaire : un geste, une cible, et ce qu'on veut en plus.
+ *
+ * Un seul geste par bouton — le format de stockage en accepte plusieurs (c'est
+ * une liste), mais rien ne les demande encore, et un formulaire à plusieurs
+ * lignes coûterait plus qu'il ne rapporte.
+ *
+ * La luminosité et la couleur ne s'affichent que si la lampe visée sait les
+ * recevoir : `entityCaps` lit ses `supported_color_modes` plutôt que de le
+ * déduire du domaine. Une ampoule blanche ne se verra donc pas proposer une
+ * couleur qu'elle ne peut pas prendre.
+ */
 function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
   const dejaLa = existant[0] || null;
+  const d0 = (dejaLa && dejaLa.data) || {};
   const [geste, setGeste] = useState(() => (gesteDe(dejaLa) || GESTES()[0]).id);
-  const [entite, setEntite] = useState((dejaLa && dejaLa.data && dejaLa.data.entity_id) || '');
+  const [entite, setEntite] = useState(d0.entity_id || '');
   const [libre, setLibre] = useState(() => (gesteDe(dejaLa) ? '' : ((dejaLa && dejaLa.service) || '')));
   const [choisir, setChoisir] = useState(false);
+  const [lum, setLum] = useState(d0.brightness_pct != null ? d0.brightness_pct : null);
+  const [coul, setCoul] = useState(() => {
+    if (Array.isArray(d0.rgb_color)) return { rgb: d0.rgb_color.slice(0, 3) };
+    if (d0.color_temp_kelvin != null) return { k: d0.color_temp_kelvin };
+    return null;
+  });
 
   const g = GESTES().find(x => x.id === geste) || GESTES()[0];
-  const nomEntite = useMemo(() => {
-    if (!entite) return '';
-    const st = hass && hass.states && hass.states[entite];
-    return st ? cvName(st, entite) : entite;
-  }, [hass, entite]);
+  const etat = (hass && hass.states && hass.states[entite]) || null;
+  const nomEntite = useMemo(() => (entite ? (etat ? cvName(etat, entite) : entite) : ''), [etat, entite]);
+
+  /* Ce que la lampe sait faire, d'après elle — pas d'après son domaine. */
+  const caps = useMemo(() => (etat && entite.indexOf('light.') === 0 ? entityCaps(entite, etat) : null), [etat, entite]);
+  const peutLum = !!(caps && caps.can.has('set_brightness'));
+  const peutCoul = !!(caps && caps.can.has('set_color'));
+  const peutTemp = !!(caps && caps.can.has('set_color_temp'));
+  const enPlus = (geste === 'on' || geste === 'toggle') && (peutLum || peutCoul || peutTemp);
+  const at = (etat && etat.attributes) || {};
+  const kMin = at.min_color_temp_kelvin || 2000;
+  const kMax = at.max_color_temp_kelvin || 6500;
 
   const pret = g.libre
     ? (libre.trim().split('.').length === 2 && libre.trim().split('.').every(Boolean))
     : !!entite;
 
   const valider = () => {
-    const service = g.libre ? libre.trim() : g.service;
+    let service = g.libre ? libre.trim() : g.service;
     const data = { ...(g.extra || {}) };
     if (entite) data.entity_id = entite;
+    if (enPlus) {
+      if (peutLum && lum != null) data.brightness_pct = lum;
+      if (coul && Array.isArray(coul.rgb) && peutCoul) data.rgb_color = coul.rgb;
+      else if (coul && coul.k != null && peutTemp) data.color_temp_kelvin = coul.k;
+      /* `homeassistant.turn_on` ne sait rien de la luminosité ni de la
+       * couleur : dès qu'on en pose une, le geste passe par le domaine
+       * `light`, seul à les comprendre. */
+      if (data.brightness_pct != null || data.rgb_color || data.color_temp_kelvin != null) {
+        service = geste === 'toggle' ? 'light.toggle' : 'light.turn_on';
+      }
+    }
     onValider([Object.keys(data).length ? { service, data } : { service }]);
   };
 
   const champ = { width: '100%', padding: '10px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600, boxSizing: 'border-box' };
+  const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
+  const label = { fontSize: 12.5, fontWeight: 700, marginBottom: 6 };
 
   return (
     <BottomSheet onClose={onFermer} title={cible.nom}>
@@ -257,14 +323,10 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
         </div>
 
         <div>
-          <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 7 }}>{tr('Faire')}</div>
+          <div style={label}>{tr('Faire')}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
             {GESTES().map(x => (
-              <button key={x.id} onClick={() => setGeste(x.id)}
-                style={{ padding: '8px 13px', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'none',
-                  background: x.id === geste ? 'var(--o-accent)' : 'var(--o-s1)', color: x.id === geste ? '#fff' : 'var(--o-text1)' }}>
-                {x.nom}
-              </button>
+              <button key={x.id} onClick={() => setGeste(x.id)} style={puce(x.id === geste)}>{x.nom}</button>
             ))}
           </div>
           {g.aide && <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>{g.aide}</div>}
@@ -272,15 +334,13 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
 
         {g.libre && (
           <div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>{tr('Service')}</div>
+            <div style={label}>{tr('Service')}</div>
             <input value={libre} onChange={e => setLibre(e.target.value)} placeholder="script.turn_on" spellCheck={false} style={champ} />
           </div>
         )}
 
         <div>
-          <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>
-            {g.libre ? tr('Sur (facultatif)') : tr('Sur')}
-          </div>
+          <div style={label}>{g.libre ? tr('Sur (facultatif)') : tr('Sur')}</div>
           <button onClick={() => setChoisir(true)} style={{ ...champ, textAlign: 'left', cursor: 'pointer', color: entite ? 'var(--o-text1)' : 'var(--o-text3)' }}>
             {entite ? nomEntite : tr('Choisir une entité…')}
           </button>
@@ -291,6 +351,59 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
             </div>
           )}
         </div>
+
+        {/* Luminosité et couleur : seulement si la lampe sait les recevoir. */}
+        {enPlus && (
+          <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingTop: 13 }}>
+            <div style={label}>{tr('À l’allumage')}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 9 }}>
+              {tr('Facultatif. Sans rien ici, la lampe reprend son dernier état.')}
+            </div>
+            {peutLum && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <button onClick={() => setLum(v => (v == null ? 70 : null))} style={puce(lum != null)}>{tr('Luminosité')}</button>
+                {lum != null && (
+                  <>
+                    <input type="range" min={1} max={100} value={lum} onChange={e => setLum(Number(e.target.value))}
+                      style={{ flex: 1, minWidth: 120, accentColor: 'var(--o-accent)' }} />
+                    <span style={{ width: 46, textAlign: 'right', fontSize: 12.5, fontWeight: 800 }}>{lum} %</span>
+                  </>
+                )}
+              </div>
+            )}
+            {(peutCoul || peutTemp) && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                  <button onClick={() => setCoul(null)} style={puce(!coul)}>{tr('Couleur inchangée')}</button>
+                  {peutCoul && (
+                    <button onClick={() => setCoul(c => (c && c.rgb ? c : { rgb: [255, 170, 60] }))} style={puce(!!(coul && coul.rgb))}>
+                      {tr('Une couleur')}
+                    </button>
+                  )}
+                  {peutTemp && (
+                    <button onClick={() => setCoul(c => (c && c.k != null ? c : { k: Math.round((kMin + kMax) / 2) }))} style={puce(!!(coul && coul.k != null))}>
+                      {tr('Un blanc')}
+                    </button>
+                  )}
+                </div>
+                {coul && coul.rgb && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 9 }}>
+                    <input type="color" value={enHex(coul.rgb)} onChange={e => setCoul({ rgb: enRgb(e.target.value) })}
+                      style={{ width: 54, height: 34, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} />
+                    <code style={{ fontSize: 11.5, color: 'var(--o-text3)' }}>{enHex(coul.rgb)}</code>
+                  </div>
+                )}
+                {coul && coul.k != null && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9, flexWrap: 'wrap' }}>
+                    <input type="range" min={kMin} max={kMax} step={50} value={coul.k} onChange={e => setCoul({ k: Number(e.target.value) })}
+                      style={{ flex: 1, minWidth: 120, accentColor: 'var(--o-accent)' }} />
+                    <span style={{ width: 60, textAlign: 'right', fontSize: 12.5, fontWeight: 800 }}>{coul.k} K</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 9, justifyContent: 'flex-end', marginTop: 2 }}>
           <button onClick={onFermer} style={{ padding: '10px 16px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd2)', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text2)' }}>{tr('Annuler')}</button>

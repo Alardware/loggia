@@ -80,7 +80,12 @@ function etatsInitiaux() {
     states['sensor.' + cle + '_temperature'] = s(t, { friendly_name: nom + ' température', unit_of_measurement: '°C', device_class: 'temperature' });
     states['sensor.' + cle + '_humidite'] = s(h, { friendly_name: nom + ' humidité', unit_of_measurement: '%', device_class: 'humidity' });
     if (co2 != null) states['sensor.' + cle + '_co2'] = s(co2, { friendly_name: nom + ' CO2', unit_of_measurement: 'ppm', device_class: 'carbon_dioxide' });
-    states['light.' + cle] = s(cle === 'salon' || cle === 'cuisine' ? 'on' : 'off', { friendly_name: 'Plafonnier ' + nom, brightness: 180, supported_color_modes: ['brightness'] });
+    /* Le salon a une lampe de COULEUR, les autres non : c'est ce qui permet
+     * de voir que Loggia ne propose une teinte que la ou elle existe. */
+    states['light.' + cle] = s(cle === 'salon' || cle === 'cuisine' ? 'on' : 'off', cle === 'salon'
+      ? { friendly_name: 'Plafonnier ' + nom, brightness: 180, rgb_color: [255, 176, 92], color_temp_kelvin: 2900,
+          min_color_temp_kelvin: 2000, max_color_temp_kelvin: 6535, supported_color_modes: ['color_temp', 'rgb'] }
+      : { friendly_name: 'Plafonnier ' + nom, brightness: 180, supported_color_modes: ['brightness'] });
   });
   return states;
 }

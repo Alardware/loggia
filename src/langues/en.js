@@ -1250,4 +1250,10 @@ export default {
   'à régler': 'to set',
   'MQTT est là, mais l’abonnement a échoué — regarde le journal de Home Assistant': 'MQTT is there, but the subscription failed — check the Home Assistant log',
   'Pas d’intégration MQTT sur cette installation': 'No MQTT integration on this install',
+  'À l’allumage': 'When turning on',
+  'Facultatif. Sans rien ici, la lampe reprend son dernier état.': 'Optional. Leave empty and the light returns to its last state.',
+  'Couleur inchangée': 'Colour unchanged',
+  'Une couleur': 'A colour',
+  'Un blanc': 'A white',
+  'couleur': 'colour',
 };
