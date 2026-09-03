@@ -60,8 +60,8 @@ COVER_SET_POSITION = 4
 HYSTERESE_DEG = 8.0
 
 DEFAUT: dict[str, Any] = {
-    "planning": {"actif": False, "ouverture": {"decalage": 0}, "fermeture": {"decalage": 0},
-                 "jours": [0, 1, 2, 3, 4, 5, 6], "volets": {}},
+    "planning": {"actif": False, "mode": "auto", "ouverture": {"decalage": 0},
+                 "fermeture": {"decalage": 0}, "jours": [0, 1, 2, 3, 4, 5, 6], "volets": {}},
     "soleil": {"actif": False, "position": 30, "elevation_min": 15, "temp_min": 25,
                "temp_entite": "", "volets": {}},
     "vent": {"actif": False, "entite": "", "seuil": 50},
@@ -128,6 +128,31 @@ def groupes_horaires(plan, covers, sens: str) -> dict:
                     pass
         groupes.setdefault(general, []).append(haid)
     return groupes
+
+
+# Les trois positions du mode, reprises de celles que les installations
+# ecrivaient a la main dans un `input_select`. `actif` dit si la regle existe ;
+# le mode dit ce qu'elle fait aujourd'hui, et c'est lui qu'on change au
+# quotidien depuis la vue Volets.
+MODES = ("auto", "nuit", "manuel")
+
+
+def planning_agit(mode, sens: str) -> bool:
+    """Le planning doit-il bouger, dans ce mode et dans ce sens ?
+
+    auto     ferme le soir et ouvre le matin.
+    nuit     ferme le soir, mais laisse les volets fermes au matin — pour une
+             chambre d'ami, un depart, une grasse matinee qui dure.
+    manuel   ne touche a rien, sans qu'on ait a defaire les reglages.
+    """
+    m = str(mode or "auto").lower()
+    if m not in MODES:
+        m = "auto"
+    if m == "manuel":
+        return False
+    if m == "nuit":
+        return sens == "fermer"
+    return True
 
 
 def jour_actif(jours, quand) -> bool:
@@ -214,6 +239,8 @@ class LoggiaVolets:
 
         plan = self.cfg.get("planning") or {}
         if not plan.get("actif") or not jour_actif(plan.get("jours"), dt_util.now()):
+            return
+        if not planning_agit(plan.get("mode"), sens):
             return
         # Mise a l'abri en cours : on ne redescend rien, et on ne « rouvre »
         # pas ce qui est deja ouvert pour cette raison.

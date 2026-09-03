@@ -1324,4 +1324,9 @@ export default {
   'Jamais': 'Never',
   'min': 'min',
   'Vide = suit l’heure générale pour ce sens.': 'Empty = follows the general time for that direction.',
+  'Ferme le soir, ouvre le matin': 'Closes at night, opens in the morning',
+  'Ferme le soir, laisse fermé le matin': 'Closes at night, stays closed in the morning',
+  'Ne touche à rien': 'Leaves everything alone',
+  'Fermeture nuit': 'Night close',
+  'Manuel': 'Manual',
 };

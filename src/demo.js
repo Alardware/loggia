@@ -248,7 +248,7 @@ function interAffecter(msg) {
  * facades, le vent au repos. De quoi voir la page telle qu'elle sera une fois
  * remplie, plutot qu'un formulaire vide. */
 const VOL_CFG = {
-  planning: { actif: true, ouverture: { decalage: 15 }, fermeture: { decalage: -20 }, jours: [0, 1, 2, 3, 4, 5, 6] },
+  planning: { actif: true, mode: 'auto', ouverture: { decalage: 15 }, fermeture: { decalage: -20 }, jours: [0, 1, 2, 3, 4, 5, 6], volets: { 'cover.chambre': { ouverture: 90, fermeture: null } } },
   soleil: {
     actif: true, position: 30, elevation_min: 15, temp_min: 25,
     temp_entite: 'sensor.exterieur_temperature',

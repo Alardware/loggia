@@ -149,6 +149,25 @@ export function VoletsReglages({ hass, cardSt }) {
           on={plan.actif} cb={() => enregistrer({ planning: { actif: !plan.actif } })} />
         {plan.actif && (
           <>
+            {/* Ce que la règle fait AUJOURD'HUI. Le même choix se retrouve en
+              * haut de la vue Volets : c'est celui qu'on change au quotidien,
+              * quand l'interrupteur ci-dessus se règle une fois. */}
+            <div style={{ marginTop: 14 }}>
+              <div style={label}>{tr('En ce moment')}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                {[['auto', tr('Auto lever/coucher'), tr('Ferme le soir, ouvre le matin')],
+                  ['nuit', tr('Fermeture nuit'), tr('Ferme le soir, laisse fermé le matin')],
+                  ['manuel', tr('Manuel'), tr('Ne touche à rien')]].map(([id, nom]) => (
+                    <button key={id} onClick={() => enregistrer({ planning: { mode: id } })}
+                      style={puce((plan.mode || 'auto') === id)}>{nom}</button>
+                  ))}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>
+                {(plan.mode || 'auto') === 'nuit'
+                  ? tr('Ferme le soir, laisse fermé le matin')
+                  : ((plan.mode || 'auto') === 'manuel' ? tr('Ne touche à rien') : tr('Ferme le soir, ouvre le matin'))}
+              </div>
+            </div>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Ouverture')}</span>
               <Nombre v={(plan.ouverture || {}).decalage || 0} min={-120} max={120} unite={tr('min après le lever')}
