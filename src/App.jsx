@@ -8771,7 +8771,10 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   // Bouton d'armement compact (ligne dense)
   // `position`/`overflow` : le tour de progression se dessine dedans, et son
   // trait déborde de moitié pour rester collé au bord.
-  const armBtn = (active, rgb) => ({ position: 'relative', overflow: 'hidden', padding: '7px 13px', borderRadius: 9, border: '1px solid ' + (active ? ca(rgb, .5) : 'var(--o-bd1)'), cursor: 'pointer', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap', transition: 'all .2s', background: active ? ca(rgb, .16) : 'var(--o-s2)', color: active ? cs(rgb) : 'var(--o-text1)' });
+  /* Largeur EGALE pour tous : elle suivait le libelle, si bien que « Nuit »
+   * etait deux fois plus etroit que « Desarme » — et que le bouton retrecissait
+   * en cours d'armement, quand le decompte remplace le mot (retour 03/09). */
+  const armBtn = (active, rgb) => ({ position: 'relative', overflow: 'hidden', minWidth: 96, textAlign: 'center', padding: '7px 13px', borderRadius: 9, border: '1px solid ' + (active ? ca(rgb, .5) : 'var(--o-bd1)'), cursor: 'pointer', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap', transition: 'all .2s', background: active ? ca(rgb, .16) : 'var(--o-s2)', color: active ? cs(rgb) : 'var(--o-text1)' });
   // Ligne au patron Apparence : libellé + description à gauche, contrôle/valeur à droite
   const SecRow = ({ label, desc, children }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', flexWrap: 'wrap' }}>
