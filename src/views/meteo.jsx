@@ -18,16 +18,9 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 const WeatherGL = lazy(() => import('../wx3d.jsx'));
 import { REDUCE_MOTION, Fi, Anim, ViewEditBar } from '../ui.jsx';
 import { WX_PRESETS } from '../wxpresets.js';
-import { WX_BG, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from '../wxutil.jsx';
+import { WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from '../wxutil.jsx';
 import { tr } from '../i18n.js';
 import WeatherEffects from '../wxeffects.jsx';
-
-
-
-
-
-
-
 
 /* Carte d'un JOUR de la semaine : sa propre animation en fond — pluie qui
  * tombe, etoiles, halo — et le degrade de sa condition. C'est la demande du
@@ -36,13 +29,17 @@ function WxJour({ f, nom, mode, effets, deg, n }) {
   const mx = n(f.temperature), mn = n(f.templow);
   const pluie = n(f.precipitation);
   const proba = n(f.precipitation_probability);
+  /* UN SEUL fond. La carte portait son propre dégradé — bleu en haut, presque
+   * noir en bas — et la scène posait le sien par-dessus en se dissolvant : les
+   * deux se croisaient en un bas de carte tout noir, qu'on prenait pour une
+   * ombre (retour 03/09). La scène fait le ciel, la carte la surface. */
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', height: 168, borderRadius: 'var(--o-radius,20px)', border: 'none', background: WX_BG[mode] || WX_BG.clouds, padding: '15px 16px', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'relative', overflow: 'hidden', height: 168, borderRadius: 'var(--o-radius,20px)', border: 'none', background: 'var(--o-surfA)', padding: '15px 16px', display: 'flex', flexDirection: 'column' }}>
       {/* `offsetY` pousse les ornements sous le titre : les nuages de la
         * maquette, dessinés pour un grand panneau, tombaient sinon en plein
         * sur le nom du jour. L'ombre de texte fait le reste — un nuage blanc
         * qui dérive passera toujours quelque part. */}
-      {effets && <WeatherEffects weather={mode} k={0.52} fadeStart={34} densite={0.55} offsetY={30} />}
+      {effets && <WeatherEffects weather={mode} k={0.52} fadeStart={62} densite={0.55} offsetY={30} />}
       {/* Un voile sombre sur le tiers haut : quelle que soit l'ambiance, un
         * nuage blanc finit toujours par passer sous le nom du jour. */}
       <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: '52%', background: 'linear-gradient(180deg,rgba(6,12,24,.58),rgba(6,12,24,0))' }} />
