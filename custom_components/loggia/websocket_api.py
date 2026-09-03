@@ -46,6 +46,8 @@ WS_INT_ETAT = "loggia/interrupteurs/etat"
 WS_INT_AFFECTER = "loggia/interrupteurs/affecter"
 WS_VOL_ETAT = "loggia/volets/etat"
 WS_VOL_CONFIG = "loggia/volets/config"
+WS_FEN_ETAT = "loggia/fenetres/etat"
+WS_FEN_CONFIG = "loggia/fenetres/config"
 
 
 def _user_info(connection: websocket_api.ActiveConnection) -> dict[str, Any]:
@@ -77,7 +79,7 @@ def _payload_too_big(patch: dict[str, Any]) -> str | None:
 
 @callback
 def async_register(hass: HomeAssistant, store: LoggiaStore,
-                   acces_interrupteurs=None, acces_volets=None) -> None:
+                   acces_interrupteurs=None, acces_volets=None, acces_fenetres=None) -> None:
     """Declare les commandes aupres du serveur WebSocket.
 
     `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
@@ -219,6 +221,30 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             return
         connection.send_result(msg["id"], {"config": await volets.async_enregistrer(msg["patch"])})
 
+    # ── Fenetre ouverte, chauffage coupe ──────────────────────────────────
+    @websocket_api.websocket_command({vol.Required("type"): WS_FEN_ETAT})
+    @websocket_api.async_response
+    async def handle_fen_etat(hass, connection, msg):
+        fen = acces_fenetres() if acces_fenetres else None
+        if fen is None:
+            connection.send_error(msg["id"], "not_available", "regle des fenetres indisponible")
+            return
+        connection.send_result(msg["id"], await fen.async_etat())
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_FEN_CONFIG, vol.Required("patch"): dict}
+    )
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_fen_config(hass, connection, msg):
+        fen = acces_fenetres() if acces_fenetres else None
+        if fen is None:
+            connection.send_error(msg["id"], "not_available", "regle des fenetres indisponible")
+            return
+        connection.send_result(msg["id"], {"config": await fen.async_enregistrer(msg["patch"])})
+
+    websocket_api.async_register_command(hass, handle_fen_etat)
+    websocket_api.async_register_command(hass, handle_fen_config)
     websocket_api.async_register_command(hass, handle_vol_etat)
     websocket_api.async_register_command(hass, handle_vol_config)
     websocket_api.async_register_command(hass, handle_int_etat)
