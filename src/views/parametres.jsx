@@ -145,7 +145,7 @@ function AlertesTele({ hass, cardSt }) {
       {d && <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{d}</div>}
     </div>
   );
-  if (!cfg) return <div style={cardSt}><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Chargement…')}</div></div>;
+  if (!cfg) return <div className="o-parcard" style={cardSt}><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Chargement…')}</div></div>;
   const CATS = [
     ['fumee', tr('Fumée'), tr('Détecteurs de fumée et de sûreté')],
     ['gaz', tr('Gaz'), tr('Détecteurs de gaz')],
@@ -155,7 +155,7 @@ function AlertesTele({ hass, cardSt }) {
     ['portes', tr("Ouverture pendant que l'alarme est armée"), tr('Portes, fenêtres et garage')],
   ];
   return (
-    <div style={cardSt}>
+    <div className="o-parcard" style={cardSt}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Alertes téléphone')}</div>
@@ -1292,7 +1292,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </div>
         </div>
 
-        <div style={cardSt}>
+        <div className="o-parcard" style={cardSt}>
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>{tr('Bon à savoir')}</div>
           {PAR_HELPS().map(h => {
             const isOpen = !!open[h.id];
@@ -1313,7 +1313,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <SecBar>
           {isAdmin && <SecGroup label="Profils"><button onClick={() => setEditing({ i: null })} style={secBtn(false)}>{tr('Ajouter un profil')}</button></SecGroup>}
         </SecBar>
-        <div style={cardSt}>
+        <div className="o-parcard" style={cardSt}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><div style={{ fontSize: 16, fontWeight: 700 }}>Utilisateurs ({users.length})</div></div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '-12px 0 12px' }}>Profils locaux à cet appareil — l'utilisateur Home Assistant connecté est reconnu automatiquement.</div>
           {!isAdmin && <div style={{ fontSize: 12.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 14 }}>{tr('Seul un administrateur peut ajouter, modifier ou supprimer un utilisateur.')}</div>}
@@ -1377,7 +1377,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <SecGroup label={tr('Vue personnalisée')}><button onClick={() => setCvEditing('new')} style={secBtn(false)}>{tr('Créer une vue')}</button></SecGroup>
           {onNav && <SecGroup label={tr('Catalogue')}><button onClick={() => onNav('biblio')} style={secBtn(false)}>{tr('Bibliothèque de cartes')}</button></SecGroup>}
         </SecBar>
-        <div style={cardSt}>
+        <div className="o-parcard" style={cardSt}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Vues intégrées')}</div><span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.05em' }}>{tr('visibilité du menu latéral')}</span></div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 6px' }}>Masque celles que tu n'utilises pas, ou réactive une vue retirée. La barre mobile garde ses raccourcis.</div>
           <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1390,7 +1390,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             ); })}
           </div>
         </div>
-        <div style={cardSt}>
+        <div className="o-parcard" style={cardSt}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 10 }}><div><div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Gestion des vues')}</div><div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600 }}>{tr('Crée tes propres vues avec tes entités — elles apparaissent dans le menu latéral.')}</div></div></div>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '18px 0 10px' }}>MES VUES ({customViews.length})</div>
           <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1442,7 +1442,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
           </SecGroup>
         </SecBar>
-        <div style={cardSt}>
+        <div className="o-parcard" style={cardSt}>
           <div style={{ display: 'flex', gap: 8, margin: '10px 0 14px', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ flex: '1 1 200px', position: 'relative' }}>
               <input value={autoQ} onChange={e => setAutoQ(e.target.value)} placeholder={tr('Filtrer par nom…')} spellCheck={false} style={{ width: '100%', boxSizing: 'border-box', padding: '9px 13px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
@@ -1481,7 +1481,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
           </SecGroup>
         </SecBar>
-        <div style={cardSt}>
+        <div className="o-parcard" style={cardSt}>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
             <button onClick={() => {
               // 1) La zone Home Assistant : c'est elle qui fait autorité, et la
@@ -1559,7 +1559,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
           </SecGroup>
         </SecBar>
-        <div style={cardSt}>
+        <div className="o-parcard" style={cardSt}>
           {ups.length === 0
             ? <div style={{ padding: '26px 0 14px', textAlign: 'center' }}>
                 <div style={{ width: 52, height: 52, borderRadius: '50%', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-ok-rgb),.14)' }}><Fi i="check" size={22} color="var(--o-ok)" /></div>
