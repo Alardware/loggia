@@ -598,18 +598,18 @@ function Header() {
         <button onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }} title="Profil" style={{ width: 44, height: 44, borderRadius: '50%', marginLeft: 4, background: curBg, border: '2px solid rgba(255,255,255,.15)', cursor: 'pointer', flexShrink: 0 }} />
         {notifOpen && (
           <div style={{ ...menu, right: 52, width: 'min(304px, calc(100vw - 32px))' }}>
-            <div style={{ padding: '12px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 14 }}>Notifications</span><span onClick={marquerVues} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); marquerVues(); } }} style={{ fontSize: 12, color: 'var(--o-accent-soft)', cursor: 'pointer', fontWeight: 600 }}>Tout lire</span></div>
+            <div style={{ padding: '12px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 14 }}>Notifications</span><span onClick={marquerVues} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); marquerVues(); } }} style={{ fontSize: 12, color: 'var(--o-accent-soft)', cursor: 'pointer', fontWeight: 600 }}>{tr('Tout lire')}</span></div>
             <div style={{ maxHeight: 300, overflowY: 'auto' }}>
               {hasNotif ? notifs.map((n, i) => (
                 <div key={i} style={{ display: 'flex', gap: 11, padding: '11px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: n[0], marginTop: 5, flexShrink: 0 }} /><div style={{ minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700 }}>{n[1]}</div><div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{n[2]}</div>{n[3] && <div style={{ fontSize: 11, color: 'var(--o-text3)', marginTop: 2 }}>{n[3]}</div>}</div></div>
-              )) : <div style={{ padding: '22px 14px', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>Aucune notification</div>}
+              )) : <div style={{ padding: '22px 14px', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucune notification')}</div>}
             </div>
           </div>
         )}
         {userOpen && (
           <div style={{ ...menu, right: 0, width: 252 }}>
             <div style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 11, borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}><span style={{ width: 40, height: 40, borderRadius: '50%', background: curBg, flexShrink: 0 }} /><div style={{ minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{cur.name}</div><div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{cur.role} · Maison</div></div></div>
-            <div style={{ padding: '8px 12px 4px', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)' }}>CHANGER DE PROFIL</div>
+            <div style={{ padding: '8px 12px 4px', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)' }}>{tr('CHANGER DE PROFIL')}</div>
             <div style={{ padding: '0 6px 6px' }}>
               {users.map((u, i) => (
                 <button key={i} onClick={() => { onSwitchUser && onSwitchUser(i); setUserOpen(false); }} style={{ ...mItem, gap: 11, background: i === userIdx ? 'var(--o-s1)' : 'transparent' }}>
@@ -1000,7 +1000,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         </div>
         {temp && <span className="o-chip-temp-d" style={{ fontSize: 19, fontWeight: 800, color: p.tc, flexShrink: 0 }}>{temp}</span>}
         {canToggle && (
-          <span role="switch" aria-checked={on} aria-label={'Lumières ' + p.name} tabIndex={0}
+          <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
             onClick={e => { e.stopPropagation(); doToggle(); }}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
             style={{ width: 44, height: 25, borderRadius: 13, position: 'relative', cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-bd1)', transition: 'background .25s' }}>
@@ -1062,7 +1062,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
             )}
           </div> : <span />}
           {canToggle && (
-            <span role="switch" aria-checked={on} aria-label={'Lumières ' + p.name} tabIndex={0}
+            <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
               onClick={e => { e.stopPropagation(); doToggle(); }}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
               style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
@@ -1231,9 +1231,9 @@ function RoomComfortModal({ piece, hass, onClose }) {
                   <ComfortBar m={m} value={v} />
                   <div style={{ marginTop: 14 }}>
                     {histState === 'loading'
-                      ? <div style={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600 }}>Chargement de l'historique…</div>
+                      ? <div style={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600 }}>{tr("Chargement de l'historique…")}</div>
                       : hist[m.key]
-                        ? <><Sparkline points={hist[m.key]} color={vd.c} /><div style={{ fontSize: 10.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 3 }}>24 dernières heures</div></>
+                        ? <><Sparkline points={hist[m.key]} color={vd.c} /><div style={{ fontSize: 10.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 3 }}>{tr('24 dernières heures')}</div></>
                         : <div style={{ height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--o-text3)', fontWeight: 600 }}>Historique indisponible</div>}
                   </div>
                 </div>
@@ -1574,7 +1574,7 @@ function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
     if (f & 4) btns.push(['home', 'dock', tr('Renvoyer au dock')]);
   }
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)}
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + (label || a.friendly_name || id)}
       onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }}
       onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -1604,7 +1604,7 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onOpen, extra = null
   // Compacte 1×1 : gabarit CvCard dense — réservoir à droite, ration en mini.
   if (chip) {
     return (
-      <div className="o-piece o-cvdense" role="button" tabIndex={0} aria-label={'Ouvrir ' + nom}
+      <div className="o-piece o-cvdense" role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
         onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -1625,7 +1625,7 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onOpen, extra = null
     );
   }
   return (
-    <div className="o-rmcard" role="button" tabIndex={0} aria-label={'Ouvrir ' + nom}
+    <div className="o-rmcard" role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
       onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -1661,7 +1661,7 @@ function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, temp, im
   // Compacte 1×1 : gabarit CvCard dense — l'humidité à la couleur du verdict.
   if (chip) {
     return (
-      <div className="o-piece o-cvdense" role="button" tabIndex={0} aria-label={'Ouvrir ' + nom}
+      <div className="o-piece o-cvdense" role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
         onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -1686,7 +1686,7 @@ function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, temp, im
     </div>
   );
   return (
-    <div className="o-rmcard" role="button" tabIndex={0} aria-label={'Ouvrir ' + nom}
+    <div className="o-rmcard" role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
       onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', position: 'relative', overflow: 'hidden' }}>
       {filigrane}
@@ -1731,7 +1731,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
     el.onpointercancel = () => { end(); if (fill) fill.style.width = pos + '%'; };
   };
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (titre || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + (titre || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : volet ouvert = lavis VIOLET, gradué par la position — le bleu accent restait trop proche des autres cartes.
       ...(pos > 0 && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-purple-rgb),${lav(.10 + pos * .0012)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
@@ -1862,7 +1862,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
   const nextMode = () => { const i = all.indexOf(mode); commander(hass, id, 'set_hvac_mode', all[(i + 1) % all.length]); };
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
       ...(heating && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-bad-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
@@ -1872,7 +1872,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
       {/* Allumé = ROUGE (retour d'essai) : l'ambre warn2 rendait jaune. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(off ? 'var(--o-s1)' : 'rgba(var(--o-bad-rgb),.14)', off ? 'var(--o-text3)' : 'var(--o-bad)')}><Fi i="thermometer-half" size={17} /></span>
-        <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title="Changer de mode" style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'none', background: off ? 'var(--o-s1)' : 'rgba(var(--o-bad-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-bad)' }}>{tr(MODE_FR[mode]) || String(mode).toUpperCase()}</button>
+        <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title={tr('Changer de mode')} style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'none', background: off ? 'var(--o-s1)' : 'rgba(var(--o-bad-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-bad)' }}>{tr(MODE_FR[mode]) || String(mode).toUpperCase()}</button>
       </div>
       <div style={{ marginTop: 14 }}>
         <div className="o-rmbig" style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1.1 }}>{target}<span style={{ fontSize: 20 }}>°</span></div>
@@ -1961,12 +1961,12 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   };
   const label = String(zoneModeLabel(zone, z.modeBrut || options[0] || '')).toUpperCase();
   return (
-    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (titre || zone.name)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(zone.id); } }} onClick={() => onOpen && onOpen(zone.id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
+    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + (titre || zone.name)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(zone.id); } }} onClick={() => onOpen && onOpen(zone.id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.16)', off ? 'var(--o-text3)' : heating ? 'var(--o-warn2)' : '#ff8a4c')}><Fi i="thermometer-half" size={17} /></span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {z.auto && <span style={{ padding: '4px 8px', borderRadius: 999, fontSize: 9.5, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>AUTO</span>}
-          <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title="Changer de mode" style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'var(--o-bw,1px) solid ' + (off ? 'var(--o-bd2)' : 'rgba(var(--o-warn2-rgb),.3)'), background: off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-warn2)' }}>{label}</button>
+          <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title={tr('Changer de mode')} style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'var(--o-bw,1px) solid ' + (off ? 'var(--o-bd2)' : 'rgba(var(--o-warn2-rgb),.3)'), background: off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-warn2)' }}>{label}</button>
         </div>
       </div>
       <div>
@@ -2019,7 +2019,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, margin: '10px 0 18px' }}>
           <button onClick={() => setT(-0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>−</button>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', textAlign: 'center', lineHeight: 1.35 }}>± par<br />pas de 0,5°</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', textAlign: 'center', lineHeight: 1.35 }}>{tr('± par')}<br />{tr('pas de 0,5°')}</span>
           <button onClick={() => setT(0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>+</button>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -2180,7 +2180,7 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
   const art = /echo/i.test(artKey) ? DEVICE_ART.echo : /apple|atv|tv/i.test(artKey) ? DEVICE_ART.appletv : null;
   const mort = !S || !S[id] || S[id].state === 'unavailable';
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={'Ouvrir ' + (label || (a && a.friendly_name) || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, position: 'relative', overflow: 'hidden', cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + (label || (a && a.friendly_name) || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, position: 'relative', overflow: 'hidden', cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : un lecteur EN LECTURE lave sa surface d'accent, comme la
       // lumière de son or — l'activité se voit avant de lire le titre.
       ...(np.playing && LAVIS ? {
@@ -2339,7 +2339,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, margin: '10px 0 18px' }}>
           <button onClick={() => setT(-0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>−</button>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', textAlign: 'center', lineHeight: 1.35 }}>± par<br />pas de 0,5°</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', textAlign: 'center', lineHeight: 1.35 }}>{tr('± par')}<br />{tr('pas de 0,5°')}</span>
           <button onClick={() => setT(0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 22, fontWeight: 700, cursor: 'pointer' }}>+</button>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -2825,8 +2825,8 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
             </>
           )}
           <div style={{ display: 'flex', gap: 9, marginTop: 20, flexWrap: 'wrap' }}>
-            <button onClick={() => valider(close)} style={{ flex: 1, minWidth: 130, padding: '11px 0', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700, background: 'var(--o-accent)', color: '#06121f' }}>Enregistrer</button>
-            <button onClick={() => { ed.remove(id); close(); }} style={{ padding: '11px 16px', borderRadius: 12, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.14)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: 'var(--o-bad)' }}>Retirer</button>
+            <button onClick={() => valider(close)} style={{ flex: 1, minWidth: 130, padding: '11px 0', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700, background: 'var(--o-accent)', color: '#06121f' }}>{tr('Enregistrer')}</button>
+            <button onClick={() => { ed.remove(id); close(); }} style={{ padding: '11px 16px', borderRadius: 12, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.14)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: 'var(--o-bad)' }}>{tr('Retirer')}</button>
           </div>
         </div>
       )}
@@ -2888,9 +2888,9 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, children }) {
           else if ((e.key === 'Enter' || e.key === ' ') && onEdit) { e.preventDefault(); onEdit(id); }
         }}
         title={tr('Cliquer pour modifier · glisser pour déplacer (flèches ← →)')}
-        aria-label={'Modifier ou déplacer ' + (nom || id)}
+        aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)}
         style={{ position: 'absolute', inset: 0, zIndex: 2, borderRadius: 'var(--o-radius,20px)', touchAction: 'pan-y', cursor: saisie ? 'grabbing' : 'grab' }} />
-      <button data-drag-ui="1" onClick={() => ed.remove(id)} title="Retirer" aria-label={'Retirer ' + (nom || id)}
+      <button data-drag-ui="1" onClick={() => ed.remove(id)} title={tr('Retirer')} aria-label={tr('Retirer') + ' ' + (nom || id)}
         style={{ position: 'absolute', ...(plat ? { top: '50%', right: 7, transform: 'translateY(-50%)' } : { top: -9, right: -9 }), zIndex: 3, width: 26, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--o-bad)', color: '#fff', fontSize: 15, fontWeight: 800, lineHeight: 1, boxShadow: '0 3px 10px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>×</button>
       {!plat && ed.basculerLarge && (
         <button data-drag-ui="1" onClick={() => ed.basculerLarge(id)} title={ed.estLarge(id) ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={ed.estLarge(id)}
@@ -3870,7 +3870,7 @@ function QuickScenes({ hass }) {
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={sectionTitle}>{tr('Scènes rapides')}</div>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{quickScenes().length} raccourcis</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('{n} raccourcis', { n: quickScenes().length })}</span>
       </div>
       <div className="grid-qscenes" style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12 }}>
         {quickScenes().map(s => {
@@ -4561,7 +4561,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
             || (S ? Object.keys(S).find(id => id.indexOf('number.') === 0 && /serving_size$/.test(id)) : null);
           return croqFicheId
             ? <FicheAppareil id={croqFicheId} hass={hass} onClose={() => setSheet(null)} />
-            : <ObjSheet title="Distributeur de croquettes" accent="#f59e0b"
+            : <ObjSheet title={tr('Distributeur de croquettes')} accent="#f59e0b"
                 rows={[[tr('Réservoir'), croqPct + ' %', croqPct < 25 ? '#f87171' : 'var(--o-text)'], ['Prochaine ration', nextMeal ? (nextMeal.time + ' · ' + nextMeal.g + ' g') : '—'], ['Distribué aujourd\'hui', (num(croqHaids().distribuees, 0) || 0) + ' g']]}
                 actions={((loggiaEnt('feeder', null) || {}).script) ? [{ label: 'Distribuer 1 ration', primary: true, run: () => call('script', 'turn_on', { entity_id: (loggiaEnt('feeder', null) || {}).script }) }] : []}
                 onClose={() => setSheet(null)} />;
@@ -5563,7 +5563,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           <div className="o-wx3d-veil" />
         </div>)}
       <div className="loggia-content" style={{ position: 'relative', zIndex: 1, padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 26 }}>
-        {editMode && onEnt && <ViewEditBar texte="Mode édition : personnalise la bannière, et choisis les pièces, capteurs d’énergie, personnes et caméras." onEnt={onEnt} />}
+        {editMode && onEnt && <ViewEditBar texte={tr("Mode édition : personnalise la bannière, et choisis les pièces, capteurs d’énergie, personnes et caméras.")} onEnt={onEnt} />}
 
         {/* BANNER */}
         <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--o-radius,22px)', padding: '22px 8px' }}>
@@ -6116,7 +6116,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
 
       {edit && (
         <ViewEditBar onEnt={onEnt}
-          texte={'Mode édition : clique une lumière pour la modifier, glisse-la pour la déplacer.'
+          texte={tr('Mode édition : clique une lumière pour la modifier, glisse-la pour la déplacer.')
             + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
           <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{tr('Ajouter une lumière')}</button>
           <button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>
@@ -7116,7 +7116,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
 
       {edit && (
         <ViewEditBar onEnt={onEnt}
-          texte={'Mode édition : clique une carte pour la modifier, glisse-la pour la déplacer.'
+          texte={tr('Mode édition : clique une carte pour la modifier, glisse-la pour la déplacer.')
             + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
           <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{tr('Ajouter un volet')}</button>
           <button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>
@@ -7815,10 +7815,10 @@ function EnergieContent({ hass, edit = false, onEnt }) {
 
       {/* Bilan instantané : les chiffres du moment, en lignes denses */}
 
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>Postes de consommation</div>
+      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Postes de consommation')}</div>
         {edit && (
-          <ViewEditBar onEnt={onEnt} entLabel="Entités du schéma"
-            texte={'Mode édition : clique un poste pour le modifier, glisse-le pour le déplacer.'
+          <ViewEditBar onEnt={onEnt} entLabel={tr('Entités du schéma')}
+            texte={tr('Mode édition : clique un poste pour le modifier, glisse-le pour le déplacer.')
               + (ed.edits ? ' Ces postes sont personnalisés.' : ' Ces postes suivent la détection automatique.')}>
             <button onClick={() => setEnAdd(true)} style={editBtn(true)}>{tr('Ajouter un poste')}</button>
             <BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} />
@@ -8268,7 +8268,7 @@ function CroquettesContent({ hass }) {
       {/* carte Distributeur */}
 
       {/* Repas du jour : une carte par repas, cliquable pour activer/désactiver */}
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>Repas du jour</div>
+      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Repas du jour')}</div>
       <div className="grid-croqmeals" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(178px,1fr))', gap: 12 }}>
         {meals.map(m => {
           const passed = mealMin(m.time) <= nowMin;
@@ -8547,7 +8547,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
 
       {edit && (
         <ViewEditBar onEnt={onEnt}
-          texte={'Mode édition : clique un lecteur pour le modifier, glisse-le pour le déplacer.'
+          texte={tr('Mode édition : clique un lecteur pour le modifier, glisse-le pour le déplacer.')
             + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
           <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{tr('Ajouter un lecteur')}</button>
           <button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>
@@ -10517,7 +10517,7 @@ function CvTyped({ x, hass, dc }) {
   const { t, id } = x;
   // Les cartes capteur ouvrent la fiche 24 h au clic — elles n'ont aucun contrôle interne à protéger.
   const ouvre = (comp) => String(id).split('.')[0] === 'sensor'
-    ? <div role="button" tabIndex={0} aria-label={'Ouvrir ' + id} onClick={() => dc.ouvrir(id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dc.ouvrir(id); } }} style={{ height: '100%', cursor: 'pointer' }}>{comp}</div>
+    ? <div role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + id} onClick={() => dc.ouvrir(id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dc.ouvrir(id); } }} style={{ height: '100%', cursor: 'pointer' }}>{comp}</div>
     : comp;
   if (t === 'compacte') return <CvCard id={id} hass={hass} onOpen={dc.ouvrir} dense />;
   // La STANDARD : la carte riche des vues intégrées quand le domaine en a une

@@ -398,10 +398,10 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
           </div>
         </>)}
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 12, background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', color: '#f87171', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Supprimer</button>}
+          {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 12, background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', color: '#f87171', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>{tr('Supprimer')}</button>}
           <div style={{ flex: 1 }} />
           <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Annuler</button>
-          <button onClick={save} style={{ padding: '11px 18px', borderRadius: 12, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Enregistrer</button>
+          <button onClick={save} style={{ padding: '11px 18px', borderRadius: 12, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
         </div>
       </div>
     </div>
@@ -476,7 +476,7 @@ function CvEditor({ cv, hass, onSave, onClose }) {
         <TplForm hass={getHass()} onAdd={(t) => setEnts(prev => [...prev, t])} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
           <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Annuler</button>
-          <button onClick={save} style={{ padding: '11px 20px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: name.trim() ? 1 : .5 }}>Enregistrer</button>
+          <button onClick={save} style={{ padding: '11px 20px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: name.trim() ? 1 : .5 }}>{tr('Enregistrer')}</button>
         </div>
       </div>
     </div>
@@ -504,7 +504,7 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
     <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
         <div style={{ fontSize: 13.5, fontWeight: 800 }}>{title}</div>
-        {addable && <button onClick={add} style={{ padding: '5px 11px', borderRadius: 9, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}>+ Ajouter</button>}
+        {addable && <button onClick={add} style={{ padding: '5px 11px', borderRadius: 9, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}>{tr('+ Ajouter')}</button>}
       </div>
       {desc && <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{desc}</div>}
       <div className="o-enthead" style={{ display: 'flex', gap: 8, padding: '0 2px 5px', fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)' }}>
@@ -521,7 +521,7 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
                 {st && <span title={st === 'ok' ? 'Entité trouvée' : 'Introuvable dans Home Assistant'} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 7, height: 7, borderRadius: '50%', background: st === 'ok' ? 'var(--o-ok)' : 'var(--o-bad)', pointerEvents: 'none' }} />}
               </span>
             ); })}
-            {addable && <button onClick={() => del(i)} title="Retirer" style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 14, fontWeight: 800 }}>×</button>}
+            {addable && <button onClick={() => del(i)} title={tr('Retirer')} style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 14, fontWeight: 800 }}>×</button>}
           </div>
         ))}
         {!rows.length && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '4px 2px' }}>Vide.</div>}
@@ -629,11 +629,11 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
   return (
     <>
       {Object.keys(dlists).map(d => <datalist key={d} id={'o-dl-' + d}>{dlists[d].map(id => <option key={id} value={id} />)}</datalist>)}
-      {has('rooms') && <EntSection title={tr('Pièces (Accueil)')} desc="Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce." cols={[{ k: 'room', label: tr('Pièce'), ph: tr('Séjour'), flex: .8 }, { k: 'temp', label: tr('Température'), ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: tr('Humidité'), ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }, { k: 'lights', label: 'Lampes du bouton', ph: tr('toutes (light.a, light.b)'), domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
+      {has('rooms') && <EntSection title={tr('Pièces (Accueil)')} desc={tr("Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce.")} cols={[{ k: 'room', label: tr('Pièce'), ph: tr('Séjour'), flex: .8 }, { k: 'temp', label: tr('Température'), ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: tr('Humidité'), ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }, { k: 'lights', label: tr('Lampes du bouton'), ph: tr('toutes (light.a, light.b)'), domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
       {has('energy') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13.5, fontWeight: 800, marginBottom: 3 }}>{tr('Énergie')}</div>
-          <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>Capteurs de puissance (W) du flux énergétique. Le véhicule et la batterie n'apparaissent sur le schéma que si tu les renseignes.</div>
+          <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Capteurs de puissance (W) du flux énergétique. Le véhicule et la batterie n'apparaissent sur le schéma que si tu les renseignes.")}</div>
           {/* Deux colonnes : a trois, le champ tronquait les noms d'entites,
               qui depassent souvent trente caracteres. */}
           <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
@@ -658,10 +658,10 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
           <input value={ent.weather} onChange={e => setEnt(o => ({ ...o, weather: e.target.value }))} placeholder="weather.…" list="o-dl-weather" spellCheck={false} style={entInp} />
         </div>
       )}
-      {has('people') && <EntSection title={tr('Présence')} desc="Personnes affichées sur l'Accueil (avatars)." cols={[{ k: 'name', label: tr('Prénom'), ph: tr('Prénom'), flex: .7 }, { k: 'haid', label: tr('Entité person'), ph: 'person.…', domain: 'person' }]} rows={ent.people} onRows={entSet('people')} check={check} />}
+      {has('people') && <EntSection title={tr('Présence')} desc={tr('Personnes affichées sur l’Accueil (avatars).')} cols={[{ k: 'name', label: tr('Prénom'), ph: tr('Prénom'), flex: .7 }, { k: 'haid', label: tr('Entité person'), ph: 'person.…', domain: 'person' }]} rows={ent.people} onRows={entSet('people')} check={check} />}
       {has('switches') && <EntSection title={tr('Interrupteurs traités comme lumières')} desc={tr('Entités switch affichées dans la vue Lumières.')} cols={[{ k: 'haid', label: tr('Entité switch'), ph: 'switch.…', domain: 'switch' }]} rows={ent.switches} onRows={entSet('switches')} />}
-      {has('cams') && <EntSection title={tr('Caméras (Accueil)')} desc="Tuiles caméras de l'Accueil (flux live)." cols={[{ k: 'name', label: 'Nom', ph: tr('Entrée'), flex: .7 }, { k: 'haid', label: tr('Entité camera'), ph: 'camera.…', domain: 'camera' }]} rows={ent.cams} onRows={entSet('cams')} />}
-      {has('medias') && <EntSection title={tr('Lecteurs médias')} desc="Vue Médias. « Compagnon MA » optionnel : entité Music Assistant qui porte titre/pochette (métadonnées + transport)." cols={[{ k: 'name', label: 'Nom', ph: 'Echo Salon', flex: .8 }, { k: 'haid', label: tr('Entité native'), ph: 'media_player.…', domain: 'media_player' }, { k: 'ma', label: 'Compagnon MA', ph: 'media_player.… (optionnel)', domain: 'media_player' }]} rows={ent.medias} onRows={entSet('medias')} />}
+      {has('cams') && <EntSection title={tr('Caméras (Accueil)')} desc={tr("Tuiles caméras de l'Accueil (flux live).")} cols={[{ k: 'name', label: 'Nom', ph: tr('Entrée'), flex: .7 }, { k: 'haid', label: tr('Entité camera'), ph: 'camera.…', domain: 'camera' }]} rows={ent.cams} onRows={entSet('cams')} />}
+      {has('medias') && <EntSection title={tr('Lecteurs médias')} desc={tr("Vue Médias. « Compagnon MA » optionnel : entité Music Assistant qui porte titre/pochette (métadonnées + transport).")} cols={[{ k: 'name', label: 'Nom', ph: 'Echo Salon', flex: .8 }, { k: 'haid', label: tr('Entité native'), ph: 'media_player.…', domain: 'media_player' }, { k: 'ma', label: tr('Compagnon MA'), ph: 'media_player.… (optionnel)', domain: 'media_player' }]} rows={ent.medias} onRows={entSet('medias')} />}
       {has('climate') && <EntSection title={tr('Chauffage')}
         desc={tr('Un thermostat (climate.…) est trouvé tout seul : rien à saisir. Cette liste sert aux radiateurs fil pilote — un interrupteur entouré de ses aides, que rien ne permet de deviner.')}
         cols={[
@@ -706,7 +706,7 @@ export function ViewEntSheet({ view, hass, onClose }) {
         <EntSections ent={ent} setEnt={setEnt} entSet={entSet} dlists={dlists} only={VIEW_ENT_SECTIONS[view]} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
           <button onClick={close} style={{ padding: '10px 16px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
-          <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Enregistrer et recharger</button>
+          <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
         </div>
       </>)}
     </BottomSheet>
@@ -1110,10 +1110,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <OptRow title="Suivre Home Assistant" desc={tr('Calque le thème actif de Home Assistant et désactive les choix ci-dessous.')}>
               <Tgl on={haTheme === 'FOLLOW'} cb={onFollowHa} label={tr('Suivre le thème Home Assistant')} />
             </OptRow>
-            <OptRow title="Barre de navigation" desc="Accès rapide en bas de l'écran, sur mobile uniquement.">
-              <Tgl on={!!navbar} cb={onToggleNavbar} label="Barre de navigation mobile" />
-            </OptRow>
-            <OptRow title={tr('Nouvel accueil (aperçu)')} desc={tr('Essaie la future page d’accueil — favoris épinglés, pièces denses — sur cet appareil seulement. Réversible d’un tap ; l’accueil actuel reste le défaut.')}>
+            <OptRow title={tr('Barre de navigation')} desc={tr('Accès rapide en bas de l’écran, sur mobile uniquement.')}>
+              <Tgl on={!!navbar} cb={onToggleNavbar} label={tr('Barre de navigation mobile')} />
             </OptRow>
             <OptRow title="Page d'accueil"
               desc={accueilDefaut === true
@@ -1133,7 +1131,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </AppCard>
 
           <AppCard title="Effets" note="coût GPU modéré">
-            <OptRow title={tr('Effets météo animés')} desc="Ciel vivant derrière la bannière d'accueil, suivant la météo réelle.">
+            <OptRow title={tr('Effets météo animés')} desc={tr("Ciel vivant derrière la bannière d'accueil, suivant la météo réelle.")}>
               <Tgl on={!!wxFx} cb={onToggleWxFx} label={tr('Effets météo animés')} />
             </OptRow>
             <OptRow title={tr('Mode ambiant')} desc={tr("Pour une tablette murale : après ce délai sans toucher, un écran de veille — heure, météo, alertes. Un toucher le retire. Réglage propre à cet appareil.")}>
@@ -1256,7 +1254,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', overflow: 'hidden', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 20px', background: 'var(--o-s4)', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
             <Fi i="settings" size={15} color="var(--o-text2)" />
-            <span style={{ fontSize: 14.5, fontWeight: 700 }}>Adresses du serveur</span>
+            <span style={{ fontSize: 14.5, fontWeight: 700 }}>{tr('Adresses du serveur')}</span>
             <span style={{ flex: 1 }} />
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{tr("testées à l'enregistrement")}</span>
           </div>
@@ -1286,7 +1284,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 6 }}>{tr('Plus court = plus de requêtes vers Home Assistant.')}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
-              <button onClick={saveHaCfg} style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Enregistrer</button>
+              <button onClick={saveHaCfg} style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
               <button onClick={resetHaCfg} style={{ padding: '10px 16px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Rétablir')}</button>
               <span style={{ flex: 1 }} />
               <button onClick={ping} disabled={latBusy} style={{ padding: '9px 14px', borderRadius: 10, background: 'transparent', border: 'none', color: 'var(--o-text3)', fontWeight: 600, fontSize: 11.5, cursor: 'pointer' }}>{latBusy ? 'Test…' : 'Tester la session'}</button>
@@ -1380,7 +1378,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           {onNav && <SecGroup label={tr('Catalogue')}><button onClick={() => onNav('biblio')} style={secBtn(false)}>{tr('Bibliothèque de cartes')}</button></SecGroup>}
         </SecBar>
         <div style={cardSt}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Vues intégrées')}</div><span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.05em' }}>visibilité du menu latéral</span></div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Vues intégrées')}</div><span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.05em' }}>{tr('visibilité du menu latéral')}</span></div>
           <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 6px' }}>Masque celles que tu n'utilises pas, ou réactive une vue retirée. La barre mobile garde ses raccourcis.</div>
           <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
             {ordonnes.map(([vid, name, icon, sub, locked], idx) => { const why = viewReason(availViews, vid); return (
@@ -1478,7 +1476,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <SecBar>
           <SecGroup label="Configuration">
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              <button onClick={saveEnt} style={secBtn(true)}>Enregistrer et recharger</button>
+              <button onClick={saveEnt} style={secBtn(true)}>{tr('Enregistrer et recharger')}</button>
               <button onClick={resetEnt} style={secBtn(false)}>{tr('Rétablir les défauts')}</button>
             </div>
           </SecGroup>
@@ -1546,7 +1544,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
             <button onClick={resetEnt} style={{ padding: '10px 16px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Rétablir les défauts')}</button>
-            <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Enregistrer et recharger</button>
+            <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
           </div>
         </div>
       </>)}
