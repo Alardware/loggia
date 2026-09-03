@@ -38,9 +38,15 @@ ANCIEN_STORAGE_KEY = "orion_dashboard_config"
 ANCIEN_PREFIXES = (("orion_", "loggia_"), ("orion-", "loggia-"))
 
 # Cles refusees a l'enregistrement, quoi qu'envoie le client.
-# Le code PIN administrateur reste dans le navigateur : le projet interdit de le
-# lire ou de le synchroniser, et il n'a rien a faire dans un fichier serveur.
-FORBIDDEN_KEYS: frozenset[str] = frozenset({"loggia_admin_pin"})
+#
+# Le code PIN administrateur y figurait, au nom du secret. Un PIN de quatre
+# chiffres ecrit en clair dans le localStorage n'en est pourtant pas un : il se
+# lit en deux clics dans les outils du navigateur. Ce que ce refus coutait,
+# lui, etait bien reel — un code different sur chaque appareil, et un de plus
+# entre l'acces local et l'acces distant, qui n'ont pas la meme origine
+# (retour 03/09). Il est desormais accepte comme le reste ; il protege un
+# basculement de profil, pas un compte.
+FORBIDDEN_KEYS: frozenset[str] = frozenset()
 
 # Le dashboard est celui de la MAISON : ses reglages sont communs a tous les
 # comptes Home Assistant, sinon un telephone ou une tablette connectee sous un
@@ -51,7 +57,10 @@ FORBIDDEN_KEYS: frozenset[str] = frozenset({"loggia_admin_pin"})
 # quels panneaux y sont replies.
 PERSONAL_KEYS: frozenset[str] = frozenset(
     {
-        "loggia_active_user",
+        # Marges de securite de l'ecran et trace du dernier passage : elles
+        # decrivent un appareil, pas la maison. Le profil actif les a quittees
+        # le 03/09 — on veut se retrouver au meme endroit, quel que soit
+        # l'ecran que l'on prend.
         "loggia-navoffset",
         "loggia-topoffset",
         "loggia-lastseen",

@@ -48,9 +48,9 @@ def test_non_admin_n_ecrit_que_chez_lui(creer_store):
 def test_cles_personnelles_restent_personnelles(creer_store):
     magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
     lancer(magasin.async_set_user(
-        "u1", {"loggia_active_user": 2, "loggia-secpanel": "0"}, is_admin=True))
+        "u1", {"loggia-topoffset": 12, "loggia-secpanel": "0"}, is_admin=True))
     data = lancer(magasin._load())
-    assert data["users"]["u1"]["loggia_active_user"] == 2
+    assert data["users"]["u1"]["loggia-topoffset"] == 12
     assert data["shared"] == {}, "un reglage d'appareil a fui dans le commun"
 
 
@@ -108,15 +108,16 @@ def test_cle_devenue_personnelle_ne_laisse_pas_d_orpheline(creer_store):
     assert data["users"]["u1"]["loggia-secpanel"] == "0"
 
 
-def test_le_pin_est_refuse(creer_store, store_module):
-    """Le code administrateur reste dans le navigateur : le projet interdit de
-    le synchroniser, et il n'a rien a faire dans un fichier serveur."""
-    assert "loggia_admin_pin" in store_module.FORBIDDEN_KEYS
+def test_le_pin_suit_la_maison(creer_store, store_module):
+    """Le code administrateur etait refuse au nom du secret. Un PIN de quatre
+    chiffres ecrit en clair dans le localStorage n'en est pas un ; ce refus, en
+    revanche, donnait un code different sur chaque appareil et un de plus entre
+    l'acces local et l'acces distant (retour 03/09). Il est commun."""
+    assert store_module.FORBIDDEN_KEYS == frozenset()
     magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
     lancer(magasin.async_set_user("u1", {"loggia_admin_pin": "1234"}, is_admin=True))
     data = lancer(magasin._load())
-    assert "loggia_admin_pin" not in data["shared"]
-    assert "loggia_admin_pin" not in data["users"].get("u1", {})
+    assert data["shared"]["loggia_admin_pin"] == "1234"
 
 
 # ── Migration ───────────────────────────────────────────────────────────────
@@ -126,12 +127,12 @@ def test_migration_remonte_et_purge_la_source(creer_store):
     prioritaire a la lecture, masquait pour ce compte toute mise a jour faite
     ensuite par un autre."""
     magasin = creer_store({"users": {"u1": {
-        "loggia_rooms": ["Salon"], "loggia_look": "x", "loggia_active_user": 0,
+        "loggia_rooms": ["Salon"], "loggia_look": "x", "loggia-topoffset": 8,
     }}})
     data = lancer(magasin._load())
     assert data["shared"]["loggia_rooms"] == ["Salon"]
     assert "loggia_rooms" not in data["users"]["u1"], "doublon laisse dans la source"
-    assert data["users"]["u1"]["loggia_active_user"] == 0, "le personnel a ete emporte"
+    assert data["users"]["u1"]["loggia-topoffset"] == 8, "le personnel a ete emporte"
 
 
 def test_migration_ne_se_rejoue_pas_apres_effacement(creer_store):
@@ -276,9 +277,10 @@ def test_ecritures_concurrentes_ne_se_perdent_pas(creer_store):
 
 def test_classement_des_cles(store_module):
     est_perso = store_module.est_personnelle
-    for cle in ("loggia_active_user", "loggia-navoffset", "loggia-topoffset",
+    for cle in ("loggia-navoffset", "loggia-topoffset",
                 "loggia-lastseen", "loggia-secpanel", "loggia-enpanel"):
         assert est_perso(cle), f"{cle} devrait rester sur l'appareil"
     for cle in ("loggia_rooms", "loggia_entities", "loggia_users", "loggia-theme",
-                "loggia_energyHaids", "loggia_roomlayout"):
+                "loggia_energyHaids", "loggia_roomlayout",
+                "loggia_active_user", "loggia_admin_pin", "loggia_accueil"):
         assert not est_perso(cle), f"{cle} devrait etre commun a la maison"

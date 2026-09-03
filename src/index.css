@@ -698,3 +698,21 @@ html.loggia-light .o-wx-card-veil { background: linear-gradient(180deg, rgba(238
    `outline:none` sans rien mettre a la place — au clavier, on ne savait plus
    ou l'on etait. */
 :focus-visible { outline: 2px solid var(--o-accent); outline-offset: 2px; }
+
+/* ── Ecran Parametres > Entites, sur telephone ────────────────────────────
+ * Cinq colonnes de saisie dans 375 px, c'etait un tableau illisible : les
+ * intitules se chevauchaient et chaque champ montrait quatre lettres
+ * (retour 03/09). Sous 720 px, la ligne devient une CARTE : un champ par
+ * ligne, son intitule au-dessus, et le bouton de retrait en pied. */
+.o-entlabel { display: none; }
+@media (max-width: 720px) {
+  .o-enthead { display: none !important; }
+  .o-entrow { flex-direction: column !important; align-items: stretch !important; gap: 8px !important;
+    padding: 12px 12px 10px; border-radius: 14px; background: var(--o-s2); }
+  .o-entrow > span { flex: 1 1 auto !important; flex-direction: column !important; align-items: stretch !important; gap: 4px; }
+  .o-entlabel { display: block; font-size: 10px; font-weight: 800; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--o-text3); }
+  /* la pastille de validation suit l'input, pas le bloc intitule + input */
+  .o-entrow > span > span:not(.o-entlabel) { top: auto !important; bottom: 13px !important; transform: none !important; }
+  .o-entrow > button { width: 100% !important; height: 34px !important; }
+}
