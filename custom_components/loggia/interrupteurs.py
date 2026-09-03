@@ -88,23 +88,43 @@ class LoggiaInterrupteurs:
         self.vus: dict[str, dict[str, Any]] = {}
         self._dernier: dict[str, float] = {}
         self._defait: list[Any] = []
+        # Ce qui est reellement branche. L'interface le montre : sans cela, une
+        # page muette ne dit pas si personne n'appuie ou si personne n'ecoute.
+        self.sources: dict[str, Any] = {"mqtt_present": False, "z2m": False, "zha": False, "deconz": False}
         hass.async_create_task(self._async_demarrer())
 
     async def _async_demarrer(self) -> None:
         """Branche les trois sources. L'absence de l'une n'empeche pas les autres."""
+        # MQTT charge ou non : la reponse change le SENS d'un echec. Sans MQTT,
+        # ne pas s'abonner est normal ; avec MQTT, c'est une panne, et elle
+        # doit se voir dans le journal plutot que de se taire en debug.
+        present = False
+        try:
+            present = "mqtt" in self.hass.config.components
+        except Exception:  # noqa: BLE001
+            present = False
+        self.sources["mqtt_present"] = present
         try:
             from homeassistant.components import mqtt
 
             self._defait.append(
                 await mqtt.async_subscribe(self.hass, TOPIC_Z2M, self._sur_mqtt, 0)
             )
+            self.sources["z2m"] = True
             _LOGGER.info("Loggia : interrupteurs zigbee2mqtt a l'ecoute (%s)", TOPIC_Z2M)
         except Exception:  # noqa: BLE001
-            # Installation sans MQTT : normal, on se contente des autres sources.
-            _LOGGER.debug("Loggia : pas d'ecoute MQTT des interrupteurs")
+            if present:
+                _LOGGER.warning(
+                    "Loggia : MQTT est la mais l'abonnement %s a echoue — les "
+                    "interrupteurs Zigbee2MQTT resteront muets", TOPIC_Z2M, exc_info=True
+                )
+            else:
+                _LOGGER.debug("Loggia : pas d'integration MQTT, rien a ecouter de ce cote")
 
         self._defait.append(self.hass.bus.async_listen("zha_event", self._sur_zha))
+        self.sources["zha"] = True
         self._defait.append(self.hass.bus.async_listen("deconz_event", self._sur_deconz))
+        self.sources["deconz"] = True
 
     # ── Les sources ───────────────────────────────────────────────────────
     @callback
@@ -250,6 +270,7 @@ class LoggiaInterrupteurs:
             "appareils": sorted(appareils.values(), key=lambda a: a["nom"].lower()),
             "affectations": table,
             "journal": list(self.journal),
+            "sources": dict(self.sources),
         }
 
     async def async_affecter(

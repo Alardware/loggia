@@ -94,6 +94,7 @@ def creer(module, store_module):
         ecouteur.vus = {}
         ecouteur._dernier = {}
         ecouteur._defait = []
+        ecouteur.sources = {'mqtt_present': True, 'z2m': True, 'zha': True, 'deconz': True}
         faits.append(ecouteur)
         return ecouteur
 
@@ -306,3 +307,7 @@ def test_l_etat_montre_l_affecte_et_le_vu(creer):
     assert par_cle["z2m/Autre"]["vues"] == ["toggle"]
     assert par_cle["z2m/Autre"]["affectees"] == []
     assert len(etat["journal"]) == 1
+    # Ce que la page affiche pour dire si quelqu'un ecoute vraiment : sans lui,
+    # une liste vide ne distinguait pas « personne n'appuie » de « rien n'est
+    # branche » (retour 03/09).
+    assert etat["sources"] == {"mqtt_present": True, "z2m": True, "zha": True, "deconz": True}
