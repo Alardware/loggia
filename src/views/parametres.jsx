@@ -18,6 +18,7 @@ import { useLoggia } from '../runtime.js';
 import { viewReason } from '../views.js';
 import { autoFamille } from '../autos.js';
 import { InterrupteursSection } from './interrupteurs.jsx';
+import { VoletsReglages } from './volets.jsx';
 import { weatherEntity } from '../wxutil.jsx';
 import { tr, choixLangue, languesDisponibles } from '../i18n.js';
 
@@ -902,6 +903,19 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       .catch(() => { /* composant trop ancien, ou ecoute absente */ });
   }, [!!hass, isAdmin]);
 
+  // Combien de regles de volets tournent : le chiffre du sommaire.
+  const [nbVolRegles, setNbVolRegles] = useState(0);
+  useEffect(() => {
+    const h = hass;
+    if (!isAdmin || !h || typeof h.callWS !== 'function') return;
+    h.callWS({ type: 'loggia/volets/etat' })
+      .then(r => {
+        const c = (r && r.config) || {};
+        setNbVolRegles(['planning', 'soleil', 'vent'].filter(k => c[k] && c[k].actif).length);
+      })
+      .catch(() => { /* composant trop ancien, ou regles absentes */ });
+  }, [!!hass, isAdmin]);
+
   // Sections du sommaire : chiffre mis en avant + accroche.
   const SECTIONS = [
     { id: 'users', name: 'Profils', ico: 'users', col: 'var(--o-accent-soft)', bg: 'rgba(var(--o-accent-rgb),.14)',
@@ -919,6 +933,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       sub: upsAvail ? 'Firmwares et modules' : tr('Tout est à jour'), big: String(upsAvail || 0), unit: upsAvail ? 'en attente' : 'à jour', admin: true, dot: upsAvail > 0 },
     { id: 'inter', name: tr('Interrupteurs'), ico: 'apps', col: 'var(--o-purple)', bg: 'rgba(var(--o-purple-rgb),.14)',
       sub: tr('Boutons sans fil Zigbee'), big: String(nbInter), unit: nbInter ? tr('réglés') : tr('à régler'), admin: true },
+    { id: 'volets', name: tr('Volets'), ico: 'blinds', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
+      sub: tr('Soleil, chaleur, vent'), big: String(nbVolRegles), unit: nbVolRegles ? tr('règles actives') : tr('à régler'), admin: true },
     { id: 'vues', name: tr('Vues'), ico: 'layout-fluid', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
       sub: tr('Menu latéral et vues perso'), big: String(11 + customViews.length), unit: tr('vues disponibles'), admin: true },
     { id: 'entites', name: tr('Entités'), ico: 'list', col: entMissing.length ? 'var(--o-bad)' : 'var(--o-text2)', bg: entMissing.length ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)',
@@ -1568,6 +1584,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
 
       {tab === 'alertes' && isAdmin && <AlertesTele hass={hass} cardSt={cardSt} />}
       {tab === 'inter' && isAdmin && <InterrupteursSection hass={hass} cardSt={cardSt} />}
+      {tab === 'volets' && isAdmin && <VoletsReglages hass={hass} cardSt={cardSt} />}
       {tab === 'maj' && isAdmin && (<>
         <SecBar>
           <SecGroup label="Installer">
