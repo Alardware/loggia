@@ -94,6 +94,7 @@ export function InterrupteursSection({ hass, cardSt }) {
   const appareils = (etat && etat.appareils) || [];
   const affectations = (etat && etat.affectations) || {};
   const journal = (etat && etat.journal) || [];
+  const sources = (etat && etat.sources) || null;
 
   const titre = { fontSize: 16, fontWeight: 700, marginBottom: 3 };
   const sous = { fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600 };
@@ -114,6 +115,23 @@ export function InterrupteursSection({ hass, cardSt }) {
           </span>
         </div>
         {err && <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
+        {/* Ce qui est reellement branche. Une page muette ne disait pas si
+          * personne n'appuyait ou si personne n'ecoutait (retour 03/09). */}
+        {sources && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
+            {[
+              ['Zigbee2MQTT', sources.z2m, sources.mqtt_present ? tr('MQTT est là, mais l’abonnement a échoué — regarde le journal de Home Assistant') : tr('Pas d’intégration MQTT sur cette installation')],
+              ['ZHA', sources.zha, ''],
+              ['deCONZ', sources.deconz, ''],
+            ].map(([nom, ok, pourquoi]) => (
+              <span key={nom} title={ok ? '' : pourquoi}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: ok ? 'rgba(var(--o-ok-rgb),.12)' : 'var(--o-s1)', color: ok ? 'var(--o-ok)' : 'var(--o-text3)' }}>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: ok ? 'var(--o-ok)' : 'var(--o-text3)' }} />
+                {nom}
+              </span>
+            ))}
+          </div>
+        )}
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' }}>
           {journal.length === 0 && !err && (
             <div style={{ fontSize: 12.5, color: 'var(--o-text3)', fontWeight: 600, padding: '8px 0' }}>

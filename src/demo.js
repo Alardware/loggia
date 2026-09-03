@@ -216,6 +216,7 @@ function interDemo() {
         affectees: [], vues: ['on', 'off', 'brightness_move_up'],
       },
     ],
+    sources: { mqtt_present: true, z2m: true, zha: false, deconz: false },
     affectations: INTER_AFF,
     journal: [
       { cle: 'z2m/Bouton Cuisine', source: 'z2m', nom: 'Bouton Cuisine', action: 'on', ts: INTER_DEPART - 4 },

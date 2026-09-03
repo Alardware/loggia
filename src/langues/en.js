@@ -1248,4 +1248,6 @@ export default {
   'Boutons sans fil Zigbee': 'Wireless Zigbee buttons',
   'réglés': 'set',
   'à régler': 'to set',
+  'MQTT est là, mais l’abonnement a échoué — regarde le journal de Home Assistant': 'MQTT is there, but the subscription failed — check the Home Assistant log',
+  'Pas d’intégration MQTT sur cette installation': 'No MQTT integration on this install',
 };
