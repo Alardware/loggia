@@ -571,6 +571,33 @@ html.loggia-light .o-wx3d-veil { background: linear-gradient(180deg, rgba(238,24
 /* Accueil avec fond météo GLSL : le ciel se voit à travers la barre du haut (comme la carte météo) */
 main:has(.o-wx3d) .loggia-hdr { background: rgba(11, 16, 27, .38) !important; }
 html.loggia-light main:has(.o-wx3d) .loggia-hdr { background: rgba(238, 242, 248, .38) !important; }
+
+/* Le ciel passe SOUS les textes de la banniere : un nuage clair effacait
+ * « Bon apres-midi » et la ligne d'etat, tous deux ecrits en gris moyen
+ * (retour 03/09). Sur ciel actif ils passent au blanc et portent une ombre —
+ * le nom, plus gros, s'en tirait seul. En theme clair le ciel est clair
+ * aussi : la couleur du texte y reste, et l'ombre s'inverse. */
+main:has(.o-wx3d) .o-greet-hi,
+main:has(.o-wx3d) .o-greet-facts { color: #fff !important; }
+main:has(.o-wx3d) .o-greet-hi,
+main:has(.o-wx3d) .o-greet-facts,
+main:has(.o-wx3d) .o-greet-name { text-shadow: 0 1px 3px rgba(8, 12, 20, .62), 0 0 18px rgba(8, 12, 20, .38); }
+html.loggia-light main:has(.o-wx3d) .o-greet-hi,
+html.loggia-light main:has(.o-wx3d) .o-greet-facts { color: var(--o-text1) !important; }
+html.loggia-light main:has(.o-wx3d) .o-greet-hi,
+html.loggia-light main:has(.o-wx3d) .o-greet-facts,
+html.loggia-light main:has(.o-wx3d) .o-greet-name { text-shadow: 0 1px 3px rgba(255, 255, 255, .8), 0 0 16px rgba(255, 255, 255, .55); }
+
+/* Telephone : la rangee de la banniere ne tenait pas cote a cote. La colonne
+ * de texte tombait a 116 px sur un ecran de 375 — « 2 lumieres allumees ·
+ * Alarme desarmee · 21.3 °C » sur quatre lignes — pendant que la vignette
+ * meteo en prenait 203. Le texte prend donc toute la largeur, et la meteo
+ * passe dessous avec les avatars. */
+@media (max-width: 560px) {
+  .o-banner-row { flex-wrap: wrap !important; }
+  .o-banner-row > div:first-child { flex: 1 1 100% !important; }
+  .o-banner-wx { flex-direction: row-reverse !important; align-items: center !important; width: 100%; justify-content: space-between; }
+}
 /* Ciel étoilé par nuit claire : tout l'arrière-plan, sans voile (fixed = suit l'écran, pas le document) */
 .o-wx3d.o-sky-full { position: fixed; inset: 0; height: auto; }
 
