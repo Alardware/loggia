@@ -33,7 +33,7 @@ def _poser_doublures() -> None:
         return
     for nom, attrs in (
         ("homeassistant", ()),
-        ("homeassistant.core", ("HomeAssistant",)),
+        ("homeassistant.core", ("HomeAssistant", "Event")),
         ("homeassistant.helpers", ()),
         ("homeassistant.helpers.storage", ("Store",)),
         # `discovery.py` lit les registres. Les doublures ci-dessous portent

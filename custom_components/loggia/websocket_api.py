@@ -42,6 +42,8 @@ WS_SET = "loggia/config/set"
 WS_DELETE = "loggia/config/delete"
 WS_STATS = "loggia/config/stats"
 WS_DISCOVERY = "loggia/discovery"
+WS_INT_ETAT = "loggia/interrupteurs/etat"
+WS_INT_AFFECTER = "loggia/interrupteurs/affecter"
 
 
 def _user_info(connection: websocket_api.ActiveConnection) -> dict[str, Any]:
@@ -72,8 +74,16 @@ def _payload_too_big(patch: dict[str, Any]) -> str | None:
 
 
 @callback
-def async_register(hass: HomeAssistant, store: LoggiaStore) -> None:
-    """Declare les commandes aupres du serveur WebSocket."""
+def async_register(hass: HomeAssistant, store: LoggiaStore, acces_interrupteurs=None) -> None:
+    """Declare les commandes aupres du serveur WebSocket.
+
+    `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
+    s'enregistrent qu'une fois pour la vie du process, alors que l'ecoute des
+    interrupteurs se recree a chaque chargement de l'integration. On la
+    resout donc au moment de l'appel. Elle peut manquer — une installation
+    sans MQTT, ou une mise en place qui a echoue : les deux commandes
+    repondent alors une erreur claire plutot que de manquer a l'appel.
+    """
 
     @websocket_api.websocket_command({vol.Required("type"): WS_GET})
     @websocket_api.async_response
@@ -143,6 +153,47 @@ def async_register(hass: HomeAssistant, store: LoggiaStore) -> None:
         # sert a retirer de la reponse ce que ce compte n'a pas le droit de lire.
         connection.send_result(msg["id"], {"index": async_index(hass, user)})
 
+    # ── Interrupteurs sans fil ────────────────────────────────────────────
+    # Lecture ouverte : des noms d'appareils et de boutons, comme la
+    # decouverte. Ecriture reservee aux administrateurs — une affectation
+    # appelle un service Home Assistant arbitraire, et un compte ordinaire ne
+    # doit pas pouvoir se donner ce pouvoir par ce detour.
+    @websocket_api.websocket_command({vol.Required("type"): WS_INT_ETAT})
+    @websocket_api.async_response
+    async def handle_int_etat(hass, connection, msg):
+        interrupteurs = acces_interrupteurs() if acces_interrupteurs else None
+        if interrupteurs is None:
+            connection.send_error(
+                msg["id"], "not_available", "ecoute des interrupteurs indisponible"
+            )
+            return
+        connection.send_result(msg["id"], await interrupteurs.async_etat())
+
+    @websocket_api.websocket_command(
+        {
+            vol.Required("type"): WS_INT_AFFECTER,
+            vol.Required("cle"): str,
+            vol.Required("action"): str,
+            vol.Required("gestes"): [dict],
+            vol.Optional("nom", default=""): str,
+        }
+    )
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_int_affecter(hass, connection, msg):
+        interrupteurs = acces_interrupteurs() if acces_interrupteurs else None
+        if interrupteurs is None:
+            connection.send_error(
+                msg["id"], "not_available", "ecoute des interrupteurs indisponible"
+            )
+            return
+        table = await interrupteurs.async_affecter(
+            msg["cle"], msg["action"], msg["gestes"], msg.get("nom") or ""
+        )
+        connection.send_result(msg["id"], {"affectations": table})
+
+    websocket_api.async_register_command(hass, handle_int_etat)
+    websocket_api.async_register_command(hass, handle_int_affecter)
     websocket_api.async_register_command(hass, handle_discovery)
     websocket_api.async_register_command(hass, handle_get)
     websocket_api.async_register_command(hass, handle_set)
