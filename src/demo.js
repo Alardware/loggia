@@ -186,6 +186,54 @@ function previsionsDemo(type) {
   return out;
 }
 
+/* Interrupteurs sans fil : deux telecommandes, l'une deja reglee, l'autre a
+ * decouvrir. Les noms de boutons sont ceux que zigbee2mqtt donne vraiment a un
+ * variateur Hue et a un bouton IKEA — la demonstration ne doit pas apprendre
+ * un vocabulaire qui n'existe pas. */
+const INTER_AFF = {
+  'z2m/Variateur Salon': {
+    nom: 'Variateur Salon',
+    source: 'z2m',
+    actions: {
+      on_press_release: [{ service: 'homeassistant.turn_on', data: { entity_id: 'light.salon' } }],
+      off_press_release: [{ service: 'homeassistant.turn_off', data: { entity_id: 'light.salon' } }],
+      up_press_release: [{ service: 'light.turn_on', data: { brightness_step_pct: 10, entity_id: 'light.salon' } }],
+    },
+  },
+};
+const INTER_DEPART = Date.now() / 1000;
+
+function interDemo() {
+  return {
+    appareils: [
+      {
+        cle: 'z2m/Variateur Salon', source: 'z2m', nom: 'Variateur Salon',
+        affectees: ['off_press_release', 'on_press_release', 'up_press_release'],
+        vues: ['down_press_release', 'off_press_release', 'on_press_release', 'up_press_release'],
+      },
+      {
+        cle: 'z2m/Bouton Cuisine', source: 'z2m', nom: 'Bouton Cuisine',
+        affectees: [], vues: ['on', 'off', 'brightness_move_up'],
+      },
+    ],
+    affectations: INTER_AFF,
+    journal: [
+      { cle: 'z2m/Bouton Cuisine', source: 'z2m', nom: 'Bouton Cuisine', action: 'on', ts: INTER_DEPART - 4 },
+      { cle: 'z2m/Variateur Salon', source: 'z2m', nom: 'Variateur Salon', action: 'up_press_release', ts: INTER_DEPART - 26 },
+      { cle: 'z2m/Variateur Salon', source: 'z2m', nom: 'Variateur Salon', action: 'on_press_release', ts: INTER_DEPART - 71 },
+    ],
+  };
+}
+
+function interAffecter(msg) {
+  const enr = INTER_AFF[msg.cle] || { nom: msg.nom || msg.cle, source: 'z2m', actions: {} };
+  if (msg.gestes && msg.gestes.length) enr.actions[msg.action] = msg.gestes;
+  else delete enr.actions[msg.action];
+  if (Object.keys(enr.actions).length) INTER_AFF[msg.cle] = enr;
+  else delete INTER_AFF[msg.cle];
+  return INTER_AFF;
+}
+
 function calendrierDemo() {
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
@@ -262,6 +310,14 @@ export function installerDemo() {
       if (msg && msg.type === 'call_service' && msg.domain === 'weather' && msg.service === 'get_forecasts') {
         const type = (msg.service_data && msg.service_data.type) || 'hourly';
         return Promise.resolve({ response: { 'weather.maison': { forecast: previsionsDemo(type) } } });
+      }
+      /* Meme raison que les previsions : sans reponse ici, la section
+       * Interrupteurs ne montrerait qu'un message d'erreur, alors qu'elle est
+       * justement ce qu'il y a a voir. Un variateur Hue et un bouton IKEA,
+       * l'un regle et l'autre pas. */
+      if (msg && msg.type === 'loggia/interrupteurs/etat') return Promise.resolve(interDemo());
+      if (msg && msg.type === 'loggia/interrupteurs/affecter') {
+        return Promise.resolve({ affectations: interAffecter(msg) });
       }
       return Promise.reject(new Error('démonstration : pas de composant serveur'));
     },
