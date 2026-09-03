@@ -19,6 +19,7 @@ import { viewReason } from '../views.js';
 import { autoFamille } from '../autos.js';
 import { InterrupteursSection } from './interrupteurs.jsx';
 import { VoletsReglages } from './volets.jsx';
+import { FenetresReglages } from './fenetres.jsx';
 import { weatherEntity } from '../wxutil.jsx';
 import { tr, choixLangue, languesDisponibles } from '../i18n.js';
 
@@ -903,17 +904,26 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       .catch(() => { /* composant trop ancien, ou ecoute absente */ });
   }, [!!hass, isAdmin]);
 
-  // Combien de regles de volets tournent : le chiffre du sommaire.
+  // Combien de regles tournent, volets et chauffage confondus : le chiffre du
+  // sommaire. Les deux commandes sont demandees ensemble, et l'absence de
+  // l'une n'empeche pas de compter l'autre.
   const [nbVolRegles, setNbVolRegles] = useState(0);
+  const [ongletRegle, setOngletRegle] = useState('volets');
   useEffect(() => {
     const h = hass;
     if (!isAdmin || !h || typeof h.callWS !== 'function') return;
+    let n = 0;
+    const compter = () => setNbVolRegles(n);
     h.callWS({ type: 'loggia/volets/etat' })
       .then(r => {
         const c = (r && r.config) || {};
-        setNbVolRegles(['planning', 'soleil', 'vent'].filter(k => c[k] && c[k].actif).length);
+        n += ['planning', 'soleil', 'vent'].filter(k => c[k] && c[k].actif).length;
+        compter();
       })
       .catch(() => { /* composant trop ancien, ou regles absentes */ });
+    h.callWS({ type: 'loggia/fenetres/etat' })
+      .then(r => { if (r && r.config && r.config.actif) { n += 1; compter(); } })
+      .catch(() => { /* idem */ });
   }, [!!hass, isAdmin]);
 
   // Sections du sommaire : chiffre mis en avant + accroche.
@@ -933,8 +943,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       sub: upsAvail ? 'Firmwares et modules' : tr('Tout est à jour'), big: String(upsAvail || 0), unit: upsAvail ? 'en attente' : 'à jour', admin: true, dot: upsAvail > 0 },
     { id: 'inter', name: tr('Interrupteurs'), ico: 'apps', col: 'var(--o-purple)', bg: 'rgba(var(--o-purple-rgb),.14)',
       sub: tr('Boutons sans fil Zigbee'), big: String(nbInter), unit: nbInter ? tr('réglés') : tr('à régler'), admin: true },
-    { id: 'volets', name: tr('Volets'), ico: 'blinds', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
-      sub: tr('Soleil, chaleur, vent'), big: String(nbVolRegles), unit: nbVolRegles ? tr('règles actives') : tr('à régler'), admin: true },
+    { id: 'regles', name: tr('Règles'), ico: 'bolt', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
+      sub: tr('Ce que Loggia fait tout seul'), big: String(nbVolRegles), unit: nbVolRegles ? tr('règles actives') : tr('à régler'), admin: true },
     { id: 'vues', name: tr('Vues'), ico: 'layout-fluid', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
       sub: tr('Menu latéral et vues perso'), big: String(11 + customViews.length), unit: tr('vues disponibles'), admin: true },
     { id: 'entites', name: tr('Entités'), ico: 'list', col: entMissing.length ? 'var(--o-bad)' : 'var(--o-text2)', bg: entMissing.length ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)',
@@ -1584,7 +1594,16 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
 
       {tab === 'alertes' && isAdmin && <AlertesTele hass={hass} cardSt={cardSt} />}
       {tab === 'inter' && isAdmin && <InterrupteursSection hass={hass} cardSt={cardSt} />}
-      {tab === 'volets' && isAdmin && <VoletsReglages hass={hass} cardSt={cardSt} />}
+      {tab === 'regles' && isAdmin && (<>
+        <div className="o-bar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+          {[['volets', tr('Volets')], ['fenetres', tr('Chauffage')]].map(([id, nom]) => (
+            <button key={id} onClick={() => setOngletRegle(id)} style={tabStyle(ongletRegle === id)}>{nom}</button>
+          ))}
+        </div>
+        {ongletRegle === 'volets'
+          ? <VoletsReglages hass={hass} cardSt={cardSt} />
+          : <FenetresReglages hass={hass} cardSt={cardSt} />}
+      </>)}
       {tab === 'maj' && isAdmin && (<>
         <SecBar>
           <SecGroup label="Installer">

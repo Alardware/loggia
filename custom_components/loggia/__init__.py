@@ -93,7 +93,8 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             # rattrape.
             async_register_ws(hass, store,
                               lambda: hass.data.get(DOMAIN, {}).get("interrupteurs"),
-                              lambda: hass.data.get(DOMAIN, {}).get("volets"))
+                              lambda: hass.data.get(DOMAIN, {}).get("volets"),
+                              lambda: hass.data.get(DOMAIN, {}).get("fenetres"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
@@ -130,6 +131,15 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["volets"] = LoggiaVolets(hass, data["store"])
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : regles de volets indisponibles")
+
+    # Fenetre ouverte, chauffage coupe. Meme regime que les regles ci-dessus.
+    if not data.get("fenetres") and data.get("store"):
+        try:
+            from .fenetres import LoggiaFenetres
+
+            data["fenetres"] = LoggiaFenetres(hass, data["store"])
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : regle des fenetres indisponible")
 
     # ── Ce qui se refait a chaque chargement : le panneau ──
     # Il se retire proprement dans `async_unload_entry`, donc il se reenregistre

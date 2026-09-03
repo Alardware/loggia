@@ -65,6 +65,10 @@ function etatsInitiaux() {
     'media_player.salon': s('playing', { friendly_name: 'Enceinte salon', media_title: 'Clair de Lune', media_artist: 'Debussy', volume_level: .35, supported_features: 20925, entity_picture: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E' }),
     'vacuum.aspirateur': s('docked', { friendly_name: 'Aspirateur', battery_level: 100 }),
     'binary_sensor.porte_entree': s('off', { friendly_name: "Porte d'entrée", device_class: 'door' }),
+    'binary_sensor.fenetre_chambre': s('off', { friendly_name: 'Fenêtre chambre', device_class: 'window' }),
+    'binary_sensor.fenetre_salon': s('off', { friendly_name: 'Fenêtre salon', device_class: 'window' }),
+    'switch.radiateur_chambre': s('on', { friendly_name: 'Radiateur chambre' }),
+    'switch.radiateur_salon': s('on', { friendly_name: 'Radiateur salon' }),
     'binary_sensor.detecteur_fumee': s('off', { friendly_name: 'Détecteur de fumée cuisine', device_class: 'smoke' }),
     'climate.salon': s('heat', { friendly_name: 'Thermostat salon', current_temperature: 21.4, temperature: 22, hvac_action: 'heating', hvac_modes: ['off', 'heat'], min_temp: 7, max_temp: 30, target_temp_step: .5 }),
     'climate.chambre': s('off', { friendly_name: 'Thermostat chambre', current_temperature: 19.6, temperature: 19, hvac_action: 'off', hvac_modes: ['off', 'heat'], min_temp: 7, max_temp: 30, target_temp_step: .5 }),
@@ -275,6 +279,72 @@ function voletsPatch(patch) {
   return VOL_CFG;
 }
 
+/* Fenetre ouverte, chauffage coupe : la regle armee sur une piece, pour que la
+ * page se montre remplie plutot que vide. */
+const FEN_CFG = {
+  actif: true, delai: 3, reprise: 0,
+  pieces: { Chambre: { actif: true, ouvrants: ['binary_sensor.fenetre_chambre'], chauffages: ['switch.radiateur_chambre'] } },
+};
+
+function fenetresDemo() {
+  return {
+    config: FEN_CFG,
+    coupes: {},
+    en_attente: [],
+    journal: [{ quoi: 'rendre', piece: 'Chambre', entites: ['switch.radiateur_chambre'], ts: Date.now() / 1000 - 5400 }],
+  };
+}
+
+function fenetresPatch(patch) {
+  Object.keys(patch || {}).forEach(k => {
+    if (k === 'pieces') {
+      Object.keys(patch.pieces || {}).forEach(nom => {
+        if (patch.pieces[nom] === null) delete FEN_CFG.pieces[nom];
+        else FEN_CFG.pieces[nom] = { ...(FEN_CFG.pieces[nom] || {}), ...patch.pieces[nom] };
+      });
+    } else FEN_CFG[k] = patch[k];
+  });
+  return FEN_CFG;
+}
+
+/* Les registres, tels que le composant les enverrait : des zones, et les
+ * entites qui y sont rangees. Le dashboard croise ensuite avec les etats. */
+function indexDemo(states) {
+  const ZONES = [
+    ['salon', 'Salon'], ['cuisine', 'Cuisine'], ['chambre', 'Chambre'],
+    ['bureau', 'Bureau'], ['entree', 'Entrée'], ['sdb', 'Salle de bain'],
+  ];
+  const ZONE_DE = {
+    salon: ['light.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'cover.salon',
+            'binary_sensor.fenetre_salon', 'switch.radiateur_salon', 'media_player.enceinte_salon'],
+    cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine'],
+    chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'cover.chambre',
+              'binary_sensor.fenetre_chambre', 'switch.radiateur_chambre'],
+    bureau: ['light.bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite'],
+    entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree'],
+    sdb: ['light.sdb', 'sensor.sdb_temperature'],
+  };
+  const entities = [];
+  Object.keys(ZONE_DE).forEach(zone => {
+    ZONE_DE[zone].forEach(id => {
+      if (!states[id]) return;
+      const at = states[id].attributes || {};
+      entities.push({ id, name: at.friendly_name || id, device: null, area: zone,
+        platform: 'demo', category: null, device_class: at.device_class || null,
+        unit: at.unit_of_measurement || null, hidden: false });
+    });
+  });
+  return {
+    version: 1,
+    areas: ZONES.map(([id, name]) => ({ id, name, floor: null, icon: null })),
+    devices: [],
+    entities,
+    floors: [],
+    services: {},
+    component_version: null,
+  };
+}
+
 function calendrierDemo() {
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
@@ -364,6 +434,13 @@ export function installerDemo() {
       if (msg && msg.type === 'loggia/volets/config') {
         return Promise.resolve({ config: voletsPatch(msg.patch) });
       }
+      if (msg && msg.type === 'loggia/fenetres/etat') return Promise.resolve(fenetresDemo());
+      if (msg && msg.type === 'loggia/fenetres/config') {
+        return Promise.resolve({ config: fenetresPatch(msg.patch) });
+      }
+      /* Sans zones, aucune regle par piece n'est proposable : c'est la zone
+       * qui dit quel radiateur est dans la meme piece que quelle fenetre. */
+      if (msg && msg.type === 'loggia/discovery') return Promise.resolve({ index: indexDemo(states) });
       return Promise.reject(new Error('démonstration : pas de composant serveur'));
     },
     callService,
