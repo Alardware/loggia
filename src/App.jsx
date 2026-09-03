@@ -5577,9 +5577,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           )}
           <div className="o-banner-row" style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'nowrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{salut}</span>
+              <span className="o-greet-hi" style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{salut}</span>
               <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 34, fontWeight: 500, lineHeight: 1 }}>{userName}</span>
-              <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: faits.alerte ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: faits.alerte ? '0 0 8px var(--o-bad)' : '0 0 8px var(--o-ok)', animation: 'pulse 2.4s infinite' }} />{faits.txt.join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span>
+              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: faits.alerte ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: faits.alerte ? '0 0 8px var(--o-bad)' : '0 0 8px var(--o-ok)', animation: 'pulse 2.4s infinite' }} />{faits.txt.join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span>
             </div>
             <div className="o-banner-wx" style={{ display: 'flex', flexDirection: 'column-reverse', alignItems: 'flex-end', gap: 10, flexShrink: 0 }}>
               {/* La vue Météo dit tout ce que cette vignette resume : elle est
