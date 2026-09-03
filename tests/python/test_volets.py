@@ -145,6 +145,48 @@ def test_les_jours_choisis(module):
     assert module.jour_actif(None, dimanche)
 
 
+# ── Les trois modes ─────────────────────────────────────────────────────────
+
+def test_auto_ouvre_et_ferme(module):
+    assert module.planning_agit('auto', 'ouvrir')
+    assert module.planning_agit('auto', 'fermer')
+
+
+def test_nuit_ferme_mais_n_ouvre_pas(module):
+    """Pour une chambre d'ami, un depart, une grasse matinee qui dure : les
+    volets descendent le soir et restent bas au matin."""
+    assert module.planning_agit('nuit', 'fermer')
+    assert not module.planning_agit('nuit', 'ouvrir')
+
+
+def test_manuel_ne_touche_a_rien(module):
+    """Une pause, sans avoir a defaire les reglages."""
+    assert not module.planning_agit('manuel', 'ouvrir')
+    assert not module.planning_agit('manuel', 'fermer')
+
+
+def test_un_mode_inconnu_vaut_auto(module):
+    """Une valeur venue d'une version future, ou d'une main qui a glisse : on
+    ne laisse pas les volets immobiles pour autant."""
+    for valeur in ('AUTO', '', None, 'bidule'):
+        assert module.planning_agit(valeur, 'ouvrir')
+
+
+def test_le_mode_nuit_arrete_le_planning_du_matin(creer):
+    v = creer({"planning": {"actif": True, "mode": "nuit"}}, VOLET)
+    lancer(v._async_planifie("ouvrir"))
+    assert v.hass.services.appels == []
+    lancer(v._async_planifie("fermer"))
+    assert [a[1] for a in v.hass.services.appels] == ["close_cover"]
+
+
+def test_le_mode_manuel_arrete_les_deux(creer):
+    v = creer({"planning": {"actif": True, "mode": "manuel"}}, VOLET)
+    lancer(v._async_planifie("ouvrir"))
+    lancer(v._async_planifie("fermer"))
+    assert v.hass.services.appels == []
+
+
 # ── Un horaire par volet ────────────────────────────────────────────────────
 
 COVERS = ["cover.chambre", "cover.cuisine", "cover.salon"]

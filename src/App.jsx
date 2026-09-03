@@ -7008,6 +7008,36 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
   // Meme raison qu'au volet isole : aucun mode invente.
   const haMode = (S && S[voletMode()] && S[voletMode()].state) || null;
   const [mode, setModeLocal] = useState(haMode);
+  /* Le mode que LOGGIA tient, quand c'est lui qui fait le planning. Tant que
+   * la regle dort, on continue d'afficher l'`input_select` de l'installation :
+   * c'est lui qui commande, et le remplacer par des boutons sans effet serait
+   * mentir sur qui pilote. */
+  const [modeLoggia, setModeLoggia] = useState(null);
+  useEffect(() => {
+    if (!hass || typeof hass.callWS !== 'function') return undefined;
+    let vivant = true;
+    const lire = () => hass.callWS({ type: 'loggia/volets/etat' })
+      .then(r => {
+        const p = (r && r.config && r.config.planning) || null;
+        if (vivant) setModeLoggia(p && p.actif ? (p.mode || 'auto') : null);
+      })
+      .catch(() => { if (vivant) setModeLoggia(null); });
+    lire();
+    const t = setInterval(lire, 15000);
+    return () => { vivant = false; clearInterval(t); };
+  }, [!!hass]);
+  const MODES_LOGGIA = () => [
+    { id: 'auto', label: tr('Auto lever/coucher') },
+    { id: 'nuit', label: tr('Fermeture nuit') },
+    { id: 'manuel', label: tr('Manuel') },
+  ];
+  const pickModeLoggia = (m) => {
+    setModeLoggia(m);
+    if (hass && hass.callWS) {
+      hass.callWS({ type: 'loggia/volets/config', patch: { planning: { mode: m } } })
+        .catch(() => setModeLoggia(x => x));   // refus d'ecriture : l'etat suivant remettra le vrai
+    }
+  };
   useEffect(() => { setModeLocal(haMode); }, [haMode]);
   const dayOn = (haid) => { const e = S && S[haid]; return e ? e.state === 'on' : false; };
   const dsig = voletDays().map(d => dayOn(d.haid) ? 1 : 0).join('');
@@ -7107,11 +7137,15 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
           <button onClick={() => { const ids = voletCovers(S).map(c => c.haid).filter(Boolean); if (ids.length) call('cover', 'stop_cover', { entity_id: ids }); }} style={barBtn(false)}>{tr('Stop')}</button>
           <button onClick={allClose} style={barBtn(false)}>{tr('Fermer')}</button>
         </BarGroup>
-        {voletModes(S).length > 0 && voletMode() && (
+        {modeLoggia !== null ? (
+          <BarGroup label={tr('Mode')}>
+            {MODES_LOGGIA().map(m => <button key={m.id} onClick={() => pickModeLoggia(m.id)} style={barBtn(modeLoggia === m.id)}>{m.label}</button>)}
+          </BarGroup>
+        ) : (voletModes(S).length > 0 && voletMode() && (
           <BarGroup label={tr('Mode')}>
             {voletModes(S).map(m => <button key={m.id} onClick={() => pickMode(m.id)} style={barBtn(mode === m.id)}>{m.label}</button>)}
           </BarGroup>
-        )}
+        ))}
       </ViewBar>}
 
       {edit && (
