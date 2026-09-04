@@ -118,6 +118,15 @@ html.loggia-tactile .loggia-content { padding-bottom: calc(112px + var(--o-safe-
 @media (max-width: 640px) {
   html.loggia-tactile .loggia-content { padding-top: calc(16px + var(--o-safe-top, 0px)) !important; }
 }
+/* Le degagement pour la barre du bas ne vaut que pour le DERNIER bloc.
+ *
+ * Pose sur chacun, il creusait 112 px de vide au milieu des vues qui empilent
+ * des sections — Climatisation met les volets sous les thermostats, et le
+ * bloc des thermostats reservait la place d une barre qui n est pas sous lui.
+ * Le composant embarque le prevoyait deja dans son style en ligne ; ces
+ * regles-ci, en !important, l ecrasaient. */
+html.loggia-tactile .loggia-content:has(~ .loggia-content),
+.o-navbar-on .loggia-content:has(~ .loggia-content) { padding-bottom: 16px !important; }
 /* Les feuilles du bas s'arrêtent AU-DESSUS de la barre de navigation : sans
  * cela, leurs derniers boutons se cachaient derrière elle. */
 html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) !important; max-height: calc(94vh - var(--o-navh, 60px)) !important; }
