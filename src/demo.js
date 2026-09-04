@@ -64,7 +64,15 @@ function etatsInitiaux() {
     'person.camille': s('home', { friendly_name: 'Camille' }),
     'person.alex': s('not_home', { friendly_name: 'Alex' }),
     'media_player.salon': s('playing', { friendly_name: 'Enceinte salon', media_title: 'Clair de Lune', media_artist: 'Debussy', volume_level: .35, supported_features: 20925, entity_picture: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E' }),
-    'vacuum.aspirateur': s('docked', { friendly_name: 'Aspirateur', battery_level: 100 }),
+    // Un vrai robot annonce ce qu'il sait faire : sans supported_features ni
+    // liste de vitesses, la fiche n'avait ni boutons ni selecteur a montrer.
+    'vacuum.aspirateur': s('docked', { friendly_name: 'Aspirateur', battery_level: 92,
+      supported_features: 8828, fan_speed: 'max_plus',
+      fan_speed_list: ['quiet', 'normal', 'max', 'max_plus'] }),
+    // La tondeuse en pleine tonte : une fiche au repos ne montrerait ni la
+    // couleur active du cadran ni le bouton pause.
+    'lawn_mower.tondeuse': s('mowing', { friendly_name: 'Tondeuse', battery_level: 64,
+      supported_features: 7 }),
     'binary_sensor.porte_entree': s('off', { friendly_name: "Porte d'entrée", device_class: 'door' }),
     'sensor.pile_porte_entree': s(9, { friendly_name: 'Pile porte entrée', device_class: 'battery', unit_of_measurement: '%' }),
     'person.demo': s('home', { friendly_name: 'Démo' }),
@@ -495,6 +503,15 @@ export function installerDemo() {
       const delay = 20;
       toucher(cid, 'arming', { delay, arm_mode: cible });
       setTimeout(() => { const s = states[cid]; if (s && s.state === 'arming' && s.attributes.arm_mode === cible) toucher(cid, cible); }, delay * 1000);
+    } else if (domaine === 'lawn_mower' || domaine === 'vacuum') {
+      const cible = { start_mowing: 'mowing', start: 'cleaning', pause: 'paused',
+        dock: 'returning', return_to_base: 'returning', stop: 'idle' }[service];
+      if (cible) {
+        toucher(id, cible);
+        // Un robot qui rentre met du temps : sans ce delai la demonstration
+        // sauterait l etape que la fiche sert justement a montrer.
+        if (cible === 'returning') setTimeout(() => toucher(id, 'docked'), 4000);
+      } else if (service === 'set_fan_speed') toucher(id, null, { fan_speed: data.fan_speed });
     } else if (domaine === 'lock') {
       // Une serrure motorisee met deux bonnes secondes : sans ce passage par
       // `locking`, la demo montrerait un mouvement instantane qui n'existe pas.

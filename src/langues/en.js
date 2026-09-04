@@ -1414,4 +1414,6 @@ export default {
   'MÉDIA EN LECTURE': 'MEDIA PLAYING',
   'APPAREILS ACTIFS': 'DEVICES RUNNING',
   'APPAREIL ACTIF': 'DEVICE RUNNING',
+  'Batterie': 'Battery',
+  'VITESSE': 'SUCTION',
 };

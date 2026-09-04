@@ -3192,6 +3192,44 @@ function Epingles({ pourId, hass, max = 3, avecAncre = false }) {
  * grand centré, le « il y a … », la batterie, l'illustration au centre, les
  * boutons ronds et la vitesse centrés. Réservé à la FICHE : les cartes des
  * vues gardent leur gabarit maison. */
+/* Cadran a graduations.
+ *
+ * Un arc epais dit « combien » ; une couronne de traits dit « combien » ET
+ * donne une echelle a lire — c'est la difference entre une barre et un
+ * instrument. Les traits franchis prennent la couleur, les autres restent en
+ * creux, et une pastille marque le point atteint.
+ *
+ * 72 traits : assez pour que la couronne se lise comme continue, assez peu
+ * pour qu'un trait vaille un cran visible (5 %).
+ */
+function CadranGradue({ pct, valeur, unite, couleur, taille = 126, traits = 60 }) {
+  const p = Math.max(0, Math.min(1, pct || 0));
+  const C = taille / 2, RE = C - 4, RI = RE - 15;
+  const actifs = Math.round(traits * p);
+  const ang = (i) => (i / traits) * 2 * Math.PI - Math.PI / 2;   // depart a midi
+  return (
+    <div style={{ position: 'relative', width: taille, height: taille, flexShrink: 0 }}>
+      <svg width={taille} height={taille} aria-hidden="true" style={{ position: 'absolute', inset: 0 }}>
+        {Array.from({ length: traits }, (_, i) => {
+          const t = ang(i), on = i < actifs;
+          return <line key={i} x1={C + RI * Math.cos(t)} y1={C + RI * Math.sin(t)}
+            x2={C + RE * Math.cos(t)} y2={C + RE * Math.sin(t)}
+            stroke={on ? couleur : 'var(--o-bd1)'} strokeWidth="2.4" strokeLinecap="round"
+            style={{ transition: 'stroke .35s' }} />;
+        })}
+        {/* La pastille : elle dit ou on en est sans compter les traits. */}
+        {p > 0 && (() => { const t = ang(actifs - 1), r = (RE + RI) / 2;
+          return <circle cx={C + r * Math.cos(t)} cy={C + r * Math.sin(t)} r="6"
+            fill={couleur} stroke="var(--o-s2, var(--o-bg2))" strokeWidth="3" />; })()}
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0 }}>
+        <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1 }}>{valeur}</div>
+        {unite && <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text1)', opacity: .85, marginTop: 3 }}>{unite}</div>}
+      </div>
+    </div>
+  );
+}
+
 function FicheMachineHero({ id, hass }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
@@ -3219,26 +3257,64 @@ function FicheMachineHero({ id, hass }) {
     if (en ? (f & 2) : (f & 1)) btns.push([en ? 'pause' : 'play', en ? 'pause' : 'start_mowing', en ? tr('Pause') : tr('Lancer la tonte')]);
     if (f & 4) btns.push(['home', 'dock', tr('Renvoyer au dock')]);
   }
+  /* La couleur dit l'etat, pas le niveau : un robot qui travaille est vert
+   * meme a 30 %, une batterie a plat est rouge meme sur la base. */
+  const colDial = mort ? 'var(--o-text3)'
+    : s === 'error' ? 'var(--o-bad)'
+      : (bat != null && bat < 20) ? 'var(--o-bad)'
+        : en ? 'var(--o-ok)'
+          : s === 'returning' ? 'var(--o-warn)'
+            : 'var(--o-accent-soft)';
+  const vitesses = (dom === 'vacuum' && Array.isArray(a.fan_speed_list)) ? a.fan_speed_list : [];
   return (
-    <div style={{ ...CV_CADRE, alignItems: 'center', textAlign: 'center', opacity: mort ? .55 : 1 }}>
-      <div style={{ fontSize: 25, fontWeight: 800, letterSpacing: '-.01em' }}>{mort ? tr('Indisponible') : etat}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 3, fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>
-        <span>{relTime(st && (st.last_changed || st.last_updated)) || '—'}</span>
-        {bat != null && <span style={{ fontVariantNumeric: 'tabular-nums', color: bat < 20 ? 'var(--o-bad)' : bat < 50 ? 'var(--o-warn)' : 'var(--o-text2)' }}>{Math.round(bat)}%</span>}
+    <div style={{ ...CV_CADRE, opacity: mort ? .55 : 1 }}>
+      {/* L'objet a gauche, sa mesure a droite : on reconnait l'appareil avant
+        * de lire son chiffre, comme sur une etagere. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+        <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+          <div aria-hidden="true" style={{ width: 140, height: 140, backgroundImage: `url("${dom === 'vacuum' ? DEVICE_ART.vacuum : DEVICE_ART.mower}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', opacity: mort ? .4 : 1 }} />
+          <div style={{ textAlign: 'center', minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-.01em', lineHeight: 1.15 }}>{mort ? tr('Indisponible') : etat}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', marginTop: 2 }}>{relTime(st && (st.last_changed || st.last_updated)) || '—'}</div>
+          </div>
+        </div>
+        {bat != null && (
+          <CadranGradue pct={bat / 100} valeur={Math.round(bat)} unite={tr('Batterie')} couleur={colDial} />
+        )}
       </div>
-      <div aria-hidden="true" style={{ width: 104, height: 104, margin: '12px 0 4px', backgroundImage: `url("${dom === 'vacuum' ? DEVICE_ART.vacuum : DEVICE_ART.mower}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', opacity: 0.55 }} />
       {btns.length > 0 && !mort && (
-        <div style={{ display: 'flex', gap: 10, marginTop: 8, justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'center' }}>
           {btns.map(([gi, svc, lbl], bi) => (
             <button key={svc} title={lbl} aria-label={lbl} onClick={() => call(svc)}
               style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={15} /></button>
           ))}
         </div>
       )}
-      {dom === 'vacuum' && !mort && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
-        <div style={{ marginTop: 12 }}>
-          <MenuDeroulant icone="wind" etiquette={tr('Vitesse')} valeur={a.fan_speed} options={a.fan_speed_list}
-            rendre={(v) => FAN_FR()[v] || v} surChoix={(v) => { try { hass.callService('vacuum', 'set_fan_speed', { entity_id: id, fan_speed: v }); } catch (e) {} }} />
+      {/* La vitesse en rangee, pas en menu : quatre crans qui se COMPARENT —
+        * la hauteur des barres dit lequel souffle plus fort, ce qu'un menu
+        * deroulant ne montre qu'un a la fois. */}
+      {vitesses.length > 1 && !mort && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78, marginBottom: 7 }}>{tr('VITESSE')}</div>
+          <div style={{ display: 'flex', gap: 7 }}>
+            {vitesses.map((v, vi) => {
+              const on = v === a.fan_speed;
+              return (
+                <button key={v} onClick={() => { try { hass.callService('vacuum', 'set_fan_speed', { entity_id: id, fan_speed: v }); } catch (e) {} }}
+                  aria-pressed={on} style={{ flex: 1, minWidth: 0, padding: '9px 4px 8px', borderRadius: 14, cursor: 'pointer',
+                    border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)',
+                    color: on ? '#fff' : 'var(--o-text1)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, transition: 'background .2s' }}>
+                  <span aria-hidden="true" style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 15 }}>
+                    {[0, 1, 2, 3].map(k => (
+                      <span key={k} style={{ width: 3, borderRadius: 2, height: 5 + k * 3.2,
+                        background: 'currentColor', opacity: k <= vi ? 1 : .22 }} />
+                    ))}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{FAN_FR()[v] || v}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
