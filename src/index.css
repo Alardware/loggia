@@ -160,7 +160,7 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
 .o-favrow { scrollbar-width: thin; padding: 2px 3px 6px; margin: -2px -3px 0; }
 .o-favrow .o-piece, .o-favrow .o-cvfit > *, .o-favrow button { box-shadow: none !important; }
 .o-favrow::-webkit-scrollbar { height: 5px; }
-.o-favrow::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 3px; }
+.o-favrow::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 4px; }
 .o-favrow::-webkit-scrollbar-track { background: transparent; }
 /* Héros « En ce moment » : la carte du catalogue remplit le gabarit 184 px. */
 .o-hero > * { height: 100%; box-sizing: border-box; }
@@ -199,7 +199,7 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .o-optrow { flex-wrap: wrap !important; }
   .o-optrow > div:first-child { flex: 1 1 100% !important; max-width: none !important; }
 }
-.o-optrow input[type="range"], .o-cvrange input[type="range"] { height: 4px; border-radius: 3px; background: var(--o-s2); appearance: none; -webkit-appearance: none; }
+.o-optrow input[type="range"], .o-cvrange input[type="range"] { height: 4px; border-radius: 4px; background: var(--o-s2); appearance: none; -webkit-appearance: none; }
 .o-optrow input[type="range"]::-webkit-slider-thumb, .o-cvrange input[type="range"]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: var(--o-accent); border: none; cursor: pointer; }
 .o-optrow input[type="range"]::-moz-range-thumb, .o-cvrange input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; background: var(--o-accent); border: none; cursor: pointer; }
 
@@ -304,7 +304,7 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
 }
 
 .o-room-scroll::-webkit-scrollbar { height: 6px; }
-.o-room-scroll::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 3px; }
+.o-room-scroll::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 4px; }
 
 /* Lecteur Médias : ring pulsant du bouton play (anim de la carte d'origine). */
 @keyframes np-pulse {
@@ -316,7 +316,7 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
 @media (max-width: 640px) {
   .o-np-row { flex-direction: column !important; align-items: center !important; gap: 18px !important; }
   .o-np-art { width: min(62vw, 250px) !important; height: min(62vw, 250px) !important; }
-  .o-np-art > div { border-radius: 22px !important; }
+  .o-np-art > div { border-radius: 18px !important; }
   .o-np-meta { width: 100%; text-align: center; }
   .o-np-title { font-size: 22px !important; }
   .o-np-main { width: 104px !important; height: 104px !important; }
@@ -357,7 +357,7 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .grid-roomdev .o-rmbtn { padding: 8px 3px !important; font-size: 11px !important; }
   .grid-roomdev .o-rmbig { font-size: 25px !important; }
   .grid-qscenes::-webkit-scrollbar { height: 4px; }
-  .grid-qscenes::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 3px; }
+  .grid-qscenes::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 4px; }
   .grid-qscenes::-webkit-scrollbar-track { background: transparent; }
   .loggia-aside { position: fixed !important; top: 0; left: 0; height: 100vh !important; overflow-y: auto !important; padding-bottom: var(--o-safe-bottom, 0px) !important; z-index: 100; transition: transform .3s ease; box-shadow: 0 0 50px rgba(0,0,0,.55); }
   .loggia-aside.is-closed { display: flex !important; transform: translateX(-100%); width: 264px !important; }
@@ -378,21 +378,21 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   }
   /* Sécurité mobile : hero compact, jauge circulaire gardée SUR LE CÔTÉ (pas de wrap dessous), 4 tuiles en grille 2-col */
   .o-sec-hero { padding: 18px 16px !important; border-radius: 18px !important; }
-  .o-sec-herotop { flex-wrap: nowrap !important; gap: 14px !important; align-items: flex-start !important; }
+  .o-sec-herotop { flex-wrap: nowrap !important; gap: 16px !important; align-items: flex-start !important; }
   .o-sec-herotop > div:first-child { min-width: 0 !important; flex: 1 1 auto !important; }
   .o-sec-herotop > div:first-child > div:nth-child(2) { font-size: 25px !important; margin-top: 6px !important; }
   .o-sec-herotop > div:first-child > div:nth-child(3) { gap: 16px !important; margin-top: 12px !important; }
   .o-sec-herotop > div:first-child > div:nth-child(3) > div > div:first-child { font-size: 24px !important; }
   .o-sec-gauge, .o-sec-gauge svg { width: 92px !important; height: 92px !important; }
   .grid-sec-tiles { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
-  .grid-sec-tiles > div { padding: 14px 14px !important; border-radius: 16px !important; }
+  .grid-sec-tiles > div { padding: 14px 14px !important; border-radius: 14px !important; }
   .o-sec-tile-val { font-size: 17px !important; }
   /* Système mobile : metrics (CPU/RAM/disque/réseau) + machines en grille 2-col, boutons alimentation en grille 3-col compacts */
   .grid-sys-metrics, .grid-sys-machines { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
   .grid-sys-metrics > div, .grid-sys-machines > div { padding: 14px !important; }
   .grid-sys-metrics > div > div:nth-child(2) { font-size: 20px !important; }
-  .grid-sys-power { grid-template-columns: 1fr 1fr 1fr !important; gap: 9px !important; }
-  .grid-sys-power > button { flex-direction: column !important; gap: 7px !important; padding: 12px 6px !important; font-size: 11.5px !important; text-align: center !important; line-height: 1.25 !important; }
+  .grid-sys-power { grid-template-columns: 1fr 1fr 1fr !important; gap: 8px !important; }
+  .grid-sys-power > button { flex-direction: column !important; gap: 8px !important; padding: 12px 6px !important; font-size: 11.5px !important; text-align: center !important; line-height: 1.25 !important; }
   /* Barre de navigation du bas (mobile) : visible, + on libère de la place sous le contenu et on remonte le bouton thème */
   .loggia-mobilenav { display: flex !important; }
   .o-navbar-on .loggia-content { padding-bottom: calc(112px + var(--o-safe-bottom, 0px)) !important; }
@@ -406,10 +406,10 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .grid-edevices { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
   .grid-objets > .o-piece, .grid-objplants > .o-piece { padding: 12px 12px !important; }
   .grid-rooms4 { grid-template-columns: repeat(4,1fr) !important; gap: 8px !important; }
-  .o-scene-room { flex-direction: column !important; gap: 5px !important; padding: 12px 4px !important; font-size: 12px !important; border-radius: 14px !important; }
+  .o-scene-room { flex-direction: column !important; gap: 4px !important; padding: 12px 4px !important; font-size: 12px !important; border-radius: 14px !important; }
   .o-clim-hero { padding: 0 !important; background: none !important; border: none !important; box-shadow: none !important; overflow: visible !important; border-radius: 0 !important; }
   .o-clim-glow { display: none !important; }
-  .o-clim-top { flex-wrap: nowrap !important; gap: 14px !important; }
+  .o-clim-top { flex-wrap: nowrap !important; gap: 16px !important; }
   .o-clim-topleft { min-width: 0 !important; gap: 10px !important; }
   .o-clim-title { font-size: 21px !important; }
   .o-clim-nums { gap: 13px !important; }
@@ -423,19 +423,19 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .o-volet-mode-txt { flex: 0 1 auto !important; text-align: center !important; }
   .o-volet-mode-desc { display: none !important; }
   .grid-etiles { gap: 10px !important; }
-  .grid-edemain { gap: 7px !important; }
+  .grid-edemain { gap: 8px !important; }
   .grid-edemain > div { padding: 12px 4px !important; }
   .grid-vac-cons { grid-template-columns: 1fr 1fr !important; }
   .grid-etats { gap: 10px !important; }
   .loggia-hdr { padding-left: 14px !important; padding-right: 14px !important; gap: 10px !important; }
   .grid-pieces { gap: 10px !important; }
-  .o-piece { padding: 13px !important; border-radius: var(--o-radius, 16px) !important; box-shadow: var(--o-shadow, 0 6px 16px rgba(0,0,0,.28)) !important; }
+  .o-piece { padding: 13px !important; border-radius: var(--o-radius,18px) !important; box-shadow: var(--o-shadow, 0 6px 16px rgba(0,0,0,.28)) !important; }
   .o-piece-name { margin-top: 9px !important; font-size: 15px !important; }
   .o-piece-temp { font-size: 22px !important; }
   .o-piece-badge-top { display: inline-flex !important; }
   .o-piece-badge-inline { display: none !important; }
   .grid-lights { gap: 11px !important; }
-  .o-light-card { padding: 14px !important; border-radius: var(--o-radius, 16px) !important; box-shadow: var(--o-shadow, 0 6px 16px rgba(0,0,0,.28)) !important; }
+  .o-light-card { padding: 14px !important; border-radius: var(--o-radius,18px) !important; box-shadow: var(--o-shadow, 0 6px 16px rgba(0,0,0,.28)) !important; }
   .o-light-ico { width: 42px !important; height: 42px !important; }
 }
 @media (max-width: 560px) {
@@ -571,6 +571,31 @@ html.loggia-light .o-wx3d-veil { background: linear-gradient(180deg, rgba(238,24
 /* Accueil avec fond météo GLSL : le ciel se voit à travers la barre du haut (comme la carte météo) */
 main:has(.o-wx3d) .loggia-hdr { background: rgba(11, 16, 27, .38) !important; }
 html.loggia-light main:has(.o-wx3d) .loggia-hdr { background: rgba(238, 242, 248, .38) !important; }
+
+/* ── Chiffres a chasse fixe ─────────────────────────────────────────────
+ * Un tableau de bord passe son temps a reecrire des nombres : 460 W devient
+ * 461 W, 21,4° devient 21,5°. Avec des chiffres proportionnels, le « 1 » est
+ * plus etroit que le « 8 » et toute la ligne se decale a chaque mise a jour.
+ * `tabular-nums` leur donne la meme largeur : les valeurs changent, la
+ * colonne ne bouge plus. C'est la difference entre un compteur qui vit et un
+ * compteur qui gigote. */
+body, button, input, select, textarea { font-variant-numeric: tabular-nums; }
+
+/* Le rendu du texte clair sur fond sombre bave sans lissage : les graisses
+ * 700 et 800, dont l'interface est faite, s'empatent. */
+body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+/* ── La rangee de metriques de la banniere ──────────────────────────────
+ * Elle est posee SUR le ciel, comme la salutation et la ligne d'etat qui ont
+ * deja ete traitees. Ses libelles gris tombaient a 3,21:1 de contraste sur un
+ * ciel nuageux — sous le minimum lisible — et le ciel s'eclaircit encore par
+ * beau temps. Blanc et ombre portee, comme leurs voisins. */
+main:has(.o-wx3d) .o-banner-metrics { text-shadow: 0 1px 3px rgba(8, 12, 20, .62), 0 0 18px rgba(8, 12, 20, .38); }
+main:has(.o-wx3d) .o-banner-metrics div,
+main:has(.o-wx3d) .o-banner-metrics span { color: #fff !important; }
+html.loggia-light main:has(.o-wx3d) .o-banner-metrics { text-shadow: 0 1px 3px rgba(255, 255, 255, .8); }
+html.loggia-light main:has(.o-wx3d) .o-banner-metrics div,
+html.loggia-light main:has(.o-wx3d) .o-banner-metrics span { color: var(--o-text1) !important; }
 
 /* Le ciel passe SOUS les textes de la banniere : un nuage clair effacait
  * « Bon apres-midi » et la ligne d'etat, tous deux ecrits en gris moyen

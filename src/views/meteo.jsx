@@ -34,7 +34,7 @@ function WxJour({ f, nom, mode, effets, deg, n }) {
    * deux se croisaient en un bas de carte tout noir, qu'on prenait pour une
    * ombre (retour 03/09). La scène fait le ciel, la carte la surface. */
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', height: 168, borderRadius: 'var(--o-radius,20px)', border: 'none', background: 'var(--o-surfA)', padding: '15px 16px', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'relative', overflow: 'hidden', height: 168, borderRadius: 'var(--o-radius,18px)', border: 'none', background: 'var(--o-surfA)', padding: '15px 16px', display: 'flex', flexDirection: 'column' }}>
       {/* `offsetY` pousse les ornements sous le titre : les nuages de la
         * maquette, dessinés pour un grand panneau, tombaient sinon en plein
         * sur le nom du jour. L'ombre de texte fait le reste — un nuage blanc
@@ -43,15 +43,15 @@ function WxJour({ f, nom, mode, effets, deg, n }) {
       {/* Pas d'icône : la scène du fond dessine déjà le temps qu'il fera, et
         * les deux côte à côte faisaient doublon (retour 02/09). */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: '.04em', color: '#fff', textShadow: '0 1px 3px rgba(6,14,30,.85), 0 2px 12px rgba(6,14,30,.5)' }}>{nom}</span>
+        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.04em', color: '#fff', textShadow: '0 1px 3px rgba(6,14,30,.85), 0 2px 12px rgba(6,14,30,.5)' }}>{nom}</span>
       </div>
-      <div style={{ position: 'relative', fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,.92)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 3px rgba(6,14,30,.85)' }}>{haWeatherLabel(String(f.condition))}</div>
+      <div style={{ position: 'relative', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.92)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 3px rgba(6,14,30,.85)' }}>{haWeatherLabel(String(f.condition))}</div>
       <div style={{ position: 'relative', marginTop: 'auto', display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, color: '#fff', textShadow: '0 2px 4px rgba(6,14,30,.8), 0 4px 16px rgba(6,14,30,.45)' }}>{deg(mx)}</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,.78)', textShadow: '0 1px 3px rgba(6,14,30,.8)' }}>{deg(mn)}</span>
       </div>
       {(pluie != null || proba != null) && (
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, fontSize: 11.5, fontWeight: 800, color: '#dff1ff', textShadow: '0 1px 3px rgba(6,14,30,.8)' }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, fontSize: 12, fontWeight: 800, color: '#dff1ff', textShadow: '0 1px 3px rgba(6,14,30,.8)' }}>
           <Fi i="raindrops" size={12} color="#dff1ff" />
           {proba != null ? Math.round(proba) + ' %' : ''}{(proba != null && pluie) ? ' · ' : ''}{pluie ? (Math.round(pluie * 10) / 10) + ' mm' : ''}
         </div>
@@ -130,9 +130,9 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
     return min < 1 ? tr('à l’instant') : min < 60 ? tr('il y a {n} min', { n: min }) : tr('il y a {n} h', { n: Math.round(min / 60) });
   })();
 
-  const carte = { background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' };
+  const carte = { background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' };
   const chip = (icone, texte, coul) => (
-    <span style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 999, background: 'var(--o-s2)', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+    <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 999, background: 'var(--o-s2)', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
       <Fi i={icone} size={13} color={coul} />{texte}
     </span>
   );
@@ -141,7 +141,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
     return (
       <div className="loggia-content" style={{ padding: '26px 28px 56px' }}>
         <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Météo')}</h1>
-        <div style={{ ...carte, marginTop: 20, color: 'var(--o-text2)', fontWeight: 600, fontSize: 13.5 }}>
+        <div style={{ ...carte, marginTop: 20, color: 'var(--o-text2)', fontWeight: 600, fontSize: 13 }}>
           Aucune entité météo dans Home Assistant. Cette vue n’a rien à afficher.
         </div>
       </div>
@@ -165,21 +165,21 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
           <Suspense fallback={null}><WeatherGL condition={cond3d} hourEq={new Date().getHours()} /></Suspense>
           <div className="o-wx3d-veil" />
         </div>)}
-      <div className="loggia-content" style={{ position: 'relative', zIndex: 1, padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 26 }}>
+      <div className="loggia-content" style={{ position: 'relative', zIndex: 1, padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
         {edit && <ViewEditBar texte={tr('Mode édition : choisis l’entité météo de cette vue.')} onEnt={onEnt} />}
 
         {/* BANNIÈRE — le gabarit de l'accueil : ce qu'il faut savoir a gauche,
           * ce qui vient a droite. */}
-        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--o-radius,22px)', padding: '22px 8px' }}>
+        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)', padding: '22px 8px' }}>
           <div className="o-banner-row" style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
             {/* Pas d'icône ici : le ciel derrière dit déjà le temps qu'il fait
               * (retour 02/09). La place revient au chiffre. */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, minWidth: 0, flex: '1 1 300px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, minWidth: 0, flex: '1 1 300px' }}>
               <div style={{ minWidth: 0 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{(wa.friendly_name || wId)}{depuis ? ' · ' + depuis : ''}</span>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                   <span className="o-greet-name" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1.05 }}>{deg(t, '')}</span>
-                  <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--o-text3)' }}>°C</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--o-text3)' }}>°C</span>
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>{label}</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
@@ -191,11 +191,11 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
                 {/* La vigilance passe avant tout le reste : c'est la seule
                   * information de cette vue qui demande d'agir. */}
                 {alerte && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, padding: '9px 13px', borderRadius: 12, background: 'var(--o-s2)', border: '1px solid ' + alerte.coul }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '9px 13px', borderRadius: 14, background: 'var(--o-s2)', border: '1px solid ' + alerte.coul }}>
                     <Fi i="exclamation-triangle" size={14} color={alerte.coul} />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 800, color: alerte.coul }}>{alerte.texte} · {alerte.niveau}</div>
-                      {alerte.risques.length > 0 && <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)' }}>{alerte.risques.join(' · ')}</div>}
+                      <div style={{ fontSize: 12, fontWeight: 800, color: alerte.coul }}>{alerte.texte} · {alerte.niveau}</div>
+                      {alerte.risques.length > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{alerte.risques.join(' · ')}</div>}
                     </div>
                   </div>
                 )}
@@ -204,16 +204,16 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
 
             {/* À DROITE, la ou l'accueil aligne les avatars : les heures qui
               * viennent, puis la semaine. */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flexShrink: 0, minWidth: 232 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0, minWidth: 232 }}>
               {prochaines.length > 0 && (
                 <div>
-                  <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', marginBottom: 8 }}>{tr('PROCHAINES HEURES')}</div>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', marginBottom: 8 }}>{tr('PROCHAINES HEURES')}</div>
                   <div style={{ display: 'flex', gap: 4 }}>
                     {prochaines.map((f, i) => (
-                      <div key={i} style={{ flex: 1, minWidth: 0, textAlign: 'center', padding: '9px 4px', borderRadius: 12, background: 'var(--o-s2)' }}>
-                        <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)' }}>{heure(f.datetime)}</div>
+                      <div key={i} style={{ flex: 1, minWidth: 0, textAlign: 'center', padding: '9px 4px', borderRadius: 14, background: 'var(--o-s2)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)' }}>{heure(f.datetime)}</div>
                         <div style={{ margin: '3px 0 2px', display: 'flex', justifyContent: 'center' }}><WeatherIco wx={modeDe(f)} size={30} /></div>
-                        <div style={{ fontSize: 12.5, fontWeight: 800 }}>{deg(n(f.temperature))}</div>
+                        <div style={{ fontSize: 12, fontWeight: 800 }}>{deg(n(f.temperature))}</div>
                       </div>
                     ))}
                   </div>
@@ -228,7 +228,7 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
           * nuit claire (retour 02/09). */}
         {jours.length > 0 && (<>
           <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Prévision 7 jours')}</div>
-          <div className="grid-wxdays" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(168px,1fr))', gap: 14 }}>
+          <div className="grid-wxdays" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(168px,1fr))', gap: 16 }}>
             {jours.map((f, i) => (
               <Anim key={i} i={i} base={140}>
                 <WxJour f={f} nom={jourLong(f.datetime, i)} mode={modeDe(f)} effets={effets} deg={deg} n={n} />

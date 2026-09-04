@@ -27,14 +27,14 @@ const VIEW_TITLES = {
 
 const card = {
   background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)',
-  borderRadius: 'var(--o-radius,16px)', boxShadow: 'var(--o-shadow)',
+  borderRadius: 'var(--o-radius,18px)', boxShadow: 'var(--o-shadow)',
 };
 const primary = {
-  padding: '11px 20px', borderRadius: 12, border: 'none', cursor: 'pointer',
-  fontSize: 13.5, fontWeight: 700, background: 'var(--o-accent)', color: '#06121f',
+  padding: '11px 20px', borderRadius: 14, border: 'none', cursor: 'pointer',
+  fontSize: 13, fontWeight: 700, background: 'var(--o-accent)', color: '#06121f',
 };
 const ghost = {
-  padding: '11px 18px', borderRadius: 12, cursor: 'pointer', fontSize: 13,
+  padding: '11px 18px', borderRadius: 14, cursor: 'pointer', fontSize: 13,
   fontWeight: 700, background: 'transparent', border: 'var(--o-bw,1px) solid var(--o-bd2)',
   color: 'var(--o-text2)',
 };
@@ -42,14 +42,14 @@ const title = {
   fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic',
   fontWeight: 400, fontSize: 36, margin: 0, letterSpacing: '-.01em',
 };
-const lead = { fontSize: 13.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.55 };
+const lead = { fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.55 };
 
 /** Chiffre et libelle, empiles. */
 function Stat({ v, label }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.02em' }}>{v}</span>
-      <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.03em' }}>{label}</span>
+      <span style={{ fontSize: 25, fontWeight: 800, letterSpacing: '-.02em' }}>{v}</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.03em' }}>{label}</span>
     </div>
   );
 }
@@ -58,13 +58,13 @@ function Check({ on, onT, name, sub }) {
   return (
     <div role="checkbox" aria-checked={on} tabIndex={0} onClick={onT}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onT(); } }}
-      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', borderRadius: 12, cursor: 'pointer', border: '1px solid ' + (on ? 'rgba(var(--o-accent-rgb),.4)' : 'var(--o-bd3)'), background: on ? 'rgba(var(--o-accent-rgb),.1)' : 'var(--o-s2)' }}>
-      <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--o-accent)' : 'transparent', border: on ? 'none' : '1.5px solid var(--o-bd1)' }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', borderRadius: 14, cursor: 'pointer', border: '1px solid ' + (on ? 'rgba(var(--o-accent-rgb),.4)' : 'var(--o-bd3)'), background: on ? 'rgba(var(--o-accent-rgb),.1)' : 'var(--o-s2)' }}>
+      <span style={{ width: 20, height: 20, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--o-accent)' : 'transparent', border: on ? 'none' : '1.5px solid var(--o-bd1)' }}>
         {on && <Fi i="check" size={11} color="#06121f" />}
       </span>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700 }}>{name}</div>
-        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{sub}</div>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>{name}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{sub}</div>
       </div>
     </div>
   );
@@ -132,10 +132,10 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
       <div style={{ maxWidth: 640, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg,var(--o-ok),var(--o-accent))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#06121f', fontSize: 19 }}>O</span>
+          <span style={{ width: 40, height: 40, borderRadius: 14, background: 'linear-gradient(135deg,var(--o-ok),var(--o-accent))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#06121f', fontSize: 19 }}>O</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 800 }}>Loggia</div>
-            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', color: 'var(--o-text3)' }}>ÉTAPE {etapeAffichee} SUR {totalEtapes}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', color: 'var(--o-text3)' }}>ÉTAPE {etapeAffichee} SUR {totalEtapes}</div>
           </div>
           <button onClick={onSkip} style={{ ...ghost, padding: '7px 13px', fontSize: 12 }}>Passer</button>
         </div>
@@ -148,7 +148,7 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
                 Loggia a lu votre installation Home Assistant. Rien n'est à saisir : les vues se remplissent avec ce qui existe déjà chez vous.
               </div>
             </div>
-            <div style={{ ...card, padding: '20px 22px', display: 'flex', gap: 30, flexWrap: 'wrap' }}>
+            <div style={{ ...card, padding: '20px 22px', display: 'flex', gap: 32, flexWrap: 'wrap' }}>
               <Stat v={totals.entities != null ? totals.entities : '—'} label={tr('ENTITÉS')} />
               <Stat v={totals.areasUsed != null ? totals.areasUsed : '—'} label={tr('ZONES UTILISÉES')} />
               <Stat v={totals.domains != null ? totals.domains : '—'} label="DOMAINES" />
@@ -184,7 +184,7 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
                 <button onClick={() => setShowTech(v => !v)} style={{ ...ghost, alignSelf: 'flex-start', border: 'none', padding: '4px 2px' }}>
                   {showTech ? 'Masquer' : 'Afficher'} les {technical.length} zones techniques
                 </button>
-                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', padding: '0 2px' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', padding: '0 2px' }}>
                   Sans équipement d’ambiance — réseau, énergie, serveurs. Rarement des pièces.
                 </div>
                 {showTech && technical.map(a => (
@@ -227,7 +227,7 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
             )}
             <div style={{ ...card, padding: '15px 17px' }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('ÉNERGIE')}</div>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.5 }}>
                 {energy.available
                   ? tr('Suivie via le {src}', { src: energy.source }) + ((energy.devices || []).length ? ' · ' + tr('{n} appareils mesurés', { n: energy.devices.length }) : '') + '. ' + tr('Rien à désigner.')
                   : tr("Rien de détecté — configure le tableau de bord Énergie de Home Assistant, Loggia s'en servira tout seul.")}
@@ -250,12 +250,12 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
               </div>
             </div>
             {missing.length > 0 && (
-              <div style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 11 }}>
+              <div style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr("MASQUÉES POUR L'INSTANT")}</div>
                 {missing.map(v => (
                   <div key={v} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, fontWeight: 700, minWidth: 96, flexShrink: 0 }}>{VIEW_TITLES[v]}</span>
-                    <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)', lineHeight: 1.45, flex: 1, minWidth: 200 }}>{views[v].reason}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', lineHeight: 1.45, flex: 1, minWidth: 200 }}>{views[v].reason}</span>
                   </div>
                 ))}
               </div>

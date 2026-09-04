@@ -88,8 +88,8 @@ export function FenetresReglages({ hass, cardSt }) {
   if (!cfg) {
     return (
       <div style={cardSt}>
-        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{tr('Fenêtre ouverte')}</div>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: err ? 'var(--o-bad)' : 'var(--o-text3)' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{tr('Fenêtre ouverte')}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: err ? 'var(--o-bad)' : 'var(--o-text3)' }}>
           {err || tr('Chargement…')}
         </div>
       </div>
@@ -97,10 +97,10 @@ export function FenetresReglages({ hass, cardSt }) {
   }
 
   const reglees = cfg.pieces || {};
-  const titre = { fontSize: 16, fontWeight: 700 };
-  const sous = { fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };
-  const label = { fontSize: 12.5, fontWeight: 700 };
-  const puce = (on) => ({ padding: '6px 11px', borderRadius: 9, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
+  const titre = { fontSize: 15, fontWeight: 700 };
+  const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };
+  const label = { fontSize: 12, fontWeight: 700 };
+  const puce = (on) => ({ padding: '6px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
 
   const Bascule = ({ on, cb }) => (
     <button onClick={cb} style={{ width: 46, height: 26, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 3, background: on ? 'var(--o-accent)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
@@ -173,7 +173,7 @@ export function FenetresReglages({ hass, cardSt }) {
 
       {cfg.actif && pieces.length === 0 && (
         <div style={cardSt}>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text3)', fontWeight: 600 }}>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
             {tr('Aucune pièce avec un capteur d’ouverture. Range tes capteurs dans une zone Home Assistant : la détection s’appuie dessus.')}
           </div>
         </div>
@@ -188,7 +188,7 @@ export function FenetresReglages({ hass, cardSt }) {
           <div key={p.nom} style={cardSt}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 15.5, fontWeight: 800 }}>{p.nom}</div>
+                <div style={{ fontSize: 15, fontWeight: 800 }}>{p.nom}</div>
                 <div style={sous}>
                   {compte(p.ouvrants.length, '{n} ouvrant', '{n} ouvrants')}
                   {' · '}
@@ -222,7 +222,7 @@ export function FenetresReglages({ hass, cardSt }) {
                     ))}
                   </div>
                   {mesChauffages.length === 0 && (
-                    <div style={{ fontSize: 11.5, color: 'var(--o-warn2)', fontWeight: 700, marginTop: 7 }}>
+                    <div style={{ fontSize: 12, color: 'var(--o-warn2)', fontWeight: 700, marginTop: 7 }}>
                       {tr('Rien à couper : choisis au moins un appareil.')}
                     </div>
                   )}
@@ -238,7 +238,7 @@ export function FenetresReglages({ hass, cardSt }) {
           <div style={titre}>{tr('Dernières coupures')}</div>
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
             {etat.journal.slice(0, 8).map((j, i) => (
-              <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12.5, fontWeight: 600 }}>
+              <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
                 <span>{j.quoi === 'couper' ? tr('coupé') : tr('rendu')} · <span style={{ color: 'var(--o-text3)' }}>{j.piece}</span></span>
                 <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString()}</span>
               </div>

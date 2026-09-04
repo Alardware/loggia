@@ -95,8 +95,8 @@ export function VoletsReglages({ hass, cardSt }) {
   if (!cfg) {
     return (
       <div style={cardSt}>
-        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{tr('Volets')}</div>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: err ? 'var(--o-bad)' : 'var(--o-text3)' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{tr('Volets')}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: err ? 'var(--o-bad)' : 'var(--o-text3)' }}>
           {err || tr('Chargement…')}
         </div>
       </div>
@@ -106,11 +106,11 @@ export function VoletsReglages({ hass, cardSt }) {
   const plan = cfg.planning || {};
   const sol = cfg.soleil || {};
   const vent = cfg.vent || {};
-  const titre = { fontSize: 16, fontWeight: 700 };
-  const sous = { fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };
-  const label = { fontSize: 12.5, fontWeight: 700, marginBottom: 6 };
+  const titre = { fontSize: 15, fontWeight: 700 };
+  const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };
+  const label = { fontSize: 12, fontWeight: 700, marginBottom: 6 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
-  const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
+  const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
   const champ = { padding: '9px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
 
   const Bascule = ({ on, cb }) => (
@@ -154,7 +154,7 @@ export function VoletsReglages({ hass, cardSt }) {
               * quand l'interrupteur ci-dessus se règle une fois. */}
             <div style={{ marginTop: 14 }}>
               <div style={label}>{tr('En ce moment')}</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {[['auto', tr('Auto lever/coucher'), tr('Ferme le soir, ouvre le matin')],
                   ['nuit', tr('Fermeture nuit'), tr('Ferme le soir, laisse fermé le matin')],
                   ['manuel', tr('Manuel'), tr('Ne touche à rien')]].map(([id, nom]) => (
@@ -162,7 +162,7 @@ export function VoletsReglages({ hass, cardSt }) {
                       style={puce((plan.mode || 'auto') === id)}>{nom}</button>
                   ))}
               </div>
-              <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>
+              <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>
                 {(plan.mode || 'auto') === 'nuit'
                   ? tr('Ferme le soir, laisse fermé le matin')
                   : ((plan.mode || 'auto') === 'manuel' ? tr('Ne touche à rien') : tr('Ferme le soir, ouvre le matin'))}
@@ -178,7 +178,7 @@ export function VoletsReglages({ hass, cardSt }) {
               <Nombre v={(plan.fermeture || {}).decalage || 0} min={-120} max={120} unite={tr('min après le coucher')}
                 cb={n => enregistrer({ planning: { fermeture: { decalage: n } } })} />
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>
               {tr('Un nombre négatif avance l’heure : −30 ferme une demi-heure avant le coucher.')}
             </div>
             {/* Un horaire par volet : on ne veut pas que la chambre s'ouvre
@@ -186,11 +186,11 @@ export function VoletsReglages({ hass, cardSt }) {
               * le général ; « jamais » retire le volet du planning. */}
             <div style={{ marginTop: 16, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingTop: 13 }}>
               <div style={label}>{tr('Volet par volet')}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>
                 {tr('Sans rien ici, tous suivent les heures ci-dessus.')}
               </div>
               {covers.length === 0 && (
-                <div style={{ fontSize: 12.5, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun volet trouvé dans Home Assistant.')}</div>
+                <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun volet trouvé dans Home Assistant.')}</div>
               )}
               {covers.map(c => {
                 const r = (plan.volets || {})[c.id] || null;
@@ -208,19 +208,19 @@ export function VoletsReglages({ hass, cardSt }) {
                     </div>
                     {propre && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 9 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('Ouverture')}</span>
                           <input type="number" value={r.ouverture != null ? r.ouverture : ''} min={-120} max={240} placeholder="—"
                             onChange={e => poser({ ...r, ouverture: e.target.value === '' ? null : Math.max(-120, Math.min(240, Number(e.target.value) || 0)) })}
                             style={{ ...champ, width: 74 }} />
-                          <span style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min')}</span>
+                          <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min')}</span>
                         </span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('Fermeture')}</span>
                           <input type="number" value={r.fermeture != null ? r.fermeture : ''} min={-120} max={240} placeholder="—"
                             onChange={e => poser({ ...r, fermeture: e.target.value === '' ? null : Math.max(-120, Math.min(240, Number(e.target.value) || 0)) })}
                             style={{ ...champ, width: 74 }} />
-                          <span style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min')}</span>
+                          <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min')}</span>
                         </span>
                       </div>
                     )}
@@ -256,7 +256,7 @@ export function VoletsReglages({ hass, cardSt }) {
           desc={tr('Quand le soleil frappe une façade et qu’il fait chaud, baisser ses volets — puis les rouvrir quand il est passé.')}
           on={sol.actif} cb={() => enregistrer({ soleil: { actif: !sol.actif } })} />
         {etat.soleil && etat.soleil.azimut != null && (
-          <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
             {tr('En ce moment : soleil à {a}°, hauteur {e}°', { a: Math.round(etat.soleil.azimut), e: Math.round(etat.soleil.elevation) })}
             {etat.abaisses && etat.abaisses.length ? ' · ' + (etat.abaisses.length > 1 ? tr('{n} volets abaissés', { n: etat.abaisses.length }) : tr('{n} volet abaissé', { n: 1 })) : ''}
           </div>
@@ -288,11 +288,11 @@ export function VoletsReglages({ hass, cardSt }) {
 
             <div style={{ marginTop: 16, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingTop: 13 }}>
               <div style={label}>{tr('Où donne chaque volet')}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>
                 {tr('Un volet sans orientation est laissé tranquille par cette règle.')}
               </div>
               {covers.length === 0 && (
-                <div style={{ fontSize: 12.5, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun volet trouvé dans Home Assistant.')}</div>
+                <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun volet trouvé dans Home Assistant.')}</div>
               )}
               {covers.map(c => {
                 const reg = (sol.volets || {})[c.id] || null;
@@ -349,7 +349,7 @@ export function VoletsReglages({ hass, cardSt }) {
           <div style={titre}>{tr('Dernières manœuvres')}</div>
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
             {etat.journal.slice(0, 8).map((j, i) => (
-              <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12.5, fontWeight: 600 }}>
+              <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
                 <span>{j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.detail ? ' · ' + j.detail : ''}</span></span>
                 <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString()}</span>
               </div>
