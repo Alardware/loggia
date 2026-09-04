@@ -1408,4 +1408,10 @@ export default {
   'Verrouillage…': 'Locking…',
   'Glisser pour ouvrir': 'Slide to unlock',
   'Glisser pour verrouiller': 'Slide to lock',
+  'OUVRANT OUVERT': 'DOOR OR WINDOW OPEN',
+  'LUMIÈRE ALLUMÉE': 'LIGHT ON',
+  'MÉDIAS EN LECTURE': 'MEDIA PLAYING',
+  'MÉDIA EN LECTURE': 'MEDIA PLAYING',
+  'APPAREILS ACTIFS': 'DEVICES RUNNING',
+  'APPAREIL ACTIF': 'DEVICE RUNNING',
 };

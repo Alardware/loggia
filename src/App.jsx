@@ -5136,6 +5136,21 @@ function FavorisAccueil({ hass, edit = false }) {
   );
 }
 
+/* Ce qui compte comme un appareil EN MARCHE.
+ *
+ * Chaque domaine dit « actif » a sa maniere : une prise est `on`, un
+ * aspirateur `cleaning`, une tondeuse `mowing`. Un robot qui rentre a sa base
+ * travaille encore — il n'est pas au repos tant qu'il roule.
+ */
+const APPAREIL_ACTIF = {
+  switch: (e) => e === 'on',
+  fan: (e) => e === 'on',
+  humidifier: (e) => e === 'on',
+  valve: (e) => e === 'open',
+  vacuum: (e) => e === 'cleaning' || e === 'returning',
+  lawn_mower: (e) => e === 'mowing' || e === 'returning',
+};
+
 function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onOpenMeteo, onNav = null }) {
   const [override, setOverride] = useState(null);
   const agenda = useAgenda(accueil && accueil.hass);
@@ -5395,6 +5410,42 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     if (!S) return { ouverts: 0, total: 0 };
     try { const l = ouvrantsDe(S); return { ouverts: l.filter(o => o.on).length, total: l.length }; } catch (e) { return { ouverts: 0, total: 0 }; }
   }, [dashHass]);
+  /* Medias en lecture et appareils en marche, pour la banniere.
+   *
+   * Les entites de CONFIGURATION et de DIAGNOSTIC sont ecartees : la LED d'une
+   * camera et le redemarrage d'un routeur sont des interrupteurs comme les
+   * autres pour Home Assistant, mais personne ne dirait qu'un appareil
+   * « tourne » parce que sa diode est allumee. Les interrupteurs designes
+   * comme des lampes le sont aussi — ils sont deja comptes en lumieres.
+   */
+  const actifsStat = useMemo(() => {
+    const vide = { medias: 0, mediasTotal: 0, appareils: 0, appareilsTotal: 0 };
+    const S = (dashHass && dashHass.states) || null;
+    if (!S) return vide;
+    try {
+      const meta = (a && a.index && a.index.entityMeta) || null;
+      const lampes = new Set(switchLights());
+      const out = { ...vide };
+      for (const id in S) {
+        const e = S[id];
+        if (!e || e.state === 'unavailable' || e.state === 'unknown') continue;
+        const p = id.indexOf('.');
+        const dom = p > 0 ? id.slice(0, p) : '';
+        if (dom === 'media_player') {
+          out.mediasTotal++;
+          if (e.state === 'playing') out.medias++;
+          continue;
+        }
+        const test = APPAREIL_ACTIF[dom];
+        if (!test || lampes.has(id)) continue;
+        const m = meta ? meta.get(id) : null;
+        if (m && (m.category || m.hidden)) continue;
+        out.appareilsTotal++;
+        if (test(e.state)) out.appareils++;
+      }
+      return out;
+    } catch (e) { return vide; }
+  }, [dashHass, a]);
   // lumières par pièce (compteur + interrupteur des cartes compactes) — une seule passe par render.
   // On ignore les entités dont le NOM AFFICHÉ commence/contient « Ampoule » (membres individuels
   // des luminaires) : seul le nom compte, pas l'entity_id (ex. le lampadaire peut avoir un id
@@ -5609,28 +5660,51 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               </div>
             </div>
           </div>
-          {<div className="o-banner-metrics" style={{ position: 'relative', display: 'flex', gap: 10, marginTop: 26, overflowX: 'auto', paddingBottom: 4 }}>
-            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
-              <Ico name="bolt" color="var(--o-ok)" size={17} />
-              <div><div style={{ fontSize: 15, fontWeight: 800, color: a && a.metricExport ? a.metricExport.color : 'var(--o-ok)', lineHeight: 1.1 }}>{a && a.metricExport ? <Num v={a.metricExport.raw} prefix={a.metricExport.sign} fmt={fmtWatts} /> : <Skel w={64} h={16} />}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a && a.metricExport ? a.metricExport.label: tr('EXPORT RÉSEAU')}</div></div>
-            </div>
-            <div style={metricDiv} />
-            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
-              <Ico name="wind" color="var(--o-accent)" size={17} />
-              <div><div style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-accent-soft)', lineHeight: 1.1 }}>{a ? (a.maxCo2 != null ? <Num v={a.maxCo2} /> : '—') : <Skel w={40} h={16} />}<span style={{ fontSize: 11, color: 'var(--o-text2)' }}> ppm</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('QUALITÉ AIR')} · {a && a.maxCo2 != null ? tr(airLabel(a.maxCo2)) : tr('BON')}</div></div>
-            </div>
-            <div style={metricDiv} />
-            {/* Les OUVRANTS ont pris la place de la température (retour
+          {(() => {
+            /* Une metrique a zero ne dit rien : « 0 / 4 ouvrants ouverts »
+              * occupe une place et ne demande aucune action. La banniere ne
+              * montre donc que ce qui se passe, et les separateurs se posent
+              * ENTRE ce qui reste — pas a des places reservees d'avance.
+              *
+              * Pendant le chargement, l'export et l'air gardent leur squelette :
+              * sans eux la banniere naitrait vide, puis sauterait. */
+            const cases = [];
+            if (!a || a.metricExport) cases.push(
+              <div key="ex" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+                <Ico name="bolt" color="var(--o-ok)" size={17} />
+                <div><div style={{ fontSize: 15, fontWeight: 800, color: a && a.metricExport ? a.metricExport.color : 'var(--o-ok)', lineHeight: 1.1 }}>{a && a.metricExport ? <Num v={a.metricExport.raw} prefix={a.metricExport.sign} fmt={fmtWatts} /> : <Skel w={64} h={16} />}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a && a.metricExport ? a.metricExport.label : tr('EXPORT RÉSEAU')}</div></div>
+              </div>);
+            if (!a || a.maxCo2 != null) cases.push(
+              <div key="air" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+                <Ico name="wind" color="var(--o-accent)" size={17} />
+                <div><div style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-accent-soft)', lineHeight: 1.1 }}>{a ? (a.maxCo2 != null ? <Num v={a.maxCo2} /> : '—') : <Skel w={40} h={16} />}<span style={{ fontSize: 11, color: 'var(--o-text2)' }}> ppm</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('QUALITÉ AIR')} · {a && a.maxCo2 != null ? tr(airLabel(a.maxCo2)) : tr('BON')}</div></div>
+              </div>);
+            /* Les OUVRANTS ont pris la place de la température (retour
               * 01/09) : la chaleur de la maison se lit sur chaque tuile pièce,
-              * une fenêtre restée ouverte ne se lit nulle part. */}
-            <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: ouvStat.ouverts ? 'var(--o-purple)' : 'var(--o-text1)' }}>{ouvStat.total ? <><Num v={ouvStat.ouverts} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {ouvStat.total}</span></> : (a ? '—' : <Skel w={34} h={15} />)}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('OUVRANTS OUVERTS')}</div>
-            </div>
-            <div style={metricDiv} />
-            <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
-              <div style={{ fontSize: 15, fontWeight: 800 }}>{a ? <Num v={a.lightsOn} /> : <Skel w={18} h={15} />} <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {a ? a.lightsTotal : <Skel w={14} h={11} />} {tr('prés.')}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('LUMIÈRES ALLUMÉES')}</div>
-            </div>
-          </div>}
+              * une fenêtre restée ouverte ne se lit nulle part. */
+            if (ouvStat.ouverts > 0) cases.push(
+              <div key="ouv" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-purple)' }}><Num v={ouvStat.ouverts} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {ouvStat.total}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{ouvStat.ouverts > 1 ? tr('OUVRANTS OUVERTS') : tr('OUVRANT OUVERT')}</div>
+              </div>);
+            if (a && a.lightsOn > 0) cases.push(
+              <div key="lum" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={a.lightsOn} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {a.lightsTotal} {tr('prés.')}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a.lightsOn > 1 ? tr('LUMIÈRES ALLUMÉES') : tr('LUMIÈRE ALLUMÉE')}</div>
+              </div>);
+            if (actifsStat.medias > 0) cases.push(
+              <div key="med" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={actifsStat.medias} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {actifsStat.mediasTotal}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{actifsStat.medias > 1 ? tr('MÉDIAS EN LECTURE') : tr('MÉDIA EN LECTURE')}</div>
+              </div>);
+            if (actifsStat.appareils > 0) cases.push(
+              <div key="app" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={actifsStat.appareils} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {actifsStat.appareilsTotal}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{actifsStat.appareils > 1 ? tr('APPAREILS ACTIFS') : tr('APPAREIL ACTIF')}</div>
+              </div>);
+            if (!cases.length) return null;
+            return (
+              <div className="o-banner-metrics" style={{ position: 'relative', display: 'flex', gap: 10, marginTop: 26, overflowX: 'auto', paddingBottom: 4 }}>
+                {cases.map((c, i) => (i ? [<div key={'d' + i} style={metricDiv} />, c] : c))}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Les favoris sont une SECTION comme les autres depuis le 01/09 :
@@ -10396,6 +10470,25 @@ function CvHistory({ id, hass, demoPoints = null }) {
  * Elles lisent la maison entière : découverte par device_class ou
  * configuration existante — zéro YAML, sources injectables pour la biblio. */
 const OUVRANT_DCS = ['door', 'window', 'garage_door', 'opening', 'gate'];
+/* Les entites que la BANNIERE compte, une par une plutot que par domaine.
+ *
+ * Surveiller `binary_sensor.` en entier reveillerait tout l'accueil a chaque
+ * detection de mouvement, alors que seuls les ouvrants y sont comptes. Sans
+ * cette liste, a l'inverse, la banniere lit des etats que rien ne la fait
+ * relire : elle garde une fenetre ouverte a l'ecran apres sa fermeture, et
+ * cache un media qui vient de demarrer.
+ */
+const bannerKeys = () => {
+  const S = (getHass() || {}).states || {};
+  const out = [];
+  for (const id in S) {
+    const p = id.indexOf('.');
+    const dom = p > 0 ? id.slice(0, p) : '';
+    if (dom === 'media_player' || APPAREIL_ACTIF[dom]) { out.push(id); continue; }
+    if (dom === 'binary_sensor' && OUVRANT_DCS.indexOf((S[id].attributes || {}).device_class) >= 0) out.push(id);
+  }
+  return out;
+};
 const ouvrantsDe = (S) => Object.keys(S || {})
   .filter(id => id.indexOf('binary_sensor.') === 0 && S[id] && S[id].state !== 'unavailable')
   .map(id => ({ id, dc: (S[id].attributes || {}).device_class, on: S[id].state === 'on', nom: (S[id].attributes || {}).friendly_name || id, lc: S[id].last_changed }))
@@ -12092,7 +12185,7 @@ export default function App() {
     ...mowerKeys(), notifIds().dishwasherStart,
     cfg.energy.consoNow, cfg.energy.solarOutput,
     ...(cfg.rooms || []).flatMap(r => [r.haid && r.haid.temp, r.haid && r.haid.humidity, r.haid && r.haid.co2]),
-    ...lightKeys, ...(cfg.cams || []).map(c => c.haid)];
+    ...lightKeys, ...bannerKeys(), ...(cfg.cams || []).map(c => c.haid)];
   const VIEW_HAKEYS = {
     accueil: accueilKeys, lumieres: lightKeys, scenes: lightKeys,
     climat: [...climateKeys(), 'climate.', ...cfgKeys('climate'), ...voletKeys(), 'cover.', ...cfgKeys('covers')],
