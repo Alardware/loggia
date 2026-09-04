@@ -1416,4 +1416,9 @@ export default {
   'APPAREIL ACTIF': 'DEVICE RUNNING',
   'Batterie': 'Battery',
   'VITESSE': 'SUCTION',
+  'Mois précédent': 'Previous month',
+  'Mois suivant': 'Next month',
+  'Choisir les agendas': 'Choose calendars',
+  'AGENDAS AFFICHÉS': 'CALENDARS SHOWN',
+  'Ouvrir le calendrier': 'Open the calendar',
 };
