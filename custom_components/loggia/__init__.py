@@ -95,7 +95,8 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                               lambda: hass.data.get(DOMAIN, {}).get("interrupteurs"),
                               lambda: hass.data.get(DOMAIN, {}).get("volets"),
                               lambda: hass.data.get(DOMAIN, {}).get("fenetres"),
-                              lambda: hass.data.get(DOMAIN, {}).get("presence"))
+                              lambda: hass.data.get(DOMAIN, {}).get("presence"),
+                              lambda: hass.data.get(DOMAIN, {}).get("nuit"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
@@ -150,6 +151,15 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["presence"] = LoggiaPresence(hass, data["store"])
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : regle de presence indisponible")
+
+    # La nuit : veilleuse a minuterie, et extinction des lampes oubliees.
+    if not data.get("nuit") and data.get("store"):
+        try:
+            from .nuit import LoggiaNuit
+
+            data["nuit"] = LoggiaNuit(hass, data["store"])
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : regles de nuit indisponibles")
 
     # ── Ce qui se refait a chaque chargement : le panneau ──
     # Il se retire proprement dans `async_unload_entry`, donc il se reenregistre

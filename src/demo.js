@@ -382,6 +382,32 @@ function presencePatch(patch) {
   return PRE_CFG;
 }
 
+/* La nuit : la veilleuse d'une chambre reglee, l'extinction du soir armee et
+ * la veilleuse mise de cote — c'est l'usage le plus courant, autant le
+ * montrer plutot qu'un formulaire vide. */
+const NUI_CFG = {
+  veilleuse: { actif: true, lampes: ['light.chambre'], duree: 30, fondu: 5, depuis: '19:00' },
+  coucher: { actif: true, heure: '23:30', sauf: ['light.chambre'], jours: [0, 1, 2, 3, 4, 5, 6] },
+};
+
+function nuitDemo() {
+  return {
+    config: NUI_CFG,
+    en_cours: [],
+    journal: [
+      { quoi: 'veilleuse', entites: ['light.chambre'], ts: Date.now() / 1000 - 50000 },
+      { quoi: 'coucher', entites: ['light.salon', 'light.cuisine'], ts: Date.now() / 1000 - 54000 },
+    ],
+  };
+}
+
+function nuitPatch(patch) {
+  Object.keys(patch || {}).forEach(k => {
+    if (NUI_CFG[k]) Object.assign(NUI_CFG[k], patch[k]);
+  });
+  return NUI_CFG;
+}
+
 function calendrierDemo() {
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
@@ -480,6 +506,10 @@ export function installerDemo() {
       if (msg && msg.type === 'loggia/presence/etat') return Promise.resolve(presenceDemo());
       if (msg && msg.type === 'loggia/presence/config') {
         return Promise.resolve({ config: presencePatch(msg.patch) });
+      }
+      if (msg && msg.type === 'loggia/nuit/etat') return Promise.resolve(nuitDemo());
+      if (msg && msg.type === 'loggia/nuit/config') {
+        return Promise.resolve({ config: nuitPatch(msg.patch) });
       }
       if (msg && msg.type === 'loggia/discovery') return Promise.resolve({ index: indexDemo(states) });
       return Promise.reject(new Error('démonstration : pas de composant serveur'));

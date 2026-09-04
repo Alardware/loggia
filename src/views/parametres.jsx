@@ -21,6 +21,7 @@ import { InterrupteursSection } from './interrupteurs.jsx';
 import { VoletsReglages } from './volets.jsx';
 import { FenetresReglages } from './fenetres.jsx';
 import { PresenceReglages } from './presence.jsx';
+import { NuitReglages } from './nuit.jsx';
 import { weatherEntity } from '../wxutil.jsx';
 import { tr, choixLangue, languesDisponibles } from '../i18n.js';
 
@@ -928,6 +929,13 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     h.callWS({ type: 'loggia/presence/etat' })
       .then(r => { if (r && r.config && r.config.actif) { n += 1; compter(); } })
       .catch(() => { /* idem */ });
+    h.callWS({ type: 'loggia/nuit/etat' })
+      .then(r => {
+        const c = (r && r.config) || {};
+        n += ['veilleuse', 'coucher'].filter(k => c[k] && c[k].actif).length;
+        compter();
+      })
+      .catch(() => { /* idem */ });
   }, [!!hass, isAdmin]);
 
   // Sections du sommaire : chiffre mis en avant + accroche.
@@ -1600,13 +1608,14 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       {tab === 'inter' && isAdmin && <InterrupteursSection hass={hass} cardSt={cardSt} />}
       {tab === 'regles' && isAdmin && (<>
         <div className="o-bar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-          {[['volets', tr('Volets')], ['fenetres', tr('Chauffage')], ['presence', tr('Départ et retour')]].map(([id, nom]) => (
+          {[['volets', tr('Volets')], ['fenetres', tr('Chauffage')], ['presence', tr('Départ et retour')], ['nuit', tr('La nuit')]].map(([id, nom]) => (
             <button key={id} onClick={() => setOngletRegle(id)} style={tabStyle(ongletRegle === id)}>{nom}</button>
           ))}
         </div>
         {ongletRegle === 'volets' ? <VoletsReglages hass={hass} cardSt={cardSt} />
           : ongletRegle === 'fenetres' ? <FenetresReglages hass={hass} cardSt={cardSt} />
-            : <PresenceReglages hass={hass} cardSt={cardSt} />}
+            : ongletRegle === 'presence' ? <PresenceReglages hass={hass} cardSt={cardSt} />
+              : <NuitReglages hass={hass} cardSt={cardSt} />}
       </>)}
       {tab === 'maj' && isAdmin && (<>
         <SecBar>
