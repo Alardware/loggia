@@ -65,6 +65,8 @@ function etatsInitiaux() {
     'media_player.salon': s('playing', { friendly_name: 'Enceinte salon', media_title: 'Clair de Lune', media_artist: 'Debussy', volume_level: .35, supported_features: 20925, entity_picture: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E' }),
     'vacuum.aspirateur': s('docked', { friendly_name: 'Aspirateur', battery_level: 100 }),
     'binary_sensor.porte_entree': s('off', { friendly_name: "Porte d'entrée", device_class: 'door' }),
+    'person.demo': s('home', { friendly_name: 'Démo' }),
+    'person.sam': s('not_home', { friendly_name: 'Sam' }),
     'binary_sensor.fenetre_chambre': s('off', { friendly_name: 'Fenêtre chambre', device_class: 'window' }),
     'binary_sensor.fenetre_salon': s('off', { friendly_name: 'Fenêtre salon', device_class: 'window' }),
     'switch.radiateur_chambre': s('on', { friendly_name: 'Radiateur chambre' }),
@@ -345,6 +347,41 @@ function indexDemo(states) {
   };
 }
 
+/* Depart et retour : la regle armee, alarme comprise, mais le desarmement au
+ * retour laisse ferme — c'est le defaut, et la demonstration doit le montrer. */
+const PRE_CFG = {
+  actif: true, delai_depart: 5, personnes: ['person.demo', 'person.sam'],
+  depart: { lumieres: true, chauffage: { actif: true, consigne: 17, confort: 20 },
+    alarme: { actif: true, entite: 'alarm_control_panel.maison', mode: 'away' } },
+  retour: { lumieres: true, seulement_la_nuit: true, chauffage: true, desarmer: false },
+};
+
+function presenceDemo() {
+  return {
+    config: PRE_CFG,
+    dehors: false,
+    en_attente: false,
+    eteintes: [],
+    journal: [
+      { quoi: 'retour', detail: ['2 lumieres', 'chauffage a 20'], ts: Date.now() / 1000 - 7200 },
+      { quoi: 'depart', detail: ['3 lumieres', 'chauffage a 17', 'alarme armee'], ts: Date.now() / 1000 - 34000 },
+    ],
+  };
+}
+
+function presencePatch(patch) {
+  const objet = (x) => x && typeof x === 'object' && !Array.isArray(x);
+  Object.keys(patch || {}).forEach(k => {
+    if (objet(PRE_CFG[k]) && objet(patch[k])) {
+      Object.keys(patch[k]).forEach(kk => {
+        if (objet(PRE_CFG[k][kk]) && objet(patch[k][kk])) Object.assign(PRE_CFG[k][kk], patch[k][kk]);
+        else PRE_CFG[k][kk] = patch[k][kk];
+      });
+    } else PRE_CFG[k] = patch[k];
+  });
+  return PRE_CFG;
+}
+
 function calendrierDemo() {
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
@@ -440,6 +477,10 @@ export function installerDemo() {
       }
       /* Sans zones, aucune regle par piece n'est proposable : c'est la zone
        * qui dit quel radiateur est dans la meme piece que quelle fenetre. */
+      if (msg && msg.type === 'loggia/presence/etat') return Promise.resolve(presenceDemo());
+      if (msg && msg.type === 'loggia/presence/config') {
+        return Promise.resolve({ config: presencePatch(msg.patch) });
+      }
       if (msg && msg.type === 'loggia/discovery') return Promise.resolve({ index: indexDemo(states) });
       return Promise.reject(new Error('démonstration : pas de composant serveur'));
     },

@@ -47,6 +47,12 @@ def _poser_doublures() -> None:
         # decider d'un jour de la semaine.
         ("homeassistant.util", ()),
         ("homeassistant.util.dt", ("now",)),
+        # `presence.py` et `volets.py` posent des abonnements et des rendez-vous
+        # quand on enregistre leur configuration. Les doublures ne font rien :
+        # aucun test ne veut declencher un vrai minuteur.
+        ("homeassistant.helpers.event", ("async_track_state_change_event",
+                                         "async_call_later", "async_track_sunrise",
+                                         "async_track_sunset")),
     ):
         module = types.ModuleType(nom)
         for attr in attrs:
@@ -58,6 +64,14 @@ def _poser_doublures() -> None:
     # pas seulement une entree de `sys.modules` : il faut relier les deux.
     import datetime as _dt
     sys.modules["homeassistant.util.dt"].now = _dt.datetime.now
+    # Ces helpers renvoient normalement une fonction de desabonnement : la
+    # doublure en rend une qui ne fait rien, pour que le code de production
+    # puisse la stocker et l'appeler comme d'habitude.
+    _ev = sys.modules["homeassistant.helpers.event"]
+    for _nom in ("async_track_state_change_event", "async_call_later",
+                 "async_track_sunrise", "async_track_sunset"):
+        setattr(_ev, _nom, lambda *a, **k: (lambda: None))
+    sys.modules["homeassistant.helpers"].event = _ev
     sys.modules["homeassistant.util"].dt = sys.modules["homeassistant.util.dt"]
 
 
