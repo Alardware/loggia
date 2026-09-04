@@ -52,7 +52,8 @@ def _poser_doublures() -> None:
         # aucun test ne veut declencher un vrai minuteur.
         ("homeassistant.helpers.event", ("async_track_state_change_event",
                                          "async_call_later", "async_track_sunrise",
-                                         "async_track_sunset", "async_track_time_change")),
+                                         "async_track_sunset", "async_track_time_change",
+                                         "async_track_time_interval")),
     ):
         module = types.ModuleType(nom)
         for attr in attrs:
@@ -70,7 +71,7 @@ def _poser_doublures() -> None:
     _ev = sys.modules["homeassistant.helpers.event"]
     for _nom in ("async_track_state_change_event", "async_call_later",
                  "async_track_sunrise", "async_track_sunset",
-                 "async_track_time_change"):
+                 "async_track_time_change", "async_track_time_interval"):
         setattr(_ev, _nom, lambda *a, **k: (lambda: None))
     sys.modules["homeassistant.helpers"].event = _ev
     sys.modules["homeassistant.util"].dt = sys.modules["homeassistant.util.dt"]

@@ -65,6 +65,7 @@ function etatsInitiaux() {
     'media_player.salon': s('playing', { friendly_name: 'Enceinte salon', media_title: 'Clair de Lune', media_artist: 'Debussy', volume_level: .35, supported_features: 20925, entity_picture: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E' }),
     'vacuum.aspirateur': s('docked', { friendly_name: 'Aspirateur', battery_level: 100 }),
     'binary_sensor.porte_entree': s('off', { friendly_name: "Porte d'entrée", device_class: 'door' }),
+    'sensor.pile_porte_entree': s(9, { friendly_name: 'Pile porte entrée', device_class: 'battery', unit_of_measurement: '%' }),
     'person.demo': s('home', { friendly_name: 'Démo' }),
     'person.sam': s('not_home', { friendly_name: 'Sam' }),
     'binary_sensor.fenetre_chambre': s('off', { friendly_name: 'Fenêtre chambre', device_class: 'window' }),
@@ -408,6 +409,35 @@ function nuitPatch(patch) {
   return NUI_CFG;
 }
 
+/* Les trois veilles : l'air arme, les piles armees, le tarif au repos faute
+ * de capteur de tarif dans la maison de demonstration. */
+const VEI_CFG = {
+  co2: { actif: true, seuil: 1200, capteurs: [], ventilation: [] },
+  batterie: { actif: true, seuil: 15 },
+  creuses: { actif: false, entite: '', valeur: '', prises: [] },
+};
+
+function veillesDemo(states) {
+  const classe = (c) => Object.keys(states)
+    .filter(id => (id.startsWith('sensor.') || id.startsWith('binary_sensor.'))
+      && ((states[id].attributes || {}).device_class === c)).sort();
+  return {
+    config: VEI_CFG,
+    capteurs_co2: classe('carbon_dioxide'),
+    capteurs_batterie: classe('battery'),
+    notification: true,
+    signales: [],
+    journal: [{ quoi: 'co2', entite: 'sensor.chambre_co2', valeur: 1310, ts: Date.now() / 1000 - 9000 }],
+  };
+}
+
+function veillesPatch(patch) {
+  Object.keys(patch || {}).forEach(k => {
+    if (VEI_CFG[k]) Object.assign(VEI_CFG[k], patch[k]);
+  });
+  return VEI_CFG;
+}
+
 function calendrierDemo() {
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
@@ -510,6 +540,10 @@ export function installerDemo() {
       if (msg && msg.type === 'loggia/nuit/etat') return Promise.resolve(nuitDemo());
       if (msg && msg.type === 'loggia/nuit/config') {
         return Promise.resolve({ config: nuitPatch(msg.patch) });
+      }
+      if (msg && msg.type === 'loggia/veilles/etat') return Promise.resolve(veillesDemo(states));
+      if (msg && msg.type === 'loggia/veilles/config') {
+        return Promise.resolve({ config: veillesPatch(msg.patch) });
       }
       if (msg && msg.type === 'loggia/discovery') return Promise.resolve({ index: indexDemo(states) });
       return Promise.reject(new Error('démonstration : pas de composant serveur'));

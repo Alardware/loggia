@@ -52,6 +52,8 @@ WS_PRE_ETAT = "loggia/presence/etat"
 WS_PRE_CONFIG = "loggia/presence/config"
 WS_NUI_ETAT = "loggia/nuit/etat"
 WS_NUI_CONFIG = "loggia/nuit/config"
+WS_VEI_ETAT = "loggia/veilles/etat"
+WS_VEI_CONFIG = "loggia/veilles/config"
 
 
 def _user_info(connection: websocket_api.ActiveConnection) -> dict[str, Any]:
@@ -84,7 +86,8 @@ def _payload_too_big(patch: dict[str, Any]) -> str | None:
 @callback
 def async_register(hass: HomeAssistant, store: LoggiaStore,
                    acces_interrupteurs=None, acces_volets=None, acces_fenetres=None,
-                   acces_presence=None, acces_nuit=None) -> None:
+                   acces_presence=None, acces_nuit=None,
+                   acces_veilles=None) -> None:
     """Declare les commandes aupres du serveur WebSocket.
 
     `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
@@ -292,6 +295,30 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             return
         connection.send_result(msg["id"], {"config": await nuit.async_enregistrer(msg["patch"])})
 
+    # ── Les veilles ───────────────────────────────────────────────────────
+    @websocket_api.websocket_command({vol.Required("type"): WS_VEI_ETAT})
+    @websocket_api.async_response
+    async def handle_vei_etat(hass, connection, msg):
+        vei = acces_veilles() if acces_veilles else None
+        if vei is None:
+            connection.send_error(msg["id"], "not_available", "veilles indisponibles")
+            return
+        connection.send_result(msg["id"], await vei.async_etat())
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_VEI_CONFIG, vol.Required("patch"): dict}
+    )
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_vei_config(hass, connection, msg):
+        vei = acces_veilles() if acces_veilles else None
+        if vei is None:
+            connection.send_error(msg["id"], "not_available", "veilles indisponibles")
+            return
+        connection.send_result(msg["id"], {"config": await vei.async_enregistrer(msg["patch"])})
+
+    websocket_api.async_register_command(hass, handle_vei_etat)
+    websocket_api.async_register_command(hass, handle_vei_config)
     websocket_api.async_register_command(hass, handle_nui_etat)
     websocket_api.async_register_command(hass, handle_nui_config)
     websocket_api.async_register_command(hass, handle_pre_etat)
