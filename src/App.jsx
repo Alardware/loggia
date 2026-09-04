@@ -5750,6 +5750,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           if (alarmRailId) {
             etatsRows.push(<RailArm key="armer" id={alarmRailId} hass={dashHass} />);
           }
+          /* La serrure juste sous l'armement : c'est le meme geste de depart
+            * et de retour. Elle n'apparait que si l'installation en a une. */
+          const serrureId = serrureRailId(dashHass && dashHass.states);
+          if (serrureId) {
+            etatsRows.push(<RailSerrure key="serrure" id={serrureId} hass={dashHass} />);
+          }
           /* Le rail ne redit pas la bannière (retour 01/09) : lumières,
             * sécurité, qualité d'air et énergie y sont déjà chiffrées. Il
             * garde ce qui RACONTE quelque chose — volets, robots, appareils. */
@@ -10023,6 +10029,111 @@ function ArmAnneau({ pct, col = 'var(--o-warn2)', r = 9 }) {
  * ceux du panneau ; s'il réclame un code, on ouvre la vue Sécurité, qui sait le
  * demander. Composant à part pour battre la seconde du décompte sans faire
  * tictaquer tout l'accueil. */
+/* La serrure du rail : on GLISSE, on ne clique pas.
+ *
+ * Un bouton ouvre une porte d'un doigt qui derape. Une glissiere demande un
+ * geste continu jusqu'au bout de la piste — le meme reflexe que le « glisser
+ * pour deverrouiller » d'un telephone, et pour la meme raison : ce qui ouvre
+ * une maison ne doit pas partir tout seul dans une poche.
+ *
+ * La course doit etre franchie a 85 %. En deca, le curseur revient a sa place
+ * et rien n'est envoye.
+ */
+function serrureRailId(S) {
+  if (!S) return null;
+  const toutes = Object.keys(S).filter(k => k.indexOf('lock.') === 0);
+  if (!toutes.length) return null;
+  /* Celle de l'entree si son nom le dit, sinon la premiere : une maison a
+   * rarement deux serrures connectees, et le nom tranche quand elle en a. */
+  const entree = toutes.find(k => /entree|entr\u00e9e|porte|front|main/i.test(
+    k + ' ' + (((S[k] || {}).attributes || {}).friendly_name || '')));
+  return entree || toutes.slice().sort()[0];
+}
+
+function RailSerrure({ id, hass }) {
+  const st = (hass && hass.states) ? hass.states[id] : null;
+  const etat = st ? String(st.state).toLowerCase() : '';
+  const verrouille = etat === 'locked';
+  const enRoute = etat === 'locking' || etat === 'unlocking';
+  const coince = etat === 'jammed';
+  const [x, setX] = useState(0);          // 0 a 1, la position du curseur
+  const [glisse, setGlisse] = useState(false);
+  const piste = useRef(null);
+
+  const nom = coince ? tr('Serrure bloquée')
+    : enRoute ? (etat === 'locking' ? tr('Verrouillage…') : tr('Ouverture…'))
+      : verrouille ? tr('Verrouill\u00e9e') : tr('D\u00e9verrouill\u00e9e');
+  /* Une seule direction, toujours la meme : le geste ne se reapprend pas
+     selon l'etat de la porte. */
+  const consigne = verrouille ? tr('Glisser pour ouvrir') : tr('Glisser pour verrouiller');
+  const col = coince ? 'var(--o-bad)' : verrouille ? 'var(--o-ok)' : 'var(--o-warn2)';
+
+  const agir = () => {
+    try {
+      if (hass && hass.callService) {
+        hass.callService('lock', verrouille ? 'unlock' : 'lock', { entity_id: id });
+      }
+    } catch (e) { /* le service dira lui-meme s'il a echoue */ }
+  };
+
+  const surX = (clientX) => {
+    const el = piste.current;
+    if (!el) return 0;
+    const r = el.getBoundingClientRect();
+    const large = Math.max(1, r.width - 44);   // moins la largeur du curseur
+    return Math.max(0, Math.min(1, (clientX - r.left - 22) / large));
+  };
+
+  const debut = (e) => {
+    if (enRoute) return;
+    setGlisse(true);
+    const el = e.currentTarget;
+    try { el.setPointerCapture(e.pointerId); } catch (x2) {}
+    el.onpointermove = (ev) => setX(surX(ev.clientX));
+    el.onpointerup = (ev) => {
+      const v = surX(ev.clientX);
+      el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null;
+      setGlisse(false);
+      // Franchi aux 85 % : sinon le curseur revient et rien ne part.
+      if (v >= 0.85) agir();
+      setX(0);
+    };
+    el.onpointercancel = () => {
+      el.onpointermove = null; el.onpointerup = null;
+      setGlisse(false); setX(0);
+    };
+  };
+
+  return (
+    <div style={{ padding: '10px 0 2px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>{tr('Porte d’entrée')}</span>
+        <span style={{ fontSize: 12, fontWeight: 800, color: col }}>{nom}</span>
+      </div>
+      <div ref={piste} onPointerDown={debut}
+        style={{ position: 'relative', height: 44, borderRadius: 999, cursor: enRoute ? 'default' : 'grab',
+          background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)',
+          overflow: 'hidden', touchAction: 'none', opacity: enRoute ? 0.6 : 1 }}>
+        {/* La trainee : elle dit jusqu'ou le geste est alle. */}
+        <span style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: (x * 100) + '%',
+          background: 'rgba(var(--o-accent-rgb),.18)', transition: glisse ? 'none' : 'width .25s ease' }} />
+        <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: 12, fontWeight: 700, color: 'var(--o-text3)',
+          pointerEvents: 'none' }}>{enRoute ? nom : consigne}</span>
+        <span style={{ position: 'absolute', top: 4, bottom: 4, width: 36,
+          left: 'calc(4px + (100% - 44px) * ' + x + ')', borderRadius: 999,
+          background: col, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: glisse ? 'none' : 'left .25s ease', pointerEvents: 'none' }}>
+          {/* Pas de blanc : sur ces aplats vifs il tombe a 2:1 en theme
+            * sombre. La couleur du fond, elle, contraste par construction
+            * dans les deux themes (4.5 a 9.7 selon la teinte). */}
+          <Fi i={verrouille ? 'lock' : 'unlock'} size={15} color="var(--o-bg)" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function RailArm({ id, hass }) {
   const st = (hass && hass.states) ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
@@ -11973,7 +12084,7 @@ export default function App() {
   // + les clés de la vue affichée seulement → évite un re-render de toute l'app à chaque tick
   // dès qu'un capteur d'une AUTRE vue bouge. L'Accueil (deriveAccueil) reste le plus large.
   const GLOBAL_KEYS = ['weather.', 'sun.sun', ...peopleList().map(p => p.haid),
-    secAlarm(), 'alarm_control_panel.', 'person.',
+    secAlarm(), 'alarm_control_panel.', 'lock.', 'person.',
     ...cfgKeys('alarm'), ...cfgKeys('cameras'), ...cfgKeys('people'),
     'lawn_mower.', notifIds().dishwasher, notifIds().bins, cfg.energy.surplusNow].filter(Boolean);
   const lightKeys = [...Object.values(hueScripts()), ...dimmableLights(getHass()), ...switchLights(), 'switch.', ...cfgKeys('hue'), ...(cfg.lights || []).map(l => l.haid)].filter(Boolean);

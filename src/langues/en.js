@@ -1403,4 +1403,9 @@ export default {
   'Et allumer, si tu veux': 'And switch on, if you like',
   'Une prise n’est pas une machine chargée : la notification reste le plus sûr.': 'A socket is not a loaded machine: the notification stays the safer option.',
   'Derniers signalements': 'Recent warnings',
+  'Porte d’entrée': 'Front door',
+  'Serrure bloquée': 'Lock jammed',
+  'Verrouillage…': 'Locking…',
+  'Glisser pour ouvrir': 'Slide to unlock',
+  'Glisser pour verrouiller': 'Slide to lock',
 };

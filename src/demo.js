@@ -47,6 +47,7 @@ function etatsInitiaux() {
       apparent_temperature: 26, wind_speed: 9, wind_gust_speed: 20, wind_bearing: 281, wind_speed_unit: 'km/h',
       pressure: 1014, uv_index: 3, visibility: 12 }),
     'alarm_control_panel.maison': s('disarmed', { friendly_name: 'Alarme' }),
+    'lock.porte_entree': s('locked', { friendly_name: 'Porte d’entrée' }),
     'sensor.production_solaire': s(1840, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.reseau': s(-460, { friendly_name: 'Réseau', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.surplus': s(460, { friendly_name: 'Surplus', unit_of_measurement: 'W', device_class: 'power' }),
@@ -494,6 +495,13 @@ export function installerDemo() {
       const delay = 20;
       toucher(cid, 'arming', { delay, arm_mode: cible });
       setTimeout(() => { const s = states[cid]; if (s && s.state === 'arming' && s.attributes.arm_mode === cible) toucher(cid, cible); }, delay * 1000);
+    } else if (domaine === 'lock') {
+      // Une serrure motorisee met deux bonnes secondes : sans ce passage par
+      // `locking`, la demo montrerait un mouvement instantane qui n'existe pas.
+      const lid = id || 'lock.porte_entree';
+      const vise = service === 'lock' ? 'locked' : 'unlocked';
+      toucher(lid, vise === 'locked' ? 'locking' : 'unlocking');
+      setTimeout(() => toucher(lid, vise), 2000);
     } else if (domaine === 'media_player' && service === 'media_play_pause') {
       toucher(id, states[id] && states[id].state === 'playing' ? 'paused' : 'playing');
     }
