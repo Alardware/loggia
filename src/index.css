@@ -70,7 +70,7 @@ html.loggia-light {
   --o-ok:#15803d; --o-ok-rgb:21,128,61;
   --o-accent-soft:#2563eb; --o-accent-soft-rgb:37,99,235; /* lisible en texte sur cartes blanches (le #6ea8ff dark = 2.4:1) */
   --o-warn:#b45309; --o-warn-rgb:180,83,9; --o-warn2:#c2410c; --o-warn2-rgb:194,65,12;
-  --o-bad:#dc2626; --o-bad-rgb:220,38,38; --o-cold:#2563eb; --o-cold-rgb:37,99,235;
+  --o-bad:#b91c1c; --o-bad-rgb:185,28,28; --o-cold:#2563eb; --o-cold-rgb:37,99,235;
   --o-gold:#a16207; --o-gold-rgb:161,98,7; --o-purple:#7c3aed; --o-purple-rgb:124,58,237; --o-cyan:#0e7490; --o-cyan-rgb:14,116,144;
   --o-shadow:0 2px 6px rgba(15,23,42,.06), 0 12px 28px rgba(15,23,42,.10); /* clair : douce, opacités faibles */
   --o-surfA:rgba(255,255,255,.96); --o-surfB:rgba(248,250,253,.96); --o-header:rgba(255,255,255,.82);
