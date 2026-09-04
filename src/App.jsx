@@ -2064,7 +2064,123 @@ function mpRead(S, id) {
 }
 
 // Détail média : lecteur complet (ambiance pochette, seek, contrôles, volume) — comme la vue Médias.
+/* Le navigateur de medias : ce que CE lecteur sait jouer.
+ *
+ * Home Assistant expose l'arbre par lecteur — un Chromecast propose les
+ * sources partagees (radios, fichiers locaux), un Apple TV ses applications.
+ * On ne devine donc rien : on demande au lecteur, et on affiche ce qu'il
+ * repond. Un lecteur qui ne sait rien proposer le DIT, plutot que de montrer
+ * une liste vide qu'on prendrait pour un chargement sans fin.
+ *
+ * Deux gestes seulement : ouvrir un dossier, lancer un media. Le reste — les
+ * files d'attente, les melanges — appartient au lecteur, pas au tableau de
+ * bord.
+ */
+const MEDIA_ICONES = {
+  music: 'music-alt', album: 'album', artist: 'music', playlist: 'list',
+  podcast: 'podcast', tv_show: 'tv', movie: 'film', video: 'film',
+  image: 'picture', directory: 'folder', channel: 'radio', app: 'play',
+};
+
+function NavigateurMedias({ id, hass, onClose }) {
+  const nom = (((hass && hass.states && hass.states[id]) || {}).attributes || {}).friendly_name || id;
+  /* La pile : chaque niveau garde de quoi le redemander. Revenir en arriere
+   * relit plutot que de conserver l'arbre entier en memoire — un lecteur peut
+   * offrir des milliers de radios. */
+  const [pile, setPile] = useState([{ titre: nom, cid: undefined, ctype: undefined }]);
+  const [contenu, setContenu] = useState(null);
+  const [etat, setEtat] = useState('charge');   // charge | pret | vide | erreur
+  const [envoi, setEnvoi] = useState(null);
+
+  const niveau = pile[pile.length - 1];
+  useEffect(() => {
+    let mort = false;
+    setEtat('charge'); setContenu(null);
+    (async () => {
+      try {
+        if (!hass || !hass.callWS) { if (!mort) setEtat('erreur'); return; }
+        const r = await hass.callWS({
+          type: 'media_player/browse_media', entity_id: id,
+          ...(niveau.cid ? { media_content_id: niveau.cid, media_content_type: niveau.ctype } : {}),
+        });
+        if (mort) return;
+        const enfants = (r && r.children) || [];
+        setContenu(enfants);
+        setEtat(enfants.length ? 'pret' : 'vide');
+      } catch (e) { if (!mort) setEtat('erreur'); }
+    })();
+    return () => { mort = true; };
+  }, [id, niveau.cid, niveau.ctype]);
+
+  const ouvrir = (c) => {
+    if (c.can_expand) { setPile(p => p.concat({ titre: c.title, cid: c.media_content_id, ctype: c.media_content_type })); return; }
+    if (!c.can_play) return;
+    setEnvoi(c.media_content_id);
+    try {
+      hass.callService('media_player', 'play_media', {
+        entity_id: id, media_content_id: c.media_content_id, media_content_type: c.media_content_type,
+      });
+    } catch (e) { /* le lecteur dira lui-meme s'il a refuse */ }
+    // Le retour visuel dure le temps qu'il faut pour que l'oeil le voie ; ce
+    // n'est pas une mesure du lancement, que Home Assistant ne raconte pas.
+    setTimeout(() => setEnvoi(v => (v === c.media_content_id ? null : v)), 1400);
+  };
+  const remonter = () => setPile(p => (p.length > 1 ? p.slice(0, -1) : p));
+
+  const btnRond = { width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
+  const message = { fontSize: 13, fontWeight: 600, color: 'var(--o-text1)', opacity: .82, padding: '22px 4px', textAlign: 'center' };
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (<>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <button onClick={pile.length > 1 ? remonter : close}
+            aria-label={pile.length > 1 ? tr('Revenir') : tr('Fermer')} style={btnRond}>
+            <Fi i={pile.length > 1 ? 'angle-left' : 'cross'} size={14} />
+          </button>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 15, fontWeight: 800, letterSpacing: '-.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niveau.titre}</span>
+            {pile.length > 1 && <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--o-text1)', opacity: .82, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pile.slice(0, -1).map(x => x.titre).join(' · ')}</span>}
+          </span>
+        </div>
+
+        {etat === 'charge' && <div style={message}>{tr('Chargement…')}</div>}
+        {etat === 'erreur' && <div style={message}>{tr('Ce lecteur ne propose rien à parcourir.')}</div>}
+        {etat === 'vide' && <div style={message}>{tr('Dossier vide')}</div>}
+        {etat === 'pret' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '58vh', overflowY: 'auto', margin: '0 -4px', padding: '0 4px' }}>
+            {contenu.map((c, i) => {
+              const jouable = !c.can_expand && c.can_play;
+              const parti = envoi === c.media_content_id;
+              const utile = c.can_expand || c.can_play;
+              return (
+                <button key={(c.media_content_id || '') + i} onClick={() => ouvrir(c)} disabled={!utile}
+                  style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', minHeight: 52, borderRadius: 13,
+                    border: 'none', background: parti ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', color: 'var(--o-text1)',
+                    cursor: utile ? 'pointer' : 'default', textAlign: 'left', width: '100%',
+                    opacity: utile ? 1 : .55, transition: 'background .2s' }}>
+                  {/* La vignette quand elle existe : une pochette reconnait un
+                    * album plus vite que son titre. */}
+                  {c.thumbnail
+                    ? <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, backgroundImage: `url("${c.thumbnail}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                    : <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, background: 'rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Fi i={MEDIA_ICONES[c.media_class] || (c.can_expand ? 'folder' : 'music-alt')} size={14} />
+                    </span>}
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
+                  {c.can_expand
+                    ? <Fi i="angle-right" size={13} style={{ opacity: .65, flexShrink: 0 }} />
+                    : jouable ? <Fi i="play" size={12} style={{ flexShrink: 0 }} /> : null}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </>)}
+    </BottomSheet>
+  );
+}
+
 function RoomMediaSheet({ id, hass, onClose }) {
+  const [parcourir, setParcourir] = useState(false);
   const S = (hass && hass.states) || null;
   const np = mpRead(S, id);
   const [, tick] = useState(0);
@@ -2104,6 +2220,7 @@ function RoomMediaSheet({ id, hass, onClose }) {
     el.onpointercancel = () => { end(); if (fill) fill.style.width = cur + '%'; };
   };
   return (
+    <>
     <BottomSheet onClose={onClose}>
       {close => (<>
         <div style={{ position: 'relative', margin: '-10px -22px 0', borderRadius: '20px 20px 0 0', overflow: 'hidden' }}>
@@ -2159,10 +2276,22 @@ function RoomMediaSheet({ id, hass, onClose }) {
               </div>
               <button onClick={() => commander(hass, id, 'mute', !np.muted)} title={tr('Couper le son')} style={{ ...glass(38, 13), ...(np.muted ? { background: 'rgba(239,68,68,.3)', border: '1px solid rgba(239,68,68,.5)', color: '#fff' } : {}) }}><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M11 5L6 9H2v6h4l5 4z" />{np.muted ? <path d="M22 9l-6 6M16 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />}</svg></button>
             </div>
+            {/* Parcourir : un lecteur ne sert a rien tant qu'on ne peut lui
+              * donner que ce que quelqu'un d'autre a lance. */}
+            <button onClick={() => setParcourir(true)}
+              style={{ marginTop: 14, width: '100%', minHeight: 46, borderRadius: 14, border: 'var(--o-bw,1px) solid var(--o-bd2)',
+                background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', gap: 9, fontSize: 13, fontWeight: 700 }}>
+              <Fi i="folder" size={14} />{tr('Parcourir')}
+            </button>
           </div>
         </div>
       </>)}
     </BottomSheet>
+    {/* Monte APRES la feuille du lecteur : plus loin dans le DOM, donc
+      * au-dessus, sans z-index a inventer. */}
+    {parcourir && <NavigateurMedias id={id} hass={hass} onClose={() => setParcourir(false)} />}
+    </>
   );
 }
 
