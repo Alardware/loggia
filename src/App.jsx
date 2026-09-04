@@ -947,10 +947,10 @@ function uiconDeMdi(mdi) {
 
 const PIECES = [
   { name: 'Séjour', bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13, icon: <Ico name="couch" color="var(--o-accent)" size={22} />, status: { kind: 'active', n: 2 }, temp: '18.1°', tc: 'var(--o-accent-soft)', hum: '63%', badge: '412 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
-  { name: 'Cuisine', bg: 'rgba(255,157,60,.16)', box: 44, rad: 13, icon: <Ico name="utensils" color="#ff9d3c" size={22} />, status: { kind: 'active', n: 1 }, temp: '22.0°', tc: '#ff9d3c', hum: '53%', badge: '486 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
+  { name: 'Cuisine', bg: 'rgba(255,157,60,.16)', box: 44, rad: 13, icon: <Ico name="utensils" color="#ff9d3c" size={22} />, status: { kind: 'active', n: 1 }, temp: '22.0°', tc: 'var(--o-warn2)', hum: '53%', badge: '486 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
   { name: 'Chambre', bg: 'rgba(167,139,250,.16)', box: 44, rad: 13, icon: <Ico name="bed-alt" color="var(--o-purple)" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: 'var(--o-purple)', hum: '60%', badge: '529 ppm', bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' },
   { name: 'Chambre enfant', bg: 'rgba(244,114,182,.16)', box: 44, rad: 13, icon: <Ico name="teddy-bear" color="#f472b6" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: '#f472b6', hum: '61%', badge: '641 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
-  { name: 'Bureau', bg: 'rgba(255,157,60,.16)', box: 44, rad: 13, icon: <Ico name="briefcase" color="#ff9d3c" size={22} />, status: { kind: 'repos' }, temp: '17.8°', tc: '#ff9d3c', hum: '64%', badge: '712 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
+  { name: 'Bureau', bg: 'rgba(255,157,60,.16)', box: 44, rad: 13, icon: <Ico name="briefcase" color="#ff9d3c" size={22} />, status: { kind: 'repos' }, temp: '17.8°', tc: 'var(--o-warn2)', hum: '64%', badge: '712 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
   { name: 'Salle de bain', bg: 'rgba(84,200,240,.16)', box: 44, rad: 13, icon: <Ico name="hot-tub" color="var(--o-cyan)" size={22} />, status: { kind: 'repos' }, temp: '15.5°', tc: 'var(--o-cyan)', hum: '80%', badge: '498 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
   { name: 'Extérieur', bg: 'rgba(52,211,153,.16)', box: 36, rad: 11, icon: <Ico name="tree" color="var(--o-ok)" size={22} />, status: { kind: 'ext' }, temp: '6.2°', tc: 'var(--o-accent-soft)', hum: '84%', badge: 'Vent 12', bc: 'var(--o-text2)', bbg: 'var(--o-bd3)' },
 ];
