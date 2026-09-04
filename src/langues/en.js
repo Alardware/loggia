@@ -1421,4 +1421,8 @@ export default {
   'Choisir les agendas': 'Choose calendars',
   'AGENDAS AFFICHÉS': 'CALENDARS SHOWN',
   'Ouvrir le calendrier': 'Open the calendar',
+  'Parcourir': 'Browse',
+  'Revenir': 'Back',
+  'Dossier vide': 'Empty folder',
+  'Ce lecteur ne propose rien à parcourir.': 'This player has nothing to browse.',
 };

@@ -449,6 +449,44 @@ function veillesPatch(patch) {
 
 /* Deux agendas, pas un : le choix des agendas et la mention du calendrier
  * sous chaque evenement n apparaissent qu a partir de deux. */
+/* L'arbre que la demonstration fait parcourir. Les radios viennent en
+ * premier : c'est ce qu'une maison lance le plus souvent, et c'est ce que
+ * `radio_browser` expose sur une vraie installation. */
+function parcoursDemo(cid) {
+  const dossier = (title, id) => ({ title, media_content_id: id, media_content_type: 'directory', media_class: 'directory', can_expand: true, can_play: false });
+  const piste = (title, id, cls) => ({ title, media_content_id: id, media_content_type: 'music', media_class: cls || 'music', can_expand: false, can_play: true });
+  if (!cid) {
+    return { title: 'Sources', children: [
+      dossier('Radios', 'demo://radios'),
+      dossier('Musique locale', 'demo://musique'),
+      dossier('Podcasts', 'demo://podcasts'),
+    ] };
+  }
+  if (cid === 'demo://radios') {
+    return { title: 'Radios', children: [
+      piste('FIP', 'demo://radio/fip', 'channel'),
+      piste('France Inter', 'demo://radio/inter', 'channel'),
+      piste('Radio Classique', 'demo://radio/classique', 'channel'),
+      piste('Nova', 'demo://radio/nova', 'channel'),
+    ] };
+  }
+  if (cid === 'demo://musique') {
+    return { title: 'Musique locale', children: [
+      dossier('Debussy', 'demo://musique/debussy'),
+      piste('Gymnopedie n1', 'demo://musique/gymnopedie', 'music'),
+    ] };
+  }
+  if (cid === 'demo://musique/debussy') {
+    return { title: 'Debussy', children: [
+      piste('Clair de Lune', 'demo://musique/clair', 'music'),
+      piste('Arabesque n1', 'demo://musique/arabesque', 'music'),
+    ] };
+  }
+  // Un dossier qui existe mais ne contient rien : l'ecran vide se distingue
+  // d'une erreur, et le navigateur doit le dire.
+  return { title: 'Podcasts', children: [] };
+}
+
 function calendrierDemo(id) {
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
@@ -555,6 +593,12 @@ export function installerDemo() {
        * Interrupteurs ne montrerait qu'un message d'erreur, alors qu'elle est
        * justement ce qu'il y a a voir. Un variateur Hue et un bouton IKEA,
        * l'un regle et l'autre pas. */
+      /* Le navigateur de medias : sans reponse ici, il n'aurait qu'un message
+       * d'erreur a montrer, alors que c'est l'arbre qu'il faut voir. Deux
+       * niveaux suffisent a rendre la navigation credible. */
+      if (msg && msg.type === 'media_player/browse_media') {
+        return Promise.resolve(parcoursDemo(msg.media_content_id));
+      }
       if (msg && msg.type === 'loggia/interrupteurs/etat') return Promise.resolve(interDemo());
       if (msg && msg.type === 'loggia/interrupteurs/affecter') {
         return Promise.resolve({ affectations: interAffecter(msg) });
