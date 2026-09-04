@@ -47,7 +47,7 @@ class LoggiaErrorBoundary extends React.Component {
     return (
       <div style={box}>
         <div style={{ maxWidth: 640, margin: '0 auto' }}>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Loggia n'a pas pu s'afficher</div>
+          <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 6 }}>Loggia n'a pas pu s'afficher</div>
           <div style={{ color: '#93a3ba' }}>
             Une erreur est survenue pendant le rendu. Le détail ci-dessous permet de la corriger.
           </div>

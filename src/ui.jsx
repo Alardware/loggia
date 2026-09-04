@@ -51,7 +51,7 @@ export function Anim({ i = 0, base = 0, children, style, className = '' }) {
   const tilt = useTilt(4);
   return (
     <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel}
-      className={'o-hov ' + (tilt.className || '') + (className ? ' ' + className : '')} style={{ position: 'relative', borderRadius: 'var(--o-radius,20px)', minWidth: 0, ...style }}>
+      className={'o-hov ' + (tilt.className || '') + (className ? ' ' + className : '')} style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', minWidth: 0, ...style }}>
       {children}
     </div>
   );
@@ -133,14 +133,14 @@ export const userBg = (u) => { const im = userImg(u); if (im) return `url(${im})
  * vue avait deja une barre, et masquait le bas de l'ecran sur les autres. Une
  * seule barre, en tete du contenu, partout.
  */
-export const editBtn = (accent) => ({ padding: '7px 12px', borderRadius: 9, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0,
+export const editBtn = (accent) => ({ padding: '7px 12px', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0,
   background: accent ? 'var(--o-accent)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
   border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
 
 export const ViewEditBar = ({ texte, onEnt, entLabel = 'Entités de la vue', children, style }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)', ...style }}>
     <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
-    <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{texte}</span>
+    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{texte}</span>
     {children}
     {onEnt && <button onClick={onEnt} style={editBtn(false)}>{entLabel}</button>}
   </div>
@@ -157,7 +157,7 @@ export const EnRow = ({ label, desc, children }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', flexWrap: 'wrap' }}>
     <div style={{ flex: '1 1 190px', minWidth: 0 }}>
       <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 11.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{desc}</div>
+      <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{desc}</div>
     </div>
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>{children}</div>
   </div>
@@ -270,13 +270,13 @@ export function TplForm({ onAdd, hass = null, initial = null }) {
           <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('APERÇU')}</div>
           {apErr
             ? <div style={{ fontSize: 12, fontWeight: 600, color: '#f87171', marginTop: 3, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 72, overflow: 'auto' }}>{apErr}</div>
-            : <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 3, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 72, overflowY: 'auto', opacity: apOut == null ? .45 : 1 }}>{apOut == null ? '…' : (apOut === '' ? '—' : apOut)}</div>}
+            : <div style={{ fontSize: 13, fontWeight: 700, marginTop: 3, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 72, overflowY: 'auto', opacity: apOut == null ? .45 : 1 }}>{apOut == null ? '…' : (apOut === '' ? '—' : apOut)}</div>}
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ flex: 1, fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Jinja, évalué par Home Assistant. La carte se met à jour en direct.')}</span>
+        <span style={{ flex: 1, fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Jinja, évalué par Home Assistant. La carte se met à jour en direct.')}</span>
         <button disabled={!ok} onClick={() => { if (!ok) return; onAdd({ t: 'tpl', id: initial ? initial.id : 'tpl_' + Math.random().toString(36).slice(2, 8), name: nom.trim(), src: src.trim() }); if (!initial) { setNom(''); setSrc(''); } }}
-          style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: ok ? 'pointer' : 'default', opacity: ok ? 1 : .5, flexShrink: 0 }}>{initial ? tr('Enregistrer') : tr('Ajouter')}</button>
+          style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: ok ? 'pointer' : 'default', opacity: ok ? 1 : .5, flexShrink: 0 }}>{initial ? tr('Enregistrer') : tr('Ajouter')}</button>
       </div>
     </div>
   );
@@ -285,7 +285,7 @@ export function TplForm({ onAdd, hass = null, initial = null }) {
 // Carte générique : affichage + action adaptés au domaine de l'entité.
 
 // Recherche + sélection d'entités (réutilisé par l'éditeur de vue et l'ajout de carte en place).
-export const cvInp = { width: '100%', padding: '12px 14px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 14.5, fontWeight: 600, boxSizing: 'border-box', fontFamily: 'inherit' };
+export const cvInp = { width: '100%', padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 14, fontWeight: 600, boxSizing: 'border-box', fontFamily: 'inherit' };
 
 export const CV_ICONS = ['home', 'bulb', 'sparkles', 'thermometer-half', 'blinds', 'bolt', 'tv-music', 'shield-check', 'leaf', 'sun', 'wind', 'users', 'briefcase', 'paw', 'video-camera', 'settings-sliders'];
 
@@ -398,7 +398,7 @@ export function BottomSheet({ onClose, children }) {
         onAnimationEnd={(e) => { if (closing && e.target === e.currentTarget) onClose(); }}
         style={{ position: 'fixed', left: '50%', bottom: 0, transform: 'translate(-50%,0)', width: 'min(480px,100%)', maxHeight: '88vh', overflowY: 'auto', background: 'var(--o-surfA)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', borderLeft: 'var(--o-bw,1px) solid var(--o-bd1)', borderRight: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: '26px 26px 0 0', padding: '10px 22px calc(24px + var(--o-safe-bottom,0px))', boxShadow: '0 -10px 50px rgba(0,0,0,.35)', animation: closing ? 'o-sheetOut .3s cubic-bezier(.32,.72,.25,1) forwards' : 'o-sheetIn .46s cubic-bezier(.22,1.28,.36,1)' }}>
         <div onPointerDown={dragClose} style={{ touchAction: 'none', cursor: 'grab', padding: '8px 60px 12px', margin: '-10px auto 2px', width: 'fit-content' }}>
-          <div style={{ width: 38, height: 5, borderRadius: 3, background: 'var(--o-bd1)', margin: '0 auto' }} />
+          <div style={{ width: 38, height: 5, borderRadius: 4, background: 'var(--o-bd1)', margin: '0 auto' }} />
         </div>
         {typeof children === 'function' ? children(close) : children}
       </div>
@@ -430,12 +430,12 @@ export function EntPicker({ hass, exclude = [], onPick, autoFocus = false, domai
     <>
       <input value={q} onChange={e => setQ(e.target.value)} placeholder={tr('Rechercher une entité (nom ou id)…')} spellCheck={false} autoFocus={autoFocus} style={cvInp} />
       {results.length > 0 && (
-        <div style={{ maxHeight: 240, overflowY: 'auto', marginTop: 8, border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: 12 }}>
+        <div style={{ maxHeight: 240, overflowY: 'auto', marginTop: 8, border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: 14 }}>
           {results.map(e => (
             <div key={e.id} onClick={() => onPick(e.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', cursor: 'pointer', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-              <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text2)' }}><Fi i={CV_DOM_ICON[e.dom] || 'bolt'} size={13} /></span>
-              <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span><span style={{ display: 'block', fontSize: 10.5, color: 'var(--o-text3)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.id}</span></span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--o-accent-soft)' }}>+</span>
+              <span style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text2)' }}><Fi i={CV_DOM_ICON[e.dom] || 'bolt'} size={13} /></span>
+              <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span><span style={{ display: 'block', fontSize: 11, color: 'var(--o-text3)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.id}</span></span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-accent-soft)' }}>+</span>
             </div>
           ))}
         </div>

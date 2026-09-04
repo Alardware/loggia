@@ -130,9 +130,9 @@ export function InterrupteursSection({ hass, cardSt }) {
   const journal = (etat && etat.journal) || [];
   const sources = (etat && etat.sources) || null;
 
-  const titre = { fontSize: 16, fontWeight: 700, marginBottom: 3 };
-  const sous = { fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600 };
-  const btnDoux = { padding: '6px 12px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)' };
+  const titre = { fontSize: 15, fontWeight: 700, marginBottom: 3 };
+  const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 };
+  const btnDoux = { padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)' };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -152,7 +152,7 @@ export function InterrupteursSection({ hass, cardSt }) {
         {/* Ce qui est reellement branche. Une page muette ne disait pas si
           * personne n'appuyait ou si personne n'ecoutait (retour 03/09). */}
         {sources && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
             {[
               ['Zigbee2MQTT', sources.z2m, sources.mqtt_present ? tr('MQTT est là, mais l’abonnement a échoué — regarde le journal de Home Assistant') : tr('Pas d’intégration MQTT sur cette installation')],
               ['ZHA', sources.zha, ''],
@@ -168,7 +168,7 @@ export function InterrupteursSection({ hass, cardSt }) {
         )}
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' }}>
           {journal.length === 0 && !err && (
-            <div style={{ fontSize: 12.5, color: 'var(--o-text3)', fontWeight: 600, padding: '8px 0' }}>
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '8px 0' }}>
               {tr('Rien encore. Appuie sur un bouton de ta télécommande : il se montrera ici.')}
             </div>
           )}
@@ -177,10 +177,10 @@ export function InterrupteursSection({ hass, cardSt }) {
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '9px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none' }}>
               <span style={{ minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.nom}</span>
-                <span style={{ display: 'block', fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600 }}>{SOURCES[v.source] || v.source} · {depuis(v.ts)}</span>
+                <span style={{ display: 'block', fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{SOURCES[v.source] || v.source} · {depuis(v.ts)}</span>
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <code style={{ fontSize: 12, fontWeight: 700, padding: '4px 9px', borderRadius: 8, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>{v.action}</code>
+                <code style={{ fontSize: 12, fontWeight: 700, padding: '4px 9px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>{v.action}</code>
                 <button onClick={() => setCible({ cle: v.cle, nom: v.nom, action: v.action })} style={btnDoux}>
                   {((affectations[v.cle] || {}).actions || {})[v.action] ? tr('Modifier') : tr('Affecter')}
                 </button>
@@ -198,10 +198,10 @@ export function InterrupteursSection({ hass, cardSt }) {
           <div key={ap.cle} style={cardSt}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 15.5, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ap.nom}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ap.nom}</div>
                 <div style={sous}>{SOURCES[ap.source] || ap.source}</div>
               </div>
-              <span style={{ flexShrink: 0, fontSize: 11.5, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>
+              <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>
                 {tr('{n} boutons', { n: boutons.length })}
               </span>
             </div>
@@ -217,7 +217,7 @@ export function InterrupteursSection({ hass, cardSt }) {
                         {gestes.length ? resume(gestes, hass) : tr('rien pour l’instant')}
                       </span>
                     </span>
-                    <span style={{ display: 'flex', gap: 7, flexShrink: 0 }}>
+                    <span style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                       {gestes.length > 0 && (
                         <button onClick={() => affecter(ap.cle, btn, [], ap.nom)}
                           style={{ ...btnDoux, background: 'rgba(var(--o-bad-rgb),.14)', color: 'var(--o-bad)' }}>
@@ -311,25 +311,25 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
   };
 
   const champ = { width: '100%', padding: '10px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600, boxSizing: 'border-box' };
-  const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
-  const label = { fontSize: 12.5, fontWeight: 700, marginBottom: 6 };
+  const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
+  const label = { fontSize: 12, fontWeight: 700, marginBottom: 6 };
 
   return (
     <BottomSheet onClose={onFermer} title={cible.nom}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '2px 0 8px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '2px 0 8px' }}>
         <div>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600 }}>{tr('Quand ce bouton est actionné')}</div>
-          <code style={{ display: 'inline-block', marginTop: 5, fontSize: 13, fontWeight: 800, padding: '5px 11px', borderRadius: 9, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>{cible.action}</code>
+          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}>{tr('Quand ce bouton est actionné')}</div>
+          <code style={{ display: 'inline-block', marginTop: 5, fontSize: 13, fontWeight: 800, padding: '5px 11px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>{cible.action}</code>
         </div>
 
         <div>
           <div style={label}>{tr('Faire')}</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {GESTES().map(x => (
               <button key={x.id} onClick={() => setGeste(x.id)} style={puce(x.id === geste)}>{x.nom}</button>
             ))}
           </div>
-          {g.aide && <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>{g.aide}</div>}
+          {g.aide && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>{g.aide}</div>}
         </div>
 
         {g.libre && (
@@ -347,7 +347,7 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
           {entite && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 5 }}>
               <code style={{ fontSize: 11, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entite}</code>
-              <button onClick={() => setEntite('')} style={{ flexShrink: 0, padding: '4px 9px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text2)' }}>{tr('Effacer')}</button>
+              <button onClick={() => setEntite('')} style={{ flexShrink: 0, padding: '4px 9px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text2)' }}>{tr('Effacer')}</button>
             </div>
           )}
         </div>
@@ -356,7 +356,7 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
         {enPlus && (
           <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingTop: 13 }}>
             <div style={label}>{tr('À l’allumage')}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 9 }}>
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 9 }}>
               {tr('Facultatif. Sans rien ici, la lampe reprend son dernier état.')}
             </div>
             {peutLum && (
@@ -366,14 +366,14 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
                   <>
                     <input type="range" min={1} max={100} value={lum} onChange={e => setLum(Number(e.target.value))}
                       style={{ flex: 1, minWidth: 120, accentColor: 'var(--o-accent)' }} />
-                    <span style={{ width: 46, textAlign: 'right', fontSize: 12.5, fontWeight: 800 }}>{lum} %</span>
+                    <span style={{ width: 46, textAlign: 'right', fontSize: 12, fontWeight: 800 }}>{lum} %</span>
                   </>
                 )}
               </div>
             )}
             {(peutCoul || peutTemp) && (
               <div style={{ marginTop: 10 }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   <button onClick={() => setCoul(null)} style={puce(!coul)}>{tr('Couleur inchangée')}</button>
                   {peutCoul && (
                     <button onClick={() => setCoul(c => (c && c.rgb ? c : { rgb: [255, 170, 60] }))} style={puce(!!(coul && coul.rgb))}>
@@ -387,17 +387,17 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
                   )}
                 </div>
                 {coul && coul.rgb && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 9 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 9 }}>
                     <input type="color" value={enHex(coul.rgb)} onChange={e => setCoul({ rgb: enRgb(e.target.value) })}
                       style={{ width: 54, height: 34, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} />
-                    <code style={{ fontSize: 11.5, color: 'var(--o-text3)' }}>{enHex(coul.rgb)}</code>
+                    <code style={{ fontSize: 12, color: 'var(--o-text3)' }}>{enHex(coul.rgb)}</code>
                   </div>
                 )}
                 {coul && coul.k != null && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9, flexWrap: 'wrap' }}>
                     <input type="range" min={kMin} max={kMax} step={50} value={coul.k} onChange={e => setCoul({ k: Number(e.target.value) })}
                       style={{ flex: 1, minWidth: 120, accentColor: 'var(--o-accent)' }} />
-                    <span style={{ width: 60, textAlign: 'right', fontSize: 12.5, fontWeight: 800 }}>{coul.k} K</span>
+                    <span style={{ width: 60, textAlign: 'right', fontSize: 12, fontWeight: 800 }}>{coul.k} K</span>
                   </div>
                 )}
               </div>
@@ -405,10 +405,10 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 9, justifyContent: 'flex-end', marginTop: 2 }}>
-          <button onClick={onFermer} style={{ padding: '10px 16px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd2)', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text2)' }}>{tr('Annuler')}</button>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 2 }}>
+          <button onClick={onFermer} style={{ padding: '10px 16px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text2)' }}>{tr('Annuler')}</button>
           <button onClick={valider} disabled={!pret}
-            style={{ padding: '10px 18px', borderRadius: 11, border: 'none', cursor: pret ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, background: pret ? 'var(--o-accent)' : 'var(--o-s1)', color: pret ? '#fff' : 'var(--o-text3)' }}>
+            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', cursor: pret ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, background: pret ? 'var(--o-accent)' : 'var(--o-s1)', color: pret ? '#fff' : 'var(--o-text3)' }}>
             {tr('Enregistrer')}
           </button>
         </div>

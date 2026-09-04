@@ -137,15 +137,15 @@ function AlertesTele({ hass, cardSt }) {
   };
   const Tgl = ({ on, cb, label }) => (
     <span onClick={cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } }}
-      style={{ width: 46, height: 26, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}>
+      style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}>
       <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
     </span>
   );
   const ligne = { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' };
   const lbl = (t, d) => (
     <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t}</div>
-      {d && <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{d}</div>}
+      <div style={{ fontSize: 13, fontWeight: 700 }}>{t}</div>
+      {d && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{d}</div>}
     </div>
   );
   if (!cfg) return <div className="o-parcard" style={cardSt}><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Chargement…')}</div></div>;
@@ -161,8 +161,8 @@ function AlertesTele({ hass, cardSt }) {
     <div className="o-parcard" style={cardSt}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Alertes téléphone')}</div>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 3 }}>{tr("Envoyées par le serveur via l'app compagnon Home Assistant — même dashboard fermé.")}</div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Alertes téléphone')}</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 3 }}>{tr("Envoyées par le serveur via l'app compagnon Home Assistant — même dashboard fermé.")}</div>
         </div>
         <Tgl on={cfg.actif} cb={() => save({ actif: !cfg.actif })} label={tr('Activer les alertes')} />
       </div>
@@ -180,9 +180,9 @@ function AlertesTele({ hass, cardSt }) {
       ))}
       <div style={{ ...ligne, borderBottom: 'none' }}>
         {lbl(tr('Essai'), tr('Envoie une notification de test au téléphone choisi'))}
-        <button onClick={test} style={{ padding: '9px 16px', borderRadius: 11, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Envoyer un test')}</button>
+        <button onClick={test} style={{ padding: '9px 16px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Envoyer un test')}</button>
       </div>
-      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-accent-soft)', marginTop: 4 }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)', marginTop: 4 }}>{msg}</div>}
       {journal.length > 0 && (<>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 4px' }}>{tr('DERNIERS ENVOIS')}</div>
         {journal.slice(0, 8).map((j, i) => {
@@ -192,15 +192,15 @@ function AlertesTele({ hass, cardSt }) {
             <div key={(j.quand || '') + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
               <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: 'var(--o-bad)' }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{j.message} : {j.nom}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{j.message} : {j.nom}</div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{j.entite}</div>
               </div>
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0 }}>{rel}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0 }}>{rel}</span>
             </div>
           );
         })}
       </>)}
-      <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 12 }}>{tr("Les catégories se reconnaissent à la classe des capteurs (device_class) — rien à désigner à la main. Anti-rafale : 5 min par capteur, sauf l'alarme.")}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 12 }}>{tr("Les catégories se reconnaissent à la classe des capteurs (device_class) — rien à désigner à la main. Anti-rafale : 5 min par capteur, sauf l'alarme.")}</div>
     </div>
   );
 }
@@ -234,8 +234,8 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
   const greet = h < 6 ? 'Bonne nuit' : h < 12 ? 'Bonjour' : h < 18 ? tr('Bon après-midi') : 'Bonsoir';
   const tile = (v, l, c) => (
     <div key={l} style={{ background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: RAD[2], padding: '9px 11px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 3, background: c, flexShrink: 0 }} /><span style={{ fontSize: 12.5, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span></div>
-      <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 3 }}>{l}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: c, flexShrink: 0 }} /><span style={{ fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span></div>
+      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)', marginTop: 3 }}>{l}</div>
     </div>
   );
   return (
@@ -243,28 +243,28 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
       <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: '2px 2px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>{tr('APERÇU')}<span style={{ flex: 1, height: 1, background: 'var(--o-bd3)' }} /></div>
       <div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: RAD[0], padding: 13, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ width: 20, height: 20, borderRadius: 6, background: 'linear-gradient(135deg,var(--o-ok),var(--o-accent))', flexShrink: 0 }} />
-          <span style={{ fontSize: 11.5, fontWeight: 800 }}>Loggia</span>
+          <span style={{ width: 20, height: 20, borderRadius: 10, background: 'linear-gradient(135deg,var(--o-ok),var(--o-accent))', flexShrink: 0 }} />
+          <span style={{ fontSize: 12, fontWeight: 800 }}>Loggia</span>
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}</span>
         </div>
         <div style={{ background: 'var(--o-s3)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: RAD[1], padding: '10px 12px', marginBottom: 9 }}>
           <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 15, fontWeight: 500 }}>{greet}{userName ? ', ' + userName : ''}</div>
-          <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr("l'aperçu suit le thème choisi")}</div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr("l'aperçu suit le thème choisi")}</div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginBottom: 9 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 9 }}>
           {tile(temp, rooms[0] ? rooms[0].room : tr('Pièce'), '#ffb347')}
           {tile(lightsOn + ' on', tr('Lumières'), 'var(--o-gold)')}
           {tile(conso, tr('Consommation'), 'var(--o-ok)')}
           {tile(alTxt, tr('Alarme'), 'var(--o-accent)')}
         </div>
-        <div style={{ display: 'flex', gap: 5 }}>
+        <div style={{ display: 'flex', gap: 4 }}>
           <span style={{ flex: 1.4, height: 14, borderRadius: RAD[3], background: 'var(--o-accent)', opacity: .85 }} />
           <span style={{ flex: 1, height: 14, borderRadius: RAD[3], background: 'var(--o-s1)' }} />
           <span style={{ flex: 1, height: 14, borderRadius: RAD[3], background: 'var(--o-s2)' }} />
           <span style={{ flex: 1, height: 14, borderRadius: RAD[3], background: 'var(--o-s3)' }} />
         </div>
       </div>
-      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)', padding: '8px 2px 0' }}>Thème « {(PRESET_META().find(x => x.id === (loggiaTheme || '')) || PRESET_META()[0]).name} » · mode {themeMode === 'light' ? 'clair' : 'foncé'}.</div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', padding: '8px 2px 0' }}>Thème « {(PRESET_META().find(x => x.id === (loggiaTheme || '')) || PRESET_META()[0]).name} » · mode {themeMode === 'light' ? 'clair' : 'foncé'}.</div>
     </div>
   );
 }
@@ -335,22 +335,22 @@ function AdminPinEditor() {
     cfgSet({ loggia_admin_pin: np });
     setPin(np); setNp(''); setCf(''); setMsg({ ok: true, t: 'Code administrateur mis à jour.' });
   };
-  const inp = { width: '100%', padding: '12px 14px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 18, fontWeight: 700, letterSpacing: '.3em', textAlign: 'center', fontFamily: 'monospace' };
+  const inp = { width: '100%', padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 700, letterSpacing: '.3em', textAlign: 'center', fontFamily: 'monospace' };
   return (
     <div style={{ marginTop: 22, paddingTop: 20, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Code administrateur</div>
-      <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 16 }}>{tr('Requis pour basculer vers un profil Admin. Reste local à cet appareil (jamais synchronisé).')}</div>
+      <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 16 }}>{tr('Requis pour basculer vers un profil Admin. Reste local à cet appareil (jamais synchronisé).')}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)' }}>ACTUEL</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, letterSpacing: '.3em', color: 'var(--o-accent-soft)' }}>{show ? pin : '••••'}</span>
-        <button onClick={() => setShow(s => !s)} style={{ padding: '5px 12px', borderRadius: 9, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{show ? 'Masquer' : 'Afficher'}</button>
+        <span style={{ fontFamily: 'monospace', fontSize: 19, fontWeight: 700, letterSpacing: '.3em', color: 'var(--o-accent-soft)' }}>{show ? pin : '••••'}</span>
+        <button onClick={() => setShow(s => !s)} style={{ padding: '5px 12px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{show ? 'Masquer' : 'Afficher'}</button>
       </div>
       <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
         <div><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>NOUVEAU CODE</div><input value={np} onChange={e => { setNp(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" style={inp} /></div>
         <div><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>CONFIRMER</div><input value={cf} onChange={e => { setCf(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" style={inp} /></div>
       </div>
-      {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: msg.ok ? 'var(--o-ok)' : '#f87171', marginBottom: 12 }}>{msg.t}</div>}
-      <button onClick={save} style={{ padding: '11px 18px', borderRadius: 12, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>{tr('Enregistrer le code')}</button>
+      {msg && <div style={{ fontSize: 12, fontWeight: 600, color: msg.ok ? 'var(--o-ok)' : '#f87171', marginBottom: 12 }}>{msg.t}</div>}
+      <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer le code')}</button>
     </div>
   );
 }
@@ -372,39 +372,39 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
     ...customViews.map(cv => ['cv:' + cv.id, cv.name]),
   ];
   const basculeVue = (vid) => setVues(v => v.indexOf(vid) >= 0 ? v.filter(x => x !== vid) : [...v, vid]);
-  const inp = { width: '100%', padding: '12px 14px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 14.5, fontWeight: 600, boxSizing: 'border-box' };
+  const inp = { width: '100%', padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' };
   const save = () => { const n = name.trim(); if (!n) return; onSave({ name: n, role, c, sub: role + ' · ' + n.toLowerCase().replace(/\s+/g, '.'), vues: role === 'Admin' ? [] : vues }); };
-  const roleBtn = (on) => ({ flex: 1, padding: 11, borderRadius: 11, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' });
+  const roleBtn = (on) => ({ flex: 1, padding: 11, borderRadius: 10, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' });
   return (
     <div onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}><span style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, color: '#fff', background: `linear-gradient(135deg,${c},rgba(${cl_hexRgb(c)},.6))` }}>{(name.trim()[0] || '?').toUpperCase()}</span><div style={{ fontSize: 17, fontWeight: 800 }}>{user ? "Modifier l'utilisateur" : 'Nouvel utilisateur'}</div></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}><span style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 19, color: '#fff', background: `linear-gradient(135deg,${c},rgba(${cl_hexRgb(c)},.6))` }}>{(name.trim()[0] || '?').toUpperCase()}</span><div style={{ fontSize: 15, fontWeight: 800 }}>{user ? "Modifier l'utilisateur" : 'Nouvel utilisateur'}</div></div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>NOM</div>
         <input value={name} autoFocus onChange={e => setName(e.target.value)} placeholder="Nom" style={{ ...inp, marginBottom: 16 }} />
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>{tr('RÔLE')}</div>
-        <div style={{ display: 'flex', gap: 9, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <button onClick={() => setRole('Admin')} style={roleBtn(role === 'Admin')}>Admin</button>
           <button onClick={() => setRole('Famille')} style={roleBtn(role === 'Famille')}>Famille</button>
         </div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 8 }}>COULEUR</div>
-        <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
           {USER_COLORS.map(col => <button key={col} onClick={() => setC(col)} style={{ width: 32, height: 32, borderRadius: '50%', border: col === c ? '2px solid var(--o-text)' : '2px solid transparent', background: col, cursor: 'pointer', flexShrink: 0 }} />)}
         </div>
         {role !== 'Admin' && (<>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 4 }}>{tr('VUES AUTORISÉES')}</div>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 8 }}>{tr("Rien de coché = tout est visible. L'Accueil et les fiches restent toujours accessibles.")}</div>
-          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 20 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 8 }}>{tr("Rien de coché = tout est visible. L'Accueil et les fiches restent toujours accessibles.")}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
             {VUES_CHOIX.map(([vid, lb]) => { const on = vues.indexOf(vid) >= 0; return (
               <button key={vid} onClick={() => basculeVue(vid)} aria-pressed={on}
                 style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{lb}</button>
             ); })}
           </div>
         </>)}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 12, background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', color: '#f87171', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>{tr('Supprimer')}</button>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 14, background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', color: '#f87171', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Supprimer')}</button>}
           <div style={{ flex: 1 }} />
-          <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Annuler</button>
-          <button onClick={save} style={{ padding: '11px 18px', borderRadius: 12, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
+          <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
+          <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
         </div>
       </div>
     </div>
@@ -435,12 +435,12 @@ function FondPhotoBtn({ actif, onLook }) {
     }
   };
   return (
-    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>
       <input ref={fichierRef} type="file" accept="image/*" onChange={choisir} style={{ display: 'none' }} />
       <button onClick={() => { if (!photo) { fichierRef.current && fichierRef.current.click(); return; } onLook({ fond: 'photo' }); }}
         aria-pressed={actif} aria-label={tr("Fond d'écran") + ' ' + tr('Photo')}
-        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 12, cursor: 'pointer', transition: 'all .2s', background: actif ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
-        <span style={{ width: 34, height: 22, borderRadius: 6, border: '1px solid ' + (actif ? 'var(--o-accent)' : 'var(--o-bd2)'), background: photo ? `url("${photo}") center/cover` : 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{!photo && <Fi i="picture" size={11} color="var(--o-text3)" />}</span>
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: actif ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
+        <span style={{ width: 34, height: 22, borderRadius: 10, border: '1px solid ' + (actif ? 'var(--o-accent)' : 'var(--o-bd2)'), background: photo ? `url("${photo}") center/cover` : 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{!photo && <Fi i="picture" size={11} color="var(--o-text3)" />}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: actif ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{tr('Photo')}</span>
       </button>
       {photo && (
@@ -463,23 +463,23 @@ function CvEditor({ cv, hass, onSave, onClose }) {
   return (
     <div onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 470, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
-        <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 16 }}>{cv ? 'Modifier la vue' : 'Nouvelle vue'}</div>
+        <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>{cv ? 'Modifier la vue' : 'Nouvelle vue'}</div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', marginBottom: 6 }}>NOM</div>
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Ma vue" style={inp} />
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('ICÔNE')}</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-          {CV_ICONS.map(ic => <button key={ic} onClick={() => setIcon(ic)} style={{ width: 40, height: 40, borderRadius: 11, border: icon === ic ? '2px solid var(--o-accent)' : 'var(--o-bw,1px) solid var(--o-bd2)', background: icon === ic ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: icon === ic ? 'var(--o-accent-soft)' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={ic} size={16} /></button>)}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {CV_ICONS.map(ic => <button key={ic} onClick={() => setIcon(ic)} style={{ width: 40, height: 40, borderRadius: 10, border: icon === ic ? '2px solid var(--o-accent)' : 'var(--o-bw,1px) solid var(--o-bd2)', background: icon === ic ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: icon === ic ? 'var(--o-accent-soft)' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={ic} size={16} /></button>)}
         </div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>ENTITÉS ({ents.length})</div>
         {ents.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-          {ents.map((x, i) => <span key={cvKey(x)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', borderRadius: 9, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px solid rgba(var(--o-accent-rgb),.25)', fontSize: 11.5, fontWeight: 700, color: 'var(--o-accent-soft)', maxWidth: '100%' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cvEstTpl(x) ? '{ } ' + (x.name || 'Template') : cvName(hass && hass.states && hass.states[x], x)}</span><span onClick={() => setEnts(prev => prev.filter((_, k) => k !== i))} style={{ cursor: 'pointer', fontWeight: 800, opacity: .8 }}>×</span></span>)}
+          {ents.map((x, i) => <span key={cvKey(x)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px solid rgba(var(--o-accent-rgb),.25)', fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)', maxWidth: '100%' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cvEstTpl(x) ? '{ } ' + (x.name || 'Template') : cvName(hass && hass.states && hass.states[x], x)}</span><span onClick={() => setEnts(prev => prev.filter((_, k) => k !== i))} style={{ cursor: 'pointer', fontWeight: 800, opacity: .8 }}>×</span></span>)}
         </div>}
         <EntPicker hass={hass} exclude={ents.filter(x => typeof x === 'string')} onPick={(id) => setEnts(prev => prev.indexOf(id) < 0 ? [...prev, id] : prev)} />
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
         <TplForm hass={getHass()} onAdd={(t) => setEnts(prev => [...prev, t])} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Annuler</button>
-          <button onClick={save} style={{ padding: '11px 20px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', opacity: name.trim() ? 1 : .5 }}>{tr('Enregistrer')}</button>
+          <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
+          <button onClick={save} style={{ padding: '11px 20px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: name.trim() ? 1 : .5 }}>{tr('Enregistrer')}</button>
         </div>
       </div>
     </div>
@@ -489,7 +489,7 @@ function CvEditor({ cv, hass, onSave, onClose }) {
 /* ── Onglet Entités : éditeur générique de listes (Paramètres, admin) ──
    cols: [{k, label, ph, domain?, flex?}] — domain remplit un <datalist> d'autocomplétion depuis hass. */
 
-const entInp = { width: '100%', padding: '9px 11px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 12.5, fontWeight: 600, boxSizing: 'border-box', fontFamily: 'inherit' };
+const entInp = { width: '100%', padding: '9px 11px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 12, fontWeight: 600, boxSizing: 'border-box', fontFamily: 'inherit' };
 
 function EntSection({ title, desc, cols, rows, onRows, addable = true, check = null }) {
   const set = (i, k, v) => onRows(rows.map((r, j) => j === i ? { ...r, [k]: v } : r));
@@ -506,15 +506,15 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
   return (
     <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 800 }}>{title}</div>
-        {addable && <button onClick={add} style={{ padding: '5px 11px', borderRadius: 9, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}>{tr('+ Ajouter')}</button>}
+        <div style={{ fontSize: 13, fontWeight: 800 }}>{title}</div>
+        {addable && <button onClick={add} style={{ padding: '5px 11px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('+ Ajouter')}</button>}
       </div>
-      {desc && <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{desc}</div>}
+      {desc && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{desc}</div>}
       <div className="o-enthead" style={{ display: 'flex', gap: 8, padding: '0 2px 5px', fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)' }}>
         {cols.map(c => <span key={c.k} style={{ flex: c.flex || 1, minWidth: 0 }}>{c.label.toUpperCase()}</span>)}
         {addable && <span style={{ width: 30, flexShrink: 0 }} />}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {rows.map((r, i) => (
           <div key={r._k || 'i' + i} className="o-entrow" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {cols.map(c => { const v = r[c.k] || ''; const st = check && c.domain && v ? (check(v) ? 'ok' : 'bad') : null; return (
@@ -524,7 +524,7 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
                 {st && <span title={st === 'ok' ? 'Entité trouvée' : 'Introuvable dans Home Assistant'} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 7, height: 7, borderRadius: '50%', background: st === 'ok' ? 'var(--o-ok)' : 'var(--o-bad)', pointerEvents: 'none' }} />}
               </span>
             ); })}
-            {addable && <button onClick={() => del(i)} title={tr('Retirer')} style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 14, fontWeight: 800 }}>×</button>}
+            {addable && <button onClick={() => del(i)} title={tr('Retirer')} style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 14, fontWeight: 800 }}>×</button>}
           </div>
         ))}
         {!rows.length && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '4px 2px' }}>Vide.</div>}
@@ -635,8 +635,8 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
       {has('rooms') && <EntSection title={tr('Pièces (Accueil)')} desc={tr("Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce.")} cols={[{ k: 'room', label: tr('Pièce'), ph: tr('Séjour'), flex: .8 }, { k: 'temp', label: tr('Température'), ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: tr('Humidité'), ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }, { k: 'lights', label: tr('Lampes du bouton'), ph: tr('toutes (light.a, light.b)'), domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
       {has('energy') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, marginBottom: 3 }}>{tr('Énergie')}</div>
-          <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Capteurs de puissance (W) du flux énergétique. Le véhicule et la batterie n'apparaissent sur le schéma que si tu les renseignes.")}</div>
+          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Énergie')}</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Capteurs de puissance (W) du flux énergétique. Le véhicule et la batterie n'apparaissent sur le schéma que si tu les renseignes.")}</div>
           {/* Deux colonnes : a trois, le champ tronquait les noms d'entites,
               qui depassent souvent trente caracteres. */}
           <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
@@ -649,15 +649,15 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
       )}
       {has('alarm') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, marginBottom: 3 }}>Alarme</div>
-          <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Panneau d'alarme (vue Sécurité, bannière, notifications).")}</div>
+          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>Alarme</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Panneau d'alarme (vue Sécurité, bannière, notifications).")}</div>
           <input value={ent.alarm} onChange={e => setEnt(o => ({ ...o, alarm: e.target.value }))} placeholder="alarm_control_panel.…" list="o-dl-alarm_control_panel" spellCheck={false} style={entInp} />
         </div>
       )}
       {has('weather') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, marginBottom: 3 }}>{tr('Météo')}</div>
-          <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Entité météo (vue Météo, bannière de l'Accueil, conseils extérieur).")}</div>
+          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Météo')}</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Entité météo (vue Météo, bannière de l'Accueil, conseils extérieur).")}</div>
           <input value={ent.weather} onChange={e => setEnt(o => ({ ...o, weather: e.target.value }))} placeholder="weather.…" list="o-dl-weather" spellCheck={false} style={entInp} />
         </div>
       )}
@@ -703,13 +703,13 @@ export function ViewEntSheet({ view, hass, onClose }) {
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-          <span style={{ fontSize: 18, fontWeight: 700 }}>{tr('Entités de cette vue')}</span>
+          <span style={{ fontSize: 19, fontWeight: 700 }}>{tr('Entités de cette vue')}</span>
         </div>
         <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 14 }}>{tr('Autocomplétion en tapant. « Enregistrer » recharge le dashboard pour appliquer.')}</div>
         <EntSections ent={ent} setEnt={setEnt} entSet={entSet} dlists={dlists} only={VIEW_ENT_SECTIONS[view]} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-          <button onClick={close} style={{ padding: '10px 16px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
-          <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
+          <button onClick={close} style={{ padding: '10px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
+          <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
         </div>
       </>)}
     </BottomSheet>
@@ -886,9 +886,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const autoRel = (t) => { try { if (!t) return ''; const m = (Date.now() - new Date(t).getTime()) / 60000; if (m < 1) return "à l'instant"; if (m < 60) return 'il y a ' + Math.round(m) + ' min'; if (m < 1440) return 'il y a ' + Math.round(m / 60) + ' h'; return 'il y a ' + Math.round(m / 1440) + ' j'; } catch (e) { return ''; } };
   const autos = (hass && hass.states) ? Object.keys(hass.states).filter(e => e.indexOf('automation.') === 0).map(id => { const s = hass.states[id], at = s.attributes || {}; return { id, name: at.friendly_name || id.replace('automation.', '').replace(/_/g, ' '), on: autoOv[id] != null ? autoOv[id] : s.state === 'on', last: at.last_triggered }; }).sort((a, b) => a.name.localeCompare(b.name)) : [];
   const tabStyle = on => on
-    ? { padding: '9px 18px', borderRadius: 13, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700, background: 'var(--o-accent)', color: '#fff', flexShrink: 0, whiteSpace: 'nowrap' }
-    : { padding: '9px 18px', borderRadius: 13, border: 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontSize: 13.5, fontWeight: 700, background: 'var(--o-s2)', color: 'var(--o-text1)', flexShrink: 0, whiteSpace: 'nowrap' };
-  const cardSt = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,22px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' };
+    ? { padding: '9px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent)', color: '#fff', flexShrink: 0, whiteSpace: 'nowrap' }
+    : { padding: '9px 18px', borderRadius: 14, border: 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s2)', color: 'var(--o-text1)', flexShrink: 0, whiteSpace: 'nowrap' };
+  const cardSt = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' };
 
   // Combien de boutons sont deja regles : le chiffre du sommaire. Lu une
   // fois a l'ouverture — la section, elle, sonde en continu quand on y est.
@@ -959,7 +959,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // Bandeau d'une section : volontairement LEGER (1 a 2 groupes) — entasser dix reglages
   // sur une ligne rend la barre illisible. Le reste vit dans les cartes en lignes denses.
   const SecBar = ({ children }) => (
-    <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+    <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
       {children}
       <span style={{ flex: 1 }} />
     </div>
@@ -973,22 +973,22 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       {children}
     </div>
   );
-  const secBtn = (on) => ({ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' });
+  const secBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' });
   const SecTgl = ({ on, cb, label }) => (
     <span onClick={cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } }}
-      style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 11, cursor: 'pointer', background: on ? 'var(--o-accent)' : 'var(--o-s4)', border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}>
+      style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 10, cursor: 'pointer', background: on ? 'var(--o-accent)' : 'var(--o-s4)', border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}>
       <span style={{ position: 'absolute', top: 2, left: on ? 19 : 2, width: 17, height: 17, borderRadius: '50%', background: '#fff', transition: 'left .2s cubic-bezier(.4,1.3,.5,1)' }} />
     </span>
   );
   const secTagBg = (c) => 'rgba(' + (c === 'ok' ? 'var(--o-ok-rgb)' : c === 'warn' ? 'var(--o-warn2-rgb)' : c === 'bad' ? 'var(--o-bad-rgb)' : 'var(--o-accent-rgb)') + ',.14)';
   const secTagFg = (c) => c === 'ok' ? 'var(--o-ok)' : c === 'warn' ? 'var(--o-warn2)' : c === 'bad' ? 'var(--o-bad)' : 'var(--o-accent-soft)';
   const SecCard = ({ title, tag, tagCol, sub, children }) => (
-    <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
+    <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>{title}</div>
         {tag ? <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: secTagBg(tagCol), color: secTagFg(tagCol) }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: secTagFg(tagCol) }} />{tag}</span> : null}
       </div>
-      {sub ? <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{sub}</div> : null}
+      {sub ? <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{sub}</div> : null}
       <div style={{ display: 'flex', flexDirection: 'column' }}>{children}</div>
     </div>
   );
@@ -997,21 +997,21 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       {tab === 'hub' ? (
         <>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Paramètres')}</h1>
               <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Réglages propres à cet appareil')} · {tr('{n} profils', { n: users.length })}</div>
             </div>
             <span style={{ flex: 1 }} />
-            {upsAvail > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(var(--o-warn2-rgb),.14)', color: 'var(--o-warn2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-warn2)' }} />{upsAvail > 1 ? tr('{n} MISES À JOUR', { n: upsAvail }) : tr('{n} MISE À JOUR', { n: upsAvail })}</span>}
+            {upsAvail > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(var(--o-warn2-rgb),.14)', color: 'var(--o-warn2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-warn2)' }} />{upsAvail > 1 ? tr('{n} MISES À JOUR', { n: upsAvail }) : tr('{n} MISE À JOUR', { n: upsAvail })}</span>}
           </div>
 
-          <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+          <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Mode</span>
               <div style={{ display: 'flex', gap: 4 }}>
                 {[['dark', 'Sombre'], ['light', 'Clair']].map(([id, lb]) => (
-                  <button key={id} onClick={() => onMode(id)} disabled={haTheme === 'FOLLOW'} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: haTheme === 'FOLLOW' ? 'not-allowed' : 'pointer', fontSize: 11.5, fontWeight: 700, opacity: haTheme === 'FOLLOW' ? .5 : 1, background: themeMode === id ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: themeMode === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</button>
+                  <button key={id} onClick={() => onMode(id)} disabled={haTheme === 'FOLLOW'} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: haTheme === 'FOLLOW' ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, opacity: haTheme === 'FOLLOW' ? .5 : 1, background: themeMode === id ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: themeMode === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</button>
                 ))}
               </div>
             </div>
@@ -1020,13 +1020,13 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
 
 
           <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Toutes les sections')}</div>
-          <div className="grid-parsections" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 14 }}>
+          <div className="grid-parsections" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 16 }}>
             {SECTIONS.map(sec => (
-              <button key={sec.id} onClick={() => setTab(sec.id)} style={{ textAlign: 'left', cursor: 'pointer', padding: '16px 17px', borderRadius: 16, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                  <span style={{ width: 34, height: 34, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: sec.bg }}><Fi i={sec.ico} size={15} color={sec.col} /></span>
+              <button key={sec.id} onClick={() => setTab(sec.id)} style={{ textAlign: 'left', cursor: 'pointer', padding: '16px 17px', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: sec.bg }}><Fi i={sec.ico} size={15} color={sec.col} /></span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 800 }}>{sec.name}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800 }}>{sec.name}</div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sec.sub}</div>
                   </div>
                   {sec.dot && <span style={{ width: 7, height: 7, borderRadius: '50%', background: sec.col, flexShrink: 0 }} />}
@@ -1035,7 +1035,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                   <span style={{ fontSize: sec.small ? 17 : 24, fontWeight: 800, letterSpacing: '-.02em', color: sec.col, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sec.big}</span>
                   <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sec.unit}</span>
                 </div>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: 'var(--o-accent-soft)' }}>Ouvrir<Fi i="angle-small-right" size={12} color="var(--o-accent-soft)" /></span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)' }}>Ouvrir<Fi i="angle-small-right" size={12} color="var(--o-accent-soft)" /></span>
               </button>
             ))}
           </div>
@@ -1043,7 +1043,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div>
-            <button onClick={() => setTab('hub')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}><Fi i="angle-small-left" size={13} color="var(--o-text2)" />{tr('Paramètres')}</button>
+            <button onClick={() => setTab('hub')} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}><Fi i="angle-small-left" size={13} color="var(--o-text2)" />{tr('Paramètres')}</button>
             <h1 style={{ margin: '10px 0 0', fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 34, fontWeight: 500 }}>{curSection ? (curSection.long || curSection.name) : tr('Paramètres')}</h1>
             <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{curSection ? (curSection.pageSub || curSection.sub) : ''}</div>
           </div>
@@ -1060,15 +1060,15 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
           </SecGroup>
         </SecBar>
-        <div className="grid-appar" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 264px', gap: 18, alignItems: 'start' }}>
+        <div className="grid-appar" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 264px', gap: 16, alignItems: 'start' }}>
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>{(() => {
         const notFollow = haTheme !== 'FOLLOW';
         // Carte de reglages : en-tete a fond leger + corps en lignes denses (patron Atrium).
         const AppCard = ({ title, sub, note, action, children }) => (
-          <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', overflow: 'hidden', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
+          <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', background: 'var(--o-s4)', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14.5, fontWeight: 700 }}>{title}</span>
-              {sub ? <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{sub}</span> : null}
+              <span style={{ fontSize: 14, fontWeight: 700 }}>{title}</span>
+              {sub ? <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{sub}</span> : null}
               <span style={{ flex: 1 }} />
               {note ? <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', fontFamily: 'ui-monospace,monospace' }}>{note}</span> : null}
               {action}
@@ -1080,33 +1080,33 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '13px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
             <div style={{ flex: 1, minWidth: 0, maxWidth: '62ch' }}>
               <div style={{ fontSize: 13, fontWeight: 700 }}>{title}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--o-text2)', fontWeight: 600, lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
+              <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{children}</div>
           </div>
         );
         const Tgl = ({ on, cb, label, off = false }) => (
           <span onClick={off ? undefined : cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={off ? -1 : 0} onKeyDown={(e) => { if (!off && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); cb(); } }}
-            style={{ width: 46, height: 26, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: off ? 'not-allowed' : 'pointer', opacity: off ? .45 : 1, flexShrink: 0, transition: 'background .25s', display: 'inline-block' }}>
+            style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: off ? 'not-allowed' : 'pointer', opacity: off ? .45 : 1, flexShrink: 0, transition: 'background .25s', display: 'inline-block' }}>
             <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
           </span>
         );
         // Segment : 2 a 3 choix mutuellement exclusifs, sur une piste unique.
         const Seg = ({ value, opts, onPick, disabled = false }) => (
-          <div style={{ display: 'flex', gap: 3, padding: 3, borderRadius: 11, background: 'var(--o-s2)', opacity: disabled ? .5 : 1 }}>
+          <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', opacity: disabled ? .5 : 1 }}>
             {opts.map(([v, lb]) => (
-              <button key={String(v)} disabled={disabled} onClick={() => onPick(v)} style={{ padding: '6px 13px', borderRadius: 8, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: value === v ? 'var(--o-surfA)' : 'transparent', color: value === v ? 'var(--o-text)' : 'var(--o-text2)', boxShadow: value === v ? '0 1px 3px rgba(0,0,0,.25)' : 'none' }}>{lb}</button>
+              <button key={String(v)} disabled={disabled} onClick={() => onPick(v)} style={{ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: value === v ? 'var(--o-surfA)' : 'transparent', color: value === v ? 'var(--o-text)' : 'var(--o-text2)', boxShadow: value === v ? '0 1px 3px rgba(0,0,0,.25)' : 'none' }}>{lb}</button>
             ))}
           </div>
         );
-        const stepBtn = { width: 30, height: 30, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd1)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
+        const stepBtn = { width: 30, height: 30, borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd1)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
         // Marge : stepper + glissiere absolue. « auto » = valeur calculee, non figee.
         const MarginRow = ({ label, px, auto, onStep, onSet }) => (
-          <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+          <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '11px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
             <div style={{ fontSize: 13, fontWeight: 700, width: 108, flexShrink: 0 }}>{label}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: 3, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
               <button onClick={() => onStep(-2)} style={stepBtn} aria-label={'Réduire ' + label}>−</button>
-              <span style={{ minWidth: 48, textAlign: 'center', fontWeight: 800, fontSize: 12.5, fontFamily: 'ui-monospace,monospace', color: auto ? 'var(--o-text3)' : 'var(--o-text)' }}>{auto ? 'auto' : Math.round(px) + 'px'}</span>
+              <span style={{ minWidth: 48, textAlign: 'center', fontWeight: 800, fontSize: 12, fontFamily: 'ui-monospace,monospace', color: auto ? 'var(--o-text3)' : 'var(--o-text)' }}>{auto ? 'auto' : Math.round(px) + 'px'}</span>
               <button onClick={() => onStep(2)} style={stepBtn} aria-label={'Augmenter ' + label}>+</button>
             </div>
             <input type="range" min={0} max={100} step={1} value={Math.round(px) || 0} onChange={e => onSet && onSet(+e.target.value)} aria-label={label}
@@ -1118,7 +1118,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         const COMMU = ['frosted', 'onedark', 'dracula', 'github', 'tokyo', 'nightowl', 'plum', 'material', 'lavande'];
         const ids = themeTab === 'natifs' ? NATIFS : COMMU;
         const themeList = ids.map(id => PRESET_META().find(x => x.id === id)).filter(Boolean);
-        const tabBtn = (on) => ({ padding: '6px 13px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: on ? 'var(--o-surfA)' : 'transparent', color: on ? 'var(--o-text)' : 'var(--o-text2)', boxShadow: on ? '0 1px 3px rgba(0,0,0,.25)' : 'none' });
+        const tabBtn = (on) => ({ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: on ? 'var(--o-surfA)' : 'transparent', color: on ? 'var(--o-text)' : 'var(--o-text2)', boxShadow: on ? '0 1px 3px rgba(0,0,0,.25)' : 'none' });
         return (<>
           <AppCard title="Affichage">
             <OptRow title={tr('Mode')} desc={tr('Appliqué au thème choisi.')}>
@@ -1204,7 +1204,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 const on = look.radius === v;
                 return (
                   <button key={v} onClick={() => onLook({ radius: v })} aria-pressed={on} aria-label={'Arrondi ' + lb}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 12, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
                     <span style={{ width: 22, height: 22, borderRadius: r, background: 'var(--o-s1)', border: '2px solid ' + (on ? 'var(--o-accent)' : 'var(--o-text3)') }} />
                     <span style={{ fontSize: 11, fontWeight: 700, color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</span>
                   </button>
@@ -1227,8 +1227,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 const on = (look.fond || 'aucun') !== 'photo';
                 return (
                   <button onClick={() => onLook({ fond: 'aucun' })} aria-pressed={on} aria-label={tr("Fond d'écran") + ' ' + tr('Aucun')}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 12, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
-                    <span style={{ width: 34, height: 22, borderRadius: 6, background: 'var(--o-bg)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd2)') }} />
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
+                    <span style={{ width: 34, height: 22, borderRadius: 10, background: 'var(--o-bg)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd2)') }} />
                     <span style={{ fontSize: 11, fontWeight: 700, color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{tr('Aucun')}</span>
                   </button>
                 );
@@ -1249,7 +1249,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </AppCard>
 
           <AppCard title="Marges de l'écran" action={(navAuto && topAuto) ? null : (
-            <button onClick={() => { onNavOffsetReset && onNavOffsetReset(); onTopOffsetReset && onTopOffsetReset(); }} style={{ padding: '6px 12px', borderRadius: 9, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}>{tr('Revenir à auto')}</button>
+            <button onClick={() => { onNavOffsetReset && onNavOffsetReset(); onTopOffsetReset && onTopOffsetReset(); }} style={{ padding: '6px 12px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('Revenir à auto')}</button>
           )}>
             <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, lineHeight: 1.5, maxWidth: '62ch', padding: '12px 0 2px' }}>
               À ajuster seulement si la barre passe sous l'encoche ou la barre d'accueil de votre téléphone. « auto » convient dans la quasi-totalité des cas.
@@ -1259,7 +1259,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </AppCard>
 
           <AppCard title={tr('Thème')} sub={themeList.length + ' disponibles'} action={(
-            <div style={{ display: 'flex', gap: 3, padding: 3, borderRadius: 11, background: 'var(--o-s2)' }}>
+            <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)' }}>
               <button onClick={() => setThemeTab('natifs')} style={tabBtn(themeTab === 'natifs')}>Natifs</button>
               <button onClick={() => setThemeTab('commu')} style={tabBtn(themeTab === 'commu')}>{tr('Communauté')}</button>
             </div>
@@ -1268,20 +1268,20 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               {themeList.map(p => {
                 const on = notFollow && (loggiaTheme || '') === p.id, rgb = cl_hexRgb(p.cols[0]);
                 return (
-                  <button key={p.id || 'loggia'} onClick={() => onPickTheme(p.id)} style={{ position: 'relative', textAlign: 'left', padding: '11px 12px', borderRadius: 13, cursor: 'pointer', transition: 'all .25s', border: '1px solid ' + (on ? `rgba(${rgb},.55)` : 'var(--o-bd1)'), background: on ? `rgba(${rgb},.10)` : 'var(--o-s2)' }}>
+                  <button key={p.id || 'loggia'} onClick={() => onPickTheme(p.id)} style={{ position: 'relative', textAlign: 'left', padding: '11px 12px', borderRadius: 14, cursor: 'pointer', transition: 'all .25s', border: '1px solid ' + (on ? `rgba(${rgb},.55)` : 'var(--o-bd1)'), background: on ? `rgba(${rgb},.10)` : 'var(--o-s2)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
                       {on && <span style={{ flexShrink: 0, marginLeft: 6, display: 'inline-flex' }}><Fi i="check" size={13} color={p.cols[0]} /></span>}
                     </div>
-                    <div style={{ display: 'flex', gap: 5, marginBottom: 7 }}>
-                      {p.cols.map((c, k) => <div key={k} style={{ width: 20, height: 20, borderRadius: 7, background: c, border: '1px solid rgba(255,255,255,.12)' }} />)}
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 7 }}>
+                      {p.cols.map((c, k) => <div key={k} style={{ width: 20, height: 20, borderRadius: 10, background: c, border: '1px solid rgba(255,255,255,.12)' }} />)}
                     </div>
-                    <div style={{ fontSize: 10.5, color: 'var(--o-text3)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
+                    <div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
                   </button>
                 );
               })}
             </div>
-            {!notFollow && <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 12 }}>{tr('Thème suivi depuis Home Assistant — coupe « Suivre » pour choisir manuellement.')}</div>}
+            {!notFollow && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 12 }}>{tr('Thème suivi depuis Home Assistant — coupe « Suivre » pour choisir manuellement.')}</div>}
           </AppCard>
         </>);
       })()}</div><ParPreview themeMode={themeMode} loggiaTheme={loggiaTheme} hass={hass} userName={(users[userIdx] || {}).name || ''} look={look} /></div>
@@ -1294,15 +1294,15 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </SecGroup>
         </SecBar>
 
-        <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', overflow: 'hidden', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
+        <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 20px', background: 'var(--o-s4)', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
             <Fi i="settings" size={15} color="var(--o-text2)" />
-            <span style={{ fontSize: 14.5, fontWeight: 700 }}>{tr('Adresses du serveur')}</span>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>{tr('Adresses du serveur')}</span>
             <span style={{ flex: 1 }} />
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{tr("testées à l'enregistrement")}</span>
           </div>
           <div style={{ padding: '18px 20px 20px' }}>
-            <div style={{ fontSize: 12.5, color: 'var(--o-accent-soft)', fontWeight: 600, lineHeight: 1.55, maxWidth: '62ch', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: 'var(--o-accent-soft)', fontWeight: 600, lineHeight: 1.55, maxWidth: '62ch', marginBottom: 16 }}>
               Loggia n'a pas de compte : il emprunte la session Home Assistant ouverte dans ce navigateur. Si elle expire, c'est l'écran de connexion de Home Assistant qui s'affiche.
             </div>
             {[['local', 'URL LOCALE', 'http://homeassistant.local:8123', "Adresse du serveur sur le réseau domestique."],
@@ -1310,42 +1310,42 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               const r = testLine(k);
               return (
                 <div key={k} style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.07em', color: 'var(--o-text3)', marginBottom: 6 }}>{lb}</div>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.07em', color: 'var(--o-text3)', marginBottom: 6 }}>{lb}</div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input value={haDraft[k] || ''} onChange={e => setHaDraft(d => ({ ...d, [k]: e.target.value }))} placeholder={ph} spellCheck={false} autoComplete="off" style={{ ...entInp, flex: 1, minWidth: 0 }} />
-                    <button onClick={() => testUrl(k)} style={{ padding: '9px 15px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', flexShrink: 0 }}>Tester</button>
+                    <button onClick={() => testUrl(k)} style={{ padding: '9px 15px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>Tester</button>
                   </div>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, marginTop: 6, color: r ? r.col : 'var(--o-text3)' }}>{r ? r.txt : hint}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: r ? r.col : 'var(--o-text3)' }}>{r ? r.txt : hint}</div>
                 </div>
               );
             })}
-            <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.07em', color: 'var(--o-text3)', marginBottom: 6 }}>{tr('INTERVALLE DE RAFRAÎCHISSEMENT')}</div>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.07em', color: 'var(--o-text3)', marginBottom: 6 }}>{tr('INTERVALLE DE RAFRAÎCHISSEMENT')}</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {POLL_CHOICES.map(([ms, lb]) => (
-                <button key={ms} onClick={() => setHaDraft(d => ({ ...d, pollMs: ms }))} style={{ padding: '8px 15px', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: '1px solid ' + ((haDraft.pollMs || 2000) === ms ? 'var(--o-accent)' : 'var(--o-bd1)'), background: (haDraft.pollMs || 2000) === ms ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: (haDraft.pollMs || 2000) === ms ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{lb}</button>
+                <button key={ms} onClick={() => setHaDraft(d => ({ ...d, pollMs: ms }))} style={{ padding: '8px 15px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + ((haDraft.pollMs || 2000) === ms ? 'var(--o-accent)' : 'var(--o-bd1)'), background: (haDraft.pollMs || 2000) === ms ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: (haDraft.pollMs || 2000) === ms ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{lb}</button>
               ))}
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginTop: 6 }}>{tr('Plus court = plus de requêtes vers Home Assistant.')}</div>
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 6 }}>{tr('Plus court = plus de requêtes vers Home Assistant.')}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
-              <button onClick={saveHaCfg} style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
-              <button onClick={resetHaCfg} style={{ padding: '10px 16px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Rétablir')}</button>
+              <button onClick={saveHaCfg} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
+              <button onClick={resetHaCfg} style={{ padding: '10px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Rétablir')}</button>
               <span style={{ flex: 1 }} />
-              <button onClick={ping} disabled={latBusy} style={{ padding: '9px 14px', borderRadius: 10, background: 'transparent', border: 'none', color: 'var(--o-text3)', fontWeight: 600, fontSize: 11.5, cursor: 'pointer' }}>{latBusy ? 'Test…' : 'Tester la session'}</button>
+              <button onClick={ping} disabled={latBusy} style={{ padding: '9px 14px', borderRadius: 10, background: 'transparent', border: 'none', color: 'var(--o-text3)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>{latBusy ? 'Test…' : 'Tester la session'}</button>
             </div>
           </div>
         </div>
 
         <div className="o-parcard" style={cardSt}>
-          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>{tr('Bon à savoir')}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>{tr('Bon à savoir')}</div>
           {PAR_HELPS().map(h => {
             const isOpen = !!open[h.id];
             return (
-              <div key={h.id} style={{ border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 13, marginBottom: 10, overflow: 'hidden' }}>
+              <div key={h.id} style={{ border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, marginBottom: 10, overflow: 'hidden' }}>
                 <button onClick={() => setOpen(o => ({ ...o, [h.id]: !o[h.id] }))} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 16px', background: 'var(--o-s4)', border: 'none', cursor: 'pointer', color: 'var(--o-text)', textAlign: 'left' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, fontWeight: 700 }}><Fi i="info" size={16} color="var(--o-accent-soft)" />{h.title}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 700 }}><Fi i="info" size={16} color="var(--o-accent-soft)" />{h.title}</span>
                   <span style={{ display: 'inline-flex', transition: 'transform .25s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)' }}><Fi i="angle-small-down" size={16} color="var(--o-text2)" /></span>
                 </button>
-                <div style={{ maxHeight: isOpen ? 200 : 0, overflow: 'hidden', transition: 'max-height .3s ease' }}><div style={{ padding: '0 16px 15px', fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 500, lineHeight: 1.6 }}>{h.body}</div></div>
+                <div style={{ maxHeight: isOpen ? 200 : 0, overflow: 'hidden', transition: 'max-height .3s ease' }}><div style={{ padding: '0 16px 15px', fontSize: 12, color: 'var(--o-text2)', fontWeight: 500, lineHeight: 1.6 }}>{h.body}</div></div>
               </div>
             );
           })}
@@ -1357,14 +1357,14 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           {isAdmin && <SecGroup label="Profils"><button onClick={() => setEditing({ i: null })} style={secBtn(false)}>{tr('Ajouter un profil')}</button></SecGroup>}
         </SecBar>
         <div className="o-parcard" style={cardSt}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><div style={{ fontSize: 16, fontWeight: 700 }}>Utilisateurs ({users.length})</div></div>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '-12px 0 12px' }}>Profils locaux à cet appareil — l'utilisateur Home Assistant connecté est reconnu automatiquement.</div>
-          {!isAdmin && <div style={{ fontSize: 12.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 14 }}>{tr('Seul un administrateur peut ajouter, modifier ou supprimer un utilisateur.')}</div>}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><div style={{ fontSize: 15, fontWeight: 700 }}>Utilisateurs ({users.length})</div></div>
+          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '-12px 0 12px' }}>Profils locaux à cet appareil — l'utilisateur Home Assistant connecté est reconnu automatiquement.</div>
+          {!isAdmin && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 14 }}>{tr('Seul un administrateur peut ajouter, modifier ou supprimer un utilisateur.')}</div>}
           <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
             {users.map((u, i) => { const im = userImg(u); return (
-              <div key={u._k || 'u' + i} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '12px 0' }}>
-                <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: '#fff', background: userBg(u) }}>{im ? '' : (u.name[0] || '?').toUpperCase()}</span>
-                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14.5, fontWeight: 700 }}>{u.name}{i === userIdx && <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', padding: '2px 7px', borderRadius: 999, marginLeft: 7, verticalAlign: '1px', letterSpacing: '.04em' }}>{tr('VOUS')}</span>}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}>{u.sub || u.role}</div></div>
+              <div key={u._k || 'u' + i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
+                <span style={{ width: 40, height: 40, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, color: '#fff', background: userBg(u) }}>{im ? '' : (u.name[0] || '?').toUpperCase()}</span>
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{u.name}{i === userIdx && <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', padding: '2px 7px', borderRadius: 999, marginLeft: 7, verticalAlign: '1px', letterSpacing: '.04em' }}>{tr('VOUS')}</span>}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}>{u.sub || u.role}</div></div>
                 {(() => { const r = seenRel(u.name, i === userIdx); return r ? <span style={{ fontSize: 11, fontWeight: 600, color: i === userIdx ? 'var(--o-ok)' : 'var(--o-text3)', flexShrink: 0 }}>{r}</span> : null; })()}
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: u.role === 'Admin' ? 'rgba(255,179,71,.16)' : 'rgba(52,211,153,.16)', color: u.role === 'Admin' ? '#ffb347' : 'var(--o-ok)' }}>{u.role}</span>
                 {isAdmin && <span onClick={() => setEditing({ i, u })} style={{ cursor: 'pointer', color: 'var(--o-text3)', display: 'flex' }}><Fi i="pencil" size={16} /></span>}
@@ -1399,17 +1399,17 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           const t2 = ids[i]; ids[i] = ids[j]; ids[j] = t2;
           const c = readViewsCfg(); c.order = ids; writeViewsCfg(c); bump();
         };
-        const fleche = { width: 26, height: 26, borderRadius: 8, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 };
+        const fleche = { width: 26, height: 26, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 };
         const Row = ({ icon, c, name, sub, on, locked, onT, onUp, onDown }) => (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
-            <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', opacity: on ? 1 : .55 }}><Fi i={icon} size={15} color={c || 'var(--o-text2)'} /></span>
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 700, color: on ? 'var(--o-text)' : 'var(--o-text3)' }}>{name}</div><div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600 }}>{on ? sub: tr('masquée')}</div></div>
+            <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', opacity: on ? 1 : .55 }}><Fi i={icon} size={15} color={c || 'var(--o-text2)'} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700, color: on ? 'var(--o-text)' : 'var(--o-text3)' }}>{name}</div><div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600 }}>{on ? sub: tr('masquée')}</div></div>
             {onUp && <button onClick={onUp} title={tr('Monter')} aria-label={tr('Monter') + ' ' + name} style={fleche}><Fi i="angle-up" size={12} /></button>}
             {onDown && <button onClick={onDown} title={tr('Descendre')} aria-label={tr('Descendre') + ' ' + name} style={fleche}><Fi i="angle-down" size={12} /></button>}
-            <button onClick={() => setTab('entites')} style={{ padding: '6px 11px', borderRadius: 9, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>{tr('Entités')}</button>
+            <button onClick={() => setTab('entites')} style={{ padding: '6px 11px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>{tr('Entités')}</button>
             {locked
               ? <span style={{ width: 46, textAlign: 'center', flexShrink: 0 }}><Fi i="lock" size={13} color="var(--o-text3)" /></span>
-              : <span onClick={onT} role="switch" aria-checked={on} aria-label={name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onT(); } }} style={{ width: 46, height: 26, borderRadius: 13, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
+              : <span onClick={onT} role="switch" aria-checked={on} aria-label={name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onT(); } }} style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
           </div>
         );
         const hiddenNames = BUILTIN_VIEWS.filter(v => cfg.hidden.has(v[0])).map(v => v[1]);
@@ -1421,8 +1421,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           {onNav && <SecGroup label={tr('Catalogue')}><button onClick={() => onNav('biblio')} style={secBtn(false)}>{tr('Bibliothèque de cartes')}</button></SecGroup>}
         </SecBar>
         <div className="o-parcard" style={cardSt}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Vues intégrées')}</div><span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.05em' }}>{tr('visibilité du menu latéral')}</span></div>
-          <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 6px' }}>Masque celles que tu n'utilises pas, ou réactive une vue retirée. La barre mobile garde ses raccourcis.</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Vues intégrées')}</div><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.05em' }}>{tr('visibilité du menu latéral')}</span></div>
+          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 6px' }}>Masque celles que tu n'utilises pas, ou réactive une vue retirée. La barre mobile garde ses raccourcis.</div>
           <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
             {ordonnes.map(([vid, name, icon, sub, locked], idx) => { const why = viewReason(availViews, vid); return (
               <Row key={vid} icon={icon} name={name} sub={why || sub} locked={locked || !!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)}
@@ -1434,15 +1434,15 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </div>
         </div>
         <div className="o-parcard" style={cardSt}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 10 }}><div><div style={{ fontSize: 16, fontWeight: 700 }}>{tr('Gestion des vues')}</div><div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600 }}>{tr('Crée tes propres vues avec tes entités — elles apparaissent dans le menu latéral.')}</div></div></div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 10 }}><div><div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Gestion des vues')}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}>{tr('Crée tes propres vues avec tes entités — elles apparaissent dans le menu latéral.')}</div></div></div>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '18px 0 10px' }}>MES VUES ({customViews.length})</div>
           <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
             {customViews.map(cv => (
               <div key={cv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
-                <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><Fi i={cv.icon || 'sparkles'} size={15} /></span>
-                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{cv.name}</div><div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div></div>
-                <button onClick={() => setCvEditing(cv)} title="Modifier" style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="pencil" size={13} /></button>
-                <button onClick={() => onSaveCustomViews(customViews.filter(x => x.id !== cv.id))} title="Supprimer" style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>×</button>
+                <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><Fi i={cv.icon || 'sparkles'} size={15} /></span>
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{cv.name}</div><div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div></div>
+                <button onClick={() => setCvEditing(cv)} title="Modifier" style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="pencil" size={13} /></button>
+                <button onClick={() => onSaveCustomViews(customViews.filter(x => x.id !== cv.id))} title="Supprimer" style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>×</button>
               </div>
             ))}
             {!customViews.length && <div style={{ padding: '16px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucune vue personnalisée. « + Nouvelle vue » pour commencer.')}</div>}
@@ -1468,9 +1468,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         const anyOpen = groups.some(gr => autoOpen[gr.g]);
         const line = (a) => (
           <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: a.on ? 'var(--o-text)' : 'var(--o-text2)' }}>{a.name}</div><div style={{ fontSize: 11.5, fontWeight: 600, color: a.on ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>{a.on ? 'active' : 'inactive'}{a.last ? ' · dernière exécution ' + autoRel(a.last) : ''}</div></div>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: a.on ? 'var(--o-text)' : 'var(--o-text2)' }}>{a.name}</div><div style={{ fontSize: 12, fontWeight: 600, color: a.on ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>{a.on ? 'active' : 'inactive'}{a.last ? ' · dernière exécution ' + autoRel(a.last) : ''}</div></div>
             <button onClick={() => runAuto(a)} title={tr('Exécuter maintenant')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><Fi i="play" size={12} />{tr('Exécuter')}</button>
-            <span onClick={() => toggleAuto(a)} role="switch" aria-checked={a.on} aria-label={a.name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAuto(a); } }} style={{ width: 46, height: 26, borderRadius: 13, background: a.on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: a.on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>
+            <span onClick={() => toggleAuto(a)} role="switch" aria-checked={a.on} aria-label={a.name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAuto(a); } }} style={{ width: 46, height: 26, borderRadius: 14, background: a.on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: a.on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>
           </div>
         );
         const lastRun = autos.map(a => a.last).filter(Boolean).sort().slice(-1)[0];
@@ -1488,7 +1488,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <div className="o-parcard" style={cardSt}>
           <div style={{ display: 'flex', gap: 8, margin: '10px 0 14px', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ flex: '1 1 200px', position: 'relative' }}>
-              <input value={autoQ} onChange={e => setAutoQ(e.target.value)} placeholder={tr('Filtrer par nom…')} spellCheck={false} style={{ width: '100%', boxSizing: 'border-box', padding: '9px 13px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
+              <input value={autoQ} onChange={e => setAutoQ(e.target.value)} placeholder={tr('Filtrer par nom…')} spellCheck={false} style={{ width: '100%', boxSizing: 'border-box', padding: '9px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
             </div>
                         <button onClick={() => setAutoOpen(anyOpen ? {} : Object.fromEntries(groups.map(gr => [gr.g, true])))} style={{ padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s2)', color: 'var(--o-text1)' }}>{anyOpen ? 'Tout replier' : 'Tout déplier'}</button>
           </div>
@@ -1498,11 +1498,11 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               const isOpen = !!autoOpen[gr.g] || !!q;
               const nOn = gr.items.filter(a => a.on).length;
               return (
-                <div key={gr.g} style={{ border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 13, overflow: 'hidden' }}>
-                  <button onClick={() => setAutoOpen(o => ({ ...o, [gr.g]: !o[gr.g] }))} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '12px 15px', background: 'var(--o-s4)', border: 'none', cursor: 'pointer', color: 'var(--o-text)', textAlign: 'left' }}>
+                <div key={gr.g} style={{ border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, overflow: 'hidden' }}>
+                  <button onClick={() => setAutoOpen(o => ({ ...o, [gr.g]: !o[gr.g] }))} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 15px', background: 'var(--o-s4)', border: 'none', cursor: 'pointer', color: 'var(--o-text)', textAlign: 'left' }}>
                     <span style={{ display: 'inline-flex', transition: 'transform .22s', transform: isOpen ? 'rotate(90deg)' : 'rotate(0)' }}><Fi i="angle-small-right" size={15} color="var(--o-text3)" /></span>
-                    <span style={{ fontSize: 13.5, fontWeight: 800 }}>{gr.g}</span>
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{gr.items.length > 1 ? tr('{n} automatisations', { n: gr.items.length }) : tr('{n} automatisation', { n: gr.items.length })}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800 }}>{gr.g}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{gr.items.length > 1 ? tr('{n} automatisations', { n: gr.items.length }) : tr('{n} automatisation', { n: gr.items.length })}</span>
                     <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: nOn ? 'rgba(var(--o-ok-rgb),.13)' : 'var(--o-s1)', color: nOn ? 'var(--o-ok)' : 'var(--o-text3)' }}>{nOn ? (nOn > 1 ? tr('{n} actives', { n: nOn }) : tr('{n} active', { n: nOn })) : tr('toutes inactives')}</span>
                   </button>
                   {isOpen && <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column', padding: '2px 15px 6px' }}>{gr.items.map(line)}</div>}
@@ -1564,30 +1564,30 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                   + (parZoneN ? ' (' + parZoneN + ' par la zone Home Assistant)' : ' par le nom')
                   + ' — vérifie puis « Enregistrer et recharger ».'
                 : 'Aucun capteur supplémentaire trouvé. Range tes capteurs dans une zone Home Assistant : la détection s’appuie dessus en premier.');
-            }} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 10, background: 'rgba(var(--o-ok-rgb),.13)', border: '1px solid rgba(var(--o-ok-rgb),.3)', color: 'var(--o-ok)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}><Fi i="magic-wand" size={13} />{tr('Détecter automatiquement')}</button>
+            }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(var(--o-ok-rgb),.13)', border: '1px solid rgba(var(--o-ok-rgb),.3)', color: 'var(--o-ok)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}><Fi i="magic-wand" size={13} />{tr('Détecter automatiquement')}</button>
           </div>
           <EntSections ent={ent} setEnt={setEnt} entSet={entSet} dlists={dlists} hass={hass} />
           <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
-            <div style={{ fontSize: 13.5, fontWeight: 800, marginBottom: 3 }}>{tr('Synchronisation entre accès')}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>WiFi (IP locale) et 5G (Nabu Casa) = deux stockages séparés du navigateur : la config peut diverger entre les deux. Copie-la ici, puis importe-la sur l'autre accès. (Le code PIN admin n'est jamais inclus.)</div>
+            <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Synchronisation entre accès')}</div>
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>WiFi (IP locale) et 5G (Nabu Casa) = deux stockages séparés du navigateur : la config peut diverger entre les deux. Copie-la ici, puis importe-la sur l'autre accès. (Le code PIN admin n'est jamais inclus.)</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={doExport} style={{ padding: '9px 14px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{tr('Copier la config')}</button>
-              <button onClick={() => { setSyncTxt(''); setSyncMsg('Colle ici la config copiée depuis l\'autre accès, puis « Appliquer ».'); setSyncOpen(true); }} style={{ padding: '9px 14px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{tr('Importer une config')}</button>
+              <button onClick={doExport} style={{ padding: '9px 14px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('Copier la config')}</button>
+              <button onClick={() => { setSyncTxt(''); setSyncMsg('Colle ici la config copiée depuis l\'autre accès, puis « Appliquer ».'); setSyncOpen(true); }} style={{ padding: '9px 14px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('Importer une config')}</button>
             </div>
             {syncOpen && (
               <div style={{ marginTop: 10 }}>
-                {syncMsg && <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--o-accent-soft)', marginBottom: 7 }}>{syncMsg}</div>}
-                <textarea value={syncTxt} onChange={e => setSyncTxt(e.target.value)} rows={4} spellCheck={false} style={{ ...entInp, fontFamily: 'monospace', fontSize: 10.5, resize: 'vertical' }} />
+                {syncMsg && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)', marginBottom: 7 }}>{syncMsg}</div>}
+                <textarea value={syncTxt} onChange={e => setSyncTxt(e.target.value)} rows={4} spellCheck={false} style={{ ...entInp, fontFamily: 'monospace', fontSize: 11, resize: 'vertical' }} />
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 7 }}>
-                  <button onClick={() => { setSyncOpen(false); setSyncMsg(''); }} style={{ padding: '8px 13px', borderRadius: 9, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Fermer</button>
-                  <button onClick={doImport} style={{ padding: '8px 15px', borderRadius: 9, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Appliquer et recharger</button>
+                  <button onClick={() => { setSyncOpen(false); setSyncMsg(''); }} style={{ padding: '8px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Fermer</button>
+                  <button onClick={doImport} style={{ padding: '8px 15px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Appliquer et recharger</button>
                 </div>
               </div>
             )}
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-            <button onClick={resetEnt} style={{ padding: '10px 16px', borderRadius: 11, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Rétablir les défauts')}</button>
-            <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 11, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
+            <button onClick={resetEnt} style={{ padding: '10px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Rétablir les défauts')}</button>
+            <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
           </div>
         </div>
       </>)}
@@ -1595,7 +1595,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       {tab === 'alertes' && isAdmin && <AlertesTele hass={hass} cardSt={cardSt} />}
       {tab === 'inter' && isAdmin && <InterrupteursSection hass={hass} cardSt={cardSt} />}
       {tab === 'regles' && isAdmin && (<>
-        <div className="o-bar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+        <div className="o-bar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
           {[['volets', tr('Volets')], ['fenetres', tr('Chauffage')]].map(([id, nom]) => (
             <button key={id} onClick={() => setOngletRegle(id)} style={tabStyle(ongletRegle === id)}>{nom}</button>
           ))}
@@ -1623,12 +1623,12 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             : <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
                 {ups.map(u => (
                   <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
-                    <span style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: u.avail ? 'rgba(var(--o-warn2-rgb),.16)' : 'var(--o-s1)', color: u.avail ? 'var(--o-warn2)' : 'var(--o-text3)' }}>
+                    <span style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: u.avail ? 'rgba(var(--o-warn2-rgb),.16)' : 'var(--o-s1)', color: u.avail ? 'var(--o-warn2)' : 'var(--o-text3)' }}>
                       {u.pic ? <img src={u.pic} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.currentTarget.remove(); }} /> : <Fi i="download" size={16} />}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
-                      <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600 }}>
+                      <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
                         {u.prog !== false
                           ? <span style={{ color: 'var(--o-accent-soft)' }}>Installation…{typeof u.prog === 'number' ? ' ' + Math.round(u.prog) + '%' : ''}</span>
                           : u.avail
@@ -1652,18 +1652,18 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         const entCount = (hass && hass.states) ? Object.keys(hass.states).length : 0;
         return (
         <>
-          <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+          <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Configuration</span>
-              <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-                <button onClick={() => window.location.reload()} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)' }}>Recharger</button>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <button onClick={() => window.location.reload()} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)' }}>Recharger</button>
                 {/* Sauvegarder et restaurer la configuration COMPLETE : celle
                     du serveur, partagee entre tous les appareils, et non le
                     seul stockage de ce navigateur. */}
                 <button onClick={async () => {
                   const j = await exportConfigComplete();
                   telechargerConfig(j, 'loggia-config');
-                }} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text)' }}>Exporter</button>
+                }} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text)' }}>Exporter</button>
                 {isAdmin && (
                   <>
                     <input type="file" accept="application/json,.json" style={{ display: 'none' }} id="o-import-cfg"
@@ -1678,7 +1678,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                         } finally { e.target.value = ''; }
                       }} />
                     <button onClick={() => { const el = document.getElementById('o-import-cfg'); if (el) el.click(); }}
-                      style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text)' }}>Importer</button>
+                      style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text)' }}>Importer</button>
                     <ResetLoggiaBtn compact />
                   </>
                 )}
@@ -1689,9 +1689,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
 
           {/* Toujours affiché : la carte de l'installation N'EST PAS un réglage,
             * c'est la réponse à « quelle version ai-je ? » (retour 02/09). */}
-          <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,20px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
+          <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>Installation</div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>Installation</div>
               {(() => {
                 const inst = installationReelle();
                 // Sans entite de suivi, aucun badge : mieux vaut ne rien dire
@@ -1708,7 +1708,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 );
               })()}
             </div>
-            <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{tr('Tableau de bord domotique auto-hébergé pour Home Assistant')}</div>
+            <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{tr('Tableau de bord domotique auto-hébergé pour Home Assistant')}</div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {(() => {
                 const inst = installationReelle();
@@ -1736,9 +1736,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               [tr('Signaler un problème'), tr('ouvrir un ticket'), 'https://github.com/Alardware/loggia/issues'],
             ].map(([titre, sous, url]) => (
               <a key={url} href={url} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '14px 16px', borderRadius: 'var(--o-radius,20px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', textDecoration: 'none' }}>
+                style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '14px 16px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', textDecoration: 'none' }}>
                 <span style={{ minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{titre}</span>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{titre}</span>
                   <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{sous}</span>
                 </span>
                 <Fi i="arrow-up-right" size={12} color="var(--o-text3)" />
@@ -1750,7 +1750,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             * depuis ko-fi.com tant qu'on ne tape pas — la tasse est dessinee
             * ici plutot que servie par leur CDN. */}
           <a href="https://ko-fi.com/alardware" target="_blank" rel="noopener noreferrer"
-            style={{ display: 'inline-flex', alignSelf: 'center', alignItems: 'center', gap: 10, padding: '13px 26px', borderRadius: 999, background: '#72a4f2', color: '#152744', fontSize: 14.5, fontWeight: 800, textDecoration: 'none', boxShadow: '0 10px 26px rgba(114,164,242,.26)' }}>
+            style={{ display: 'inline-flex', alignSelf: 'center', alignItems: 'center', gap: 10, padding: '13px 26px', borderRadius: 999, background: '#72a4f2', color: '#152744', fontSize: 14, fontWeight: 800, textDecoration: 'none', boxShadow: '0 10px 26px rgba(114,164,242,.26)' }}>
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
               <path d="M3 6.6h13v6.6a6.5 6.5 0 0 1-13 0z" fill="#fff" />
               <path d="M16.4 8.2h1.9a2.9 2.9 0 0 1 0 5.8h-1.9" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
