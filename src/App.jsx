@@ -230,7 +230,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
   );
   return (
     <aside ref={navRef} className={'loggia-aside ' + (open ? 'is-open' : 'is-closed')} style={{ width: 264, flexShrink: 0, position: 'sticky', top: 0, alignSelf: 'flex-start', height: '100vh', overflowY: 'auto', background: 'linear-gradient(180deg,var(--o-side1),var(--o-side2))', borderRight: 'var(--o-bw,1px) solid var(--o-bd3)', padding: 'calc(18px + var(--o-safe-top,0px)) 12px 18px', display: 'flex', flexDirection: 'column' }}>
-      {pill && <div aria-hidden="true" className="o-navpill" style={{ position: 'absolute', left: 12, right: 12, top: 0, height: pill.h, transform: `translateY(${pill.top}px)`, borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', pointerEvents: 'none', zIndex: 0 }}><span style={{ position: 'absolute', left: 0, top: 9, bottom: 9, width: 3, borderRadius: 4, background: 'var(--o-accent)' }} /></div>}
+      {pill && <div aria-hidden="true" className="o-navpill" style={{ position: 'absolute', left: 12, right: 12, top: 0, height: pill.h, transform: `translateY(${pill.top}px)`, borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', pointerEvents: 'none', zIndex: 0 }}><span style={{ position: 'absolute', left: 0, top: 9, bottom: 9, width: 3, borderRadius: 4, background: 'var(--o-accent-fond)' }} /></div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 8px 14px' }}>
         {/* Le logo du projet. C'etait un « O » sur un degrade — le O d'Orion,
             reste apres le renommage. Servi depuis le meme dossier que le reste
@@ -1588,7 +1588,7 @@ function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
           <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
             {btns.map(([gi, svc, lbl2], bi) => (
               <button key={svc} title={lbl2} aria-label={lbl2} onClick={(e) => { e.stopPropagation(); call(svc); }} className="o-rmbtn"
-                style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 6px', ...(bi === 0 ? { background: 'var(--o-accent)', border: '1px solid transparent', color: '#fff' } : {}) }}><Fi i={gi} size={13} /></button>
+                style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 6px', ...(bi === 0 ? { background: 'var(--o-accent-fond)', border: '1px solid transparent', color: '#fff' } : {}) }}><Fi i={gi} size={13} /></button>
             ))}
           </div>
         )}
@@ -1616,7 +1616,7 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onOpen, extra = null
           {pct != null && <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: pct < 25 ? 'var(--o-bad)' : 'var(--o-text2)' }}>{pct}%</span>}
           {onFeed && (
             <button aria-label={tr('Distribuer une ration')} onClick={(e) => { e.stopPropagation(); onFeed(); }}
-              style={{ width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-accent)', color: '#fff', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              style={{ width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Ico name="bowl-rice" color="#fff" size={14} />
             </button>
           )}
@@ -1638,7 +1638,7 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onOpen, extra = null
         {onFeed && (
           <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
             <button className="o-rmbtn" onClick={(e) => { e.stopPropagation(); onFeed(); }}
-              style={{ ...RM_BTN, background: 'var(--o-accent)', border: '1px solid transparent', color: '#fff' }}>{tr('Distribuer une ration')}</button>
+              style={{ ...RM_BTN, background: 'var(--o-accent-fond)', border: '1px solid transparent', color: '#fff' }}>{tr('Distribuer une ration')}</button>
           </div>
         )}
         {extra}
@@ -2004,7 +2004,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={13} color="#ff8a4c" />{zone.name.toUpperCase()}</span>
           {estClimate(zone) && <BoutonEpingle id={zone.haid} />}
-          {zone.autoEnt && <span onClick={() => call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt })} role="switch" tabIndex={0} aria-label={(z.auto ? 'Désactiver' : 'Activer') + ' la programmation automatique'} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt }); } }} aria-checked={!!z.auto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><span style={{ fontSize: 12, fontWeight: 700, color: z.auto ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>Auto</span><span style={{ width: 42, height: 24, borderRadius: 14, background: z.auto ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: z.auto ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span></span>}
+          {zone.autoEnt && <span onClick={() => call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt })} role="switch" tabIndex={0} aria-label={(z.auto ? 'Désactiver' : 'Activer') + ' la programmation automatique'} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt }); } }} aria-checked={!!z.auto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><span style={{ fontSize: 12, fontWeight: 700, color: z.auto ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>Auto</span><span style={{ width: 42, height: 24, borderRadius: 14, background: z.auto ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: z.auto ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span></span>}
         </div>
         <div style={{ position: 'relative', width: 230, height: 230, margin: '10px auto 0' }}>
           <svg width="230" height="230" viewBox="0 0 130 130" style={{ position: 'absolute', inset: 0, transform: 'rotate(135deg)' }}>
@@ -2502,7 +2502,7 @@ function RoomChips({ rooms, room, onNav }) {
   }, [room, rooms.join('|')]);
   return (
     <div ref={wrapRef} className="o-room-scroll" style={{ position: 'relative', display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-      {pill && <span aria-hidden="true" className="o-roompill" style={{ position: 'absolute', top: 0, left: 0, width: pill.w, height: pill.h, transform: `translateX(${pill.x}px)`, borderRadius: 999, background: 'var(--o-accent)', pointerEvents: 'none' }} />}
+      {pill && <span aria-hidden="true" className="o-roompill" style={{ position: 'absolute', top: 0, left: 0, width: pill.w, height: pill.h, transform: `translateX(${pill.x}px)`, borderRadius: 999, background: 'var(--o-accent-fond)', pointerEvents: 'none' }} />}
       {rooms.map(r => (
         <button key={r} data-room-active={r === room ? '1' : undefined} onClick={() => onNav('room:' + r)} style={{ position: 'relative', zIndex: 1, padding: '9px 17px', borderRadius: 999, border: r === room ? '1px solid transparent' : 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontWeight: 700, fontSize: 13, background: r === room ? 'transparent' : 'var(--o-s2)', color: r === room ? '#fff' : 'var(--o-text1)', flexShrink: 0, whiteSpace: 'nowrap', transition: 'color .25s' }}>{r}</button>
       ))}
@@ -2825,7 +2825,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
             </>
           )}
           <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
-            <button onClick={() => valider(close)} style={{ flex: 1, minWidth: 130, padding: '11px 0', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent)', color: '#06121f' }}>{tr('Enregistrer')}</button>
+            <button onClick={() => valider(close)} style={{ flex: 1, minWidth: 130, padding: '11px 0', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f' }}>{tr('Enregistrer')}</button>
             <button onClick={() => { ed.remove(id); close(); }} style={{ padding: '11px 16px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.14)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: 'var(--o-bad)' }}>{tr('Retirer')}</button>
           </div>
         </div>
@@ -2894,7 +2894,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, children }) {
         style={{ position: 'absolute', ...(plat ? { top: '50%', right: 7, transform: 'translateY(-50%)' } : { top: -9, right: -9 }), zIndex: 3, width: 26, height: 26, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-bad)', color: '#fff', fontSize: 15, fontWeight: 800, lineHeight: 1, boxShadow: '0 3px 10px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>×</button>
       {!plat && ed.basculerLarge && (
         <button data-drag-ui="1" onClick={() => ed.basculerLarge(id)} title={ed.estLarge(id) ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={ed.estLarge(id)}
-          style={{ position: 'absolute', bottom: -9, right: -9, zIndex: 3, width: 26, height: 26, borderRadius: 10, border: 'none', cursor: 'pointer', background: ed.estLarge(id) ? 'var(--o-accent)' : 'var(--o-surfA)', color: ed.estLarge(id) ? '#fff' : 'var(--o-text1)', boxShadow: '0 3px 10px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i="arrows-h" size={11} /></button>
+          style={{ position: 'absolute', bottom: -9, right: -9, zIndex: 3, width: 26, height: 26, borderRadius: 10, border: 'none', cursor: 'pointer', background: ed.estLarge(id) ? 'var(--o-accent-fond)' : 'var(--o-surfA)', color: ed.estLarge(id) ? '#fff' : 'var(--o-text1)', boxShadow: '0 3px 10px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i="arrows-h" size={11} /></button>
       )}
     </div>
   );
@@ -2948,7 +2948,7 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
       <div role="checkbox" aria-checked={on} tabIndex={0} onClick={() => onToggle(id)}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(id); } }}
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 11px', borderRadius: 10, cursor: 'pointer', border: '1px solid ' + (on ? 'rgba(var(--o-accent-rgb),.4)' : 'var(--o-bd3)'), background: on ? 'rgba(var(--o-accent-rgb),.11)' : 'var(--o-s2)' }}>
-        <span style={{ width: 19, height: 19, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--o-accent)' : 'transparent', border: on ? 'none' : '1.5px solid var(--o-bd1)' }}>
+        <span style={{ width: 19, height: 19, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--o-accent-fond)' : 'transparent', border: on ? 'none' : '1.5px solid var(--o-bd1)' }}>
           {on && <Fi i="check" size={10} color="#06121f" />}
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -2998,7 +2998,7 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
             </>
           )}
 
-          <button onClick={close} style={{ marginTop: 18, width: '100%', padding: '11px 0', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent)', color: '#06121f' }}>{tr('Terminé')}</button>
+          <button onClick={close} style={{ marginTop: 18, width: '100%', padding: '11px 0', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f' }}>{tr('Terminé')}</button>
         </div>
       )}
     </BottomSheet>
@@ -3050,7 +3050,7 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
   if (dom === 'switch' || dom === 'input_boolean' || dom === 'siren') {
     const on = opt != null ? opt === 'on' : (!!st && st.state === 'on');
     const basculer = () => { poserOpt(on ? 'off' : 'on'); call('homeassistant', 'toggle'); };
-    controle = <span role="switch" aria-checked={on} tabIndex={0} aria-label={label} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); basculer(); } }} onClick={basculer} style={{ width: 42, height: 24, borderRadius: 14, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .3s cubic-bezier(.34,1.56,.64,1)' }} /></span>;
+    controle = <span role="switch" aria-checked={on} tabIndex={0} aria-label={label} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); basculer(); } }} onClick={basculer} style={{ width: 42, height: 24, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .3s cubic-bezier(.34,1.56,.64,1)' }} /></span>;
   } else if (dom === 'number' || dom === 'input_number') {
     const v = opt != null ? +opt : (st ? parseFloat(st.state) : NaN);
     const pas = a.step != null ? +a.step : 1;
@@ -3101,14 +3101,14 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
           placeholder={tr('Code')} aria-label={tr('Code')}
           style={{ flex: 1, minWidth: 0, maxWidth: 130, padding: '6px 10px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
         <button onClick={() => { if (!codeSaisi) return; poserOpt(etatApres[demandeCode.svc]); call('alarm_control_panel', demandeCode.svc, { code: codeSaisi }); setDemandeCode(null); setCodeSaisi(''); }}
-          style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'var(--o-accent)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
+          style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
         <button onClick={() => setDemandeCode(null)} aria-label={tr('Annuler')} style={{ width: 28, height: 28, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>✕</button>
       </div>
     ) : (
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {modes.map(([lab, svc, actif]) => (
           <button key={svc} onClick={() => agir(svc)} aria-pressed={actif}
-            style={{ padding: '5px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text1)' }}>{lab}</button>
+            style={{ padding: '5px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: actif ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text1)' }}>{lab}</button>
         ))}
       </div>
     );
@@ -3231,7 +3231,7 @@ function FicheMachineHero({ id, hass }) {
         <div style={{ display: 'flex', gap: 10, marginTop: 8, justifyContent: 'center' }}>
           {btns.map(([gi, svc, lbl], bi) => (
             <button key={svc} title={lbl} aria-label={lbl} onClick={() => call(svc)}
-              style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={15} /></button>
+              style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={15} /></button>
           ))}
         </div>
       )}
@@ -3761,7 +3761,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{coverIds.length > 1 ? tr('Volets') : tr('Volet')}</span>
                   {coverPct != null && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)' }}>{covOn ? coverPct + ' %' : 'fermé'}</span>}
                 </span>
-                <span onClick={toggleCovers} role="switch" aria-checked={covOn} aria-label={'Volets ' + room} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCovers(); } }} style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 10, cursor: 'pointer', background: covOn ? 'var(--o-accent)' : 'var(--o-s4)', border: covOn ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}><span style={{ position: 'absolute', top: 2, left: covOn ? 19 : 2, width: 17, height: 17, borderRadius: '50%', background: '#fff', transition: 'left .2s cubic-bezier(.4,1.3,.5,1)' }} /></span>
+                <span onClick={toggleCovers} role="switch" aria-checked={covOn} aria-label={'Volets ' + room} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCovers(); } }} style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 10, cursor: 'pointer', background: covOn ? 'var(--o-accent-fond)' : 'var(--o-s4)', border: covOn ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}><span style={{ position: 'absolute', top: 2, left: covOn ? 19 : 2, width: 17, height: 17, borderRadius: '50%', background: '#fff', transition: 'left .2s cubic-bezier(.4,1.3,.5,1)' }} /></span>
               </div>
             )}
             <span style={{ flex: 1 }} />
@@ -3813,7 +3813,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
           : <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun appareil détecté pour cette pièce.')}<br /><span style={{ fontSize: 12 }}>Loggia regroupe les entités dont le nom contient « {room} ».</span></div>}
         {edit && (() => {
           const btn = (accent) => ({ padding: '7px 12px', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0,
-            background: accent ? 'var(--o-accent)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
+            background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
             border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
@@ -3878,7 +3878,7 @@ function QuickScenes({ hass }) {
           const running = flash === s.haid || (st && st.state === 'on' && s.haid.indexOf('script.') === 0);
           const dead = hass && hass.states && !st;
           return (
-            <button key={s.haid} onClick={(e) => { fxTap(e); run(s); }} className="o-scene-room" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: '14px 15px 15px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', textAlign: 'left', transition: 'all .25s', opacity: dead ? .45 : 1, background: running ? 'var(--o-accent)' : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (running ? 'transparent' : 'var(--o-bd2)'), boxShadow: running ? '0 10px 26px rgba(var(--o-accent-rgb),.4)' : 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))' }}>
+            <button key={s.haid} onClick={(e) => { fxTap(e); run(s); }} className="o-scene-room" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: '14px 15px 15px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', textAlign: 'left', transition: 'all .25s', opacity: dead ? .45 : 1, background: running ? 'var(--o-accent-fond)' : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (running ? 'transparent' : 'var(--o-bd2)'), boxShadow: running ? '0 10px 26px rgba(var(--o-accent-rgb),.4)' : 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                 <Fi i={s.icon} size={18} color={running ? '#fff' : 'var(--o-text1)'} />
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: running ? '#fff' : 'var(--o-bd1)', transition: 'background .25s' }} />
@@ -4516,7 +4516,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
         </div>
         {edit && (() => {
           const btn = (accent) => ({ padding: '7px 12px', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0,
-            background: accent ? 'var(--o-accent)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
+            background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
             border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
@@ -5051,7 +5051,7 @@ function HeroSlider({ ids, dc }) {
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 9 }}>
           {ids.map((id, i) => (
             <button key={id} type="button" aria-label={tr('Carte {n}', { n: i + 1 })} onClick={() => va(i)}
-              style={{ width: i === i2 ? 18 : 6, height: 6, borderRadius: 999, border: 'none', padding: 0, cursor: 'pointer', background: i === i2 ? 'var(--o-accent)' : 'var(--o-bd1)', transition: 'all .25s' }} />
+              style={{ width: i === i2 ? 18 : 6, height: 6, borderRadius: 999, border: 'none', padding: 0, cursor: 'pointer', background: i === i2 ? 'var(--o-accent-fond)' : 'var(--o-bd1)', transition: 'all .25s' }} />
           ))}
         </div>
       )}
@@ -5114,7 +5114,7 @@ function FavorisAccueil({ hass, edit = false }) {
                   <EditBarre>
                     <button onClick={() => (cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
                     <button onClick={() => poser(eps.map(y => cvKey(y) === cvKey(x) ? cvAvecW(x) : y))} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={cvW(x) === 2}
-                      style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
+                      style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
                     <button onClick={() => poser(eps.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
                   </EditBarre>
                 )}
@@ -6201,7 +6201,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
               {/* segment de contrôle : power · luminosité · couleur · temp */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--o-s1)', borderRadius: 999, padding: 6, margin: '22px auto 0', width: 'max-content' }}>
                 <button onClick={() => toggle(pl)} style={{ ...segBase, background: 'transparent', color: 'var(--o-text1)' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 3v9M6.5 7a8 8 0 1 0 11 0" /></svg></button>
-                <button style={{ ...segBase, background: 'var(--o-accent)', color: '#fff', boxShadow: '0 4px 14px rgba(var(--o-accent-rgb),.5)', cursor: 'default' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3M4 4l2 2M18 18l2 2M18 6l2-2M4 20l2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg></button>
+                <button style={{ ...segBase, background: 'var(--o-accent-fond)', color: '#fff', boxShadow: '0 4px 14px rgba(var(--o-accent-rgb),.5)', cursor: 'default' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3M4 4l2 2M18 18l2 2M18 6l2-2M4 20l2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg></button>
                 {pl.rgb && <button onClick={() => setPopMode('color')} style={{ ...segBase, background: 'transparent', boxShadow: popMode === 'color' ? '0 0 0 2px var(--o-text)' : 'none' }}><span style={{ width: 22, height: 22, borderRadius: '50%', background: 'conic-gradient(from 0deg,#ff5f57,var(--o-gold),var(--o-ok),var(--o-accent),var(--o-purple),#ff5f57)' }} /></button>}
                 {pl.ct && <button onClick={() => setPopMode('white')} style={{ ...segBase, background: 'transparent', boxShadow: popMode === 'white' ? '0 0 0 2px var(--o-text)' : 'none' }}><span style={{ width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(90deg,#fff,#ffd27a)' }} /></button>}
               </div>
@@ -6555,7 +6555,7 @@ function ScenesContent({ hass }) {
               <span style={{ display: 'block', padding: '11px 13px 12px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 13, fontWeight: 800, color: on ? 'var(--o-accent-soft)' : 'var(--o-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.name}</span>
-                  {on && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent)', flexShrink: 0 }} />}
+                  {on && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent-fond)', flexShrink: 0 }} />}
                 </span>
                 <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>Luminosité {sc.brightness} %</span>
                 <span style={{ display: 'flex', gap: 4, marginTop: 9 }}>
@@ -7771,7 +7771,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const expToday = avail(EN.injectionJour) ? num(EN.injectionJour) : null;
   const hpArc = Math.round(251 * hpPct / 100);
   const hpOff = useDrawArc(251 - hpArc, 251); // arc HP qui se dessine depuis 0
-  const seg = on => ({ padding: '7px 14px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: on ? 'var(--o-accent)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)' });
+  const seg = on => ({ padding: '7px 14px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)' });
   const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', borderRadius: 'var(--o-radius,18px)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' };
 
   return (
@@ -7799,7 +7799,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
             </div>
           </div>
           <div className="o-en-kpis" style={{ display: 'flex', gap: 24, marginTop: 16, flexWrap: 'wrap' }}>
-            <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{consoAvail ? <Num v={consoW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-accent)' }} />Conso maison</div></div>
+            <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{consoAvail ? <Num v={consoW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />Conso maison</div></div>
             <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-gold)' }}>{solarAvail ? <Num v={solarW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-gold)' }} />Production</div></div>
             {ecoJour != null && <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-ok)' }}><Num v={ecoJour} d={2} suffix=" €" /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('Économie du jour')}</div></div>}
             <div style={{ marginLeft: 'auto', textAlign: 'right' }}><div style={{ fontSize: 25, fontWeight: 800, color: exporting ? 'var(--o-ok)' : '#f87171' }}>{(surplusAvail || consoAvail) ? <Num v={exporting ? surplusW : importW} suffix=" W" /> : '—'}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><FlipText text={exporting ? '↑ ' + tr('Vente réseau') : '↓ ' + tr('Achat réseau')} /></div></div>
@@ -8122,7 +8122,7 @@ function AspirateurContent({ hass }) {
               );
             })}
           </div>
-          <button onClick={() => { const sc = vacScript('pieces_selectionnees'); if (picked.length && sc) runScript(sc); }} style={{ width: '100%', marginTop: 14, padding: 13, borderRadius: 14, border: 'none', cursor: picked.length ? 'pointer' : 'default', fontWeight: 800, fontSize: 13, transition: 'all .2s', background: picked.length ? 'var(--o-accent)' : 'var(--o-s1)', color: picked.length ? '#fff' : 'var(--o-text3)', boxShadow: picked.length ? '0 8px 20px rgba(var(--o-accent-rgb),.35)' : 'none' }}>{picked.length ? (picked.length > 1 ? tr('Nettoyer {n} pièces', { n: picked.length }) : tr('Nettoyer {n} pièce', { n: picked.length })) : tr('Sélectionne des pièces')}</button>
+          <button onClick={() => { const sc = vacScript('pieces_selectionnees'); if (picked.length && sc) runScript(sc); }} style={{ width: '100%', marginTop: 14, padding: 13, borderRadius: 14, border: 'none', cursor: picked.length ? 'pointer' : 'default', fontWeight: 800, fontSize: 13, transition: 'all .2s', background: picked.length ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: picked.length ? '#fff' : 'var(--o-text3)', boxShadow: picked.length ? '0 8px 20px rgba(var(--o-accent-rgb),.35)' : 'none' }}>{picked.length ? (picked.length > 1 ? tr('Nettoyer {n} pièces', { n: picked.length }) : tr('Nettoyer {n} pièce', { n: picked.length })) : tr('Sélectionne des pièces')}</button>
         </div>
         {idCam && (
           <div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '18px 20px' }}>
@@ -8869,7 +8869,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
                 onKeyDown={(e) => { if (e.key === 'Enter') validerCode(); if (e.key === 'Escape') setDemandeCode(null); }}
                 placeholder={tr('Code')} aria-label={tr('Code')}
                 style={{ width: 118, padding: '6px 10px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
-              <button onClick={validerCode} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'var(--o-accent)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>{tr('Valider')}</button>
+              <button onClick={validerCode} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>{tr('Valider')}</button>
               <button onClick={() => setDemandeCode(null)} aria-label={tr('Annuler')} style={{ width: 28, height: 28, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer' }}>✕</button>
             </div>
           ) : (
@@ -9449,7 +9449,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
             {dense && dom === 'climate' && a.current_temperature != null ? tr('actuel {n}°', { n: a.current_temperature }) : stateTxt}
           </div>
         </div>
-        {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + name} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={(e) => { e.stopPropagation(); call('homeassistant', on ? 'turn_off' : 'turn_on'); }} style={{ width: 44, height: 25, borderRadius: 14, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
+        {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + name} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={(e) => { e.stopPropagation(); call('homeassistant', on ? 'turn_off' : 'turn_on'); }} style={{ width: 44, height: 25, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
         {runnable && !dead && <button onClick={(e) => { e.stopPropagation(); call(runnable[0], runnable[1]); }} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
         {dom === 'lock' && !dead && <button onClick={(e) => { e.stopPropagation(); call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ padding: '7px 12px', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{s === 'locked' ? 'Déverrouiller' : 'Verrouiller'}</button>}
         {/* Alarme : le geste attendu, comme la serrure — armer quand elle
@@ -9485,7 +9485,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           // Pilules rectangulaires sans filet, le dessin de la maquette —
           // le même pour tous les minis de la compacte.
           const mini = { width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, padding: 0 };
-          const miniAccent = { ...mini, background: 'var(--o-accent)', color: '#fff' };
+          const miniAccent = { ...mini, background: 'var(--o-accent-fond)', color: '#fff' };
           // Climat : la consigne ENTRE les deux boutons, comme la maquette.
           if (dom === 'climate') {
             const base = ovT != null ? ovT : a.temperature;
@@ -9565,7 +9565,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           <div style={{ display: 'flex', gap: 10, marginTop: 12, alignItems: 'center' }}>
             {btns.map(([gi, svc, lbl], bi) => (
               <button key={svc} title={lbl} aria-label={lbl} onClick={(e) => { e.stopPropagation(); call(dom, svc); }}
-                style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={14} /></button>
+                style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={14} /></button>
             ))}
             {dom === 'vacuum' && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
               <div style={{ marginLeft: 'auto' }}>
@@ -10049,12 +10049,12 @@ function RailArm({ id, hass }) {
             onKeyDown={(e) => { if (e.key === 'Enter') valider(); if (e.key === 'Escape') setDemande(null); }}
             placeholder={tr('Code')} aria-label={tr('Code')}
             style={{ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 14, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
-          <button onClick={valider} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'var(--o-accent)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
+          <button onClick={valider} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
           <button onClick={() => setDemande(null)} aria-label={tr('Annuler')} style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>✕</button>
         </>
       ) : armChips(a, st && st.state).map(([lbl, svc, actif]) => (
         <button key={svc} onClick={() => agir(svc)} aria-pressed={actif}
-          style={{ position: 'relative', flex: 1, padding: '11px 6px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
+          style={{ position: 'relative', flex: 1, padding: '11px 6px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: actif ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
           {(cpt && svcVise === svc) ? cpt.reste + ' s' : lbl}
           {/* Le décompte se lit ici aussi : le tour du mode visé se referme. */}
           {cpt && svcVise === svc && <ArmAnneau pct={100 - (cpt.reste / cpt.total) * 100} r={10} />}
@@ -10144,14 +10144,14 @@ function CvAlarm({ id, hass, sans = false }) {
               onKeyDown={(e) => { if (e.key === 'Enter') valider(); if (e.key === 'Escape') setDemande(null); }}
               placeholder={tr('Code')} aria-label={tr('Code')}
               style={{ flex: 1, minWidth: 0, padding: '6px 10px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
-            <button onClick={valider} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'var(--o-accent)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
+            <button onClick={valider} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
             <button onClick={() => setDemande(null)} aria-label={tr('Annuler')} style={{ width: 30, height: 30, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>✕</button>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 8, margin: '7px 0 6px' }}>
             {CHIPS.map(([lbl, svc, actif]) => (
               <button key={svc} onClick={() => agir(svc)}
-                style={{ position: 'relative', flex: 1, padding: sans ? '10px 4px' : '6px 4px', borderRadius: 10, border: 'none', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
+                style={{ position: 'relative', flex: 1, padding: sans ? '10px 4px' : '6px 4px', borderRadius: 10, border: 'none', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
                 {(cpt && svcVise === svc) ? cpt.reste + ' s' : lbl}
                 {/* Le tour se referme au rythme du décompte : à zéro, le mode
                   * visé est cerné — l'alarme prend. */}
@@ -10266,7 +10266,7 @@ function CvHistory({ id, hass, demoPoints = null }) {
       {barres && barres.length > 0 && (
         <div aria-hidden="true" style={{ position: 'absolute', left: 12, right: 12, bottom: 10, height: '48%', display: 'flex', alignItems: 'flex-end', gap: 6 }}>
           {barres.map((v, i) => (
-            <div key={i} style={{ flex: 1, minWidth: 0, height: Math.max(8, (v / bmax) * 100) + '%', borderRadius: 10, background: i === barres.length - 1 ? 'var(--o-accent)' : 'rgba(var(--o-accent-rgb),.35)' }} />
+            <div key={i} style={{ flex: 1, minWidth: 0, height: Math.max(8, (v / bmax) * 100) + '%', borderRadius: 10, background: i === barres.length - 1 ? 'var(--o-accent-fond)' : 'rgba(var(--o-accent-rgb),.35)' }} />
           ))}
         </div>
       )}
@@ -10426,7 +10426,7 @@ function CvEnergie({ hass, roles = null }) {
         <div style={{ fontSize: 19, fontWeight: 800, marginTop: 1 }}>{maison != null ? maison : '—'}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 5 }}>W</span></div>
         <div style={{ display: 'flex', height: 5, borderRadius: 4, background: 'var(--o-bd1)', margin: '6px 0 7px', overflow: 'hidden' }}>
           <div style={{ width: (part || 0) + '%', background: 'var(--o-ok)', transition: 'width .3s' }} />
-          <div style={{ width: (100 - (part || 0)) + '%', background: 'var(--o-accent)', opacity: .8, transition: 'width .3s' }} />
+          <div style={{ width: (100 - (part || 0)) + '%', background: 'var(--o-accent-fond)', opacity: .8, transition: 'width .3s' }} />
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {tuile(tr('Solaire'), sol != null ? Math.round(sol) + ' W' : null, 'var(--o-ok)')}
@@ -10506,7 +10506,7 @@ function CvCalendrier({ id, hass }) {
         {semaine.map((d, i) => {
           const cJour = d.toDateString() === auj.toDateString();
           return (
-            <span key={'j' + i} style={{ fontSize: 12, fontWeight: cJour ? 800 : 600, lineHeight: '24px', width: 24, height: 24, borderRadius: '50%', justifySelf: 'center', background: cJour ? 'var(--o-accent)' : 'transparent', color: cJour ? '#fff' : 'var(--o-text1)' }}>{d.getDate()}</span>
+            <span key={'j' + i} style={{ fontSize: 12, fontWeight: cJour ? 800 : 600, lineHeight: '24px', width: 24, height: 24, borderRadius: '50%', justifySelf: 'center', background: cJour ? 'var(--o-accent-fond)' : 'transparent', color: cJour ? '#fff' : 'var(--o-text1)' }}>{d.getDate()}</span>
           );
         })}
         {semaine.map((d, i) => <span key={'p' + i} style={{ height: 4, display: 'flex', justifyContent: 'center' }}>{marques.has(cleJour(d)) && <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--o-accent-soft)' }} />}</span>)}
@@ -10859,7 +10859,7 @@ const CV_GALERIE = () => [
 function CarteApercu({ x, hass, dc, lbl, actif = false, onClick }) {
   const h = cvRowsDe(x) === 1 ? 88 : 184;
   return (
-    <button onClick={onClick} aria-pressed={actif} style={{ display: 'block', width: '100%', textAlign: 'left', padding: 8, borderRadius: 14, cursor: 'pointer', background: actif ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent)' : 'var(--o-bd2)') }}>
+    <button onClick={onClick} aria-pressed={actif} style={{ display: 'block', width: '100%', textAlign: 'left', padding: 8, borderRadius: 14, cursor: 'pointer', background: actif ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent-fond)' : 'var(--o-bd2)') }}>
       <span style={{ display: 'block', fontSize: 11, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: actif ? 'var(--o-accent-soft)' : 'var(--o-text3)', margin: '0 2px 7px' }}>{lbl}</span>
       <span className="o-cvfit" style={{ display: 'block', height: h, pointerEvents: 'none', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)' }}>
         <CvTyped x={x} hass={hass} dc={dc} />
@@ -11070,7 +11070,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           {edit && renaming
             ? <div style={{ display: 'flex', gap: 10, alignItems: 'center', maxWidth: 420 }}>
                 <input value={nameDraft} onChange={e => setNameDraft(e.target.value)} autoFocus style={cvInp} />
-                <button onClick={() => { const n = nameDraft.trim(); if (n) onSave && onSave({ ...cv, name: n }); setRenaming(false); }} style={{ padding: '11px 16px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>OK</button>
+                <button onClick={() => { const n = nameDraft.trim(); if (n) onSave && onSave({ ...cv, name: n }); setRenaming(false); }} style={{ padding: '11px 16px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>OK</button>
               </div>
             : <h1 onClick={edit ? () => setRenaming(true) : undefined} style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, cursor: edit ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: 12 }}>{cv.name}{edit && <Fi i="pencil" size={16} color="var(--o-text3)" />}</h1>}
           <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div>
@@ -11100,7 +11100,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
                     * son propre éditeur. */}
                   <button onClick={() => (cvEstTpl(x) ? setTplEdit(x) : cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
                   <button onClick={() => basculerW(x)} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={cvW(x) === 2}
-                    style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
+                    style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
                   <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
                 </EditBarre>
               )}
@@ -11509,7 +11509,7 @@ function MobileNav({ view, onNav, onMenu }) {
     <nav ref={navRef} className="loggia-mobilenav" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, alignItems: 'stretch', background: 'var(--o-header)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', paddingBottom: 'calc(var(--o-safe-bottom, 0px) + 6px)', boxShadow: '0 -8px 24px rgba(0,0,0,.22)' }}>
       {items.map(it => { const on = view === it.id; return (
         <button key={it.id} onClick={() => onNav(it.id)} style={cell(on)}>
-          {on && <span style={{ position: 'absolute', top: 0, width: 28, height: 3, borderRadius: '0 0 3px 3px', background: 'var(--o-accent)' }} />}
+          {on && <span style={{ position: 'absolute', top: 0, width: 28, height: 3, borderRadius: '0 0 3px 3px', background: 'var(--o-accent-fond)' }} />}
           <Fi i={it.icon} size={20} color={on ? 'var(--o-accent)' : 'var(--o-text2)'} />
           <span>{it.label}</span>
         </button>

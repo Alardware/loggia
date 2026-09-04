@@ -137,7 +137,7 @@ function AlertesTele({ hass, cardSt }) {
   };
   const Tgl = ({ on, cb, label }) => (
     <span onClick={cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } }}
-      style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}>
+      style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}>
       <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
     </span>
   );
@@ -258,7 +258,7 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
           {tile(alTxt, tr('Alarme'), 'var(--o-accent)')}
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
-          <span style={{ flex: 1.4, height: 14, borderRadius: RAD[3], background: 'var(--o-accent)', opacity: .85 }} />
+          <span style={{ flex: 1.4, height: 14, borderRadius: RAD[3], background: 'var(--o-accent-fond)', opacity: .85 }} />
           <span style={{ flex: 1, height: 14, borderRadius: RAD[3], background: 'var(--o-s1)' }} />
           <span style={{ flex: 1, height: 14, borderRadius: RAD[3], background: 'var(--o-s2)' }} />
           <span style={{ flex: 1, height: 14, borderRadius: RAD[3], background: 'var(--o-s3)' }} />
@@ -350,7 +350,7 @@ function AdminPinEditor() {
         <div><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>CONFIRMER</div><input value={cf} onChange={e => { setCf(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" style={inp} /></div>
       </div>
       {msg && <div style={{ fontSize: 12, fontWeight: 600, color: msg.ok ? 'var(--o-ok)' : '#f87171', marginBottom: 12 }}>{msg.t}</div>}
-      <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer le code')}</button>
+      <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer le code')}</button>
     </div>
   );
 }
@@ -404,7 +404,7 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
           {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 14, background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', color: '#f87171', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Supprimer')}</button>}
           <div style={{ flex: 1 }} />
           <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
-          <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
+          <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
         </div>
       </div>
     </div>
@@ -439,7 +439,7 @@ function FondPhotoBtn({ actif, onLook }) {
       <input ref={fichierRef} type="file" accept="image/*" onChange={choisir} style={{ display: 'none' }} />
       <button onClick={() => { if (!photo) { fichierRef.current && fichierRef.current.click(); return; } onLook({ fond: 'photo' }); }}
         aria-pressed={actif} aria-label={tr("Fond d'écran") + ' ' + tr('Photo')}
-        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: actif ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: actif ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent-fond)' : 'var(--o-bd1)') }}>
         <span style={{ width: 34, height: 22, borderRadius: 10, border: '1px solid ' + (actif ? 'var(--o-accent)' : 'var(--o-bd2)'), background: photo ? `url("${photo}") center/cover` : 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{!photo && <Fi i="picture" size={11} color="var(--o-text3)" />}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: actif ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{tr('Photo')}</span>
       </button>
@@ -479,7 +479,7 @@ function CvEditor({ cv, hass, onSave, onClose }) {
         <TplForm hass={getHass()} onAdd={(t) => setEnts(prev => [...prev, t])} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
           <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
-          <button onClick={save} style={{ padding: '11px 20px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: name.trim() ? 1 : .5 }}>{tr('Enregistrer')}</button>
+          <button onClick={save} style={{ padding: '11px 20px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: name.trim() ? 1 : .5 }}>{tr('Enregistrer')}</button>
         </div>
       </div>
     </div>
@@ -709,7 +709,7 @@ export function ViewEntSheet({ view, hass, onClose }) {
         <EntSections ent={ent} setEnt={setEnt} entSet={entSet} dlists={dlists} only={VIEW_ENT_SECTIONS[view]} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
           <button onClick={close} style={{ padding: '10px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
-          <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
+          <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
         </div>
       </>)}
     </BottomSheet>
@@ -886,7 +886,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const autoRel = (t) => { try { if (!t) return ''; const m = (Date.now() - new Date(t).getTime()) / 60000; if (m < 1) return "à l'instant"; if (m < 60) return 'il y a ' + Math.round(m) + ' min'; if (m < 1440) return 'il y a ' + Math.round(m / 60) + ' h'; return 'il y a ' + Math.round(m / 1440) + ' j'; } catch (e) { return ''; } };
   const autos = (hass && hass.states) ? Object.keys(hass.states).filter(e => e.indexOf('automation.') === 0).map(id => { const s = hass.states[id], at = s.attributes || {}; return { id, name: at.friendly_name || id.replace('automation.', '').replace(/_/g, ' '), on: autoOv[id] != null ? autoOv[id] : s.state === 'on', last: at.last_triggered }; }).sort((a, b) => a.name.localeCompare(b.name)) : [];
   const tabStyle = on => on
-    ? { padding: '9px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent)', color: '#fff', flexShrink: 0, whiteSpace: 'nowrap' }
+    ? { padding: '9px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff', flexShrink: 0, whiteSpace: 'nowrap' }
     : { padding: '9px 18px', borderRadius: 14, border: 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s2)', color: 'var(--o-text1)', flexShrink: 0, whiteSpace: 'nowrap' };
   const cardSt = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' };
 
@@ -976,7 +976,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const secBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' });
   const SecTgl = ({ on, cb, label }) => (
     <span onClick={cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } }}
-      style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 10, cursor: 'pointer', background: on ? 'var(--o-accent)' : 'var(--o-s4)', border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}>
+      style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 10, cursor: 'pointer', background: on ? 'var(--o-accent-fond)' : 'var(--o-s4)', border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}>
       <span style={{ position: 'absolute', top: 2, left: on ? 19 : 2, width: 17, height: 17, borderRadius: '50%', background: '#fff', transition: 'left .2s cubic-bezier(.4,1.3,.5,1)' }} />
     </span>
   );
@@ -1087,7 +1087,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         );
         const Tgl = ({ on, cb, label, off = false }) => (
           <span onClick={off ? undefined : cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={off ? -1 : 0} onKeyDown={(e) => { if (!off && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); cb(); } }}
-            style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: off ? 'not-allowed' : 'pointer', opacity: off ? .45 : 1, flexShrink: 0, transition: 'background .25s', display: 'inline-block' }}>
+            style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: off ? 'not-allowed' : 'pointer', opacity: off ? .45 : 1, flexShrink: 0, transition: 'background .25s', display: 'inline-block' }}>
             <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
           </span>
         );
@@ -1204,8 +1204,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 const on = look.radius === v;
                 return (
                   <button key={v} onClick={() => onLook({ radius: v })} aria-pressed={on} aria-label={'Arrondi ' + lb}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
-                    <span style={{ width: 22, height: 22, borderRadius: r, background: 'var(--o-s1)', border: '2px solid ' + (on ? 'var(--o-accent)' : 'var(--o-text3)') }} />
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent-fond)' : 'var(--o-bd1)') }}>
+                    <span style={{ width: 22, height: 22, borderRadius: r, background: 'var(--o-s1)', border: '2px solid ' + (on ? 'var(--o-accent-fond)' : 'var(--o-text3)') }} />
                     <span style={{ fontSize: 11, fontWeight: 700, color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</span>
                   </button>
                 );
@@ -1227,8 +1227,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 const on = (look.fond || 'aucun') !== 'photo';
                 return (
                   <button onClick={() => onLook({ fond: 'aucun' })} aria-pressed={on} aria-label={tr("Fond d'écran") + ' ' + tr('Aucun')}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)') }}>
-                    <span style={{ width: 34, height: 22, borderRadius: 10, background: 'var(--o-bg)', border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd2)') }} />
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent-fond)' : 'var(--o-bd1)') }}>
+                    <span style={{ width: 34, height: 22, borderRadius: 10, background: 'var(--o-bg)', border: '1px solid ' + (on ? 'var(--o-accent-fond)' : 'var(--o-bd2)') }} />
                     <span style={{ fontSize: 11, fontWeight: 700, color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{tr('Aucun')}</span>
                   </button>
                 );
@@ -1327,7 +1327,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
             <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 6 }}>{tr('Plus court = plus de requêtes vers Home Assistant.')}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
-              <button onClick={saveHaCfg} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
+              <button onClick={saveHaCfg} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
               <button onClick={resetHaCfg} style={{ padding: '10px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Rétablir')}</button>
               <span style={{ flex: 1 }} />
               <button onClick={ping} disabled={latBusy} style={{ padding: '9px 14px', borderRadius: 10, background: 'transparent', border: 'none', color: 'var(--o-text3)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>{latBusy ? 'Test…' : 'Tester la session'}</button>
@@ -1409,7 +1409,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <button onClick={() => setTab('entites')} style={{ padding: '6px 11px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>{tr('Entités')}</button>
             {locked
               ? <span style={{ width: 46, textAlign: 'center', flexShrink: 0 }}><Fi i="lock" size={13} color="var(--o-text3)" /></span>
-              : <span onClick={onT} role="switch" aria-checked={on} aria-label={name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onT(); } }} style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
+              : <span onClick={onT} role="switch" aria-checked={on} aria-label={name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onT(); } }} style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
           </div>
         );
         const hiddenNames = BUILTIN_VIEWS.filter(v => cfg.hidden.has(v[0])).map(v => v[1]);
@@ -1470,7 +1470,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
             <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: a.on ? 'var(--o-text)' : 'var(--o-text2)' }}>{a.name}</div><div style={{ fontSize: 12, fontWeight: 600, color: a.on ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>{a.on ? 'active' : 'inactive'}{a.last ? ' · dernière exécution ' + autoRel(a.last) : ''}</div></div>
             <button onClick={() => runAuto(a)} title={tr('Exécuter maintenant')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><Fi i="play" size={12} />{tr('Exécuter')}</button>
-            <span onClick={() => toggleAuto(a)} role="switch" aria-checked={a.on} aria-label={a.name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAuto(a); } }} style={{ width: 46, height: 26, borderRadius: 14, background: a.on ? 'var(--o-accent)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: a.on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>
+            <span onClick={() => toggleAuto(a)} role="switch" aria-checked={a.on} aria-label={a.name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAuto(a); } }} style={{ width: 46, height: 26, borderRadius: 14, background: a.on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: a.on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>
           </div>
         );
         const lastRun = autos.map(a => a.last).filter(Boolean).sort().slice(-1)[0];
@@ -1580,14 +1580,14 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 <textarea value={syncTxt} onChange={e => setSyncTxt(e.target.value)} rows={4} spellCheck={false} style={{ ...entInp, fontFamily: 'monospace', fontSize: 11, resize: 'vertical' }} />
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 7 }}>
                   <button onClick={() => { setSyncOpen(false); setSyncMsg(''); }} style={{ padding: '8px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Fermer</button>
-                  <button onClick={doImport} style={{ padding: '8px 15px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Appliquer et recharger</button>
+                  <button onClick={doImport} style={{ padding: '8px 15px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Appliquer et recharger</button>
                 </div>
               </div>
             )}
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
             <button onClick={resetEnt} style={{ padding: '10px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Rétablir les défauts')}</button>
-            <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
+            <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
           </div>
         </div>
       </>)}

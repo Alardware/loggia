@@ -581,6 +581,20 @@ html.loggia-light main:has(.o-wx3d) .loggia-hdr { background: rgba(238, 242, 248
  * compteur qui gigote. */
 body, button, input, select, textarea { font-variant-numeric: tabular-nums; }
 
+/* ── L'accent quand il porte du texte ──────────────────────────────────
+ * `--o-accent` est un bleu vif : du blanc pose dessus donne 3,22:1, sous le
+ * minimum lisible de 4,5. On ne touche pas a l'accent lui-meme — c'est
+ * l'identite, elle suit les presets et la couleur primaire de Home
+ * Assistant. On en derive une version assombrie de 17 %, reservee aux FONDS
+ * qui portent du texte. `color-mix` recalcule tout seul quand l'accent
+ * change : un preset ou un theme HA reste suivi.
+ *
+ * 82 % d'accent + 17 % de noir amene le bleu par defaut a 4,6:1. */
+:root { --o-accent-fond: var(--o-accent); }
+@supports (color: color-mix(in srgb, red 50%, black)) {
+  :root { --o-accent-fond: color-mix(in srgb, var(--o-accent) 82%, #000); }
+}
+
 /* Le rendu du texte clair sur fond sombre bave sans lissage : les graisses
  * 700 et 800, dont l'interface est faite, s'empatent. */
 body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }

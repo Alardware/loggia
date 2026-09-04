@@ -311,7 +311,7 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
   };
 
   const champ = { width: '100%', padding: '10px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600, boxSizing: 'border-box' };
-  const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
+  const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
   const label = { fontSize: 12, fontWeight: 700, marginBottom: 6 };
 
   return (
@@ -408,7 +408,7 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 2 }}>
           <button onClick={onFermer} style={{ padding: '10px 16px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text2)' }}>{tr('Annuler')}</button>
           <button onClick={valider} disabled={!pret}
-            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', cursor: pret ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, background: pret ? 'var(--o-accent)' : 'var(--o-s1)', color: pret ? '#fff' : 'var(--o-text3)' }}>
+            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', cursor: pret ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, background: pret ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: pret ? '#fff' : 'var(--o-text3)' }}>
             {tr('Enregistrer')}
           </button>
         </div>

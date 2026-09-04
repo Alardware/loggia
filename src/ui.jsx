@@ -134,7 +134,7 @@ export const userBg = (u) => { const im = userImg(u); if (im) return `url(${im})
  * seule barre, en tete du contenu, partout.
  */
 export const editBtn = (accent) => ({ padding: '7px 12px', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0,
-  background: accent ? 'var(--o-accent)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
+  background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
   border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
 
 export const ViewEditBar = ({ texte, onEnt, entLabel = 'Entités de la vue', children, style }) => (
@@ -276,7 +276,7 @@ export function TplForm({ onAdd, hass = null, initial = null }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ flex: 1, fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Jinja, évalué par Home Assistant. La carte se met à jour en direct.')}</span>
         <button disabled={!ok} onClick={() => { if (!ok) return; onAdd({ t: 'tpl', id: initial ? initial.id : 'tpl_' + Math.random().toString(36).slice(2, 8), name: nom.trim(), src: src.trim() }); if (!initial) { setNom(''); setSrc(''); } }}
-          style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: ok ? 'pointer' : 'default', opacity: ok ? 1 : .5, flexShrink: 0 }}>{initial ? tr('Enregistrer') : tr('Ajouter')}</button>
+          style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: ok ? 'pointer' : 'default', opacity: ok ? 1 : .5, flexShrink: 0 }}>{initial ? tr('Enregistrer') : tr('Ajouter')}</button>
       </div>
     </div>
   );
