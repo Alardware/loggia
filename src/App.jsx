@@ -3535,11 +3535,15 @@ function useDomainCards(hass) {
   const [mediaPop, setMediaPop] = useState(null);
   const [sensPop, setSensPop] = useState(null);
   const [appPop, setAppPop] = useState(null);
+  const [calPop, setCalPop] = useState(null);
   // La fiche du domaine, depuis n'importe quelle carte — la compacte ouvre la
   // même popup que la riche. Tout ce qui n'a pas de fiche dédiée reçoit la
   // FICHE APPAREIL UNIVERSELLE : l'appareil entier, rendu par le registre.
   const ouvrir = (id) => {
     const d = String(id).split('.')[0];
+    // Le calendrier n'ouvre pas une fiche d'entite : un agenda n'a ni etat ni
+    // commande, il a un mois.
+    if (d === 'calendar') { setCalPop(id); return; }
     const st = S[id]; const a = (st && st.attributes) || {};
     if (d === 'light') {
       const modes = a.supported_color_modes || [];
@@ -3574,6 +3578,7 @@ function useDomainCards(hass) {
       {mediaPop && <RoomMediaSheet id={mediaPop} hass={hass} onClose={() => setMediaPop(null)} />}
       {sensPop && <SensorSheet id={sensPop} hass={hass} onClose={() => setSensPop(null)} />}
       {appPop && <FicheAppareil id={appPop} hass={hass} onClose={() => setAppPop(null)} />}
+      {calPop && <FeuilleCalendrier hass={hass} onClose={() => setCalPop(null)} />}
     </>
   );
   const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); };
@@ -5060,7 +5065,10 @@ function habillagePiece(nom, mdi) {
  * configuration : pas de calendrier chez vous, pas de carte. Les evenements ne
  * se poussent pas : l'API calendrier de HA est un GET — on relit au montage,
  * puis toutes les quinze minutes, et quand un calendrier apparait ou disparait. */
-function useAgenda(hass, seulement = null) {
+/* `plage` : { debut, fin } pour lire un mois entier au lieu des sept jours
+ * qui suffisent au rail. Sans elle, rien ne change — les appelants d'origine
+ * gardent leur fenetre et leur plafond de huit evenements. */
+function useAgenda(hass, seulement = null, plage = null) {
   const [events, setEvents] = useState([]);
   const S = hass && hass.states;
   const ids = useMemo(() => (seulement && seulement.length) ? seulement : (S ? Object.keys(S).filter(id => id.indexOf('calendar.') === 0) : []), [S, seulement ? seulement.join('|') : '']);
@@ -5070,8 +5078,8 @@ function useAgenda(hass, seulement = null) {
     if (!api || !sig) { setEvents([]); return; }
     let mort = false;
     const lire = async () => {
-      const debut = new Date(); debut.setSeconds(0, 0);
-      const fin = new Date(debut.getTime() + 7 * 864e5);
+      const debut = plage ? plage.debut : (() => { const d = new Date(); d.setSeconds(0, 0); return d; })();
+      const fin = plage ? plage.fin : new Date(debut.getTime() + 7 * 864e5);
       const q = '?start=' + encodeURIComponent(debut.toISOString()) + '&end=' + encodeURIComponent(fin.toISOString());
       const tous = [];
       for (const id of sig.split('|')) {
@@ -5083,12 +5091,12 @@ function useAgenda(hass, seulement = null) {
       if (mort) return;
       const quand = (e) => new Date(e.start.dateTime || (e.start.date + 'T00:00:00')).getTime();
       tous.sort((x, y) => quand(x) - quand(y));
-      setEvents(tous.slice(0, 8));
+      setEvents(plage ? tous : tous.slice(0, 8));
     };
     lire();
     const iv = setInterval(lire, 15 * 60000);
     return () => { mort = true; clearInterval(iv); };
-  }, [api ? 1 : 0, sig]);
+  }, [api ? 1 : 0, sig, plage ? plage.debut.getTime() : 0, plage ? plage.fin.getTime() : 0]);
   return events;
 }
 
@@ -5978,7 +5986,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           })();
           const railCal = calRailId ? (
             <div>
-              <div style={{ height: 184 }} className="o-hero"><CvCalendrier id={calRailId} hass={dashHass} /></div>
+              <div style={{ height: 184 }} className="o-hero"><CvCalendrier id={calRailId} hass={dashHass} onOpen={dc.ouvrir} /></div>
             </div>
           ) : null;
           const secsRail = { etats: railEtats, rappels: railRappels, calendrier: railCal, agenda: railAgenda };
@@ -10762,9 +10770,167 @@ function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
   );
 }
 
+/* Le calendrier en grand : le mois entier, et le choix des agendas.
+ *
+ * La carte du rail dit la semaine ; elle ne peut pas dire le mois sans
+ * devenir illisible. Le clic ouvre donc ce que la carte resume, avec la
+ * meme grammaire — anneau sur les jours qui portent un rendez-vous, pastille
+ * sur aujourd'hui — pour qu'on reconnaisse la semaine qu'on vient de voir.
+ *
+ * Le jour choisi montre ses evenements dessous. Un mois sans cela ne serait
+ * qu'un almanach : on saurait QUE quelque chose arrive, jamais quoi.
+ */
+function FeuilleCalendrier({ hass, onClose }) {
+  const S = (hass && hass.states) || {};
+  const tousCals = useMemo(() => Object.keys(S).filter(k => k.indexOf('calendar.') === 0).sort(), [Object.keys(S).length]);
+  /* Les agendas retenus. Rien de choisi = tous : une maison qui n'a jamais
+   * ouvert ce reglage doit voir son calendrier, pas un mois vide. */
+  const [choisis, setChoisis] = useState(() => {
+    const c = cfgVal('loggia_agendas', null);
+    return Array.isArray(c) && c.length ? c.filter(x => typeof x === 'string') : null;
+  });
+  const [reglages, setReglages] = useState(false);
+  const actifs = useMemo(() => {
+    const l = (choisis || tousCals).filter(k => tousCals.indexOf(k) >= 0);
+    return l.length ? l : tousCals;
+  }, [choisis ? choisis.join('|') : '', tousCals.join('|')]);
+
+  const auj = new Date(); auj.setHours(0, 0, 0, 0);
+  const [ancre, setAncre] = useState(() => new Date(auj.getFullYear(), auj.getMonth(), 1));
+  const [choisi, setChoisi] = useState(() => new Date(auj));
+
+  /* La grille commence au LUNDI qui precede le 1er et tient six semaines :
+   * un mois qui commence un dimanche en occupe six, et une grille qui change
+   * de hauteur d'un mois a l'autre fait sauter tout ce qui est dessous. */
+  const debutGrille = useMemo(() => {
+    const d = new Date(ancre); d.setDate(1 - ((ancre.getDay() + 6) % 7)); d.setHours(0, 0, 0, 0); return d;
+  }, [ancre.getTime()]);
+  const finGrille = useMemo(() => new Date(debutGrille.getTime() + 42 * 864e5), [debutGrille.getTime()]);
+  const plage = useMemo(() => ({ debut: debutGrille, fin: finGrille }), [debutGrille.getTime(), finGrille.getTime()]);
+  const events = useAgenda(hass, actifs, plage);
+
+  const cleJour = (d) => d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+  const dateDe = (e) => new Date(e.start.dateTime || (e.start.date + 'T00:00:00'));
+  const parJour = useMemo(() => {
+    const m = new Map();
+    for (const e of events) { const k = cleJour(dateDe(e)); if (!m.has(k)) m.set(k, []); m.get(k).push(e); }
+    return m;
+  }, [events]);
+
+  const jours = useMemo(() => Array.from({ length: 42 }, (_, i) => new Date(debutGrille.getTime() + i * 864e5)), [debutGrille.getTime()]);
+  const duJour = parJour.get(cleJour(choisi)) || [];
+  const moisAns = ancre.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+  const bougerMois = (n) => {
+    const d = new Date(ancre.getFullYear(), ancre.getMonth() + n, 1);
+    setAncre(d);
+    // Le jour choisi suit le mois, sinon la liste du bas parlerait d'un jour
+    // qui n'est plus a l'ecran.
+    setChoisi(d.getFullYear() === auj.getFullYear() && d.getMonth() === auj.getMonth() ? new Date(auj) : d);
+  };
+  const basculer = (k) => {
+    const base = choisis || tousCals;
+    const suiv = base.indexOf(k) >= 0 ? base.filter(x => x !== k) : base.concat(k);
+    // Tout decocher reviendrait a un mois vide sans rien dire : on garde au
+    // moins celui qu'on vient de toucher.
+    const val = suiv.length ? suiv : [k];
+    setChoisis(val);
+    cfgSet({ loggia_agendas: val.length === tousCals.length ? null : val });
+  };
+  const heureDe = (e) => e.start.dateTime
+    ? dateDe(e).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
+    : tr('journée');
+  const nomCal = (id) => ((S[id] || {}).attributes || {}).friendly_name || id.replace('calendar.', '');
+
+  const btnRond = { width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (<>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <button onClick={close} aria-label={tr('Fermer')} style={btnRond}><Fi i="cross" size={14} /></button>
+        <span style={{ flex: 1, fontSize: 17, fontWeight: 800, textTransform: 'capitalize', letterSpacing: '-.01em' }}>{moisAns}</span>
+        <button onClick={() => bougerMois(-1)} aria-label={tr('Mois précédent')} style={btnRond}><Fi i="angle-left" size={14} /></button>
+        <button onClick={() => bougerMois(1)} aria-label={tr('Mois suivant')} style={btnRond}><Fi i="angle-right" size={14} /></button>
+        {tousCals.length > 1 && (
+          <button onClick={() => setReglages(v => !v)} aria-label={tr('Choisir les agendas')} aria-pressed={reglages}
+            style={{ ...btnRond, background: reglages ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: reglages ? '#fff' : 'var(--o-text1)' }}><Fi i="settings-sliders" size={14} /></button>
+        )}
+      </div>
+
+      {reglages && (
+        <div style={{ marginBottom: 14, padding: 12, borderRadius: 16, background: 'var(--o-s1)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78 }}>{tr('AGENDAS AFFICHÉS')}</div>
+          {tousCals.map(k => {
+            const on = actifs.indexOf(k) >= 0;
+            return (
+              <button key={k} onClick={() => basculer(k)} aria-pressed={on}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', minHeight: 44, borderRadius: 12, cursor: 'pointer',
+                  border: 'var(--o-bw,1px) solid var(--o-bd2)', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'transparent', color: 'var(--o-text1)', textAlign: 'left' }}>
+                <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: on ? 'var(--o-accent-fond)' : 'transparent', border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+                  {on && <Fi i="check" size={11} color="#fff" />}
+                </span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomCal(k)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', rowGap: 5, textAlign: 'center' }}>
+        {jours.slice(0, 7).map((d, i) => <span key={'e' + i} style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em', color: 'var(--o-text1)', opacity: .78, paddingBottom: 4 }}>{d.toLocaleDateString(locale(), { weekday: 'narrow' })}</span>)}
+        {jours.map((d, i) => {
+          const cJour = d.getTime() === auj.getTime();
+          const sel = d.getTime() === new Date(choisi).setHours(0, 0, 0, 0);
+          const horsMois = d.getMonth() !== ancre.getMonth();
+          const n = (parJour.get(cleJour(d)) || []).length;
+          return (
+            <button key={'j' + i} onClick={() => setChoisi(new Date(d))} aria-pressed={sel}
+              aria-label={d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }) + (n ? ' · ' + n : '')}
+              style={{ position: 'relative', width: 36, height: 36, justifySelf: 'center', border: 'none', background: 'transparent',
+                cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {n > 0 && !cJour && <span aria-hidden="true" style={{ position: 'absolute', inset: 4, borderRadius: '50%', border: (n > 1 ? 2 : 1.5) + 'px solid var(--o-accent-soft)', opacity: horsMois ? .35 : 1 }} />}
+              {cJour && <span aria-hidden="true" style={{ position: 'absolute', inset: 4, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />}
+              {/* Le jour choisi n'est pas forcement aujourd'hui : il lui faut sa
+                * propre marque, sinon on perdrait de vue ce que la liste du bas
+                * est en train de raconter. */}
+              {sel && !cJour && <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'var(--o-s1)' }} />}
+              {sel && cJour && <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid var(--o-accent-soft)' }} />}
+              <span style={{ position: 'relative', fontSize: 13, fontWeight: cJour || sel ? 800 : n > 0 ? 700 : 600,
+                color: cJour ? '#fff' : 'var(--o-text1)', opacity: cJour ? 1 : horsMois ? .78 : n > 0 ? 1 : .9 }}>{d.getDate()}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 16, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingTop: 13 }}>
+        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78, marginBottom: 9, textTransform: 'uppercase' }}>
+          {choisi.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' })}
+        </div>
+        {duJour.length === 0
+          ? <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text1)', opacity: .62, paddingBottom: 4 }}>{tr('Rien de prévu')}</div>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {duJour.map((e, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 13, background: 'var(--o-s1)' }}>
+                  <span style={{ width: 3, alignSelf: 'stretch', borderRadius: 2, background: 'var(--o-accent-soft)', flexShrink: 0 }} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.summary}</span>
+                    {tousCals.length > 1 && e._cal && <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text1)', opacity: .6, marginTop: 1 }}>{nomCal(e._cal)}</span>}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--o-text1)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{heureDe(e)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+      </div>
+      </>)}
+    </BottomSheet>
+  );
+}
+
 /* Calendrier : le mois en grille — aujourd'hui à l'accent, un point sous
  * les jours qui portent un événement (7 prochains jours connus). */
-function CvCalendrier({ id, hass }) {
+function CvCalendrier({ id, hass, onOpen = null }) {
   const events = useAgenda(hass, useMemo(() => [id], [id]));
   const auj = new Date();
   // La SEMAINE courante (lundi → dimanche) : le mois entier étouffait dans le
@@ -10772,24 +10938,57 @@ function CvCalendrier({ id, hass }) {
   const lundi = new Date(auj); lundi.setHours(0, 0, 0, 0); lundi.setDate(auj.getDate() - ((auj.getDay() + 6) % 7));
   const semaine = Array.from({ length: 7 }, (_, i) => { const d = new Date(lundi); d.setDate(lundi.getDate() + i); return d; });
   const cleJour = (d) => d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
-  const marques = new Set(events.map(e => cleJour(new Date(e.start.dateTime || (e.start.date + 'T00:00:00')))));
+  /* Combien d'evenements par jour, pas seulement s'il y en a : deux rendez-vous
+   * ne se voient pas comme un seul. */
+  const parJour = new Map();
+  for (const e of events) {
+    const k = cleJour(new Date(e.start.dateTime || (e.start.date + 'T00:00:00')));
+    parJour.set(k, (parJour.get(k) || 0) + 1);
+  }
   const mois = auj.toLocaleDateString(locale(), { month: 'long' });
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
+    <div className="o-piece" onClick={onOpen ? () => onOpen(id) : undefined}
+      role={onOpen ? 'button' : undefined} tabIndex={onOpen ? 0 : undefined}
+      onKeyDown={onOpen ? (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onOpen(id); } } : undefined}
+      aria-label={onOpen ? tr('Ouvrir le calendrier') : undefined}
+      style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden', cursor: onOpen ? 'pointer' : undefined }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 25, fontWeight: 400, textTransform: 'capitalize', letterSpacing: '-.01em' }}>{mois}</span>
         <span style={{ fontSize: 34, fontWeight: 800, lineHeight: 1, letterSpacing: '-.02em' }}>{auj.getDate()}</span>
       </div>
       <div style={{ flex: 1, minHeight: 10 }} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', rowGap: 4, textAlign: 'center' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', rowGap: 6, textAlign: 'center' }}>
         {semaine.map((d, i) => <span key={'e' + i} style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em', color: 'var(--o-text3)', textTransform: 'uppercase' }}>{d.toLocaleDateString(locale(), { weekday: 'narrow' })}</span>)}
+        {/* La marque est SUR le jour, pas sous lui : un point en dessous
+          * demandait une ligne entiere pour dire ce qu'un anneau dit sur
+          * place, et laissait le chiffre muet. Les jours passes s'effacent —
+          * la semaine se lit alors d'un coup, de ce qui est fait vers ce qui
+          * vient. */}
         {semaine.map((d, i) => {
           const cJour = d.toDateString() === auj.toDateString();
+          const passe = !cJour && d < auj;
+          const n = parJour.get(cleJour(d)) || 0;
           return (
-            <span key={'j' + i} style={{ fontSize: 12, fontWeight: cJour ? 800 : 600, lineHeight: '24px', width: 24, height: 24, borderRadius: '50%', justifySelf: 'center', background: cJour ? 'var(--o-accent-fond)' : 'transparent', color: cJour ? '#fff' : 'var(--o-text1)' }}>{d.getDate()}</span>
+            <span key={'j' + i} style={{ position: 'relative', width: 26, height: 26, justifySelf: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {/* L'anneau : fin quand le jour vient, efface quand il est passe.
+                * Deux rendez-vous l'epaississent — c'est la seule facon de
+                * distinguer une journee chargee d'une journee ordinaire sans
+                * ecrire un chiffre de plus. */}
+              {n > 0 && !cJour && (
+                <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%',
+                  border: (n > 1 ? 2 : 1.5) + 'px solid var(--o-accent-soft)', opacity: passe ? .3 : 1 }} />
+              )}
+              {cJour && <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />}
+              {/* Aujourd'hui ET un rendez-vous : la pastille garde son halo,
+                * sinon le jour le plus important serait le seul sans marque. */}
+              {cJour && n > 0 && (
+                <span aria-hidden="true" style={{ position: 'absolute', inset: -3, borderRadius: '50%', border: '1.5px solid var(--o-accent-soft)', opacity: .55 }} />
+              )}
+              <span style={{ position: 'relative', fontSize: 12, fontWeight: cJour ? 800 : n > 0 ? 700 : 600,
+                color: cJour ? '#fff' : 'var(--o-text1)', opacity: cJour ? 1 : passe ? .72 : n > 0 ? 1 : .86 }}>{d.getDate()}</span>
+            </span>
           );
         })}
-        {semaine.map((d, i) => <span key={'p' + i} style={{ height: 4, display: 'flex', justifyContent: 'center' }}>{marques.has(cleJour(d)) && <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--o-accent-soft)' }} />}</span>)}
       </div>
     </div>
   );
@@ -10869,7 +11068,7 @@ function CvTyped({ x, hass, dc }) {
   if (t === 'alarme') return <CvAlarm id={id} hass={hass} />;
   if (t === 'alarmeseule') return <CvAlarm id={id} hass={hass} sans />;
   if (t === 'camera') return <CvCamera id={id} hass={hass} />;
-  if (t === 'calendrier') return <CvCalendrier id={id} hass={hass} />;
+  if (t === 'calendrier') return <CvCalendrier id={id} hass={hass} onOpen={dc ? dc.ouvrir : null} />;
   if (t === 'localisation') return <CvCarte hass={hass} />;
   if (t === 'chip') return <CvChip id={id} hass={hass} dc={dc} />;
   if (t === 'chips') return <CvChips x={x} hass={hass} dc={dc} />;

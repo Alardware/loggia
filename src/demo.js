@@ -447,13 +447,24 @@ function veillesPatch(patch) {
   return VEI_CFG;
 }
 
-function calendrierDemo() {
+/* Deux agendas, pas un : le choix des agendas et la mention du calendrier
+ * sous chaque evenement n apparaissent qu a partir de deux. */
+function calendrierDemo(id) {
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
+  if (id === 'calendar.travail') return [
+    { summary: 'Point d equipe', start: { dateTime: h(1, 9) }, end: { dateTime: h(1, 10) } },
+    { summary: 'Livrable client', start: { dateTime: h(3, 17) }, end: { dateTime: h(3, 18) } },
+  ];
   return [
     { summary: 'Ramassage des poubelles', start: { date: j(1) }, end: { date: j(2) } },
     { summary: 'Café avec Sam', start: { dateTime: h(2, 10) }, end: { dateTime: h(2, 11) } },
     { summary: 'Contrôle chaudière', start: { dateTime: h(4, 14) }, end: { dateTime: h(4, 15) } },
+    // Un rendez-vous AUJOURD'HUI et une journee a deux : sans eux, deux etats
+    // du calendrier ne se voyaient nulle part — le halo du jour courant et
+    // l'anneau epaissi d'une journee chargee.
+    { summary: 'Livraison colis', start: { dateTime: h(0, 16) }, end: { dateTime: h(0, 17) } },
+    { summary: 'Visite du ramoneur', start: { dateTime: h(2, 15) }, end: { dateTime: h(2, 16) } },
   ];
 }
 
@@ -575,7 +586,10 @@ export function installerDemo() {
     },
     callService,
     callApi: (methode, chemin) => {
-      if (methode === 'GET' && String(chemin).indexOf('calendars/') === 0) return Promise.resolve(calendrierDemo());
+      if (methode === 'GET' && String(chemin).indexOf('calendars/') === 0) {
+        const cid = String(chemin).slice(10).split('?')[0];
+        return Promise.resolve(calendrierDemo(cid));
+      }
       if (methode === 'GET' && String(chemin).indexOf('history/period/') === 0) return Promise.resolve(historiqueDemo(String(chemin), states));
       return Promise.resolve({});
     },
@@ -585,6 +599,7 @@ export function installerDemo() {
 
   // Un calendrier dans les états, pour que la carte Agenda se montre.
   states['calendar.maison'] = s('off', { friendly_name: 'Calendrier maison' });
+  states['calendar.travail'] = s('off', { friendly_name: 'Travail' });
 
   // ── 3. Le badge ───────────────────────────────────────────────────────────
   const badge = document.createElement('div');
