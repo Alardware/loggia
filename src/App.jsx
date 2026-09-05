@@ -406,6 +406,42 @@ function useWide(bp) {
   }, [bp]);
   return w;
 }
+/* Le TYPE d'appareil, pas la largeur — la meme regle que la classe
+ * `loggia-tactile`. Un ecran de 1180 px peut etre une tablette posee sur une
+ * table ou un moniteur : seul `pointer: coarse` les separe. */
+function useCoarse() {
+  const [c, setC] = useState(() => { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } });
+  useEffect(() => {
+    let mq; try { mq = window.matchMedia('(pointer: coarse)'); } catch (e) { return; }
+    const on = () => setC(mq.matches);
+    on();
+    if (mq.addEventListener) mq.addEventListener('change', on); else mq.addListener(on);
+    return () => { if (mq.removeEventListener) mq.removeEventListener('change', on); else mq.removeListener(on); };
+  }, []);
+  return c;
+}
+
+/* La taille d'une tuile piece quand personne ne l'a choisie.
+ *
+ * Trois appareils, trois reponses. L'ordinateur a la place : tout en
+ * standard, la carte complete. Le telephone ne l'a pas : tout en puce. La
+ * tablette est entre les deux — une MOSAIQUE sur trois colonnes, les deux
+ * coins du haut et le milieu du bas en grand, le reste en puce. Le regard s'y
+ * accroche a trois endroits au lieu de balayer six cartes identiques.
+ *
+ *   [GRANDE][petite][GRANDE]
+ *   [petite][GRANDE][petite]
+ *
+ * Le motif se repete au-dela de six pieces : rangee paire, les bords ;
+ * rangee impaire, le centre.
+ */
+function tailleParDefaut(i, tactile, large) {
+  if (!tactile) return 's';
+  if (!large) return 'c';
+  const col = i % 3;
+  return (Math.floor(i / 3) % 2 === 0) ? (col === 1 ? 'c' : 's') : (col === 1 ? 's' : 'c');
+}
+
 function SearchSheet({ onClose, onNav, customViews = [], rooms = [], isAdmin = false }) {
   const { views: avail } = useLoggia();
   const [q, setQ] = useState('');
@@ -5613,6 +5649,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   const metricDiv = { flexShrink: 0, width: 1, background: 'var(--o-bd2)', margin: '4px 4px' };
   // ── Layout PC (≥1180) : rail « En cours / Rappels » accolé à la zone Pièces+Caméras ──
   const wide = useWide(1180);
+  const tactile = useCoarse();
   const wideXL = useWide(1440); // tablette paysage (1180-1439) : rail plus étroit, cartes pièces prioritaires
   const dashHass = a && a.hass;
   // Le panneau d'alarme du rail : celui de la configuration d'abord.
@@ -5949,13 +5986,20 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             // Deux densités comme partout : compacte = une rangée de 88 px
             // (défaut), standard = deux rangées. Choix par pièce en édition
             // (coin bas-droit), persisté avec l'agencement de l'accueil.
-            <div className="grid-chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 8 }}>
+            /* La mosaique de la tablette compte les colonnes : sans les fixer
+              * a trois, `auto-fill` en donnerait quatre ou cinq et les grandes
+              * tuiles tomberaient n'importe ou. */
+            <div className="grid-chips" style={{ display: 'grid', gridTemplateColumns: (tactile && wide) ? 'repeat(3,1fr)' : 'repeat(auto-fill,minmax(210px,1fr))', gap: 8 }}>
               {(() => {
                 const nomsInner = inner.map(p => p.name);
                 const ordre = pieceDrag ? pieceDrag.ordre : ordrePieces(nomsInner);
                 return ordre.map(n => inner.find(p => p.name === n)).filter(Boolean);
               })().map((p, i) => {
-                const t = ((accL.tailles || {})[p.name] === 's') ? 's' : 'c';
+                /* Un choix explicite (bouton de taille en edition) prime sur
+                  * tout : il vaut pour l'appareil qui l'a fait comme pour les
+                  * autres. Sans choix, l'appareil decide. */
+                const choisi = (accL.tailles || {})[p.name];
+                const t = (choisi === 's' || choisi === 'c') ? choisi : tailleParDefaut(i, tactile, wide);
                 const saisie = pieceDrag && pieceDrag.id === p.name;
                 return (
                   <div key={p.name} data-piece={p.name} className={t === 'c' ? 'o-chiprow1' : undefined}
