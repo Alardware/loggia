@@ -110,9 +110,11 @@ test('restaurer reste annulable', () => {
 });
 
 test('l’historique suit la maison, pas l’appareil', () => {
-  // `est_personnelle` (store.py) classe sur le séparateur : `loggia-x` reste sur
-  // l'appareil, `loggia_x` vaut pour la maison. Un historique personnel serait
-  // absurde — on restaure depuis le téléphone un agencement fait sur l'ordinateur.
+  // `est_personnelle` (store.py) ne garde sur l'appareil qu'une courte liste
+  // nommée — les marges d'écran, la trace du dernier passage — et ce qui finit
+  // par « panel ». Tout le reste suit la maison, `loggia_histo` compris. C'est
+  // ce qu'on veut : on restaure depuis le téléphone un agencement fait sur
+  // l'ordinateur.
   assert.match(src, /cfgVal\('loggia_histo', null\)/, 'la lecture de l’historique a changé de clé');
   assert.ok(!/loggia-histo/.test(src), 'l’historique est passé sur une clé personnelle : il ne suivrait plus la maison');
 });
