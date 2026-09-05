@@ -5421,7 +5421,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     // rendait l'ordre et la taille des cartes pièces perdus à chaque
     // rechargement, alors que saveAccL les écrivait bien.
     return { main: Array.isArray(v.main) ? v.main : null, rail: Array.isArray(v.rail) ? v.rail : null, caches: Array.isArray(v.caches) ? v.caches : [],
-      piecesOrdre: Array.isArray(v.piecesOrdre) ? v.piecesOrdre : [], tailles: (v.tailles && typeof v.tailles === 'object') ? v.tailles : {} };
+      piecesOrdre: Array.isArray(v.piecesOrdre) ? v.piecesOrdre : [], tailles: (v.tailles && typeof v.tailles === 'object') ? v.tailles : {},
+      /* Les grilles des autres formats. Les cles ci-dessus restent celles de
+       * l'ORDINATEUR : une installation existante retrouve donc son accueil
+       * tel qu'elle l'a laisse, et ne decouvre `formats` que le jour ou
+       * quelqu'un edite depuis une tablette ou un telephone. */
+      formats: (v.formats && typeof v.formats === 'object') ? v.formats : {} };
   });
   /* Le dashboard suit la MAISON, pas le navigateur : l'agencement part au
    * composant. En localStorage, il changeait d'un appareil a l'autre — et meme
@@ -5445,6 +5450,44 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     setFutur([]);           // une nouvelle action coupe la branche refaite
     setAccL(n);
     cfgSet({ loggia_accueil: n });
+  };
+  /* Le format est lu des ici : la grille qui suit en depend, et une `const`
+   * n'existe pas avant sa ligne. */
+  const wide = useWide(1180);
+  const tactile = useCoarse();
+  /* Une grille PAR FORMAT, sur la meme maison.
+   *
+   * Un telephone n'a pas les moyens d'un ecran large : le meme ordre de
+   * sections y descend trop bas, et les cameras passent avant ce qu'on ouvre
+   * vraiment. Chaque format garde donc son agencement.
+   *
+   * Cote SERVEUR malgre tout — l'agencement suit la maison, pas le navigateur
+   * (voir plus haut). Deux tablettes voient la meme grille tablette ; c'est le
+   * TYPE d'appareil qui separe, jamais l'appareil lui-meme.
+   *
+   * L'ordinateur ecrit dans les cles historiques, les autres dans `formats`.
+   * Un format sans grille propre suit celle de l'ordinateur : on ne duplique
+   * rien d'avance, sinon la moindre retouche sur grand ecran laisserait le
+   * telephone fige sur un vieil etat sans que personne ne le voie.
+   */
+  const formatGrille = !tactile ? 'pc' : (wide ? 'tablette' : 'mobile');
+  const grillePropre = formatGrille !== 'pc' && !!(accL.formats || {})[formatGrille];
+  const grille = grillePropre ? accL.formats[formatGrille] : accL;
+  const saveGrille = (g) => {
+    if (formatGrille === 'pc') { saveAccL({ ...accL, ...g }); return; }
+    // `grille` vaut l'agencement complet tant qu'aucune surcharge n'existe :
+    // le recopier tel quel logerait un `formats` dans un format. On ne garde
+    // que ce qu'une grille contient.
+    const { formats: _ignore, ...base } = grille;
+    saveAccL({ ...accL, formats: { ...(accL.formats || {}), [formatGrille]: { ...base, ...g } } });
+  };
+  /* Repartir de l'ordinateur : on SUPPRIME la surcharge plutot que d'y recopier
+   * la grille de bureau. Recopiee, elle cesserait de suivre au premier
+   * changement suivant. */
+  const suivrePc = () => {
+    const f = { ...(accL.formats || {}) };
+    delete f[formatGrille];
+    saveAccL({ ...accL, formats: f });
   };
   const annuler = () => {
     setPasse(p => {
@@ -5487,7 +5530,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   });
   const ordreDe = (zone) => {
     const base = zone === 'main' ? ACC_MAIN : ACC_RAIL;
-    const sauve = (accL[zone] || []).filter(s => base.indexOf(s) >= 0);
+    const sauve = (grille[zone] || []).filter(s => base.indexOf(s) >= 0);
     return [...sauve, ...base.filter(s => sauve.indexOf(s) < 0)];
   };
   const [secDrag, setSecDrag] = useState(null); // { zone, id, ordre }
@@ -5532,18 +5575,18 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   };
   const finSec = () => {
     clearTimeout(secTimer.current); secDebut.current = null;
-    if (secDrag) saveAccL({ ...accL, [secDrag.zone]: secDrag.ordre });
+    if (secDrag) saveGrille({ [secDrag.zone]: secDrag.ordre });
     setSecDrag(null);
   };
-  const cacheSec = (id) => saveAccL({ ...accL, caches: [...accL.caches, id] });
-  const montreSec = (id) => saveAccL({ ...accL, caches: accL.caches.filter(x => x !== id) });
+  const cacheSec = (id) => saveGrille({ caches: [...grille.caches, id] });
+  const montreSec = (id) => saveGrille({ caches: grille.caches.filter(x => x !== id) });
   // Drag d'une CARTE pièce (dans la section) : même mécanique que les sections
   // — souris directe, appui long au doigt — mais l'ordre est le sien
   // (accL.piecesOrdre). stopPropagation : sinon la section se saisit avec.
   const [pieceDrag, setPieceDrag] = useState(null); // { id, ordre }
   const pieceTimer = useRef(null);
   const pieceDebut = useRef(null);
-  const ordrePieces = (noms) => { const sauve = (accL.piecesOrdre || []).filter(n => noms.indexOf(n) >= 0); return [...sauve, ...noms.filter(n => sauve.indexOf(n) < 0)]; };
+  const ordrePieces = (noms) => { const sauve = (grille.piecesOrdre || []).filter(n => noms.indexOf(n) >= 0); return [...sauve, ...noms.filter(n => sauve.indexOf(n) < 0)]; };
   const debutPiece = (e, id, noms) => {
     if (!editMode) return;
     if (e.target.closest && e.target.closest('button, [role="switch"], input')) return;
@@ -5583,12 +5626,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   };
   const finPiece = () => {
     clearTimeout(pieceTimer.current); pieceDebut.current = null;
-    if (pieceDrag) saveAccL({ ...accL, piecesOrdre: pieceDrag.ordre });
+    if (pieceDrag) saveGrille({ piecesOrdre: pieceDrag.ordre });
     setPieceDrag(null);
   };
   /** Enveloppe d'une section : drag + masque en édition, rien sinon. */
   const Sec = (zone, id, contenu) => {
-    const cache = accL.caches.indexOf(id) >= 0;
+    const cache = (grille.caches || []).indexOf(id) >= 0;
     if (cache && !editMode) return null;
     const saisie = secDrag && secDrag.id === id;
     return (
@@ -5705,8 +5748,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   const mLv = M.lv || (a ? null : _dLv), mPb = M.poubelles || (a ? null : _dPb);
   const metricDiv = { flexShrink: 0, width: 1, background: 'var(--o-bd2)', margin: '4px 4px' };
   // ── Layout PC (≥1180) : rail « En cours / Rappels » accolé à la zone Pièces+Caméras ──
-  const wide = useWide(1180);
-  const tactile = useCoarse();
   const wideXL = useWide(1440); // tablette paysage (1180-1439) : rail plus étroit, cartes pièces prioritaires
   const dashHass = a && a.hass;
   // Le panneau d'alarme du rail : celui de la configuration d'abord.
@@ -5945,6 +5986,17 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               style={{ ...editBtn(false), display: 'flex', alignItems: 'center', gap: 6, opacity: futur.length ? 1 : .45, cursor: futur.length ? 'pointer' : 'default' }}>
               <Fi i="redo" size={12} />{tr('Refaire')}
             </button>
+            {/* Dire QUEL agencement on modifie : sans cela, on croit toucher
+              * celui de tous les ecrans. */}
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.04em', padding: '5px 10px', borderRadius: 999,
+              background: 'rgba(var(--o-accent-rgb),.16)', color: 'var(--o-text1)', whiteSpace: 'nowrap' }}>
+              {formatGrille === 'pc' ? tr('ORDINATEUR') : formatGrille === 'tablette' ? tr('TABLETTE') : tr('TÉLÉPHONE')}
+            </span>
+            {grillePropre && (
+              <button onClick={suivrePc} style={editBtn(false)} title={tr('Cet écran retrouve l’agencement de l’ordinateur.')}>
+                {tr('Suivre l’ordinateur')}
+              </button>
+            )}
           </ViewEditBar>
         )}
 
@@ -6068,7 +6120,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
                 /* Un choix explicite (bouton de taille en edition) prime sur
                   * tout : il vaut pour l'appareil qui l'a fait comme pour les
                   * autres. Sans choix, l'appareil decide. */
-                const choisi = (accL.tailles || {})[p.name];
+                const choisi = (grille.tailles || {})[p.name];
                 const t = (choisi === 's' || choisi === 'c') ? choisi : tailleParDefaut(i, tactile, wide);
                 const saisie = pieceDrag && pieceDrag.id === p.name;
                 return (
@@ -6105,7 +6157,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
                     {editMode && (
                       <EditBarre>
                         <button aria-label={tr('Taille de la carte') + ' · ' + p.name} title={tr('Taille de la carte')}
-                          onClick={(e) => { e.stopPropagation(); saveAccL({ ...accL, tailles: { ...(accL.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } }); }}
+                          onClick={(e) => { e.stopPropagation(); saveGrille({ tailles: { ...(grille.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } }); }}
                           style={{ ...EDIT_BTN, background: 'rgba(var(--o-accent-rgb),.16)', color: 'var(--o-accent-soft)' }}>
                           <Fi i="resize" size={12} />
                         </button>

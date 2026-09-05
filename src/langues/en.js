@@ -1427,4 +1427,9 @@ export default {
   'Ce lecteur ne propose rien à parcourir.': 'This player has nothing to browse.',
   'Refaire': 'Redo',
   'Défaire': 'Undo',
+  'ORDINATEUR': 'DESKTOP',
+  'TABLETTE': 'TABLET',
+  'TÉLÉPHONE': 'PHONE',
+  'Suivre l’ordinateur': 'Follow the desktop',
+  'Cet écran retrouve l’agencement de l’ordinateur.': 'This screen goes back to the desktop layout.',
 };

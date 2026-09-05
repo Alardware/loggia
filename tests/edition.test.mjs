@@ -75,3 +75,36 @@ test('le bouton dit « défaire », pas « annuler »', () => {
   assert.match(en, /'Défaire': 'Undo',/, 'la traduction de « Défaire » a disparu');
   assert.match(en, /'Refaire': 'Redo',/, 'la traduction de « Refaire » a disparu');
 });
+
+test('l’ordinateur écrit dans la base, les autres dans leur grille', () => {
+  const i = src.indexOf('const saveGrille = (g) => {');
+  assert.notEqual(i, -1, 'saveGrille a disparu');
+  const corps = src.slice(i, src.indexOf('\n  };', i));
+  // L'ordinateur garde les clés historiques : une installation existante
+  // retrouve son accueil sans rien migrer.
+  assert.match(corps, /formatGrille === 'pc'/, 'l’ordinateur n’écrit plus dans les clés historiques');
+  assert.match(corps, /formats: \{ \.\.\.\(accL\.formats \|\| \{\}\), \[formatGrille\]/,
+    'les autres formats n’écrivent plus dans leur propre grille');
+  // Une grille de format ne doit pas contenir la table des formats.
+  assert.match(corps, /const \{ formats: _ignore, \.\.\.base \} = grille;/,
+    'la grille recopiée embarque de nouveau la table des formats');
+});
+
+test('« Suivre l’ordinateur » supprime la surcharge, il ne la recopie pas', () => {
+  const i = src.indexOf('const suivrePc = () => {');
+  assert.notEqual(i, -1, 'suivrePc a disparu');
+  const corps = src.slice(i, src.indexOf('\n  };', i));
+  // Recopiée, la grille de bureau cesserait de suivre au premier changement
+  // suivant : l’écran croirait suivre et resterait figé.
+  assert.match(corps, /delete f\[formatGrille\];/, 'la surcharge n’est plus supprimée');
+  assert.ok(!/tailles|piecesOrdre/.test(corps), 'suivrePc recopie la grille au lieu de l’effacer');
+});
+
+test('un format sans grille propre suit l’ordinateur', () => {
+  // Dupliquer d’avance laisserait le téléphone figé sur un vieil état dès la
+  // première retouche faite sur grand écran.
+  assert.match(src, /const grille = grillePropre \? accL\.formats\[formatGrille\] : accL;/,
+    'un format sans grille propre ne retombe plus sur celle de l’ordinateur');
+  assert.match(src, /const formatGrille = !tactile \? 'pc' : \(wide \? 'tablette' : 'mobile'\);/,
+    'le format n’est plus décidé par le type d’appareil');
+});

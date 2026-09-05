@@ -81,8 +81,8 @@ test('la mosaïque impose la colonne, jamais la rangée', () => {
 });
 
 test('un choix explicite prime sur l’appareil', () => {
-  const i = src.indexOf('const choisi = (accL.tailles || {})[p.name];');
-  assert.notEqual(i, -1, 'la lecture du choix de taille a disparu');
+  const i = src.indexOf('const choisi = (grille.tailles || {})[p.name];');
+  assert.notEqual(i, -1, 'la lecture du choix de taille a disparu (elle passe par la grille du format)');
   assert.match(src.slice(i, i + 260), /\(choisi === 's' \|\| choisi === 'c'\) \? choisi : tailleParDefaut/,
     'le bouton de taille ne prime plus sur le défaut de l’appareil');
 });
