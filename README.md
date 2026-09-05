@@ -4,6 +4,8 @@
 [![CI](https://github.com/Alardware/loggia/actions/workflows/validate.yml/badge.svg)](https://github.com/Alardware/loggia/actions)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-soutenir%20le%20projet-ff5f5f?logo=ko-fi&logoColor=white)](https://ko-fi.com/alardware)
 
+![Loggia sur ordinateur, portable, tablette et téléphone](docs/loggia-presentation.webp)
+
 Un tableau de bord Home Assistant qui se remplit tout seul.
 
 Loggia lit les registres de votre installation — zones, appareils, entités — et
