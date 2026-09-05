@@ -1043,7 +1043,13 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
           {p.live && p.live.hum != null ? <> · <Num v={p.live.hum} suffix="%" /></> : null}
         </div>
         {/* Pied : minis d'action (volets violet, clim ROUGE — des `button`, le
-          * drag d'édition les ignore) à gauche, switch lumière à droite. */}
+          * drag d'édition les ignore) à gauche, switch lumière à droite.
+          *
+          * `marginLeft: auto` sur le switch plutôt que le seul
+          * `space-between` : quand la carte est trop étroite, les minis
+          * passent en `display: none` et sortent du flux — il ne reste alors
+          * qu'un item, que `space-between` colle à GAUCHE. La marge, elle,
+          * tient quel que soit le nombre de voisins. */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8 }}>
           {(covers || clim) ? <div className="o-piece-minis" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {covers && (
@@ -1065,7 +1071,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
             <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
               onClick={e => { e.stopPropagation(); doToggle(); }}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-              style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
+              style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, marginLeft: 'auto', background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
               <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
             </span>
           )}
@@ -5849,7 +5855,13 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
               <span className="o-greet-hi" style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{salut}</span>
               <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 34, fontWeight: 500, lineHeight: 1 }}>{userName}</span>
-              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: faits.alerte ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: faits.alerte ? '0 0 8px var(--o-bad)' : '0 0 8px var(--o-ok)', animation: 'pulse 2.4s infinite' }} />{faits.txt.join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span>
+              {/* Le resume est un ITEM a lui seul, pas un noeud texte nu.
+                * Nu, il devenait un item flex anonyme : trop long, il basculait
+                * en entier sous la pastille au lieu de s'enrouler a cote
+                * d'elle — un flex ne coupe pas un item, il le renvoie a la
+                * ligne. La pastille s'aligne donc sur la PREMIERE ligne, et le
+                * texte garde sa colonne. */}
+              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}><span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: faits.alerte ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: faits.alerte ? '0 0 8px var(--o-bad)' : '0 0 8px var(--o-ok)', animation: 'pulse 2.4s infinite' }} /><span style={{ flex: 1, minWidth: 0 }}>{faits.txt.join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span></span>
             </div>
             <div className="o-banner-wx" style={{ display: 'flex', flexDirection: 'column-reverse', alignItems: 'flex-end', gap: 10, flexShrink: 0 }}>
               {/* La vue Météo dit tout ce que cette vignette resume : elle est

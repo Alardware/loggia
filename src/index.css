@@ -174,11 +174,19 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
 /* Héros « En ce moment » : la carte du catalogue remplit le gabarit 184 px. */
 .o-hero > * { height: 100%; box-sizing: border-box; }
 .o-heroslider::-webkit-scrollbar { display: none; }
-/* Tuile pièce standard : les minis volets/clim cèdent quand la carte est
- * étroite (mobile 2 colonnes) — icône et interrupteur gardent la place. */
+/* Tuile piece standard : les minis volets/clim cedent quand la carte est
+ * VRAIMENT trop etroite — icone et interrupteur gardent la place.
+ *
+ * Le seuil etait a 199 px, et `container-type: inline-size` interroge la
+ * CONTENT-BOX : avec 30 px de rembourrage lateral, il masquait des la carte
+ * de 229 px — les tuiles de 170 px d'un telephone en deux colonnes perdaient
+ * leurs icones alors que la place suffisait largement.
+ *
+ * Deux minis et l'interrupteur mesurent 120 px. On masque donc sous 120 px
+ * DE CONTENU, c'est-a-dire 150 px de carte, et seulement la. */
 .o-piecestd { container-type: inline-size; }
-@container (max-width: 199px) {
-  /* !important : le display:flex est posé inline par la carte. */
+@container (max-width: 119px) {
+  /* !important : le display:flex est pose inline par la carte. */
   .o-piecestd .o-piece-minis { display: none !important; }
 }
 /* Chip pièce : à l'étroit, la température quitte la droite (o-chip-temp-d)
