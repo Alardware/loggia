@@ -187,3 +187,24 @@ export function presentationSummary(devices, ctx = {}) {
     physiques, pilotables, avecLecture, retenus, parStatut,
   };
 }
+
+/**
+ * L'identité d'une tuile caméra dans la liste de l'accueil.
+ *
+ * Loggia accepte qu'une caméra soit déclarée par son seul nom, sans entité :
+ * la tuile prend alors son rendu de repli. Ces caméras n'ont pas de `haid`, et
+ * la liste les rendait toutes avec la même clé vide.
+ *
+ * React s'en plaignait dans la console, mais le vrai dégât était plus discret :
+ * sans clé distincte, il ne peut plus dire quelle tuile est laquelle, et l'état
+ * local d'une tuile — sa popup d'agrandissement ouverte — peut se retrouver sur
+ * sa voisine dès que l'ordre de la liste change.
+ *
+ * L'entité passe en premier quand elle existe : elle est déjà unique, et elle
+ * survit à un changement d'ordre. À défaut, le rang départage ce que le nom ne
+ * suffit pas à rendre unique — rien n'interdit deux « Entrée ».
+ */
+export function cleCamera(cam, rang) {
+  const c = cam || {};
+  return c.haid || ((c.name || c.label || 'cam') + '#' + rang);
+}

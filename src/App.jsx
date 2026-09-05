@@ -17,7 +17,7 @@ import { planAction as actionsPlan, availableActions as actionsAvailable,
   planAction, runPlan } from './actions.js';
 import { entityCaps } from './capabilities.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
-import { deviceCard, presentableDevices, presentationSummary } from './present.js';
+import { deviceCard, presentableDevices, presentationSummary, cleCamera } from './present.js';
 import { healthReport, healthText } from './health.js';
 import { probe as configProbe, reportLive as configReportLive, migrateFromLocalStorage, completerDepuisLocal, collectLocal, createConfig, CONFIG_VERSION } from './config.js';
 import { resolveAll, report as resolveReport } from './resolve.js';
@@ -4278,8 +4278,8 @@ function QuickScenes({ hass }) {
  * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
  * langue. Appelee au rendu, elle se dit dans la langue du moment. */
 const CAMERAS = () => [
-  { label: tr('Entrée'), tag: 'LIVE · ENTRÉE', grad: 'linear-gradient(180deg,#6ba8d8 0%,#9cc4e0 42%,#7a8a5c 60%,#56683f 100%)', glow: 'radial-gradient(120% 80% at 50% 18%,rgba(255,255,255,.18),transparent 55%)', sub: <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffce73" strokeWidth="2.4" strokeLinecap="round"><path d="M13 2L3 14h7l-1 8 11-13h-7z" /></svg>Mouvement il y a 3 min</> },
-  { label: tr('Façade'), tag: 'LIVE · FAÇADE', grad: 'linear-gradient(180deg,#5e94c4 0%,#86b06f 38%,#6f7e4a 62%,#4a5a36 100%)', glow: 'radial-gradient(120% 80% at 60% 22%,rgba(255,255,255,.16),transparent 55%)', sub: <><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('RAS · véhicule présent')}</> },
+  { cle: 'demo-entree', label: tr('Entrée'), tag: 'LIVE · ENTRÉE', grad: 'linear-gradient(180deg,#6ba8d8 0%,#9cc4e0 42%,#7a8a5c 60%,#56683f 100%)', glow: 'radial-gradient(120% 80% at 50% 18%,rgba(255,255,255,.18),transparent 55%)', sub: <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffce73" strokeWidth="2.4" strokeLinecap="round"><path d="M13 2L3 14h7l-1 8 11-13h-7z" /></svg>Mouvement il y a 3 min</> },
+  { cle: 'demo-facade', label: tr('Façade'), tag: 'LIVE · FAÇADE', grad: 'linear-gradient(180deg,#5e94c4 0%,#86b06f 38%,#6f7e4a 62%,#4a5a36 100%)', glow: 'radial-gradient(120% 80% at 60% 22%,rgba(255,255,255,.16),transparent 55%)', sub: <><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('RAS · véhicule présent')}</> },
 ];
 
 // ── Snapshot proxy authentifié (repli) ──
@@ -5889,7 +5889,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     return { txt: out, alerte };
   }, [a]);
   // HA absent → vitrine de demo ; HA present sans camera → aucune camera, pas d'exemple
-  const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => ({ label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: CAMERAS()[i % CAMERAS().length].grad, glow: CAMERAS()[i % CAMERAS().length].glow, sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: cam.online ? 'var(--o-ok)' : '#f87171' }} />{cam.online ? 'Direct' : 'Hors ligne'}</>), haid: cam.haid, online: cam.online, hass: a.hass })) : CAMERAS();
+  const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => ({ label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: CAMERAS()[i % CAMERAS().length].grad, glow: CAMERAS()[i % CAMERAS().length].glow, sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: cam.online ? 'var(--o-ok)' : '#f87171' }} />{cam.online ? 'Direct' : 'Hors ligne'}</>), cle: cleCamera(cam, i), haid: cam.haid, online: cam.online, hass: a.hass })) : CAMERAS();
   const _dWallE = { label: tr('Aspirateur'), iconKey: 'vacuum', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
   const _dLuba = { label: tr('Tondeuse'), iconKey: 'mower', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
   const _dLv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase: tr('Éteint'), color: '#94a3b8', active: false, valueIcon: 'timer', valueText: '--:--', bar: null };
@@ -6325,7 +6325,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           );
           const camsGrid = (
             <div className="grid-cams" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              {cams.map(c => <CameraTile key={c.haid || c.id} c={c} />)}
+              {cams.map(c => <CameraTile key={c.cle} c={c} />)}
             </div>
           );
           const repasCard = (sm) => (
