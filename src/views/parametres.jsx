@@ -523,7 +523,7 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
             {cols.map(c => { const v = r[c.k] || ''; const st = check && c.domain && v ? (check(v) ? 'ok' : 'bad') : null; return (
               <span key={c.k} style={{ position: 'relative', flex: c.flex || 1, minWidth: 0, display: 'flex' }}>
                 <span className="o-entlabel">{c.label}</span>
-                <input value={v} onChange={e => set(i, c.k, e.target.value)} placeholder={c.ph || ''} list={c.domain ? 'o-dl-' + c.domain : undefined} spellCheck={false} style={{ ...entInp, width: '100%', minWidth: 0, paddingRight: st ? 24 : undefined, borderColor: st === 'bad' ? 'rgba(var(--o-bad-rgb),.55)' : undefined }} />
+                <input value={v} onChange={e => set(i, c.k, e.target.value)} placeholder={c.ph || ''} list={c.domain ? 'o-dl-' + c.domain : undefined} spellCheck={false} style={{ ...entInp, width: '100%', minWidth: 0, paddingRight: st ? 24 : undefined, border: st === 'bad' ? 'var(--o-bw,1px) solid rgba(var(--o-bad-rgb),.55)' : entInp.border }} />
                 {st && <span title={st === 'ok' ? 'Entité trouvée' : 'Introuvable dans Home Assistant'} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 7, height: 7, borderRadius: '50%', background: st === 'ok' ? 'var(--o-ok)' : 'var(--o-bad)', pointerEvents: 'none' }} />}
               </span>
             ); })}
