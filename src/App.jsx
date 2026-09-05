@@ -6007,16 +6007,22 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
                     onPointerMove={editMode ? mouvPiece : undefined}
                     onPointerUp={editMode ? finPiece : undefined}
                     onPointerCancel={editMode ? finPiece : undefined}
-                    /* Mosaique tablette : chaque tuile recoit SA case.
+                    /* Mosaique tablette : la COLONNE est imposee, la rangee
+                      * non.
                       *
-                      * `.grid-chips` coule en `row dense` sur des rangees de
-                      * 88 px — une standard en occupe deux, une puce une seule.
-                      * Laisse libre, la puce remonte donc combler le trou
-                      * laisse par sa voisine et la mosaique part en escalier.
-                      * Colonne et rangee explicites : la ligne du haut reste
-                      * grand-petit-grand, celle du bas petit-grand-petit. */
+                      * `.grid-chips` coule sur des rangees de 88 px — une
+                      * standard en occupe deux, une puce une seule. Sans
+                      * colonne imposee, les tuiles se bousculent et la
+                      * mosaique part en escalier. Avec la rangee imposee EN
+                      * PLUS, chaque colonne s'aligne sur la plus haute et
+                      * laisse un trou sous les puces.
+                      *
+                      * La colonne seule donne les deux : l'ordre voulu, et
+                      * chaque tuile qui monte aussi haut que sa colonne le
+                      * permet — la grande du milieu vient donc combler le vide
+                      * laisse par la puce au-dessus d'elle. */
                     style={{ position: 'relative', minWidth: 0, opacity: saisie ? .55 : 1, transition: 'opacity .15s',
-                      ...((tactile && wide) ? { gridColumn: (i % 3) + 1, gridRow: (Math.floor(i / 3) * 2 + 1) + ' / span ' + (t === 's' ? 2 : 1) } : {}),
+                      ...((tactile && wide) ? { gridColumn: (i % 3) + 1 } : {}),
                       ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 2, borderRadius: 14, cursor: 'grab', touchAction: 'pan-y' } : {}) }}>
                     {/* Carte inerte en édition (comme partout) : le wrapper
                       * garde le drag, le bouton taille reste tapable. */}
