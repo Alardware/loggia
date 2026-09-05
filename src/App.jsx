@@ -5427,7 +5427,64 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
    * composant. En localStorage, il changeait d'un appareil a l'autre — et meme
    * d'un reseau a l'autre, l'acces distant n'ayant pas la meme origine que
    * l'acces local (retour 03/09). */
-  const saveAccL = (n) => { setAccL(n); cfgSet({ loggia_accueil: n }); };
+  /* Annuler / refaire.
+   *
+   * `saveAccL` est le passage UNIQUE de tout ce qui se modifie en edition —
+   * ordre des sections, masquages, ordre des pieces, tailles. Une pile posee
+   * ici les couvre donc toutes, sans avoir a decrire chaque geste.
+   *
+   * On empile des ETATS, pas des gestes : revenir en arriere est alors une
+   * simple reaffectation, et aucun geste n'a besoin de savoir s'inverser.
+   * Vingt pas suffisent — au-dela, personne ne se souvient de ce qu'il
+   * annule, et chaque etat garde une copie de l'agencement.
+   */
+  const [passe, setPasse] = useState([]);
+  const [futur, setFutur] = useState([]);
+  const saveAccL = (n) => {
+    setPasse(p => [...p.slice(-19), accL]);
+    setFutur([]);           // une nouvelle action coupe la branche refaite
+    setAccL(n);
+    cfgSet({ loggia_accueil: n });
+  };
+  const annuler = () => {
+    setPasse(p => {
+      if (!p.length) return p;
+      const avant = p[p.length - 1];
+      setFutur(f => [...f, accL]);
+      setAccL(avant);
+      cfgSet({ loggia_accueil: avant });
+      return p.slice(0, -1);
+    });
+  };
+  const refaire = () => {
+    setFutur(f => {
+      if (!f.length) return f;
+      const apres = f[f.length - 1];
+      setPasse(p => [...p, accL]);
+      setAccL(apres);
+      cfgSet({ loggia_accueil: apres });
+      return f.slice(0, -1);
+    });
+  };
+  /* Quitter l'edition oublie l'historique : rouvrir le mode le lendemain et
+   * pouvoir defaire un geste qu'on ne voit plus a l'ecran serait une trappe,
+   * pas un filet. */
+  useEffect(() => { if (!editMode) { setPasse([]); setFutur([]); } }, [editMode]);
+  /* Ctrl+Z, Ctrl+Maj+Z — mais jamais dans un champ de saisie : on y volerait
+   * l'annulation du texte que la personne est en train de taper. */
+  useEffect(() => {
+    if (!editMode) return;
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
+      const t = e.target;
+      const dansUnChamp = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (dansUnChamp) return;
+      e.preventDefault();
+      if (e.shiftKey) refaire(); else annuler();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   const ordreDe = (zone) => {
     const base = zone === 'main' ? ACC_MAIN : ACC_RAIL;
     const sauve = (accL[zone] || []).filter(s => base.indexOf(s) >= 0);
@@ -5876,7 +5933,20 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           <div className="o-wx3d-veil" />
         </div>)}
       <div className="loggia-content" style={{ position: 'relative', zIndex: 1, padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-        {editMode && onEnt && <ViewEditBar texte={tr("Mode édition : personnalise la bannière, et choisis les pièces, capteurs d’énergie, personnes et caméras.")} onEnt={onEnt} />}
+        {editMode && onEnt && (
+          <ViewEditBar texte={tr("Mode édition : personnalise la bannière, et choisis les pièces, capteurs d’énergie, personnes et caméras.")} onEnt={onEnt}>
+            {/* Desactives plutot que masques : leur place ne bouge pas, et
+              * l'on voit qu'il n'y a rien a annuler. */}
+            <button onClick={annuler} disabled={!passe.length} aria-label={tr('Défaire')} title={tr('Défaire') + ' (Ctrl+Z)'}
+              style={{ ...editBtn(false), display: 'flex', alignItems: 'center', gap: 6, opacity: passe.length ? 1 : .45, cursor: passe.length ? 'pointer' : 'default' }}>
+              <Fi i="undo" size={12} />{tr('Défaire')}
+            </button>
+            <button onClick={refaire} disabled={!futur.length} aria-label={tr('Refaire')} title={tr('Refaire') + ' (Ctrl+Maj+Z)'}
+              style={{ ...editBtn(false), display: 'flex', alignItems: 'center', gap: 6, opacity: futur.length ? 1 : .45, cursor: futur.length ? 'pointer' : 'default' }}>
+              <Fi i="redo" size={12} />{tr('Refaire')}
+            </button>
+          </ViewEditBar>
+        )}
 
         {/* BANNER */}
         <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)', padding: '22px 8px' }}>
