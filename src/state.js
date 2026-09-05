@@ -256,6 +256,20 @@ export function loggiaEnt(domain, fallback = null) {
 
 export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_weather', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_customviews', 'loggia_users', 'loggia_accueil', 'loggia_look', 'loggia_active_user', 'loggia_admin_pin', 'loggia_roomlayout', 'loggia_objlayout', 'loggia_lightlayout', 'loggia_climlayout', 'loggia_coverlayout', 'loggia_enlayout', 'loggia_medlayout', 'loggia_lights', 'loggia_climate', 'loggia-theme', 'loggia-mode', 'loggia-ha', 'loggia-navbar', 'loggia-navoffset', 'loggia-topoffset', 'loggia-wxfx', 'loggia-ciel', 'loggia-langue'];
 
+/** Les cles que le MOTEUR lit : la configuration de la maison, pas l'apparence.
+ *
+ * `LOGGIA_SYNC_KEYS` melange deux choses, et c'est justifie pour ce qu'il fait
+ * — theme, marges et langue suivent la maison au meme titre que les pieces.
+ * Mais la disponibilite des vues ne depend que de la configuration, et les
+ * preferences d'apparence sont ecrites EN CLAIR (`loggia-mode` vaut `dark`, pas
+ * `"dark"`). Les relire avec `readLS`, qui attend du JSON, faisait annoncer
+ * « config corrompue » a chaque ouverture sur une valeur parfaitement valide.
+ *
+ * Le moteur ne lit de toute facon que des cles en `loggia_` : voir `resolve.js`
+ * et `views.js`, ou chaque acces a `userCfg` porte ce prefixe.
+ */
+export const LOGGIA_CONFIG_KEYS = LOGGIA_SYNC_KEYS.filter(k => k.indexOf('loggia_') === 0);
+
 export const importLoggiaConfig = (txt) => {
   const o = JSON.parse(String(txt).trim());
   if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('invalide');

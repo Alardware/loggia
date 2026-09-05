@@ -34,7 +34,7 @@ import { WX_BG, WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity
 const VacPlan = lazy(() => import('./vacplan.jsx'));
 import { LOGGIA_INDEX, LOGGIA_ENT, LOGGIA_RESOLVED, LOGGIA_CFG, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle, feederScript, ENT_ALIAS,
   enHaids, medCompanion, medPlayers, normRooms, secAlarm, switchLightsCfg,
-  exportLoggiaConfig, importLoggiaConfig, LOGGIA_SYNC_KEYS,
+  exportLoggiaConfig, importLoggiaConfig, LOGGIA_SYNC_KEYS, LOGGIA_CONFIG_KEYS,
   discoveredRooms, medResolved, MED_COLORS, vacRooms, vacSensors, vacOption } from './state.js';
 // L'accueil de premiere installation ne sert qu'une fois : son code n'a pas a
 // peser dans le bundle de chaque ouverture.
@@ -12621,7 +12621,7 @@ export default function App() {
    * yeux de quelqu'un qui venait justement de la configurer. */
   const cfgVues = useMemo(() => {
     const local = {};
-    LOGGIA_SYNC_KEYS.forEach(k => { const v = readLS(k, null); if (v != null) local[k] = v; });
+    LOGGIA_CONFIG_KEYS.forEach(k => { const v = readLS(k, null); if (v != null) local[k] = v; });
     return { ...local, ...(serverCfg || {}) };
   }, [serverCfg, sigEntites]);
   const loggiaRuntime = useMemo(
