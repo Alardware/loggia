@@ -195,7 +195,17 @@ export function VoletsReglages({ hass, cardSt }) {
               {covers.map(c => {
                 const r = (plan.volets || {})[c.id] || null;
                 const exclu = !!(r && r.exclu);
-                const propre = !!(r && !r.exclu && (r.ouverture != null || r.fermeture != null));
+                /* Le mode est MEMORISE, pas deduit des valeurs.
+                 *
+                 * Deduit, il disparaissait sous les doigts : vider le dernier
+                 * champ rendait `propre` faux, le bloc entier se demontait et
+                 * le volet retombait sur « Comme les autres » — alors que la
+                 * ligne juste en dessous dit que vide est un choix valable
+                 * (« suit l'heure generale pour ce sens »).
+                 *
+                 * `r.ouverture != null || r.fermeture != null` reste lu pour
+                 * les configurations ecrites avant ce drapeau. */
+                const propre = !!(r && !r.exclu && (r.perso || r.ouverture != null || r.fermeture != null));
                 const poser = (v) => enregistrer({ planning: { volets: { ...(plan.volets || {}), [c.id]: v } } });
                 const retirer = () => { const v = { ...(plan.volets || {}) }; delete v[c.id]; enregistrer({ planning: { volets: v } }); };
                 return (
@@ -203,7 +213,7 @@ export function VoletsReglages({ hass, cardSt }) {
                     <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 7 }}>{c.nom}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       <button onClick={retirer} style={puce(!r)}>{tr('Comme les autres')}</button>
-                      <button onClick={() => poser({ ouverture: 60, fermeture: null })} style={puce(propre)}>{tr('Heures à lui')}</button>
+                      <button onClick={() => poser({ perso: true, ouverture: 60, fermeture: null })} style={puce(propre)}>{tr('Heures à lui')}</button>
                       <button onClick={() => poser({ exclu: true })} style={puce(exclu)}>{tr('Jamais')}</button>
                     </div>
                     {propre && (
