@@ -1425,4 +1425,6 @@ export default {
   'Revenir': 'Back',
   'Dossier vide': 'Empty folder',
   'Ce lecteur ne propose rien à parcourir.': 'This player has nothing to browse.',
+  'Refaire': 'Redo',
+  'Défaire': 'Undo',
 };
