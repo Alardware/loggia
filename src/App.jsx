@@ -549,7 +549,11 @@ function Header() {
   const cur = users[userIdx] || { name: 'Administrateur', role: 'Admin', grad: 'linear-gradient(135deg,#ffb347,#f87171)' };
   const curBg = userBg(cur);
   const hbtn = { width: 42, height: 42, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 };
-  const editBtn = editMode ? { ...hbtn, background: 'rgba(var(--o-accent-rgb),.18)', borderColor: 'rgba(var(--o-accent-rgb),.45)', color: 'var(--o-accent-soft)' } : hbtn;
+  /* `border` et non `borderColor` : `hbtn` pose deja le raccourci, et React
+   * ne garantit pas l'ordre entre les deux. En quittant l'edition il retirait
+   * `borderColor` en laissant `border` — le bouton pouvait garder sa bordure
+   * accentuee. */
+  const editBtn = editMode ? { ...hbtn, background: 'rgba(var(--o-accent-rgb),.18)', border: 'var(--o-bw,1px) solid rgba(var(--o-accent-rgb),.45)', color: 'var(--o-accent-soft)' } : hbtn;
   const menu = { position: 'absolute', top: 'calc(100% + 8px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 14, boxShadow: '0 18px 44px rgba(0,0,0,.45)', backdropFilter: 'blur(14px)', zIndex: 60, overflow: 'hidden' };
   const mItem = { width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: 'transparent', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', fontSize: 13, fontWeight: 600, textAlign: 'left' };
   const [notifOpen, setNotifOpen] = useState(false);
@@ -5161,7 +5165,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
       </div>
       {rouges.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14, alignItems: 'center' }}>
-          {rouges.map((n, i) => <span key={i} style={{ ...chip, color: '#f87171', borderColor: 'rgba(248,113,113,.3)', background: 'rgba(248,113,113,.08)' }}>{pt('#f87171')}{n[1]} · {n[2]}</span>)}
+          {rouges.map((n, i) => <span key={i} style={{ ...chip, color: '#f87171', border: '1px solid rgba(248,113,113,.3)', background: 'rgba(248,113,113,.08)' }}>{pt('#f87171')}{n[1]} · {n[2]}</span>)}
         </div>
       )}
       {/* Scènes rapides SANS réveiller : le pointeur est stoppé avant d'atteindre
