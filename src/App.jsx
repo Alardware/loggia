@@ -2106,6 +2106,131 @@ function mpRead(S, id) {
 }
 
 // Détail média : lecteur complet (ambiance pochette, seek, contrôles, volume) — comme la vue Médias.
+/** Ce qu'on garde de l'historique.
+ *
+ * DEUX plafonds, parce qu'ils ne protegent pas de la meme chose.
+ *
+ * Dix versions : au-dela on ne restaure plus, on fouille.
+ *
+ * Et un plafond d'OCTETS, moins evident : chaque version garde une copie
+ * entiere de l'agencement, et le serveur refuse toute valeur de plus de 256 Ko
+ * (`MAX_VALUE_BYTES`, store.py). Un refus porte sur la requete entiere, sans
+ * rien afficher : l'historique semblerait s'enregistrer, puis serait vide au
+ * rechargement suivant. On elague donc AVANT d'envoyer.
+ *
+ * 128 Ko vient d'une mesure, pas d'une intuition. Une maison de demonstration
+ * pese 91 octets ; une maison volontairement demesuree — 40 pieces, 25
+ * sections, les trois formats distincts — pese 7,6 Ko, soit 77 Ko pour dix
+ * versions. Le filet doit laisser passer ce cas-la et n'attraper que
+ * l'anormal : au-dessous de 128 Ko il mordrait en usage legitime, au-dela il
+ * approcherait le refus serveur. Et quand il mord, ce sont les vieilles
+ * versions qui partent, jamais les recentes.
+ */
+const HISTO_MAX = 10;
+const HISTO_OCTETS = 128 * 1024;
+function elaguerHisto(liste) {
+  let h = liste.slice(0, HISTO_MAX);
+  while (h.length > 1) {
+    let poids;
+    try { poids = new Blob([JSON.stringify(h)]).size; }
+    catch (e) { poids = JSON.stringify(h).length * 2; }   // pire cas UTF-16
+    if (poids <= HISTO_OCTETS) break;
+    h = h.slice(0, -1);
+  }
+  return h;
+}
+
+/* L'historique des mises en page.
+ *
+ * UNE VERSION PAR SEANCE, pas par geste. Un journal des gestes donnerait
+ * cinquante entrees a trois secondes d'intervalle, et l'on n'y retrouverait
+ * rien. Ce qu'on veut restaurer, c'est « l'accueil d'avant ma seance de ce
+ * matin » — donc l'etat capture a l'ENTREE en edition, archive a la sortie si
+ * quelque chose a bouge.
+ *
+ * Le defaire/refaire vit en memoire et meurt en quittant l'edition ; celui-ci
+ * survit et suit la maison. Les deux se completent : l'un rattrape le geste,
+ * l'autre la seance.
+ */
+
+/** Quand une version a ete prise, dans la langue de l'interface.
+ *
+ * `relTime` plus bas dit « Il y a 2 h » en francais EN DUR : sur un dashboard
+ * anglais, l'historique serait la seule liste a parler francais.
+ * `Intl.RelativeTimeFormat` traduit lui-meme, dans les 64 langues de HA.
+ */
+function quandVersion(ts) {
+  const secs = Math.round((ts - Date.now()) / 1000);   // negatif : c'est du passe
+  const paliers = [[60, 'second', 1], [3600, 'minute', 60], [86400, 'hour', 3600], [604800, 'day', 86400]];
+  try {
+    for (const [borne, unite, taille] of paliers) {
+      if (Math.abs(secs) < borne) return new Intl.RelativeTimeFormat(locale(), { numeric: 'auto' }).format(Math.round(secs / taille), unite);
+    }
+    // Au-dela d'une semaine, « il y a 3 semaines » situe moins bien qu'une date.
+    return new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(ts));
+  } catch (e) { return new Date(ts).toLocaleString(); }
+}
+
+/** Ce qu'une version contient, en clair.
+ *
+ * Sans cela la liste n'est qu'une suite de dates, et l'on restaure a l'aveugle.
+ */
+function resumeVersion(g) {
+  const n = [];
+  const caches = (g.caches || []).length;
+  if (caches) n.push(tr(caches > 1 ? '{n} sections masquées' : '{n} section masquée', { n: caches }));
+  const tailles = Object.keys(g.tailles || {}).length;
+  if (tailles) n.push(tr(tailles > 1 ? '{n} tuiles redimensionnées' : '{n} tuile redimensionnée', { n: tailles }));
+  const fmts = Object.keys(g.formats || {}).length;
+  if (fmts) n.push(tr(fmts > 1 ? '{n} écrans à part' : '{n} écran à part', { n: fmts }));
+  const ordre = (g.piecesOrdre || []).length;
+  if (ordre) n.push(tr('pièces réordonnées'));
+  return n.length ? n.join(' · ') : tr('Agencement par défaut');
+}
+
+function FeuilleHistorique({ entrees, onRestaurer, onOublier, onClose }) {
+  const btnRond = { width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
+  return (
+    <BottomSheet onClose={onClose}>
+      {(close) => (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <button onClick={close} aria-label={tr('Fermer')} style={btnRond}><Fi i="cross" size={14} /></button>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 800, letterSpacing: '-.01em' }}>{tr('Historique des mises en page')}</span>
+            {entrees.length > 0 && (
+              <button onClick={() => { onOublier(); close(); }} style={editBtn(false)}>{tr('Tout oublier')}</button>
+            )}
+          </div>
+          {entrees.length === 0
+            ? <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text1)', padding: '26px 4px', textAlign: 'center' }}>
+              {tr('Aucune version enregistrée. Une séance d’édition qui change quelque chose en dépose une.')}
+            </div>
+            : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '54vh', overflowY: 'auto' }}>
+                {entrees.map((e, i) => (
+                  <div key={e.ts} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 13, background: 'var(--o-s1)' }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{tr('Avant la séance')} · {quandVersion(e.ts)}</span>
+                      <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text1)', marginTop: 2 }}>{resumeVersion(e.grille || {})}</span>
+                    </span>
+                    <button onClick={() => { onRestaurer(e); close(); }} style={editBtn(i === 0)}>{tr('Restaurer')}</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          {/* Restaurer n'est pas un point de non-retour : la pile de la seance
+            * en cours le rattrape comme n'importe quel autre geste. */}
+          {entrees.length > 0 && (
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text1)', marginTop: 12 }}>
+              {tr('Une restauration se défait comme un geste ordinaire.')}
+            </div>
+          )}
+        </div>
+      )}
+    </BottomSheet>
+  );
+}
+
 /* Le navigateur de medias : ce que CE lecteur sait jouer.
  *
  * Home Assistant expose l'arbre par lecteur — un Chromecast propose les
@@ -5489,6 +5614,32 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     delete f[formatGrille];
     saveAccL({ ...accL, formats: f });
   };
+  /* L'historique persiste, et suit la MAISON : `loggia_histo` s'ecrit sans
+   * tiret, donc `est_personnelle` le classe en commun — comme l'agencement
+   * qu'il archive. Restaurer depuis le telephone doit valoir pour tous. */
+  const [histo, setHisto] = useState(() => {
+    const v = cfgVal('loggia_histo', null);
+    return Array.isArray(v) ? v.filter(x => x && x.ts && x.grille) : [];
+  });
+  const [histoOuvert, setHistoOuvert] = useState(false);
+  /* L'etat au moment ou l'on entre en edition. Une ref, pas un state : le
+   * relire ne doit rien redessiner, et il ne sert qu'a la sortie. */
+  const avantSeance = useRef(null);
+  useEffect(() => {
+    if (editMode) { avantSeance.current = accL; return; }
+    const av = avantSeance.current;
+    avantSeance.current = null;
+    if (!av) return;
+    // Une seance blanche ne merite pas une version.
+    if (JSON.stringify(av) === JSON.stringify(accL)) return;
+    setHisto(h => {
+      const suiv = elaguerHisto([{ ts: Date.now(), grille: av }, ...h]);
+      cfgSet({ loggia_histo: suiv });
+      return suiv;
+    });
+  }, [editMode]);
+  const restaurer = (e) => { if (e && e.grille) saveAccL(e.grille); };
+  const oublierHisto = () => { setHisto([]); cfgSet({ loggia_histo: [] }); };
   const annuler = () => {
     setPasse(p => {
       if (!p.length) return p;
@@ -5997,6 +6148,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
                 {tr('Suivre l’ordinateur')}
               </button>
             )}
+            <button onClick={() => setHistoOuvert(true)} style={{ ...editBtn(false), display: 'flex', alignItems: 'center', gap: 6 }}
+              title={tr('Retrouver un agencement précédent')}>
+              <Fi i="time-past" size={12} />{tr('Historique')}{histo.length ? ' · ' + histo.length : ''}
+            </button>
           </ViewEditBar>
         )}
 
@@ -6343,6 +6498,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
       })()}
       {/* Fiches des cartes du catalogue (héros « En ce moment »). */}
       {dc.sheets}
+      {histoOuvert && <FeuilleHistorique entrees={histo} onRestaurer={restaurer} onOublier={oublierHisto} onClose={() => setHistoOuvert(false)} />}
     </main>
   );
 }
