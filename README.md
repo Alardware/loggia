@@ -13,8 +13,6 @@ en déduit ce qu'il peut afficher. Aucun identifiant d'entité n'est écrit dans
 code : ce qui n'existe pas chez vous n'apparaît pas, et ce que vous ajoutez plus
 tard apparaît sans rien toucher.
 
-![L'accueil : pièces, températures, qualité de l'air, état de la maison](docs/captures/pc-accueil.webp)
-
 Le même dashboard s'adapte à l'écran qui le regarde : sur tablette comme sur
 téléphone, le bandeau du haut disparaît, la navigation passe en bas et la
 barre latérale devient un tiroir. C'est le TYPE d'appareil qui décide, jamais
