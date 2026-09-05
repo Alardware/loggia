@@ -116,11 +116,19 @@ function configDemo() {
     })),
     // `loggia_energyHaids` est la cle que lisent `enHaids()` ET la disponibilite
     // des vues : sans elle, la vue Energie restait masquee en demonstration.
+    // `loggia_cameras` est la cle que lit l'agregat — `loggia_entities.cameras`
+    // sert ailleurs. Sans `haid`, la tuile prend son rendu de repli : degrade,
+    // halo et badge « Direct », au lieu d'attendre un flux qui n'existe pas ici.
+    loggia_cameras: [{ name: 'Jardin', online: true }, { name: 'Entrée', online: true }],
+    // Le defaut du code est la puce compacte. La demonstration montre le
+    // format standard : c'est celui qui porte le plus — temperature, compte
+    // de lampes, volets, chauffage et interrupteur sur la meme carte.
+    loggia_accueil: { tailles: PIECES.reduce((o, p) => { o[p[1]] = 's'; return o; }, {}) },
     loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
     loggia_entities: {
       weather: ['weather.maison', 'sun.sun'],
       alarm: 'alarm_control_panel.maison',
-      cameras: [],
+      cameras: [{ name: 'Jardin', online: true }, { name: 'Entrée', online: true }],
       people: [{ name: 'Camille', haid: 'person.camille' }, { name: 'Alex', haid: 'person.alex' }],
       energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
     },
