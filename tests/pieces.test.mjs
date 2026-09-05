@@ -62,15 +62,22 @@ test('la tablette pose sa mosaïque sur trois colonnes', () => {
     'les trois colonnes de la tablette ne sont plus imposées');
 });
 
-test('chaque tuile de la mosaïque reçoit sa case', () => {
-  // `.grid-chips` coule en `row dense` sur des rangées de 88 px : une standard
-  // en occupe deux, une puce une seule. Laissée libre, la puce remonte combler
-  // le trou de sa voisine et la mosaïque part en escalier — la 4e tuile se
-  // logeait sous la 2e au lieu d'ouvrir la rangée du bas.
+test('la mosaïque impose la colonne, jamais la rangée', () => {
+  // `.grid-chips` coule sur des rangées de 88 px : une standard en occupe
+  // deux, une puce une seule.
+  //
+  // Sans colonne imposée, les tuiles se bousculent et la mosaïque part en
+  // escalier. Avec la rangée imposée EN PLUS, chaque colonne s'aligne sur la
+  // plus haute et laisse un trou sous les puces — la grande du milieu restait
+  // clouée en bas au lieu de remonter combler le vide.
+  //
+  // Mesuré à 1180 px tactile : la tuile du milieu démarre à y=546, juste sous
+  // la puce qui finit à 538, et non à 642 comme ses voisines de rangée.
   assert.match(src, /gridColumn: \(i % 3\) \+ 1/,
-    'la colonne de chaque tuile n’est plus imposée');
-  assert.match(src, /gridRow: \(Math\.floor\(i \/ 3\) \* 2 \+ 1\) \+ ' \/ span ' \+ \(t === 's' \? 2 : 1\)/,
-    'la rangée de chaque tuile n’est plus imposée : la mosaïque repartira en escalier');
+    'la colonne de chaque tuile n’est plus imposée : la mosaïque partira en escalier');
+  const i = src.indexOf('gridColumn: (i % 3) + 1');
+  assert.ok(!src.slice(i, i + 160).includes('gridRow'),
+    'la rangée est de nouveau imposée : les tuiles cesseront de combler les vides');
 });
 
 test('un choix explicite prime sur l’appareil', () => {
