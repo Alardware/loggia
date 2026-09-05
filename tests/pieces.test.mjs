@@ -62,6 +62,17 @@ test('la tablette pose sa mosaïque sur trois colonnes', () => {
     'les trois colonnes de la tablette ne sont plus imposées');
 });
 
+test('chaque tuile de la mosaïque reçoit sa case', () => {
+  // `.grid-chips` coule en `row dense` sur des rangées de 88 px : une standard
+  // en occupe deux, une puce une seule. Laissée libre, la puce remonte combler
+  // le trou de sa voisine et la mosaïque part en escalier — la 4e tuile se
+  // logeait sous la 2e au lieu d'ouvrir la rangée du bas.
+  assert.match(src, /gridColumn: \(i % 3\) \+ 1/,
+    'la colonne de chaque tuile n’est plus imposée');
+  assert.match(src, /gridRow: \(Math\.floor\(i \/ 3\) \* 2 \+ 1\) \+ ' \/ span ' \+ \(t === 's' \? 2 : 1\)/,
+    'la rangée de chaque tuile n’est plus imposée : la mosaïque repartira en escalier');
+});
+
 test('un choix explicite prime sur l’appareil', () => {
   const i = src.indexOf('const choisi = (accL.tailles || {})[p.name];');
   assert.notEqual(i, -1, 'la lecture du choix de taille a disparu');
