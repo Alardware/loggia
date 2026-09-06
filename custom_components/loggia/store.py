@@ -218,14 +218,48 @@ class LoggiaStore:
         return data["shared"].get(key, default)
 
     async def async_set_shared(self, key: str, value: Any) -> None:
-        """Ecriture SERVEUR d'une cle commune (journal des alertes).
+        """Ecriture SERVEUR d'une cle commune.
 
         Reservee aux modules du composant : le client, lui, passe par
         async_set_user qui verifie le role. Meme verrou que le reste.
+
+        LES MEMES PLAFONDS QU'AILLEURS. Cette methode passait a cote : le
+        controle de volume vivait dans `_set_locked`, sur le chemin du client,
+        et les six commandes de configuration par module — volets, fenetres,
+        presence, nuit, veilles, interrupteurs — arrivaient ici avec le contenu
+        du client sans jamais y toucher. Le plafond referme en aout se
+        rouvrait donc par une autre porte, celle-la meme qu'ont empruntee tous
+        les modules ajoutes ensuite.
+
+        Etre reserve aux administrateurs ne suffit pas : un plafond n'est pas
+        la contre la malveillance, il est la pour qu'une boucle ou un client
+        fautif ne laisse pas un fichier de plusieurs dizaines de Mo dans
+        `.storage`, resserialise a chaque reglage.
+
+        Le volume se mesure APRES ecriture, comme dans `_set_locked` : une
+        suite de petits appels acceptes un a un laisse sinon passer n'importe
+        quelle taille.
         """
         async with self._lock:
             data = await self._load()
-            data["shared"][key] = value
+            taille_valeur = _taille({key: value})
+            if taille_valeur > MAX_VALUE_BYTES:
+                raise ValueError(
+                    f"valeur trop volumineuse pour {key} "
+                    f"({taille_valeur} > {MAX_VALUE_BYTES} octets)"
+                )
+            commun = dict(data["shared"])
+            commun[key] = value
+            if len(commun) > MAX_KEYS_PER_USER:
+                raise ValueError(
+                    f"trop de cles communes ({len(commun)} > {MAX_KEYS_PER_USER})"
+                )
+            taille = _taille(commun)
+            if taille > MAX_TOTAL_BYTES:
+                raise ValueError(
+                    f"stockage commun trop volumineux ({taille} > {MAX_TOTAL_BYTES} octets)"
+                )
+            data["shared"] = commun
             await self._store.async_save(data)
 
     async def async_get_user(self, user_id: str) -> dict[str, Any]:

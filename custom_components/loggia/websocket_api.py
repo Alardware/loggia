@@ -200,9 +200,13 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                 msg["id"], "not_available", "ecoute des interrupteurs indisponible"
             )
             return
-        table = await interrupteurs.async_affecter(
-            msg["cle"], msg["action"], msg["gestes"], msg.get("nom") or ""
-        )
+        try:
+            table = await interrupteurs.async_affecter(
+                msg["cle"], msg["action"], msg["gestes"], msg.get("nom") or ""
+            )
+        except ValueError as err:
+            connection.send_error(msg["id"], "payload_too_large", str(err))
+            return
         connection.send_result(msg["id"], {"affectations": table})
 
     # ── Regles de volets ──────────────────────────────────────────────────
@@ -227,7 +231,15 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         if volets is None:
             connection.send_error(msg["id"], "not_available", "regles de volets indisponibles")
             return
-        connection.send_result(msg["id"], {"config": await volets.async_enregistrer(msg["patch"])})
+        try:
+            config = await volets.async_enregistrer(msg["patch"])
+        except ValueError as err:
+            # Les plafonds de `store.py`. Sans ce relais, le refus
+            # remonterait en erreur inconnue et l'ecran continuerait
+            # d'afficher un reglage que le serveur n'a pas garde.
+            connection.send_error(msg["id"], "payload_too_large", str(err))
+            return
+        connection.send_result(msg["id"], {"config": config})
 
     # ── Fenetre ouverte, chauffage coupe ──────────────────────────────────
     @websocket_api.websocket_command({vol.Required("type"): WS_FEN_ETAT})
@@ -249,7 +261,15 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         if fen is None:
             connection.send_error(msg["id"], "not_available", "regle des fenetres indisponible")
             return
-        connection.send_result(msg["id"], {"config": await fen.async_enregistrer(msg["patch"])})
+        try:
+            config = await fen.async_enregistrer(msg["patch"])
+        except ValueError as err:
+            # Les plafonds de `store.py`. Sans ce relais, le refus
+            # remonterait en erreur inconnue et l'ecran continuerait
+            # d'afficher un reglage que le serveur n'a pas garde.
+            connection.send_error(msg["id"], "payload_too_large", str(err))
+            return
+        connection.send_result(msg["id"], {"config": config})
 
     # ── Depart et retour ──────────────────────────────────────────────────
     @websocket_api.websocket_command({vol.Required("type"): WS_PRE_ETAT})
@@ -271,7 +291,15 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         if pre is None:
             connection.send_error(msg["id"], "not_available", "regle de presence indisponible")
             return
-        connection.send_result(msg["id"], {"config": await pre.async_enregistrer(msg["patch"])})
+        try:
+            config = await pre.async_enregistrer(msg["patch"])
+        except ValueError as err:
+            # Les plafonds de `store.py`. Sans ce relais, le refus
+            # remonterait en erreur inconnue et l'ecran continuerait
+            # d'afficher un reglage que le serveur n'a pas garde.
+            connection.send_error(msg["id"], "payload_too_large", str(err))
+            return
+        connection.send_result(msg["id"], {"config": config})
 
     # ── La nuit ───────────────────────────────────────────────────────────
     @websocket_api.websocket_command({vol.Required("type"): WS_NUI_ETAT})
@@ -293,7 +321,15 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         if nuit is None:
             connection.send_error(msg["id"], "not_available", "regles de nuit indisponibles")
             return
-        connection.send_result(msg["id"], {"config": await nuit.async_enregistrer(msg["patch"])})
+        try:
+            config = await nuit.async_enregistrer(msg["patch"])
+        except ValueError as err:
+            # Les plafonds de `store.py`. Sans ce relais, le refus
+            # remonterait en erreur inconnue et l'ecran continuerait
+            # d'afficher un reglage que le serveur n'a pas garde.
+            connection.send_error(msg["id"], "payload_too_large", str(err))
+            return
+        connection.send_result(msg["id"], {"config": config})
 
     # ── Les veilles ───────────────────────────────────────────────────────
     @websocket_api.websocket_command({vol.Required("type"): WS_VEI_ETAT})
@@ -315,7 +351,15 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         if vei is None:
             connection.send_error(msg["id"], "not_available", "veilles indisponibles")
             return
-        connection.send_result(msg["id"], {"config": await vei.async_enregistrer(msg["patch"])})
+        try:
+            config = await vei.async_enregistrer(msg["patch"])
+        except ValueError as err:
+            # Les plafonds de `store.py`. Sans ce relais, le refus
+            # remonterait en erreur inconnue et l'ecran continuerait
+            # d'afficher un reglage que le serveur n'a pas garde.
+            connection.send_error(msg["id"], "payload_too_large", str(err))
+            return
+        connection.send_result(msg["id"], {"config": config})
 
     websocket_api.async_register_command(hass, handle_vei_etat)
     websocket_api.async_register_command(hass, handle_vei_config)

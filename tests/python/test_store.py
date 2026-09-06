@@ -284,3 +284,80 @@ def test_classement_des_cles(store_module):
                 "loggia_energyHaids", "loggia_roomlayout",
                 "loggia_active_user", "loggia_admin_pin", "loggia_accueil"):
         assert not est_perso(cle), f"{cle} devrait etre commun a la maison"
+
+def test_le_plafond_vaut_aussi_pour_les_modules(creer_store, store_module):
+    """`async_set_shared` passait a cote des plafonds.
+
+    Le controle de volume vivait dans `_set_locked`, sur le chemin du client.
+    Les six commandes de configuration par module — volets, fenetres, presence,
+    nuit, veilles, interrupteurs — arrivent, elles, par `async_set_shared` avec
+    le contenu envoye par le client, et n'y touchaient jamais. Le plafond
+    referme en aout se rouvrait donc par la porte qu'ont empruntee tous les
+    modules ajoutes ensuite.
+
+    Etre reserve aux administrateurs ne dispense pas d'un plafond : celui-ci
+    n'est pas la contre la malveillance, mais pour qu'une boucle ou un client
+    fautif ne laisse pas des dizaines de Mo dans `.storage`, resserialises a
+    chaque reglage.
+    """
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    trop_gros = "x" * (store_module.MAX_VALUE_BYTES + 1)
+    with pytest.raises(ValueError):
+        lancer(magasin.async_set_shared("loggia_volets", trop_gros))
+
+
+def test_le_volume_cumule_du_commun_est_refuse(creer_store, store_module):
+    """Chaque ecriture sous la limite, leur somme au-dessus.
+
+    Meme piege que pour le chemin client : mesurer la requete entrante ne dit
+    rien de ce qui reste sur le disque. Le volume se mesure donc apres ecriture.
+    """
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    gros = "x" * (store_module.MAX_VALUE_BYTES // 2)
+    with pytest.raises(ValueError):
+        for i in range(store_module.MAX_KEYS_PER_USER):
+            lancer(magasin.async_set_shared(f"loggia_m{i}", gros))
+
+
+def test_une_ecriture_normale_de_module_passe(creer_store):
+    """Le plafond ne doit pas gener les vraies configurations.
+
+    Un planning de volets complet pese quelques Ko : s'il etait refuse, la
+    correction serait pire que le defaut.
+    """
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    plan = {"planning": {"actif": True, "jours": [0, 1, 2, 3, 4, 5, 6],
+                         "volets": {f"cover.v{i}": {"ouverture": 15} for i in range(40)}}}
+    lancer(magasin.async_set_shared("loggia_volets", plan))
+    data = lancer(magasin._load())
+    assert data["shared"]["loggia_volets"] == plan, "une configuration normale a ete refusee"
+
+def test_le_nombre_de_cles_communes_est_plafonne(creer_store, store_module):
+    """Beaucoup de petites cles, sans jamais approcher le plafond d'octets.
+
+    Le test du volume cumule ne prouve pas celui-ci : il atteint la limite
+    d'octets bien avant celle des cles, si bien que retirer le compte de cles
+    le laissait passer. Verifie par mutation.
+    """
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    with pytest.raises(ValueError):
+        for i in range(store_module.MAX_KEYS_PER_USER + 1):
+            lancer(magasin.async_set_shared(f"loggia_p{i}", i))
+
+def test_les_commandes_de_module_relaient_le_refus():
+    """Un plafond qui refuse en silence ne vaut guere mieux qu'aucun plafond.
+
+    `handle_set` attrape deja `ValueError` et repond `payload_too_large`. Les six
+    commandes de configuration par module ne le faisaient pas : le refus serait
+    remonte en erreur inconnue, et l'ecran aurait continue d'afficher un reglage
+    que le serveur n'a pas garde.
+    """
+    from pathlib import Path
+    src = Path(__file__).resolve().parents[2] / "custom_components" / "loggia" / "websocket_api.py"
+    texte = src.read_text(encoding="utf-8")
+    for var in ("volets", "fen", "pre", "nuit", "vei"):
+        bloc = texte[texte.index("await %s.async_enregistrer" % var) - 400:]
+        bloc = bloc[:bloc.index("send_result") + 40]
+        assert "except ValueError" in bloc,             "la commande de %s ne relaie pas le refus du plafond" % var
+    i = texte.index("await interrupteurs.async_affecter")
+    assert "except ValueError" in texte[i - 200:i + 400],         "l'affectation des interrupteurs ne relaie pas le refus"
