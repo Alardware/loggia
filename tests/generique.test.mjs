@@ -148,3 +148,37 @@ test('les moteurs sont indépendants de React et du navigateur', () => {
   });
   assert.deepEqual(fautes, [], 'dépendances à l’interface :\n  ' + fautes.join('\n  '));
 });
+
+test('le paquet livre ne traine pas les bundles des compilations passees', () => {
+  // Vite compile avec `emptyOutDir: false` : chaque compilation depose de
+  // nouveaux bundles au hash different, et rien ne reprend les anciens. La
+  // retenue de `pack_frontend.py` ne portait que sur la famille `index-*` ;
+  // toutes les autres — boot, meteo, parametres, vacplan, wx3d, Onboarding, en,
+  // demo — s'empilaient sans fin.
+  //
+  // Mesure du 06/09 avant correction : 1 302 fichiers pour 158 Mo, dont 215
+  // copies de `meteo-*` et 185 de `boot-*`. Tout cela partait chez chaque
+  // utilisateur par HACS, et grossissait le depot a chaque version. Apres : 40
+  // fichiers, 4,3 Mo.
+  //
+  // Rien ne le signalait : le paquet restait valide, l'application marchait, et
+  // le poids ne se voit ni au lint ni aux tests.
+  const dossier = join(RACINE, 'custom_components', 'loggia', 'frontend', 'assets');
+  const fichiers = readdirSync(dossier).filter(f => /\.(js|css)$/.test(f));
+  const parFamille = {};
+  for (const f of fichiers) {
+    const ext = f.slice(f.lastIndexOf('.'));
+    const base = f.slice(0, f.lastIndexOf('.'));
+    if (!base.includes('-')) continue;
+    // La famille inclut l'extension : `retenir()` traite `index-*.js` et
+    // `index-*.css` separement, et les melanger fausserait le compte.
+    const famille = base.slice(0, base.lastIndexOf('-')) + ext;
+    parFamille[famille] = (parFamille[famille] || 0) + 1;
+  }
+  // `GARDE = 3` dans pack_frontend.py, plus le bundle du jour : quatre au plus.
+  // Les caches iOS reclament parfois l'ancien fichier, d'ou cette marge.
+  const trop = Object.entries(parFamille).filter(([, n]) => n > 4);
+  assert.deepEqual(trop, [],
+    'des familles de bundles s’accumulent dans le paquet livré : ' +
+    trop.map(([f, n]) => `${f} (${n} copies)`).join(', '));
+});

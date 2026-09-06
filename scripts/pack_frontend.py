@@ -205,8 +205,26 @@ def main():
         print('REFUS : le html reclame des fichiers absents du paquet :', manquants)
         return 1
 
-    efface = (retenir(assets_dst, 'index-', '.js', reference)
-              + retenir(assets_dst, 'index-', '.css', reference))
+    # TOUTES les familles, pas seulement `index-`.
+    #
+    # La retenue ne portait que sur `index-*`. Les autres bundles — `boot`,
+    # `meteo`, `parametres`, `vacplan`, `wx3d`, `Onboarding`, `en`, `demo` —
+    # n'etaient jamais elagues : chaque compilation en deposait une version de
+    # plus, et rien ne les reprenait. Mesure du 06/09 : 1 295 fichiers dans
+    # `assets`, dont 215 copies de `meteo-*`, 215 de `parametres-*` et 185 de
+    # `boot-*`, pour 158 Mo. Tout cela partait chez chaque utilisateur par HACS,
+    # et grossissait le depot a chaque version.
+    #
+    # On decouvre les familles au lieu de les nommer : un nouveau point d'entree
+    # ajoute par Vite serait autrement oublie a son tour, en silence.
+    familles = set()
+    for f in os.listdir(assets_dst):
+        for suf in ('.js', '.css'):
+            if f.endswith(suf) and '-' in f[:-len(suf)]:
+                familles.add((f[:f[:-len(suf)].rindex('-') + 1], suf))
+    efface = []
+    for prefixe, suffixe in sorted(familles):
+        efface += retenir(assets_dst, prefixe, suffixe, reference)
     print('bundle publie       :', ', '.join(sorted(f for f in reference if f.endswith('.js'))))
     print('assets copies       :', n)
     print('fichiers publics    :', autres)
