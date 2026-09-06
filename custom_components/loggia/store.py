@@ -66,6 +66,13 @@ PERSONAL_KEYS: frozenset[str] = frozenset(
         "loggia-lastseen",
     }
 )
+# Sans separateur, a dessein : les cles en place — `loggia-secpanel`,
+# `loggia-objpanel`, `loggia-parpanel`, `loggia-enpanel`, `loggia-reglespanel`
+# — finissent par « panel » mais pas par « -panel ». Exiger le tiret les
+# ferait toutes basculer du cote commun, et chacun retrouverait les panneaux
+# replies de quelqu'un d'autre. Le revers est qu'une future cle PARTAGEE
+# nommee « ...panel » deviendrait personnelle sans avertissement : a garder
+# en tete au moment de nommer.
 PERSONAL_SUFFIXES: tuple[str, ...] = ("panel",)
 
 
@@ -189,6 +196,18 @@ class LoggiaStore:
         if raw.get("migrated") or not raw["users"]:
             raw["migrated"] = True
             return False
+        # Le compte le mieux garni, sans verifier qu'il est administrateur — le
+        # role ne vit pas ici, `_migrer` ne voit que des configurations.
+        #
+        # En theorie, un compte non-admin qui se serait gonfle de cles avant la
+        # migration verrait les siennes promues en commun. En pratique la
+        # fenetre est nulle : sur une installation neuve, `raw["users"]` est
+        # vide au premier chargement et le marqueur est pose avant qu'aucune
+        # donnee n'existe. Ce chemin ne sert qu'a reprendre l'ancien projet
+        # prive, jamais une installation publique.
+        #
+        # Ecrit ici parce qu'un audit l'a releve, et que le prochain lecteur se
+        # posera la meme question.
         source = max(
             raw["users"].values(),
             key=lambda c: len(c) if isinstance(c, dict) else 0,

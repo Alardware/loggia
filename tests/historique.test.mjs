@@ -85,7 +85,11 @@ test('une version par séance, pas par geste', () => {
     'l’état d’avant la séance n’est plus capturé à l’entrée en édition');
   // …et l'effet ne se rejoue QUE sur editMode. Ajouter `accL` aux dépendances
   // en ferait un journal des gestes : une entrée par déplacement de tuile.
-  const deps = bloc.match(/\}, \[([^\]]*)\]\);/);
+  // On cherche la fin de l'effet, pas une fenêtre de taille fixe : un
+  // commentaire ajouté au-dessus suffisait à la faire déborder, et le test
+  // échouait pour une raison qui n'avait rien à voir avec ce qu'il vérifie.
+  const finEffet = src.slice(i, src.indexOf('const restaurer', i));
+  const deps = finEffet.match(/\}, \[([^\]]*)\]\)/);
   assert.ok(deps, 'les dépendances de l’effet d’archivage sont introuvables');
   assert.equal(deps[1].trim(), 'editMode',
     'l’archivage se déclenche sur autre chose que la sortie d’édition : il déposera une version par geste');

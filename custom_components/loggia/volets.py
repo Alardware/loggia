@@ -160,8 +160,21 @@ def groupes_horaires(plan, covers, sens: str, quand=None) -> dict:
     Renvoie {minutes: [entity_id]} — un rendez-vous par valeur distincte,
     plutot qu'un rendez-vous par volet.
     """
+    # `plan[sens]` doit etre un dict — mais rien ne l'y oblige. La MEME cle
+    # porte deux formes selon le niveau : ici `{"decalage": N}`, et un entier nu
+    # dans `plan["volets"][haid]`. Un patch qui applique la seconde forme au
+    # premier niveau remplace le dict par un entier ou une chaine, et `.get`
+    # levait alors une `AttributeError` que le `except` ne rattrapait pas.
+    #
+    # Le degat ne s'arretait pas la : `async_enregistrer` persiste AVANT de
+    # reprogrammer, si bien que la configuration fautive etait deja ecrite quand
+    # le plantage survenait — et se reproduisait a chaque demarrage jusqu'a une
+    # correction a la main dans `.storage`.
+    section = plan.get(sens)
+    if not isinstance(section, dict):
+        section = {}
     try:
-        general = int((plan.get(sens) or {}).get("decalage") or 0)
+        general = int(section.get("decalage") or 0)
     except (TypeError, ValueError):
         general = 0
     par_volet = plan.get("volets") or {}

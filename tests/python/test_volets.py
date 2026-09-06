@@ -500,3 +500,19 @@ def test_le_declenchement_quotidien_applique_le_filtre():
     # n'est jamais pose pour un volet ecarte le jour de l'enregistrement.
     prog = texte[texte.index("async def _async_reprogrammer"):debut]
     assert "groupes_horaires(plan, covers, sens)" in prog,         "la programmation filtre de nouveau par jour : le rendez-vous ne sera pas pose"
+
+def test_une_section_de_planning_corrompue_ne_plante_pas(module):
+    """La meme cle porte deux formes selon le niveau.
+
+    Au niveau du plan, `ouverture` vaut `{"decalage": N}` ; au niveau d'un
+    volet, un entier nu. Un patch qui applique la seconde forme au premier
+    niveau remplacait le dict par un entier, et `.get` levait une
+    `AttributeError` que le `except (TypeError, ValueError)` ne rattrapait pas.
+
+    Pire : `async_enregistrer` persiste AVANT de reprogrammer. La configuration
+    fautive etait donc deja ecrite quand le plantage survenait, et se
+    reproduisait a chaque demarrage jusqu'a une correction a la main.
+    """
+    for mauvais in ("corrompu", 15, [1, 2], True):
+        g = module.groupes_horaires({"ouverture": mauvais, "volets": {}}, COVERS, "ouverture")
+        assert COVERS[0] in [x for v in g.values() for x in v],             f"une section {type(mauvais).__name__} fait disparaitre les volets"

@@ -5641,7 +5641,14 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
       cfgSet({ loggia_histo: suiv });
       return suiv;
     });
-  }, [editMode]);
+    /* `accL` est lu en fermeture SANS figurer dans les dependances, et c'est
+     * voulu : l'effet ne doit se declencher qu'aux transitions du mode edition.
+     * Le callback etant recree a chaque rendu, il capture bien la valeur du
+     * rendu ou la transition a lieu.
+     *
+     * L'ecrire ici parce que le lint le signale, et qu'un futur refactor qui
+     * memoiserait ce callback romprait la capture sans que rien ne le voie. */
+  }, [editMode]);   // eslint-disable-line react-hooks/exhaustive-deps
   const restaurer = (e) => { if (e && e.grille) saveAccL(e.grille); };
   const oublierHisto = () => { setHisto([]); cfgSet({ loggia_histo: [] }); };
   /* Les effets de bord vivent DEHORS de l'updater.

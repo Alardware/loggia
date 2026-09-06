@@ -209,3 +209,25 @@ test('la documentation ne promet pas de garde-fou inexistant', () => {
       `${nom} annonce une liste blanche d’appels de service que le code n’implémente pas`);
   }
 });
+
+test('une URL venue d’une entité ne devient pas un lien sans contrôle', () => {
+  // `release_url` vient de l'intégration qui publie l'entité `update.*`, pas de
+  // Loggia. React ne filtre pas le schéma d'un href : `javascript:...` s'y
+  // exécuterait, dans l'origine du dashboard — le panneau n'est pas en iframe
+  // isolée — avec l'objet `hass` authentifié sous la main.
+  const src = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
+  const m = src.match(/function lienSur\(url\)[\s\S]*?\n\}/);
+  assert.ok(m, 'le filtre d’URL a disparu');
+  const lienSur = new Function('url', m[0].replace(/^function lienSur\(url\)\s*\{/, '').replace(/\}$/, ''));
+
+  for (const mauvais of ['javascript:alert(1)', 'JaVaScRiPt:alert(1)', 'data:text/html,x', 'vbscript:x', '', null]) {
+    assert.equal(lienSur(mauvais), null, `« ${mauvais} » passe encore en href`);
+  }
+  assert.equal(lienSur('https://github.com/x'), 'https://github.com/x', 'une URL légitime est rejetée');
+  assert.equal(lienSur('  http://a.b  '), 'http://a.b', 'les espaces autour ne sont plus retirés');
+
+  // Et la valeur doit passer par le filtre à la SOURCE, pas au rendu : une
+  // seule ligne à garder juste plutôt qu'un href à ne pas oublier.
+  assert.match(src, /notes: lienSur\(at\.release_url\)/,
+    'l’URL de notes n’est plus filtrée là où elle entre');
+});

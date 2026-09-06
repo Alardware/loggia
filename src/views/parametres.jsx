@@ -687,6 +687,24 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
 
 
 // Quelles sections d'entités chaque vue intégrée peut éditer en place (crayon → sheet).
+/** Une URL de notes de version, ou rien.
+ *
+ * `release_url` vient de l'entite `update.*`, donc de l'integration qui la
+ * publie — pas de Loggia. React ne filtre pas le schema d'un `href` : une
+ * integration tierce compromise pourrait y mettre `javascript:...`, et le
+ * panneau n'etant pas en iframe isolee (`embed_iframe` vaut False), le clic
+ * l'executerait dans l'origine du dashboard, avec l'objet `hass` authentifie
+ * sous la main.
+ *
+ * Deux etapes seraient necessaires — une integration deja compromise, puis
+ * un clic d'administrateur sur ce lien precis. Cela reste une porte, et la
+ * fermer coute une ligne.
+ */
+function lienSur(url) {
+  const u = String(url || '').trim();
+  return /^https?:\/\//i.test(u) ? u : null;
+}
+
 const VIEW_ENT_SECTIONS = {
   accueil: ['rooms', 'energy', 'people', 'cams'],
   lumieres: ['switches'],
@@ -872,7 +890,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     let prog = at.in_progress === true ? (at.update_percentage != null ? at.update_percentage : true) : (typeof at.in_progress === 'number' ? at.in_progress : false);
     // optimiste : « Installation… » dès le clic, tant que HA n'a pas confirmé (filet 3 min)
     if (prog === false && updBusy[id] && Date.now() - updBusy[id] < 180000 && s.state === 'on') prog = true;
-    return { id, name: at.friendly_name || at.title || id.replace('update.', '').replace(/_/g, ' '), avail: s.state === 'on', installed: at.installed_version, latest: at.latest_version, prog, pic: at.entity_picture, notes: at.release_url };
+    return { id, name: at.friendly_name || at.title || id.replace('update.', '').replace(/_/g, ' '), avail: s.state === 'on', installed: at.installed_version, latest: at.latest_version, prog, pic: at.entity_picture, notes: lienSur(at.release_url) };
   }) : [];
   // purge l'optimiste dès que HA prend le relais (in_progress réel) ou que la MàJ est terminée (state off)
   useEffect(() => {
