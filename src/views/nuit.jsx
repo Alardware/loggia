@@ -5,7 +5,7 @@
  * fondu que la lampe ne tiendra pas est pire que de ne pas le proposer.
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { cvName } from '../ui.jsx';
+import { cvName, RegleEntete, usePli } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
 // Le bit TRANSITION de Home Assistant : une lampe qui ne l'a pas ne sait pas
@@ -18,6 +18,10 @@ export function NuitReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const [etat, setEtat] = useState(null);
   const [err, setErr] = useState('');
+  /* Un pli par regle — avec les autres etats : un hook ne vit pas apres
+   * un retour conditionnel. */
+  const [pliVeilleuse, plierVeilleuse] = usePli('nuit:veilleuse');
+  const [pliCoucher, plierCoucher] = usePli('nuit:coucher');
   const vivant = useRef(true);
 
   useEffect(() => {
@@ -84,21 +88,6 @@ export function NuitReglages({ hass, cardSt }) {
   const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
   const champ = { padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
 
-  const Bascule = ({ on, cb }) => (
-    <button onClick={cb} style={{ width: 46, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 2, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
-      <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
-    </button>
-  );
-
-  const Entete = ({ nom, desc, on, cb }) => (
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={titre}>{nom}</div>
-        <div style={sous}>{desc}</div>
-      </div>
-      <Bascule on={!!on} cb={cb} />
-    </div>
-  );
 
   // Le fondu ne tient que si la lampe sait le faire : on le dit plutôt que de
   // laisser croire à un réglage sans effet.
@@ -109,15 +98,15 @@ export function NuitReglages({ hass, cardSt }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* ── La veilleuse ── */}
       <div style={cardSt}>
-        <Entete nom={tr('Veilleuse')}
+        <RegleEntete nom={tr('Veilleuse')}
           desc={tr('Allumée le soir, elle s’éteint toute seule après le délai réglé.')}
-          on={v.actif} cb={() => enregistrer({ veilleuse: { actif: !v.actif } })} />
+          on={v.actif} cb={() => enregistrer({ veilleuse: { actif: !v.actif } })} plie={pliVeilleuse} onPlier={plierVeilleuse} />
         {etat.en_cours && etat.en_cours.length > 0 && (
           <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--o-warn2)' }}>
             {tr('Décompte en cours.')}
           </div>
         )}
-        {v.actif && (
+        {v.actif && !pliVeilleuse && (
           <>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 78 }}>{tr('S’éteint après')}</span>
@@ -171,10 +160,10 @@ export function NuitReglages({ hass, cardSt }) {
 
       {/* ── Les lampes oubliées ── */}
       <div style={cardSt}>
-        <Entete nom={tr('Extinction du soir')}
+        <RegleEntete nom={tr('Extinction du soir')}
           desc={tr('À l’heure dite, ce qui traîne encore allumé s’éteint.')}
-          on={c.actif} cb={() => enregistrer({ coucher: { actif: !c.actif } })} />
-        {c.actif && (
+          on={c.actif} cb={() => enregistrer({ coucher: { actif: !c.actif } })} plie={pliCoucher} onPlier={plierCoucher} />
+        {c.actif && !pliCoucher && (
           <>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 78 }}>{tr('À')}</span>

@@ -9,7 +9,7 @@
  * sud-ouest. Le serveur, lui, travaille en degrés.
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { BottomSheet, EntPicker, cvName } from '../ui.jsx';
+import { BottomSheet, EntPicker, cvName, RegleEntete, usePli } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
 const CARDINAUX = () => [
@@ -55,6 +55,11 @@ export function VoletsReglages({ hass, cardSt }) {
   const [etat, setEtat] = useState(null);
   const [err, setErr] = useState('');
   const [picker, setPicker] = useState(null);   // { section, champ, domaines }
+  /* Un pli par regle — avec les autres etats : un hook ne peut pas vivre
+   * apres un retour conditionnel. */
+  const [pliPlan, plierPlan] = usePli('volets:planning');
+  const [pliSol, plierSol] = usePli('volets:soleil');
+  const [pliVent, plierVent] = usePli('volets:vent');
   const vivant = useRef(true);
 
   useEffect(() => {
@@ -113,21 +118,6 @@ export function VoletsReglages({ hass, cardSt }) {
   const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
   const champ = { padding: '9px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
 
-  const Bascule = ({ on, cb }) => (
-    <button onClick={cb} style={{ width: 46, height: 26, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 3, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
-      <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
-    </button>
-  );
-
-  const Entete = ({ nom, desc, on, cb }) => (
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={titre}>{nom}</div>
-        <div style={sous}>{desc}</div>
-      </div>
-      <Bascule on={!!on} cb={cb} />
-    </div>
-  );
 
   const Nombre = ({ v, min, max, pas = 1, unite, cb }) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -144,10 +134,10 @@ export function VoletsReglages({ hass, cardSt }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* ── Le planning ── */}
       <div style={cardSt}>
-        <Entete nom={tr('Lever et coucher du soleil')}
+        <RegleEntete nom={tr('Lever et coucher du soleil')}
           desc={tr('Ouvrir le matin, fermer le soir, aux heures réelles du soleil chez toi.')}
-          on={plan.actif} cb={() => enregistrer({ planning: { actif: !plan.actif } })} />
-        {plan.actif && (
+          on={plan.actif} cb={() => enregistrer({ planning: { actif: !plan.actif } })} plie={pliPlan} onPlier={plierPlan} />
+        {plan.actif && !pliPlan && (
           <>
             {/* Ce que la règle fait AUJOURD'HUI. Le même choix se retrouve en
               * haut de la vue Volets : c'est celui qu'on change au quotidien,
@@ -294,16 +284,16 @@ export function VoletsReglages({ hass, cardSt }) {
 
       {/* ── La protection solaire ── */}
       <div style={cardSt}>
-        <Entete nom={tr('Protection solaire')}
+        <RegleEntete nom={tr('Protection solaire')}
           desc={tr('Quand le soleil frappe une façade et qu’il fait chaud, baisser ses volets — puis les rouvrir quand il est passé.')}
-          on={sol.actif} cb={() => enregistrer({ soleil: { actif: !sol.actif } })} />
+          on={sol.actif} cb={() => enregistrer({ soleil: { actif: !sol.actif } })} plie={pliSol} onPlier={plierSol} plie={pliVent} onPlier={plierVent} />
         {etat.soleil && etat.soleil.azimut != null && (
           <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
             {tr('En ce moment : soleil à {a}°, hauteur {e}°', { a: Math.round(etat.soleil.azimut), e: Math.round(etat.soleil.elevation) })}
             {etat.abaisses && etat.abaisses.length ? ' · ' + (etat.abaisses.length > 1 ? tr('{n} volets abaissés', { n: etat.abaisses.length }) : tr('{n} volet abaissé', { n: 1 })) : ''}
           </div>
         )}
-        {sol.actif && (
+        {sol.actif && !pliSol && (
           <>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Descendre à')}</span>
@@ -361,13 +351,13 @@ export function VoletsReglages({ hass, cardSt }) {
 
       {/* ── La mise à l'abri ── */}
       <div style={cardSt}>
-        <Entete nom={tr('Vent fort')}
+        <RegleEntete nom={tr('Vent fort')}
           desc={tr('Au-delà d’un seuil, tout remonter. Un volet baissé dans une rafale est un volet plié — cette règle passe avant les deux autres.')}
           on={vent.actif} cb={() => enregistrer({ vent: { actif: !vent.actif } })} />
         {etat.a_l_abri && (
           <div style={{ marginTop: 9, fontSize: 12, fontWeight: 800, color: 'var(--o-warn2)' }}>{tr('Volets à l’abri en ce moment.')}</div>
         )}
-        {vent.actif && (
+        {vent.actif && !pliVent && (
           <>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Anémomètre')}</span>

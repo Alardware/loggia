@@ -6,13 +6,18 @@
  * préviendront personne.
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { cvName } from '../ui.jsx';
+import { cvName, RegleEntete, usePli } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
 export function VeillesReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const [etat, setEtat] = useState(null);
   const [err, setErr] = useState('');
+  /* Un pli par regle — avec les autres etats : un hook ne vit pas apres
+   * un retour conditionnel. */
+  const [pliCo2, plierCo2] = usePli('veilles:co2');
+  const [pliBat, plierBat] = usePli('veilles:piles');
+  const [pliCr, plierCr] = usePli('veilles:creuses');
   const vivant = useRef(true);
 
   useEffect(() => {
@@ -88,21 +93,6 @@ export function VeillesReglages({ hass, cardSt }) {
   const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
   const champ = { padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
 
-  const Bascule = ({ on, cb }) => (
-    <button onClick={cb} style={{ width: 46, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 2, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
-      <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
-    </button>
-  );
-
-  const Entete = ({ nom, desc, on, cb }) => (
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={titre}>{nom}</div>
-        <div style={sous}>{desc}</div>
-      </div>
-      <Bascule on={!!on} cb={cb} />
-    </div>
-  );
 
   const Choix = ({ liste, retenues, champNom, section }) => (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -132,10 +122,10 @@ export function VeillesReglages({ hass, cardSt }) {
 
       {/* ── L'air ── */}
       <div style={cardSt}>
-        <Entete nom={tr('Air vicié')}
+        <RegleEntete nom={tr('Air vicié')}
           desc={tr('Au-delà de 1000 à 1200 ppm on dort mal et on pense moins bien. Personne ne consulte un capteur de CO2 : il faut qu’il vienne le dire.')}
-          on={co2.actif} cb={() => enregistrer({ co2: { actif: !co2.actif } })} />
-        {co2.actif && (
+          on={co2.actif} cb={() => enregistrer({ co2: { actif: !co2.actif } })} plie={pliCo2} onPlier={plierCo2} />
+        {co2.actif && !pliCo2 && (
           <>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('Au-delà de')}</span>
@@ -166,10 +156,10 @@ export function VeillesReglages({ hass, cardSt }) {
 
       {/* ── Les piles ── */}
       <div style={cardSt}>
-        <Entete nom={tr('Piles faibles')}
+        <RegleEntete nom={tr('Piles faibles')}
           desc={tr('Un détecteur à plat ne prévient pas qu’il est à plat : il se tait, et on croit la porte fermée.')}
-          on={bat.actif} cb={() => enregistrer({ batterie: { actif: !bat.actif } })} />
-        {bat.actif && (
+          on={bat.actif} cb={() => enregistrer({ batterie: { actif: !bat.actif } })} plie={pliBat} onPlier={plierBat} />
+        {bat.actif && !pliBat && (
           <>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('En dessous de')}</span>
@@ -189,10 +179,10 @@ export function VeillesReglages({ hass, cardSt }) {
 
       {/* ── Le tarif ── */}
       <div style={cardSt}>
-        <Entete nom={tr('Heures creuses')}
+        <RegleEntete nom={tr('Heures creuses')}
           desc={tr('Le lave-vaisselle attend souvent qu’on y pense.')}
-          on={cr.actif} cb={() => enregistrer({ creuses: { actif: !cr.actif } })} />
-        {cr.actif && (
+          on={cr.actif} cb={() => enregistrer({ creuses: { actif: !cr.actif } })} plie={pliCr} onPlier={plierCr} />
+        {cr.actif && !pliCr && (
           <>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('L’entité')}</span>

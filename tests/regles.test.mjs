@@ -53,3 +53,62 @@ test('vider un champ écrit null, pas zéro', () => {
   assert.equal(champs.length, 2,
     'les deux champs de minutes doivent distinguer « vide » de « zéro »');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Une règle activée doit pouvoir se replier.
+//
+// Sur Paramètres → Règles, activer une règle déployait tout son paramétrage et
+// ne le refermait jamais. On règle une automatisation une fois, puis on n'y
+// revient plus : cinq familles déployées remplissaient plusieurs écrans de
+// champs qu'on ne relit pas.
+//
+// « Activée » et « dépliée » sont donc deux états distincts, et le pli ne
+// touche pas au fonctionnement : la règle continue de tourner.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ui = readFileSync(join(RACINE, 'src', 'ui.jsx'), 'utf8');
+const VUES_REGLES = ['volets', 'nuit', 'veilles'];
+
+test('l’en-tête des règles est écrit une seule fois', () => {
+  // Il l'était trois fois à l'identique. Le poser ailleurs évite de devoir lui
+  // ajouter le pli trois fois — et d'oublier la quatrième vue à venir.
+  assert.match(ui, /export function RegleEntete\(/, 'l’en-tête partagé a disparu');
+  assert.match(ui, /export function Bascule\(/, 'l’interrupteur partagé a disparu');
+  for (const v of VUES_REGLES) {
+    const src = readFileSync(join(RACINE, 'src', 'views', v + '.jsx'), 'utf8');
+    assert.ok(!/const Entete = \(\{ nom/.test(src), `${v}.jsx a repris une copie locale de l’en-tête`);
+    assert.ok(!/const Bascule = \(\{ on/.test(src), `${v}.jsx a repris une copie locale de l’interrupteur`);
+    assert.match(src, /RegleEntete, usePli/, `${v}.jsx n’importe plus l’en-tête partagé`);
+  }
+});
+
+test('chaque règle dépliée peut se replier', () => {
+  // Un déploiement qui ne regarde que `actif` ne se referme jamais.
+  for (const v of VUES_REGLES) {
+    const src = readFileSync(join(RACINE, 'src', 'views', v + '.jsx'), 'utf8');
+    const gardes = src.match(/\{[a-z0-9]+\.actif && [^(]*\(/g) || [];
+    assert.ok(gardes.length > 0, `${v}.jsx : aucun déploiement trouvé`);
+    for (const g of gardes) {
+      assert.match(g, /&& !pli/i,
+        `${v}.jsx : « ${g.trim()} » ne tient pas compte du pli — cette règle restera dépliée`);
+    }
+  }
+});
+
+test('le pli reste sur l’appareil', () => {
+  // `estPersonnelle` classe sur le suffixe « panel ». Ce qu'on a replié sur son
+  // téléphone n'a pas à se replier sur la tablette de quelqu'un d'autre.
+  const m = ui.match(/localStorage\.getItem\('(loggia-[a-z]+)'\)/);
+  assert.ok(m, 'la clé du pli est introuvable');
+  assert.ok(m[1].endsWith('panel'),
+    `${m[1]} ne finit pas par « panel » : le pli suivrait la maison au lieu de l’appareil`);
+});
+
+test('le pli ne s’affiche pas sur une règle éteinte', () => {
+  const i = ui.indexOf('export function RegleEntete(');
+  const corps = ui.slice(i, ui.indexOf('\n}', i));
+  // On ne replie pas ce qui n'affiche rien : sans cela, le chevron apparaîtrait
+  // sur une règle désactivée et ne ferait rien.
+  assert.match(corps, /const pliable = !!\(on && onPlier\);/,
+    'le chevron s’affiche désormais sur les règles éteintes');
+});

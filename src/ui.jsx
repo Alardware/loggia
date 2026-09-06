@@ -443,3 +443,88 @@ export function EntPicker({ hass, exclude = [], onPick, autoFocus = false, domai
     </>
   );
 }
+
+/* ── Les regles : un en-tete qui sait se replier ────────────────────────────
+ *
+ * Une regle activee gardait tout son parametrage a l'ecran. Or on la regle
+ * une fois, puis on n'y revient plus : sur Parametres > Regles, cinq familles
+ * deployees remplissaient plusieurs ecrans de champs qu'on ne relit jamais.
+ *
+ * « Activee » et « depliee » deviennent donc deux etats distincts. Le pli ne
+ * touche pas au fonctionnement : la regle continue de tourner, on cesse
+ * seulement de la regarder.
+ *
+ * L'en-tete etait ecrit trois fois a l'identique — volets, nuit, veilles. Le
+ * poser ici evite d'avoir a lui ajouter le pli trois fois, et d'oublier la
+ * quatrieme vue le jour ou elle arrivera.
+ */
+
+/** Le pli d'une regle, retenu SUR CET APPAREIL.
+ *
+ * `loggia-reglespanel` se termine par « panel » : `estPersonnelle` la classe
+ * donc d'office parmi les cles qui ne suivent pas la maison. C'est voulu —
+ * ce qu'on a replie sur son telephone n'a pas a se replier sur la tablette de
+ * quelqu'un d'autre.
+ *
+ * Une seule cle pour toutes les regles, et non une par regle : le stockage
+ * local n'est pas extensible a l'infini, et un objet se relit d'un bloc.
+ */
+export function usePli(cle) {
+  const lire = () => {
+    try { return JSON.parse(window.localStorage.getItem('loggia-reglespanel') || '{}') || {}; }
+    catch (e) { return {}; }
+  };
+  const [plie, setPlie] = useState(() => !!lire()[cle]);
+  const basculer = () => setPlie(v => {
+    const n = !v;
+    try {
+      const o = lire();
+      if (n) o[cle] = 1; else delete o[cle];
+      window.localStorage.setItem('loggia-reglespanel', JSON.stringify(o));
+    } catch (e) { /* stockage indisponible : le pli ne survivra pas, tant pis */ }
+    return n;
+  });
+  return [plie, basculer];
+}
+
+/** L'en-tete d'une regle : son nom, ce qu'elle fait, son interrupteur.
+ *
+ * `onPlier` absent, ou regle eteinte, l'en-tete redevient ce qu'il etait : un
+ * titre inerte. On ne replie pas ce qui n'affiche rien.
+ */
+export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null }) {
+  const titre = { fontSize: 15, fontWeight: 700 };
+  const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };
+  const pliable = !!(on && onPlier);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+      <button type="button" onClick={pliable ? onPlier : undefined} disabled={!pliable}
+        aria-expanded={pliable ? !plie : undefined}
+        style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0,
+          color: 'inherit', font: 'inherit', cursor: pliable ? 'pointer' : 'default' }}>
+        <div style={{ ...titre, display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ minWidth: 0 }}>{nom}</span>
+          {pliable && <Fi i={plie ? 'angle-small-down' : 'angle-small-up'} size={13} />}
+        </div>
+        <div style={sous}>{desc}</div>
+      </button>
+      <Bascule on={!!on} cb={cb} />
+    </div>
+  );
+}
+
+/** L'interrupteur d'une regle.
+ *
+ * Repris trait pour trait des trois copies locales : memes dimensions, memes
+ * variables de couleur. Un composant partage qui change l'apparence en passant
+ * n'est pas une extraction, c'est une refonte — et personne ne l'a demandee.
+ */
+export function Bascule({ on, cb }) {
+  return (
+    <button type="button" onClick={cb} role="switch" aria-checked={!!on}
+      style={{ width: 46, height: 26, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 3,
+        background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
+      <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
+    </button>
+  );
+}
