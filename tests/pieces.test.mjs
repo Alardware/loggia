@@ -124,3 +124,22 @@ test('le résumé d’accueil s’enroule à côté de la pastille, pas dessous'
   // Et la pastille s'aligne sur la première ligne, pas au milieu du bloc.
   assert.match(bloc, /alignItems: 'flex-start'/, 'la pastille se recentre sur tout le bloc');
 });
+
+test('la marge du haut ne s’ajoute pas à la zone sûre', () => {
+  // `env(safe-area-inset-top)` vaut ZÉRO dans un navigateur de bureau : une
+  // règle qui additionne paraît donc juste en démonstration et ne se trahit
+  // que sur l'appareil. Sur un iPhone, `16px + 59px` fait démarrer le titre
+  // trente-huit pixels sous la barre d'état — signalé deux fois (01/09, 06/09).
+  //
+  // La zone sûre EST la marge : on prend la plus grande des deux, on ne les
+  // empile pas. Mesuré dans la démo : à safe-top 0 le titre reste à y=38, et
+  // à safe-top 59 il remonte de 97 à 81.
+  const regles = css.match(/html\.loggia-tactile \.loggia-content \{[^}]*padding-top:[^;]+;/g) || [];
+  assert.ok(regles.length >= 2, `${regles.length} règle(s) de marge haute trouvée(s) : la forme a changé`);
+  for (const r of regles) {
+    assert.ok(!/padding-top:\s*calc\([^)]*var\(--o-safe-top/.test(r),
+      'la marge du haut s’additionne de nouveau à la zone sûre : le titre replongera sur les écrans à encoche');
+    assert.match(r, /padding-top:\s*max\(\s*\d+px\s*,\s*var\(--o-safe-top/,
+      'la marge du haut ne passe plus par max() : elle vaudra zéro là où il n’y a pas d’encoche');
+  }
+});
