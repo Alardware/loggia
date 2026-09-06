@@ -10,7 +10,7 @@
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { LOGGIA_INDEX } from '../state.js';
-import { cvName } from '../ui.jsx';
+import { cvName, RegleEntete, usePli } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
 /* Ce qui compte comme ouvrant : Home Assistant le dit lui-même dans la
@@ -36,6 +36,8 @@ export function FenetresReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const [etat, setEtat] = useState(null);
   const [err, setErr] = useState('');
+  /* Le pli de cette regle — avec les autres etats. */
+  const [pliFen, plierFen] = usePli('fenetres:coupure');
   const vivant = useRef(true);
 
   useEffect(() => {
@@ -141,14 +143,11 @@ export function FenetresReglages({ hass, cardSt }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={cardSt}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={titre}>{tr('Fenêtre ouverte, chauffage coupé')}</div>
-            <div style={sous}>{tr('Chauffer une pièce dont la fenêtre est ouverte, c’est chauffer la rue.')}</div>
-          </div>
-          <Bascule on={!!cfg.actif} cb={() => enregistrer({ actif: !cfg.actif })} />
-        </div>
-        {cfg.actif && (
+        <RegleEntete nom={tr('Fenêtre ouverte, chauffage coupé')}
+          desc={tr('Chauffer une pièce dont la fenêtre est ouverte, c’est chauffer la rue.')}
+          on={!!cfg.actif} cb={() => enregistrer({ actif: !cfg.actif })}
+          plie={pliFen} onPlier={plierFen} />
+        {cfg.actif && !pliFen && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
             <span style={{ ...label, minWidth: 92 }}>{tr('Après')}</span>
             <input type="number" value={cfg.delai != null ? cfg.delai : 3} min={0} max={60}
@@ -171,7 +170,7 @@ export function FenetresReglages({ hass, cardSt }) {
         )}
       </div>
 
-      {cfg.actif && pieces.length === 0 && (
+      {cfg.actif && !pliFen && pieces.length === 0 && (
         <div style={cardSt}>
           <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
             {tr('Aucune pièce avec un capteur d’ouverture. Range tes capteurs dans une zone Home Assistant : la détection s’appuie dessus.')}
@@ -179,7 +178,7 @@ export function FenetresReglages({ hass, cardSt }) {
         </div>
       )}
 
-      {cfg.actif && pieces.map(p => {
+      {cfg.actif && !pliFen && pieces.map(p => {
         const reg = reglees[p.nom] || null;
         const on = !!(reg && reg.actif);
         const mesOuvrants = (reg && reg.ouvrants) || [];

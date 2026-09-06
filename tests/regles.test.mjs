@@ -67,31 +67,77 @@ test('vider un champ écrit null, pas zéro', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ui = readFileSync(join(RACINE, 'src', 'ui.jsx'), 'utf8');
-const VUES_REGLES = ['volets', 'nuit', 'veilles'];
+// Les cinq onglets de Paramètres → Règles.
+const VUES_REGLES = ['volets', 'nuit', 'veilles', 'fenetres', 'presence'];
+// Celles dont l'en-tête était écrit à l'identique et a été extrait.
+const VUES_EXTRAITES = ['volets', 'nuit', 'veilles'];
 
 test('l’en-tête des règles est écrit une seule fois', () => {
   // Il l'était trois fois à l'identique. Le poser ailleurs évite de devoir lui
   // ajouter le pli trois fois — et d'oublier la quatrième vue à venir.
   assert.match(ui, /export function RegleEntete\(/, 'l’en-tête partagé a disparu');
   assert.match(ui, /export function Bascule\(/, 'l’interrupteur partagé a disparu');
-  for (const v of VUES_REGLES) {
+  for (const v of VUES_EXTRAITES) {
     const src = readFileSync(join(RACINE, 'src', 'views', v + '.jsx'), 'utf8');
     assert.ok(!/const Entete = \(\{ nom/.test(src), `${v}.jsx a repris une copie locale de l’en-tête`);
     assert.ok(!/const Bascule = \(\{ on/.test(src), `${v}.jsx a repris une copie locale de l’interrupteur`);
+  }
+  for (const v of VUES_REGLES) {
+    const src = readFileSync(join(RACINE, 'src', 'views', v + '.jsx'), 'utf8');
     assert.match(src, /RegleEntete, usePli/, `${v}.jsx n’importe plus l’en-tête partagé`);
   }
 });
 
-test('chaque règle dépliée peut se replier', () => {
-  // Un déploiement qui ne regarde que `actif` ne se referme jamais.
+test('les cinq onglets ont au moins une règle repliable', () => {
+  // Deux d'entre eux étaient bâtis autrement, sans le composant d'en-tête, et
+  // sont restés dépliés une version de plus.
   for (const v of VUES_REGLES) {
     const src = readFileSync(join(RACINE, 'src', 'views', v + '.jsx'), 'utf8');
-    const gardes = src.match(/\{[a-z0-9]+\.actif && [^(]*\(/g) || [];
-    assert.ok(gardes.length > 0, `${v}.jsx : aucun déploiement trouvé`);
-    for (const g of gardes) {
-      assert.match(g, /&& !pli/i,
-        `${v}.jsx : « ${g.trim()} » ne tient pas compte du pli — cette règle restera dépliée`);
+    assert.match(src, /<RegleEntete[\s\S]{0,400}?plie=\{/,
+      `${v}.jsx : aucune règle repliable — cet onglet restera déplié`);
+  }
+});
+
+test('chaque en-tête pilote SON pli, et lui seul', () => {
+  // Vérifier que le pli est branché quelque part ne suffit pas. « Protection
+  // solaire » avait reçu deux jeux de props — `plie={pliSol}` puis
+  // `plie={pliVent}` — et en JSX le dernier gagne : l'en-tête basculait le pli
+  // du vent pendant que son contenu attendait celui du soleil. Le chevron
+  // bougeait, rien ne se repliait, et le bloc du vent n'était plus pliable du
+  // tout. Rien ne le signalait : deux props valides, deux gardes valides,
+  // simplement pas les mêmes.
+  for (const v of VUES_REGLES) {
+    const src = readFileSync(join(RACINE, 'src', 'views', v + '.jsx'), 'utf8');
+
+    // Une balise ne porte `plie` qu'une fois.
+    for (const balise of src.match(/<RegleEntete[\s\S]*?\/>/g) || []) {
+      const n = (balise.match(/\bplie=\{/g) || []).length;
+      assert.equal(n, 1, `${v}.jsx : un en-tête porte ${n} fois « plie » — le dernier écrase les autres`);
     }
+
+    // Pour chaque en-tête, on relie la règle qu'il commande au pli qu'il porte,
+    // puis on exige que TOUTES les gardes de cette règle portent CE pli.
+    //
+    // Compter, ou comparer des ensembles, ne suffirait pas : « Départ et
+    // retour » gouverne trois blocs avec un seul pli, et il suffirait qu'un
+    // seul des trois le garde pour que l'ensemble paraisse complet — pendant
+    // qu'un bloc resterait déplié pour de bon.
+    const pilotes = [];
+    for (const balise of src.match(/<RegleEntete[\s\S]*?\/>/g) || []) {
+      const mOn = balise.match(/on=\{!*([A-Za-z0-9_]+)\.actif\}/);
+      const mPli = balise.match(/plie=\{(pli[A-Za-z0-9]*)\}/);
+      if (!mOn || !mPli) continue;
+      const [regle, pli] = [mOn[1], mPli[1]];
+      pilotes.push(pli);
+      const gardes = src.match(new RegExp('\\{' + regle + '\\.actif &&[^(]*\\(', 'g')) || [];
+      assert.ok(gardes.length > 0, `${v}.jsx : « ${regle} » a un en-tête pliable mais rien à replier`);
+      for (const g of gardes) {
+        assert.ok(g.includes('!' + pli + ' &&'),
+          `${v}.jsx : « ${g.trim()} » ne porte pas ${pli}, le pli de son en-tête — ce bloc restera déplié`);
+      }
+    }
+    assert.equal(new Set(pilotes).size, pilotes.length,
+      `${v}.jsx : deux en-têtes partagent le même pli — ils se replieront ensemble`);
   }
 });
 

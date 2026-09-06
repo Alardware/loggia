@@ -286,7 +286,7 @@ export function VoletsReglages({ hass, cardSt }) {
       <div style={cardSt}>
         <RegleEntete nom={tr('Protection solaire')}
           desc={tr('Quand le soleil frappe une façade et qu’il fait chaud, baisser ses volets — puis les rouvrir quand il est passé.')}
-          on={sol.actif} cb={() => enregistrer({ soleil: { actif: !sol.actif } })} plie={pliSol} onPlier={plierSol} plie={pliVent} onPlier={plierVent} />
+          on={sol.actif} cb={() => enregistrer({ soleil: { actif: !sol.actif } })} plie={pliSol} onPlier={plierSol} />
         {etat.soleil && etat.soleil.azimut != null && (
           <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
             {tr('En ce moment : soleil à {a}°, hauteur {e}°', { a: Math.round(etat.soleil.azimut), e: Math.round(etat.soleil.elevation) })}
@@ -353,7 +353,7 @@ export function VoletsReglages({ hass, cardSt }) {
       <div style={cardSt}>
         <RegleEntete nom={tr('Vent fort')}
           desc={tr('Au-delà d’un seuil, tout remonter. Un volet baissé dans une rafale est un volet plié — cette règle passe avant les deux autres.')}
-          on={vent.actif} cb={() => enregistrer({ vent: { actif: !vent.actif } })} />
+          on={vent.actif} cb={() => enregistrer({ vent: { actif: !vent.actif } })} plie={pliVent} onPlier={plierVent} />
         {etat.a_l_abri && (
           <div style={{ marginTop: 9, fontSize: 12, fontWeight: 800, color: 'var(--o-warn2)' }}>{tr('Volets à l’abri en ce moment.')}</div>
         )}

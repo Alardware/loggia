@@ -9,13 +9,15 @@
  * pas se cocher distraitement au milieu des autres.
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { cvName } from '../ui.jsx';
+import { cvName, RegleEntete, usePli } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
 export function PresenceReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const [etat, setEtat] = useState(null);
   const [err, setErr] = useState('');
+  /* Le pli de la regle — avec les autres etats. */
+  const [pliPres, plierPres] = usePli('presence:depart');
   const vivant = useRef(true);
 
   useEffect(() => {
@@ -112,20 +114,17 @@ export function PresenceReglages({ hass, cardSt }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={cardSt}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={titre}>{tr('Départ et retour')}</div>
-            <div style={sous}>{tr('Quand la dernière personne s’en va, la maison se met en veille. Elle se réveille au retour.')}</div>
-          </div>
-          <Bascule on={!!cfg.actif} cb={() => enregistrer({ actif: !cfg.actif })} />
-        </div>
+        <RegleEntete nom={tr('Départ et retour')}
+          desc={tr('Quand la dernière personne s’en va, la maison se met en veille. Elle se réveille au retour.')}
+          on={!!cfg.actif} cb={() => enregistrer({ actif: !cfg.actif })}
+          plie={pliPres} onPlier={plierPres} />
         {etat.dehors && (
           <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{tr('Maison en veille en ce moment.')}</div>
         )}
         {etat.en_attente && (
           <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--o-warn2)' }}>{tr('Décompte de départ en cours.')}</div>
         )}
-        {cfg.actif && (
+        {cfg.actif && !pliPres && (
           <>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 88 }}>{tr('Attendre')}</span>
@@ -157,7 +156,7 @@ export function PresenceReglages({ hass, cardSt }) {
         )}
       </div>
 
-      {cfg.actif && (
+      {cfg.actif && !pliPres && (
         <div style={cardSt}>
           <div style={titre}>{tr('En partant')}</div>
           <div style={{ marginTop: 8 }}>
@@ -198,7 +197,7 @@ export function PresenceReglages({ hass, cardSt }) {
         </div>
       )}
 
-      {cfg.actif && (
+      {cfg.actif && !pliPres && (
         <div style={cardSt}>
           <div style={titre}>{tr('Au retour')}</div>
           <div style={{ marginTop: 8 }}>
