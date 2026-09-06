@@ -1,12 +1,18 @@
-"""Loggia Dashboard API — proxy de services HA avec allow-list cote serveur.
+"""Loggia — l'integration qui sert le dashboard et garde sa configuration.
 
-Expose une API HTTP authentifiee (auth Home Assistant standard) que le frontend
-Loggia utilise a la place d'appels /api/services/* directs. Seuls les services
-de l'allow-list ci-dessous sont executes ; tout le reste est refuse (fail-closed).
+Le frontend construit est embarque dans `frontend/` et expose par un panneau
+plein ecran (pas une iframe : `embed_iframe` vaut False, cf. panel.py). Rien a
+copier dans www/, aucun dashboard YAML a ecrire.
 
-Sert aussi le dashboard lui-meme : le frontend construit est embarque dans
-`frontend/` et expose par un panneau iframe. Rien a copier dans www/, aucun
-dashboard YAML a ecrire.
+La configuration passe par des commandes WebSocket authentifiees, dont celles
+qui ecrivent la maison exigent `require_admin`. Les appels de service, eux,
+passent par l'API standard de Home Assistant : ce module n'ajoute pas de filtre
+par-dessus, et n'en retire aucun.
+
+Ce docstring a longtemps decrit une route `/api/loggia/call` protegee par une
+allow-list. Elle n'a jamais existe dans le code, et le README l'annoncait au
+public — corrige le 06/09. Une barriere de securite qu'on croit avoir est pire
+que pas de barriere du tout.
 
 Installation :
   - par HACS, puis Parametres -> Appareils et services -> Ajouter -> Loggia

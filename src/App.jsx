@@ -5644,25 +5644,33 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   }, [editMode]);
   const restaurer = (e) => { if (e && e.grille) saveAccL(e.grille); };
   const oublierHisto = () => { setHisto([]); cfgSet({ loggia_histo: [] }); };
+  /* Les effets de bord vivent DEHORS de l'updater.
+   *
+   * Ils etaient dedans : `setPasse(p => { setFutur(...); setAccL(...); cfgSet(...) })`.
+   * React se reserve le droit de rappeler un updater — c'est meme ce que fait
+   * StrictMode, deliberement, pour debusquer ce cas. Chaque double appel aurait
+   * empile `accL` deux fois dans `futur` et envoye deux fois l'enregistrement.
+   *
+   * Le dashboard ne monte pas en StrictMode aujourd'hui, donc rien ne casse ;
+   * mais c'est la ligne qu'on ajoute un jour pour deboguer autre chose, et
+   * l'annulation se mettrait alors a corrompre sa propre pile. Lire l'etat
+   * directement suffit : ces deux gestes viennent d'un clic, jamais d'une
+   * rafale ou deux appels se marcheraient dessus. */
   const annuler = () => {
-    setPasse(p => {
-      if (!p.length) return p;
-      const avant = p[p.length - 1];
-      setFutur(f => [...f, accL]);
-      setAccL(avant);
-      cfgSet({ loggia_accueil: avant });
-      return p.slice(0, -1);
-    });
+    if (!passe.length) return;
+    const avant = passe[passe.length - 1];
+    setPasse(p => p.slice(0, -1));
+    setFutur(f => [...f, accL]);
+    setAccL(avant);
+    cfgSet({ loggia_accueil: avant });
   };
   const refaire = () => {
-    setFutur(f => {
-      if (!f.length) return f;
-      const apres = f[f.length - 1];
-      setPasse(p => [...p, accL]);
-      setAccL(apres);
-      cfgSet({ loggia_accueil: apres });
-      return f.slice(0, -1);
-    });
+    if (!futur.length) return;
+    const apres = futur[futur.length - 1];
+    setFutur(f => f.slice(0, -1));
+    setPasse(p => [...p, accL]);
+    setAccL(apres);
+    cfgSet({ loggia_accueil: apres });
   };
   /* Quitter l'edition oublie l'historique : rouvrir le mode le lendemain et
    * pouvoir defaire un geste qu'on ne voit plus a l'ecran serait une trappe,
@@ -12650,8 +12658,26 @@ export default function App() {
       } catch (e) {}
     };
     const h = getHass();
-    if (h && h.callWS) h.callWS({ type: 'loggia/config/set', config: patch }).catch(local);
-    else local();
+    if (h && h.callWS) {
+      h.callWS({ type: 'loggia/config/set', config: patch }).catch((e) => {
+        local();
+        /* Un serveur ABSENT est un cas normal : le repli local suffit, et l'on
+         * n'alarme pas qui n'a pas installe le composant.
+         *
+         * Un serveur qui REFUSE est tout autre chose. L'etat optimiste a deja
+         * pose la valeur a l'ecran ; elle y restera toute la seance, puis ne
+         * sera plus la au rechargement. Se taire fait mentir l'interface — et
+         * c'est ce qui arrive au-dela des plafonds de `store.py`, ou le serveur
+         * repond une erreur precise que personne ne lisait.
+         *
+         * Un refus applicatif porte un `code` ; une deconnexion, non. On relance
+         * donc le rejet, que l'ecoute globale plus bas rend visible. */
+        if (e && e.code) {
+          console.error('Loggia : reglage refuse par le serveur', Object.keys(patch), e);
+          Promise.reject(e);
+        }
+      });
+    } else local();
   }, []);
   // Confié APRÈS sa déclaration : plus haut, `saveCfg` serait encore en zone
   // morte temporelle et le rendu entier échouerait.

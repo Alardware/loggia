@@ -97,6 +97,48 @@ def au_soleil(azimut, elevation, orientation, ouverture=90.0, elevation_min=15.0
         return False
 
 
+def volets_du_jour(plan, cibles, sens: str, quand) -> list:
+    """Parmi `cibles`, ceux que leurs jours propres autorisent aujourd'hui.
+
+    Le filtre par jour ne peut pas vivre a la programmation. `_async_reprogrammer`
+    ne tourne qu'au demarrage et a l'enregistrement, tandis que les rendez-vous
+    poses, eux, sonnent TOUS LES JOURS. Filtrer a la pose figeait donc la
+    decision : une chambre reglee sur le week-end, configuree un mardi, n'aurait
+    jamais recu de rendez-vous — et ne se serait plus ouverte du tout. Configuree
+    un samedi, elle se serait ouverte aussi le lundi.
+
+    On filtre donc quand la cloche sonne, comme le fait deja `plan["jours"]`.
+    """
+    par_volet = plan.get("volets") or {}
+    if not isinstance(par_volet, dict):
+        return list(cibles)
+    garde = []
+    for haid in cibles:
+        reglage = par_volet.get(haid)
+        jours = reglage.get("jours_" + sens) if isinstance(reglage, dict) else None
+        if isinstance(jours, list):
+            # Sept jours decoches donne [] : c'est « jamais », pas « toujours ».
+            # `jour_actif` repond l'inverse, et a raison pour les jours GENERAUX
+            # ou l'absence de liste veut dire « aucune restriction ». Ici la liste
+            # est le choix de quelqu'un : vide, elle dit qu'il n'en veut aucun.
+            if not jours:
+                continue
+            # Les jours viennent du stockage, que rien n'oblige a contenir des
+            # entiers. Des chaines feraient echouer le test d'appartenance en
+            # silence, et le volet ne bougerait plus jamais sans que rien ne
+            # l'explique. Le reste du fichier caste partout ; ici aussi.
+            propres = set()
+            for j in jours:
+                try:
+                    propres.add(int(j))
+                except (TypeError, ValueError):
+                    pass
+            if quand.weekday() not in propres:
+                continue
+        garde.append(haid)
+    return garde
+
+
 def groupes_horaires(plan, covers, sens: str, quand=None) -> dict:
     """Les volets ranges par decalage, pour un sens donne.
 
@@ -233,7 +275,7 @@ class LoggiaVolets:
         # chambres qui s'ouvrent une heure plus tard partagent le leur.
         covers = self._tous_les_covers()
         for sens, poser in (("ouverture", async_track_sunrise), ("fermeture", async_track_sunset)):
-            groupes = groupes_horaires(plan, covers, sens, dt_util.now())
+            groupes = groupes_horaires(plan, covers, sens)
             for decalage, cibles in groupes.items():
                 self._defait_soleil.append(
                     poser(self.hass, self._rendezvous(sens, list(cibles)), timedelta(minutes=decalage))
@@ -263,6 +305,8 @@ class LoggiaVolets:
         if self.a_l_abri:
             return
         cibles = list(cibles) if cibles else self._tous_les_covers()
+        # Les jours propres a chaque volet, evalues MAINTENANT.
+        cibles = volets_du_jour(plan, cibles, 'ouverture' if sens == 'ouvrir' else 'fermeture', dt_util.now())
         if not cibles:
             return
         await self._async_service("open_cover" if sens == "ouvrir" else "close_cover", cibles)

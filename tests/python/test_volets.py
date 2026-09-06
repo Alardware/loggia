@@ -397,7 +397,7 @@ def test_sans_volet_regle_le_planning_prend_le_domaine(creer):
     lancer(v._async_planifie("fermer"))
     assert v.hass.services.appels[0][2]["entity_id"] == ["cover.a", "cover.b"]
 
-def test_jours_propres_par_sens(module):
+def test_jours_propres_par_sens_ANCIEN(module):
     """Un volet peut ne pas s'ouvrir certains jours, et fermer quand meme.
 
     Le cas qui l'a demande : travailler de nuit. La chambre ne doit pas
@@ -434,3 +434,69 @@ def test_sans_date_aucun_filtre(module):
             "volets": {COVERS[0]: {"perso": True, "jours_ouverture": []}}}
     g = module.groupes_horaires(plan, COVERS, "ouverture")
     assert COVERS[0] in [x for v in g.values() for x in v], "un appel sans date s'est mis a filtrer"
+
+def test_le_rendez_vous_est_pose_meme_un_jour_ecarte(module):
+    """Filtrer a la programmation aurait prive le volet de tout rendez-vous.
+
+    `_async_reprogrammer` ne tourne qu'au demarrage et a l'enregistrement ; les
+    rendez-vous poses, eux, sonnent tous les jours. Une chambre reglee sur le
+    week-end et configuree un mardi n'aurait jamais recu de rendez-vous, et ne
+    se serait plus ouverte du tout — pas meme le samedi.
+    """
+    plan = {"ouverture": {"decalage": 0},
+            "volets": {COVERS[0]: {"perso": True, "jours_ouverture": [5, 6]}}}
+    g = module.groupes_horaires(plan, COVERS, "ouverture")
+    assert COVERS[0] in [x for v in g.values() for x in v],         "le volet n'a pas de rendez-vous : il ne s'ouvrira plus jamais"
+
+
+def test_le_filtre_agit_quand_la_cloche_sonne(module):
+    lundi, samedi = datetime(2026, 9, 7), datetime(2026, 9, 12)   # weekday 0 et 5
+    plan = {"volets": {COVERS[0]: {"jours_ouverture": [5, 6]}}}
+    assert COVERS[0] not in module.volets_du_jour(plan, COVERS, "ouverture", lundi),         "le volet s'ouvre un jour ecarte"
+    assert COVERS[0] in module.volets_du_jour(plan, COVERS, "ouverture", samedi),         "le volet ne s'ouvre pas un jour retenu"
+    assert COVERS[1] in module.volets_du_jour(plan, COVERS, "ouverture", lundi),         "les autres volets ont ete emportes"
+    # La fermeture, sans liste propre, n'est pas concernee.
+    assert COVERS[0] in module.volets_du_jour(plan, COVERS, "fermeture", lundi),         "les jours d'ouverture bloquent aussi la fermeture"
+
+
+def test_tous_les_jours_decoches_veut_dire_jamais(module):
+    """`[]` est un choix, pas une absence de choix.
+
+    `jour_actif([])` repond « tous les jours » — juste pour les jours GENERAUX,
+    ou l'absence de liste dit « aucune restriction ». Pour un volet, la liste
+    vide vient de quelqu'un qui a decoche les sept cases : lui repondre
+    « toujours » serait l'exact contraire de ce qu'il a demande.
+    """
+    plan = {"volets": {COVERS[0]: {"jours_ouverture": []}}}
+    for jour in (datetime(2026, 9, 7), datetime(2026, 9, 12)):
+        assert COVERS[0] not in module.volets_du_jour(plan, COVERS, "ouverture", jour),             "sept jours decoches ouvrent le volet au lieu de le laisser tranquille"
+
+
+def test_des_jours_en_chaines_restent_compris(module):
+    """Le stockage n'oblige personne a ecrire des entiers.
+
+    `weekday() in ["0","1"]` est faux tous les jours : le volet ne bougerait
+    plus jamais, sans erreur ni journal pour le dire.
+    """
+    plan = {"volets": {COVERS[0]: {"jours_ouverture": ["5", "6"]}}}
+    assert COVERS[0] in module.volets_du_jour(plan, COVERS, "ouverture", datetime(2026, 9, 12)),         "des jours ecrits en chaines excluent le volet pour toujours"
+
+def test_le_declenchement_quotidien_applique_le_filtre():
+    """Le filtre doit etre APPELE la ou la cloche sonne.
+
+    Les tests ci-dessus verifient `volets_du_jour` isolement. Rien ne garantirait
+    que `_async_planifie` s'en serve : la fonction pourrait etre juste, et le
+    planning continuer de tout ouvrir. C'est ce chainon qui manquait quand le
+    filtre vivait dans `groupes_horaires`.
+    """
+    from pathlib import Path
+    src = Path(__file__).resolve().parents[2] / "custom_components" / "loggia" / "volets.py"
+    texte = src.read_text(encoding="utf-8")
+    debut = texte.index("async def _async_planifie")
+    corps = texte[debut:texte.index("\n    # ", debut)]
+    assert "volets_du_jour(" in corps,         "_async_planifie n'applique plus les jours propres : ils seront ignores chaque jour"
+    assert "dt_util.now()" in corps,         "le filtre ne recoit plus la date du jour"
+    # Et il ne doit PAS revenir a la programmation, sinon le rendez-vous
+    # n'est jamais pose pour un volet ecarte le jour de l'enregistrement.
+    prog = texte[texte.index("async def _async_reprogrammer"):debut]
+    assert "groupes_horaires(plan, covers, sens)" in prog,         "la programmation filtre de nouveau par jour : le rendez-vous ne sera pas pose"

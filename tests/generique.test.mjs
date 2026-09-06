@@ -182,3 +182,30 @@ test('le paquet livre ne traine pas les bundles des compilations passees', () =>
     'des familles de bundles s’accumulent dans le paquet livré : ' +
     trop.map(([f, n]) => `${f} (${n} copies)`).join(', '));
 });
+
+test('la documentation ne promet pas de garde-fou inexistant', () => {
+  // Le README annoncait publiquement une route `/api/loggia/call` protegee par
+  // une « liste blanche fermee par defaut », et nommait les domaines refuses.
+  // Cette route n'a jamais existe dans le code. `info.md` — le texte que HACS
+  // affiche dans son magasin — reprenait la meme promesse.
+  //
+  // Une barriere de securite qu'on croit avoir est pire que pas de barriere :
+  // un administrateur qui ouvre des comptes a sa famille en s'y fiant n'est
+  // protege par rien.
+  const readme = readFileSync(join(RACINE, 'README.md'), 'utf8');
+  const info = readFileSync(join(RACINE, 'info.md'), 'utf8');
+  const init = readFileSync(join(RACINE, 'custom_components', 'loggia', '__init__.py'), 'utf8');
+  const py = readdirSync(join(RACINE, 'custom_components', 'loggia'))
+    .filter(f => f.endsWith('.py'))
+    .map(f => readFileSync(join(RACINE, 'custom_components', 'loggia', f), 'utf8')).join('\n');
+
+  // On cherche la DECLARATION de la route, pas la chaine : le texte qui
+  // corrige le mensonge cite forcement le chemin, et suffisait a neutraliser
+  // ce garde-fou.
+  const routeExiste = /url\s*=\s*["'][^"']*loggia\/call/.test(py);
+  for (const [nom, texte] of [['README.md', readme], ['info.md', info], ['__init__.py', init]]) {
+    const promet = /liste blanche|allow-list/i.test(texte) && !/n'a jamais existe|jamais existé/i.test(texte);
+    assert.ok(!promet || routeExiste,
+      `${nom} annonce une liste blanche d’appels de service que le code n’implémente pas`);
+  }
+});

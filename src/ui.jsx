@@ -475,15 +475,17 @@ export function usePli(cle) {
     catch (e) { return {}; }
   };
   const [plie, setPlie] = useState(() => !!lire()[cle]);
-  const basculer = () => setPlie(v => {
-    const n = !v;
+  /* L'ecriture reste DEHORS de l'updater : React se reserve le droit de
+   * rappeler celui-ci, et un updater doit rester pur. */
+  const basculer = () => {
+    const n = !plie;
     try {
       const o = lire();
       if (n) o[cle] = 1; else delete o[cle];
       window.localStorage.setItem('loggia-reglespanel', JSON.stringify(o));
     } catch (e) { /* stockage indisponible : le pli ne survivra pas, tant pis */ }
-    return n;
-  });
+    setPlie(n);
+  };
   return [plie, basculer];
 }
 

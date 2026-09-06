@@ -221,14 +221,25 @@ les réglages restent, mais ne suivent plus d'un appareil à l'autre.
 
 ## Sécurité
 
-- Les appels de service passent par `/api/loggia/call`, protégé par une
-  **liste blanche fermée par défaut** : un domaine absent de la liste est
-  refusé. `shell_command`, `python_script`, `hassio`, `recorder`, `backup` et
-  `homeassistant.restart` n'y figurent pas.
-- Le code **ne lit jamais** votre jeton d'accès Home Assistant et ne demande
-  aucun identifiant.
-- Le code PIN administrateur reste sur l'appareil : il n'est jamais envoyé au
-  serveur (`FORBIDDEN_KEYS`, dans `store.py`, le refuse à l'écriture).
+- Les appels de service passent par l'API standard de Home Assistant, avec
+  **ses** autorisations : Loggia n'ajoute aucun filtre par-dessus, et n'en
+  retire aucun. Un compte ne peut donc rien faire ici qu'il ne puisse déjà
+  faire ailleurs dans Home Assistant.
+- Les commandes qui écrivent la configuration de la maison sont **réservées
+  aux administrateurs** (`require_admin`, sur les sept commandes WebSocket
+  concernées). L'identité vient de la connexion authentifiée, jamais d'un
+  champ envoyé par le navigateur.
+- Les automatisations n'appellent que des services **écrits en dur** dans le
+  composant (`cover.open_cover`, `climate.set_hvac_mode`…) : seule la cible
+  est configurable. Seuls les boutons sans fil font exception, et leur
+  affectation demande d'être administrateur.
+- Le jeton d'accès Home Assistant est lu **à un seul endroit** : pour
+  authentifier les images de caméra auprès du proxy de Home Assistant. Il
+  n'est ni stocké, ni envoyé ailleurs.
+- Le code PIN administrateur suit la maison depuis le 03/09 : il est
+  enregistré côté serveur avec le reste de la configuration, et non plus
+  seulement sur l'appareil. C'est ce qui permet de le retrouver sur un autre
+  écran.
 - Aucune ressource externe : ni CDN, ni police distante, ni télémétrie.
 
 ## Développement

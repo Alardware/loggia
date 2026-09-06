@@ -12,7 +12,7 @@ plus tard apparaît sans rien toucher.
 - Une vue sans contenu se masque, et revient d'elle-même
 - Réglages **par utilisateur**, côté serveur : mêmes pièces et même thème sur
   tous vos appareils
-- Appels de service filtrés par une liste blanche fermée par défaut
+- Écriture de la configuration réservée aux administrateurs Home Assistant
 - Aucune ressource externe, aucune télémétrie
 
 Après installation : Paramètres → Appareils et services → Ajouter → **Loggia**.
