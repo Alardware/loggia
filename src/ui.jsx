@@ -494,14 +494,18 @@ export function usePli(cle) {
  * `onPlier` absent, ou regle eteinte, l'en-tete redevient ce qu'il etait : un
  * titre inerte. On ne replie pas ce qui n'affiche rien.
  */
-export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null }) {
+export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, zone = null }) {
   const titre = { fontSize: 15, fontWeight: 700 };
   const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };
   const pliable = !!(on && onPlier);
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+      {/* `aria-expanded` dit l'etat, `aria-controls` dit DE QUOI. Sans le
+        * second, un lecteur d'ecran annonce « replie » sans pouvoir mener a la
+        * region concernee : le motif de divulgation reste incomplet. */}
       <button type="button" onClick={pliable ? onPlier : undefined} disabled={!pliable}
         aria-expanded={pliable ? !plie : undefined}
+        aria-controls={pliable && zone ? zone : undefined}
         style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0,
           color: 'inherit', font: 'inherit', cursor: pliable ? 'pointer' : 'default' }}>
         <div style={{ ...titre, display: 'flex', alignItems: 'center', gap: 7 }}>

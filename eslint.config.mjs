@@ -19,6 +19,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 import react from 'eslint-plugin-react';
+import a11y from 'eslint-plugin-jsx-a11y';
 
 export default [
   {
@@ -29,9 +30,25 @@ export default [
       globals: { ...globals.browser },
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
-    plugins: { 'react-hooks': reactHooks, react },
+    plugins: { 'react-hooks': reactHooks, react, 'jsx-a11y': a11y },
     rules: {
       ...js.configs.recommended.rules,
+      /* L'accessibilite, en AVERTISSEMENT.
+       *
+       * `npm run lint` tourne avec `--quiet` et ne montre que les erreurs : le
+       * signal qui casse la page reste donc seul a l'ecran, comme voulu plus
+       * haut. Ces regles-la se lisent avec `npm run lint:tout`, qui sort aussi
+       * les avertissements.
+       *
+       * Pourquoi pas en erreur : au 06/09 elles relevent 121 cas, surtout des
+       * boutons sans intitule lisible et des `onClick` poses sur un `div` —
+       * reels (rien ne repond au clavier), mais
+       * dans du JSX ecrit avant la regle. Les corriger d'un bloc sans pouvoir
+       * regarder chaque ecran, c'est echanger un defaut d'accessibilite contre
+       * un defaut de mise en page. La dette est donc chiffree et visible plutot
+       * que masquee. */
+      ...Object.fromEntries(Object.entries(a11y.flatConfigs.recommended.rules)
+        .map(([regle]) => [regle, 'warn'])),
       // Un hook appele sous condition casse l'ordre des hooks : React lit
       // alors l'etat d'un autre. Erreur, jamais negociable.
       // LE filet : `no-undef` ne voit pas les composants JSX. Un composant
