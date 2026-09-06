@@ -635,7 +635,7 @@ function Header() {
         {isAdmin && <button onClick={onToggleEdit} title={editMode ? 'Quitter le mode édition' : tr('Mode édition')} style={editBtn}><Ico name="edit" size={17} /></button>}
         <button onClick={onToggleTheme} title={tr('Changer de thème')} style={hbtn}><Ico name="brightness" size={18} /></button>
         <button onClick={() => { setNotifOpen(o => { const n = !o; if (n) marquerVues(); return n; }); setUserOpen(false); }} title="Notifications" style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{nonVues && <span className="o-livedot" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: '#f87171', border: '2px solid var(--o-bg2)' }} />}</button>
-        <button onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }} title="Profil" style={{ width: 44, height: 44, borderRadius: '50%', marginLeft: 4, background: curBg, border: '2px solid rgba(255,255,255,.15)', cursor: 'pointer', flexShrink: 0 }} />
+        <button aria-label="Profil" onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }} title="Profil" style={{ width: 44, height: 44, borderRadius: '50%', marginLeft: 4, background: curBg, border: '2px solid rgba(255,255,255,.15)', cursor: 'pointer', flexShrink: 0 }} />
         {notifOpen && (
           <div style={{ ...menu, right: 52, width: 'min(304px, calc(100vw - 32px))' }}>
             <div style={{ padding: '12px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 14 }}>Notifications</span><span onClick={marquerVues} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); marquerVues(); } }} style={{ fontSize: 12, color: 'var(--o-accent-soft)', cursor: 'pointer', fontWeight: 600 }}>{tr('Tout lire')}</span></div>
@@ -2427,7 +2427,7 @@ function RoomMediaSheet({ id, hass, onClose }) {
             </div>
             {/* contrôles */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 4 }}>
-              <button onClick={() => commander(hass, np.ctl, 'set_shuffle', !np.shuffle)} title={tr('Aléatoire')} style={{ ...glass(40, 14), color: np.shuffle ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg></button>
+              <button aria-label={tr('Aléatoire')} onClick={() => commander(hass, np.ctl, 'set_shuffle', !np.shuffle)} title={tr('Aléatoire')} style={{ ...glass(40, 14), color: np.shuffle ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg></button>
               <button onClick={() => commander(hass, np.ctl, 'previous_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8zM7 4v16H5V4z" /></svg></button>
               <button onClick={() => commander(hass, np.ctl, 'play_pause')} style={{ ...glass(76, '50%'), background: onArt ? 'linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.07))' : 'var(--o-s1)' }}>
                 {np.playing && <span aria-hidden style={{ position: 'absolute', inset: -6, borderRadius: 'inherit', border: '1px solid rgba(255,255,255,.22)', animation: 'np-pulse 2.4s ease-out infinite', pointerEvents: 'none' }} />}
@@ -3273,7 +3273,7 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
             Coche pour ajouter, décoche pour retirer. Les modifications s'appliquent tout de suite.
           </div>
 
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Rechercher une entité…')}
+          <input aria-label={tr('Rechercher une entité…')} value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Rechercher une entité…')}
             style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
 
           {!terme && zoneIds.length > 0 && (
@@ -7211,7 +7211,7 @@ function ScenesContent({ hass }) {
         {scenes.map(sc => {
           const on = sel === sc.name;
           return (
-            <button key={sc.name} onClick={() => pickScene(sc)} title={'Appliquer « ' + sc.name + ' »'} style={{ position: 'relative', textAlign: 'left', padding: 0, overflow: 'hidden', cursor: 'pointer', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.55)' : 'var(--o-bd2)'), boxShadow: on ? '0 0 0 1px rgba(var(--o-accent-rgb),.3)' : 'none', transition: 'border-color .2s, box-shadow .2s' }}>
+            <button aria-label={'Appliquer « ' + sc.name + ' »'} key={sc.name} onClick={() => pickScene(sc)} title={'Appliquer « ' + sc.name + ' »'} style={{ position: 'relative', textAlign: 'left', padding: 0, overflow: 'hidden', cursor: 'pointer', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.55)' : 'var(--o-bd2)'), boxShadow: on ? '0 0 0 1px rgba(var(--o-accent-rgb),.3)' : 'none', transition: 'border-color .2s, box-shadow .2s' }}>
               <span aria-hidden="true" style={{ display: 'block', height: 96, background: sceneBackground(sc) }} />
               <span style={{ display: 'block', padding: '11px 13px 12px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

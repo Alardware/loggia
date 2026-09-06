@@ -261,7 +261,7 @@ export function TplForm({ onAdd, hass = null, initial = null }) {
   }, [src, conn]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <input value={nom} onChange={e => setNom(e.target.value)} placeholder={tr('Titre de la carte (optionnel)')} style={cvInp} />
+      <input aria-label={tr('Titre de la carte (optionnel)')} value={nom} onChange={e => setNom(e.target.value)} placeholder={tr('Titre de la carte (optionnel)')} style={cvInp} />
       <textarea value={src} onChange={e => setSrc(e.target.value)} rows={4} spellCheck={false}
         placeholder={"{{ now().strftime('%H:%M') }}"}
         style={{ ...cvInp, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, resize: 'vertical', minHeight: 88 }} />
@@ -428,7 +428,7 @@ export function EntPicker({ hass, exclude = [], onPick, autoFocus = false, domai
     : [];
   return (
     <>
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder={tr('Rechercher une entité (nom ou id)…')} spellCheck={false} autoFocus={autoFocus} style={cvInp} />
+      <input aria-label={tr('Rechercher une entité (nom ou id)…')} value={q} onChange={e => setQ(e.target.value)} placeholder={tr('Rechercher une entité (nom ou id)…')} spellCheck={false} autoFocus={autoFocus} style={cvInp} />
       {results.length > 0 && (
         <div style={{ maxHeight: 240, overflowY: 'auto', marginTop: 8, border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: 14 }}>
           {results.map(e => (

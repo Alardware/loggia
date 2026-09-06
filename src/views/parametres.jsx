@@ -349,8 +349,8 @@ function AdminPinEditor() {
         <button onClick={() => setShow(s => !s)} style={{ padding: '5px 12px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{show ? 'Masquer' : 'Afficher'}</button>
       </div>
       <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-        <div><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>NOUVEAU CODE</div><input value={np} onChange={e => { setNp(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" style={inp} /></div>
-        <div><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>CONFIRMER</div><input value={cf} onChange={e => { setCf(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" style={inp} /></div>
+        <div><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>NOUVEAU CODE</div><input aria-label="Nouveau code" value={np} onChange={e => { setNp(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" style={inp} /></div>
+        <div><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>CONFIRMER</div><input aria-label="Confirmer le nouveau code" value={cf} onChange={e => { setCf(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" style={inp} /></div>
       </div>
       {msg && <div style={{ fontSize: 12, fontWeight: 600, color: msg.ok ? 'var(--o-ok)' : '#f87171', marginBottom: 12 }}>{msg.t}</div>}
       <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer le code')}</button>
@@ -383,7 +383,7 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
       <div onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}><span style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 19, color: '#fff', background: `linear-gradient(135deg,${c},rgba(${cl_hexRgb(c)},.6))` }}>{(name.trim()[0] || '?').toUpperCase()}</span><div style={{ fontSize: 15, fontWeight: 800 }}>{user ? "Modifier l'utilisateur" : 'Nouvel utilisateur'}</div></div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>NOM</div>
-        <input value={name} autoFocus onChange={e => setName(e.target.value)} placeholder="Nom" style={{ ...inp, marginBottom: 16 }} />
+        <input aria-label="Nom" value={name} autoFocus onChange={e => setName(e.target.value)} placeholder="Nom" style={{ ...inp, marginBottom: 16 }} />
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>{tr('RÔLE')}</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <button onClick={() => setRole('Admin')} style={roleBtn(role === 'Admin')}>Admin</button>
@@ -468,7 +468,7 @@ function CvEditor({ cv, hass, onSave, onClose }) {
       <div onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 470, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
         <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>{cv ? 'Modifier la vue' : 'Nouvelle vue'}</div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', marginBottom: 6 }}>NOM</div>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Ma vue" style={inp} />
+        <input aria-label="Ma vue" value={name} onChange={e => setName(e.target.value)} placeholder="Ma vue" style={inp} />
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('ICÔNE')}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {CV_ICONS.map(ic => <button key={ic} onClick={() => setIcon(ic)} style={{ width: 40, height: 40, borderRadius: 10, border: icon === ic ? '2px solid var(--o-accent)' : 'var(--o-bw,1px) solid var(--o-bd2)', background: icon === ic ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: icon === ic ? 'var(--o-accent-soft)' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={ic} size={16} /></button>)}
@@ -1526,7 +1526,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <div className="o-parcard" style={cardSt}>
           <div style={{ display: 'flex', gap: 8, margin: '10px 0 14px', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ flex: '1 1 200px', position: 'relative' }}>
-              <input value={autoQ} onChange={e => setAutoQ(e.target.value)} placeholder={tr('Filtrer par nom…')} spellCheck={false} style={{ width: '100%', boxSizing: 'border-box', padding: '9px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
+              <input aria-label={tr('Filtrer par nom…')} value={autoQ} onChange={e => setAutoQ(e.target.value)} placeholder={tr('Filtrer par nom…')} spellCheck={false} style={{ width: '100%', boxSizing: 'border-box', padding: '9px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
             </div>
                         <button onClick={() => setAutoOpen(anyOpen ? {} : Object.fromEntries(groups.map(gr => [gr.g, true])))} style={{ padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s2)', color: 'var(--o-text1)' }}>{anyOpen ? 'Tout replier' : 'Tout déplier'}</button>
           </div>

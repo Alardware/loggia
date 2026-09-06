@@ -210,14 +210,14 @@ export function VoletsReglages({ hass, cardSt }) {
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 9 }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('Ouverture')}</span>
-                          <input type="number" value={r.ouverture != null ? r.ouverture : ''} min={-120} max={240} placeholder="—"
+                          <input aria-label={tr('Ouverture, décalage en minutes')} type="number" value={r.ouverture != null ? r.ouverture : ''} min={-120} max={240} placeholder="—"
                             onChange={e => poser({ ...r, ouverture: e.target.value === '' ? null : Math.max(-120, Math.min(240, Number(e.target.value) || 0)) })}
                             style={{ ...champ, width: 74 }} />
                           <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min')}</span>
                         </span>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('Fermeture')}</span>
-                          <input type="number" value={r.fermeture != null ? r.fermeture : ''} min={-120} max={240} placeholder="—"
+                          <input aria-label={tr('Fermeture, décalage en minutes')} type="number" value={r.fermeture != null ? r.fermeture : ''} min={-120} max={240} placeholder="—"
                             onChange={e => poser({ ...r, fermeture: e.target.value === '' ? null : Math.max(-120, Math.min(240, Number(e.target.value) || 0)) })}
                             style={{ ...champ, width: 74 }} />
                           <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min')}</span>

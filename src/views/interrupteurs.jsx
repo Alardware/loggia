@@ -335,7 +335,7 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
         {g.libre && (
           <div>
             <div style={label}>{tr('Service')}</div>
-            <input value={libre} onChange={e => setLibre(e.target.value)} placeholder="script.turn_on" spellCheck={false} style={champ} />
+            <input aria-label={tr('Service à appeler')} value={libre} onChange={e => setLibre(e.target.value)} placeholder="script.turn_on" spellCheck={false} style={champ} />
           </div>
         )}
 
