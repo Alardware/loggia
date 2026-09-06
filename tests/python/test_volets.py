@@ -396,3 +396,41 @@ def test_sans_volet_regle_le_planning_prend_le_domaine(creer):
     v = creer({"planning": {"actif": True}}, etats)
     lancer(v._async_planifie("fermer"))
     assert v.hass.services.appels[0][2]["entity_id"] == ["cover.a", "cover.b"]
+
+def test_jours_propres_par_sens(module):
+    """Un volet peut ne pas s'ouvrir certains jours, et fermer quand meme.
+
+    Le cas qui l'a demande : travailler de nuit. La chambre ne doit pas
+    s'ouvrir le matin les jours ou l'on dort, mais doit s'ouvrir les jours de
+    repos — et la fermeture du soir, elle, ne change pas. Une seule liste de
+    jours pour les deux sens ne saurait pas dire cela.
+    """
+    lundi, samedi = datetime(2026, 9, 7), datetime(2026, 9, 12)   # weekday 0 et 5
+    plan = {"ouverture": {"decalage": 0}, "fermeture": {"decalage": 0},
+            "volets": {COVERS[0]: {"perso": True, "jours_ouverture": [5, 6]}}}
+
+    # Lundi : le volet ne s'ouvre pas, les autres si.
+    g = module.groupes_horaires(plan, COVERS, "ouverture", lundi)
+    assert COVERS[0] not in [x for v in g.values() for x in v], "le volet s'ouvre un jour ecarte"
+    assert COVERS[1] in [x for v in g.values() for x in v], "les autres volets ont ete emportes"
+
+    # Samedi : il s'ouvre.
+    g = module.groupes_horaires(plan, COVERS, "ouverture", samedi)
+    assert COVERS[0] in [x for v in g.values() for x in v], "le volet ne s'ouvre pas un jour retenu"
+
+    # La FERMETURE ignore les jours d'ouverture : sans liste propre, elle suit
+    # les jours generaux, tous les jours de la semaine.
+    g = module.groupes_horaires(plan, COVERS, "fermeture", lundi)
+    assert COVERS[0] in [x for v in g.values() for x in v], "les jours d'ouverture bloquent aussi la fermeture"
+
+
+def test_sans_date_aucun_filtre(module):
+    """`quand` absent : la fonction reste ce qu'elle etait.
+
+    Ses appels d'origine ne passent pas de date. S'ils se mettaient a filtrer,
+    ils ecarteraient des volets sans que rien ne l'ait demande.
+    """
+    plan = {"ouverture": {"decalage": 0},
+            "volets": {COVERS[0]: {"perso": True, "jours_ouverture": []}}}
+    g = module.groupes_horaires(plan, COVERS, "ouverture")
+    assert COVERS[0] in [x for v in g.values() for x in v], "un appel sans date s'est mis a filtrer"

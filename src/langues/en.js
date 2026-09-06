@@ -1447,4 +1447,7 @@ export default {
   '{n} écrans à part': '{n} screens of their own',
   'Aucune version enregistrée. Une séance d’édition qui change quelque chose en dépose une.': 'No version saved yet. An editing session that changes something leaves one behind.',
   'Une restauration se défait comme un geste ordinaire.': 'A restore can be undone like any other change.',
+  'Ouvre les': 'Opens on',
+  'Ferme les': 'Closes on',
+  'Vide = suit l’heure générale pour ce sens. Un jour décoché : ce volet ne bouge pas ce jour-là, dans ce sens.': 'Empty = follows the general time for that direction. An unchecked day: this shutter stays put that day, in that direction.',
 };

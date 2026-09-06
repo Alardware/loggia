@@ -97,13 +97,23 @@ def au_soleil(azimut, elevation, orientation, ouverture=90.0, elevation_min=15.0
         return False
 
 
-def groupes_horaires(plan, covers, sens: str) -> dict:
+def groupes_horaires(plan, covers, sens: str, quand=None) -> dict:
     """Les volets ranges par decalage, pour un sens donne.
 
     Le planning n'a longtemps connu qu'une heure pour toute la maison. Or on
     ne veut pas que la chambre s'ouvre au lever du soleil comme le salon. Un
     volet peut donc porter son propre decalage, qui REMPLACE le general, ou
     se retirer entierement du planning.
+
+    Il peut aussi porter ses propres JOURS, et separement selon le sens. Qui
+    travaille de nuit ne veut pas que la chambre s'ouvre le matin les jours
+    ou il dort — mais veut qu'elle s'ouvre les jours de repos, et que la
+    fermeture du soir, elle, ne change pas. Deux listes valent donc mieux
+    qu'une : `jours_ouverture` et `jours_fermeture`.
+
+    Absentes, elles laissent le volet suivre les jours generaux. `quand` non
+    fourni, aucun filtre ne s'applique : la fonction reste alors ce qu'elle
+    etait, et ses appels d'origine ne changent pas de sens.
 
     Renvoie {minutes: [entity_id]} — un rendez-vous par valeur distincte,
     plutot qu'un rendez-vous par volet.
@@ -118,6 +128,10 @@ def groupes_horaires(plan, covers, sens: str) -> dict:
         reglage = par_volet.get(haid) if isinstance(par_volet, dict) else None
         if isinstance(reglage, dict):
             if reglage.get("exclu"):
+                continue
+            # Les jours propres a CE volet, pour CE sens.
+            jours = reglage.get("jours_" + sens)
+            if quand is not None and isinstance(jours, list) and not jour_actif(jours, quand):
                 continue
             propre = reglage.get(sens)
             if propre not in (None, ""):
@@ -201,6 +215,8 @@ class LoggiaVolets:
         Les decalages font partie du rendez-vous lui-meme : les changer oblige
         a tout reposer, d'ou cette fonction rappelee a chaque enregistrement.
         """
+        from homeassistant.util import dt as dt_util
+
         for defaire in self._defait_soleil:
             try:
                 defaire()
@@ -217,7 +233,7 @@ class LoggiaVolets:
         # chambres qui s'ouvrent une heure plus tard partagent le leur.
         covers = self._tous_les_covers()
         for sens, poser in (("ouverture", async_track_sunrise), ("fermeture", async_track_sunset)):
-            groupes = groupes_horaires(plan, covers, sens)
+            groupes = groupes_horaires(plan, covers, sens, dt_util.now())
             for decalage, cibles in groupes.items():
                 self._defait_soleil.append(
                     poser(self.hass, self._rendezvous(sens, list(cibles)), timedelta(minutes=decalage))

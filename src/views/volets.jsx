@@ -234,9 +234,41 @@ export function VoletsReglages({ hass, cardSt }) {
                         </span>
                       </div>
                     )}
+                    {/* Les jours de CE volet, et separement selon le sens.
+                      *
+                      * Qui travaille de nuit ne veut pas que la chambre s'ouvre
+                      * le matin les jours ou il dort — mais veut qu'elle s'ouvre
+                      * les jours de repos, et que la fermeture du soir, elle, ne
+                      * change pas. Une seule liste pour les deux sens ne saurait
+                      * pas dire cela.
+                      *
+                      * Sept jours coches = on efface la liste plutot que de la
+                      * garder pleine : le volet redevient alors sujet aux jours
+                      * generaux, et les suivra s'ils changent. */}
+                    {propre && ['ouverture', 'fermeture'].map(sens => {
+                      const cle = 'jours_' + sens;
+                      const actifs = Array.isArray(r[cle]) ? r[cle] : null;
+                      return (
+                        <div key={sens} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                          <span style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 700, minWidth: 72 }}>
+                            {sens === 'ouverture' ? tr('Ouvre les') : tr('Ferme les')}
+                          </span>
+                          {JOURS_COURTS().map((j, i) => {
+                            const on = actifs ? actifs.indexOf(i) >= 0 : true;
+                            return (
+                              <button key={j} onClick={() => {
+                                const base = actifs || [0, 1, 2, 3, 4, 5, 6];
+                                const suiv = on ? base.filter(x => x !== i) : [...base, i].sort((a, b) => a - b);
+                                poser({ ...r, [cle]: suiv.length === 7 ? null : suiv });
+                              }} style={{ ...puce(on), minWidth: 34, padding: '5px 7px', textAlign: 'center' }}>{j}</button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
                     {propre && (
                       <div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600, marginTop: 6 }}>
-                        {tr('Vide = suit l’heure générale pour ce sens.')}
+                        {tr('Vide = suit l’heure générale pour ce sens. Un jour décoché : ce volet ne bouge pas ce jour-là, dans ce sens.')}
                       </div>
                     )}
                   </div>
