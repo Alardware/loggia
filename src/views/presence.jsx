@@ -94,8 +94,8 @@ export function PresenceReglages({ hass, cardSt }) {
   const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
   const champ = { padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
 
-  const Bascule = ({ on, cb }) => (
-    <button onClick={cb} style={{ width: 46, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 2, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
+  const Bascule = ({ on, cb, nom }) => (
+    <button aria-label={nom} onClick={cb} style={{ width: 46, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 2, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
       <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
     </button>
   );
@@ -106,7 +106,7 @@ export function PresenceReglages({ hass, cardSt }) {
         <span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{nom}</span>
         {desc ? <span style={{ display: 'block', fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 2 }}>{desc}</span> : null}
       </span>
-      <Bascule on={on} cb={cb} />
+      <Bascule nom={nom} on={on} cb={cb} />
     </div>
   );
 
@@ -127,7 +127,7 @@ export function PresenceReglages({ hass, cardSt }) {
           <>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 88 }}>{tr('Attendre')}</span>
-              <input type="number" value={cfg.delai_depart != null ? cfg.delai_depart : 5} min={0} max={60}
+              <input aria-label={tr('Attendre avant la mise en veille, en minutes')} type="number" value={cfg.delai_depart != null ? cfg.delai_depart : 5} min={0} max={60}
                 onChange={e => enregistrer({ delai_depart: Math.max(0, Math.min(60, Number(e.target.value) || 0)) })}
                 style={{ ...champ, width: 74 }} />
               <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>
@@ -166,12 +166,12 @@ export function PresenceReglages({ hass, cardSt }) {
             {chauf.actif && (
               <div style={{ ...ligne, marginTop: 4, paddingBottom: 8 }}>
                 <span style={{ ...label, minWidth: 88 }}>{tr('Absence')}</span>
-                <input type="number" value={chauf.consigne != null ? chauf.consigne : 17} min={5} max={25} step={0.5}
+                <input aria-label={tr('Température en absence, en °C')} type="number" value={chauf.consigne != null ? chauf.consigne : 17} min={5} max={25} step={0.5}
                   onChange={e => enregistrer({ depart: { chauffage: { consigne: Number(e.target.value) || 17 } } })}
                   style={{ ...champ, width: 74 }} />
                 <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>°C</span>
                 <span style={{ ...label, minWidth: 56, marginLeft: 8 }}>{tr('Confort')}</span>
-                <input type="number" value={chauf.confort != null ? chauf.confort : 20} min={10} max={28} step={0.5}
+                <input aria-label={tr('Température de confort, en °C')} type="number" value={chauf.confort != null ? chauf.confort : 20} min={10} max={28} step={0.5}
                   onChange={e => enregistrer({ depart: { chauffage: { confort: Number(e.target.value) || 20 } } })}
                   style={{ ...champ, width: 74 }} />
                 <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>°C</span>
@@ -220,7 +220,7 @@ export function PresenceReglages({ hass, cardSt }) {
                     {tr('Armer parce que la maison se vide est sans risque. La désarmer parce qu’un téléphone approche en est un : qui tient ce téléphone entre dans une maison ouverte.')}
                   </span>
                 </span>
-                <Bascule on={!!ret.desarmer} cb={() => enregistrer({ retour: { desarmer: !ret.desarmer } })} />
+                <Bascule nom={tr('Désarmer l’alarme au retour')} on={!!ret.desarmer} cb={() => enregistrer({ retour: { desarmer: !ret.desarmer } })} />
               </div>
             </div>
           )}

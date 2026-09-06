@@ -128,7 +128,7 @@ export function VeillesReglages({ hass, cardSt }) {
           <>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('Au-delà de')}</span>
-              <input type="number" value={co2.seuil != null ? co2.seuil : 1200} min={400} max={3000} step={50}
+              <input aria-label={tr('Seuil de CO₂, en ppm')} type="number" value={co2.seuil != null ? co2.seuil : 1200} min={400} max={3000} step={50}
                 onChange={e => enregistrer({ co2: { seuil: Math.max(400, Math.min(3000, Number(e.target.value) || 1200)) } })}
                 style={{ ...champ, width: 88 }} />
               <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>ppm</span>
@@ -162,7 +162,7 @@ export function VeillesReglages({ hass, cardSt }) {
           <>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('En dessous de')}</span>
-              <input type="number" value={bat.seuil != null ? bat.seuil : 15} min={1} max={50}
+              <input aria-label={tr('Seuil de batterie, en pourcentage')} type="number" value={bat.seuil != null ? bat.seuil : 15} min={1} max={50}
                 onChange={e => enregistrer({ batterie: { seuil: Math.max(1, Math.min(50, Number(e.target.value) || 15)) } })}
                 style={{ ...champ, width: 74 }} />
               <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>%</span>
@@ -193,7 +193,7 @@ export function VeillesReglages({ hass, cardSt }) {
             </div>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('Vaut')}</span>
-              <input type="text" value={cr.valeur || ''} placeholder="HC"
+              <input aria-label={tr('Valeur du tarif heures creuses')} type="text" value={cr.valeur || ''} placeholder="HC"
                 onChange={e => enregistrer({ creuses: { valeur: e.target.value } })}
                 style={{ ...champ, width: 120 }} spellCheck={false} />
               <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>

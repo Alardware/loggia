@@ -364,7 +364,7 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
                 <button onClick={() => setLum(v => (v == null ? 70 : null))} style={puce(lum != null)}>{tr('Luminosité')}</button>
                 {lum != null && (
                   <>
-                    <input type="range" min={1} max={100} value={lum} onChange={e => setLum(Number(e.target.value))}
+                    <input aria-label={tr('Luminosité, en pourcentage')} type="range" min={1} max={100} value={lum} onChange={e => setLum(Number(e.target.value))}
                       style={{ flex: 1, minWidth: 120, accentColor: 'var(--o-accent)' }} />
                     <span style={{ width: 46, textAlign: 'right', fontSize: 12, fontWeight: 800 }}>{lum} %</span>
                   </>
@@ -388,14 +388,14 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
                 </div>
                 {coul && coul.rgb && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 9 }}>
-                    <input type="color" value={enHex(coul.rgb)} onChange={e => setCoul({ rgb: enRgb(e.target.value) })}
+                    <input aria-label={tr('Couleur de la lumière')} type="color" value={enHex(coul.rgb)} onChange={e => setCoul({ rgb: enRgb(e.target.value) })}
                       style={{ width: 54, height: 34, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} />
                     <code style={{ fontSize: 12, color: 'var(--o-text3)' }}>{enHex(coul.rgb)}</code>
                   </div>
                 )}
                 {coul && coul.k != null && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9, flexWrap: 'wrap' }}>
-                    <input type="range" min={kMin} max={kMax} step={50} value={coul.k} onChange={e => setCoul({ k: Number(e.target.value) })}
+                    <input aria-label={tr('Température de couleur, en kelvins')} type="range" min={kMin} max={kMax} step={50} value={coul.k} onChange={e => setCoul({ k: Number(e.target.value) })}
                       style={{ flex: 1, minWidth: 120, accentColor: 'var(--o-accent)' }} />
                     <span style={{ width: 60, textAlign: 'right', fontSize: 12, fontWeight: 800 }}>{coul.k} K</span>
                   </div>
@@ -416,7 +416,12 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
 
       {choisir && (
         <BottomSheet onClose={() => setChoisir(false)} title={tr('Choisir une entité')}>
-          <EntPicker hass={hass} autoFocus domaines={g.domaines || null}
+          {/* `autoFocus` est ici delibere : ce selecteur s'ouvre en reponse a un
+            * clic, pour saisir tout de suite. Le retirer obligerait a un second
+            * clic — la regle vise les champs focalises au CHARGEMENT d'une page,
+            * ce qui n'est pas le cas. */}
+            {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+            <EntPicker hass={hass} autoFocus domaines={g.domaines || null}
             onPick={(id) => { setEntite(id); setChoisir(false); }} />
         </BottomSheet>
       )}

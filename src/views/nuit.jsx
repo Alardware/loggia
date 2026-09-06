@@ -109,14 +109,14 @@ export function NuitReglages({ hass, cardSt }) {
           <>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 78 }}>{tr('S’éteint après')}</span>
-              <input type="number" value={v.duree != null ? v.duree : 30} min={0} max={240}
+              <input aria-label={tr('Extinction après, en minutes')} type="number" value={v.duree != null ? v.duree : 30} min={0} max={240}
                 onChange={e => enregistrer({ veilleuse: { duree: Math.max(0, Math.min(240, Number(e.target.value) || 0)) } })}
                 style={{ ...champ, width: 74 }} />
               <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min')}</span>
             </div>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 78 }}>{tr('En fondu sur')}</span>
-              <input type="number" value={v.fondu != null ? v.fondu : 5} min={0} max={30}
+              <input aria-label={tr('Durée du fondu, en minutes')} type="number" value={v.fondu != null ? v.fondu : 5} min={0} max={30}
                 onChange={e => enregistrer({ veilleuse: { fondu: Math.max(0, Math.min(30, Number(e.target.value) || 0)) } })}
                 style={{ ...champ, width: 74 }} />
               <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min — 0 pour une extinction franche')}</span>
@@ -130,7 +130,7 @@ export function NuitReglages({ hass, cardSt }) {
             )}
             <div style={ligne}>
               <span style={{ ...label, minWidth: 78 }}>{tr('À partir de')}</span>
-              <input type="time" value={v.depuis || '19:00'}
+              <input aria-label={tr('Veilleuse active à partir de')} type="time" value={v.depuis || '19:00'}
                 onChange={e => enregistrer({ veilleuse: { depuis: e.target.value } })}
                 style={{ ...champ, width: 116 }} />
               <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>
@@ -166,7 +166,7 @@ export function NuitReglages({ hass, cardSt }) {
           <>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 78 }}>{tr('À')}</span>
-              <input type="time" value={c.heure || '23:30'}
+              <input aria-label={tr('Heure d’extinction')} type="time" value={c.heure || '23:30'}
                 onChange={e => enregistrer({ coucher: { heure: e.target.value } })}
                 style={{ ...champ, width: 116 }} />
             </div>

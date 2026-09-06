@@ -119,9 +119,11 @@ export function VoletsReglages({ hass, cardSt }) {
   const champ = { padding: '9px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
 
 
-  const Nombre = ({ v, min, max, pas = 1, unite, cb }) => (
+  /* `nom` sert d'intitule : le champ n'a pas d'etiquette propre, et l'unite
+   * affichee a cote (« min apres le lever ») ne dit pas de quoi il s'agit. */
+  const Nombre = ({ v, min, max, pas = 1, unite, nom, cb }) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-      <input type="number" value={v} min={min} max={max} step={pas}
+      <input aria-label={nom || unite} type="number" value={v} min={min} max={max} step={pas}
         onChange={e => cb(Math.max(min, Math.min(max, Number(e.target.value) || 0)))}
         style={{ ...champ, width: 78 }} />
       <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{unite}</span>
@@ -160,12 +162,12 @@ export function VoletsReglages({ hass, cardSt }) {
             </div>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Ouverture')}</span>
-              <Nombre v={(plan.ouverture || {}).decalage || 0} min={-120} max={120} unite={tr('min après le lever')}
+              <Nombre v={(plan.ouverture || {}).decalage || 0} nom={tr('Ouverture, décalage par rapport au lever du soleil')} min={-120} max={120} unite={tr('min après le lever')}
                 cb={n => enregistrer({ planning: { ouverture: { decalage: n } } })} />
             </div>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Fermeture')}</span>
-              <Nombre v={(plan.fermeture || {}).decalage || 0} min={-120} max={120} unite={tr('min après le coucher')}
+              <Nombre v={(plan.fermeture || {}).decalage || 0} nom={tr('Fermeture, décalage par rapport au coucher du soleil')} min={-120} max={120} unite={tr('min après le coucher')}
                 cb={n => enregistrer({ planning: { fermeture: { decalage: n } } })} />
             </div>
             <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>
@@ -297,17 +299,17 @@ export function VoletsReglages({ hass, cardSt }) {
           <>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Descendre à')}</span>
-              <Nombre v={sol.position != null ? sol.position : 30} min={0} max={100} pas={5} unite="%"
+              <Nombre v={sol.position != null ? sol.position : 30} nom={tr('Position des volets sous le soleil, en pourcentage')} min={0} max={100} pas={5} unite="%"
                 cb={n => enregistrer({ soleil: { position: n } })} />
             </div>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Au-dessus de')}</span>
-              <Nombre v={sol.elevation_min != null ? sol.elevation_min : 15} min={0} max={60} pas={5} unite={tr('° de hauteur')}
+              <Nombre v={sol.elevation_min != null ? sol.elevation_min : 15} nom={tr('Hauteur minimale du soleil, en degrés')} min={0} max={60} pas={5} unite={tr('° de hauteur')}
                 cb={n => enregistrer({ soleil: { elevation_min: n } })} />
             </div>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Et au-delà de')}</span>
-              <Nombre v={sol.temp_min != null && sol.temp_min !== '' ? sol.temp_min : 25} min={0} max={45} unite={tr('°C dehors')}
+              <Nombre v={sol.temp_min != null && sol.temp_min !== '' ? sol.temp_min : 25} nom={tr('Température extérieure minimale, en °C')} min={0} max={45} unite={tr('°C dehors')}
                 cb={n => enregistrer({ soleil: { temp_min: n } })} />
             </div>
             <div style={{ ...ligne, marginTop: 8 }}>
@@ -368,7 +370,7 @@ export function VoletsReglages({ hass, cardSt }) {
             </div>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('À partir de')}</span>
-              <Nombre v={vent.seuil != null ? vent.seuil : 50} min={0} max={150} pas={5} unite={tr('dans l’unité du capteur')}
+              <Nombre v={vent.seuil != null ? vent.seuil : 50} nom={tr('Seuil de vent, dans l’unité du capteur')} min={0} max={150} pas={5} unite={tr('dans l’unité du capteur')}
                 cb={n => enregistrer({ vent: { seuil: n } })} />
             </div>
           </>
@@ -394,7 +396,12 @@ export function VoletsReglages({ hass, cardSt }) {
 
       {picker && (
         <BottomSheet onClose={() => setPicker(null)} title={tr('Choisir un capteur')}>
-          <EntPicker hass={hass} autoFocus domaines={picker.domaines}
+          {/* `autoFocus` est ici delibere : ce selecteur s'ouvre en reponse a un
+            * clic, pour saisir tout de suite. Le retirer obligerait a un second
+            * clic — la regle vise les champs focalises au CHARGEMENT d'une page,
+            * ce qui n'est pas le cas. */}
+            {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+            <EntPicker hass={hass} autoFocus domaines={picker.domaines}
             onPick={(id) => { enregistrer({ [picker.section]: { [picker.champ]: id } }); setPicker(null); }} />
         </BottomSheet>
       )}
