@@ -400,7 +400,6 @@ export function VoletsReglages({ hass, cardSt }) {
             * clic, pour saisir tout de suite. Le retirer obligerait a un second
             * clic — la regle vise les champs focalises au CHARGEMENT d'une page,
             * ce qui n'est pas le cas. */}
-            {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
             <EntPicker hass={hass} autoFocus domaines={picker.domaines}
             onPick={(id) => { enregistrer({ [picker.section]: { [picker.champ]: id } }); setPicker(null); }} />
         </BottomSheet>

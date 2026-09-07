@@ -420,7 +420,6 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
             * clic, pour saisir tout de suite. Le retirer obligerait a un second
             * clic — la regle vise les champs focalises au CHARGEMENT d'une page,
             * ce qui n'est pas le cas. */}
-            {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
             <EntPicker hass={hass} autoFocus domaines={g.domaines || null}
             onPick={(id) => { setEntite(id); setChoisir(false); }} />
         </BottomSheet>

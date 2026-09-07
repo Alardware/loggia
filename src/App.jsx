@@ -3057,6 +3057,8 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
   const [ent, setEnt] = useState(estEntite ? brut : '');
   const dom = estEntite ? brut.slice(0, brut.indexOf('.')) : '';
   const dlId = 'o-cardent-' + (dom || 'x');
+  const nomId = 'o-cardnom-' + (dom || 'x');
+  const entId = 'o-cardent-champ-' + (dom || 'x');
   // Meme domaine seulement : un poste de puissance n'a rien a faire sur une
   // lampe, et la liste complete est illisible.
   const options = useMemo(
@@ -3080,8 +3082,8 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
               : 'Ce nom ne vaut que pour cette vue ; Home Assistant n’est pas modifié.'}
           </div>
 
-          <div style={etiquette}>NOM</div>
-          <input value={val} onChange={(e) => setVal(e.target.value)} placeholder={origine || nom}
+          <label htmlFor={nomId} style={etiquette}>{tr('NOM')}</label>
+          <input id={nomId} value={val} onChange={(e) => setVal(e.target.value)} placeholder={origine || nom}
             onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} autoFocus />
           {!estSection && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>
             Laisse vide pour revenir à « {origine || nom} ».
@@ -3089,9 +3091,14 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
 
           {estEntite && (
             <>
-              <div style={etiquette}>{tr('ENTITÉ')}</div>
+              <label htmlFor={entId} style={etiquette}>{tr('ENTITÉ')}</label>
+              {/* Les entrees d'un <datalist> ne sont pas des controles a
+                * nommer : leur `value` EST ce que le navigateur affiche. Leur
+                * ajouter un texte visible changerait la liste deroulante. La
+                * regle lit ici l'<option> d'un <select>, ou le texte compte. */}
+              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
               <datalist id={dlId}>{options.map(k => <option key={k} value={k} />)}</datalist>
-              <input value={ent} onChange={(e) => setEnt(e.target.value)} list={dlId} spellCheck={false}
+              <input id={entId} value={ent} onChange={(e) => setEnt(e.target.value)} list={dlId} spellCheck={false}
                 placeholder={dom + '.…'} onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} />
               <div style={{ fontSize: 12, fontWeight: 600, color: etat ? 'var(--o-text3)' : 'var(--o-warn2)', margin: '6px 2px 0' }}>
                 {etat ? 'État actuel : ' + etat.state : 'Home Assistant ne connaît pas cette entité.'}
@@ -10109,6 +10116,11 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   else if (runnable || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—'; // scene/script/button : état = date de dernière exécution
   else stateTxt = String(s);
   return (
+    /* Le role, l'index de tabulation, le clic et la touche sont tous
+     * conditionnes par `ouvrable` : ils arrivent ensemble ou pas du tout. La
+     * regle lit chaque attribut isolement et ne suit pas le ternaire — elle
+     * croit voir un tabIndex sans role, et un clic sans clavier. */
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
     <div className={'o-piece' + (dense ? ' o-cvdense' : '') + (dense && dom === 'climate' ? ' o-cvclim' : '') + (dead ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? 'Ouvrir ' + name : undefined}
       onClick={ouvrable ? () => onOpen(id) : undefined}
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
@@ -10188,7 +10200,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
       </div>
       {/* Standard lumière : la luminosité en dessous — commit au relâcher. */}
       {!dense && dom === 'light' && !dead && (a.brightness != null || (a.supported_color_modes || []).indexOf('brightness') >= 0) && (
-        <div className="o-cvrange" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+        <div className="o-cvrange" role="presentation" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
           <Fi i="bulb" size={13} color="var(--o-text3)" />
           <input type="range" min="1" max="100" key={on ? Math.round((a.brightness || 0) / 255 * 100) : 0}
             defaultValue={on ? Math.round((a.brightness || 0) / 255 * 100) : 0} aria-label={tr('{n} % de luminosité', { n: '' })}
@@ -11457,8 +11469,10 @@ function CvCalendrier({ id, hass, onOpen = null }) {
   }
   const mois = auj.toLocaleDateString(locale(), { month: 'long' });
   return (
-    <div className="o-piece" onClick={onOpen ? () => onOpen(id) : undefined}
-      role={onOpen ? 'button' : undefined} tabIndex={onOpen ? 0 : undefined}
+    /* Meme motif que la tuile ci-dessus : tout est conditionne par `onOpen`. */
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
+    <div className="o-piece" onClick={onOpen ? () => onOpen(id) : undefined} tabIndex={onOpen ? 0 : undefined}
+      role={onOpen ? 'button' : undefined}
       onKeyDown={onOpen ? (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onOpen(id); } } : undefined}
       aria-label={onOpen ? tr('Ouvrir le calendrier') : undefined}
       style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden', cursor: onOpen ? 'pointer' : undefined }}>
@@ -12058,10 +12072,18 @@ function CustomView({ cv, hass, edit = false, onSave }) {
         <div>
           {edit && renaming
             ? <div style={{ display: 'flex', gap: 10, alignItems: 'center', maxWidth: 420 }}>
-                <input value={nameDraft} onChange={e => setNameDraft(e.target.value)} autoFocus style={cvInp} />
+                <input value={nameDraft} onChange={e => setNameDraft(e.target.value)}
+                  aria-label={tr('Nom de la vue')} autoFocus style={cvInp} />
                 <button onClick={() => { const n = nameDraft.trim(); if (n) onSave && onSave({ ...cv, name: n }); setRenaming(false); }} style={{ padding: '11px 16px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>OK</button>
               </div>
-            : <h1 onClick={edit ? () => setRenaming(true) : undefined} style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, cursor: edit ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: 12 }}>{cv.name}{edit && <Fi i="pencil" size={16} color="var(--o-text3)" />}</h1>}
+            : <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+                {edit
+                  ? <button onClick={() => setRenaming(true)} aria-label={tr('Renommer la vue')}
+                      style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+                      {cv.name}<Fi i="pencil" size={16} color="var(--o-text3)" />
+                    </button>
+                  : cv.name}
+              </h1>}
           <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div>
         </div>
         {/* Grille DENSE : chaque carte déclare sa hauteur en rangées (.grid-custom

@@ -49,6 +49,23 @@ export default [
        * que masquee. */
       ...Object.fromEntries(Object.entries(a11y.flatConfigs.recommended.rules)
         .map(([regle]) => [regle, 'warn'])),
+      /* `no-autofocus` ne s'applique pas a ce dashboard.
+       *
+       * La regle vise les pages web ou un champ focalise AU CHARGEMENT
+       * desoriente : on arrive quelque part, et le curseur est deja pose sans
+       * qu'on l'ait demande.
+       *
+       * Ici, les dix-huit `autoFocus` sont tous dans des feuilles ouvertes a la
+       * demande — la recherche (Ctrl+K), la saisie d'un code, le choix d'une
+       * entite, le renommage d'une vue. Donner le focus au premier champ d'un
+       * dialogue qui vient de s'ouvrir est le motif RECOMMANDE : sans lui, il
+       * faudrait un clic ou une tabulation de plus a chaque ouverture, pour
+       * tout le monde.
+       *
+       * Desactivee une fois plutot que dix-huit : dix-huit exceptions
+       * identiques disent moins bien la meme chose, et la dix-neuvieme serait
+       * posee sans reflechir. */
+      'jsx-a11y/no-autofocus': 'off',
       // Un hook appele sous condition casse l'ordre des hooks : React lit
       // alors l'etat d'un autre. Erreur, jamais negociable.
       // LE filet : `no-undef` ne voit pas les composants JSX. Un composant

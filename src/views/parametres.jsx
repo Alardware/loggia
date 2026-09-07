@@ -390,7 +390,6 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
         {/* `autoFocus` delibere : cette feuille s'ouvre pour saisir un nom, en
           * reponse a un clic. La regle vise les champs focalises au CHARGEMENT
           * d'une page. */}
-        {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
         <input aria-label="Nom" value={name} autoFocus onChange={e => setName(e.target.value)} placeholder="Nom" style={{ ...inp, marginBottom: 16 }} />
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>{tr('RÔLE')}</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
