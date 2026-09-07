@@ -107,7 +107,7 @@ export function PresenceReglages({ hass, cardSt }) {
         <RegleEntete nom={tr('Départ et retour')}
           desc={tr('Quand la dernière personne s’en va, la maison se met en veille. Elle se réveille au retour.')}
           on={!!cfg.actif} cb={() => enregistrer({ actif: !cfg.actif })}
-          plie={pliPres} onPlier={plierPres} />
+          plie={pliPres} onPlier={plierPres} zone="presence-pres-1 presence-pres-2 presence-pres-3" />
         {etat.dehors && (
           <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{tr('Maison en veille en ce moment.')}</div>
         )}
@@ -115,7 +115,7 @@ export function PresenceReglages({ hass, cardSt }) {
           <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--o-warn2)' }}>{tr('Décompte de départ en cours.')}</div>
         )}
         {cfg.actif && !pliPres && (
-          <>
+          <div id="presence-pres-1">
             <div style={ligne}>
               <span style={{ ...label, minWidth: 88 }}>{tr('Attendre')}</span>
               <input aria-label={tr('Attendre avant la mise en veille, en minutes')} type="number" value={cfg.delai_depart != null ? cfg.delai_depart : 5} min={0} max={60}
@@ -142,12 +142,12 @@ export function PresenceReglages({ hass, cardSt }) {
                 })}
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
 
       {cfg.actif && !pliPres && (
-        <div style={cardSt}>
+        <div id="presence-pres-2" style={cardSt}>
           <div style={titre}>{tr('En partant')}</div>
           <div style={{ marginTop: 8 }}>
             <Rangee nom={tr('Éteindre les lumières')} desc={tr('Celles qui étaient déjà éteintes ne se rallumeront pas au retour.')}
@@ -188,7 +188,7 @@ export function PresenceReglages({ hass, cardSt }) {
       )}
 
       {cfg.actif && !pliPres && (
-        <div style={cardSt}>
+        <div id="presence-pres-3" style={cardSt}>
           <div style={titre}>{tr('Au retour')}</div>
           <div style={{ marginTop: 8 }}>
             <Rangee nom={tr('Rallumer les lumières')} desc={tr('Seulement celles que Loggia a éteintes en partant.')}

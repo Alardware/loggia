@@ -158,3 +158,43 @@ test('le pli ne s’affiche pas sur une règle éteinte', () => {
   assert.match(corps, /const pliable = !!\(on && onPlier\);/,
     'le chevron s’affiche désormais sur les règles éteintes');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Un en-tête doit dire DE QUOI il commande le pli.
+//
+// `RegleEntete` acceptait `zone` et le posait en `aria-controls` — mais aucun
+// appelant ne le lui passait. Le commentaire du composant décrivait donc un
+// motif que le code ne réalisait pas : exactement la faute du `nom` de
+// `Bascule`, accepté par JSX et jeté par la fonction.
+//
+// Le report tenait à un obstacle qui n'existait pas : « il faudrait convertir
+// les fragments en <div>, ce qui casserait la mise en page ». Les cartes de
+// règles sont des blocs simples, sans flex ni gap — un enrobage y est neutre.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('chaque en-tête repliable désigne la région qu’il replie', () => {
+  for (const v of VUES_REGLES) {
+    const src = readFileSync(join(RACINE, 'src', 'views', v + '.jsx'), 'utf8');
+    for (const balise of src.match(/<RegleEntete[\s\S]*?\/>/g) || []) {
+      if (!/\bplie=\{/.test(balise)) continue;          // en-tête non repliable
+      const z = balise.match(/zone="([^"]+)"/);
+      assert.ok(z, `${v}.jsx : un en-tête repliable ne dit pas quelle région il commande`);
+      for (const id of z[1].split(' ')) {
+        // Une zone qui désigne un identifiant que personne ne porte ne relie
+        // rien : l'attribut a l'air posé et ne mène nulle part.
+        assert.ok(src.includes(`id="${id}"`),
+          `${v}.jsx : aucune région ne porte l’identifiant « ${id} »`);
+      }
+    }
+  }
+});
+
+test('la relation disparaît avec la région', () => {
+  const i = ui.indexOf('export function RegleEntete(');
+  const corps = ui.slice(i, ui.indexOf('\n}', i));
+  // Replier ne masque pas la région : cela la démonte. Garder `aria-controls`
+  // laisserait une référence vers un identifiant absent du document — ce qu'un
+  // vérificateur signale, et qui ne mène nulle part.
+  assert.match(corps, /aria-controls=\{pliable && zone && !plie \? zone : undefined\}/,
+    'l’en-tête garde aria-controls une fois replié : il désigne alors une région démontée');
+});

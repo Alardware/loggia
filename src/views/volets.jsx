@@ -128,9 +128,9 @@ export function VoletsReglages({ hass, cardSt }) {
       <div style={cardSt}>
         <RegleEntete nom={tr('Lever et coucher du soleil')}
           desc={tr('Ouvrir le matin, fermer le soir, aux heures réelles du soleil chez toi.')}
-          on={plan.actif} cb={() => enregistrer({ planning: { actif: !plan.actif } })} plie={pliPlan} onPlier={plierPlan} />
+          on={plan.actif} cb={() => enregistrer({ planning: { actif: !plan.actif } })} plie={pliPlan} onPlier={plierPlan} zone="volets-plan" />
         {plan.actif && !pliPlan && (
-          <>
+          <div id="volets-plan">
             {/* Ce que la règle fait AUJOURD'HUI. Le même choix se retrouve en
               * haut de la vue Volets : c'est celui qu'on change au quotidien,
               * quand l'interrupteur ci-dessus se règle une fois. */}
@@ -270,7 +270,7 @@ export function VoletsReglages({ hass, cardSt }) {
                 })}
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
 
@@ -278,7 +278,7 @@ export function VoletsReglages({ hass, cardSt }) {
       <div style={cardSt}>
         <RegleEntete nom={tr('Protection solaire')}
           desc={tr('Quand le soleil frappe une façade et qu’il fait chaud, baisser ses volets — puis les rouvrir quand il est passé.')}
-          on={sol.actif} cb={() => enregistrer({ soleil: { actif: !sol.actif } })} plie={pliSol} onPlier={plierSol} />
+          on={sol.actif} cb={() => enregistrer({ soleil: { actif: !sol.actif } })} plie={pliSol} onPlier={plierSol} zone="volets-sol" />
         {etat.soleil && etat.soleil.azimut != null && (
           <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
             {tr('En ce moment : soleil à {a}°, hauteur {e}°', { a: Math.round(etat.soleil.azimut), e: Math.round(etat.soleil.elevation) })}
@@ -286,7 +286,7 @@ export function VoletsReglages({ hass, cardSt }) {
           </div>
         )}
         {sol.actif && !pliSol && (
-          <>
+          <div id="volets-sol">
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Descendre à')}</span>
               <Nombre v={sol.position != null ? sol.position : 30} nom={tr('Position des volets sous le soleil, en pourcentage')} min={0} max={100} pas={5} unite="%"
@@ -337,7 +337,7 @@ export function VoletsReglages({ hass, cardSt }) {
                 );
               })}
             </div>
-          </>
+          </div>
         )}
       </div>
 
@@ -345,12 +345,12 @@ export function VoletsReglages({ hass, cardSt }) {
       <div style={cardSt}>
         <RegleEntete nom={tr('Vent fort')}
           desc={tr('Au-delà d’un seuil, tout remonter. Un volet baissé dans une rafale est un volet plié — cette règle passe avant les deux autres.')}
-          on={vent.actif} cb={() => enregistrer({ vent: { actif: !vent.actif } })} plie={pliVent} onPlier={plierVent} />
+          on={vent.actif} cb={() => enregistrer({ vent: { actif: !vent.actif } })} plie={pliVent} onPlier={plierVent} zone="volets-vent" />
         {etat.a_l_abri && (
           <div style={{ marginTop: 9, fontSize: 12, fontWeight: 800, color: 'var(--o-warn2)' }}>{tr('Volets à l’abri en ce moment.')}</div>
         )}
         {vent.actif && !pliVent && (
-          <>
+          <div id="volets-vent">
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Anémomètre')}</span>
               <button onClick={() => choisirEntite('vent', 'entite', ['sensor'])}
@@ -363,7 +363,7 @@ export function VoletsReglages({ hass, cardSt }) {
               <Nombre v={vent.seuil != null ? vent.seuil : 50} nom={tr('Seuil de vent, dans l’unité du capteur')} min={0} max={150} pas={5} unite={tr('dans l’unité du capteur')}
                 cb={n => enregistrer({ vent: { seuil: n } })} />
             </div>
-          </>
+          </div>
         )}
       </div>
 

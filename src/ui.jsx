@@ -551,12 +551,20 @@ export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, z
   const pliable = !!(on && onPlier);
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-      {/* `aria-expanded` dit l'etat, `aria-controls` dit DE QUOI. Sans le
-        * second, un lecteur d'ecran annonce « replie » sans pouvoir mener a la
-        * region concernee : le motif de divulgation reste incomplet. */}
+      {/* `aria-expanded` dit l'etat, `aria-controls` dit DE QUOI.
+        *
+        * Le second n'est pose QUE deplie, et c'est voulu : replier ne masque
+        * pas la region, cela la demonte. `aria-controls` designerait alors un
+        * identifiant absent du document — une reference pendante, que les
+        * verificateurs signalent et qui ne mene nulle part.
+        *
+        * Le motif canonique garderait la region montee et la cacherait par
+        * `hidden`, ce qui tiendrait la relation dans les deux etats. Ce n'est
+        * pas ce que fait Loggia : ces panneaux embarquent des champs et des
+        * effets, et on ne les laisse pas tourner sous un pli. */}
       <button type="button" onClick={pliable ? onPlier : undefined} disabled={!pliable}
         aria-expanded={pliable ? !plie : undefined}
-        aria-controls={pliable && zone ? zone : undefined}
+        aria-controls={pliable && zone && !plie ? zone : undefined}
         style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0,
           color: 'inherit', font: 'inherit', cursor: pliable ? 'pointer' : 'default' }}>
         <div style={{ ...titre, display: 'flex', alignItems: 'center', gap: 7 }}>

@@ -137,9 +137,9 @@ export function FenetresReglages({ hass, cardSt }) {
         <RegleEntete nom={tr('Fenêtre ouverte, chauffage coupé')}
           desc={tr('Chauffer une pièce dont la fenêtre est ouverte, c’est chauffer la rue.')}
           on={!!cfg.actif} cb={() => enregistrer({ actif: !cfg.actif })}
-          plie={pliFen} onPlier={plierFen} />
+          plie={pliFen} onPlier={plierFen} zone="fenetres-fen" />
         {cfg.actif && !pliFen && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+          <div id="fenetres-fen" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
             <span style={{ ...label, minWidth: 92 }}>{tr('Après')}</span>
             <input aria-label={tr('Délai avant coupure, en minutes')} type="number" value={cfg.delai != null ? cfg.delai : 3} min={0} max={60}
               onChange={e => enregistrer({ delai: Math.max(0, Math.min(60, Number(e.target.value) || 0)) })}

@@ -90,14 +90,14 @@ export function NuitReglages({ hass, cardSt }) {
       <div style={cardSt}>
         <RegleEntete nom={tr('Veilleuse')}
           desc={tr('Allumée le soir, elle s’éteint toute seule après le délai réglé.')}
-          on={v.actif} cb={() => enregistrer({ veilleuse: { actif: !v.actif } })} plie={pliVeilleuse} onPlier={plierVeilleuse} />
+          on={v.actif} cb={() => enregistrer({ veilleuse: { actif: !v.actif } })} plie={pliVeilleuse} onPlier={plierVeilleuse} zone="nuit-veilleuse" />
         {etat.en_cours && etat.en_cours.length > 0 && (
           <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--o-warn2)' }}>
             {tr('Décompte en cours.')}
           </div>
         )}
         {v.actif && !pliVeilleuse && (
-          <>
+          <div id="nuit-veilleuse">
             <div style={ligne}>
               <span style={{ ...label, minWidth: 78 }}>{tr('S’éteint après')}</span>
               <input aria-label={tr('Extinction après, en minutes')} type="number" value={v.duree != null ? v.duree : 30} min={0} max={240}
@@ -144,7 +144,7 @@ export function NuitReglages({ hass, cardSt }) {
                 })}
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
 
@@ -152,9 +152,9 @@ export function NuitReglages({ hass, cardSt }) {
       <div style={cardSt}>
         <RegleEntete nom={tr('Extinction du soir')}
           desc={tr('À l’heure dite, ce qui traîne encore allumé s’éteint.')}
-          on={c.actif} cb={() => enregistrer({ coucher: { actif: !c.actif } })} plie={pliCoucher} onPlier={plierCoucher} />
+          on={c.actif} cb={() => enregistrer({ coucher: { actif: !c.actif } })} plie={pliCoucher} onPlier={plierCoucher} zone="nuit-coucher" />
         {c.actif && !pliCoucher && (
-          <>
+          <div id="nuit-coucher">
             <div style={ligne}>
               <span style={{ ...label, minWidth: 78 }}>{tr('À')}</span>
               <input aria-label={tr('Heure d’extinction')} type="time" value={c.heure || '23:30'}
@@ -190,7 +190,7 @@ export function NuitReglages({ hass, cardSt }) {
                 })}
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
 

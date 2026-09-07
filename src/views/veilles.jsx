@@ -114,9 +114,9 @@ export function VeillesReglages({ hass, cardSt }) {
       <div style={cardSt}>
         <RegleEntete nom={tr('Air vicié')}
           desc={tr('Au-delà de 1000 à 1200 ppm on dort mal et on pense moins bien. Personne ne consulte un capteur de CO2 : il faut qu’il vienne le dire.')}
-          on={co2.actif} cb={() => enregistrer({ co2: { actif: !co2.actif } })} plie={pliCo2} onPlier={plierCo2} />
+          on={co2.actif} cb={() => enregistrer({ co2: { actif: !co2.actif } })} plie={pliCo2} onPlier={plierCo2} zone="veilles-co2" />
         {co2.actif && !pliCo2 && (
-          <>
+          <div id="veilles-co2">
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('Au-delà de')}</span>
               <input aria-label={tr('Seuil de CO₂, en ppm')} type="number" value={co2.seuil != null ? co2.seuil : 1200} min={400} max={3000} step={50}
@@ -140,7 +140,7 @@ export function VeillesReglages({ hass, cardSt }) {
                 <Choix liste={commandables} retenues={co2.ventilation} champNom="ventilation" section="co2" />
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
@@ -148,9 +148,9 @@ export function VeillesReglages({ hass, cardSt }) {
       <div style={cardSt}>
         <RegleEntete nom={tr('Piles faibles')}
           desc={tr('Un détecteur à plat ne prévient pas qu’il est à plat : il se tait, et on croit la porte fermée.')}
-          on={bat.actif} cb={() => enregistrer({ batterie: { actif: !bat.actif } })} plie={pliBat} onPlier={plierBat} />
+          on={bat.actif} cb={() => enregistrer({ batterie: { actif: !bat.actif } })} plie={pliBat} onPlier={plierBat} zone="veilles-bat" />
         {bat.actif && !pliBat && (
-          <>
+          <div id="veilles-bat">
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('En dessous de')}</span>
               <input aria-label={tr('Seuil de batterie, en pourcentage')} type="number" value={bat.seuil != null ? bat.seuil : 15} min={1} max={50}
@@ -163,7 +163,7 @@ export function VeillesReglages({ hass, cardSt }) {
                 ? tr('{n} capteurs de batterie surveillés, vérifiés une fois par heure.', { n: etat.capteurs_batterie.length })
                 : tr('{n} capteur de batterie surveillé, vérifié une fois par heure.', { n: (etat.capteurs_batterie || []).length })}
             </div>
-          </>
+          </div>
         )}
       </div>
 
@@ -171,9 +171,9 @@ export function VeillesReglages({ hass, cardSt }) {
       <div style={cardSt}>
         <RegleEntete nom={tr('Heures creuses')}
           desc={tr('Le lave-vaisselle attend souvent qu’on y pense.')}
-          on={cr.actif} cb={() => enregistrer({ creuses: { actif: !cr.actif } })} plie={pliCr} onPlier={plierCr} />
+          on={cr.actif} cb={() => enregistrer({ creuses: { actif: !cr.actif } })} plie={pliCr} onPlier={plierCr} zone="veilles-cr" />
         {cr.actif && !pliCr && (
-          <>
+          <div id="veilles-cr">
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('L’entité')}</span>
               <select value={cr.entite || ''} onChange={e => enregistrer({ creuses: { entite: e.target.value } })}
@@ -202,7 +202,7 @@ export function VeillesReglages({ hass, cardSt }) {
                 <Choix liste={commandables} retenues={cr.prises} champNom="prises" section="creuses" />
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
