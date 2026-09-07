@@ -13,7 +13,7 @@ import {
   cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, medCompanion,
   medPlayers, normRooms, secAlarm, switchLightsCfg, exportLoggiaConfig, importLoggiaConfig,
   exportConfigComplete, importConfigComplete, resetLoggiaComplet, cheminPanneau, lirePageAccueil,
-  definirPageAccueil
+  definirPageAccueil, DROITS
 } from '../state.js';
 import {
   CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS, BottomSheet, EntPicker, FOND_PHOTO_CLE,
@@ -374,14 +374,18 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
    * historique). La restriction ne concerne que les non-admins — un admin voit
    * tout, c'est son rôle. */
   const [vues, setVues] = useState(() => (user && Array.isArray(user.vues) ? user.vues : []));
+  /* Autorisations : rien de coché = AUCUNE, l'inverse des vues juste
+   * au-dessus. Une restriction se lève par défaut, un pouvoir se donne. */
+  const [droits, setDroits] = useState(() => (user && Array.isArray(user.droits) ? user.droits : []));
   const VUES_CHOIX = [
     ['pieces', tr('Pièces')], ['scenes', tr('Scènes')], ['objets', tr('Objets')],
     ['energie', tr('Énergie')], ['securite', tr('Sécurité')], ['systeme', tr('Système')],
     ...customViews.map(cv => ['cv:' + cv.id, cv.name]),
   ];
   const basculeVue = (vid) => setVues(v => v.indexOf(vid) >= 0 ? v.filter(x => x !== vid) : [...v, vid]);
+  const basculeDroit = (did) => setDroits(d => d.indexOf(did) >= 0 ? d.filter(x => x !== did) : [...d, did]);
   const inp = { width: '100%', padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' };
-  const save = () => { const n = name.trim(); if (!n) return; onSave({ name: n, role, c, sub: role + ' · ' + n.toLowerCase().replace(/\s+/g, '.'), vues: role === 'Admin' ? [] : vues }); };
+  const save = () => { const n = name.trim(); if (!n) return; onSave({ name: n, role, c, sub: role + ' · ' + n.toLowerCase().replace(/\s+/g, '.'), vues: role === 'Admin' ? [] : vues, droits: role === 'Admin' ? [] : droits }); };
   const roleBtn = (on) => ({ flex: 1, padding: 11, borderRadius: 10, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' });
   return (
     <div role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -408,6 +412,16 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
             {VUES_CHOIX.map(([vid, lb]) => { const on = vues.indexOf(vid) >= 0; return (
               <button key={vid} onClick={() => basculeVue(vid)} aria-pressed={on}
                 style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{lb}</button>
+            ); })}
+          </div>
+        </>)}
+        {role !== 'Admin' && (<>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 4 }}>{tr('AUTORISATIONS')}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 8 }}>{tr('Rien de coché = aucune. Ajouter, modifier ou supprimer un profil, et le code admin, restent réservés à un administrateur.')}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+            {DROITS.map(([did, lb]) => { const on = droits.indexOf(did) >= 0; return (
+              <button key={did} onClick={() => basculeDroit(did)} aria-pressed={on}
+                style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-ok)' : 'var(--o-bd1)'), background: on ? 'rgba(52,211,153,.16)' : 'var(--o-s2)', color: on ? 'var(--o-ok)' : 'var(--o-text1)' }}>{tr(lb)}</button>
             ); })}
           </div>
         </>)}
@@ -748,7 +762,7 @@ export function ViewEntSheet({ view, hass, onClose }) {
   );
 }
 
-export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews, onNav = null }) {
+export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews, onNav = null, droits = [] }) {
   /* La section ouverte survit au rechargement, comme la vue elle-meme.
    *
    * Changer de langue recharge la page : on revenait au sommaire des sections,
@@ -903,6 +917,13 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   }) : [];
   // purge l'optimiste dès que HA prend le relais (in_progress réel) ou que la MàJ est terminée (state off)
   const connecte = !!hass;
+  /* Ce que ce profil a le droit d'ouvrir. `droits` arrive deja complet pour
+   * un administrateur ; le `isAdmin ||` est la ceinture, pas la bretelle. */
+  const aD = (id) => isAdmin || droits.indexOf(id) >= 0;
+  // Nommes : un sondage qui ne sert a personne ne doit pas partir, et une
+  // expression dans un tableau de dependances cesse d'etre verifiee.
+  const peutInter = aD('inter');
+  const peutRegles = aD('regles');
   const upsSig = upsAll.map(u => u.id + ':' + u.avail + ':' + String(u.prog)).join('|');
   useEffect(() => {
     const ids = Object.keys(updBusy); if (!ids.length || !hass || !hass.states) return;
@@ -927,14 +948,14 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const [nbInter, setNbInter] = useState(0);
   useEffect(() => {
     const h = hass;
-    if (!isAdmin || !h || typeof h.callWS !== 'function') return;
+    if (!peutInter || !h || typeof h.callWS !== 'function') return;
     h.callWS({ type: 'loggia/interrupteurs/etat' })
       .then(r => {
         const t = (r && r.affectations) || {};
         setNbInter(Object.values(t).reduce((n, a) => n + Object.keys((a && a.actions) || {}).length, 0));
       })
       .catch(() => { /* composant trop ancien, ou ecoute absente */ });
-  }, [connecte, isAdmin]);
+  }, [connecte, peutInter]);
 
   // Combien de regles tournent, volets et chauffage confondus : le chiffre du
   // sommaire. Les deux commandes sont demandees ensemble, et l'absence de
@@ -943,7 +964,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const [ongletRegle, setOngletRegle] = useState('volets');
   useEffect(() => {
     const h = hass;
-    if (!isAdmin || !h || typeof h.callWS !== 'function') return;
+    if (!peutRegles || !h || typeof h.callWS !== 'function') return;
     let n = 0;
     const compter = () => setNbVolRegles(n);
     h.callWS({ type: 'loggia/volets/etat' })
@@ -973,7 +994,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         compter();
       })
       .catch(() => { /* idem */ });
-  }, [connecte, isAdmin]);
+  }, [connecte, peutRegles]);
 
   // Sections du sommaire : chiffre mis en avant + accroche.
   const SECTIONS = [
@@ -1002,7 +1023,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       sub: tr('React + Vite · servi par l’intégration'),
       big: (LOGGIA_INDEX && LOGGIA_INDEX.componentVersion) ? 'v' + LOGGIA_INDEX.componentVersion : '—',
       unit: tr('version installée'), admin: false, small: true },
-  ].filter(x => !x.admin || isAdmin);
+  ].filter(x => !x.admin || aD(x.id));
   // Interrupteur du bandeau (Tgl n'existe que dans la portée d'Apparence)
   const curSection = SECTIONS.find(x => x.id === tab);
   // Bandeau d'une section : volontairement LEGER (1 a 2 groupes) — entasser dix reglages
@@ -1412,7 +1433,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         </div>
       </>)}
 
-      {tab === 'vues' && isAdmin && (() => {
+      {tab === 'vues' && aD('vues') && (() => {
         const BUILTIN_VIEWS = [
           ['accueil', tr('Accueil'), 'home', 'vue principale', true],
           ['pieces', tr('Pièces'), 'door-open', 'toutes les pièces', false],
@@ -1488,7 +1509,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       })()}
       {cvEditing && isAdmin && <CvEditor cv={cvEditing === 'new' ? null : cvEditing} hass={hass} onClose={() => setCvEditing(null)} onSave={(cv) => { onSaveCustomViews(cvEditing === 'new' ? [...customViews, cv] : customViews.map(x => x.id === cv.id ? cv : x)); setCvEditing(null); }} />}
 
-      {tab === 'auto' && isAdmin && (() => {
+      {tab === 'auto' && aD('auto') && (() => {
         const norm = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
         const q = norm(autoQ.trim());
         const filtered = autos.filter(a => (!q || norm(a.name).indexOf(q) >= 0) && (autoFilter === 'all' || (autoFilter === 'on') === a.on));
@@ -1549,7 +1570,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         );
       })()}
 
-      {tab === 'entites' && isAdmin && (<>
+      {tab === 'entites' && aD('entites') && (<>
         <SecBar>
           <SecGroup label="Configuration">
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -1626,9 +1647,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         </div>
       </>)}
 
-      {tab === 'alertes' && isAdmin && <AlertesTele hass={hass} cardSt={cardSt} />}
-      {tab === 'inter' && isAdmin && <InterrupteursSection hass={hass} cardSt={cardSt} />}
-      {tab === 'regles' && isAdmin && (<>
+      {tab === 'alertes' && aD('alertes') && <AlertesTele hass={hass} cardSt={cardSt} />}
+      {tab === 'inter' && aD('inter') && <InterrupteursSection hass={hass} cardSt={cardSt} />}
+      {tab === 'regles' && aD('regles') && (<>
         <div className="o-bar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
           {[['volets', tr('Volets')], ['fenetres', tr('Chauffage')], ['presence', tr('Départ et retour')], ['nuit', tr('La nuit')], ['veilles', tr('Veilles')]].map(([id, nom]) => (
             <button key={id} onClick={() => setOngletRegle(id)} style={tabStyle(ongletRegle === id)}>{nom}</button>
@@ -1640,7 +1661,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               : ongletRegle === 'nuit' ? <NuitReglages hass={hass} cardSt={cardSt} />
                 : <VeillesReglages hass={hass} cardSt={cardSt} />}
       </>)}
-      {tab === 'maj' && isAdmin && (<>
+      {tab === 'maj' && aD('maj') && (<>
         <SecBar>
           <SecGroup label="Installer">
             <div style={{ display: 'flex', gap: 4 }}>

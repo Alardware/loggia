@@ -429,6 +429,57 @@ export const switchLightsCfg = () => (cfgVal('loggia_switchlights', []) || []).f
 // plus d'entite par defaut — c'est la decouverte qui trouve le panneau.
 export const secAlarm = () => cfgVal('loggia_alarm', '') || '';
 
+/* ── Ce qu'un profil non-admin a le droit de faire ──────────────────────────
+ *
+ * Un profil « Famille » voyait déjà moins : la clé `vues` d'un utilisateur
+ * restreint les vues qu'il atteint. Mais il ne POUVAIT rien : toutes les
+ * sections des Paramètres qui changent l'installation — automatisations,
+ * règles, entités, mises à jour — sont réservées à l'administrateur, et le
+ * mode édition aussi. C'était tout ou rien, et le seul moyen de confier une
+ * seule de ces choses était de faire de la personne un administrateur.
+ *
+ * Ce catalogue les rouvre une par une. Deux n'y figureront jamais : la gestion
+ * des profils et le code administrateur. Les accorder laisserait quelqu'un se
+ * promouvoir lui-même, et le réglage entier n'aurait plus de sens.
+ *
+ * Rien de coché = aucune autorisation. C'est l'INVERSE de `vues`, où rien de
+ * coché veut dire « tout est visible ». Les deux défauts vont dans le même
+ * sens : une restriction ne s'applique que si on la demande, un pouvoir ne se
+ * donne que si on le donne.
+ *
+ * Ces autorisations ne sont pas une sécurité. Le tableau de bord emprunte la
+ * session Home Assistant du navigateur : ce que le serveur refuse à cette
+ * session, aucune case cochée ici ne l'autorisera, et ce qu'il accepte reste
+ * atteignable par d'autres chemins. C'est un garde-fou contre la fausse
+ * manœuvre, pas contre quelqu'un qui cherche à passer outre. Le vrai verrou —
+ * le code admin — garde ce qu'il a toujours gardé : le passage vers un profil
+ * administrateur.
+ */
+export const DROITS = [
+  ['edition', 'Mode édition'],
+  ['vues', 'Vues'],
+  ['auto', 'Automatisations'],
+  ['regles', 'Règles'],
+  ['inter', 'Interrupteurs'],
+  ['alertes', 'Alertes'],
+  ['entites', 'Entités'],
+  ['maj', 'Mises à jour'],
+];
+
+export const DROITS_IDS = DROITS.map(d => d[0]);
+
+/** Les autorisations effectives d'un profil : toutes pour un admin.
+ *
+ * Le filtre n'est pas décoratif. Une configuration écrite par une version plus
+ * récente peut nommer un droit que celle-ci ne connaît pas ; le laisser passer
+ * ferait apparaître une section qu'aucun rendu n'attend.
+ */
+export function droitsDe(user) {
+  if (!user) return [];
+  if (user.role === 'Admin') return DROITS_IDS;
+  return Array.isArray(user.droits) ? user.droits.filter(d => DROITS_IDS.indexOf(d) >= 0) : [];
+}
+
 export function normRooms(raw) {
   if (!Array.isArray(raw) || !raw.length) return discoveredRooms() || [];
   const byName = {};
