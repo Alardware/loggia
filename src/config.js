@@ -60,8 +60,8 @@ function lsRead(key, fallback = null) {
   try {
     const raw = window.localStorage.getItem(key);
     if (raw == null) return fallback;
-    try { return JSON.parse(raw); } catch (e) { return raw; } // valeurs simples ('dark', '0'…)
-  } catch (e) { return fallback; }
+    try { return JSON.parse(raw); } catch { return raw; } // valeurs simples ('dark', '0'…)
+  } catch { return fallback; }
 }
 
 function lsWrite(key, value) {
@@ -69,7 +69,7 @@ function lsWrite(key, value) {
     if (value === null || value === undefined) window.localStorage.removeItem(key);
     else window.localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
     return true;
-  } catch (e) { return false; }
+  } catch { return false; }
 }
 
 /** Toutes les cles Loggia du localStorage, PIN exclu. */
@@ -81,7 +81,7 @@ export function collectLocal() {
       if (!isLoggiaKey(k) || LOCAL_ONLY_KEYS.has(k)) continue;
       out[k] = lsRead(k);
     }
-  } catch (e) { /* stockage indisponible (navigation privee) */ }
+  } catch { /* stockage indisponible (navigation privee) */ }
   return out;
 }
 

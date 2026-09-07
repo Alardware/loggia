@@ -63,7 +63,7 @@ class LoggiaErrorBoundary extends React.Component {
                 dashboard dont le contenu est arbitraire. Le drapeau ne vaut que
                 pour UN chargement et ne touche pas à la configuration. */}
             <button
-              onClick={() => { try { sessionStorage.setItem('loggia_safe_nocv', '1'); } catch (e) {} window.location.reload(); }}
+              onClick={() => { try { sessionStorage.setItem('loggia_safe_nocv', '1'); } catch {} window.location.reload(); }}
               style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.16)', color: '#e6ecf5' }}
             >
               Repartir sans les vues custom
@@ -72,7 +72,7 @@ class LoggiaErrorBoundary extends React.Component {
                 preset ou un accent corrompu casse le rendu aussi sûrement
                 qu'une vue. Même règle : UN chargement, configuration intacte. */}
             <button
-              onClick={() => { try { sessionStorage.setItem('loggia_safe_nolook', '1'); } catch (e) {} window.location.reload(); }}
+              onClick={() => { try { sessionStorage.setItem('loggia_safe_nolook', '1'); } catch {} window.location.reload(); }}
               style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.16)', color: '#e6ecf5' }}
             >
               Repartir sans le thème
@@ -88,7 +88,7 @@ class LoggiaErrorBoundary extends React.Component {
                     const k = ls.key(i);
                     if (k && (k.indexOf('loggia') === 0 || k.indexOf('orion') === 0)) ls.removeItem(k);
                   }
-                } catch (e) {}
+                } catch {}
                 window.location.reload();
               }}
               style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(240,100,90,.12)', border: '1px solid rgba(240,100,90,.35)', color: '#f0938c' }}
@@ -101,6 +101,30 @@ class LoggiaErrorBoundary extends React.Component {
     );
   }
 }
+
+/* Filet : les commandes envoyées à Home Assistant partaient sans recours.
+ *
+ * Quarante endroits écrivent `try { hass.callService(…) } catch {}`, et deux
+ * choses s'y cachent.
+ *
+ * La première : `callService` rend une PROMESSE. Le `try/catch` n'attrape que
+ * ce qui échoue tout de suite ; un refus du serveur — permission manquante,
+ * entité disparue, service inexistant — rejette la promesse plus tard, hors de
+ * portée du bloc. Le `catch` donnait donc une impression de prudence sans rien
+ * couvrir de ce qui échoue vraiment.
+ *
+ * La seconde : personne ne le voyait. On appuie sur un bouton, rien ne bouge,
+ * et la console reste muette.
+ *
+ * `actions.js` fait déjà les choses proprement — `runPlan` attend la promesse
+ * et rend `{ ok: false, reason }`. Faire passer les quarante appels par lui est
+ * un vrai chantier, et ce n'en est pas un. Ceci rend seulement l'échec visible
+ * à qui cherche, au lieu de le laisser disparaître. */
+window.addEventListener('unhandledrejection', (ev) => {
+  const r = ev && ev.reason;
+  console.error('Loggia : promesse rejetée sans recours',
+    (r && (r.message || r.error || r.code)) || r);
+});
 
 createRoot(document.getElementById('root')).render(
   <LoggiaErrorBoundary><App /></LoggiaErrorBoundary>

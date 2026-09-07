@@ -50,7 +50,7 @@ export const LANGUES = [
  * l'application. `chargerCatalogueTardif` couvre le cas restant : « auto » qui
  * bascule vers l'anglais a l'arrivee de hass. */
 const CATALOGUES = {};
-try { if (typeof window !== 'undefined' && window.__loggiaCatEN) CATALOGUES.en = window.__loggiaCatEN; } catch (e) { /* rien */ }
+try { if (typeof window !== 'undefined' && window.__loggiaCatEN) CATALOGUES.en = window.__loggiaCatEN; } catch { /* rien */ }
 
 let _chargementEn = null;
 function chargerCatalogueTardif(demande) {
@@ -262,8 +262,8 @@ function lireLS(cle) {
   try {
     const v = localStorage.getItem(cle);
     if (v == null) return null;
-    try { return JSON.parse(v); } catch (e) { return v; }
-  } catch (e) { return null; }
+    try { return JSON.parse(v); } catch { return v; }
+  } catch { return null; }
 }
 
 /* La langue AVANT que quoi que ce soit ne soit charge.
@@ -324,13 +324,13 @@ function memoriserHA(code, tout) {
   if (!Object.keys(utile).length) return;
   const neuf = !_haMemo;
   _haMemo = utile;
-  try { localStorage.setItem(MEMO_HA + code, JSON.stringify(utile)); } catch (e) { /* stockage plein : on repartira du reseau */ }
+  try { localStorage.setItem(MEMO_HA + code, JSON.stringify(utile)); } catch { /* stockage plein : on repartira du reseau */ }
   /* Les mots de Home Assistant viennent d'arriver. Il fallait recharger pour que
    * les libelles batis a l'import en profitent ; ils sont devenus des fonctions,
    * un redessin suffit. La racine ecoute cet evenement. */
   if (neuf) {
     try { window.dispatchEvent(new CustomEvent('loggia-langue-prete', { detail: { langue: code } })); }
-    catch (e) { /* pas de navigateur : rien a annoncer */ }
+    catch { /* pas de navigateur : rien a annoncer */ }
   }
 }
 
@@ -341,7 +341,7 @@ function localiserHA(cle, hass) {
   /* Quand Loggia suit la langue du compte, `localize` est deja charge et couvre
    * tout — y compris l'interface (`ui.*`), que le serveur n'expose pas. */
   if (_code === langueDeHA(h) && typeof h.localize === 'function') {
-    try { return h.localize(cle) || null; } catch (e) { return null; }
+    try { return h.localize(cle) || null; } catch { return null; }
   }
   if (_ressourcesHA && _ressourcesPour === _code) return _ressourcesHA[cle] || null;
   return null;
@@ -387,7 +387,7 @@ function chargerRessourcesHA(hass, code) {
       /* Les libelles deja rendus datent d'avant : on previent l'application. */
       try {
         window.dispatchEvent(new CustomEvent('loggia-langue-prete', { detail: { langue: code } }));
-      } catch (e) { /* pas de fenetre : rien a prevenir */ }
+      } catch { /* pas de fenetre : rien a prevenir */ }
     })
     .catch(() => { /* sans ces ressources, le catalogue suffit */ });
 }
@@ -418,7 +418,7 @@ export function preparerLangue(hass) {
    * Assistant » se rabat sur le navigateur : figer cette valeur provisoire ferait
    * demarrer l'appareil suivant sur une langue qui n'a jamais ete choisie. */
   if (hass) {
-    try { localStorage.setItem(MEMO, JSON.stringify(_code)); } catch (e) { /* sans memo, on repart du navigateur */ }
+    try { localStorage.setItem(MEMO, JSON.stringify(_code)); } catch { /* sans memo, on repart du navigateur */ }
     chargerRessourcesHA(hass, _code);
 
     /* Plusieurs modules construisent leurs libelles AU MOMENT DE L'IMPORT —
@@ -440,7 +440,7 @@ export function preparerLangue(hass) {
   // celle du francais.
   try {
     if (typeof document !== 'undefined') document.documentElement.lang = _code;
-  } catch (e) { /* pas de DOM : rien a annoncer */ }
+  } catch { /* pas de DOM : rien a annoncer */ }
   return avant !== _code;
 }
 

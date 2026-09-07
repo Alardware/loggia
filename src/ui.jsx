@@ -14,7 +14,7 @@ import { tr } from './i18n.js';
 
 // Suit un min-width en live (layout PC : rail Accueil ≥ 1180 px)
 // ── Animations lot 1 : count-up, stagger d'entrée, jauges qui se remplissent ──
-export const REDUCE_MOTION = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+export const REDUCE_MOTION = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } })();
 
 // Icône Flaticon UICons (police web chargée dans index.html). i = nom sans préfixe (ex 'home' → fi-rr-home).
 export function Fi({ i, size = 18, color, style }) {
@@ -87,7 +87,7 @@ export const HIDDEN_VIEWS = () => [
 // Visibilité des vues de la sidebar, pilotée depuis Paramètres → Vues (design Claude Design 21/08).
 // hidden = vids masquées parmi les vues principales ; shown = vids réactivées parmi les vues retirées.
 export function readViewsCfg() {
-  const rd = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
+  const rd = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
   // `order` : l'ordre choisi des vues intégrées dans le menu (vide = ordre d'origine).
   return { hidden: new Set(rd('loggia-hiddenviews')), shown: new Set(rd('loggia-shownviews')), order: rd('loggia-vueordre') };
 }
@@ -97,8 +97,8 @@ export function writeViewsCfg(cfg) {
     localStorage.setItem('loggia-hiddenviews', JSON.stringify([...cfg.hidden]));
     localStorage.setItem('loggia-shownviews', JSON.stringify([...cfg.shown]));
     localStorage.setItem('loggia-vueordre', JSON.stringify(cfg.order || []));
-  } catch (e) {}
-  try { window.dispatchEvent(new Event('loggia-views-changed')); } catch (e) {}
+  } catch {}
+  try { window.dispatchEvent(new Event('loggia-views-changed')); } catch {}
 }
 
 // Profils du sélecteur (menu avatar). Administrateur = profil générique par défaut.
@@ -187,11 +187,11 @@ export const FOND_PHOTO_CLE = 'loggia-fond-photo';
 let _fondPhoto;
 export function lireFondPhoto() {
   if (_fondPhoto === undefined) {
-    try { _fondPhoto = window.localStorage.getItem(FOND_PHOTO_CLE) || null; } catch (e) { _fondPhoto = null; }
+    try { _fondPhoto = window.localStorage.getItem(FOND_PHOTO_CLE) || null; } catch { _fondPhoto = null; }
   }
   return _fondPhoto;
 }
-try { window.addEventListener('loggia-fond-photo', () => { _fondPhoto = undefined; }); } catch (e) {}
+try { window.addEventListener('loggia-fond-photo', () => { _fondPhoto = undefined; }); } catch {}
 
 /**
  * Compresse une image choisie par l'utilisateur : 1920 px de grand cote au
@@ -254,10 +254,10 @@ export function TplForm({ onAdd, hass = null, initial = null }) {
         if (msg.error) { setApErr(String(msg.error)); return; }
         setApErr(null); setApOut(msg.result != null ? String(msg.result) : '');
       }, { type: 'render_template', template: s, report_errors: true })
-        .then(u => { if (mort) { try { u(); } catch (e) {} } else unsub = u; })
+        .then(u => { if (mort) { try { u(); } catch {} } else unsub = u; })
         .catch(e => { if (!mort) setApErr(String((e && e.message) || e)); });
     }, 700);
-    return () => { mort = true; clearTimeout(t); if (unsub) { try { unsub(); } catch (e) {} } };
+    return () => { mort = true; clearTimeout(t); if (unsub) { try { unsub(); } catch {} } };
   }, [src, conn]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -299,8 +299,8 @@ export let PAINT_READY = false;
 const PAINT_WAITERS = [];
 export const onPaintReady = (fn) => { if (PAINT_READY) fn(); else PAINT_WAITERS.push(fn); };
 (() => {
-  const arm = () => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => { PAINT_READY = true; PAINT_WAITERS.splice(0).forEach(f => { try { f(); } catch (e) {} }); }, 600)));
-  try { if (document.visibilityState === 'visible') arm(); else document.addEventListener('visibilitychange', function h() { if (document.visibilityState === 'visible') { document.removeEventListener('visibilitychange', h); arm(); } }); } catch (e) { arm(); }
+  const arm = () => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => { PAINT_READY = true; PAINT_WAITERS.splice(0).forEach(f => { try { f(); } catch {} }); }, 600)));
+  try { if (document.visibilityState === 'visible') arm(); else document.addEventListener('visibilitychange', function h() { if (document.visibilityState === 'visible') { document.removeEventListener('visibilitychange', h); arm(); } }); } catch { arm(); }
 })();
 
 export function Gauge({ pct, color, h = 4, track = 'var(--o-bd1)', style, liquid = false }) {
@@ -351,8 +351,8 @@ export function BottomSheet({ onClose, children }) {
   // A11y : focus dans la feuille à l'ouverture (Escape marche alors partout), restauré à la fermeture
   useEffect(() => {
     const prev = document.activeElement;
-    const t = setTimeout(() => { try { const el = sheetRef.current; if (el) (el.querySelector('button, [tabindex="0"], input, [role="switch"]') || el).focus({ preventScroll: true }); } catch (e) {} }, 60);
-    return () => { clearTimeout(t); try { if (prev && prev.focus) prev.focus({ preventScroll: true }); } catch (e) {} };
+    const t = setTimeout(() => { try { const el = sheetRef.current; if (el) (el.querySelector('button, [tabindex="0"], input, [role="switch"]') || el).focus({ preventScroll: true }); } catch {} }, 60);
+    return () => { clearTimeout(t); try { if (prev && prev.focus) prev.focus({ preventScroll: true }); } catch {} };
   }, []);
   // Glisser-fermer iOS : la feuille suit le doigt depuis la poignée ; > 120 px = fermeture, sinon rebond spring.
   const dragClose = (e) => {
@@ -361,7 +361,7 @@ export function BottomSheet({ onClose, children }) {
     const y0 = e.clientY; let dy = 0;
     const h = e.currentTarget;
     el.style.animation = 'none'; el.style.transition = 'none';
-    try { h.setPointerCapture(e.pointerId); } catch (x) {}
+    try { h.setPointerCapture(e.pointerId); } catch {}
     h.onpointermove = (ev) => { dy = Math.max(0, ev.clientY - y0); el.style.transform = `translate(-50%, ${dy}px)`; };
     const up = () => {
       h.onpointermove = null; h.onpointerup = null; h.onpointercancel = null;
@@ -480,7 +480,7 @@ export function EntPicker({ hass, exclude = [], onPick, autoFocus = false, domai
 export function usePli(cle) {
   const lire = () => {
     try { return JSON.parse(window.localStorage.getItem('loggia-reglespanel') || '{}') || {}; }
-    catch (e) { return {}; }
+    catch { return {}; }
   };
   const [plie, setPlie] = useState(() => !!lire()[cle]);
   /* L'ecriture reste DEHORS de l'updater : React se reserve le droit de
@@ -491,7 +491,7 @@ export function usePli(cle) {
       const o = lire();
       if (n) o[cle] = 1; else delete o[cle];
       window.localStorage.setItem('loggia-reglespanel', JSON.stringify(o));
-    } catch (e) { /* stockage indisponible : le pli ne survivra pas, tant pis */ }
+    } catch { /* stockage indisponible : le pli ne survivra pas, tant pis */ }
     setPlie(n);
   };
   return [plie, basculer];

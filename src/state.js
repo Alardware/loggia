@@ -99,7 +99,7 @@ export function migrerAnciennesCles() {
       const neuf = vieux === 'orion-skyorion' ? 'loggia-ciel' : 'loggia' + vieux.slice(5);
       if (ls.getItem(neuf) == null) ls.setItem(neuf, ls.getItem(vieux));
     });
-  } catch (e) { /* stockage indisponible : rien a reprendre */ }
+  } catch { /* stockage indisponible : rien a reprendre */ }
 }
 
 /**
@@ -142,7 +142,7 @@ export function cfgSet(patch) {
       if (patch[k] == null) localStorage.removeItem(k);
       else localStorage.setItem(k, JSON.stringify(patch[k]));
     });
-  } catch (e) { /* stockage indisponible : la valeur serveur suffit */ }
+  } catch { /* stockage indisponible : la valeur serveur suffit */ }
   if (cfgSave) cfgSave(patch);
 }
 
@@ -156,7 +156,7 @@ export function getHass() {
       ? window.top.document : document;
     const el = doc.querySelector('home-assistant');
     return (el && el.hass) || null;
-  } catch (e) { return null; }
+  } catch { return null; }
 }
 
 /**
@@ -196,7 +196,7 @@ export function cheminPanneau() {
   try {
     const chemin = (window.top && window.top.location && window.top.location.pathname) || '';
     return chemin.split('/').filter(Boolean)[0] || null;
-  } catch (e) {
+  } catch {
     return null;   // page parente d'une autre origine : on ne peut pas savoir
   }
 }
@@ -207,7 +207,7 @@ export async function lirePageAccueil(hass) {
   try {
     const r = await hass.callWS({ type: 'frontend/get_user_data', key: 'core' });
     return ((r && r.value) || {}).default_panel || null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -225,7 +225,7 @@ export async function definirPageAccueil(hass, chemin) {
     const valeur = { ...((r && r.value) || {}), default_panel: chemin };
     await hass.callWS({ type: 'frontend/set_user_data', key: 'core', value: valeur });
     return true;
-  } catch (e) {
+  } catch {
     return false;
   }
 }
@@ -275,12 +275,12 @@ export const importLoggiaConfig = (txt) => {
   if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('invalide');
   // Miroir EXACT de la source : on purge d'abord toutes les clés synchronisables —
   // une clé absente de l'export = retour aux défauts (sinon une vieille config locale survivrait à l'import).
-  LOGGIA_SYNC_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
-  Object.keys(o).forEach(k => { if (LOGGIA_SYNC_KEYS.indexOf(k) >= 0 && typeof o[k] === 'string') { try { localStorage.setItem(k, o[k]); } catch (e) {} } });
+  LOGGIA_SYNC_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch {} });
+  Object.keys(o).forEach(k => { if (LOGGIA_SYNC_KEYS.indexOf(k) >= 0 && typeof o[k] === 'string') { try { localStorage.setItem(k, o[k]); } catch {} } });
   window.location.reload();
 };
 
-export const exportLoggiaConfig = () => { const o = {}; LOGGIA_SYNC_KEYS.forEach(k => { try { const v = localStorage.getItem(k); if (v != null) o[k] = v; } catch (e) {} }); return JSON.stringify(o); };
+export const exportLoggiaConfig = () => { const o = {}; LOGGIA_SYNC_KEYS.forEach(k => { try { const v = localStorage.getItem(k); if (v != null) o[k] = v; } catch {} }); return JSON.stringify(o); };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // La configuration COMPLETE : celle du serveur, pas seulement du navigateur.
@@ -311,7 +311,7 @@ export async function exportConfigComplete() {
     try {
       const r = await h.callWS({ type: 'loggia/config/get' });
       serveur = (r && r.config) || {};
-    } catch (e) { serveur = {}; }
+    } catch { serveur = {}; }
   }
   /* Le stockage local complete : une cle jamais synchronisee n'existe que la.
    *
@@ -334,9 +334,9 @@ export async function exportConfigComplete() {
       const k = localStorage.key(i);
       if (!/^loggia[_-]/.test(k) || LOCAL_ONLY_KEYS.has(k) || serveur[k] !== undefined) continue;
       const brut = localStorage.getItem(k);
-      try { local[k] = JSON.parse(brut); } catch (e) { local[k] = brut; }
+      try { local[k] = JSON.parse(brut); } catch { local[k] = brut; }
     }
-  } catch (e) { /* stockage indisponible : l'export reste valable */ }
+  } catch { /* stockage indisponible : l'export reste valable */ }
   return JSON.stringify({
     format: 'loggia-config',
     version: 1,
@@ -383,7 +383,7 @@ export async function importConfigComplete(txt) {
       const v = config[k];
       if (typeof v === 'string') localStorage.setItem(k, v);
     });
-  } catch (e) { /* le serveur fait foi de toute facon */ }
+  } catch { /* le serveur fait foi de toute facon */ }
 }
 
 /**
@@ -409,14 +409,14 @@ export async function resetLoggiaComplet() {
       // Les reglages personnels de ce compte, que le patch ci-dessus ne couvre
       // que si l'utilisateur est administrateur.
       await h.callWS({ type: 'loggia/config/delete' }).catch(() => null);
-    } catch (e) { /* on vide au moins l'appareil */ }
+    } catch { /* on vide au moins l'appareil */ }
   }
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
       if (/^loggia[_-]/.test(k)) localStorage.removeItem(k);
     }
-  } catch (e) { /* rien de plus a faire */ }
+  } catch { /* rien de plus a faire */ }
 }
 
 

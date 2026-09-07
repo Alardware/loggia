@@ -172,7 +172,7 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
         setSrc(url);
         if (precedent) URL.revokeObjectURL(precedent);
         precedent = url;
-      } catch (e) { /* carte momentanement indisponible : on garde la precedente */ }
+      } catch { /* carte momentanement indisponible : on garde la precedente */ }
     };
     charger();
     // La carte bouge lentement : dix secondes suffisent, et l'analyse des
@@ -215,7 +215,7 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
       const ctx = c.getContext('2d', { willReadFrequently: true });
       poser(ctx, img, rot, c.width, c.height);
       setRegions(detecterPieces(ctx.getImageData(0, 0, c.width, c.height).data, c.width, c.height, pieces.length));
-    } catch (e) {
+    } catch {
       // Image d'une autre origine : la lecture des pixels est refusee. On
       // retombe simplement sur une carte non cliquable.
       setRegions([]);

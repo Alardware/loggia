@@ -523,7 +523,7 @@ export function installerDemo() {
     key: (i) => Array.from(mem.keys())[i] || null,
     get length() { return mem.size; },
   };
-  try { Object.defineProperty(window, 'localStorage', { value: faux, configurable: true }); } catch (e) { /* repli : la demo ecrira le vrai stockage */ }
+  try { Object.defineProperty(window, 'localStorage', { value: faux, configurable: true }); } catch { /* repli : la demo ecrira le vrai stockage */ }
 
   // ── 2. La maison ──────────────────────────────────────────────────────────
   const states = etatsInitiaux();

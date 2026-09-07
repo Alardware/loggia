@@ -267,7 +267,7 @@ export default function WeatherGL({ condition = 'partlycloudy', hourEq = 12, int
     const host = hostRef.current; if (!host) return undefined;
     let disposed = false, rafId = 0;
     let renderer;
-    try { renderer = new THREE.WebGLRenderer({ antialias: false }); } catch (e) { return undefined; } // WebGL indispo → pas d'effet
+    try { renderer = new THREE.WebGLRenderer({ antialias: false }); } catch { return undefined; } // WebGL indispo → pas d'effet
     renderer.setPixelRatio(Math.max(1, Math.min(window.devicePixelRatio || 1, 1.5))); // plafonné : GPU/batterie mobile
     const canvas = renderer.domElement;
     canvas.style.cssText = 'position:absolute;inset:0;display:block;width:100%;height:100%;';
@@ -374,7 +374,7 @@ export default function WeatherGL({ condition = 'partlycloudy', hourEq = 12, int
       cancelAnimationFrame(rafId);
       ro.disconnect();
       geo.dispose(); mat.dispose(); renderer.dispose();
-      try { host.removeChild(canvas); } catch (e) {}
+      try { host.removeChild(canvas); } catch {}
     };
   }, []);
   return <div ref={hostRef} aria-hidden="true" style={{ position: 'absolute', inset: 0 }} />;

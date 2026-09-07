@@ -13,6 +13,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { planAction, runAction, availableActions } from '../src/actions.js';
 
 const et = (state, attributes = {}) => ({ state: String(state), attributes });
@@ -229,4 +232,66 @@ test('les actions réellement possibles, avec leurs bornes', () => {
   assert.equal(a.has('set_hvac_mode'), false);
   // Le domaine ne publie pas set_fan_mode, et l'entité ne le déclare pas.
   assert.equal(a.has('set_fan_mode'), false);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Une commande qui part sans recours.
+//
+// Quarante endroits écrivent encore `try { hass.callService(…) } catch {}` au
+// lieu de passer par `runPlan`. Deux choses s'y cachent.
+//
+// `callService` rend une PROMESSE. Le `try/catch` n'attrape que ce qui échoue
+// tout de suite ; un refus du serveur — permission manquante, entité disparue,
+// service inexistant — rejette la promesse plus tard, hors de portée du bloc.
+// Le `catch` donnait donc une impression de prudence sans couvrir ce qui échoue
+// vraiment. Et personne ne le voyait : on appuie, rien ne bouge, la console
+// reste muette.
+//
+// `boot.jsx` pose maintenant un filet qui rend ces rejets visibles. Ce test
+// tient le compte pour que le motif ne se répande pas en attendant la migration
+// vers `runPlan` : un quarante et unième fait échouer la suite, et un de moins
+// aussi — pour qu'on descende le compteur plutôt que de le laisser mentir.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RACINE_SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
+
+const SANS_RECOURS = { 'App.jsx': 36, 'parametres.jsx': 3, 'state.js': 1 };
+
+function sansCommentaires(s) {
+  const sansBloc = s.replace(/\/\*[\s\S]*?\*\//g, '');
+  return sansBloc.split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+}
+
+function sources(dossier = RACINE_SRC) {
+  const out = [];
+  for (const f of readdirSync(dossier)) {
+    const p = join(dossier, f);
+    if (statSync(p).isDirectory()) { out.push(...sources(p)); continue; }
+    if (/\.(js|jsx)$/.test(f)) out.push([f, p]);
+  }
+  return out;
+}
+
+test('aucune commande de plus ne part sans recours', () => {
+  const vu = {};
+  for (const [nom, p] of sources()) {
+    // Les commentaires sont retirés : celui de `boot.jsx` décrit le motif, et
+    // se comptait lui-même.
+    const src = sansCommentaires(readFileSync(p, 'utf8'));
+    for (const m of src.matchAll(/try\s*\{([\s\S]{0,400}?)\}\s*catch\s*\{\s*\}/g)) {
+      if (/call(Service|WS|Api)/.test(m[1])) vu[nom] = (vu[nom] || 0) + 1;
+    }
+  }
+  assert.deepEqual(vu, SANS_RECOURS,
+    'le compte des appels de service sans recours a changé : soit un de plus, soit un corrigé — dans les deux cas, mets cette liste à jour');
+});
+
+test('les rejets sans recours sont au moins rendus visibles', () => {
+  const boot = readFileSync(join(RACINE_SRC, 'boot.jsx'), 'utf8');
+  // Sans ce filet, un refus du serveur disparaît sans laisser de trace nulle
+  // part : ni écran, ni console.
+  assert.match(boot, /addEventListener\('unhandledrejection'/,
+    'le filet a disparu : une commande refusée redevient invisible');
+  assert.match(boot, /console\.error\('Loggia : promesse rejetée sans recours'/,
+    'le filet ne dit plus rien');
 });

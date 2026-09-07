@@ -18,7 +18,7 @@ import './index.css';
 
 const demo = (() => {
   try { return new URLSearchParams(window.location.search).has('demo') && window === window.top; }
-  catch (e) { return false; }
+  catch { return false; }
 })();
 
 /* Le catalogue anglais pese 40 Ko que le boot francophone n'a aucune raison
@@ -32,8 +32,8 @@ function langueProbable() {
     try {
       const v = localStorage.getItem(k);
       if (v == null) return null;
-      try { return JSON.parse(v); } catch (e) { return v; }
-    } catch (e) { return null; }
+      try { return JSON.parse(v); } catch { return v; }
+    } catch { return null; }
   };
   const choix = lire('loggia-langue') || 'auto';
   if (choix !== 'auto') return choix;
@@ -63,11 +63,11 @@ function langueProbable() {
        * captures du README et a verifier une vue d'un seul chargement. */
       const vu = q.get('vue');
       if (vu && /^[a-z]+(:.{1,40})?$/.test(vu)) sessionStorage.setItem('loggia-vue', vu);
-    } catch (e) { /* rien */ }
+    } catch { /* rien */ }
   }
   if (langueProbable() === 'en') {
     try { window.__loggiaCatEN = (await import('./langues/en.js')).default; }
-    catch (e) { /* reseau : le francais couvre tout */ }
+    catch { /* reseau : le francais couvre tout */ }
   }
   await import('./boot.jsx');
 })();

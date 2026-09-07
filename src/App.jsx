@@ -95,7 +95,7 @@ function WeatherFx({ weather }) {
 // Adresse du serveur telle que le navigateur la voit : rien a configurer, et
 // rien qui vienne de l'installation de quelqu'un d'autre.
 function haHost() {
-  try { return ((window.top || window).location || {}).host || 'Home Assistant'; } catch (e) { return 'Home Assistant'; }
+  try { return ((window.top || window).location || {}).host || 'Home Assistant'; } catch { return 'Home Assistant'; }
 }
 
 const NAV = [
@@ -224,7 +224,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
 
 /* ── Recherche globale (⌘K / Ctrl+K / clic barre) : pièces, vues (natives + custom), scènes rapides ── */
 const srNorm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); // insensible accents/casse
-const IS_MAC = (() => { try { return srNorm(navigator.platform || '').indexOf('mac') >= 0 || /iphone|ipad/.test(srNorm(navigator.platform || '')); } catch (e) { return false; } })();
+const IS_MAC = (() => { try { return srNorm(navigator.platform || '').indexOf('mac') >= 0 || /iphone|ipad/.test(srNorm(navigator.platform || '')); } catch { return false; } })();
 // Nombre qui « roule » vers sa valeur (rAF, easeOutCubic). Re-anime à chaque changement de cible.
 // <Num v={23.4} d={1} suffix="°" /> : chiffre animé, tabular-nums pour éviter le tremblement de largeur.
 function Num({ v, d = 0, prefix = '', suffix = '', fallback = '—', fmt }) {
@@ -237,7 +237,6 @@ function Num({ v, d = 0, prefix = '', suffix = '', fallback = '—', fmt }) {
   const txt = fmt ? fmt(a) : (d > 0 ? a.toFixed(d).replace('.', ',') : String(Math.round(a)));
   return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{prefix}{txt}{suffix}</span>;
 }
-const FINE_POINTER = (() => { try { return window.matchMedia('(hover: hover) and (pointer: fine)').matches; } catch (e) { return false; } })();
 function kbSlider(label, value, commit, { min = 0, max = 100, step = 5, unit = '%' } = {}) {
   return {
     role: 'slider', tabIndex: 0, 'aria-label': label,
@@ -270,9 +269,9 @@ function fxTap(e) {
     rip.className = 'o-ripple';
     const sz = Math.max(r.width, r.height) * 1.7;
     rip.style.cssText = `width:${sz}px;height:${sz}px;left:${(e.clientX || r.left + r.width / 2) - r.left - sz / 2}px;top:${(e.clientY || r.top + r.height / 2) - r.top - sz / 2}px`;
-    el.appendChild(rip); setTimeout(() => { try { el.removeChild(rip); } catch (x) {} }, 650);
+    el.appendChild(rip); setTimeout(() => { try { el.removeChild(rip); } catch {} }, 650);
     el.classList.remove('o-scenefx'); void el.offsetWidth; el.classList.add('o-scenefx');
-  } catch (x) {}
+  } catch {}
 }
 // ── Animations lot 5 ──
 // <Skel w h r> : placeholder shimmer tant que la donnée n'est pas là (remplace les valeurs démo au boot)
@@ -304,7 +303,7 @@ function ActionBtn({ onClick, style, children, doneLabel = '✓ Envoyé' }) {
       rip.className = 'o-ripple';
       const sz = Math.max(r.width, r.height) * 1.6;
       rip.style.cssText = `width:${sz}px;height:${sz}px;left:${(e.clientX || r.left + r.width / 2) - r.left - sz / 2}px;top:${(e.clientY || r.top + r.height / 2) - r.top - sz / 2}px`;
-      el.appendChild(rip); setTimeout(() => { try { el.removeChild(rip); } catch (x) {} }, 650);
+      el.appendChild(rip); setTimeout(() => { try { el.removeChild(rip); } catch {} }, 650);
     }
     if (onClick) onClick(e);
     setDone(true); clearTimeout(tRef.current); tRef.current = setTimeout(() => setDone(false), 900);
@@ -324,12 +323,12 @@ function Shiny({ on = true, children, style }) {
 // Cascade retiree le 21/08 (demande user) : plus aucun delai d'entree. Conserve pour les ~200 appels existants.
 const stag = () => undefined;
 // relance les animations CSS en pause une fois le 1er paint atteint (cartes montées avant l'affichage de l'iframe)
-onPaintReady(() => { try { document.querySelectorAll('.o-stag, .o-draw, .o-fadein').forEach(el => { el.style.animationPlayState = 'running'; }); } catch (e) {} });
+onPaintReady(() => { try { document.querySelectorAll('.o-stag, .o-draw, .o-fadein').forEach(el => { el.style.animationPlayState = 'running'; }); } catch {} });
 
 function useWide(bp) {
-  const [w, setW] = useState(() => { try { return window.matchMedia('(min-width:' + bp + 'px)').matches; } catch (e) { return false; } });
+  const [w, setW] = useState(() => { try { return window.matchMedia('(min-width:' + bp + 'px)').matches; } catch { return false; } });
   useEffect(() => {
-    let mq; try { mq = window.matchMedia('(min-width:' + bp + 'px)'); } catch (e) { return; }
+    let mq; try { mq = window.matchMedia('(min-width:' + bp + 'px)'); } catch { return; }
     const on = () => setW(mq.matches);
     on();
     if (mq.addEventListener) mq.addEventListener('change', on); else mq.addListener(on);
@@ -341,9 +340,9 @@ function useWide(bp) {
  * `loggia-tactile`. Un ecran de 1180 px peut etre une tablette posee sur une
  * table ou un moniteur : seul `pointer: coarse` les separe. */
 function useCoarse() {
-  const [c, setC] = useState(() => { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } });
+  const [c, setC] = useState(() => { try { return window.matchMedia('(pointer: coarse)').matches; } catch { return false; } });
   useEffect(() => {
-    let mq; try { mq = window.matchMedia('(pointer: coarse)'); } catch (e) { return; }
+    let mq; try { mq = window.matchMedia('(pointer: coarse)'); } catch { return; }
     const on = () => setC(mq.matches);
     on();
     if (mq.addEventListener) mq.addEventListener('change', on); else mq.addListener(on);
@@ -385,7 +384,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], isAdmin = f
   NAV.forEach(g => g.items.forEach(it => { const vid = LABEL_VIEW[it.label]; if (BUILT.has(vid) && isViewAvailable(avail, vid) && match(it.label)) results.push({ group: tr('Vues'), label: tr(it.label), icon: it.svg, act: (close) => { onNav(vid); close(); } }); }));
   HIDDEN_VIEWS().forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: tr('Vues'), label: tr(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
   customViews.forEach(cv => { if (match(cv.name)) results.push({ group: tr('Vues'), label: cv.name, icon: <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" />, act: (close) => { onNav('cv:' + cv.id); close(); } }); });
-  quickScenes().forEach(s => { if (!match(s.name)) return; results.push({ group: tr('Scènes'), label: s.name, sub: s.sub, icon: <Fi i={s.icon} color="var(--o-purple)" />, run: true, act: (close) => { try { const h = getHass(); if (h && h.callService) h.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); } catch (e) {} close(); } }); });
+  quickScenes().forEach(s => { if (!match(s.name)) return; results.push({ group: tr('Scènes'), label: s.name, sub: s.sub, icon: <Fi i={s.icon} color="var(--o-purple)" />, run: true, act: (close) => { try { const h = getHass(); if (h && h.callService) h.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); } catch {} close(); } }); });
   // Appareils : par nom, dès deux caractères tapés — le déluge n'aide personne.
   // Les togglables se basculent sur place ; les autres mènent à leur vue.
   if (nq.length >= 2) {
@@ -408,7 +407,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], isAdmin = f
         group: tr('Appareils'), label: nom, sub: id, run: togglable, runLabel: tr('Basculer'),
         icon: <Fi i={DOMS[dom]} color="var(--o-cyan)" />,
         act: (close) => {
-          if (togglable) { try { h.callService('homeassistant', 'toggle', { entity_id: id }); } catch (e) {} }
+          if (togglable) { try { h.callService('homeassistant', 'toggle', { entity_id: id }); } catch {} }
           else if (VUE_DOM[dom]) onNav(VUE_DOM[dom]);
           close();
         },
@@ -420,12 +419,12 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], isAdmin = f
   if (isAdmin) {
     [['users', tr('Utilisateurs')], ['apparence', tr('Apparence')], ['entites', tr('Entités')], ['vues', tr('Vues')], ['auto', tr('Automatisations')], ['alertes', tr('Alertes')], ['maj', tr('Mises à jour')], ['connexion', tr('Connexion HA')], ['about', tr('À propos')]].forEach(([id, label]) => {
       if (!match(label)) return;
-      results.push({ group: tr('Réglages'), label, icon: <Fi i="settings" color="var(--o-text2)" />, act: (close) => { try { sessionStorage.setItem('loggia-par-section', id); } catch (e) {} onNav('parametres'); close(); } });
+      results.push({ group: tr('Réglages'), label, icon: <Fi i="settings" color="var(--o-text2)" />, act: (close) => { try { sessionStorage.setItem('loggia-par-section', id); } catch {} onNav('parametres'); close(); } });
     });
   }
   const selIdx = results.length ? Math.min(sel, results.length - 1) : -1;
   useEffect(() => { setSel(0); }, [nq]);
-  useEffect(() => { try { const el = listRef.current && listRef.current.querySelector('[data-sel="1"]'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); } catch (e) {} }, [selIdx]);
+  useEffect(() => { try { const el = listRef.current && listRef.current.querySelector('[data-sel="1"]'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); } catch {} }, [selIdx]);
   let lastGroup = null;
   return (
     <BottomSheet onClose={onClose}>
@@ -503,7 +502,7 @@ function Header() {
   /* Vu = PERSISTÉ (par appareil) : l'ancien état React s'évaporait à chaque
    * rechargement et le point rouge revenait pour des notifications déjà lues.
    * On retient la signature du contenu lu ; ouvrir le panneau marque tout vu. */
-  const [vuSig, setVuSig] = useState(() => { try { return localStorage.getItem('loggia-notifsvues') || ''; } catch (e) { return ''; } });
+  const [vuSig, setVuSig] = useState(() => { try { return localStorage.getItem('loggia-notifsvues') || ''; } catch { return ''; } });
   const [bellRing, setBellRing] = useState(false);
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => { const iv = setInterval(() => setClock(new Date()), 30000); return () => clearInterval(iv); }, []);
@@ -514,7 +513,7 @@ function Header() {
   // Signature du contenu (hors temps relatif) : compare au « vu » persisté.
   const nsig = notifs.map(n => '' + n[1] + n[2]).join('|');
   const nonVues = hasNotif && nsig !== vuSig;
-  const marquerVues = () => { setVuSig(nsig); try { localStorage.setItem('loggia-notifsvues', nsig); } catch (e) {} };
+  const marquerVues = () => { setVuSig(nsig); try { localStorage.setItem('loggia-notifsvues', nsig); } catch {} };
   const nsigPrev = useRef(nsig);
   useEffect(() => {
     // La cloche ne tinte que pour du contenu jamais lu — pas pour une signature
@@ -767,14 +766,14 @@ function readComputedHaTheme(hass) {
         font: r('--primary-font-family') || r('--mdc-typography-font-family') || r('--paper-font-body1_-_font-family'),
       };
     }
-  } catch (e) {}
+  } catch {}
   return null;
 }
 /* Safe mode « sans thème » : posé par l'écran d'erreur (boot.jsx), consommé
  * ici — il ne vaut que pour UN chargement et ne touche pas à la configuration.
  * Un preset ou un look corrompu ne doit pas condamner le dashboard. */
 const SAFE_NOLOOK = (() => {
-  try { if (sessionStorage.getItem('loggia_safe_nolook')) { sessionStorage.removeItem('loggia_safe_nolook'); return true; } } catch (e) { /* rien */ }
+  try { if (sessionStorage.getItem('loggia_safe_nolook')) { sessionStorage.removeItem('loggia_safe_nolook'); return true; } } catch { /* rien */ }
   return false;
 })();
 
@@ -784,7 +783,7 @@ function readLook() {
     const L = { ...LOOK_DEF, ...(cfgVal('loggia_look', null) || {}) };
     if (L.fond !== 'photo') L.fond = 'aucun'; // les degrades retires retombent sur « aucun »
     return L;
-  } catch (e) { return { ...LOOK_DEF }; }
+  } catch { return { ...LOOK_DEF }; }
 }
 
 /* Teinte d'état : les cartes qui montrent un appareil ACTIF (lampe allumée,
@@ -1395,7 +1394,7 @@ function roomEntitiesBrutes(hass, roomName) {
     discoverLights(hass).filter(l => rmNorm(l.room) === target)
       .sort((a, b) => (LT_ORDER[lightType(a)] - LT_ORDER[lightType(b)]) || a.name.localeCompare(b.name))
       .forEach(l => out.push(l.id));
-  } catch (e) {}
+  } catch {}
   // 2) chauffage : toutes les zones de la pièce — poêle (climate.*) ET radiateurs fil pilote (switch + input_*),
   //    ces derniers référencés par « zone:<id> » car ils n'ont pas d'entité climate unique.
   climateZones(hass && hass.states).filter(z => rmNorm(z.room) === target).forEach(z => {
@@ -1443,7 +1442,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   // Filet : si HA n'a pas confirmé sous 6 s (commande rejetée), retour à l'état réel au lieu de rester désynchronisé
   const ovRevertRef = useRef(0);
   useEffect(() => () => clearTimeout(ovRevertRef.current), []);
-  const toggle = (e) => { e.stopPropagation(); flash(accent); setOv(!on); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); try { if (hass && hass.callService) hass.callService('homeassistant', on ? 'turn_off' : 'turn_on', { entity_id: id }); } catch (er) {} };
+  const toggle = (e) => { e.stopPropagation(); flash(accent); setOv(!on); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); try { if (hass && hass.callService) hass.callService('homeassistant', on ? 'turn_off' : 'turn_on', { entity_id: id }); } catch {} };
   // Luminosité optimiste : fenêtre fixe 4 s (l'écho Zigbee rejoue l'ancienne valeur).
   const [ovBri, setOvBri] = useState(null);
   const ovBriRef = useRef(0);
@@ -1451,7 +1450,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const poseBri = (pct) => {
     setOvBri(pct); setOv(pct > 0);
     clearTimeout(ovBriRef.current); ovBriRef.current = setTimeout(() => { setOvBri(null); setOv(null); }, 4000);
-    try { if (hass && hass.callService) { if (pct > 0) hass.callService('light', 'turn_on', { entity_id: id, brightness_pct: pct }); else hass.callService('light', 'turn_off', { entity_id: id }); } } catch (er) {}
+    try { if (hass && hass.callService) { if (pct > 0) hass.callService('light', 'turn_on', { entity_id: id, brightness_pct: pct }); else hass.callService('light', 'turn_off', { entity_id: id }); } } catch {}
   };
   const briAff = ovBri != null ? ovBri : (on ? bri : 0);
   // Glissière épaisse : peinture DOM directe pendant le geste, commit au relâcher.
@@ -1462,7 +1461,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
     const calc = (x) => Math.max(0, Math.min(100, Math.round((x - r.left) / r.width * 100)));
     let v = calc(e.clientX);
     const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = v + '%'; } };
-    paint(); try { el.setPointerCapture(e.pointerId); } catch (er) {}
+    paint(); try { el.setPointerCapture(e.pointerId); } catch {}
     el.onpointermove = (ev) => { v = calc(ev.clientX); paint(); };
     const end = () => { el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; };
     el.onpointerup = () => { end(); poseBri(v); };
@@ -1530,7 +1529,7 @@ function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
   const mort = !st || s === 'unavailable';
   const en = dom === 'vacuum' ? s === 'cleaning' : s === 'mowing';
   const actif = en || s === 'returning';
-  const call = (svc) => { try { if (hass && hass.callService) hass.callService(dom, svc, { entity_id: id }); } catch (e) {} };
+  const call = (svc) => { try { if (hass && hass.callService) hass.callService(dom, svc, { entity_id: id }); } catch {} };
   const f = a.supported_features || 0;
   // La batterie vit rarement dans l'attribut : le capteur SŒUR fait foi.
   const bat = (() => {
@@ -1692,7 +1691,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   const [ov, setOv] = useState(null);
   useEffect(() => { setOv(null); }, [realPos]);
   const pos = ov != null ? ov : realPos;
-  const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('cover', svc, { entity_id: id, ...(data || {}) }); } catch (e) {} };
+  const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('cover', svc, { entity_id: id, ...(data || {}) }); } catch {} };
   const mort = !st || st.state === 'unavailable';
   const drag = (e) => {
     e.preventDefault();
@@ -1700,7 +1699,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
     const calc = x => Math.max(0, Math.min(100, Math.round((x - r.left) / r.width * 100)));
     let v = calc(e.clientX);
     const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = v + '%'; } if (kn) { kn.style.transition = 'none'; kn.style.left = `calc(${v}% - 8px)`; } };
-    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch (er) {}
+    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch {}
     el.onpointermove = ev => { v = calc(ev.clientX); paint(); };
     const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (kn) kn.style.transition = ''; };
     el.onpointerup = () => { end(); setOv(v); commander(hass, id, 'set_position', v); };
@@ -1926,7 +1925,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const target = ov != null ? ov : (z.target != null ? z.target : 19);
   const off = z.mode === 'off';
   const heating = !off && z.current != null && z.current < target;
-  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch {} };
   const setT = (d) => { const v = Math.max(5, Math.min(30, Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
   const options = zoneModes(S, zone);
   const nextMode = () => {
@@ -1966,7 +1965,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
   const target = ov != null ? ov : (z.target != null ? z.target : 19);
   const off = z.mode === 'off';
   const heating = !off && z.current != null && z.current < target;
-  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch {} };
   const setT = (d) => { const v = Math.max(5, Math.min(30, Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
   // La température vécue : le capteur de la zone s'il existe (état numérique, requête légère),
   // sinon l'attribut current_temperature du climate.
@@ -2068,7 +2067,7 @@ function elaguerHisto(liste) {
   while (h.length > 1) {
     let poids;
     try { poids = new Blob([JSON.stringify(h)]).size; }
-    catch (e) { poids = JSON.stringify(h).length * 2; }   // pire cas UTF-16
+    catch { poids = JSON.stringify(h).length * 2; }   // pire cas UTF-16
     if (poids <= HISTO_OCTETS) break;
     h = h.slice(0, -1);
   }
@@ -2103,7 +2102,7 @@ function quandVersion(ts) {
     }
     // Au-dela d'une semaine, « il y a 3 semaines » situe moins bien qu'une date.
     return new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(ts));
-  } catch (e) { return new Date(ts).toLocaleString(); }
+  } catch { return new Date(ts).toLocaleString(); }
 }
 
 /** Ce qu'une version contient, en clair.
@@ -2209,7 +2208,7 @@ function NavigateurMedias({ id, hass, onClose }) {
         const enfants = (r && r.children) || [];
         setContenu(enfants);
         setEtat(enfants.length ? 'pret' : 'vide');
-      } catch (e) { if (!mort) setEtat('erreur'); }
+      } catch { if (!mort) setEtat('erreur'); }
     })();
     return () => { mort = true; };
   }, [id, niveau.cid, niveau.ctype]);
@@ -2222,7 +2221,7 @@ function NavigateurMedias({ id, hass, onClose }) {
       hass.callService('media_player', 'play_media', {
         entity_id: id, media_content_id: c.media_content_id, media_content_type: c.media_content_type,
       });
-    } catch (e) { /* le lecteur dira lui-meme s'il a refuse */ }
+    } catch { /* le lecteur dira lui-meme s'il a refuse */ }
     // Le retour visuel dure le temps qu'il faut pour que l'oeil le voie ; ce
     // n'est pas une mesure du lancement, que Home Assistant ne raconte pas.
     setTimeout(() => setEnvoi(v => (v === c.media_content_id ? null : v)), 1400);
@@ -2298,7 +2297,6 @@ function RoomMediaSheet({ id, hass, onClose }) {
   const ALight = acc ? `rgb(${acc.map(v => Math.round(v + (255 - v) * .28)).join(',')})` : 'var(--o-accent-soft)';
   const onArt = !!artOk;
   const tMain = onArt ? '#fff' : 'var(--o-text)', tSub = onArt ? 'rgba(255,255,255,.75)' : 'var(--o-text2)', tDim = onArt ? 'rgba(255,255,255,.55)' : 'var(--o-text3)';
-  const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('media_player', svc, data || {}); } catch (e) {} };
   const [volOv, setVolOv] = useState(null);
   useEffect(() => { setVolOv(null); }, [np.vol]);
   const vol = volOv != null ? volOv : np.vol;
@@ -2315,7 +2313,7 @@ function RoomMediaSheet({ id, hass, onClose }) {
     const calc = x => Math.max(0, Math.min(100, (x - r.left) / r.width * 100));
     let v = calc(e.clientX);
     const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = v + '%'; } };
-    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch (er) {}
+    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch {}
     el.onpointermove = ev => { v = calc(ev.clientX); paint(); };
     const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; };
     el.onpointerup = () => { end(); dragEnd(v); };
@@ -2405,7 +2403,7 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
   const S = (hass && hass.states) || null;
   const np = mpRead(S, id); // fusion compagnon Music Assistant (titre/pochette) comme la vue Médias
   const a = (S && S[id] && S[id].attributes) || {};
-  const call = (svc, data, ent) => { try { if (hass && hass.callService) hass.callService('media_player', svc, { entity_id: ent || id, ...(data || {}) }); } catch (e) {} };
+  const call = (svc, data, ent) => { try { if (hass && hass.callService) hass.callService('media_player', svc, { entity_id: ent || id, ...(data || {}) }); } catch {} };
   const sub = [np.artist, np.album].filter(Boolean).join(' · ');
   const vol = np.hasVol ? np.vol : null;
   // Filigrane appareil (comme la vue Objets) : Apple TV ou Echo selon le lecteur configuré
@@ -2455,7 +2453,7 @@ function RoomCoverSheet({ id, hass, onClose }) {
   const [ov, setOv] = useState(null);
   useEffect(() => { setOv(null); }, [realPos]);
   const pos = ov != null ? ov : realPos;
-  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch {} };
   const cov = (svc, data) => call('cover', svc, { entity_id: id, ...(data || {}) });
   // Pas d'entite de mode : pas de mode. Supposer « Manuel » — un mot francais,
   // compare plus loin par `schedActive` — declarait le planning inactif en
@@ -2467,7 +2465,7 @@ function RoomCoverSheet({ id, hass, onClose }) {
     const calc = x => Math.max(0, Math.min(100, Math.round((x - r.left) / r.width * 100)));
     let v = calc(e.clientX);
     const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = v + '%'; } };
-    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch (er) {}
+    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch {}
     el.onpointermove = ev => { v = calc(ev.clientX); paint(); };
     const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; };
     el.onpointerup = () => { end(); setOv(v); cov('set_cover_position', { position: v }); };
@@ -2542,7 +2540,6 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const heating = a.hvac_action === 'heating';
   const MODE_FR = { off: tr('Arrêt'), heat: tr('Confort'), cool: tr('Froid'), auto: 'Auto', heat_cool: 'Auto', dry: tr('Sec'), fan_only: tr('Ventil') };
   const all = a.hvac_modes || ['off', 'heat'];
-  const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('climate', svc, { entity_id: id, ...(data || {}) }); } catch (e) {} };
   // Les bornes viennent de l'entite, pas d'une constante : la climatisation de
   // l'installation d'essai monte a 35, la ou le code plafonnait a 30. Le pas
   // aussi lui appartient. On affiche ce qui a ete envoye, pas ce qui a ete
@@ -2607,8 +2604,7 @@ function RoomLightSheet({ light, hass, onClose }) {
   useEffect(() => { if (!dragRef.current) { setOn(realOn); setBri(realBri); } }, [realOn, realBri]);
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : light.color;
   const acc = (light.rgb && color) ? color : '#ffce73';
-  const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('light', svc, { entity_id: light.id, ...(data || {}) }); } catch (e) {} };
-  const toggle = () => { const v = !on; setOn(v); try { hass.callService('homeassistant', v ? 'turn_on' : 'turn_off', { entity_id: light.id }); } catch (e) {} };
+  const toggle = () => { const v = !on; setOn(v); try { hass.callService('homeassistant', v ? 'turn_on' : 'turn_off', { entity_id: light.id }); } catch {} };
   const shown = on ? bri : 0;
   const dragVert = (e) => {
     e.preventDefault();
@@ -2618,7 +2614,7 @@ function RoomLightSheet({ light, hass, onClose }) {
     let v = calc(e.clientY); dragRef.current = true;
     if (fill) fill.style.transition = 'none'; if (handle) handle.style.transition = 'none';
     const paint = () => { if (fill) { fill.style.height = v + '%'; fill.style.opacity = '1'; } if (handle) { handle.style.bottom = `calc(${v}% - 26px)`; handle.style.opacity = '1'; } if (big) big.textContent = String(v); };
-    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch (er) {}
+    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch {}
     el.onpointermove = ev => { v = calc(ev.clientY); paint(); };
     const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (handle) handle.style.transition = ''; dragRef.current = false; };
     el.onpointerup = () => { end(); setBri(v); setOn(true); commander(hass, light.id, 'set_brightness', v); };
@@ -2695,7 +2691,7 @@ function RoomNav({ room, onNav, hass }) {
      * On pose donc `scrollLeft` a la main : la barre bouge, la page reste. */
     const cible = el.offsetLeft - (w.clientWidth - el.offsetWidth) / 2;
     try { w.scrollTo({ left: Math.max(0, cible), behavior: REDUCE_MOTION ? 'auto' : 'smooth' }); }
-    catch (e) { w.scrollLeft = Math.max(0, cible); }
+    catch { w.scrollLeft = Math.max(0, cible); }
   }, [room]);
   return (
     <div ref={wrapRef} className="o-room-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, minWidth: 0 }}>
@@ -2842,8 +2838,8 @@ function useLayoutEditor(cfgKey, scope, derived) {
     st.boxShadow = '0 18px 44px rgba(0,0,0,.5)';
     d.doc.body.appendChild(d.fantome);
     // Une fois saisi, la page ne défile plus sous la carte.
-    d.bloque = (ev) => { try { ev.preventDefault(); } catch (x) {} };
-    try { d.doc.addEventListener('touchmove', d.bloque, { passive: false }); } catch (x) {}
+    d.bloque = (ev) => { try { ev.preventDefault(); } catch {} };
+    try { d.doc.addEventListener('touchmove', d.bloque, { passive: false }); } catch {}
     setDragId(d.id);
     setDragOver(ids.indexOf(d.id));
   };
@@ -2862,13 +2858,13 @@ function useLayoutEditor(cfgKey, scope, derived) {
     const tactile = e.pointerType === 'touch';
     const d = { id, cases, hote, doc, fantome: null, x0: e.clientX, y0: e.clientY, cible: ids.indexOf(id), parti: false, tactile, pret: !tactile };
     dragRef.current = d;
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {}
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     if (tactile) {
       d.timer = setTimeout(() => {
         const dd = dragRef.current;
         if (!dd || dd !== d) return;
         dd.pret = true;
-        try { if (navigator.vibrate) navigator.vibrate(35); } catch (x) {}
+        try { if (navigator.vibrate) navigator.vibrate(35); } catch {}
         saisir(dd);
       }, 380);
     } else {
@@ -2910,9 +2906,9 @@ function useLayoutEditor(cfgKey, scope, derived) {
     setDragOver(-1);
     if (!d) return false;
     clearTimeout(d.timer);
-    try { if (d.bloque) d.doc.removeEventListener('touchmove', d.bloque); } catch (x) {}
+    try { if (d.bloque) d.doc.removeEventListener('touchmove', d.bloque); } catch {}
     if (!d.parti) return true;
-    try { if (d.fantome) d.fantome.remove(); } catch (x) {}
+    try { if (d.fantome) d.fantome.remove(); } catch {}
     const from = ids.indexOf(d.id);
     // Repose a sa place : rien a enregistrer, on ne salit pas la configuration.
     if (from < 0 || d.cible < 0 || d.cible === from) return false;
@@ -3255,7 +3251,7 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
   const a = (st && st.attributes) || {};
   const dom = String(id).split('.')[0];
   const label = nom || (a.friendly_name || id).replace(/^[^:]*: ?/, '');
-  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch {} };
   const mort = !st || st.state === 'unavailable';
   /* Optimisme : l'écran répond au doigt, Home Assistant confirme après.
    * Sans lui, chaque clic attend l'aller-retour Zigbee PUIS le poll — mou.
@@ -3461,7 +3457,7 @@ function FicheMachineHero({ id, hass }) {
   const s = st ? st.state : null;
   const mort = !st || s === 'unavailable';
   const en = dom === 'vacuum' ? s === 'cleaning' : s === 'mowing';
-  const call = (svc) => { try { if (hass && hass.callService) hass.callService(dom, svc, { entity_id: id }); } catch (e) {} };
+  const call = (svc) => { try { if (hass && hass.callService) hass.callService(dom, svc, { entity_id: id }); } catch {} };
   const f = a.supported_features || 0;
   const bat = (() => {
     if (a.battery_level != null) return a.battery_level;
@@ -3524,7 +3520,7 @@ function FicheMachineHero({ id, hass }) {
             {vitesses.map((v, vi) => {
               const on = v === a.fan_speed;
               return (
-                <button key={v} onClick={() => { try { hass.callService('vacuum', 'set_fan_speed', { entity_id: id, fan_speed: v }); } catch (e) {} }}
+                <button key={v} onClick={() => { try { hass.callService('vacuum', 'set_fan_speed', { entity_id: id, fan_speed: v }); } catch {} }}
                   aria-pressed={on} style={{ flex: 1, minWidth: 0, padding: '9px 4px 8px', borderRadius: 14, cursor: 'pointer',
                     border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)',
                     color: on ? '#fff' : 'var(--o-text1)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, transition: 'background .2s' }}>
@@ -3835,9 +3831,9 @@ function useRoomLogbook(hass, ids) {
         return tous.slice(0, 30);
       });
     }, { type: 'logbook/event_stream', start_time: debut, ...(ids ? { entity_ids: ids } : {}) })
-      .then(u => { if (mort) { try { u(); } catch (e) {} } else unsub = u; })
+      .then(u => { if (mort) { try { u(); } catch {} } else unsub = u; })
       .catch(() => {}); // logbook absent ou refuse : la carte ne s'affiche pas, c'est tout
-    return () => { mort = true; if (unsub) { try { unsub(); } catch (e) {} } };
+    return () => { mort = true; if (unsub) { try { unsub(); } catch {} } };
   }, [conn, sig]);
   return events;
 }
@@ -3935,7 +3931,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   // `loggia_roomhidden` n'est plus écrit — le retrait passe par l'agencement de
   // la pièce. On continue de le LIRE : une configuration antérieure garde ses
   // cartes masquées, et « Tout réafficher » sert à s'en débarrasser.
-  const unhideAll = () => { try { localStorage.removeItem('loggia_roomhidden'); } catch (e) {} setHidden([]); };
+  const unhideAll = () => { try { localStorage.removeItem('loggia_roomhidden'); } catch {} setHidden([]); };
   const live = piece && piece.live;
   const onOpenComfort = () => setComfort(true);
   // ── Barre de contrôles de la pièce ──
@@ -3945,7 +3941,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
    * barre. */
   const S = (hass && hass.states) || {};
   const dom = (id) => id.slice(0, id.indexOf('.'));
-  const call = (d, svc, data) => { try { if (hass && hass.callService) hass.callService(d, svc, data); } catch (e) {} };
+  const call = (d, svc, data) => { try { if (hass && hass.callService) hass.callService(d, svc, data); } catch {} };
   const lightIds = ents.filter(id => dom(id) === 'light');
   const coverIds = ents.filter(id => dom(id) === 'cover');
   const lightsOn = lightIds.filter(id => S[id] && S[id].state === 'on');
@@ -4126,7 +4122,7 @@ function QuickScenes({ hass }) {
   useEffect(() => () => clearTimeout(fRef.current), []);
   const run = (s) => {
     setFlash(s.haid); clearTimeout(fRef.current); fRef.current = setTimeout(() => setFlash(null), 2500);
-    try { if (hass && hass.callService) hass.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); } catch (e) {}
+    try { if (hass && hass.callService) hass.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); } catch {}
   };
   return (
     <>
@@ -4188,7 +4184,7 @@ function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = 'cover' 
         const url = URL.createObjectURL(blob);
         if (last) URL.revokeObjectURL(last);
         last = url; setSrc(url);
-      } catch (e) { /* garde le fond en repli */ }
+      } catch { /* garde le fond en repli */ }
     };
     fetchSnap();
     const id = setInterval(fetchSnap, refreshMs);
@@ -4226,7 +4222,7 @@ async function iceServers(conn, haid) {
     const r = await conn.sendMessagePromise({ type: 'camera/webrtc/get_client_config', entity_id: haid });
     const s = r && r.configuration && r.configuration.iceServers;
     return Array.isArray(s) ? s : [];
-  } catch (e) {
+  } catch {
     return [];
   }
 }
@@ -4261,7 +4257,7 @@ function CamLive({ hass, haid, online = true }) {
           immobiles += 1;
           if (immobiles >= 3) {
             clearInterval(gelIv);
-            if (cleanupRtc) { try { cleanupRtc(); } catch (e) {} cleanupRtc = null; }
+            if (cleanupRtc) { try { cleanupRtc(); } catch {} cleanupRtc = null; }
             startMjpeg();
           }
         } else { vues = n; immobiles = 0; }
@@ -4315,7 +4311,7 @@ function CamLive({ hass, haid, online = true }) {
           else if (msg.type === 'answer') pc.setRemoteDescription({ type: 'answer', sdp: msg.answer }).catch(() => {});
           else if (msg.type === 'candidate' && msg.candidate) { try { pc.addIceCandidate(new RTCIceCandidate(typeof msg.candidate === 'string' ? { candidate: msg.candidate, sdpMLineIndex: 0 } : msg.candidate)); } catch {} }
         }, { type: 'camera/webrtc/offer', entity_id: haid, offer: pc.localDescription.sdp });
-      } catch (e) { cleanupRtc(); cleanupRtc = null; return false; }
+      } catch { cleanupRtc(); cleanupRtc = null; return false; }
       /* Quatre secondes suffisent en direct, sur le reseau local. Passer par un
        * relais TURN en demande davantage : allocation aupres du relais, puis
        * chaque paquet fait un detour. On accorde donc jusqu'a douze secondes,
@@ -4515,7 +4511,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
   const num = (id, d = null) => { const e = S && S[id]; if (!e) return d; const n = parseFloat(e.state); return isNaN(n) ? d : n; };
   const stTxt = (id) => { const e = S && S[id]; return (e && e.state != null && e.state !== 'unknown' && e.state !== 'unavailable') ? e.state : null; };
   const isOn = (id) => { const e = S && S[id]; return !!(e && e.state === 'on'); };
-  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch {} };
   const [sheet, setSheet] = useState(null);
   const batCol = (b) => b == null ? 'var(--o-text3)' : b > 40 ? 'var(--o-ok)' : b > 15 ? '#ffb347' : '#f87171';
 
@@ -4857,7 +4853,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
   /* Économiseur d'écran : un diaporama des images des MÉDIAS LOCAUX de Home
    * Assistant (le dossier media) — jamais un service externe, le projet se
    * l'interdit. Sans image trouvée, la veille classique reste. */
-  const photosOn = (() => { try { return localStorage.getItem('loggia-ambphotos') === '1'; } catch (e) { return false; } })();
+  const photosOn = (() => { try { return localStorage.getItem('loggia-ambphotos') === '1'; } catch { return false; } })();
   const [photos, setPhotos] = useState([]);
   const [photoIdx, setPhotoIdx] = useState(0);
   useEffect(() => {
@@ -4872,7 +4868,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
           // try PAR SOURCE : une intégration qui refuse le browse (Netatmo…)
           // ne doit pas emporter les images déjà trouvées ailleurs.
           let r = null;
-          try { r = await h.callWS({ type: 'media_source/browse_media', ...(id ? { media_content_id: id } : {}) }); } catch (e) { return; }
+          try { r = await h.callWS({ type: 'media_source/browse_media', ...(id ? { media_content_id: id } : {}) }); } catch { return; }
           for (const c of (r && r.children) || []) {
             if (mort || images.length >= 60) return;
             if (c.media_class === 'image' && c.media_content_id) images.push(c.media_content_id);
@@ -4884,12 +4880,12 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
         const urls = [];
         for (const mid of images.slice(0, 40)) {
           if (mort) return;
-          try { const rr = await h.callWS({ type: 'media_source/resolve_media', media_content_id: mid }); if (rr && rr.url) urls.push(rr.url); } catch (e) { /* image illisible */ }
+          try { const rr = await h.callWS({ type: 'media_source/resolve_media', media_content_id: mid }); if (rr && rr.url) urls.push(rr.url); } catch { /* image illisible */ }
         }
         // Mélange : ne pas revoir toujours les mêmes premières photos.
         for (let i = urls.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t2 = urls[i]; urls[i] = urls[j]; urls[j] = t2; }
         if (!mort && urls.length) setPhotos(urls);
-      } catch (e) { /* pas de médias : la veille classique */ }
+      } catch { /* pas de médias : la veille classique */ }
     })();
     return () => { mort = true; };
   }, [photosOn]);
@@ -4902,7 +4898,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
    * quelqu'un passe. Tout est local — les frames ne quittent jamais l'appareil,
    * rien n'est enregistré. getUserMedia exige un contexte sécurisé : en HTTP
    * local la fonction s'éteint d'elle-même, le toucher réveille toujours. */
-  const motionOn = (() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch (e) { return false; } })();
+  const motionOn = (() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch { return false; } })();
   useEffect(() => {
     if (!motionOn) return;
     let flux = null, iv = 0, mort = false, avant = null;
@@ -4923,14 +4919,14 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
               let diff = 0;
               for (let i = 0; i < d.length; i += 16) { if (Math.abs(d[i] - avant[i]) > 26) diff++; }
               // ~192 points échantillonnés : une vingtaine qui bougent = une présence, pas du bruit de capteur.
-              if (diff > 18) { try { window.dispatchEvent(new PointerEvent('pointerdown')); } catch (e) { window.dispatchEvent(new Event('pointerdown')); } }
+              if (diff > 18) { try { window.dispatchEvent(new PointerEvent('pointerdown')); } catch { window.dispatchEvent(new Event('pointerdown')); } }
             }
             avant = new Uint8ClampedArray(d);
-          } catch (e) { /* frame illisible */ }
+          } catch { /* frame illisible */ }
         }, 900);
-      } catch (e) { /* permission refusée : le toucher réveille */ }
+      } catch { /* permission refusée : le toucher réveille */ }
     })();
-    return () => { mort = true; clearInterval(iv); try { if (flux) flux.getTracks().forEach(t => t.stop()); } catch (e) {} try { video.srcObject = null; } catch (e) {} };
+    return () => { mort = true; clearInterval(iv); try { if (flux) flux.getTracks().forEach(t => t.stop()); } catch {} try { video.srcObject = null; } catch {} };
   }, [motionOn]);
   // Scène lancée depuis la veille : retour visuel bref, sans réveiller l'écran.
   const [scFlash, setScFlash] = useState(null);
@@ -4938,7 +4934,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
   useEffect(() => () => clearTimeout(scRef.current), []);
   const lancerScene = (s) => {
     setScFlash(s.haid); clearTimeout(scRef.current); scRef.current = setTimeout(() => setScFlash(null), 1600);
-    try { const h = getHass(); if (h && h.callService) h.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); } catch (e) { /* le poll dira */ }
+    try { const h = getHass(); if (h && h.callService) h.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); } catch { /* le poll dira */ }
   };
   const hm = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const capit = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
@@ -5147,7 +5143,7 @@ function useAgenda(hass, seulement = null, plage = null) {
         try {
           const evs = await api('GET', 'calendars/' + id + q);
           if (Array.isArray(evs)) evs.forEach(e => { if (e && e.summary && e.start) tous.push({ ...e, _cal: id }); });
-        } catch (e) {} // un calendrier qui refuse ne prive pas les autres
+        } catch {} // un calendrier qui refuse ne prive pas les autres
       }
       if (mort) return;
       const quand = (e) => new Date(e.start.dateTime || (e.start.date + 'T00:00:00')).getTime();
@@ -5471,13 +5467,13 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   const debutSec = (e, zone, id) => {
     if (!editMode) return;
     if (e.target.closest && e.target.closest('button, [role="switch"], input')) return;
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) {}
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     if (e.pointerType === 'touch') {
       secDebut.current = { x: e.clientX, y: e.clientY, zone, id };
       clearTimeout(secTimer.current);
       secTimer.current = setTimeout(() => {
         if (!secDebut.current) return;
-        try { if (navigator.vibrate) navigator.vibrate(35); } catch (er) {}
+        try { if (navigator.vibrate) navigator.vibrate(35); } catch {}
         setSecDrag({ zone: secDebut.current.zone, id: secDebut.current.id, ordre: ordreDe(secDebut.current.zone) });
       }, 380);
       return;
@@ -5522,13 +5518,13 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     if (!editMode) return;
     if (e.target.closest && e.target.closest('button, [role="switch"], input')) return;
     e.stopPropagation();
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) {}
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     if (e.pointerType === 'touch') {
       pieceDebut.current = { x: e.clientX, y: e.clientY, id, noms };
       clearTimeout(pieceTimer.current);
       pieceTimer.current = setTimeout(() => {
         if (!pieceDebut.current) return;
-        try { if (navigator.vibrate) navigator.vibrate(35); } catch (er) {}
+        try { if (navigator.vibrate) navigator.vibrate(35); } catch {}
         setPieceDrag({ id: pieceDebut.current.id, ordre: ordrePieces(pieceDebut.current.noms) });
       }, 380);
       return;
@@ -5660,7 +5656,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     const out = [];
     let alerte = false;
     let lum = 0;
-    try { for (const l of discoverLights(hs, a && a.index)) if (l.on) lum++; } catch (e) {}
+    try { for (const l of discoverLights(hs, a && a.index)) if (l.on) lum++; } catch {}
     out.push(lum === 0 ? tr('Tout est éteint') : lum === 1 ? tr('{n} lumière allumée', { n: 1 }) : tr('{n} lumières allumées', { n: lum }));
     const ouv = ouvrantsDe(S).filter(o => o.on).length;
     if (ouv > 0) out.push(ouv === 1 ? tr('{n} ouvrant ouvert', { n: 1 }) : tr('{n} ouvrants ouverts', { n: ouv }));
@@ -5700,7 +5696,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   const ouvStat = useMemo(() => {
     const S = (dashHass && dashHass.states) || null;
     if (!S) return { ouverts: 0, total: 0 };
-    try { const l = ouvrantsDe(S); return { ouverts: l.filter(o => o.on).length, total: l.length }; } catch (e) { return { ouverts: 0, total: 0 }; }
+    try { const l = ouvrantsDe(S); return { ouverts: l.filter(o => o.on).length, total: l.length }; } catch { return { ouverts: 0, total: 0 }; }
   }, [dashHass]);
   /* Medias en lecture et appareils en marche, pour la banniere.
    *
@@ -5736,7 +5732,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
         if (test(e.state)) out.appareils++;
       }
       return out;
-    } catch (e) { return vide; }
+    } catch { return vide; }
   }, [dashHass, a]);
   // lumières par pièce (compteur + interrupteur des cartes compactes) — une seule passe par render.
   // On ignore les entités dont le NOM AFFICHÉ commence/contient « Ampoule » (membres individuels
@@ -5767,7 +5763,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
         const k = rmNorm(l.room); (m[k] || (m[k] = [])).push(l);
       }
       return m;
-    } catch (e) { return null; }
+    } catch { return null; }
     // L'index doit figurer parmi les dependances : il arrive APRES le premier
     // rendu, et sans lui la piece d'une lumiere se deduit encore de son nom.
   }, [lightsSig, indexA]);
@@ -5837,7 +5833,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     const ms = roomMainsOf(name);
     if (!ms || !ms.length || !dashHass || !dashHass.callService) return;
     const svc = ms.some(l => l.on) ? 'turn_off' : 'turn_on';
-    try { dashHass.callService('homeassistant', svc, { entity_id: ms.map(l => l.id) }); } catch (e) {}
+    try { dashHass.callService('homeassistant', svc, { entity_id: ms.map(l => l.id) }); } catch {}
   };
   // ── Volets et clim par pièce : les minis des tuiles ──────────────────────
   // Agir sans ouvrir la pièce. Double chemin de rattachement, comme les
@@ -5861,7 +5857,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
         const zc = zones.find(z => parZone.indexOf(z.haid) >= 0 || rmNorm(z.room || '') === target || rmNorm(z.name || '').indexOf(target) >= 0);
         m[target] = { covers, clim: zc ? zc.haid : null };
       }
-    } catch (e) { return null; }
+    } catch { return null; }
     return m;
   }, [dashHass, a]);
   const roomCoversInfo = (name) => {
@@ -5869,7 +5865,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     if (!ex || !ex.covers.length) return null;
     const S = dashHass.states;
     const open = ex.covers.some(id => { const st = S[id]; return st && (st.state === 'open' || st.state === 'opening'); });
-    return { open, onToggle: () => { try { dashHass.callService('cover', open ? 'close_cover' : 'open_cover', { entity_id: ex.covers }); } catch (e) {} } };
+    return { open, onToggle: () => { try { dashHass.callService('cover', open ? 'close_cover' : 'open_cover', { entity_id: ex.covers }); } catch {} } };
   };
   // ── Héros contextuel : « ce qui compte maintenant » ──────────────────────
   // TOUS les candidats, par intérêt : les lecteurs qui jouent (les plus
@@ -5887,7 +5883,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
       const travaille = (z) => ['heating', 'cooling'].indexOf((S[z.haid].attributes || {}).hvac_action) >= 0 ? 0 : 1;
       zs.sort((za, zb) => travaille(za) - travaille(zb));
       return [...new Set([...joue, ...zs.map(z => z.haid)])].slice(0, 6);
-    } catch (e) { return []; }
+    } catch { return []; }
   }, [dashHass]);
   const roomClimInfo = (name) => {
     const ex = roomExtras && roomExtras[rmNorm(name)];
@@ -5900,7 +5896,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
       // Rallumer : le premier mode que l'entité connaît, le chauffage d'abord.
       const modes = (st.attributes || {}).hvac_modes || [];
       const cible = on ? 'off' : (['heat', 'auto', 'heat_cool', 'cool'].find(mo => modes.indexOf(mo) >= 0) || 'heat');
-      try { dashHass.callService('climate', 'set_hvac_mode', { entity_id: ex.clim, hvac_mode: cible }); } catch (e) {}
+      try { dashHass.callService('climate', 'set_hvac_mode', { entity_id: ex.clim, hvac_mode: cible }); } catch {}
     } };
   };
 
@@ -6402,10 +6398,9 @@ function LumieresContent({ hass, edit = false, onEnt }) {
       return { ...l, on: p.on, bri: p.on ? (l.bri || 100) : l.bri };
     }));
   }, [sig]);
-  const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('light', svc, data); } catch (e) {} };
   const setBri = (id, v) => setLights(ls => ls.map(l => l.id === id ? { ...l, bri: v, on: true } : l));
   // homeassistant.turn_on/off gère light ET switch (interrupteurs traités comme lumières).
-  const callHa = (svc, data) => { try { if (hass && hass.callService) hass.callService('homeassistant', svc, data); } catch (e) {} };
+  const callHa = (svc, data) => { try { if (hass && hass.callService) hass.callService('homeassistant', svc, data); } catch {} };
   const toggle = (l) => { markPending([l.id], !l.on); setLights(ls => ls.map(x => x.id === l.id ? { ...x, on: !x.on, bri: !x.on ? (x.bri || 100) : x.bri } : x)); callHa(l.on ? 'turn_off' : 'turn_on', { entity_id: l.id }); };
   const setAll = (on) => { const ids = lights.map(x => x.id); markPending(ids, on); setLights(ls => ls.map(x => ({ ...x, on, bri: on ? (x.bri || 100) : x.bri }))); if (ids.length) callHa(on ? 'turn_on' : 'turn_off', { entity_id: ids }); };
   const pick = (id, c) => { setLights(ls => ls.map(l => l.id === id ? { ...l, color: c, on: true } : l)); const n = parseInt(c.slice(1), 16); commander(hass, id, 'set_color', [(n >> 16) & 255, (n >> 8) & 255, n & 255]); };
@@ -6436,7 +6431,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
       if (big) big.textContent = String(v);
     };
     paint();
-    try { el.setPointerCapture(e.pointerId); } catch (er) {}
+    try { el.setPointerCapture(e.pointerId); } catch {}
     el.onpointermove = ev => { v = calc(ev.clientY); paint(); };
     const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (handle) handle.style.transition = ''; dragRef.current = false; };
     el.onpointerup = () => { end(); setBri(id, v); commander(hass, id, 'set_brightness', v); };
@@ -6830,7 +6825,7 @@ function ScenesContent({ hass }) {
   const [cat, setCat] = useState(selCat || 'classics');
   useEffect(() => { if (selCat) setCat(selCat); }, [selCat]);
 
-  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch {} };
   // Applique une scène : le script configuré s'il existe, sinon la luminosité
   // seule sur les lampes variables.
   const applyScene = (data) => {
@@ -7084,7 +7079,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   const [selZone, setSelZone] = useState('poele');
   const sig = derived.map(t => `${t.id}:${t.mode}:${t.target}:${t.current}:${t.auto}`).join('|');
   useEffect(() => { setThermos(derived); }, [sig]);
-  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch {} };
   const zoneOf = (id) => climateZones(S).find(z => z.id === id);
   const upLocal = (id, patch) => setThermos(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t));
   const commitTarget = (id, v) => { v = Math.max(5, Math.min(30, Math.round(v * 2) / 2)); upLocal(id, { target: v }); call('input_number', 'set_value', { entity_id: zoneOf(id).tempCible, value: v }); };
@@ -7346,13 +7341,12 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
     }
   });
 
-  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch {} };
   const allOpen = () => { setCovers(cs => cs.map(c => ({ ...c, pos: 100 }))); call('cover', 'open_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
   const allClose = () => { setCovers(cs => cs.map(c => ({ ...c, pos: 0 }))); call('cover', 'close_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
   const pickMode = (m) => { setModeLocal(m); call('input_select', 'select_option', { entity_id: voletMode(), option: m }); };
 
   const openCount = covers.filter(c => c.pos > 0).length;
-  const fmtT = (iso) => { if (!iso) return '—'; try { return new Date(iso).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); } catch (e) { return '—'; } };
 
   return (
     <div className="loggia-content" style={{ padding: embarque ? '0 28px 40px' : '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -7610,7 +7604,7 @@ function wxHourEq() {
     const nightLen = Math.max(0.1, (24 - si.sunset) + si.sunrise);
     const tn = nowH >= si.sunset ? (nowH - si.sunset) / nightLen : (nowH + 24 - si.sunset) / nightLen;
     return (18 + 12 * Math.min(1, Math.max(0, tn))) % 24;
-  } catch (e) { const d = new Date(); return d.getHours() + d.getMinutes() / 60; }
+  } catch { const d = new Date(); return d.getHours() + d.getMinutes() / 60; }
 }
 function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null }) {
   const [, tick] = useState(0);
@@ -8155,7 +8149,7 @@ function AspirateurContent({ hass }) {
   // dessus evite de resynchroniser a chaque rendu, `rooms` etant reconstruit.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setSel(Object.fromEntries(rooms.map(r => [r.id, sOn(r.toggle)]))); }, [ssig]);
-  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch {} };
   const runScript = (id) => call('script', 'turn_on', { entity_id: id });
   // Un script maison fait souvent plus que le service standard (selection de
   // pieces, sequence). On le garde donc quand il existe, et on retombe sinon
@@ -8343,7 +8337,7 @@ function CroquettesContent({ hass }) {
   const [levelLocal, setLevelLocal] = useState(null);
   useEffect(() => { setLevelLocal(null); }, [reservoirG]); // toute variation confirmée du capteur reprend la main sur l'optimiste
   const level = levelLocal != null ? levelLocal : (reservoirG == null ? 0 : Math.max(0, Math.min(100, Math.round(reservoirG / croqMax(S) * 100))));
-  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch {} };
   // Distribuer demande un script propre a l'installation : rien de standard.
   // Sans lui, le geste ne fait rien plutot que d'appeler un script absent.
   const dispense = (n) => { const sc = (loggiaEnt('feeder', null) || {}).script; if (sc) call('script', 'turn_on', { entity_id: sc, variables: { portions: n } }); };
@@ -8477,11 +8471,11 @@ function extractNpAccent(url) {
             acc = acc.map((e, j) => e + tuned[j] * wt); w += wt;
           }
           resolve(w ? acc.map(e => Math.max(0, Math.min(255, Math.round(e / w)))) : null);
-        } catch (e) { resolve(null); } // canvas tainted (CORS) → pas d'accent, fallback thème
+        } catch { resolve(null); } // canvas tainted (CORS) → pas d'accent, fallback thème
       };
       img.onerror = () => resolve(null);
       img.src = url;
-    } catch (e) { resolve(null); }
+    } catch { resolve(null); }
   });
   NP_ACCENT_CACHE.set(url, p); p.then(v => NP_ACCENT_CACHE.set(url, v));
   return p;
@@ -8552,7 +8546,6 @@ function MediasContent({ hass, edit = false, onEnt }) {
   const selId = playingP ? playingP.id : 'echo_salon';
   const sel = lecteurs.find(p => p.id === selId) || lecteurs[0] || null;
   const np = rd(sel);
-  const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('media_player', svc, data || {}); } catch (e) {} };
   /**
    * Monter ou baisser le volume d'un cran.
    *
@@ -8739,7 +8732,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   };
   const callAlarm = (svc, mode, code) => {
     setAlarm(mode);
-    try { if (hass && hass.callService && alarmId) hass.callService('alarm_control_panel', svc, { entity_id: alarmId, ...(code ? { code } : {}) }); } catch (e) {}
+    try { if (hass && hass.callService && alarmId) hass.callService('alarm_control_panel', svc, { entity_id: alarmId, ...(code ? { code } : {}) }); } catch {}
     clearTimeout(alarmRevertRef.current);
     alarmRevertRef.current = setTimeout(() => { const cur = getHass(); const st = (cur && cur.states && alarmId && cur.states[alarmId]) ? cur.states[alarmId].state : null; const m = (st === 'armed_away' || st === 'armed_vacation') ? 'away' : st === 'armed_home' ? 'home' : st === 'armed_night' ? 'night' : st === 'triggered' ? 'triggered' : (st === 'arming' || st === 'pending') ? mode : 'off'; setAlarm(m); }, 6000);
   };
@@ -9079,7 +9072,7 @@ function SystemeContent({ hass }) {
   const [armed, setArmed] = useState(null);
   const armRef = useRef(null);
   const power = (id, domain, service) => {
-    if (armed === id) { try { if (hass && hass.callService) hass.callService(domain, service, {}); } catch (e) {} setArmed(null); if (armRef.current) clearTimeout(armRef.current); }
+    if (armed === id) { try { if (hass && hass.callService) hass.callService(domain, service, {}); } catch {} setArmed(null); if (armRef.current) clearTimeout(armRef.current); }
     else { setArmed(id); if (armRef.current) clearTimeout(armRef.current); armRef.current = setTimeout(() => setArmed(null), 4000); }
   };
   useEffect(() => () => { if (armRef.current) clearTimeout(armRef.current); }, []);
@@ -9234,9 +9227,9 @@ function CvTemplateCard({ def, hass }) {
       setErr(null);
       setOut(msg.result != null ? String(msg.result) : '');
     }, { type: 'render_template', template: def.src, report_errors: true })
-      .then(u => { if (mort) { try { u(); } catch (e) {} } else unsub = u; })
+      .then(u => { if (mort) { try { u(); } catch {} } else unsub = u; })
       .catch(e => { if (!mort) setErr(String((e && e.message) || e)); });
-    return () => { mort = true; if (unsub) { try { unsub(); } catch (e) {} } };
+    return () => { mort = true; if (unsub) { try { unsub(); } catch {} } };
   }, [conn, def.src]);
   const attente = out == null && !err;
   return (
@@ -9303,7 +9296,7 @@ function cvIcoEntite(dom, id, st, name) {
 }
 function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   const st = hass && hass.states ? hass.states[id] : null;
-  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch (e) {} };
+  const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); } catch {} };
   // Consigne optimiste de la compacte climat (fenêtre fixe 4 s, comme partout).
   const [ovT, setOvT] = useState(null);
   const ovTRef = useRef(0);
@@ -9641,7 +9634,7 @@ function CvBigToggle({ id, hass }) {
   const lum = cvEstLumiere(id);
   const rgbTok = lum ? 'var(--o-gold-rgb)' : 'var(--o-accent-rgb)';
   const txtCol = lum ? 'var(--o-warn)' : 'var(--o-accent-soft)';
-  const toggle = () => { try { if (hass && hass.callService) hass.callService('homeassistant', 'toggle', { entity_id: id }); } catch (e) {} };
+  const toggle = () => { try { if (hass && hass.callService) hass.callService('homeassistant', 'toggle', { entity_id: id }); } catch {} };
   return (
     <button className={'o-piece' + (mort ? ' o-panne' : '')} onClick={toggle} disabled={mort}
       style={{ ...CV_CADRE, height: '100%', minHeight: 150, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
@@ -9986,7 +9979,7 @@ function RailSerrure({ id, hass }) {
       if (hass && hass.callService) {
         hass.callService('lock', verrouille ? 'unlock' : 'lock', { entity_id: id });
       }
-    } catch (e) { /* le service dira lui-meme s'il a echoue */ }
+    } catch { /* le service dira lui-meme s'il a echoue */ }
   };
 
   const surX = (clientX) => {
@@ -10001,7 +9994,7 @@ function RailSerrure({ id, hass }) {
     if (enRoute) return;
     setGlisse(true);
     const el = e.currentTarget;
-    try { el.setPointerCapture(e.pointerId); } catch (x2) {}
+    try { el.setPointerCapture(e.pointerId); } catch {}
     el.onpointermove = (ev) => setX(surX(ev.clientX));
     el.onpointerup = (ev) => {
       const v = surX(ev.clientX);
@@ -10058,7 +10051,7 @@ function RailArm({ id, hass }) {
    * désarmer, et tout était à refaire là-bas (retour 03/09). */
   const [demande, setDemande] = useState(null);
   const [code, setCode] = useState('');
-  const call = (svc, c) => { try { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id, ...(c ? { code: c } : {}) }); } catch (e) {} };
+  const call = (svc, c) => { try { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id, ...(c ? { code: c } : {}) }); } catch {} };
   const agir = (svc) => {
     const faut = svc === 'alarm_disarm' ? !!a.code_format : (!!a.code_format && a.code_arm_required !== false);
     if (faut) { setDemande(svc); setCode(''); return; }
@@ -10117,7 +10110,7 @@ function CvAlarm({ id, hass, sans = false }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const s = st ? st.state : null;
   const aAl = (st && st.attributes) || {};
-  const call = (svc, code) => { try { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id, ...(code ? { code } : {}) }); } catch (e) {} };
+  const call = (svc, code) => { try { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id, ...(code ? { code } : {}) }); } catch {} };
   // Si le panneau exige un code (code_format), on le demande avant d'agir :
   // Home Assistant refuserait silencieusement sans lui.
   const codeRequis = !!aAl.code_format;
@@ -10192,7 +10185,7 @@ function CvAlarm({ id, hass, sans = false }) {
           const S = (hass && hass.states) || {};
           const os = ouvrantsDe(S);
           const ouverts = os.filter(o => o.on).length;
-          const cfgCams = (() => { try { const c = cfgVal('loggia_cameras', null); return Array.isArray(c) ? c.map(x => x && x.haid).filter(Boolean) : []; } catch (e) { return []; } })();
+          const cfgCams = (() => { try { const c = cfgVal('loggia_cameras', null); return Array.isArray(c) ? c.map(x => x && x.haid).filter(Boolean) : []; } catch { return []; } })();
           const camIds = cfgCams.length ? cfgCams : Object.keys(S).filter(cid => cid.indexOf('camera.') === 0);
           const cams = camIds.filter(cid => S[cid] && S[cid].state !== 'unavailable').length;
           // Lignes nues, sans fond ni contour (retour 31/08).
@@ -11252,13 +11245,13 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   const debutDrag = (e, x) => {
     if (!edit) return;
     if (e.target.closest && e.target.closest('button')) return; // ×, coin
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (er) {}
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     if (e.pointerType === 'touch') {
       dragDebut.current = { x: e.clientX, y: e.clientY, cle: cvKey(x) };
       clearTimeout(dragTimer.current);
       dragTimer.current = setTimeout(() => {
         if (!dragDebut.current) return;
-        try { if (navigator.vibrate) navigator.vibrate(35); } catch (er) {}
+        try { if (navigator.vibrate) navigator.vibrate(35); } catch {}
         setDragCle(dragDebut.current.cle);
         setOrdreDrag([...cv.ents]);
       }, 380);
@@ -11399,7 +11392,7 @@ function ParametresView({ themeMode, loggiaTheme, haTheme, onMode, onPickTheme, 
 // Intervalle du pont hass (Parametres > Connexion). Lu UNE fois au chargement :
 // changer la valeur passe par « Enregistrer », qui recharge la page.
 const HASS_POLL_MS = (() => {
-  try { const c = JSON.parse(window.localStorage.getItem('loggia_haCfg') || 'null'); const n = c && +c.pollMs; return (n >= 1000 && n <= 60000) ? n : 2000; } catch (e) { return 2000; }
+  try { const c = JSON.parse(window.localStorage.getItem('loggia_haCfg') || 'null'); const n = c && +c.pollMs; return (n >= 1000 && n <= 60000) ? n : 2000; } catch { return 2000; }
 })();
 const sigHash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
 // noisyKeys : capteurs de puissance (W) au jitter continu → signature = valeur arrondie à 10 W,
@@ -11688,8 +11681,8 @@ function PinModal({ expected, onClose, onSuccess }) {
   // sans quoi le clavier reste derriere la modale.
   useEffect(() => {
     const avant = document.activeElement;
-    const t = setTimeout(() => { try { const el = boiteRef.current; if (el) (el.querySelector('button, [tabindex="0"]') || el).focus({ preventScroll: true }); } catch (e) {} }, 40);
-    return () => { clearTimeout(t); try { if (avant && avant.focus) avant.focus({ preventScroll: true }); } catch (e) {} };
+    const t = setTimeout(() => { try { const el = boiteRef.current; if (el) (el.querySelector('button, [tabindex="0"]') || el).focus({ preventScroll: true }); } catch {} }, 40);
+    return () => { clearTimeout(t); try { if (avant && avant.focus) avant.focus({ preventScroll: true }); } catch {} };
   }, []);
   const padBtn = { height: 52, borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 600, cursor: 'pointer' };
   const add = (d) => {
@@ -11747,12 +11740,12 @@ function MobileNav({ view, onNav, onMenu }) {
   const navRef = useRef(null);
   useEffect(() => {
     const el = navRef.current;
-    const poser = () => { try { document.documentElement.style.setProperty('--o-navh', Math.round(el ? el.getBoundingClientRect().height : 0) + 'px'); } catch (e) {} };
+    const poser = () => { try { document.documentElement.style.setProperty('--o-navh', Math.round(el ? el.getBoundingClientRect().height : 0) + 'px'); } catch {} };
     poser();
     let ro = null;
-    try { ro = new ResizeObserver(poser); if (el) ro.observe(el); } catch (e) {}
+    try { ro = new ResizeObserver(poser); if (el) ro.observe(el); } catch {}
     window.addEventListener('resize', poser);
-    return () => { window.removeEventListener('resize', poser); if (ro) ro.disconnect(); try { document.documentElement.style.setProperty('--o-navh', '0px'); } catch (e) {} };
+    return () => { window.removeEventListener('resize', poser); if (ro) ro.disconnect(); try { document.documentElement.style.setProperty('--o-navh', '0px'); } catch {} };
   }, []);
   return (
     <nav ref={navRef} className="loggia-mobilenav" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, alignItems: 'stretch', background: 'var(--o-header)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', paddingBottom: 'calc(var(--o-safe-bottom, 0px) + 6px)', boxShadow: '0 -8px 24px rgba(0,0,0,.22)' }}>
@@ -11775,7 +11768,7 @@ function MobileNav({ view, onNav, onMenu }) {
 function deriveNotifs(hass) {
   const S = hass && hass.states; if (!S) return [];
   const out = [], now = Date.now();
-  const rel = (id) => { try { const e = S[id]; const t = e && (e.last_changed || e.last_updated); if (!t) return ''; const m = (now - new Date(t).getTime()) / 60000; if (m < 1) return tr("à l'instant"); if (m < 60) return tr('Il y a {n} min', { n: Math.round(m) }); if (m < 1440) return tr('Il y a {n} h', { n: Math.round(m / 60) }); return tr('Il y a {n} j', { n: Math.round(m / 1440) }); } catch (e) { return ''; } };
+  const rel = (id) => { try { const e = S[id]; const t = e && (e.last_changed || e.last_updated); if (!t) return ''; const m = (now - new Date(t).getTime()) / 60000; if (m < 1) return tr("à l'instant"); if (m < 60) return tr('Il y a {n} min', { n: Math.round(m) }); if (m < 1440) return tr('Il y a {n} h', { n: Math.round(m / 60) }); return tr('Il y a {n} j', { n: Math.round(m / 1440) }); } catch { return ''; } };
   const stOf = (id) => (S[id] && S[id].state) || null;
   const numOf = (id) => { const v = parseFloat(stOf(id)); return isNaN(v) ? null : v; };
   for (const id in S) { if (id.indexOf('alarm_control_panel.') === 0 && S[id].state === 'triggered') { out.push(['#f87171', tr('Alarme'), tr('Intrusion détectée'), rel(id)]); break; } }
@@ -11935,7 +11928,7 @@ export default function App() {
           if (patch[k] == null) localStorage.removeItem(k);
           else localStorage.setItem(k, JSON.stringify(patch[k]));
         });
-      } catch (e) {}
+      } catch {}
     };
     const h = getHass();
     if (h && h.callWS) {
@@ -11974,7 +11967,7 @@ export default function App() {
         get knowledge() { return discovery.knowledge; },
         // Les pieces telles que la configuration et les zones les donnent :
         // sans elles, impossible de voir ou l'appariement piece/zone echoue.
-        get rooms() { try { return cfgRef.current; } catch (e) { return null; } },
+        get rooms() { try { return cfgRef.current; } catch { return null; } },
         get health() { return discovery.health; },
         healthText: () => { const t = healthText(discovery.health); console.log(t); return t; },
         get errors() { return discovery.errors; },
@@ -11997,7 +11990,7 @@ export default function App() {
         presentableDevices,
         presentationSummary,
       };
-    } catch (e) {}
+    } catch {}
   }, [discovery.ready, discovery.caps]);
 
   // ── Configuration par utilisateur (etape 2) ──
@@ -12062,7 +12055,7 @@ export default function App() {
           report: () => configReportLive(h).then(t => { console.log(t); return t; }),
         // Rejoue l'ecran de premier lancement (verification, demonstration).
         resetOnboarding: async () => {
-          try { localStorage.removeItem('loggia_onboarded'); } catch (e) {}
+          try { localStorage.removeItem('loggia_onboarded'); } catch {}
           await h.callWS({ type: 'loggia/config/set', config: { loggia_onboarded: null } });
           console.log('Premier lancement rearme — rechargez la page.');
         },
@@ -12080,7 +12073,7 @@ export default function App() {
           migrate: (dryRun = true, overwrite = false) =>
             migrateFromLocalStorage(h, { dryRun, overwrite }).then(r => { console.log(r); return r; }),
         };
-      } catch (e) {}
+      } catch {}
     };
 
     sonder();
@@ -12090,9 +12083,9 @@ export default function App() {
   /* Lecture PARESSEUSE : l'effet d'application réécrit ces clés — les lire
    * dans un effet arrivait APRÈS la première écriture (le défaut écrasait le
    * réglage au double-montage de dev, et par pure chance d'ordre en prod). */
-  const [themeMode, setThemeMode] = useState(() => { try { const m = localStorage.getItem('loggia-mode'); return (m === 'light' || m === 'dark' || m === 'auto') ? m : 'dark'; } catch (e) { return 'dark'; } }); // base Loggia : clair/foncé/auto
-  const [loggiaTheme, setLoggiaTheme] = useState(() => { if (SAFE_NOLOOK) return ''; try { const t = localStorage.getItem('loggia-theme'); return t != null ? t : ''; } catch (e) { return ''; } });     // '' = défaut Loggia ; sinon preset natif (neumorphix/google/ios)
-  const [haTheme, setHaTheme] = useState(() => { if (SAFE_NOLOOK) return ''; try { const h = localStorage.getItem('loggia-ha'); return h != null ? h : ''; } catch (e) { return ''; } });           // '' = base Loggia ; 'FOLLOW' = suit HA ; sinon nom de thème HA
+  const [themeMode, setThemeMode] = useState(() => { try { const m = localStorage.getItem('loggia-mode'); return (m === 'light' || m === 'dark' || m === 'auto') ? m : 'dark'; } catch { return 'dark'; } }); // base Loggia : clair/foncé/auto
+  const [loggiaTheme, setLoggiaTheme] = useState(() => { if (SAFE_NOLOOK) return ''; try { const t = localStorage.getItem('loggia-theme'); return t != null ? t : ''; } catch { return ''; } });     // '' = défaut Loggia ; sinon preset natif (neumorphix/google/ios)
+  const [haTheme, setHaTheme] = useState(() => { if (SAFE_NOLOOK) return ''; try { const h = localStorage.getItem('loggia-ha'); return h != null ? h : ''; } catch { return ''; } });           // '' = base Loggia ; 'FOLLOW' = suit HA ; sinon nom de thème HA
   const [lightMode, setLightMode] = useState(false);
   /* La vue courante survit au rechargement.
    *
@@ -12117,10 +12110,10 @@ export default function App() {
    * bas, le rendu attend que les donnees soient la avant de monter la vue, et
    * montre en attendant une surface vide plutot que l'accueil. */
   const [view, setView] = useState(() => {
-    try { return window.sessionStorage.getItem('loggia-vue') || 'accueil'; } catch (e) { return 'accueil'; }
+    try { return window.sessionStorage.getItem('loggia-vue') || 'accueil'; } catch { return 'accueil'; }
   });
   useEffect(() => {
-    try { window.sessionStorage.setItem('loggia-vue', view); } catch (e) { /* stockage indisponible */ }
+    try { window.sessionStorage.setItem('loggia-vue', view); } catch { /* stockage indisponible */ }
   }, [view]);
   /* Et la position dans la page.
    *
@@ -12137,9 +12130,9 @@ export default function App() {
     /* Le navigateur restaure AUSSI la position, et il le fait APRÈS nous : sa
      * valeur (souvent zéro, la page n'étant pas encore remplie au moment du
      * rechargement) écrasait la nôtre. On lui retire la main. */
-    try { if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'; } catch (e) {}
+    try { if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'; } catch {}
     let t = 0;
-    const ecrire = () => { try { window.sessionStorage.setItem(cle, String(document.documentElement.scrollTop || 0)); } catch (e) {} };
+    const ecrire = () => { try { window.sessionStorage.setItem(cle, String(document.documentElement.scrollTop || 0)); } catch {} };
     const noter = () => { clearTimeout(t); t = setTimeout(ecrire, 150); };
     window.addEventListener('scroll', noter, { passive: true });
     /* Un réglage enregistré recharge la page : la position doit être écrite
@@ -12147,7 +12140,7 @@ export default function App() {
      * revenait en haut (retour 01/09). */
     window.addEventListener('pagehide', ecrire);
     window.addEventListener('beforeunload', ecrire);
-    const y = (() => { try { return +window.sessionStorage.getItem(cle) || 0; } catch (e) { return 0; } })();
+    const y = (() => { try { return +window.sessionStorage.getItem(cle) || 0; } catch { return 0; } })();
     /* La page se remplit par morceaux (vues paresseuses, données qui
      * arrivent) : on retente jusqu'à ce qu'elle soit assez haute pour
      * accueillir la position, puis on s'arrête. Deux images ne suffisaient
@@ -12158,7 +12151,7 @@ export default function App() {
       essais++;
       try {
         if (document.documentElement.scrollHeight - window.innerHeight >= y) { window.scrollTo({ top: y, behavior: 'auto' }); return; }
-      } catch (e) {}
+      } catch {}
       tid = setTimeout(restaurer, 60);
     };
     /* `setTimeout` et non `requestAnimationFrame` : un onglet en arrière-plan
@@ -12178,7 +12171,7 @@ export default function App() {
     // drapeau puis recharge. Il est CONSOMMÉ ici — il ne protège que ce
     // chargement-ci, et la configuration n'est pas touchée : si la vue fautive
     // replante au retour, l'écran d'erreur revient et on peut recommencer.
-    try { if (sessionStorage.getItem('loggia_safe_nocv')) { sessionStorage.removeItem('loggia_safe_nocv'); return []; } } catch (e) {}
+    try { if (sessionStorage.getItem('loggia_safe_nocv')) { sessionStorage.removeItem('loggia_safe_nocv'); return []; } } catch {}
     const v = readLS('loggia_customviews', []); return Array.isArray(v) ? v.filter(x => x && x.id && x.name) : [];
   });
   const saveCustomViews = (list) => { cfgSet({ loggia_customviews: list }); setCustomViews(list); };
@@ -12329,8 +12322,8 @@ export default function App() {
       clearTimeout(toastTRef.current); toastTRef.current = setTimeout(() => setToast(null), 4000);
     };
     window.addEventListener('unhandledrejection', h);
-    let topW = null; try { if (window.top && window.top !== window) { topW = window.top; topW.addEventListener('unhandledrejection', h); } } catch (e) {}
-    return () => { window.removeEventListener('unhandledrejection', h); try { if (topW) topW.removeEventListener('unhandledrejection', h); } catch (e) {} clearTimeout(toastTRef.current); };
+    let topW = null; try { if (window.top && window.top !== window) { topW = window.top; topW.addEventListener('unhandledrejection', h); } } catch {}
+    return () => { window.removeEventListener('unhandledrejection', h); try { if (topW) topW.removeEventListener('unhandledrejection', h); } catch {} clearTimeout(toastTRef.current); };
   }, []);
   const wEnt = (hass && hass.states) ? hass.states[weatherEntity(hass)] : null;
   const isNight = (hass && hass.states && hass.states['sun.sun'] && hass.states['sun.sun'].state === 'below_horizon') || (wEnt && wEnt.state === 'clear-night');
@@ -12349,14 +12342,14 @@ export default function App() {
     // « Auto » : le clair/foncé suit l'APPAREIL (prefers-color-scheme) — et le
     // suit en direct quand l'OS bascule au coucher du soleil.
     const modeEff = () => themeMode === 'auto'
-      ? ((() => { try { return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; } catch (e) { return 'dark'; } })())
+      ? ((() => { try { return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; } catch { return 'dark'; } })())
       : themeMode;
     const run = () => setLightMode(!applyTheme({ mode: modeEff(), loggiaTheme, haTheme, look }, getHass()));
     run();
     // En safe mode, ne RIEN réécrire : les défauts affichés écraseraient le thème enregistré.
-    if (!SAFE_NOLOOK) { try { localStorage.setItem('loggia-mode', themeMode); localStorage.setItem('loggia-theme', loggiaTheme); localStorage.setItem('loggia-ha', haTheme); } catch (e) {} }
+    if (!SAFE_NOLOOK) { try { localStorage.setItem('loggia-mode', themeMode); localStorage.setItem('loggia-theme', loggiaTheme); localStorage.setItem('loggia-ha', haTheme); } catch {} }
     let mq = null;
-    if (themeMode === 'auto') { try { mq = window.matchMedia('(prefers-color-scheme: light)'); mq.addEventListener('change', run); } catch (e) { mq = null; } }
+    if (themeMode === 'auto') { try { mq = window.matchMedia('(prefers-color-scheme: light)'); mq.addEventListener('change', run); } catch { mq = null; } }
     // Suivre HA : hass.themes peut charger après coup / l'actif peut changer → on réapplique en boucle
     if (haTheme === 'FOLLOW') { const iv = setInterval(run, 1500); return () => { clearInterval(iv); if (mq) mq.removeEventListener('change', run); }; }
     return () => { if (mq) mq.removeEventListener('change', run); };
@@ -12370,16 +12363,16 @@ export default function App() {
   //   5. une seule bascule par session (sessionStorage), pour ne jamais boucler.
   useEffect(() => {
     let cfg = null;
-    try { cfg = JSON.parse(localStorage.getItem('loggia_haCfg') || 'null'); } catch (e) { return undefined; }
+    try { cfg = JSON.parse(localStorage.getItem('loggia_haCfg') || 'null'); } catch { return undefined; }
     if (!cfg || !cfg.fallback || !cfg.remote) return undefined;
     if (window.top === window) return undefined;
-    let origin; try { origin = (window.top && window.top.location.origin) || window.location.origin; } catch (e) { origin = window.location.origin; }
+    let origin; try { origin = (window.top && window.top.location.origin) || window.location.origin; } catch { origin = window.location.origin; }
     if (origin === cfg.remote.replace(/\/+$/, '') || /nabu\.casa/.test(origin)) return undefined;
-    try { if (sessionStorage.getItem('loggia-fellback') === '1') return undefined; } catch (e) { return undefined; }
+    try { if (sessionStorage.getItem('loggia-fellback') === '1') return undefined; } catch { return undefined; }
     const t = setTimeout(() => {
       if (getHass()) return; // Home Assistant a repondu : rien a faire
-      try { sessionStorage.setItem('loggia-fellback', '1'); } catch (e) {}
-      try { (window.top || window).location.href = cfg.remote; } catch (e) { window.location.href = cfg.remote; }
+      try { sessionStorage.setItem('loggia-fellback', '1'); } catch {}
+      try { (window.top || window).location.href = cfg.remote; } catch { window.location.href = cfg.remote; }
     }, 2000);
     return () => clearTimeout(t);
   }, []);
@@ -12387,14 +12380,14 @@ export default function App() {
   const onPickTheme = (id) => { setLoggiaTheme(id); setHaTheme(''); };
   const onFollowHa = () => setHaTheme(h => h === 'FOLLOW' ? '' : 'FOLLOW');
   const toggle = () => { setHaTheme(''); setThemeMode(m => m === 'light' ? 'dark' : 'light'); }; // bouton flottant = bascule clair/foncé Loggia
-  const [navOpen, setNavOpen] = useState(() => { try { return (typeof window !== 'undefined' ? window.innerWidth : 1000) > 820; } catch (e) { return true; } });
+  const [navOpen, setNavOpen] = useState(() => { try { return (typeof window !== 'undefined' ? window.innerWidth : 1000) > 820; } catch { return true; } });
   /* Interface TACTILE — téléphone ET tablette, portrait comme paysage : la
    * classe `loggia-tactile` masque le bandeau du haut, met la sidebar en
    * tiroir et affiche la barre du bas. Le type d'appareil (pointer: coarse)
    * décide, jamais la largeur. */
   useEffect(() => {
-    const actif = (() => { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
-    try { document.documentElement.classList.toggle('loggia-tactile', actif); } catch (e) {}
+    const actif = (() => { try { return window.matchMedia('(pointer: coarse)').matches; } catch { return false; } })();
+    try { document.documentElement.classList.toggle('loggia-tactile', actif); } catch {}
     if (actif) setNavOpen(false); // la sidebar devient un tiroir : fermée d'office
   }, [view]);
   /* Le menu mobile se fermait au clic sur le voile, mais rien au clavier :
@@ -12406,7 +12399,7 @@ export default function App() {
     window.addEventListener('keydown', surTouche);
     return () => window.removeEventListener('keydown', surTouche);
   }, [navOpen]);
-  const [navbar, setNavbar] = useState(() => { try { return localStorage.getItem('loggia-navbar') !== '0'; } catch (e) { return true; } }); // barre du bas mobile (défaut activée)
+  const [navbar, setNavbar] = useState(() => { try { return localStorage.getItem('loggia-navbar') !== '0'; } catch { return true; } }); // barre du bas mobile (défaut activée)
   // Mode ambiant : minutes d'inactivité avant l'écran de veille, 0 = coupé.
   // Par APPAREIL (localStorage, hors sync) : on l'active sur la tablette
   // murale, pas sur le poste de travail.
@@ -12427,15 +12420,15 @@ export default function App() {
       const ici = new URLSearchParams(window.location.search).get('fiche');
       if (ici) return ici;
       if (window.top !== window) return new URLSearchParams(window.top.location.search).get('fiche') || null;
-    } catch (e) { /* cross-origin improbable : même hôte */ }
+    } catch { /* cross-origin improbable : même hôte */ }
     return null;
   });
-  const [ambient, setAmbient] = useState(() => { try { return parseInt(localStorage.getItem('loggia-ambient') || '0', 10) || 0; } catch (e) { return 0; } });
-  const onAmbient = (min) => { setAmbient(min); try { localStorage.setItem('loggia-ambient', String(min)); } catch (e) {} };
+  const [ambient, setAmbient] = useState(() => { try { return parseInt(localStorage.getItem('loggia-ambient') || '0', 10) || 0; } catch { return 0; } });
+  const onAmbient = (min) => { setAmbient(min); try { localStorage.setItem('loggia-ambient', String(min)); } catch {} };
   // Plage de la veille : « toujours », « nuit » (21 h – 8 h) ou « jour » — trois
   // choix nets plutôt que deux champs d'heure. Par appareil, comme le délai.
-  const [ambPlage, setAmbPlage] = useState(() => { try { return localStorage.getItem('loggia-ambientplage') || 'toujours'; } catch (e) { return 'toujours'; } });
-  const onAmbPlage = (v) => { setAmbPlage(v); try { localStorage.setItem('loggia-ambientplage', v); } catch (e) {} };
+  const [ambPlage, setAmbPlage] = useState(() => { try { return localStorage.getItem('loggia-ambientplage') || 'toujours'; } catch { return 'toujours'; } });
+  const onAmbPlage = (v) => { setAmbPlage(v); try { localStorage.setItem('loggia-ambientplage', v); } catch {} };
   const hNow = new Date().getHours();
   const enNuit = hNow >= 21 || hNow < 8;
   const plageOk = ambPlage === 'toujours' || (ambPlage === 'nuit' ? enNuit : !enNuit);
@@ -12453,15 +12446,15 @@ export default function App() {
     return () => { clearTimeout(t); evs.forEach(e => window.removeEventListener(e, reveil)); };
   }, [ambient]);
   // Fonds animés de l'Accueil : effets météo (défaut activés) et ciel étoilé en remplacement de « nuit claire » (défaut activé)
-  const [wxFx, setWxFx] = useState(() => { try { return localStorage.getItem('loggia-wxfx') !== '0'; } catch (e) { return true; } });
-  const onToggleWxFx = () => setWxFx(v => { const nv = !v; try { localStorage.setItem('loggia-wxfx', nv ? '1' : '0'); } catch (e) {} return nv; });
-  const onToggleNavbar = () => setNavbar(v => { const nv = !v; try { localStorage.setItem('loggia-navbar', nv ? '1' : '0'); } catch (e) {} return nv; });
+  const [wxFx, setWxFx] = useState(() => { try { return localStorage.getItem('loggia-wxfx') !== '0'; } catch { return true; } });
+  const onToggleWxFx = () => setWxFx(v => { const nv = !v; try { localStorage.setItem('loggia-wxfx', nv ? '1' : '0'); } catch {} return nv; });
+  const onToggleNavbar = () => setNavbar(v => { const nv = !v; try { localStorage.setItem('loggia-navbar', nv ? '1' : '0'); } catch {} return nv; });
   // Safe-area iPhone : env() = 0 dans l'iframe → on mesure la vraie valeur sur le document TOP (qui a viewport-fit=cover).
   const [safeAuto, setSafeAuto] = useState(0);
   const [safeTopAuto, setSafeTopAuto] = useState(0);
   // Réglages manuels de secours (px) : null = auto (sonde). Persistés par appareil.
-  const [navOffset, setNavOffset] = useState(() => { try { const v = localStorage.getItem('loggia-navoffset'); return (v == null || v === '') ? null : Math.max(0, parseInt(v) || 0); } catch (e) { return null; } });
-  const [topOffset, setTopOffset] = useState(() => { try { const v = localStorage.getItem('loggia-topoffset'); return (v == null || v === '') ? null : Math.max(0, parseInt(v) || 0); } catch (e) { return null; } });
+  const [navOffset, setNavOffset] = useState(() => { try { const v = localStorage.getItem('loggia-navoffset'); return (v == null || v === '') ? null : Math.max(0, parseInt(v) || 0); } catch { return null; } });
+  const [topOffset, setTopOffset] = useState(() => { try { const v = localStorage.getItem('loggia-topoffset'); return (v == null || v === '') ? null : Math.max(0, parseInt(v) || 0); } catch { return null; } });
   useEffect(() => {
     const measure = () => {
       try {
@@ -12469,7 +12462,7 @@ export default function App() {
         const probe = (css) => { const p = td.createElement('div'); p.style.cssText = 'position:fixed;left:0;width:0;opacity:0;pointer-events:none;z-index:-1;' + css; td.documentElement.appendChild(p); void p.offsetHeight; const h = Math.round(p.getBoundingClientRect().height || p.offsetHeight || 0); td.documentElement.removeChild(p); return h > 0 ? h : 0; };
         setSafeAuto(probe('bottom:0;height:env(safe-area-inset-bottom,0px)'));
         setSafeTopAuto(probe('top:0;height:env(safe-area-inset-top,0px)'));
-      } catch (e) {}
+      } catch {}
     };
     measure();
     const t1 = setTimeout(measure, 400), t2 = setTimeout(measure, 1200);
@@ -12479,18 +12472,18 @@ export default function App() {
   }, []);
   const safeEff = navOffset != null ? navOffset : safeAuto; // valeur appliquée (manuel prioritaire)
   const safeTopEff = topOffset != null ? topOffset : safeTopAuto;
-  useEffect(() => { try { document.documentElement.style.setProperty('--o-safe-bottom', safeEff + 'px'); document.documentElement.style.setProperty('--o-safe-top', safeTopEff + 'px'); } catch (e) {} }, [safeEff, safeTopEff]);
-  const onNavOffset = (d) => setNavOffset(v => { const base = v != null ? v : safeAuto; const nv = Math.max(0, Math.min(100, base + d)); try { localStorage.setItem('loggia-navoffset', String(nv)); } catch (e) {} return nv; });
-  const onNavSet = (px) => setNavOffset(() => { const nv = Math.max(0, Math.min(100, Math.round(px))); try { localStorage.setItem('loggia-navoffset', String(nv)); } catch (e) {} return nv; });
-  const onNavOffsetReset = () => { setNavOffset(null); try { localStorage.removeItem('loggia-navoffset'); } catch (e) {} };
-  const onTopOffset = (d) => setTopOffset(v => { const base = v != null ? v : safeTopAuto; const nv = Math.max(0, Math.min(100, base + d)); try { localStorage.setItem('loggia-topoffset', String(nv)); } catch (e) {} return nv; });
-  const onTopSet = (px) => setTopOffset(() => { const nv = Math.max(0, Math.min(100, Math.round(px))); try { localStorage.setItem('loggia-topoffset', String(nv)); } catch (e) {} return nv; });
-  const onTopOffsetReset = () => { setTopOffset(null); try { localStorage.removeItem('loggia-topoffset'); } catch (e) {} };
-  const [users, setUsers] = useState(() => { const withK = withUserKeys; try { const s = localStorage.getItem('loggia_users'); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length) return withK(a); } } catch (e) {} return withK(FIRST_USER()); });
+  useEffect(() => { try { document.documentElement.style.setProperty('--o-safe-bottom', safeEff + 'px'); document.documentElement.style.setProperty('--o-safe-top', safeTopEff + 'px'); } catch {} }, [safeEff, safeTopEff]);
+  const onNavOffset = (d) => setNavOffset(v => { const base = v != null ? v : safeAuto; const nv = Math.max(0, Math.min(100, base + d)); try { localStorage.setItem('loggia-navoffset', String(nv)); } catch {} return nv; });
+  const onNavSet = (px) => setNavOffset(() => { const nv = Math.max(0, Math.min(100, Math.round(px))); try { localStorage.setItem('loggia-navoffset', String(nv)); } catch {} return nv; });
+  const onNavOffsetReset = () => { setNavOffset(null); try { localStorage.removeItem('loggia-navoffset'); } catch {} };
+  const onTopOffset = (d) => setTopOffset(v => { const base = v != null ? v : safeTopAuto; const nv = Math.max(0, Math.min(100, base + d)); try { localStorage.setItem('loggia-topoffset', String(nv)); } catch {} return nv; });
+  const onTopSet = (px) => setTopOffset(() => { const nv = Math.max(0, Math.min(100, Math.round(px))); try { localStorage.setItem('loggia-topoffset', String(nv)); } catch {} return nv; });
+  const onTopOffsetReset = () => { setTopOffset(null); try { localStorage.removeItem('loggia-topoffset'); } catch {} };
+  const [users, setUsers] = useState(() => { const withK = withUserKeys; try { const s = localStorage.getItem('loggia_users'); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length) return withK(a); } } catch {} return withK(FIRST_USER()); });
   // `cfgSet` ecrit le serveur ET le localStorage. Avec le seul localStorage,
   // les profils restaient prisonniers de l'appareil qui les avait crees.
-  const persistUsers = (a) => { try { cfgSet({ loggia_users: a }); } catch (e) {} setUsers(a); };
-  const [userIdx, setUserIdx] = useState(() => { try { const v = parseInt(cfgVal('loggia_active_user', null), 10); return (v >= 0 && v < users.length) ? v : 0; } catch (e) { return 0; } });
+  const persistUsers = (a) => { try { cfgSet({ loggia_users: a }); } catch {} setUsers(a); };
+  const [userIdx, setUserIdx] = useState(() => { try { const v = parseInt(cfgVal('loggia_active_user', null), 10); return (v >= 0 && v < users.length) ? v : 0; } catch { return 0; } });
   // La configuration serveur arrive APRES le premier rendu. Sans cette
   // resynchronisation, `users` resterait celui du localStorage de l'appareil,
   // et les profils crees ailleurs n'apparaitraient jamais.
@@ -12521,7 +12514,7 @@ export default function App() {
     return n;
   }, [hass]);
   const adminPin = String(cfgVal('loggia_admin_pin', null) || '0000');
-  const applyUser = (i) => { cfgSet({ loggia_active_user: String(i) }); try { const u = users[i]; if (u && u.name) { const m = JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); m[u.name] = Date.now(); localStorage.setItem('loggia-lastseen', JSON.stringify(m)); } } catch (e) {} setUserIdx(i); };
+  const applyUser = (i) => { cfgSet({ loggia_active_user: String(i) }); try { const u = users[i]; if (u && u.name) { const m = JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); m[u.name] = Date.now(); localStorage.setItem('loggia-lastseen', JSON.stringify(m)); } } catch {} setUserIdx(i); };
   const switchUser = (i) => { if (i === userIdx) return; if (users[i] && users[i].role === 'Admin') setPinTarget(i); else applyUser(i); };
   const isAdmin = !!(users[userIdx] && users[userIdx].role === 'Admin');
   /* Permissions par profil : le set des vues autorisées du profil actif, ou
@@ -12564,8 +12557,8 @@ export default function App() {
   useEffect(() => {
     const sel = 'button,.o-nav-item,.o-piece,.o-light-card,.o-scene-room,.o-volet-mode,[role="switch"],[role="button"]';
     let start = null;
-    const onDown = (e) => { try { start = (e.target && e.target.closest && e.target.closest(sel)) ? { x: e.clientX, y: e.clientY } : null; } catch (er) { start = null; } };
-    const onUp = (e) => { try { if (start && navigator.vibrate && Math.abs(e.clientX - start.x) < 10 && Math.abs(e.clientY - start.y) < 10) navigator.vibrate(8); } catch (er) {} start = null; };
+    const onDown = (e) => { try { start = (e.target && e.target.closest && e.target.closest(sel)) ? { x: e.clientX, y: e.clientY } : null; } catch { start = null; } };
+    const onUp = (e) => { try { if (start && navigator.vibrate && Math.abs(e.clientX - start.x) < 10 && Math.abs(e.clientY - start.y) < 10) navigator.vibrate(8); } catch {} start = null; };
     document.addEventListener('pointerdown', onDown, { passive: true });
     document.addEventListener('pointerup', onUp, { passive: true });
     return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('pointerup', onUp); };
@@ -12600,7 +12593,7 @@ export default function App() {
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
       {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 14, padding: '10px 16px', fontSize: 12, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
-      <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={isAdmin ? () => setEditMode(e => !e) : null} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} open={navOpen} customViews={customViews} ha={(() => {
+      <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={isAdmin ? () => setEditMode(e => !e) : null} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={(() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
         let devCount = 0;
         if (ok) { const doms = ['light.', 'switch.', 'media_player.', 'camera.', 'climate.', 'cover.', 'vacuum.', 'lawn_mower.']; for (const id in hass.states) { if (doms.some(d => id.indexOf(d) === 0) && hass.states[id] && hass.states[id].state !== 'unavailable') devCount++; } }
@@ -12625,7 +12618,7 @@ export default function App() {
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
         : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && isAdmin} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && isAdmin} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && isAdmin} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && isAdmin} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && isAdmin} onEnt={editMode && isAdmin ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && isAdmin} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && isAdmin} /> : <Dashboard editMode={editMode} onEnt={isAdmin ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
       </div>
-      {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch (e) {} }} onMenu={() => setNavOpen(o => !o)} />}
+      {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} />}
       {entSheet && editMode && isAdmin && <Suspense fallback={null}><ViewEntSheet view={view} hass={hass} onClose={() => setEntSheet(false)} /></Suspense>}
     </div>
     </HeaderCtx.Provider>

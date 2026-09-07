@@ -106,7 +106,7 @@ async function registresDuComposant(hass) {
   let r;
   try {
     r = await hass.callWS({ type: 'loggia/discovery' });
-  } catch (e) {
+  } catch {
     return null;   // composant absent ou trop ancien : on se rabat plus bas
   }
   const index = r && r.index;

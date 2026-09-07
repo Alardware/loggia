@@ -136,7 +136,7 @@ function AlertesTele({ hass, cardSt }) {
     try {
       hass.callService('notify', cfg.service, { title: 'Loggia — sûreté', message: tr('Notification de test — tout est en place.') });
       setMsg(tr('Test envoyé — regarde ton téléphone.'));
-    } catch (e) { setMsg("Envoi impossible."); }
+    } catch { setMsg("Envoi impossible."); }
   };
   const Tgl = ({ on, cb, label }) => (
     <span onClick={cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } }}
@@ -194,7 +194,7 @@ function AlertesTele({ hass, cardSt }) {
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 4px' }}>{tr('DERNIERS ENVOIS')}</div>
         {journal.slice(0, 8).map((j, i) => {
           let rel = '';
-          try { const m = (Date.now() - new Date(j.quand).getTime()) / 60000; rel = m < 1 ? tr("à l'instant") : m < 60 ? 'il y a ' + Math.round(m) + ' min' : m < 1440 ? 'il y a ' + Math.round(m / 60) + ' h' : 'il y a ' + Math.round(m / 1440) + ' j'; } catch (e) { /* date illisible */ }
+          try { const m = (Date.now() - new Date(j.quand).getTime()) / 60000; rel = m < 1 ? tr("à l'instant") : m < 60 ? 'il y a ' + Math.round(m) + ' min' : m < 1440 ? 'il y a ' + Math.round(m / 60) + ' h' : 'il y a ' + Math.round(m / 1440) + ' j'; } catch { /* date illisible */ }
           return (
             <div key={(j.quand || '') + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
               <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: 'var(--o-bad)' }} />
@@ -295,7 +295,7 @@ function telechargerConfig(texte, base) {
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 4000);
     return true;
-  } catch (e) { return false; }
+  } catch { return false; }
 }
 
 function ResetLoggiaBtn({ compact = false }) {
@@ -318,8 +318,8 @@ function ResetLoggiaBtn({ compact = false }) {
     try {
       const j = await exportConfigComplete();
       telechargerConfig(j, 'loggia-avant-remise-a-zero');
-    } catch (e) { /* une sauvegarde impossible ne doit pas bloquer la remise a zero demandee */ }
-    try { await resetLoggiaComplet(); } catch (e) { /* on recharge quand meme */ }
+    } catch { /* une sauvegarde impossible ne doit pas bloquer la remise a zero demandee */ }
+    try { await resetLoggiaComplet(); } catch { /* on recharge quand meme */ }
     window.location.reload();
   };
   return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ padding: compact ? '5px 10px' : '9px 16px', borderRadius: compact ? 8 : 11, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: arm ? '#fff' : 'var(--o-bad)', fontWeight: 700, fontSize: compact ? 11.5 : 12.5, cursor: 'pointer', transition: 'all .2s' }}>{arm ? 'Confirmer ?' : (compact ? 'Réinitialiser Loggia' : 'Réinitialiser')}</button>;
@@ -430,7 +430,7 @@ function FondPhotoBtn({ actif, onLook }) {
   const [, force] = useState(0);
   const fichierRef = useRef(null);
   const photo = lireFondPhoto();
-  const prev = () => { try { window.dispatchEvent(new CustomEvent('loggia-fond-photo')); } catch (e) {} force(v => v + 1); };
+  const prev = () => { try { window.dispatchEvent(new CustomEvent('loggia-fond-photo')); } catch {} force(v => v + 1); };
   const choisir = async (e) => {
     const f = e.target.files && e.target.files[0];
     e.target.value = '';
@@ -456,7 +456,7 @@ function FondPhotoBtn({ actif, onLook }) {
       {photo && (
         <span style={{ display: 'flex', gap: 6 }}>
           <button onClick={() => fichierRef.current && fichierRef.current.click()} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 10, fontWeight: 700, cursor: 'pointer', padding: 0 }}>{tr('changer')}</button>
-          <button onClick={() => { try { localStorage.removeItem(FOND_PHOTO_CLE); } catch (e) {} prev(); if (actif) onLook({ fond: 'aucun' }); }} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 10, fontWeight: 700, cursor: 'pointer', padding: 0 }}>{tr('retirer')}</button>
+          <button onClick={() => { try { localStorage.removeItem(FOND_PHOTO_CLE); } catch {} prev(); if (actif) onLook({ fond: 'aucun' }); }} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 10, fontWeight: 700, cursor: 'pointer', padding: 0 }}>{tr('retirer')}</button>
         </span>
       )}
     </span>
@@ -609,7 +609,7 @@ function useEntConfig(hass) {
           tempSensor: z.tempSensor || null,
         })),
       });
-    } catch (e) { alert('Enregistrement impossible — la configuration n’a pas été appliquée.'); return; }
+    } catch { alert('Enregistrement impossible — la configuration n’a pas été appliquée.'); return; }
     // L'écriture serveur part en arrière-plan : on lui laisse le temps d'aboutir
     // avant de recharger, sinon la page relirait l'ancienne valeur.
     setTimeout(() => window.location.reload(), 700);
@@ -757,10 +757,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
    * `hub` reste le point de depart d'un onglet neuf : la memoire est propre a
    * la session, et on n'ouvre pas Loggia le lendemain au milieu d'un reglage. */
   const [tab, setTab] = useState(() => {
-    try { return window.sessionStorage.getItem('loggia-par-section') || 'hub'; } catch (e) { return 'hub'; }
+    try { return window.sessionStorage.getItem('loggia-par-section') || 'hub'; } catch { return 'hub'; }
   });
   useEffect(() => {
-    try { window.sessionStorage.setItem('loggia-par-section', tab); } catch (e) { /* stockage indisponible */ }
+    try { window.sessionStorage.setItem('loggia-par-section', tab); } catch { /* stockage indisponible */ }
   }, [tab]);
   // Une vue que l'installation ne peut pas remplir se montre ici verrouillée,
   // avec son motif : mieux vaut expliquer que faire disparaître sans un mot.
@@ -791,7 +791,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     hass.callApi('GET', 'config').then(() => { setLat(Math.round(performance.now() - t0)); setLatBusy(false); }).catch(() => { setLat(-1); setLatBusy(false); });
   };
   useEffect(() => { if (tab === 'connexion' && lat == null) ping(); }, [tab]);
-  const accessOrigin = (() => { try { return (window.top && window.top.location.origin) || window.location.origin; } catch (e) { return window.location.origin; } })();
+  const accessOrigin = (() => { try { return (window.top && window.top.location.origin) || window.location.origin; } catch { return window.location.origin; } })();
   const accessKind = /nabu\.casa/.test(accessOrigin) ? 'Nabu Casa' : /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|localhost|127\.)/.test(accessOrigin) ? tr('réseau local') : 'accès distant';
   // Adresses du serveur : locales a cet appareil. Loggia n'ouvre PAS de session par ces URL
   // (il emprunte celle du navigateur) — elles servent au test de joignabilite, au repli
@@ -804,7 +804,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   });
   const [urlTest, setUrlTest] = useState({});
   const [themeTab, setThemeTab] = useState(() => (['', 'atrium', 'ios', 'google', 'neumorphix'].indexOf(loggiaTheme || '') >= 0 ? 'natifs' : 'commu'));
-  const writeHaCfg = (c) => { try { localStorage.setItem('loggia_haCfg', JSON.stringify(c)); } catch (e) {} };
+  const writeHaCfg = (c) => { try { localStorage.setItem('loggia_haCfg', JSON.stringify(c)); } catch {} };
   const toggleFallback = () => setHaDraft(d => { const n = { ...d, fallback: !d.fallback }; writeHaCfg(n); return n; });
   const testUrl = (key) => {
     const raw = (haDraft[key] || '').trim().replace(/\/+$/, '');
@@ -820,7 +820,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     if (window.location.protocol === 'https:' && raw.indexOf('http://') === 0) { set({ ms: -1, msg: 'Bloqué : page HTTPS, adresse HTTP (contenu mixte)' }); return; }
     const t0 = performance.now();
     const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    const to = setTimeout(() => { try { if (ctl) ctl.abort(); } catch (e) {} }, 2500);
+    const to = setTimeout(() => { try { if (ctl) ctl.abort(); } catch {} }, 2500);
     // no-cors : reponse opaque, on ne lit pas le corps — on mesure la JOIGNABILITE.
     fetch(raw + '/manifest.json', { mode: 'no-cors', cache: 'no-store', signal: ctl ? ctl.signal : undefined })
       .then(() => { clearTimeout(to); set({ ms: Math.round(performance.now() - t0) }); })
@@ -845,7 +845,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // Mises à jour : « Tout installer » (confirmation 2 temps) + revérification
   const [updAllConfirm, setUpdAllConfirm] = useState(false);
   // Utilisateurs : dernière activité par profil (posée par applyUser)
-  const lastSeen = (() => { try { return JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); } catch (e) { return {}; } })();
+  const lastSeen = (() => { try { return JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); } catch { return {}; } })();
   const seenRel = (name, isCur) => { if (isCur) return 'actif maintenant'; const t = lastSeen[name]; if (!t) return ''; const m = (Date.now() - t) / 60000; if (m < 60) return 'vu il y a ' + Math.max(1, Math.round(m)) + ' min'; if (m < 1440) return 'vu il y a ' + Math.round(m / 60) + ' h'; if (m < 2880) return 'vu hier'; return 'vu il y a ' + Math.round(m / 1440) + ' j'; };
   const [editing, setEditing] = useState(null); // { i, u } pour éditer, { i:null } pour ajouter
   // Automatisations : état optimiste local (id → on/off) au-dessus de hass.
@@ -860,7 +860,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       return ch ? n : o;
     });
   }, [autoSig]);
-  const autoCall = (svc, id) => { try { if (hass && hass.callService) hass.callService('automation', svc, { entity_id: id }); } catch (e) {} };
+  const autoCall = (svc, id) => { try { if (hass && hass.callService) hass.callService('automation', svc, { entity_id: id }); } catch {} };
   // ── Entités (config du dashboard) : édition des mappings, persistés localStorage, appliqués au rechargement ──
   const { ent, setEnt, entSet, saveEnt, resetEnt, dlists } = useEntConfig(hass);
   const entIds = [...ent.rooms.flatMap(r => [r.temp, r.humidity, r.co2]), ent.energy.consoNow, ent.energy.surplusNow, ent.energy.solarOutput, ent.alarm, ...ent.people.map(x => x.haid), ...ent.switches.map(x => x.haid), ...ent.cams.map(x => x.haid), ...ent.medias.flatMap(x => [x.haid, x.ma])].filter(Boolean);
@@ -868,10 +868,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const [cvEditing, setCvEditing] = useState(null); // null | 'new' | objet vue custom
   // Veille : diaporama photos + réveil caméra — par appareil, lus par AmbientOverlay au montage.
   // Aperçu du nouvel accueil : par appareil, réversible — l'ancien reste le défaut.
-  const [ambPhotos, setAmbPhotos] = useState(() => { try { return localStorage.getItem('loggia-ambphotos') === '1'; } catch (e) { return false; } });
-  const toggleAmbPhotos = () => setAmbPhotos(v => { const n = !v; try { localStorage.setItem('loggia-ambphotos', n ? '1' : '0'); } catch (e) {} return n; });
-  const [ambMotion, setAmbMotion] = useState(() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch (e) { return false; } });
-  const toggleAmbMotion = () => setAmbMotion(v => { const n = !v; try { localStorage.setItem('loggia-ambmotion', n ? '1' : '0'); } catch (e) {} return n; });
+  const [ambPhotos, setAmbPhotos] = useState(() => { try { return localStorage.getItem('loggia-ambphotos') === '1'; } catch { return false; } });
+  const toggleAmbPhotos = () => setAmbPhotos(v => { const n = !v; try { localStorage.setItem('loggia-ambphotos', n ? '1' : '0'); } catch {} return n; });
+  const [ambMotion, setAmbMotion] = useState(() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch { return false; } });
+  const toggleAmbMotion = () => setAmbMotion(v => { const n = !v; try { localStorage.setItem('loggia-ambmotion', n ? '1' : '0'); } catch {} return n; });
   // Synchro entre origines (WiFi/IP locale vs Nabu Casa) : export/import du localStorage Loggia.
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncTxt, setSyncTxt] = useState('');
@@ -880,15 +880,15 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     const j = exportLoggiaConfig();
     setSyncTxt(j); setSyncOpen(true);
     try { await navigator.clipboard.writeText(j); setSyncMsg('Copiée dans le presse-papier ✓ — colle-la sur l\'autre accès (Importer).'); }
-    catch (e) { setSyncMsg('Copie auto impossible ici — sélectionne le texte ci-dessous et copie-le manuellement.'); }
+    catch { setSyncMsg('Copie auto impossible ici — sélectionne le texte ci-dessous et copie-le manuellement.'); }
   };
-  const doImport = () => { try { importLoggiaConfig(syncTxt); } catch (e) { setSyncMsg('Import impossible : colle une config valide (bouton « Copier la config » de l\'autre accès).'); } };
+  const doImport = () => { try { importLoggiaConfig(syncTxt); } catch { setSyncMsg('Import impossible : colle une config valide (bouton « Copier la config » de l\'autre accès).'); } };
   // ── Mises à jour (entités update.*) : install avec confirmation 2 temps, skip, progression ──
   const [updConfirm, setUpdConfirm] = useState(null); // id en attente de confirmation
   const [updBusy, setUpdBusy] = useState({}); // id → timestamp : « Installation… » optimiste dès le clic (HA met du temps à passer in_progress)
   const updTimer = useRef(null);
   useEffect(() => () => clearTimeout(updTimer.current), []);
-  const updCall = (svc, id) => { try { if (hass && hass.callService) hass.callService('update', svc, { entity_id: id }); } catch (e) {} };
+  const updCall = (svc, id) => { try { if (hass && hass.callService) hass.callService('update', svc, { entity_id: id }); } catch {} };
   const askInstall = (u) => {
     if (updConfirm === u.id) { setUpdConfirm(null); clearTimeout(updTimer.current); setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updCall('install', u.id); return; }
     setUpdConfirm(u.id); clearTimeout(updTimer.current); updTimer.current = setTimeout(() => setUpdConfirm(null), 4000);
@@ -914,7 +914,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const upsTotal = upsAll.length;
   const toggleAuto = (a) => { setAutoOv(o => ({ ...o, [a.id]: !a.on })); autoCall(a.on ? 'turn_off' : 'turn_on', a.id); };
   const runAuto = (a) => autoCall('trigger', a.id);
-  const autoRel = (t) => { try { if (!t) return ''; const m = (Date.now() - new Date(t).getTime()) / 60000; if (m < 1) return "à l'instant"; if (m < 60) return 'il y a ' + Math.round(m) + ' min'; if (m < 1440) return 'il y a ' + Math.round(m / 60) + ' h'; return 'il y a ' + Math.round(m / 1440) + ' j'; } catch (e) { return ''; } };
+  const autoRel = (t) => { try { if (!t) return ''; const m = (Date.now() - new Date(t).getTime()) / 60000; if (m < 1) return "à l'instant"; if (m < 60) return 'il y a ' + Math.round(m) + ' min'; if (m < 1440) return 'il y a ' + Math.round(m / 60) + ' h'; return 'il y a ' + Math.round(m / 1440) + ' j'; } catch { return ''; } };
   const autos = (hass && hass.states) ? Object.keys(hass.states).filter(e => e.indexOf('automation.') === 0).map(id => { const s = hass.states[id], at = s.attributes || {}; return { id, name: at.friendly_name || id.replace('automation.', '').replace(/_/g, ' '), on: autoOv[id] != null ? autoOv[id] : s.state === 'on', last: at.last_triggered }; }).sort((a, b) => a.name.localeCompare(b.name)) : [];
   const tabStyle = on => on
     ? { padding: '9px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff', flexShrink: 0, whiteSpace: 'nowrap' }
@@ -1183,7 +1183,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                    * moment, et un simple redessin suffit. */
                   cfgSet({ 'loggia-langue': v });
                   // La racine ecoute : elle rappelle `preparerLangue` puis redessine.
-                  try { window.dispatchEvent(new CustomEvent('loggia-langue-changee')); } catch (e) {}
+                  try { window.dispatchEvent(new CustomEvent('loggia-langue-changee')); } catch {}
                 }} />
             </OptRow>
             <OptRow title="Suivre Home Assistant" desc={tr('Calque le thème actif de Home Assistant et désactive les choix ci-dessous.')}>
@@ -1644,7 +1644,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <SecGroup label="Installer">
             <div style={{ display: 'flex', gap: 4 }}>
               {upsAvail > 1 && <button onClick={() => { if (!updAllConfirm) { setUpdAllConfirm(true); setTimeout(() => setUpdAllConfirm(false), 4000); return; } setUpdAllConfirm(false); ups.filter(u => u.avail && u.prog === false).forEach(u => { setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updCall('install', u.id); }); }} style={secBtn(!!updAllConfirm)}>{updAllConfirm ? 'Confirmer ?' : 'Tout installer (' + upsAvail + ')'}</button>}
-              <button onClick={() => { try { if (hass && hass.callService && upsAll.length) hass.callService('homeassistant', 'update_entity', { entity_id: upsAll.map(u => u.id) }); } catch (e) {} }} style={secBtn(false)}>{tr('Vérifier')}</button>
+              <button onClick={() => { try { if (hass && hass.callService && upsAll.length) hass.callService('homeassistant', 'update_entity', { entity_id: upsAll.map(u => u.id) }); } catch {} }} style={secBtn(false)}>{tr('Vérifier')}</button>
             </div>
           </SecGroup>
         </SecBar>
@@ -1687,7 +1687,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       </>)}
 
       {tab === 'about' && (() => {
-        const cacheKb = (() => { try { let n = 0; for (let k = 0; k < localStorage.length; k++) { const key = localStorage.key(k); n += (localStorage.getItem(key) || '').length + key.length; } return Math.round(n / 1024 * 10) / 10; } catch (e) { return null; } })();
+        const cacheKb = (() => { try { let n = 0; for (let k = 0; k < localStorage.length; k++) { const key = localStorage.key(k); n += (localStorage.getItem(key) || '').length + key.length; } return Math.round(n / 1024 * 10) / 10; } catch { return null; } })();
         const entCount = (hass && hass.states) ? Object.keys(hass.states).length : 0;
         return (
         <>

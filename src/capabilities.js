@@ -205,7 +205,6 @@ function bitsDe(masque, table) {
   const out = [];
   if (!table || typeof masque !== 'number' || masque <= 0) return out;
   Object.keys(table).forEach(bit => {
-    // eslint-disable-next-line no-bitwise
     if (masque & Number(bit)) out.push(table[bit]);
   });
   return out;

@@ -113,14 +113,14 @@ function MeteoContent({ hass, edit = false, onEnt, wxFx = true }) {
   const vent = n(wa.wind_speed);
   const uv = n(wa.uv_index);
   const deg = (v, u = '°') => v == null ? '—' : Math.round(v) + u;
-  const heure = (iso) => { try { return new Date(iso).getHours() + ' h'; } catch (e) { return '—'; } };
+  const heure = (iso) => { try { return new Date(iso).getHours() + ' h'; } catch { return '—'; } };
   const JOURS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
   // Sur une carte, le jour a la place de s'écrire en entier.
-  const jourLong = (iso, i) => { try { return i === 0 ? tr("Aujourd’hui") : tr(JOURS[new Date(iso).getDay()]); } catch (e) { return '—'; } };
+  const jourLong = (iso, i) => { try { return i === 0 ? tr("Aujourd’hui") : tr(JOURS[new Date(iso).getDay()]); } catch { return '—'; } };
   /* La nuit se déduit de l'HEURE du créneau, pas de l'instant présent : une
    * prévision de 23 h dessinait un grand soleil parce qu'on demandait toujours
    * « fait-il nuit maintenant ? ». */
-  const nuitA = (iso) => { try { const h = new Date(iso).getHours(); return h >= 21 || h < 7; } catch (e) { return false; } };
+  const nuitA = (iso) => { try { const h = new Date(iso).getHours(); return h >= 21 || h < 7; } catch { return false; } };
   const modeDe = (f) => haWeatherMode(String(f && f.condition), nuitA(f && f.datetime));
   // Pas d'horodatage de releve : `last_changed` est ce qui s'en approche le plus.
   const depuis = (() => {
