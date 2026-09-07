@@ -50,18 +50,21 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
  * tableau contenait une expression, la règle refusait de le vérifier ENTIER —
  * y compris les dépendances correctement nommées à côté. */
 const VERIFIE = {
+  /* Passé de 43 à 41 en retirant le code mort : deux effets ne servaient qu'à
+   * remplir un état que personne ne lisait. Ils sont partis avec lui, et leurs
+   * dépendances omises avec eux. */
   'src/App.jsx': [
     'HIST_IDS, SYS.host.online, and hass', 'S', 'S', 'S',
     'S', 'S and domaineOk', 'S and ids', 'S and lecteurs',
     'S and zonesHaids', 'a and dashHass', 'ancre', 'api and plage',
     'applyUser', 'autoOn', 'choisis and tousCals', 'cle and hass',
-    'cv.name', 'dayOn', 'dc', 'debutGrille and finGrille',
-    'derived', 'derived', 'derivedCovers', 'derivedVols',
-    'discovery', 'discovery', 'domaineOk', 'hass',
-    'hass', 'hass', 'hass', 'hass',
-    'hass', 'hass and live', 'hass, ids, and metrics', 'hidden',
-    'ids', 'keys and noisyKeys', 'lights and presentRooms', 'loggiaRuntime.index',
-    'noms', 'seulement', 'vuSig', 'vuesAutorisees',
+    'cv.name', 'dc', 'debutGrille and finGrille', 'derived',
+    'derived', 'derivedCovers', 'discovery', 'discovery',
+    'domaineOk', 'hass', 'hass', 'hass',
+    'hass', 'hass', 'hass and live', 'hass, ids, and metrics',
+    'hidden', 'ids', 'keys and noisyKeys', 'lights and presentRooms',
+    'loggiaRuntime.index', 'noms', 'seulement', 'vuSig',
+    'vuesAutorisees',
   ],
   'src/ciel3d.jsx': ['exposure and limitMag'],
   'src/ui.jsx': ['cur'],

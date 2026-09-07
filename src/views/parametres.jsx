@@ -6,14 +6,19 @@
  * ramenerait le monolithe entier dans ce morceau et annulerait le decoupage.
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Fi, Anim, REDUCE_MOTION, EnRow, EnVal, EnGauge, LOOK_DEF, HIDDEN_VIEWS,
-  readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, personPicture } from '../ui.jsx';
-import { cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_ENT, LOGGIA_RESOLVED, LOGGIA_INDEX, readLS,
-  enHaids, medCompanion, medPlayers, normRooms, secAlarm, switchLightsCfg,
-  exportLoggiaConfig, importLoggiaConfig,
-  exportConfigComplete, importConfigComplete, resetLoggiaComplet,
-  cheminPanneau, lirePageAccueil, definirPageAccueil } from '../state.js';
-import { CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS, BottomSheet, EntPicker, CV_DOM_ICON, cvDomain, FOND_PHOTO_CLE, lireFondPhoto, compresserImage } from '../ui.jsx';
+import {
+  Fi, EnRow, EnVal, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg
+} from '../ui.jsx';
+import {
+  cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, medCompanion,
+  medPlayers, normRooms, secAlarm, switchLightsCfg, exportLoggiaConfig, importLoggiaConfig,
+  exportConfigComplete, importConfigComplete, resetLoggiaComplet, cheminPanneau, lirePageAccueil,
+  definirPageAccueil
+} from '../state.js';
+import {
+  CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS, BottomSheet, EntPicker, FOND_PHOTO_CLE,
+  lireFondPhoto, compresserImage
+} from '../ui.jsx';
 import { useLoggia } from '../runtime.js';
 import { viewReason } from '../views.js';
 import { autoFamille } from '../autos.js';
@@ -80,12 +85,6 @@ const PRESET_META = () => [
 ];
 // Luminance 0..1 d'une couleur (hex/rgb) → choix sombre/clair
 
-/* Une FONCTION, pas une table.
- *
- * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
- * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
- * langue. Appelee au rendu, elle se dit dans la langue du moment. */
-const PAR_TABS = () => [['connexion', tr('Connexion HA')], ['users', tr('Utilisateurs')], ['vues', tr('Vues')], ['entites', tr('Entités')], ['auto', tr('Automatisations')], ['alertes', tr('Alertes')], ['maj', tr('Mises à jour')], ['apparence', tr('Apparence')], ['about', tr('À propos')]];
 // Nav latérale des Paramètres, groupée façon Atrium (réf. user 20/08) : { grp, items: [id, label, glyphe UICons] }
 
 /* Une FONCTION, pas une table.
@@ -845,12 +844,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const [autoOpen, setAutoOpen] = useState({});
   // Mises à jour : « Tout installer » (confirmation 2 temps) + revérification
   const [updAllConfirm, setUpdAllConfirm] = useState(false);
-  const [updCheckTs, setUpdCheckTs] = useState(null);
   // Utilisateurs : dernière activité par profil (posée par applyUser)
   const lastSeen = (() => { try { return JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); } catch (e) { return {}; } })();
   const seenRel = (name, isCur) => { if (isCur) return 'actif maintenant'; const t = lastSeen[name]; if (!t) return ''; const m = (Date.now() - t) / 60000; if (m < 60) return 'vu il y a ' + Math.max(1, Math.round(m)) + ' min'; if (m < 1440) return 'vu il y a ' + Math.round(m / 60) + ' h'; if (m < 2880) return 'vu hier'; return 'vu il y a ' + Math.round(m / 1440) + ' j'; };
   const [editing, setEditing] = useState(null); // { i, u } pour éditer, { i:null } pour ajouter
-  const visTabs = isAdmin ? PAR_TABS() : PAR_TABS().filter(([id]) => id !== 'vues' && id !== 'auto' && id !== 'maj' && id !== 'entites' && id !== 'alertes');
   // Automatisations : état optimiste local (id → on/off) au-dessus de hass.
   const [autoOv, setAutoOv] = useState({});
   // Signature des états automation.* → purge l'override optimiste dès que HA confirme (ou change depuis un autre appareil).
@@ -1030,18 +1027,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 10, cursor: 'pointer', background: on ? 'var(--o-accent-fond)' : 'var(--o-s4)', border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}>
       <span style={{ position: 'absolute', top: 2, left: on ? 19 : 2, width: 17, height: 17, borderRadius: '50%', background: '#fff', transition: 'left .2s cubic-bezier(.4,1.3,.5,1)' }} />
     </span>
-  );
-  const secTagBg = (c) => 'rgba(' + (c === 'ok' ? 'var(--o-ok-rgb)' : c === 'warn' ? 'var(--o-warn2-rgb)' : c === 'bad' ? 'var(--o-bad-rgb)' : 'var(--o-accent-rgb)') + ',.14)';
-  const secTagFg = (c) => c === 'ok' ? 'var(--o-ok)' : c === 'warn' ? 'var(--o-warn2)' : c === 'bad' ? 'var(--o-bad)' : 'var(--o-accent-soft)';
-  const SecCard = ({ title, tag, tagCol, sub, children }) => (
-    <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>{title}</div>
-        {tag ? <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: secTagBg(tagCol), color: secTagFg(tagCol) }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: secTagFg(tagCol) }} />{tag}</span> : null}
-      </div>
-      {sub ? <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{sub}</div> : null}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>{children}</div>
-    </div>
   );
 
   return (
@@ -1463,8 +1448,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               : <span onClick={onT} role="switch" aria-checked={on} aria-label={name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onT(); } }} style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
           </div>
         );
-        const hiddenNames = BUILTIN_VIEWS.filter(v => cfg.hidden.has(v[0])).map(v => v[1]);
-        const nExtra = HIDDEN_VIEWS().filter(h => cfg.shown.has(h.vid)).length;
         return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <SecBar>
@@ -1524,7 +1507,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <span onClick={() => toggleAuto(a)} role="switch" aria-checked={a.on} aria-label={a.name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAuto(a); } }} style={{ width: 46, height: 26, borderRadius: 14, background: a.on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: a.on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>
           </div>
         );
-        const lastRun = autos.map(a => a.last).filter(Boolean).sort().slice(-1)[0];
         return (
         <>
         <SecBar>
@@ -1662,7 +1644,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <SecGroup label="Installer">
             <div style={{ display: 'flex', gap: 4 }}>
               {upsAvail > 1 && <button onClick={() => { if (!updAllConfirm) { setUpdAllConfirm(true); setTimeout(() => setUpdAllConfirm(false), 4000); return; } setUpdAllConfirm(false); ups.filter(u => u.avail && u.prog === false).forEach(u => { setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updCall('install', u.id); }); }} style={secBtn(!!updAllConfirm)}>{updAllConfirm ? 'Confirmer ?' : 'Tout installer (' + upsAvail + ')'}</button>}
-              <button onClick={() => { try { if (hass && hass.callService && upsAll.length) hass.callService('homeassistant', 'update_entity', { entity_id: upsAll.map(u => u.id) }); } catch (e) {} setUpdCheckTs(new Date().toISOString()); }} style={secBtn(false)}>{tr('Vérifier')}</button>
+              <button onClick={() => { try { if (hass && hass.callService && upsAll.length) hass.callService('homeassistant', 'update_entity', { entity_id: upsAll.map(u => u.id) }); } catch (e) {} }} style={secBtn(false)}>{tr('Vérifier')}</button>
             </div>
           </SecGroup>
         </SecBar>

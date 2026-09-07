@@ -1,0 +1,18 @@
+# Fins de ligne : LF partout, y compris dans les copies de travail Windows.
+#
+# Sans ce fichier, `core.autocrlf = true` — le reglage par defaut de Git pour
+# Windows — sort les sources en CRLF a chaque clone. Or la suite de tests lit
+# les sources en texte et y cherche des reperes contenant des sauts de ligne :
+# `src.indexOf('\n}\n')` pour delimiter le corps d'une fonction, par exemple.
+# Sur un fichier CRLF ces reperes ne se trouvent plus, `indexOf` rend -1, et
+# `slice(i, -1)` renvoie presque tout le fichier au lieu d'une fonction. Le test
+# se met alors a mesurer autre chose que ce qu'il annonce : il echoue, ou pire,
+# il passe pour de mauvaises raisons.
+#
+# Vingt-six assertions reparties sur dix fichiers en dependent. La suite ne
+# passait sur cette machine que parce que les outils y avaient reecrit les
+# sources en LF au fil du temps : un clone neuf sous Windows echouait.
+#
+# Loggia tourne par ailleurs sous Linux, dans Home Assistant. LF est de toute
+# facon ce que le depot doit contenir.
+* text=auto eol=lf

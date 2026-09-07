@@ -8,7 +8,9 @@
  * sait que sa façade regarde à 232°, tout le monde sait qu'elle donne au
  * sud-ouest. Le serveur, lui, travaille en degrés.
  */
-import { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  useState, useMemo
+} from 'react';
 import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
@@ -101,7 +103,6 @@ export function VoletsReglages({ hass, cardSt }) {
   const sol = cfg.soleil || {};
   const vent = cfg.vent || {};
   const titre = { fontSize: 15, fontWeight: 700 };
-  const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };
   const label = { fontSize: 12, fontWeight: 700, marginBottom: 6 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
   const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });

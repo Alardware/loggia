@@ -5,7 +5,9 @@
  * le signale en tête plutôt que de laisser régler des seuils qui ne
  * préviendront personne.
  */
-import { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  useMemo
+} from 'react';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 

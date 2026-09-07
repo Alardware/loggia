@@ -11,7 +11,9 @@
  * déclenche, pas cette page. Un bouton continue de marcher quand le dashboard
  * est fermé — c'est bien le moins pour un interrupteur.
  */
-import { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  useState, useMemo
+} from 'react';
 import { BottomSheet, EntPicker, cvName , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 import { entityCaps } from '../capabilities.js';

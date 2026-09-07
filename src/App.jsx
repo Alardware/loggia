@@ -23,19 +23,20 @@ import { probe as configProbe, reportLive as configReportLive, migrateFromLocalS
 import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
 import { isViewAvailable, viewReason } from './views.js';
-import { REDUCE_MOTION, Fi, Anim, useTilt, editBtn, ViewEditBar,
-  HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, HX_TOKENS, userBg, userImg, personPicture,
-  EnRow, EnVal, EnGauge, LOOK_DEF, CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, USER_COLORS,
-  FlipText, Gauge, BottomSheet, onPaintReady, PAINT_READY,
-  EntPicker, CV_DOM_ICON, cvDomain } from './ui.jsx';
+import {
+  REDUCE_MOTION, Fi, Anim, useTilt, editBtn, ViewEditBar, HIDDEN_VIEWS, readViewsCfg, cl_hexRgb, HX_TOKENS,
+  userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
+  Gauge, BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain
+} from './ui.jsx';
 import { WX_BG, WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 const VacPlan = lazy(() => import('./vacplan.jsx'));
-import { LOGGIA_INDEX, LOGGIA_ENT, LOGGIA_RESOLVED, LOGGIA_CFG, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle, feederScript, ENT_ALIAS,
-  enHaids, medCompanion, medPlayers, normRooms, secAlarm, switchLightsCfg,
-  exportLoggiaConfig, importLoggiaConfig, LOGGIA_SYNC_KEYS, LOGGIA_CONFIG_KEYS,
-  discoveredRooms, medResolved, MED_COLORS, vacRooms, vacSensors, vacOption } from './state.js';
+import {
+  LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle,
+  feederScript, enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, vacRooms,
+  vacSensors
+} from './state.js';
 // L'accueil de premiere installation ne sert qu'une fois : son code n'a pas a
 // peser dans le bundle de chaque ouverture.
 const Onboarding = lazy(() => import('./Onboarding.jsx'));
@@ -58,69 +59,6 @@ const field = (n, mk) => Array.from({ length: n }, (_, i) => {
   return mk(i, r);
 });
 
-// ── Canvas flux énergétique (hexagones qui dérivent solaire→maison→réseau) ──
-function FluxCanvas() {
-  const ref = useRef(null);
-  useEffect(() => {
-    const c = ref.current; if (!c) return;
-    let raf, stopped = false, ctx, W, H, parts;
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const spawn = (x) => {
-      const h = H || 88, r = Math.random();
-      const size = r < 0.7 ? 2.4 + Math.random() * 2 : r < 0.92 ? 4.4 + Math.random() * 2 : 6.4 + Math.random() * 2.6;
-      return { x, y: h / 2 + (Math.random() - 0.5) * h * 0.34, size, speed: (0.45 + Math.random() * 1.05) * (size / 5 + 0.6), op: 0.22 + Math.random() * 0.55, jig: (Math.random() - 0.5) * 0.45 };
-    };
-    const color = (t) => (t < 0.36 ? '255,209,102' : t < 0.6 ? '110,168,255' : '52,211,153');
-    const hex = (x, y, rr, fill) => { ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = Math.PI / 180 * (60 * i - 30); const px = x + rr * Math.cos(a), py = y + rr * Math.sin(a); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); };
-    const init = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = c.clientWidth || 760, h = c.clientHeight || 88;
-      c.width = w * dpr; c.height = h * dpr;
-      ctx = c.getContext('2d'); ctx.scale(dpr, dpr);
-      W = w; H = h;
-      const N = Math.max(60, Math.round(w / 8));
-      parts = Array.from({ length: N }, () => spawn(Math.random() * w));
-    };
-    const draw = () => {
-      ctx.clearRect(0, 0, W, H);
-      for (const p of parts) {
-        const col = color(p.x / W);
-        hex(p.x, p.y, p.size, 'rgba(' + col + ',' + p.op + ')');
-        hex(p.x, p.y, p.size * 0.5, 'rgba(255,255,255,' + (p.op * 0.35) + ')');
-      }
-    };
-    const loop = () => {
-      if (stopped) return;
-      raf = requestAnimationFrame(loop);
-      if (!ctx) return;
-      ctx.clearRect(0, 0, W, H);
-      for (const p of parts) {
-        p.x += p.speed; p.y += p.jig;
-        if (p.y < H * 0.34 || p.y > H * 0.66) p.jig *= -1;
-        if (p.x > W + 12) Object.assign(p, spawn(-12));
-        const col = color(p.x / W);
-        hex(p.x, p.y, p.size, 'rgba(' + col + ',' + p.op + ')');
-        hex(p.x, p.y, p.size * 0.5, 'rgba(255,255,255,' + (p.op * 0.35) + ')');
-      }
-    };
-    init();
-    if (reduce) draw(); else loop();
-    const onResize = () => { cancelAnimationFrame(raf); init(); if (reduce) draw(); else loop(); };
-    window.addEventListener('resize', onResize);
-    // Pause hors viewport : la boucle rAF (~190 hexagones/frame) ne tourne que si le canvas est visible.
-    let visible = true;
-    const io = ('IntersectionObserver' in window) ? new IntersectionObserver(entries => {
-      const v = !!(entries[0] && entries[0].isIntersecting);
-      if (v === visible) return;
-      visible = v;
-      cancelAnimationFrame(raf);
-      if (v && !reduce && !stopped) loop();
-    }, { threshold: 0.01 }) : null;
-    if (io) io.observe(c);
-    return () => { stopped = true; cancelAnimationFrame(raf); window.removeEventListener('resize', onResize); if (io) io.disconnect(); };
-  }, []);
-  return <canvas ref={ref} aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', WebkitMaskImage: 'radial-gradient(120% 78% at 50% 50%,#000 52%,transparent 100%),linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)', WebkitMaskComposite: 'source-in', maskImage: 'radial-gradient(120% 78% at 50% 50%,#000 52%,transparent 100%),linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)', maskComposite: 'intersect' }} />;
-}
 
 // ── Effet météo du bandeau (suit `weather`) ──
 function WeatherFx({ weather }) {
@@ -159,7 +97,6 @@ function WeatherFx({ weather }) {
 function haHost() {
   try { return ((window.top || window).location || {}).host || 'Home Assistant'; } catch (e) { return 'Home Assistant'; }
 }
-const ic = (fill, inner) => <svg width="18" height="18" viewBox="0 0 24 24" fill={fill}>{inner}</svg>;
 
 const NAV = [
   { group: 'MAISON', items: [
@@ -341,12 +278,6 @@ function fxTap(e) {
 // <Skel w h r> : placeholder shimmer tant que la donnée n'est pas là (remplace les valeurs démo au boot)
 function Skel({ w = 60, h = 14, r = 6, style }) {
   return <span className="o-skel" aria-hidden="true" style={{ display: 'inline-block', width: w, height: h, borderRadius: r, verticalAlign: 'middle', ...style }} />;
-}
-// Arc SVG qui se dessine à l'arrivée : dashoffset part de la circonférence puis file vers la cible
-function useDrawArc(target, circ) {
-  const [off, setOff] = useState(REDUCE_MOTION ? target : circ);
-  useEffect(() => { let alive = true, id = 0; onPaintReady(() => { if (alive) id = requestAnimationFrame(() => setOff(target)); }); return () => { alive = false; cancelAnimationFrame(id); }; }, [target, circ]);
-  return off;
 }
 // ── Animations lot 4 ──
 // useFlash() : déclenche un halo bref sur une carte (retour visuel après une action) via classe CSS .o-flash
@@ -545,7 +476,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], isAdmin = f
 
 function Header() {
   const ctx = useContext(HeaderCtx) || {};
-  const { light, onToggleTheme, onToggleNav, onNav, editMode, onToggleEdit, users = [], userIdx = 0, onSwitchUser, isAdmin = false, notifs = [], customViews = [], rooms = [] } = ctx;
+  const { onToggleTheme, onToggleNav, onNav, editMode, onToggleEdit, users = [], userIdx = 0, onSwitchUser, isAdmin = false, notifs = [], customViews = [], rooms = [] } = ctx;
   const cur = users[userIdx] || { name: 'Administrateur', role: 'Admin', grad: 'linear-gradient(135deg,#ffb347,#f87171)' };
   const curBg = userBg(cur);
   const hbtn = { width: 42, height: 42, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 };
@@ -568,7 +499,6 @@ function Header() {
   // Appui long sur le chip lumières (voir plus bas) : minuteur + drapeau pour
   // que le clic qui SUIT un appui long ne navigue pas en plus d'avoir éteint.
   const chipTimer = useRef(0);
-  const chipLong = useRef(false);
   useEffect(() => () => clearTimeout(chipTimer.current), []);
   /* Vu = PERSISTÉ (par appareil) : l'ancien état React s'évaporait à chaque
    * rechargement et le point rouge revenait pour des notifications déjà lues.
@@ -1431,7 +1361,6 @@ function setLayout(cfgKey, scope, patch) {
 
 const ROOM_LAYOUT_KEY = 'loggia_roomlayout';
 const roomLayoutOf = (roomName) => layoutOf(ROOM_LAYOUT_KEY, roomName);
-const setRoomLayout = (roomName, patch) => setLayout(ROOM_LAYOUT_KEY, roomName, patch);
 
 /** Nom choisi pour un element dans ce perimetre, ou null. */
 function labelIn(layout, id) {
@@ -1452,7 +1381,6 @@ function applyLayout(L, derived) {
   const rang = (id) => { const i = order.indexOf(id); return i < 0 ? order.length + ids.indexOf(id) : i; };
   return ids.slice().sort((a, b) => rang(a) - rang(b));
 }
-const applyRoomLayout = (roomName, derived) => applyLayout(roomLayoutOf(roomName), derived);
 // Les appareils d'une pièce viennent des CONFIGS d'Loggia (lumières découvertes, zones climat, volets, médias) :
 // ça écarte d'office le bruit HA (LED d'équipement, *_announcement, communications, prises techniques…).
 /** Ce que la decouverte propose pour une piece, avant tout agencement. */
@@ -1481,10 +1409,6 @@ function roomEntitiesBrutes(hass, roomName) {
   return out.filter((id, i) => out.indexOf(id) === i && hidden.indexOf(id) < 0);
 }
 
-// Facade pour les appelants qui veulent la liste telle qu'elle s'affiche. La
-// vue Piece, elle, passe par l'editeur : il applique l'agencement lui-meme, et
-// le faire deux fois donnerait un ordre incoherent.
-const roomEntities = (hass, roomName) => applyRoomLayout(roomName, roomEntitiesBrutes(hass, roomName));
 
 /* Cartes de la vue Pièce — style Loggia, format de la maquette : tuiles de même hauteur,
    une seule grille, actions au pied de carte. Autonomes : pilotent une entité par son id. */
@@ -1769,7 +1693,6 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   useEffect(() => { setOv(null); }, [realPos]);
   const pos = ov != null ? ov : realPos;
   const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('cover', svc, { entity_id: id, ...(data || {}) }); } catch (e) {} };
-  const label = pos === 0 ? tr('Fermé') : pos === 100 ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
   const mort = !st || st.state === 'unavailable';
   const drag = (e) => {
     e.preventDefault();
@@ -2538,10 +2461,6 @@ function RoomCoverSheet({ id, hass, onClose }) {
   // compare plus loin par `schedActive` — declarait le planning inactif en
   // permanence chez qui n'a pas cette entite.
   const mode = (S && S[voletMode()] && S[voletMode()].state) || null;
-  const dayOn = (h) => !!(S && S[h] && S[h].state === 'on');
-  const nights = voletDays().filter(d => dayOn(d.haid)).length;
-  const sunA = S && S['sun.sun'] && S['sun.sun'].attributes ? S['sun.sun'].attributes : {};
-  const fmtT = (iso) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d) ? '—' : String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const drag = (e) => {
     e.preventDefault();
     const el = e.currentTarget, fill = el.querySelector('[data-fill]'), r = el.getBoundingClientRect();
@@ -2794,37 +2713,6 @@ function RoomNav({ room, onNav, hass }) {
   );
 }
 
-function RoomChips({ rooms, room, onNav }) {
-  const wrapRef = useRef(null);
-  const [pill, setPill] = useState(null);
-  const roomsSig = rooms.join('|');
-  useEffect(() => {
-    const w = wrapRef.current; if (!w) return;
-    const el = w.querySelector('[data-room-active="1"]');
-    if (!el) { setPill(null); return; }
-    setPill({ x: el.offsetLeft, w: el.offsetWidth, h: el.offsetHeight });
-    /* Defiler la BARRE, jamais la page.
-     *
-     * `scrollIntoView` fait defiler TOUS les ancetres scrollables, y compris
-     * le document — et `block: 'nearest'` n'y change rien des que l'element
-     * sort du champ. Cette barre etant en haut de la vue, tout redeclenchement
-     * de l'effet ramenait l'utilisateur en haut de page. Or il se redeclenche
-     * a chaque changement de configuration, `rooms` etant reconstruit.
-     *
-     * On pose donc `scrollLeft` a la main : la barre bouge, la page reste. */
-    const cible = el.offsetLeft - (w.clientWidth - el.offsetWidth) / 2;
-    try { w.scrollTo({ left: Math.max(0, cible), behavior: REDUCE_MOTION ? 'auto' : 'smooth' }); }
-    catch (e) { w.scrollLeft = Math.max(0, cible); }
-  }, [room, roomsSig]);
-  return (
-    <div ref={wrapRef} className="o-room-scroll" style={{ position: 'relative', display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-      {pill && <span aria-hidden="true" className="o-roompill" style={{ position: 'absolute', top: 0, left: 0, width: pill.w, height: pill.h, transform: `translateX(${pill.x}px)`, borderRadius: 999, background: 'var(--o-accent-fond)', pointerEvents: 'none' }} />}
-      {rooms.map(r => (
-        <button key={r} data-room-active={r === room ? '1' : undefined} onClick={() => onNav('room:' + r)} style={{ position: 'relative', zIndex: 1, padding: '9px 17px', borderRadius: 999, border: r === room ? '1px solid transparent' : 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontWeight: 700, fontSize: 13, background: r === room ? 'transparent' : 'var(--o-s2)', color: r === room ? '#fff' : 'var(--o-text1)', flexShrink: 0, whiteSpace: 'nowrap', transition: 'color .25s' }}>{r}</button>
-      ))}
-    </div>
-  );
-}
 
 /**
  * Editeur d'agencement — commun aux vues ordonnables (pieces, objets).
@@ -4059,10 +3947,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   const dom = (id) => id.slice(0, id.indexOf('.'));
   const call = (d, svc, data) => { try { if (hass && hass.callService) hass.callService(d, svc, data); } catch (e) {} };
   const lightIds = ents.filter(id => dom(id) === 'light');
-  const switchIds = ents.filter(id => dom(id) === 'switch');
   const coverIds = ents.filter(id => dom(id) === 'cover');
-  const mediaIds = ents.filter(id => dom(id) === 'media_player');
-  const climIds = ents.filter(id => dom(id) === 'climate');
   const lightsOn = lightIds.filter(id => S[id] && S[id].state === 'on');
   const rgbIds = lightIds.filter(id => { const m = S[id] && S[id].attributes && S[id].attributes.supported_color_modes; return Array.isArray(m) && m.some(x => ['rgb', 'rgbw', 'rgbww', 'hs', 'xy'].indexOf(x) >= 0); });
   // luminosité du groupe = moyenne des lumières allumées (optimiste au clic)
@@ -4089,47 +3974,6 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   const covOn = covOv != null ? covOv : coverOpen;
   const toggleCovers = () => { const nv = !covOn; setCovOv(nv); clearTimeout(covRef.current); covRef.current = setTimeout(() => setCovOv(null), 8000); call('cover', nv ? 'open_cover' : 'close_cover', { entity_id: coverIds }); };
   const coverPct = (() => { const ps = coverIds.map(id => (S[id] && (S[id].attributes || {}).current_position)).filter(v => v != null); return ps.length ? Math.round(ps.reduce((a, b) => a + b, 0) / ps.length) : null; })();
-  // média en cours
-  const mediaAct = mediaIds.map(id => S[id]).find(st => st && ['playing', 'paused'].indexOf(st.state) >= 0);
-  const mediaTitle = mediaAct ? ((mediaAct.attributes || {}).media_title || (mediaAct.attributes || {}).app_name || tr('En lecture')) : null;
-  const mediaSub = mediaAct ? (((mediaAct.attributes || {}).friendly_name || '').replace(room, '').trim() || tr('Lecteur')) + ' · ' + (mediaAct.state === 'playing' ? tr('en lecture') : tr('en pause')) : null;
-  // chauffage actif dans la pièce → badge de la carte
-  const heatOn = climIds.map(id => S[id]).find(st => st && st.state !== 'off' && st.state !== 'unavailable')
-    || switchIds.map(id => S[id]).find(st => st && st.state === 'on' && /po[eê]le|chauff|radiateur|granul/i.test((st.attributes || {}).friendly_name || ''));
-  // dernier changement dans la pièce
-  const lastChange = (() => {
-    let best = 0;
-    ents.forEach(id => { const st = S[id]; if (!st) return; const t = Date.parse(st.last_changed || st.last_updated || 0); if (t > best) best = t; });
-    if (!best) return null;
-    const m = (Date.now() - best) / 60000;
-    if (m < 1) return "à l'instant";
-    if (m < 60) return 'il y a ' + Math.round(m) + ' min';
-    if (m < 1440) return 'il y a ' + Math.round(m / 60) + ' h';
-    return 'il y a ' + Math.round(m / 1440) + ' j';
-  })();
-  // Ligne dense de la carte Ambiance (patron validé : libellé + description à gauche, valeur à droite)
-  const AmbRow = ({ label, desc, children }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', flexWrap: 'wrap' }}>
-      <div style={{ flex: '1 1 190px', minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
-        <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{desc}</div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>{children}</div>
-    </div>
-  );
-  const AmbVal = ({ v, col }) => <span style={{ fontSize: 15, fontWeight: 800, color: col || 'var(--o-text)', whiteSpace: 'nowrap' }}><FlipText live text={String(v)} /></span>;
-  const AmbGauge = ({ v, pct, col }) => (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-      <AmbVal v={v} col={col} />
-      <Gauge pct={pct} color={col} h={3} style={{ width: 160 }} />
-    </div>
-  );
-  const metric = (label, val, ico, col) => val == null ? null : (
-    <div style={{ minWidth: 92, padding: '10px 14px', borderRadius: 14, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)' }}><Fi i={ico} size={11} color={col} />{label}</div>
-      <div style={{ fontSize: 19, fontWeight: 800, marginTop: 3 }}>{val}</div>
-    </div>
-  );
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
@@ -4567,7 +4411,6 @@ function CvCamera({ id, hass, label = null }) {
   );
 }
 
-const stateCard = { ...card, borderRadius: 14, padding: '11px 14px', boxShadow: 'var(--o-shadow,0 8px 20px rgba(0,0,0,.26))' };
 
 /* ════════════ VUE OBJETS — hub des appareils connectés (réf. « Objets connectés ») ════════════ */
 // Illustrations filigrane des appareils médias (même style flat que PLANT_ART, ancrées à droite).
@@ -4661,36 +4504,6 @@ function ObjCard({ icon, iconBg, name, sub, status, statusColor, barLabel, barPc
         {actionLabel && (
           <ActionBtn onClick={() => { if (onAction) onAction(); }} style={{ marginTop: 9, width: '100%', padding: '8px 10px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: 'var(--o-s2)', color: 'var(--o-text1)' }}>{actionLabel}</ActionBtn>
         )}
-      </div>
-    </div>
-  );
-}
-// Carte capteur plante (vue Objets) — extraite pour pouvoir utiliser useTilt (hook) par carte.
-function PlantObjCard({ pl, pi, v, batCol, fmtV, onOpen }) {
-  const tilt = useTilt(4);
-  return (
-    <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-stag ' + (tilt.className || '')} role="button" tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
-      style={{ ...card, position: 'relative', overflow: 'hidden', borderRadius: 18, padding: '16px 17px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', cursor: 'pointer', border: pl.hum != null && pl.hum < 15 ? '1px solid rgba(var(--o-warn2-rgb),.55)' : undefined, ...stag(pi, 120) }}>
-      {/* filigrane illustration — bas de carte, ancré à droite (réf. user) */}
-      {pl.img && PLANT_ART[pl.img] && <div aria-hidden="true" style={{ position: 'absolute', right: 10, bottom: -14, width: 150, height: 150, backgroundImage: `url("${PLANT_ART[pl.img]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.15, pointerEvents: 'none' }} />}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pl.name}</div>
-          {pl.room && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{pl.room}</div>}
-        </div>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: batCol(pl.bat), flexShrink: 0, marginTop: 2 }}><Fi i="battery-full" size={12} color={batCol(pl.bat)} />{pl.bat != null ? Math.round(pl.bat) + ' %' : '—'}</span>
-      </div>
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <span style={{ fontSize: 30, fontWeight: 800, color: v.c, fontVariantNumeric: 'tabular-nums', letterSpacing: '-.01em' }}><Num v={pl.hum} suffix="%" /></span>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('humidité du sol')}</span>
-      </div>
-      <Gauge pct={pl.hum || 0} color={v.c} h={6} style={{ position: 'relative', margin: '11px 0 9px' }} />
-      <div style={{ position: 'relative', fontSize: 12, fontWeight: 700, color: v.c, borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', paddingBottom: 12, marginBottom: 11 }}><FlipText text={v.t} /></div>
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 16, fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Fi i="sun" size={12} color="var(--o-text3)" />{fmtV(pl.lux, ' lx')}</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Fi i="raindrops" size={12} color="var(--o-text3)" />{fmtV(pl.cond, ' µS')}</span>
       </div>
     </div>
   );
@@ -4802,7 +4615,6 @@ function ObjetsView({ hass, onNav, edit = false }) {
   });
   // Bandeau + carte de synthèse repliables (patron Atrium, 21/08)
   const actifs = (vacCleaning ? 1 : 0) + (lubaMow ? 1 : 0) + (nextMeal ? 1 : 0) + medias.filter(x => x.np.on).length;
-  const total = 3 + medias.length;
   const plantVerdict = (hum) => hum == null ? { t: '—', c: 'var(--o-text3)' } : hum < 15 ? { t: 'Sol sec · à arroser', c: 'var(--o-warn2)' } : hum > 60 ? { t: 'Sol très humide', c: 'var(--o-cold)' } : { t: 'Humidité correcte', c: 'var(--o-ok)' };
   const fmtV = (v, u) => v == null ? '—' : Math.round(v) + u;
 
@@ -4992,8 +4804,6 @@ function ObjetsView({ hass, onNav, edit = false }) {
   );
 }
 
-// ── Carte machine animée (aspirateur, tondeuse, lave-vaisselle, poubelles), inspirée des button-card V1 ──
-const M_ANIM = { wiggle: 'm-wiggle 2s ease-in-out infinite', charge: 'm-charge 2s ease-in-out infinite', shake: 'm-shake 2.2s ease-in-out infinite', bounce: 'm-bounce 2s ease-in-out infinite' };
 // SVG custom (Flaticon premium fournis par l'utilisateur, single-path 24×24 fill)
 const CUSTOM_SVG = {
   vacuum: 'm24,12c0,6.617-5.383,12-12,12S0,18.617,0,12c0-2.9,1.035-5.563,2.754-7.64L.101,1.707,1.515.293l2.644,2.644c.851-.737,1.809-1.351,2.841-1.829v8.892c0,2.757,2.243,5,5,5s5-2.243,5-5V1.103c.993.459,1.916,1.044,2.741,1.743L22.485.101l1.414,1.414-2.745,2.745c1.771,2.092,2.845,4.791,2.845,7.74Zm-15-5.974c.838-.635,1.87-1.026,3-1.026s2.162.391,3,1.026V.389c-.96-.249-1.963-.389-3-.389s-2.04.141-3,.391v5.634Zm0,3.974c0,1.654,1.346,3,3,3s3-1.346,3-3-1.346-3-3-3-3,1.346-3,3Z',
@@ -5011,42 +4821,6 @@ const FI_MAP = { mower: 'tractor', trash: 'trash', 'trash-full': 'trash-clock', 
 function Ico({ name, size = 20, color = 'currentColor', style }) {
   if (CUSTOM_SVG[name]) return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" style={style}><path d={CUSTOM_SVG[name]} fill={color} /></svg>;
   return <i aria-hidden="true" className={'fi fi-rr-' + (FI_MAP[name] || name)} style={{ fontSize: size, color, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...style }} />;
-}
-function MachineCard({ m, small = false }) {
-  if (!m) return null;
-  const anim = m.anim ? M_ANIM[m.anim] : null;
-  const box = small ? 32 : 40;
-  return (
-    <div style={{ ...stateCard, padding: small ? '8px 10px' : '10px 12px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: small ? 9 : 11 }}>
-        <div style={{ position: 'relative', width: box, height: box, flexShrink: 0 }}>
-          {m.active && <div style={{ position: 'absolute', inset: -4, borderRadius: 14, background: m.color, animation: 'm-pulse 2.4s ease-in-out infinite' }} />}
-          <div style={{ position: 'absolute', inset: 0, borderRadius: small ? 10 : 12, background: hx(m.color, 0.13), display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            {m.spin && <div style={{ position: 'absolute', inset: 4, border: `2px dashed ${hx(m.color, 0.3)}`, borderRadius: '50%', animation: 'spin 3s linear infinite' }} />}
-            <Ico name={m.iconKey} size={small ? 16 : 20} color={m.color} style={{ position: 'relative', zIndex: 1, animation: anim || 'none' }} />
-          </div>
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: small ? 12.5 : 13.5, fontWeight: 700 }}>{m.label}</span>
-            <span style={{ padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700, background: hx(m.color, 0.18), color: m.color }}><Shiny on={!!m.active}>{m.phase}</Shiny></span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: small ? 2 : 3, fontSize: small ? 12 : 13.5, fontWeight: 700 }}>
-            {m.valueIcon && <Ico name={m.valueIcon} size={13} color={m.barColor || m.color} />}<span>{m.valueText}</span>
-            {m.extra && <span style={{ fontSize: 10, color: 'var(--o-text3)', fontWeight: 600, marginLeft: 2 }}>{m.extra}</span>}
-          </div>
-          {m.bar != null && (
-            <div style={{ height: 4, borderRadius: 4, background: 'var(--o-bd1)', overflow: 'hidden', marginTop: 6 }}><div style={{ height: '100%', width: m.bar + '%', background: m.barColor || m.color, borderRadius: 4, transition: 'width 1s ease' }} /></div>
-          )}
-          {m.dotsTotal && (
-            <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-              {Array.from({ length: m.dotsTotal }, (_, i) => <div key={i} style={{ flex: 1, height: 4, borderRadius: 4, background: i < m.dotsFilled ? m.color : 'var(--o-bd1)', opacity: i < m.dotsFilled ? 1 : 0.5 }} />)}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // Fond adaptatif de la bannière selon la météo : teinte colorée par-dessus la surface du thème (reste lisible en clair ET sombre).
@@ -5278,60 +5052,6 @@ function BarGroup({ label, sous, children }) {
 }
 const barBtn = (actif) => ({ padding: '5px 11px', borderRadius: 10, border: actif ? '1px solid rgba(var(--o-accent-rgb),.5)' : '1px solid var(--o-bd1)', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
   background: actif ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: actif ? 'var(--o-accent-soft)' : 'var(--o-text2)' });
-/**
- * Jauge des cartes de confort : degrade fixe, curseur a la position lue. Une
- * barre de remplissage ne dit pas la meme chose — ici c'est un placement sur
- * une echelle, pas un pourcentage atteint.
- */
-function JaugeGrad({ pct, grad }) {
-  const x = Math.max(0, Math.min(100, pct));
-  return (
-    <div style={{ position: 'relative', width: 190, height: 8, borderRadius: 10, background: grad, flexShrink: 0 }}>
-      <span style={{ position: 'absolute', top: '50%', left: x + '%', transform: 'translate(-50%,-50%)', width: 15, height: 15, borderRadius: '50%',
-        background: '#fff', border: '2.5px solid rgba(10,14,22,.9)', boxShadow: '0 2px 7px rgba(0,0,0,.55)' }} />
-    </div>
-  );
-}
-/** Une ligne dense. `part` dessine une jauge, `barre` en impose une autre. */
-function PresLigne({ titre, sous, valeur, couleur, part, barre }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', flexWrap: 'wrap', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-      <div style={{ flex: '1 1 190px', minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>{titre}</div>
-        {sous && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{sous}</div>}
-      </div>
-      {barre}
-      {barre == null && part != null && (
-        <div style={{ width: 128, height: 4, borderRadius: 4, background: 'var(--o-s2)', overflow: 'hidden', flexShrink: 0 }}>
-          <div style={{ width: Math.max(0, Math.min(100, part)) + '%', height: '100%', background: couleur || 'var(--o-accent)' }} />
-        </div>
-      )}
-      <div style={{ fontSize: 15, fontWeight: 800, color: couleur || 'var(--o-text1)', whiteSpace: 'nowrap' }}>{valeur}</div>
-    </div>
-  );
-}
-/** Carte de presentation. Rend `null` sans ligne : une carte vide n'apprend rien. */
-function PresCard({ titre, lead, badge, rgb = '52,211,153', style, children }) {
-  // Pas d'import React par defaut dans ce fichier : on aplatit a la main. Les
-  // tableaux imbriques viennent des `.map()` des appelants.
-  const lignes = (Array.isArray(children) ? children : [children]).flat(Infinity).filter(Boolean);
-  if (!lignes.length) return null;
-  return (
-    <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', ...style }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, minWidth: 0 }}>{titre}</div>
-        {badge && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '4px 11px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap',
-            background: `rgba(${rgb},.14)`, color: `rgb(${rgb})` }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: `rgb(${rgb})` }} />{String(badge).toUpperCase()}
-          </span>
-        )}
-      </div>
-      {lead && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 3, marginBottom: 5 }}>{lead}</div>}
-      {lignes}
-    </div>
-  );
-}
 
 /**
  * Habillage d'une piece : icone, couleur, teinte de fond.
@@ -6389,23 +6109,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               {cams.map(c => <CameraTile key={c.cle} c={c} />)}
             </div>
           );
-          const repasCard = (sm) => (
-            <div style={{ display: 'flex', alignItems: 'center', gap: sm ? 9 : 11, ...stateCard, ...(sm ? { padding: '8px 10px' } : {}) }}>
-              <div style={{ width: sm ? 30 : 36, height: sm ? 30 : 36, borderRadius: sm ? 9 : 11, background: 'rgba(255,179,71,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico name="bowl-rice" color="#ffb347" size={sm ? 17 : 22} /></div>
-              <div style={{ flex: 1, minWidth: 0 }}><div style={{ display: 'flex', alignItems: 'center', gap: sm ? 6 : 8, flexWrap: 'wrap' }}><span style={{ fontSize: sm ? 12.5 : 15, fontWeight: 700 }}>{sm ? tr('Repas chat') : 'Prochain repas (chat)'}</span><span style={{ fontSize: sm ? 9.5 : 11, fontWeight: 800, color: 'var(--o-warn2)', background: 'rgba(var(--o-warn2-rgb),.16)', padding: '1px 8px', borderRadius: 999 }}>{a && a.repasIn ? a.repasIn : 'DANS 1H38'}</span></div><div style={{ fontSize: sm ? 11 : 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2, whiteSpace: sm ? 'nowrap' : 'normal', overflow: sm ? 'hidden' : 'visible', textOverflow: 'ellipsis' }}>{a && a.repasLabel ? a.repasLabel : 'Collation après-midi · 18g'}</div></div>
-              {!sm && <span style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text2)', flexShrink: 0 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></span>}
-            </div>
-          );
-          const infoCard = (sm, iconBg, icon, title, sub, statusColor, statusText, pulse) => (
-            <div style={{ ...stateCard, ...(sm ? { padding: '8px 10px' } : {}) }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: sm ? 9 : 12, marginBottom: sm ? 7 : 12 }}><div style={{ width: sm ? 30 : 34, height: sm ? 30 : 34, borderRadius: sm ? 9 : 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon(sm ? 16 : 20)}</div><div style={{ minWidth: 0 }}><div style={{ fontSize: sm ? 12.5 : 14, fontWeight: 700 }}>{title}</div><div style={{ fontSize: sm ? 11 : 12, color: 'var(--o-text2)', fontWeight: 600 }}>{sub}</div></div></div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: sm ? 11 : 12, fontWeight: 700, color: statusColor }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor, animation: pulse ? 'pulse 2s infinite' : 'none' }} />{statusText}</div>
-            </div>
-          );
-          const voletsCard = (sm) => infoCard(sm, 'rgba(var(--o-accent-rgb),.16)', (s) => <Ico name="blinds" color="var(--o-accent)" size={s} />, tr('Mode volets'), tr('Auto lever/coucher'), 'var(--o-accent)', <>Fermeture à {a && a.sunsetHM ? a.sunsetHM : '21:42'}</>, false);
-          const secuCard = (sm) => infoCard(sm, 'rgba(52,211,153,.16)', (s) => <Ico name="shield-check" color="var(--o-ok)" size={s} />, tr('Sécurité'), a ? a.camOnline + '/' + a.camTotal + ' caméras OK' : '3/3 caméras OK', 'var(--o-ok)', a && a.alarmArmed ? tr('Alarme armée') : 'Système opérationnel', true);
-          const etatsCards = (sm) => <>{voletsCard(sm)}{mWallE && <MachineCard m={mWallE} small={sm} />}{mLuba && <MachineCard m={mLuba} small={sm} />}{mLv && <MachineCard m={mLv} small={sm} />}{secuCard(sm)}</>;
-          const rappelsCards = (sm) => <>{repasCard(sm)}{mPb && <MachineCard m={mPb} small={sm} />}</>;
           // ── Rail en lignes denses : meme vocabulaire que les cartes de synthese des
           // autres vues (libelle + contexte a gauche, valeur alignee a droite, filet entre
           // les lignes). Une entite absente = pas de ligne, jamais une ligne vide.
@@ -6482,31 +6185,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{a ? tr('{n} en ligne', { n: a.camOnline }) : tr('{n} caméras', { n: cams.length })}</span>
             </div>
           );
-          // ── Plantes (MiFlora) : humidité du sol = jauge + verdict arrosage ──
-          const plantsList = (a && a.plants) || [{ name: 'Schefflera', img: 'schefflera', hum: 41, cond: 520, lux: 1200, temp: 22.4, bat: 88 }, { name: 'Dracaena Marginata', img: 'dracaena', hum: 12, cond: 310, lux: 800, temp: 21.9, bat: 64 }];
-          const plantRow = (sm, pl) => {
-            const st = pl.hum == null ? { t: '—', c: 'var(--o-text3)' } : pl.hum < 15 ? { t: 'À arroser', c: 'var(--o-warn2)' } : pl.hum > 60 ? { t: 'Très humide', c: 'var(--o-cold)' } : { t: 'OK', c: 'var(--o-ok)' };
-            const fmt = (v, u) => v == null ? '—' : Math.round(v) + u;
-            return (
-              <div key={pl.name} style={{ ...stateCard, ...(sm ? { padding: '8px 10px' } : {}) }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: sm ? 10 : 12 }}>
-                  {pl.img && PLANT_ART[pl.img]
-                    ? <div aria-hidden="true" style={{ width: sm ? 44 : 54, height: sm ? 44 : 54, borderRadius: sm ? 11 : 13, background: 'rgba(52,211,153,.08)', backgroundImage: `url("${PLANT_ART[pl.img]}")`, backgroundSize: '86%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', flexShrink: 0, border: 'var(--o-bw,1px) solid var(--o-bd3)' }} />
-                    : <div style={{ width: sm ? 44 : 54, height: sm ? 44 : 54, borderRadius: sm ? 11 : 13, background: 'rgba(52,211,153,.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico name="leaf" color="var(--o-ok)" size={sm ? 18 : 22} /></div>}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: sm ? 12.5 : 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pl.name}</span>
-                      <span style={{ padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700, background: hx(st.c, 0.16), color: st.c }}>{st.t}</span>
-                      {pl.bat != null && pl.bat < 20 && <span style={{ padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.16)', color: 'var(--o-bad)' }}>Pile {Math.round(pl.bat)}%</span>}
-                    </div>
-                    <div style={{ fontSize: sm ? 10.5 : 11.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmt(pl.hum, '% sol')} · {fmt(pl.lux, ' lx')} · {fmt(pl.cond, ' µS')} · {pl.temp != null ? pl.temp.toFixed(1) + '°' : '—'}</div>
-                    <div style={{ height: 4, borderRadius: 4, background: 'var(--o-bd1)', overflow: 'hidden', marginTop: 5 }}><div style={{ height: '100%', width: Math.max(0, Math.min(100, pl.hum || 0)) + '%', background: st.c, borderRadius: 4, transition: 'width 1s ease' }} /></div>
-                  </div>
-                </div>
-              </div>
-            );
-          };
-          const plantsCards = (sm) => <>{plantsList.map(pl => plantRow(sm, pl))}</>;
           // Sections nommées : l'ordre vient de `loggia_accueil`, le contenu d'ici.
           // Une section sans rien à montrer (pas de caméra, agenda vide) n'existe
           // pas du tout — ni wrapper, ni place dans l'édition.
@@ -6568,9 +6246,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   );
 }
 
-/* ════════════ VUE LUMIÈRES (reproduction fidèle de "Loggia Lumières.dc.html") ════════════ */
-const L_ROOMS = ['Séjour', 'Cuisine', 'Chambre', 'Chambre enfant', 'Bureau', 'Salle de bain', 'Extérieur'];
-const L_PALETTE = ['#ffce73', '#ff6b6b', 'var(--o-accent)', 'var(--o-ok)', 'var(--o-purple)', 'var(--o-cyan)'];
 // Formateur puissance UNIQUE (harmonisation 20/08) : virgule FR, kW à 2 décimales, « — » si valeur absente
 const fmtWatts = (w) => w == null || isNaN(w) ? '—' : Math.abs(w) >= 1000 ? (w / 1000).toFixed(2).replace('.', ',') + ' kW' : Math.round(w) + ' W';
 const hx = (hex, a) => { if (HX_TOKENS[hex]) return `rgba(var(${HX_TOKENS[hex]}),${a})`; if (typeof hex !== 'string' || hex[0] !== '#') return `rgba(140,152,180,${a})`; const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
@@ -6665,18 +6340,6 @@ function lightType(l) {
 }
 // Clés CUSTOM_SVG si fournies (l-plafonnier…), sinon nom Flaticon valide en fallback.
 const LIGHT_TYPE_ICON = { plafonnier: 'light-switch-on', ampoule: 'bulb', lampadaire: 'bulb', veilleuse: 'moon' };
-// Icônes du design "Light Cards Styles" (ampoule + lune veilleuse).
-const BulbIcon = ({ on, color = '#FFCC44', size = 26 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <path d="M9 21h6M12 3a6 6 0 0 1 4 10.47V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-3.53A6 6 0 0 1 12 3z" fill={color} stroke={color} strokeWidth="0.5" />
-    <ellipse cx="12" cy="9" rx="2.5" ry="2" fill={on ? '#FFF4B0' : 'transparent'} opacity="0.7" />
-  </svg>
-);
-const MoonIcon = ({ color = '#FFCC44', size = 26 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill={color} stroke={color} strokeWidth="0.5" />
-  </svg>
-);
 // Icônes par type de luminaire (style UICon rempli, repeint via currentColor).
 const LIGHT_ICONS = {
   ampoule: ['M12 2.5a6.5 6.5 0 0 0-4 11.6c.5.4.9 1 1 1.6.1.5.5.8 1 .8h2c.5 0 .9-.3 1-.8.1-.6.5-1.2 1-1.6A6.5 6.5 0 0 0 12 2.5z', 'M9.5 18.3h5a.8.8 0 0 1 0 1.6h-5a.8.8 0 0 1 0-1.6z', 'M10.3 21h3.4a.75.75 0 0 1 0 1.5h-3.4a.75.75 0 0 1 0-1.5z'],
@@ -6689,10 +6352,6 @@ const LightIcon = ({ type, color = 'currentColor', size = 24 }) => (
     {(LIGHT_ICONS[type] || LIGHT_ICONS.ampoule).map((d, i) => <path key={i} d={d} />)}
   </svg>
 );
-const LIGHT_COLORS = [
-  { name: 'Chaud', hex: '#FFB347' }, { name: 'Blanc', hex: '#F0F0FF' }, { name: 'Rouge', hex: '#FF4466' },
-  { name: 'Vert', hex: '#44DD88' }, { name: 'Bleu', hex: '#4488FF' }, { name: 'Violet', hex: '#AA44FF' }, { name: 'Rose', hex: '#FF44CC' },
-];
 // Palette popup (design "Light Cards Styles" — 8 teintes, blanc inclus).
 const LIGHT_PALETTE = ['#ffce73', '#ff8a4c', '#f472b6', 'var(--o-purple)', 'var(--o-accent)', 'var(--o-cyan)', 'var(--o-ok)', '#ffffff'];
 /* Une FONCTION, pas une table.
@@ -6764,10 +6423,8 @@ function LumieresContent({ hass, edit = false, onEnt }) {
     el.onpointerup = () => { end(); setBri(id, v); commander(hass, id, 'set_brightness', v); };
     el.onpointercancel = () => { end(); setLights(ls => ls.map(x => ({ ...x }))); }; // abandon → re-render resynchronise le visuel
   };
-  const openPop = (l) => { setPopupId(l.id); setPopMode(l.rgb ? 'color' : 'white'); };
   const setWhite = (id, k) => { setLights(ls => ls.map(l => l.id === id ? { ...l, color: null, on: true } : l)); commander(hass, id, 'set_color_temp', k); };
   const onCount = lights.filter(l => l.on).length;
-  const knob = (on) => ({ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' });
   const presentRooms = lightRooms(lights);
   // Agencement : la decouverte propose un intertitre par piece, suivi de ses
   // luminaires. Tout se renomme, se deplace, se retire ensuite.
@@ -7180,8 +6837,6 @@ function ScenesContent({ hass }) {
   const selScene = sel ? sceneByName(sel) : null;
   const lit = !!selScene;
   const selColor = selScene ? rgbHex(selScene.colors[0]) : '#5f6c87';
-  const roomBtn = on => ({ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 18, borderRadius: 'var(--o-radius,18px)', border: '1px solid ' + (on ? 'rgba(var(--o-accent-rgb),.4)' : 'var(--o-bd2)'), cursor: 'pointer', fontWeight: 700, fontSize: 14, transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)', boxShadow: on ? '0 6px 16px rgba(var(--o-accent-rgb),.25)' : 'none' });
-  const qaBtn = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '13px 18px', borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 14, cursor: 'pointer' };
 
   // Luminosité appliquée avec la scène (le script accepte brightness_pct)
   const [briOv, setBriOv] = useState(null);
@@ -7194,16 +6849,6 @@ function ScenesContent({ hass }) {
     else { const ids = dimmableLights(hass); if (ids.length) call('light', 'turn_on', { entity_id: ids, brightness_pct: v }); }
   };
   const totalScenes = Object.values(HUE_SCENES).reduce((n, c) => n + c.scenes.length, 0);
-  const lastApplied = (S && S[hueScripts().active] && S[hueScripts().active].last_changed) || null;
-  const lastRel = (() => {
-    if (!lastApplied) return null;
-    const m = (Date.now() - Date.parse(lastApplied)) / 60000;
-    if (isNaN(m)) return null;
-    if (m < 1) return "à l'instant";
-    if (m < 60) return 'il y a ' + Math.round(m) + ' min';
-    if (m < 1440) return 'il y a ' + Math.round(m / 60) + ' h';
-    return 'il y a ' + Math.round(m / 1440) + ' j';
-  })();
   // Bloc du bandeau : libellé + contrôle, comme la vue Pièce
   const QuickBox = ({ label, children }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
@@ -7287,20 +6932,7 @@ function ScenesView({ hass }) {
   );
 }
 
-/* ════════════ VUE CLIMAT (reproduction fidèle de "Loggia Climat.dc.html") ════════════ */
-const CL_TEMPS = [17.2, 16.9, 16.8, 17.0, 17.4, 18.1, 18.8, 19.4, 20.1, 20.7, 21.1, 21.4, 21.3, 21.0, 20.6, 20.2, 19.7, 19.3, 18.9, 18.6, 18.5, 18.4, 18.3, 18.3];
-const CL_COL = { confort: '#ff8a4c', eco: 'var(--o-ok)', horsgel: 'var(--o-accent)', off: 'var(--o-text3)' };
 // Plage du dial Nest (labels 10°/20°/30°) + palette d'arc fixe (rouge → magenta → violet)
-const T_MIN = 10, T_MAX = 30, T_SPAN = T_MAX - T_MIN;
-const NEST_GRAD = ['#f2556e', '#c850a0', '#8b6dff'];
-const cl_polC = (a, r) => ({ x: 65 + Math.cos(a * Math.PI / 180) * r, y: 65 + Math.sin(a * Math.PI / 180) * r });
-const cl_arcC = (a0, a1, r) => { const p0 = cl_polC(a0, r), p1 = cl_polC(a1, r), la = (a1 - a0) > 180 ? 1 : 0; return `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${r} ${r} 0 ${la} 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`; };
-const cl_rgbAt = (t) => {
-  const stops = [[10, [79, 140, 255]], [16, [6, 182, 212]], [20, [52, 211, 153]], [24, [234, 179, 8]], [27, [249, 115, 22]], [30, [239, 68, 68]]];
-  if (t <= stops[0][0]) return stops[0][1];
-  for (let i = 1; i < stops.length; i++) { if (t <= stops[i][0]) { const [a, ca] = stops[i - 1], [b, cb] = stops[i], f = (t - a) / (b - a); return ca.map((v, k) => Math.round(v + f * (cb[k] - v))); } }
-  return stops[stops.length - 1][1];
-};
 
 const climateKeys = () => climateZones(null).flatMap(z => [z.haid, z.tempCible, z.modeEnt, z.autoEnt, z.tempSensor].filter(Boolean));
 // Zones de chauffage : configuration de l'utilisateur (elle seule sait décrire
@@ -7431,77 +7063,17 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   const derived = climateZones(S).map(z => readZone(S, z));
   const [thermos, setThermos] = useState(derived);
   const [selZone, setSelZone] = useState('poele');
-  const [histOpen, setHistOpen] = useState(false);
-  const [devOpen, setDevOpen] = useState(false);
   const sig = derived.map(t => `${t.id}:${t.mode}:${t.target}:${t.current}:${t.auto}`).join('|');
   useEffect(() => { setThermos(derived); }, [sig]);
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
   const zoneOf = (id) => climateZones(S).find(z => z.id === id);
   const upLocal = (id, patch) => setThermos(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t));
-  const setTargetLocal = (id, v) => upLocal(id, { target: Math.max(5, Math.min(30, Math.round(v * 2) / 2)) });
   const commitTarget = (id, v) => { v = Math.max(5, Math.min(30, Math.round(v * 2) / 2)); upLocal(id, { target: v }); call('input_number', 'set_value', { entity_id: zoneOf(id).tempCible, value: v }); };
   const inc = (id) => { const t = thermos.find(x => x.id === id); commitTarget(id, (t ? t.target : 18) + 0.5); };
   const dec = (id) => { const t = thermos.find(x => x.id === id); commitTarget(id, (t ? t.target : 18) - 0.5); };
   /* `m` est l'OPTION telle que Home Assistant la nomme : elle part sans
    * traduction. Seul le poele, un vrai `climate`, garde ses modes standards. */
   const setMode = (id, m) => { const z = zoneOf(id); upLocal(id, { mode: pilotFamille(m) || m, modeBrut: m }); if (estClimate(z)) commander(hass, z.haid, 'set_hvac_mode', m); else call('input_select', 'select_option', { entity_id: z.modeEnt, option: m }); };
-  const setAuto = (id, a) => { const z = zoneOf(id); upLocal(id, { auto: a }); if (z.autoEnt) call('input_boolean', a ? 'turn_on' : 'turn_off', { entity_id: z.autoEnt }); };
-  const dragDial = (id, e) => {
-    e.preventDefault();
-    const dial = e.currentTarget; let last = null;
-    const move = ev => {
-      const r = dial.getBoundingClientRect();
-      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      let deg = Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI;
-      let a = deg - 135; while (a < 0) a += 360; while (a >= 360) a -= 360;
-      const pct = a <= 270 ? a / 270 : (a < 315 ? 1 : 0);
-      last = T_MIN + pct * T_SPAN; setTargetLocal(id, last);
-    };
-    move(e);
-    try { dial.setPointerCapture(e.pointerId); } catch (x) {}
-    const end = () => { dial.onpointermove = null; dial.onpointerup = null; dial.onpointercancel = null; };
-    dial.onpointermove = move;
-    dial.onpointerup = () => { end(); if (last != null) commitTarget(id, last); };
-    dial.onpointercancel = end;
-  };
-  // Qualité de l'air (capteurs réels)
-  // Ambiance : la piece de la zone selectionnee. Le user veut ces releves « par
-  // pieces » ; la premiere piece configuree ne sert plus que de repli.
-  const airRoom = (() => {
-    const pieces = normRooms(cfgVal('loggia_rooms', null));
-    const z = thermos.find(x => x.id === selZone) || thermos[0];
-    const cible = z && rmNorm(z.room || z.name || '');
-    return (cible && pieces.find(r => rmNorm(r.room || '') === cible))
-      || (cible && pieces.find(r => cible.indexOf(rmNorm(r.room || '')) >= 0))
-      || pieces[0] || { haid: {} };
-  })();
-  const airTemp = climNum(S, airRoom.haid && airRoom.haid.temp);
-  const airHum = climNum(S, airRoom.haid && airRoom.haid.humidity);
-  // CO2 : le plus mauvais des capteurs déclarés — c'est celui-là qui compte.
-  const co2 = normRooms(cfgVal('loggia_rooms', null))
-    .map(r => climNum(S, r.haid && r.haid.co2) || 0)
-    .reduce((a, b) => Math.max(a, b), 0) || null;
-  const aqi = co2 == null ? { label: '—', color: '#5f6c87', score: '—', off: 276 }
-    : co2 <= 600 ? { label: 'EXCELLENT', color: 'var(--o-ok)', score: 4, off: 0 }
-      : co2 <= 800 ? { label: tr('BON'), color: 'var(--o-ok)', score: 3, off: 69 }
-        : co2 <= 1200 ? { label: tr('MOYEN'), color: 'var(--o-warn2)', score: 2, off: 138 }
-          : { label: 'MAUVAIS', color: '#ff6b6b', score: 1, off: 207 };
-  const airTitle = aqi.score === 4 ? 'Air sain dans la maison' : aqi.score === 3 ? 'Air correct' : aqi.score === 2 ? 'Pensez à aérer' : aqi.score === 1 ? 'Aérez la maison' : 'Qualité de l\'air';
-  const wEnt = S && S[weatherEntity({ states: S })];
-  const outTemp = wEnt && wEnt.attributes && wEnt.attributes.temperature != null ? wEnt.attributes.temperature : null;
-  const outLabel = wEnt ? haWeatherLabel(wEnt.state) : null;
-  const tPos = airTemp == null ? 0.5 : Math.max(0.04, Math.min(0.96, (airTemp - 15) / 13));
-  const tCat = airTemp == null ? { l: '—', c: '#5f6c87' } : airTemp < 19 ? { l: 'Un peu frais', c: 'var(--o-cyan)' } : airTemp <= 23 ? { l: tr('Confort'), c: 'var(--o-ok)' } : { l: 'Chaud', c: '#ff8a4c' };
-  const hPos = airHum == null ? 0.5 : Math.max(0.04, Math.min(0.96, (airHum - 20) / 60));
-  const hCat = airHum == null ? { l: '—', c: '#5f6c87' } : airHum < 40 ? { l: 'Trop sec', c: '#ffb347' } : airHum <= 60 ? { l: tr('Confort'), c: 'var(--o-ok)' } : { l: tr('À surveiller'), c: '#ffb347' };
-  const fmt1 = (v) => v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1);
-  const ZONE_LABEL = { poele: 'Séjour', chambre: 'Chambre', enfant: 'Chambre enfant' };
-  const bars = CL_TEMPS.map((v, i) => {
-    const lo = 16, hi = 22, now = 23;
-    const h = Math.max(8, ((v - lo) / (hi - lo)) * 100);
-    const cur = i === now;
-    return { height: h + '%', background: cur ? 'linear-gradient(180deg,#ffb347,#ff8a4c)' : 'linear-gradient(180deg,rgba(255,138,76,.55),rgba(255,138,76,.16))', boxShadow: cur ? '0 0 10px rgba(255,138,76,.6)' : 'none' };
-  });
 
   // ── Zone sélectionnée → dial Nest ──
   // Deux valeurs distinctes : `zone` dit s'il existe VRAIMENT une zone (elle
@@ -7510,28 +7082,6 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   // n'a pas encore repondu — la vue entiere plantait.
   const zone = thermos.find(x => x.id === selZone) || thermos[0] || null;
   const t = zone || { id: null, name: '—', mode: 'off', type: '', target: 19, current: null, auto: false };
-  const off = t.mode === 'off';
-  const isEco = t.mode === 'eco';
-  const dis = t.type === 'pilot_wire' && t.auto;            // planning auto → dial verrouillé
-  const tClamp = Math.max(T_MIN, Math.min(T_MAX, t.target));
-  const pct = off ? 0 : Math.max(0, Math.min(1, (tClamp - T_MIN) / T_SPAN));
-  const curA = 135 + pct * 270;
-  const knob = cl_polC(curA, 54);
-  const heating = !off && t.target > t.current + 0.1;
-  const stateLabel = off ? 'ÉTEINT' : heating ? 'CHAUFFE' : (isEco ? 'ÉCO' : tr('CONFORT'));
-  const NT = 40;
-  const ticks = Array.from({ length: NT + 1 }, (_, i) => { const frac = i / NT, a = 135 + frac * 270; return { a, on: !off && frac <= pct + 0.001, o: cl_polC(a, 57), inn: cl_polC(a, 50) }; });
-  const cycleMode = () => {
-    if (!CL_OPTIONS.length) return;
-    const idx = CL_OPTIONS.indexOf(t.modeBrut);
-    setMode(selZone, CL_OPTIONS[(idx + 1) % CL_OPTIONS.length]);
-  };
-  const tFmt = (v) => (Math.round(v * 2) / 2).toFixed(v % 1 === 0 ? 0 : 1);
-  // styles
-  const MODE_GRAD = 'linear-gradient(150deg,#8b6dff,#e0457b)';
-  const navBtn = (en = true) => ({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flex: 1, background: 'none', border: 'none', cursor: en ? 'pointer' : 'default', padding: 0, opacity: en ? 1 : .4 });
-  const navCircle = (active, grad) => ({ width: 54, height: 54, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: active ? grad : 'var(--o-surfA)', border: '1px solid ' + (active ? 'transparent' : 'var(--o-bd2)'), boxShadow: active ? '0 8px 20px rgba(124,92,255,.4)' : '0 4px 12px rgba(0,0,0,.16), inset 0 1px 1px var(--o-s1)', color: active ? '#fff' : 'var(--o-text2)', transition: 'all .2s' });
-  const navLabel = (active) => ({ fontSize: 11, fontWeight: 700, letterSpacing: '.03em', color: active ? 'var(--o-text)' : 'var(--o-text3)' });
   // Agencement des zones : les zones configurees d'abord, puis les thermostats
   // que Home Assistant expose et qu'aucune zone ne couvre deja.
   const zonesHaids = climateZones(S).map(z => z.haid).filter(Boolean);
@@ -7564,20 +7114,11 @@ function ClimatContent({ hass, edit = false, onEnt }) {
     }
   });
 
-  const climCard = { flex: 1, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '20px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.15))' };
-  const svgHeat = <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 14.5c2.2-2 2.2-3.5 0-5.5s-2.2-3.5 0-5.5" /><path d="M12 14.5c2.2-2 2.2-3.5 0-5.5s-2.2-3.5 0-5.5" /><path d="M17 14.5c2.2-2 2.2-3.5 0-5.5s-2.2-3.5 0-5.5" /></svg>;
-  const svgLeaf = (sz) => <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z" /><path d="M2 21c0-3 1.85-5.4 5.1-6" /></svg>;
-  const svgCal = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="3" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></svg>;
-  const svgHist = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" /><path d="M12 7.5v5l3.5 2" /></svg>;
-  const svgChev = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: devOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}><path d="M6 9l6 6 6-6" /></svg>;
   // 4 boutons de mode (confort/éco/hors-gel/off)
   /* La barre de modes suit l'entite, pas une liste ecrite d'avance. Un poele
    * est un vrai `climate` : ses modes restent ceux du domaine. */
   const zoneSel = zoneOf(selZone);
   const CL_OPTIONS = zoneModes(S, zoneSel);
-  const CL_TEINTE = { confort: '#ff8a4c', eco: 'var(--o-ok)', horsgel: 'var(--o-accent-soft)', off: 'var(--o-text3)' };
-  const modeBtn = (on, c, d) => ({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, padding: '11px 4px', borderRadius: 14, border: '1px solid ' + (on ? c + '66' : 'var(--o-bd3)'), fontWeight: 700, fontSize: 12, cursor: d ? 'default' : 'pointer', transition: 'all .2s', background: on ? hx(c, .16) : 'var(--o-s2)', color: on ? c : 'var(--o-text2)', boxShadow: on ? '0 4px 14px ' + hx(c, .25) : 'none', opacity: d ? .45 : 1 });
-  const topBtn = (on, c) => ({ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 10px', borderRadius: 14, border: '1px solid ' + (on ? c + '66' : 'var(--o-bd2)'), background: on ? hx(c, .16) : 'var(--o-surfA)', color: on ? c : 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all .2s' });
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -7756,10 +7297,6 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
     }
   };
   useEffect(() => { setModeLocal(haMode); }, [haMode]);
-  const dayOn = (haid) => { const e = S && S[haid]; return e ? e.state === 'on' : false; };
-  const dsig = voletDays().map(d => dayOn(d.haid) ? 1 : 0).join('');
-  const [days, setDays] = useState(() => Object.fromEntries(voletDays().map(d => [d.k, dayOn(d.haid)])));
-  useEffect(() => { setDays(Object.fromEntries(voletDays().map(d => [d.k, dayOn(d.haid)]))); }, [dsig]);
 
   // Agencement : la découverte propose, l'utilisateur dispose.
   const nbEntites = Object.keys(S).length;
@@ -7791,43 +7328,12 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
   });
 
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
-  const haidOf = (id) => (voletCovers(S).find(c => c.id === id) || {}).haid;
-  const upCover = (id, pos) => setCovers(cs => cs.map(c => c.id === id ? { ...c, pos: Math.max(0, Math.min(100, Math.round(pos))) } : c));
-  const commitPos = (id, pos) => { pos = Math.max(0, Math.min(100, Math.round(pos))); upCover(id, pos); commander(hass, haidOf(id), 'set_position', pos); };
-  const coverOpen = (id) => { upCover(id, 100); commander(hass, haidOf(id), 'open'); };
-  const coverClose = (id) => { upCover(id, 0); commander(hass, haidOf(id), 'close'); };
-  const coverStop = (id) => { commander(hass, haidOf(id), 'stop'); };
   const allOpen = () => { setCovers(cs => cs.map(c => ({ ...c, pos: 100 }))); call('cover', 'open_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
   const allClose = () => { setCovers(cs => cs.map(c => ({ ...c, pos: 0 }))); call('cover', 'close_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
   const pickMode = (m) => { setModeLocal(m); call('input_select', 'select_option', { entity_id: voletMode(), option: m }); };
-  const toggleDay = (d) => { const on = !days[d.k]; setDays(dd => ({ ...dd, [d.k]: on })); call('input_boolean', on ? 'turn_on' : 'turn_off', { entity_id: d.haid }); };
-  const drag = (id, e) => {
-    e.preventDefault();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const calc = x => Math.max(0, Math.min(100, Math.round((x - rect.left) / rect.width * 100)));
-    let v = calc(e.clientX); upCover(id, v);
-    const el = e.currentTarget;
-    try { el.setPointerCapture(e.pointerId); } catch (x) {}
-    const end = () => { el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; };
-    el.onpointermove = ev => { v = calc(ev.clientX); upCover(id, v); };
-    el.onpointerup = () => { commitPos(id, v); end(); };
-    el.onpointercancel = end;
-  };
 
   const openCount = covers.filter(c => c.pos > 0).length;
-  const stateOf = p => p === 0 ? tr('Fermé') : p === 100 ? tr('Ouvert') : 'Entrouvert';
-  /* Le planning tourne des que le mode n'est pas le pilotage a la main. Ce
-   * mot-la vient de l'installation : « Manuel », « Manual », « Manuell »… on le
-   * reconnait au motif, pas a une valeur exacte. */
-  const schedActive = !!mode && !/manuel|manual|hand/i.test(mode);
-  const activeNights = voletDays().filter(d => days[d.k]).length;
-  const sun = S && S['sun.sun'];
   const fmtT = (iso) => { if (!iso) return '—'; try { return new Date(iso).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); } catch (e) { return '—'; } };
-  const nextClose = sun && sun.attributes ? fmtT(sun.attributes.next_setting) : '—';
-  const nextOpen = sun && sun.attributes ? fmtT(sun.attributes.next_rising) : '—';
-  const openBtn = active => ({ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 11, borderRadius: 10, border: '1px solid ' + (active ? 'rgba(52,211,153,.3)' : 'var(--o-bd1)'), cursor: 'pointer', background: active ? 'rgba(52,211,153,.14)' : 'var(--o-s1)', color: active ? 'var(--o-ok)' : 'var(--o-text1)' });
-  const closeBtn = active => ({ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 11, borderRadius: 10, border: '1px solid ' + (active ? 'rgba(var(--o-accent-rgb),.3)' : 'var(--o-bd1)'), cursor: 'pointer', background: active ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: active ? 'var(--o-accent-soft)' : 'var(--o-text1)' });
-  const modeBtn = (on, col) => { const isHex = col.startsWith('#'); const rgb = isHex ? cl_hexRgb(col) : '140,152,180'; return { display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px', borderRadius: 14, border: '1px solid ' + (on && isHex ? col + '55' : 'var(--o-bd3)'), cursor: 'pointer', transition: 'all .2s', textAlign: 'left', background: on ? `rgba(${rgb},.14)` : 'var(--o-s2)', color: on ? col : 'var(--o-text1)' }; };
 
   return (
     <div className="loggia-content" style={{ padding: embarque ? '0 28px 40px' : '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -7986,7 +7492,7 @@ const CHIP_CAR = (c) => (
 
 function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, evBranche = false, batW = 0, batSoc = null, batPresente = false }) {
   const netGridW = surplusW > 0 ? -surplusW : (homeW - solarW);
-  const gridImporting = netGridW > 0, gridExporting = netGridW < 0, gridFlowW = Math.abs(netGridW);
+  const gridImporting = netGridW > 0, gridFlowW = Math.abs(netGridW);
   // Palette calquée sur la vidéo de réf : solaire=jaune, maison=rose, réseau=violet.
   const C = { solar: '#fbbf24', home: '#ec4899', grid: '#a855f7', ev: '#38bdf8', bat: '#4ade80' };
   // Une batterie se charge ET se decharge. Le trace va de la batterie vers le
@@ -8162,13 +7668,6 @@ function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null }) 
     </svg>
   );
 }
-// Prévisions de production : pas d'entité dédiée (forecast solaire) → estimation démo.
-const EN_FORECAST = [
-  { day: 'DEMAIN', kwh: '3,32', col: 'var(--o-gold)', hot: true, wx: 'sun', wc: 'var(--o-gold)' },
-  { day: 'DIM', kwh: '2,10', wx: 'cloud-sun', wc: '#9aa6c0' },
-  { day: 'LUN', kwh: '1,40', wx: 'clouds', wc: 'var(--o-cyan)' },
-  { day: 'MAR', kwh: '3,80', col: 'var(--o-gold)', hot: true, wx: 'sun', wc: 'var(--o-gold)' },
-];
 
 const EN_LAYOUT_KEY = 'loggia_enlayout';
 
@@ -8393,17 +7892,10 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const prodJour = avail(EN.prodJour) ? num(EN.prodJour) : null;
   const autosuff = avail(EN.autosuffJour) ? Math.round(num(EN.autosuffJour)) : null;
   const tauxAutoconso = avail(EN.tauxAutoconso) ? Math.round(num(EN.tauxAutoconso)) : null;
-  const coutJour = avail(EN.coutJour) ? num(EN.coutJour) : null;
-  const coutMois = avail(EN.coutMois) ? num(EN.coutMois) : null;
   const ecoJour = avail(EN.ecoJour) ? num(EN.ecoJour) : null;
-  const tarifTxt = (() => { const e = S && S[EN.tarif]; return (e && (e.state === 'HP' || e.state === 'HC')) ? e.state : null; })();
-  const prixActuel = avail(EN.prixActuel) ? num(EN.prixActuel) : null;
-  const aboPct = avail(EN.aboPct) ? Math.round(num(EN.aboPct)) : null;
   const hcToday = avail(EN.consoJourHc) ? num(EN.consoJourHc) : num(EN.consoHcToday);
   const hpToday = avail(EN.consoJourHp) ? num(EN.consoJourHp) : num(EN.consoHpToday);
   const totalToday = avail(EN.consoJour) ? num(EN.consoJour) : ((hcToday + hpToday) || num(EN.consoReseauToday));
-  const hcPct = totalToday > 0 ? Math.round(hcToday / totalToday * 100) : 0;
-  const hpPct = totalToday > 0 ? Math.round(hpToday / totalToday * 100) : 0;
 
   /* ── Sources de puissance et cadrans, à droite du schéma ───────────────────
    *
@@ -8465,31 +7957,8 @@ function EnergieContent({ hass, edit = false, onEnt }) {
     if (conso <= 0) return null;
     return Math.round((totalToday * (100 - fossilePct) / 100 + solaireConsomme) / conso * 100);
   })();
-  const hcPrice = num(EN.hcPrice, 0), hpPrice = num(EN.hpPrice, 0);
-  const hcCost = hcToday * hcPrice, hpCost = hpToday * hpPrice;
-  const bill = (() => { const e = S && S[EN.bill]; if (!e) return null; const n = parseFloat(e.state); return isNaN(n) ? null : n; })();
   const solarActive = solarW > 5;
-  const eur = (v) => v == null ? '—' : v.toFixed(2).replace('.', ',') + ' €';
   const fmtW = fmtWatts;
-  const maxBar = Math.max(solarW, gridNetW, surplusW, 1500);
-  const tiles = [
-    { label: 'Solaire', tag: prodJour != null ? prodJour.toFixed(1).replace('.', ',') + ' kWh jour' : (solarActive ? tr('ACTIF') : 'INACTIF'), tagCol: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', val: fmtW(solarW), num: solarW, fmt: fmtW, valCol: 'var(--o-gold)', col: 'var(--o-gold)', bar: Math.min(100, solarW / maxBar * 100) + '%', bd: 'rgba(255,209,102,.18)', icon: 'sun', ic: 'var(--o-gold)', art: VIEW_ART.solar },
-    { label: tr('Réseau'), tag: (exporting ? 'VENTE' : 'ACHAT') + (tarifTxt ? ' · ' + tarifTxt + (prixActuel != null ? ' ' + prixActuel.toFixed(4).replace('.', ',') + '€' : '') : ''), tagCol: exporting ? 'var(--o-ok)' : '#f87171', val: fmtW(gridNetW), num: gridNetW, fmt: fmtW, valCol: exporting ? 'var(--o-ok)' : '#f87171', col: exporting ? 'var(--o-ok)' : '#f87171', bar: Math.min(100, gridNetW / maxBar * 100) + '%', bd: exporting ? 'rgba(52,211,153,.18)' : 'rgba(248,113,113,.18)', icon: 'bolt', ic: exporting ? 'var(--o-ok)' : '#f87171', art: VIEW_ART.pylon },
-    autosuff != null
-      ? { label: 'Autosuffisance', tag: tauxAutoconso != null ? 'AUTO. ' + tauxAutoconso + '%' : 'JOUR', tagCol: 'var(--o-ok)', val: autosuff + ' %', num: autosuff, unit: ' %', valCol: 'var(--o-ok)', col: 'var(--o-ok)', bar: Math.min(100, autosuff) + '%', bd: 'rgba(52,211,153,.18)', icon: 'leaf', ic: 'var(--o-ok)', art: VIEW_ART.leafart }
-      : { label: 'Injection', tag: surplusW > 5 ? 'VENTE' : '—', tagCol: 'var(--o-ok)', val: fmtW(surplusW), valCol: 'var(--o-accent)', col: 'var(--o-accent)', bar: Math.min(100, surplusW / maxBar * 100) + '%', bd: 'rgba(var(--o-accent-rgb),.18)', icon: 'chart-line-up', ic: 'var(--o-accent)', art: VIEW_ART.meter },
-    coutJour != null
-      ? { label: tr('Coût'), tag: coutMois != null ? eur(coutMois) + ' MOIS' : 'JOUR', tagCol: 'var(--o-text2)', val: eur(coutJour), num: coutJour, d: 2, unit: ' €', valCol: 'var(--o-purple)', col: 'var(--o-purple)', bar: Math.min(100, coutJour / 5 * 100) + '%', bd: 'rgba(167,139,250,.18)', icon: 'piggy-bank', ic: 'var(--o-purple)', art: VIEW_ART.piggy }
-      : { label: 'Facture', tag: 'MOIS', tagCol: 'var(--o-text2)', val: eur(bill), valCol: 'var(--o-purple)', col: 'var(--o-purple)', bar: '60%', bd: 'rgba(167,139,250,.18)', icon: 'piggy-bank', ic: 'var(--o-purple)', art: VIEW_ART.piggy },
-  ];
-  // Bandeau de réglages repliable (patron Atrium) — ne masque QUE la carte de bilan.
-  const kwhFmt = (v) => v == null ? '—' : v.toFixed(1).replace('.', ',') + ' kWh';
-  const impToday = avail(EN.consoReseauToday) ? num(EN.consoReseauToday) : (totalToday || null);
-  const expToday = avail(EN.injectionJour) ? num(EN.injectionJour) : null;
-  const hpArc = Math.round(251 * hpPct / 100);
-  const hpOff = useDrawArc(251 - hpArc, 251); // arc HP qui se dessine depuis 0
-  const seg = on => ({ padding: '7px 14px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)' });
-  const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', borderRadius: 'var(--o-radius,18px)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' };
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -8637,33 +8106,11 @@ function AspirateurContent({ hass }) {
   const legacy = (id) => (id && S && S[id]) ? id : null;
   const idBat = (vac && vac.battery) || legacy(entVac.battery);
   const idSurf = (vac && vac.area_cleaned) || legacy(entVac.surface);
-  const idDur = (vac && vac.duration) || legacy(entVac.duree);
   const idMap = (vac && vac.map) || legacy(entVac.map);
   // Camera de surveillance du passage, optionnelle : le robot n'en fournit pas.
   const idCam = legacy(entVac.camera);
   // L'entite vacuum elle-meme : c'est elle qui publie la liste des pieces.
   const idVac = (vac && vac.main) || legacy(entVac.main) || legacy(entVac.vacuum);
-  // Valeur numerique d'un capteur, ou null s'il ne repond pas.
-  const sNum = (id) => { const t = stTxt(id); const n = parseFloat(t); return isNaN(n) ? null : n; };
-  // Entites du robot reconnues toutes seules (usure, mode, debit d'eau...).
-  // La configuration reste prioritaire : qui a designe une entite garde la
-  // sienne, la decouverte ne sert qu'a remplir les roles laisses vides.
-  const auto = vacSensors(hass, idVac);
-  const role = (cle) => legacy(entVac[cle]) || auto[cle] || null;
-  // Usure des consommables. Une ligne n'apparait que si son capteur existe ET
-  // repond — pas de pourcentage invente.
-  const CONSOMMABLES = [
-    { cle: 'brushMain', nom: 'Brosse principale', desc: tr('Usure · à remplacer sous 20 %'), col: 'var(--o-ok)' },
-    { cle: 'brushSide', nom: tr('Brosse latérale'), desc: tr('Usure · à remplacer sous 20 %'), col: 'var(--o-ok)' },
-    { cle: 'mop', nom: tr('Serpillière'), desc: tr('Usure du tampon · à remplacer sous 20 %'), col: 'var(--o-cyan)' },
-    { cle: 'filter', nom: 'Filtre HEPA', desc: tr('Usure · à changer sous 20 %'), col: '#ffb347' },
-    { cle: 'care', nom: 'Entretien de l’appareil', desc: tr('Usure · révision sous 20 %'), col: 'var(--o-purple)' },
-  ].map(c => {
-    const id = role(c.cle);
-    const v = id ? sNum(id) : null;
-    return { ...c, id, v };
-  }).filter(c => c.id);
-  const idMaint = legacy(entVac.maintenance);
 
   // L'etat vient de l'entite `vacuum` (garanti partout) ; le capteur maison,
   // deja traduit, reste prioritaire chez qui le possede.
@@ -8677,8 +8124,6 @@ function AspirateurContent({ hass }) {
   const battery = batteryRaw != null ? Math.round(batteryRaw) : null;
   const surfRaw = num(idSurf, null);
   const surface = surfRaw != null ? String(Math.round(surfRaw)) : null;
-  const duree = fmtDuration(stTxt(idDur));
-  const maint = (idMaint && stTxt(idMaint)) || 'OK';
   const sOn = (id) => stTxt(id) === 'on';
   // Pieces reelles du robot, rattachees aux zones configurees (couleur, icone,
   // interrupteur). La liste des boutons et les zones cliquables du plan sortent
@@ -8714,71 +8159,12 @@ function AspirateurContent({ hass }) {
   const mainAction = () => paused ? runOr(vacScript('reprendre'), 'start') : cleaning ? runOr(vacScript('pause'), 'pause') : runOr(vacScript('nettoyer_tout'), 'start');
   const mainLabel = paused ? tr('Reprendre') : cleaning ? tr('Mettre en pause') : tr('Démarrer le nettoyage');
   const onBlue = cleaning && !paused;
-  const batColor = battery == null ? 'var(--o-text3)' : battery > 40 ? 'var(--o-ok)' : battery > 15 ? '#ffb347' : '#f87171';
   const onBase = raw ? raw === 'docked' : stTxt(entVac.onBase) === 'on';
   // Bandeau + carte de synthese repliables (patron Atrium)
   const stateTag = onBlue ? tr('NETTOYAGE EN COURS') : paused ? tr('EN PAUSE') : onBase ? tr('SUR LA BASE') : tr('AU REPOS');
   const stateCol = onBlue ? 'var(--o-accent)' : paused ? '#ffb347' : 'var(--o-ok)';
   const stateRgb = onBlue ? 'var(--o-accent-rgb)' : paused ? '255,179,71' : 'var(--o-ok-rgb)';
   const barBtn = { padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: 'var(--o-s1)', color: 'var(--o-text1)' };
-  // Ligne dense : libelle + description a gauche, valeur a droite
-  const VacRow = ({ label, desc, children }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', flexWrap: 'wrap' }}>
-      <div style={{ flex: '1 1 190px', minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
-        <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{desc}</div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>{children}</div>
-    </div>
-  );
-  // Unite publiee par l'entite : jamais devinee, sinon un total d'heures
-  // s'afficherait en minutes chez le voisin.
-  const unite = (id) => { const e = S && S[id]; return (e && e.attributes && e.attributes.unit_of_measurement) || ''; };
-  const valUnite = (id) => { const v = sNum(id); return v == null ? null : (Math.round(v * 10) / 10) + (unite(id) ? ' ' + unite(id) : ''); };
-  // « hier 14:20 » : le jour en clair tant qu'il est proche, la date au-dela.
-  const quand = (iso) => {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return null;
-    const n = new Date();
-    const jour = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-    const dj = Math.round((jour(d) - jour(n)) / 86400000);
-    const h = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
-    return (dj === 0 ? "aujourd’hui " : dj === -1 ? 'hier ' : d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' }) + ' ') + h;
-  };
-  // Ligne de reglage a choix : les options viennent de l'entite, on n'en
-  // invente aucune. Absente ou vide, la ligne ne s'affiche pas.
-  const SelRow = ({ id, label, desc }) => {
-    const e = (S && S[id]) || null;
-    const opts = (e && e.attributes && e.attributes.options) || [];
-    if (!e || !opts.length) return null;
-    return (
-      <VacRow label={label} desc={desc}>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {opts.map(o => {
-            const on = o === e.state;
-            return (
-              <button key={o} onClick={() => call('select', 'select_option', { entity_id: id, option: o })} aria-pressed={on}
-                style={{ padding: '6px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                  border: '1px solid ' + (on ? 'rgba(var(--o-accent-rgb),.5)' : 'var(--o-bd2)'),
-                  background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)',
-                  color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>
-                {vacOption(o)}
-              </button>
-            );
-          })}
-        </div>
-      </VacRow>
-    );
-  };
-  // Serpilliere posee ou retiree, et erreur en cours : deux informations que le
-  // robot publie et que la vue passait sous silence.
-  const mopPose = auto.mopOn ? stTxt(auto.mopOn) : null;
-  const modeTxt = auto.workMode && stTxt(auto.workMode) ? vacOption(stTxt(auto.workMode)) : null;
-  const erreur = auto.error ? stTxt(auto.error) : null;
-  const enPanne = erreur && !/^(no_error|ok|none|aucun)/i.test(erreur);
-  const derniere = auto.lastTask ? quand(stTxt(auto.lastTask)) : null;
-  const sousTitre = [(vac && vac.name) || tr('Aspirateur robot'), (vac && vac.area) || null, modeTxt,
-    mopPose == null ? null : (mopPose === 'on' ? 'serpillière fixée' : 'serpillière retirée')].filter(Boolean).join(' · ');
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -8907,9 +8293,6 @@ function AspirateurView({ hass }) {
   );
 }
 
-/* ════════════ VUE CROQUETTES (reproduction fidèle de "Loggia Croquettes.dc.html") ════════════ */
-const CROQ_WEEK = [54, 72, 66, 78, 60, 90, 66];
-const CROQ_WD = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 /* La capacite du reservoir etait ecrite ici : 1 500 g, celle d'un distributeur
  * precis. Un modele de 3 kg aurait affiche « 100 % » a moitie plein.
  *
@@ -8927,36 +8310,26 @@ const croqKeys = () => [...Object.values(croqHaids()), ...croqMeals().map(m => m
 // rien à découvrir — sans configuration, la vue se déclare hors ligne.
 function croqHaids() { const c = loggiaEnt('feeder', null); return (c && c.haids) || {}; }
 function croqMeals() { const c = loggiaEnt('feeder', null); return (c && Array.isArray(c.meals) && c.meals.length) ? c.meals : []; }
-// Bulles qui montent dans le réservoir (animation discrète).
-const CROQ_BUBBLES = [
-  { l: '26%', z: 5, d: '0s', s: '3.4s' }, { l: '54%', z: 4, d: '1.1s', s: '4s' },
-  { l: '68%', z: 5, d: '2.2s', s: '3.7s' }, { l: '40%', z: 3, d: '1.6s', s: '4.3s' },
-];
 
 function CroquettesContent({ hass }) {
   const S = (hass && hass.states) || null;
   const num = (id, def = 0) => { const e = S && S[id]; if (!e || e.state == null || e.state === 'unknown' || e.state === 'unavailable') return def; const n = parseFloat(e.state); return isNaN(n) ? def : n; };
   const reservoirOk = (() => { const e = S && S[croqHaids().reservoir]; return !!(e && e.state != null && e.state !== 'unknown' && e.state !== 'unavailable'); })();
   const reservoirG = reservoirOk ? Math.round(num(croqHaids().reservoir, 0)) : null;
-  const distribuees = Math.round(num(croqHaids().distribuees, 0));
   const portionW = num(croqHaids().portionWeight, 6);
   const autoOn = (id) => { const e = S && S[id]; return e ? e.state === 'on' : true; };
   const msig = croqMeals().map(m => autoOn(m.auto) ? 1 : 0).join('');
   const [meals, setMeals] = useState(() => croqMeals().map(m => ({ ...m, on: autoOn(m.auto) })));
   useEffect(() => { setMeals(croqMeals().map(m => ({ ...m, on: autoOn(m.auto) }))); }, [msig]);
-  const [portion, setPortion] = useState(1);
   const [levelLocal, setLevelLocal] = useState(null);
   useEffect(() => { setLevelLocal(null); }, [reservoirG]); // toute variation confirmée du capteur reprend la main sur l'optimiste
   const level = levelLocal != null ? levelLocal : (reservoirG == null ? 0 : Math.max(0, Math.min(100, Math.round(reservoirG / croqMax(S) * 100))));
-  const shownG = levelLocal != null ? croqMax(S) : reservoirG;
   const call = (d, s, data) => { try { if (hass && hass.callService) hass.callService(d, s, data || {}); } catch (e) {} };
   // Distribuer demande un script propre a l'installation : rien de standard.
   // Sans lui, le geste ne fait rien plutot que d'appeler un script absent.
   const dispense = (n) => { const sc = (loggiaEnt('feeder', null) || {}).script; if (sc) call('script', 'turn_on', { entity_id: sc, variables: { portions: n } }); };
   const refill = () => { setLevelLocal(100); call('input_number', 'set_value', { entity_id: croqHaids().reservoir, value: croqMax(S) }); };
   const toggleMeal = (m) => { setMeals(ms => ms.map(x => x.id === m.id ? { ...x, on: !x.on } : x)); call('automation', m.on ? 'turn_off' : 'turn_on', { entity_id: m.auto }); };
-  const onCount = meals.filter(m => m.on).length;
-  const dayG = meals.filter(m => m.on).reduce((s, m) => s + m.g, 0);
   const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
   const mealMin = (t) => { const [h, mm] = t.split(':').map(Number); return h * 60 + mm; };
   const upcoming = meals.filter(m => m.on && mealMin(m.time) > nowMin).sort((a, b) => mealMin(a.time) - mealMin(b.time))[0];
@@ -8966,9 +8339,6 @@ function CroquettesContent({ hass }) {
     const v = Math.max(2, Math.min(30, nv));
     call('number', 'set_value', { entity_id: croqHaids().portionWeight, value: v });
   };
-  // Repas passés / à venir dans la journée
-  const done = meals.filter(m => m.on && mealMin(m.time) <= nowMin);
-  const doneG = done.reduce((t, m) => t + m.g, 0);
   const remaining = meals.filter(m => m.on && mealMin(m.time) > nowMin);
   const relTo = (t) => {
     const dm = mealMin(t) - nowMin;
@@ -8976,9 +8346,6 @@ function CroquettesContent({ hass }) {
     const h = Math.floor(dm / 60), mn = dm % 60;
     return 'dans ' + (h ? h + ' h ' + String(mn).padStart(2, '0') : mn + ' min');
   };
-  // Autonomie estimée : réservoir restant / ration quotidienne programmée
-  const autonomy = (reservoirG != null && dayG > 0) ? Math.floor(reservoirG / dayG) : null;
-  const online = !!(reservoirOk || (S && S[croqHaids().portionWeight]));
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -9102,15 +8469,6 @@ function extractNpAccent(url) {
 }
 
 const medKeys = () => medPlayers().flatMap(p => [p.haid, p.ma]).filter(Boolean);
-const MED_INITIAL_SPK = [
-  { id: 'atv', name: 'Apple TV', vol: 0, muted: true },
-  { id: 'atv-s', name: 'Apple TV Séjour', vol: 0, muted: true },
-  { id: 'echo-sejour', name: 'Echo Séjour', vol: 30, color: 'var(--o-purple)' },
-  { id: 'enceinte-chambre', name: 'Enceinte Chambre', vol: 0, muted: true },
-  { id: 'enceinte-bureau', name: 'Enceinte Bureau', vol: 0, muted: true },
-  { id: 'enceinte-salon', name: 'Enceinte Salon', vol: 30, color: 'var(--o-purple)' },
-  { id: 'echo-enfant', name: 'Enceinte · Chambre enfant', vol: 16, color: 'var(--o-cyan)' },
-];
 
 function MediasContent({ hass, edit = false, onEnt }) {
   // Une seule evaluation par rendu. Chaque appel relit la configuration et
@@ -9175,24 +8533,7 @@ function MediasContent({ hass, edit = false, onEnt }) {
   const selId = playingP ? playingP.id : 'echo_salon';
   const sel = lecteurs.find(p => p.id === selId) || lecteurs[0] || null;
   const np = rd(sel);
-  const derivedVols = Object.fromEntries(lecteurs.map(p => { const st = rd1(p.haid); return [p.id, st.hasVol ? st.vol : 0]; }));
-  const vsig = lecteurs.map(p => derivedVols[p.id]).join(',');
-  const [vols, setVols] = useState(derivedVols);
-  useEffect(() => { setVols(derivedVols); }, [vsig]);
   const call = (svc, data) => { try { if (hass && hass.callService) hass.callService('media_player', svc, data || {}); } catch (e) {} };
-  const drag = (p, e) => {
-    e.preventDefault();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const calc = x => Math.max(0, Math.min(100, Math.round((x - rect.left) / rect.width * 100)));
-    let v = calc(e.clientX); setVols(o => ({ ...o, [p.id]: v }));
-    const el = e.currentTarget;
-    try { el.setPointerCapture(e.pointerId); } catch (x) {}
-    const end = () => { el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; };
-    el.onpointermove = ev => { v = calc(ev.clientX); setVols(o => ({ ...o, [p.id]: v })); };
-    el.onpointerup = () => { commander(hass, p.haid, 'set_volume', v / 100); end(); };
-    el.onpointercancel = end;
-  };
-  const playPause = () => commander(hass, np.ctl, 'play_pause');
   /**
    * Monter ou baisser le volume d'un cran.
    *
@@ -9208,39 +8549,10 @@ function MediasContent({ hass, edit = false, onEnt }) {
       commander(hass, id, 'set_volume', ((np.vol || 0) + delta) / 100);
     }
   };
-  const next = () => commander(hass, np.ctl, 'next_track');
-  const prev = () => commander(hass, np.ctl, 'previous_track');
-  const muteAll = () => { setVols(o => Object.fromEntries(lecteurs.map(p => [p.id, 0]))); lecteurs.forEach(p => commander(hass, p.haid, 'set_volume', 0)); };
-  const fmtT = (s) => { if (s == null || isNaN(s)) return '0:00'; const m = Math.floor(s / 60), ss = Math.floor(s % 60); return m + ':' + (ss < 10 ? '0' : '') + ss; };
-  const progPct = (np.pos != null && np.dur) ? Math.min(100, np.pos / np.dur * 100) : 0;
-  const playTitle = np.title || (np.playing ? tr('En lecture') : np.on ? tr('En pause') : tr('Rien en lecture'));
-  const playSub = [np.artist, np.album].filter(Boolean).join(' · ') || (np.on ? sel.name : '—');
-  const eqBar = (delay) => ({ width: 3, background: 'var(--o-purple)', borderRadius: 4, height: '100%', transformOrigin: 'bottom', animation: `eq .8s ease-in-out infinite ${delay}`, animationPlayState: np.playing ? 'running' : 'paused' });
-  const setShuffle = () => commander(hass, np.ctl, 'set_shuffle', !np.shuffle);
-  const cycleRepeat = () => { const o = ['off', 'all', 'one'], i = o.indexOf(np.repeat); commander(hass, np.ctl, 'set_repeat', o[(i + 1) % 3]); };
   // Seek sur la barre de progression (pointer capture + peinture DOM directe, commit media_seek au relâcher).
   // seekOv = override optimiste le temps que HA confirme la nouvelle position.
-  const [seekOv, setSeekOv] = useState(null);
   const seekTimer = useRef(null);
   useEffect(() => () => clearTimeout(seekTimer.current), []);
-  const seekDrag = (e) => {
-    if (!np.dur) return;
-    e.preventDefault();
-    const el = e.currentTarget;
-    const fill = el.querySelector('[data-seekfill]');
-    const r = el.getBoundingClientRect();
-    const calc = x => Math.max(0, Math.min(100, (x - r.left) / r.width * 100));
-    let v = calc(e.clientX);
-    const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = v + '%'; } };
-    paint();
-    try { el.setPointerCapture(e.pointerId); } catch (er) {}
-    el.onpointermove = ev => { v = calc(ev.clientX); paint(); };
-    const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; };
-    el.onpointerup = () => { end(); const secs = v / 100 * np.dur; setSeekOv(secs); commander(hass, np.ctl, 'seek', Math.round(secs)); clearTimeout(seekTimer.current); seekTimer.current = setTimeout(() => setSeekOv(null), 3000); };
-    el.onpointercancel = () => { end(); if (fill) fill.style.width = progPct + '%'; };
-  };
-  const showPos = seekOv != null ? seekOv : np.pos;
-  const showPct = (showPos != null && np.dur) ? Math.min(100, showPos / np.dur * 100) : 0;
   // Artwork en erreur : on mémorise l'URL fautive (state) au lieu de cacher l'<img> en dur —
   // sinon display:none survivait aux changements de piste et l'image ne revenait jamais.
   // Et comme l'URL proxy Apple TV peut rester IDENTIQUE avec un token redevenu valide,
@@ -9251,26 +8563,6 @@ function MediasContent({ hass, edit = false, onEnt }) {
     const t = setTimeout(() => setArtErr(null), 8000);
     return () => clearTimeout(t);
   }, [artErr]);
-  const artOk = np.art && np.art !== artErr;
-  const onArt = !!artOk; // artwork présent → textes blancs sur l'ambiance floutée (assombrie, lisible dans les deux modes)
-  // Accent dynamique extrait de la pochette (comme la carte d'origine) → barre, badge, glow.
-  const [npAccent, setNpAccent] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    if (!artOk) { setNpAccent(null); return; }
-    extractNpAccent(np.art).then(v => { if (alive) setNpAccent(v); });
-    return () => { alive = false; };
-  }, [np.art, artOk]);
-  const accR = npAccent ? npAccent.join(',') : null;
-  const acc = accR ? `rgb(${accR})` : 'var(--o-accent)';
-  const accA = (al) => accR ? `rgba(${accR},${al})` : `rgba(var(--o-accent-rgb),${al})`;
-  const accLight = npAccent ? `rgb(${npAccent.map(v => Math.round(v + (255 - v) * .28)).join(',')})` : 'var(--o-accent-soft)';
-  // Boutons "verre" de la carte d'origine : squircle, dégradé blanc translucide, blur, liseré haut.
-  const glass = (size, rad) => ({ width: size, height: size, borderRadius: rad, flexShrink: 0, border: onArt ? '1px solid rgba(255,255,255,.14)' : 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', color: onArt ? '#fff' : 'var(--o-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: onArt ? 'linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.06))' : 'var(--o-s1)', backdropFilter: 'blur(14px) saturate(1.38)', WebkitBackdropFilter: 'blur(14px) saturate(1.38)', boxShadow: '0 12px 26px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.08)', position: 'relative' });
-  const mutedSel = np.hasVol && vols[sel.id] === 0;
-  const tMain = onArt ? '#fff' : 'var(--o-text)';
-  const tSub = onArt ? 'rgba(255,255,255,.75)' : 'var(--o-text2)';
-  const tDim = onArt ? 'rgba(255,255,255,.55)' : 'var(--o-text3)';
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -9373,58 +8665,6 @@ const secBaseKeys = () => {
 // comptage de l'historique, qui doivent s'accorder.
 const ACTIFS = ['on', 'true', 'True', 'detected', 'Detected', 'home'];
 
-/**
- * Detections par heure sur les 24 dernieres heures, comptees dans l'historique
- * de Home Assistant.
- *
- * Ces 24 valeurs etaient auparavant ecrites en dur — un « profil illustratif »
- * affiche sous la legende « Detections camera par heure ». Le graphique
- * montrait donc la meme journee inventee a tout le monde, et personne ne
- * pouvait le deviner.
- *
- * Seules les transitions vers l'etat actif comptent : une presence qui dure une
- * heure est un evenement, pas soixante. `null` tant que la reponse n'est pas la,
- * ou si l'historique n'est pas accessible — la ligne disparait alors, plutot que
- * de montrer une journee vide qu'on prendrait pour du calme.
- */
-function useCamHist(hass, ids) {
-  const [data, setData] = useState(null);
-  const cle = ids.filter(Boolean).join('|');
-  const connecte = hass ? 1 : 0;
-  useEffect(() => {
-    let vivant = true;
-    if (!hass || !hass.callApi || !cle) { setData(null); return undefined; }
-    const debut = new Date(Date.now() - 24 * 3600 * 1000);
-    hass.callApi('GET', 'history/period/' + debut.toISOString()
-      + '?filter_entity_id=' + encodeURIComponent(cle.split('|').join(','))
-      + '&minimal_response&no_attributes')
-      .then(res => {
-        if (!vivant) return;
-        if (!Array.isArray(res)) { setData(null); return; }
-        const actif = e => ACTIFS.indexOf(String(e && e.state)) >= 0;
-        // Case 23 = heure courante ; case 0 = la meme heure hier.
-        const heures = new Array(24).fill(0);
-        const base = debut.getTime();
-        res.forEach(serie => {
-          if (!Array.isArray(serie)) return;
-          let precedent = false;
-          serie.forEach(e => {
-            const maintenant = actif(e);
-            if (maintenant && !precedent) {
-              const t = new Date(e.last_changed || e.last_updated || 0).getTime();
-              const i = Math.floor((t - base) / 3600000);
-              if (i >= 0 && i < 24) heures[i]++;
-            }
-            precedent = maintenant;
-          });
-        });
-        setData(heures);
-      })
-      .catch(() => { if (vivant) setData(null); });
-    return () => { vivant = false; };
-  }, [connecte, cle]);
-  return data;
-}
 
 function SecuriteContent({ hass, edit = false, onEnt }) {
   const S = (hass && hass.states) || {};
@@ -9506,8 +8746,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
       sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: online ? dot : '#f87171' }} />{online ? subTxt : tr('Hors ligne')}</>),
     };
   });
-  const camOnline = cams.filter(c => c.online).length, camTotal = cams.length;
-  const camPct = camTotal ? Math.round(camOnline / camTotal * 100) : 0;
+  const camOnline = cams.filter(c => c.online).length;
   const anyMotion = cams.some(c => c.online && c.active);
 
   // ── Présence ──
@@ -9518,13 +8757,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   const unknownState = alarm === 'unknown';
   const heroTitle = unknownState ? tr('État inconnu') : triggered ? tr('Alarme déclenchée') : anyMotion ? tr('Mouvement détecté') : tr('Tout est calme');
   const statusCol = unknownState ? [140, 152, 180] : triggered ? [248, 113, 113] : alarm !== 'off' ? [255, 179, 71] : [52, 211, 153];
-  const statusTxt = unknownState ? tr('CONNEXION ?') : triggered ? tr('ALERTE') : alarm === 'away' ? tr('ARMÉE · ABSENT') : alarm === 'home' ? tr('ARMÉE · PRÉSENT') : alarm === 'night' ? tr('ARMÉE · NUIT') : tr('SURVEILLÉE');
 
-  // Toutes les entites de detection des cameras : c'est leur historique qui
-  // remplit le graphique d'activite.
-  const detecteurs = camList.flatMap(c => [c.motion, c.person, c.vehicle, c.sonnette, c.colis]).filter(Boolean);
-  const activite = useCamHist(hass, detecteurs);
-  const maxC = Math.max(...(activite || [0]), 1);
   const cs = a => `rgb(${a.join(',')})`;
   const ca = (a, al) => `rgba(${a.join(',')},${al})`;
   // Bouton d'armement compact (ligne dense)
@@ -9534,16 +8767,6 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
    * etait deux fois plus etroit que « Desarme » — et que le bouton retrecissait
    * en cours d'armement, quand le decompte remplace le mot (retour 03/09). */
   const armBtn = (active, rgb) => ({ position: 'relative', overflow: 'hidden', minWidth: 96, textAlign: 'center', padding: '7px 13px', borderRadius: 10, border: '1px solid ' + (active ? ca(rgb, .5) : 'var(--o-bd1)'), cursor: 'pointer', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', transition: 'all .2s', background: active ? ca(rgb, .16) : 'var(--o-s2)', color: active ? cs(rgb) : 'var(--o-text1)' });
-  // Ligne au patron Apparence : libellé + description à gauche, contrôle/valeur à droite
-  const SecRow = ({ label, desc, children }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', flexWrap: 'wrap' }}>
-      <div style={{ flex: '1 1 190px', minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
-        <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{desc}</div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>{children}</div>
-    </div>
-  );
   // Bandeau + carte de synthese repliables (patron Atrium)
   // Bitmask AlarmControlPanelEntityFeature de HA : ARM_HOME=1, ARM_AWAY=2, ARM_NIGHT=4.
   // On n'affiche « Nuit » que si le panneau la gere — sinon l'appel serait rejete.
@@ -9559,8 +8782,6 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
     : alarm === 'away' ? tr('armée · absent') : alarm === 'home' ? tr('armée · présent') : alarm === 'night' ? tr('armée · nuit') : tr('désarmée');
   const alarmShort = arming ? (cptAlarme ? cptAlarme.reste + ' s' : tr('activation…')) : triggered ? tr('déclenchée') : alarm === 'unknown' ? tr('inconnue')
     : alarm === 'away' ? tr('absent') : alarm === 'home' ? tr('présent') : alarm === 'night' ? tr('nuit') : tr('prête');
-  const alarmDesc = arming ? (cptAlarme ? tr('Activation dans {n} s — le temps de sortir', { n: cptAlarme.reste }) : tr('Activation en cours…')) : triggered ? tr('Intrusion détectée — vérifier immédiatement') : alarm === 'unknown' ? tr('État inconnu — connexion à vérifier') : alarm === 'off' ? tr('Prête · tous les capteurs au repos') : alarm === 'away' ? tr('Surveillance totale active') : alarm === 'night' ? tr('Mode nuit — périmètre et zones de repos') : tr('Périmètre surveillé');
-  const presentNames = people.filter(p => p.home).map(p => p.name).join(', ');
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -9742,18 +8963,6 @@ function fmtUptime(raw) {
   const t = Date.parse(s); if (!isNaN(t)) { let sec = (Date.now() - t) / 1000; if (sec < 0) sec = 0; return jh(Math.floor(sec / 86400), Math.floor((sec % 86400) / 3600)); }
   return s;
 }
-/* Bases machines (icones + identite ; donnees dynamiques calculees dans
- * SystemeContent).
- *
- * Une fonction, et non une table : un `tr()` au niveau d'un module s'evalue a
- * l'import. Cela fonctionne — `resoudreTot()` fixe la langue avant tout import
- * et le selecteur recharge la page — mais l'evaluer au rendu ne depend d'aucune
- * de ces deux conditions. */
-const sysMachines = () => [
-  { key: 'host', name: tr('Serveur Home Assistant'), sub: tr('Hôte principal'), iconBg: 'rgba(52,211,153,.16)', iconCol: 'var(--o-ok)', icon: <Fi i="home" size={16} />, barCol: 'var(--o-ok)', art: 'serverart' },
-  { key: 'nebula', name: tr('Deuxième machine'), sub: tr('Serveur de stockage'), iconBg: 'rgba(255,179,71,.16)', iconCol: '#ffb347', icon: <Fi i="database" size={16} />, barCol: '#ffb347', art: 'nas' },
-  { key: 'ucg', name: tr('Troisième machine'), sub: tr('Passerelle réseau'), iconBg: 'rgba(var(--o-accent-rgb),.16)', iconCol: 'var(--o-accent-soft)', icon: <Fi i="wifi" size={16} />, barCol: 'var(--o-accent)', art: 'routerart' },
-];
 
 // History HA pour la vue Système : points {t,v} par entité, période en heures, refresh manuel.
 function useSysHist(hass, ids, hours, refreshKey) {
@@ -9776,24 +8985,6 @@ function useSysHist(hass, ids, hours, refreshKey) {
     return () => { alive = false; };
   }, [connecte, key, hours, refreshKey]);
   return data;
-}
-// Jauge circulaire (design Claude Design) : arc 288°, couleur auto selon le niveau.
-function SysRing({ pct, label, warn = 70, bad = 86 }) {
-  const v = pct == null ? null : Math.max(0, Math.min(100, Math.round(pct)));
-  const col = v == null ? 'var(--o-bd1)' : v >= bad ? '#f87171' : v >= warn ? '#ffb347' : 'var(--o-ok)';
-  const C = 2 * Math.PI * 24;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 0 }}>
-      <div style={{ position: 'relative', width: 62, height: 62 }}>
-        <svg width="62" height="62" viewBox="0 0 62 62" style={{ transform: 'rotate(126deg)' }}>
-          <circle cx="31" cy="31" r="24" fill="none" stroke="var(--o-s1)" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${C * 0.8} ${C}`} />
-          {v != null && <circle cx="31" cy="31" r="24" fill="none" stroke={col} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${C * 0.8 * v / 100} ${C}`} style={{ transition: 'stroke-dasharray .8s cubic-bezier(.22,.61,.36,1), stroke .3s' }} />}
-        </svg>
-        <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: v == null ? 'var(--o-text3)' : col }}>{v == null ? '—' : v + '%'}</span>
-      </div>
-      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.09em', color: 'var(--o-text3)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{label}</span>
-    </div>
-  );
 }
 // Aire + ligne sur points d'historique {t,v}, echelle automatique.
 //
@@ -9873,8 +9064,6 @@ function SystemeContent({ hass }) {
     else { setArmed(id); if (armRef.current) clearTimeout(armRef.current); armRef.current = setTimeout(() => setArmed(null), 4000); }
   };
   useEffect(() => () => { if (armRef.current) clearTimeout(armRef.current); }, []);
-  const pct = v => v == null ? null : Math.max(0, Math.min(100, Math.round(v)));
-  const fmtPct = v => v == null ? '—' : pct(v) + '%';
   // Hote principal (Glances ou System Monitor)
   const SYS = sysSensors();
   const SYSN = sysNames();
@@ -10007,18 +9196,6 @@ function SystemeView({ hass }) {
   );
 }
 
-/* ════════════ VUE PARAMÈTRES (reproduction fidèle de "Loggia Paramètres.dc.html") ════════════ */
-/* Une FONCTION, pas une table.
- *
- * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
- * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
- * langue. Appelee au rendu, elle se dit dans la langue du moment. */
-const PAR_NAV = () => [
-  { grp: 'Compte', items: [['users', tr('Utilisateurs'), 'users']] },
-  { grp: 'Application', items: [['apparence', tr('Apparence'), 'palette'], ['connexion', tr('Connexion HA'), 'link'], ['auto', tr('Automatisations'), 'bolt'], ['maj', tr('Mises à jour'), 'refresh']] },
-  { grp: 'Dashboard', items: [['vues', tr('Vues'), 'layout-fluid'], ['entites', tr('Entités'), 'list']] },
-  { grp: tr('Système'), items: [['about', tr('À propos'), 'info']] },
-];
 /* Carte template d'une vue custom : le Jinja est evalue par Home Assistant,
  * jamais ici. `render_template` est une SOUSCRIPTION : HA re-evalue et pousse
  * une nouvelle valeur des qu'une entite referencee change — le direct est
@@ -10129,11 +9306,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   // Climat = ROUGE (retour d'essai 31/08) : l'ambre warn2 rendait jaune.
   const teinte = cvEstLumiere(id) ? (rgbHex || '#FFCC44') : dom === 'climate' ? 'var(--o-bad)' : dom === 'cover' ? 'var(--o-purple)' : null;
   const teinteTxt = rgbHex || (cvEstLumiere(id) ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-bad)' : dom === 'cover' ? 'var(--o-purple)' : 'var(--o-accent-soft)');
-  const acc = on ? 'var(--o-accent)' : 'var(--o-text3)';
   const togglable = ['light', 'switch', 'input_boolean', 'fan', 'humidifier', 'siren'].indexOf(dom) >= 0;
-  // Cliquable comme la carte riche : la fiche du domaine s'ouvre (lumière réglable seulement — un simple toggle n'a pas de fiche).
-  const modes = a.supported_color_modes || [];
-  const reglable = dom !== 'light' || modes.length > 1 || a.brightness != null || modes.indexOf('brightness') >= 0 || modes.some(m => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww', 'color_temp'].indexOf(m) >= 0);
   // Presque tout s'ouvre : les domaines à fiche dédiée, et tout appareil du
   // registre via la fiche universelle. Seuls les capteurs texte restent muets.
   const ouvrable = !dead && !!onOpen && ((dom === 'sensor' && !isNaN(parseFloat(s)))
@@ -12347,12 +11520,6 @@ const matchHaUser = (haUser, list) => {
   }
   return -1;
 };
-/* Une FONCTION, pas une table.
- *
- * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
- * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
- * langue. Appelee au rendu, elle se dit dans la langue du moment. */
-const VAC_STATE_FR = () => ({ docked: 'À la base', cleaning: tr('Nettoyage'), returning: tr('Retour base'), paused: tr('En pause'), idle: tr('En veille'), error: tr('Erreur') });
 function airLabel(co2) { return co2 == null || co2 < 800 ? tr('BON') : co2 < 1200 ? tr('MOYEN') : tr('ÉLEVÉ'); }
 function co2Style(co2) { return co2 < 600 ? { bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' } : co2 < 900 ? { bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' } : { bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' }; }
 // Dérive les données live de l'Accueil depuis hass + config. null si pas de hass (→ démo).

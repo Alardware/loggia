@@ -4,7 +4,9 @@
  * dit quelles lampes savent vraiment faire un fondu. Promettre à l'écran un
  * fondu que la lampe ne tiendra pas est pire que de ne pas le proposer.
  */
-import { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  useMemo
+} from 'react';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 

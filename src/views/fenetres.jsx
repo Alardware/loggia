@@ -8,7 +8,9 @@
  * Le travail est fait par le serveur (`fenetres.py`) : la règle tient dashboard
  * fermé, ce qui est le minimum pour un radiateur.
  */
-import { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  useMemo
+} from 'react';
 import { LOGGIA_INDEX } from '../state.js';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';

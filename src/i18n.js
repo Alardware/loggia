@@ -392,9 +392,6 @@ function chargerRessourcesHA(hass, code) {
     .catch(() => { /* sans ces ressources, le catalogue suffit */ });
 }
 
-/* La langue avec laquelle les tableaux de libelles ont ete CONSTRUITS. Elle ne
- * bouge plus : c'est le point de comparaison. */
-const LANGUE_IMPORT = _code;
 
 
 export function preparerLangue(hass) {

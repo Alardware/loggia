@@ -8,7 +8,9 @@
  * la désarmer parce qu'un téléphone approche en est un, et cette case ne doit
  * pas se cocher distraitement au milieu des autres.
  */
-import { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  useMemo
+} from 'react';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 

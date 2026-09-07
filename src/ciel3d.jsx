@@ -35,22 +35,8 @@ const STARS = RAW.map(([n, ra, dec, m, c, sp]) => ({
   x: -(ra - RA0) * Math.cos(dec * Math.PI / 180),
   y: dec - DEC0,
 }));
-const S = n => STARS.find(s => s.n === n);
 
-const LINES = [
-  ['Betelgeuse', 'Bellatrix'],
-  ['Bellatrix', 'Mintaka'], ['Betelgeuse', 'Alnitak'],
-  ['Mintaka', 'Alnilam'], ['Alnilam', 'Alnitak'],
-  ['Alnitak', 'Saiph'], ['Mintaka', 'Rigel'],
-  ['Saiph', 'Rigel'],
-  ['Meissa', 'Betelgeuse'], ['Meissa', 'Bellatrix'],
-  ['Betelgeuse', 'μ Ori'],
-  ['Bellatrix', 'π³ Ori'],
-  ['π¹ Ori', 'π² Ori'], ['π² Ori', 'π³ Ori'], ['π³ Ori', 'π⁴ Ori'],
-  ['π⁴ Ori', 'π⁵ Ori'], ['π⁵ Ori', 'π⁶ Ori'],
-];
 
-const LABELLED = ['Betelgeuse', 'Rigel', 'Bellatrix', 'Mintaka', 'Alnilam', 'Alnitak', 'Saiph', 'Meissa', 'Hatysa'];
 
 const FRAG = `
 precision highp float;
