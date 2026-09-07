@@ -171,8 +171,12 @@ function AlertesTele({ hass, cardSt }) {
       </div>
       <div className="o-optrow" style={{ ...ligne, marginTop: 14 }}>
         {lbl(tr('Téléphone cible'), tr('Le service notify de l’app compagnon'))}
-        <input list="loggia-notify-svcs" value={cfg.service} onChange={e => save({ service: e.target.value.trim() })} placeholder="mobile_app_…"
+        <input aria-label={tr('Service de notification')} list="loggia-notify-svcs" value={cfg.service} onChange={e => save({ service: e.target.value.trim() })} placeholder="mobile_app_…"
           style={{ ...cvInp, maxWidth: 260, padding: '9px 12px', fontSize: 13 }} />
+        {/* Un <datalist> n'est pas un controle : il ne se saisit pas, il propose des
+          * valeurs a l'<input> qui le reference. C'est ce dernier qui porte
+          * l'etiquette, et il l'a. */}
+        {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
         <datalist id="loggia-notify-svcs">{services.map(s => <option key={s} value={s} />)}</datalist>
       </div>
       {CATS.map(([k, t, d]) => (
@@ -379,10 +383,14 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
   const save = () => { const n = name.trim(); if (!n) return; onSave({ name: n, role, c, sub: role + ' · ' + n.toLowerCase().replace(/\s+/g, '.'), vues: role === 'Admin' ? [] : vues }); };
   const roleBtn = (on) => ({ flex: 1, padding: 11, borderRadius: 10, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' });
   return (
-    <div onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
+    <div role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div role="presentation" onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}><span style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 19, color: '#fff', background: `linear-gradient(135deg,${c},rgba(${cl_hexRgb(c)},.6))` }}>{(name.trim()[0] || '?').toUpperCase()}</span><div style={{ fontSize: 15, fontWeight: 800 }}>{user ? "Modifier l'utilisateur" : 'Nouvel utilisateur'}</div></div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>NOM</div>
+        {/* `autoFocus` delibere : cette feuille s'ouvre pour saisir un nom, en
+          * reponse a un clic. La regle vise les champs focalises au CHARGEMENT
+          * d'une page. */}
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
         <input aria-label="Nom" value={name} autoFocus onChange={e => setName(e.target.value)} placeholder="Nom" style={{ ...inp, marginBottom: 16 }} />
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>{tr('RÔLE')}</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -391,7 +399,7 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
         </div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 8 }}>COULEUR</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-          {USER_COLORS.map(col => <button key={col} onClick={() => setC(col)} style={{ width: 32, height: 32, borderRadius: '50%', border: col === c ? '2px solid var(--o-text)' : '2px solid transparent', background: col, cursor: 'pointer', flexShrink: 0 }} />)}
+          {USER_COLORS.map(col => <button key={col} aria-label={tr('Couleur du profil')} onClick={() => setC(col)} style={{ width: 32, height: 32, borderRadius: '50%', border: col === c ? '2px solid var(--o-text)' : '2px solid transparent', background: col, cursor: 'pointer', flexShrink: 0 }} />)}
         </div>
         {role !== 'Admin' && (<>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 4 }}>{tr('VUES AUTORISÉES')}</div>
@@ -439,7 +447,7 @@ function FondPhotoBtn({ actif, onLook }) {
   };
   return (
     <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>
-      <input ref={fichierRef} type="file" accept="image/*" onChange={choisir} style={{ display: 'none' }} />
+      <input aria-label={tr('Choisir une image de profil')} ref={fichierRef} type="file" accept="image/*" onChange={choisir} style={{ display: 'none' }} />
       <button onClick={() => { if (!photo) { fichierRef.current && fichierRef.current.click(); return; } onLook({ fond: 'photo' }); }}
         aria-pressed={actif} aria-label={tr("Fond d'écran") + ' ' + tr('Photo')}
         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: actif ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent-fond)' : 'var(--o-bd1)') }}>
@@ -464,8 +472,8 @@ function CvEditor({ cv, hass, onSave, onClose }) {
   const inp = cvInp;
   const save = () => { const n = name.trim(); if (!n) return; onSave({ id: cv ? cv.id : 'cv_' + Math.random().toString(36).slice(2, 8), name: n, icon, ents }); };
   return (
-    <div onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 470, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
+    <div role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div role="presentation" onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 470, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
         <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>{cv ? 'Modifier la vue' : 'Nouvelle vue'}</div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', marginBottom: 6 }}>NOM</div>
         <input aria-label="Ma vue" value={name} onChange={e => setName(e.target.value)} placeholder="Ma vue" style={inp} />
@@ -475,7 +483,7 @@ function CvEditor({ cv, hass, onSave, onClose }) {
         </div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>ENTITÉS ({ents.length})</div>
         {ents.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-          {ents.map((x, i) => <span key={cvKey(x)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px solid rgba(var(--o-accent-rgb),.25)', fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)', maxWidth: '100%' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cvEstTpl(x) ? '{ } ' + (x.name || 'Template') : cvName(hass && hass.states && hass.states[x], x)}</span><span onClick={() => setEnts(prev => prev.filter((_, k) => k !== i))} style={{ cursor: 'pointer', fontWeight: 800, opacity: .8 }}>×</span></span>)}
+          {ents.map((x, i) => <span key={cvKey(x)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px solid rgba(var(--o-accent-rgb),.25)', fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)', maxWidth: '100%' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cvEstTpl(x) ? '{ } ' + (x.name || 'Template') : cvName(hass && hass.states && hass.states[x], x)}</span><span role="button" tabIndex={0} aria-label={tr('Retirer cette entité')} onClick={() => setEnts(prev => prev.filter((_, k) => k !== i))} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEnts(prev => prev.filter((_, k) => k !== i)); } }} style={{ cursor: 'pointer', fontWeight: 800, opacity: .8 }}>×</span></span>)}
         </div>}
         <EntPicker hass={hass} exclude={ents.filter(x => typeof x === 'string')} onPick={(id) => setEnts(prev => prev.indexOf(id) < 0 ? [...prev, id] : prev)} />
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
@@ -523,7 +531,7 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
             {cols.map(c => { const v = r[c.k] || ''; const st = check && c.domain && v ? (check(v) ? 'ok' : 'bad') : null; return (
               <span key={c.k} style={{ position: 'relative', flex: c.flex || 1, minWidth: 0, display: 'flex' }}>
                 <span className="o-entlabel">{c.label}</span>
-                <input value={v} onChange={e => set(i, c.k, e.target.value)} placeholder={c.ph || ''} list={c.domain ? 'o-dl-' + c.domain : undefined} spellCheck={false} style={{ ...entInp, width: '100%', minWidth: 0, paddingRight: st ? 24 : undefined, border: st === 'bad' ? 'var(--o-bw,1px) solid rgba(var(--o-bad-rgb),.55)' : entInp.border }} />
+                <input aria-label={c.label} value={v} onChange={e => set(i, c.k, e.target.value)} placeholder={c.ph || ''} list={c.domain ? 'o-dl-' + c.domain : undefined} spellCheck={false} style={{ ...entInp, width: '100%', minWidth: 0, paddingRight: st ? 24 : undefined, border: st === 'bad' ? 'var(--o-bw,1px) solid rgba(var(--o-bad-rgb),.55)' : entInp.border }} />
                 {st && <span title={st === 'ok' ? 'Entité trouvée' : 'Introuvable dans Home Assistant'} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 7, height: 7, borderRadius: '50%', background: st === 'ok' ? 'var(--o-ok)' : 'var(--o-bad)', pointerEvents: 'none' }} />}
               </span>
             ); })}
@@ -634,6 +642,9 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
   const check = hass && hass.states ? (id) => !!hass.states[id] : null;
   return (
     <>
+      {/* Meme raison que plus haut : ces listes de suggestions ne se saisissent
+        * pas, et les champs qui les referencent portent deja leur etiquette. */}
+      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
       {Object.keys(dlists).map(d => <datalist key={d} id={'o-dl-' + d}>{dlists[d].map(id => <option key={id} value={id} />)}</datalist>)}
       {has('rooms') && <EntSection title={tr('Pièces (Accueil)')} desc={tr("Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce.")} cols={[{ k: 'room', label: tr('Pièce'), ph: tr('Séjour'), flex: .8 }, { k: 'temp', label: tr('Température'), ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: tr('Humidité'), ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }, { k: 'lights', label: tr('Lampes du bouton'), ph: tr('toutes (light.a, light.b)'), domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
       {has('energy') && (
@@ -645,7 +656,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
           <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
             {[['consoNow', tr('Consommation')], ['surplusNow', 'Surplus'], ['solarOutput', 'Production solaire'],
               ['evNow', 'Véhicule · charge'], ['batNow', 'Batterie · puissance'], ['batSoc', 'Batterie · niveau']].map(([k, l]) => (
-              <div key={k}><div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)', marginBottom: 4 }}>{l.toUpperCase()}</div><input value={ent.energy[k] || ''} onChange={e => setEnt(o => ({ ...o, energy: { ...o.energy, [k]: e.target.value } }))} placeholder="sensor.…" list="o-dl-sensor" spellCheck={false} style={entInp} /></div>
+              <div key={k}><div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)', marginBottom: 4 }}>{l.toUpperCase()}</div><input aria-label={l} value={ent.energy[k] || ''} onChange={e => setEnt(o => ({ ...o, energy: { ...o.energy, [k]: e.target.value } }))} placeholder="sensor.…" list="o-dl-sensor" spellCheck={false} style={entInp} /></div>
             ))}
           </div>
         </div>
@@ -654,14 +665,14 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>Alarme</div>
           <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Panneau d'alarme (vue Sécurité, bannière, notifications).")}</div>
-          <input value={ent.alarm} onChange={e => setEnt(o => ({ ...o, alarm: e.target.value }))} placeholder="alarm_control_panel.…" list="o-dl-alarm_control_panel" spellCheck={false} style={entInp} />
+          <input aria-label={tr('Panneau d’alarme')} value={ent.alarm} onChange={e => setEnt(o => ({ ...o, alarm: e.target.value }))} placeholder="alarm_control_panel.…" list="o-dl-alarm_control_panel" spellCheck={false} style={entInp} />
         </div>
       )}
       {has('weather') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Météo')}</div>
           <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Entité météo (vue Météo, bannière de l'Accueil, conseils extérieur).")}</div>
-          <input value={ent.weather} onChange={e => setEnt(o => ({ ...o, weather: e.target.value }))} placeholder="weather.…" list="o-dl-weather" spellCheck={false} style={entInp} />
+          <input aria-label={tr('Entité météo')} value={ent.weather} onChange={e => setEnt(o => ({ ...o, weather: e.target.value }))} placeholder="weather.…" list="o-dl-weather" spellCheck={false} style={entInp} />
         </div>
       )}
       {has('people') && <EntSection title={tr('Présence')} desc={tr('Personnes affichées sur l’Accueil (avatars).')} cols={[{ k: 'name', label: tr('Prénom'), ph: tr('Prénom'), flex: .7 }, { k: 'haid', label: tr('Entité person'), ph: 'person.…', domain: 'person' }]} rows={ent.people} onRows={entSet('people')} check={check} />}
@@ -1350,7 +1361,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 <div key={k} style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.07em', color: 'var(--o-text3)', marginBottom: 6 }}>{lb}</div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input value={haDraft[k] || ''} onChange={e => setHaDraft(d => ({ ...d, [k]: e.target.value }))} placeholder={ph} spellCheck={false} autoComplete="off" style={{ ...entInp, flex: 1, minWidth: 0 }} />
+                    <input aria-label={lb} value={haDraft[k] || ''} onChange={e => setHaDraft(d => ({ ...d, [k]: e.target.value }))} placeholder={ph} spellCheck={false} autoComplete="off" style={{ ...entInp, flex: 1, minWidth: 0 }} />
                     <button onClick={() => testUrl(k)} style={{ padding: '9px 15px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>Tester</button>
                   </div>
                   <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: r ? r.col : 'var(--o-text3)' }}>{r ? r.txt : hint}</div>
@@ -1405,7 +1416,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{u.name}{i === userIdx && <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', padding: '2px 7px', borderRadius: 999, marginLeft: 7, verticalAlign: '1px', letterSpacing: '.04em' }}>{tr('VOUS')}</span>}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}>{u.sub || u.role}</div></div>
                 {(() => { const r = seenRel(u.name, i === userIdx); return r ? <span style={{ fontSize: 11, fontWeight: 600, color: i === userIdx ? 'var(--o-ok)' : 'var(--o-text3)', flexShrink: 0 }}>{r}</span> : null; })()}
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: u.role === 'Admin' ? 'rgba(255,179,71,.16)' : 'rgba(52,211,153,.16)', color: u.role === 'Admin' ? '#ffb347' : 'var(--o-ok)' }}>{u.role}</span>
-                {isAdmin && <span onClick={() => setEditing({ i, u })} style={{ cursor: 'pointer', color: 'var(--o-text3)', display: 'flex' }}><Fi i="pencil" size={16} /></span>}
+                {isAdmin && <span role="button" tabIndex={0} aria-label={tr('Modifier ce profil')} onClick={() => setEditing({ i, u })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing({ i, u }); } }} style={{ cursor: 'pointer', color: 'var(--o-text3)', display: 'flex' }}><Fi i="pencil" size={16} /></span>}
               </div>
             ); })}
           </div>
@@ -1615,7 +1626,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             {syncOpen && (
               <div style={{ marginTop: 10 }}>
                 {syncMsg && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)', marginBottom: 7 }}>{syncMsg}</div>}
-                <textarea value={syncTxt} onChange={e => setSyncTxt(e.target.value)} rows={4} spellCheck={false} style={{ ...entInp, fontFamily: 'monospace', fontSize: 11, resize: 'vertical' }} />
+                <textarea aria-label={tr('Configuration à coller')} value={syncTxt} onChange={e => setSyncTxt(e.target.value)} rows={4} spellCheck={false} style={{ ...entInp, fontFamily: 'monospace', fontSize: 11, resize: 'vertical' }} />
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 7 }}>
                   <button onClick={() => { setSyncOpen(false); setSyncMsg(''); }} style={{ padding: '8px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Fermer</button>
                   <button onClick={doImport} style={{ padding: '8px 15px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Appliquer et recharger</button>
@@ -1664,6 +1675,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 {ups.map(u => (
                   <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
                     <span style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: u.avail ? 'rgba(var(--o-warn2-rgb),.16)' : 'var(--o-s1)', color: u.avail ? 'var(--o-warn2)' : 'var(--o-text3)' }}>
+                      {/* `onError` n'est pas une interaction : c'est le repli quand l'image de
+                        * profil ne charge pas. La regle vise les gestionnaires de CLIC poses sur
+                        * un element non interactif. */}
+                      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
                       {u.pic ? <img src={u.pic} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.currentTarget.remove(); }} /> : <Fi i="download" size={16} />}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1706,7 +1721,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 }} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text)' }}>Exporter</button>
                 {isAdmin && (
                   <>
-                    <input type="file" accept="application/json,.json" style={{ display: 'none' }} id="o-import-cfg"
+                    <input aria-label={tr('Importer un fichier de configuration')} type="file" accept="application/json,.json" style={{ display: 'none' }} id="o-import-cfg"
                       onChange={async (e) => {
                         const f = e.target.files && e.target.files[0];
                         if (!f) return;
