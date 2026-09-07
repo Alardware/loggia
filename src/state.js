@@ -468,6 +468,22 @@ export const DROITS = [
 
 export const DROITS_IDS = DROITS.map(d => d[0]);
 
+/* Signature d'une liste de profils : ce qui, en changeant, doit faire
+ * adopter la version du serveur sur les autres appareils.
+ *
+ * Elle enumerait sept champs et en oubliait deux — `vues` et `droits`. Une
+ * restriction de vues posee sur le PC, une autorisation accordee a quelqu'un,
+ * n'atteignaient donc jamais la tablette : la signature ne bougeait pas, et
+ * la liste locale restait en place.
+ *
+ * D'ou une signature qui prend l'objet ENTIER, moins la cle de rendu `_k`,
+ * qui est tiree au hasard a chaque chargement. Oublier un champ ajoute
+ * demain redeviendrait sinon le meme silence. */
+export const usersSig = (a) => JSON.stringify((a || []).map((u) => {
+  const { _k, ...reste } = u || {};
+  return Object.keys(reste).sort().map(k => [k, reste[k]]);
+}));
+
 /** Les autorisations effectives d'un profil : toutes pour un admin.
  *
  * Le filtre n'est pas décoratif. Une configuration écrite par une version plus

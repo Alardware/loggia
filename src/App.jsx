@@ -39,7 +39,7 @@ import { CamLive } from './camera.jsx';
 const AspirateurContent = lazy(() => import('./views/aspirateur.jsx'));
 import {
   LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle,
-  feederScript, enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, droitsDe,
+  feederScript, enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, droitsDe, usersSig,
   vacSensors
 } from './state.js';
 // L'accueil de premiere installation ne sert qu'une fois : son code n'a pas a
@@ -10747,7 +10747,6 @@ const FIRST_USER = () => [{ name: 'Administrateur', role: 'Admin', sub: tr('Prof
 /** Cle de rendu stable : les profils n'ont pas d'identifiant propre. */
 const withUserKeys = (a) => a.map((u, i) => (u._k ? u : { ...u, _k: 'u' + i + '_' + Math.random().toString(36).slice(2, 6) }));
 /** Empreinte de la liste, pour comparer sans se soucier des cles de rendu. */
-const usersSig = (a) => JSON.stringify((a || []).map(u => [u.name, u.role, u.sub, u.c, u.grad, u.avatar, u.haId]));
 
 // Détection auto du profil Loggia d'après l'utilisateur HA connecté (selon l'appareil/login).
 // 1) correspondance par nom (insensible casse), 2) sinon 1er Admin si le compte HA est admin. -1 = aucun.
@@ -11084,6 +11083,14 @@ export default function App() {
   // Le composant a-t-il repondu ? Distingue « pas de configuration » de
   // « configuration vide », que rien ne separait jusqu'ici.
   const [serverOk, setServerOk] = useState(false);
+  /* Le compte Home Assistant de CETTE session est-il administrateur ?
+   *
+   * Lui seul ecrit la configuration de la maison. Le dashboard doit le
+   * savoir, non pour cacher quoi que ce soit, mais pour ne pas TENTER des
+   * ecritures automatiques qui seront refusees : la liaison d'un profil a
+   * son compte Home Assistant se declenche toute seule au chargement, et
+   * elle ferait apparaitre un refus a chaque ouverture. */
+  const [haAdmin, setHaAdmin] = useState(false);
   // Les fonctions pures du fichier — et les vues chargees a la demande — lisent
   // cet etat : on le tient a jour ici, pendant le rendu, pour qu'il soit juste
   // des le meme tour.
@@ -11276,6 +11283,7 @@ export default function App() {
 
     const appliquer = (h, state) => {
       setServerOk(!!state.available);
+      setHaAdmin(!!(state.available && state.user && state.user.is_admin));
       setServerCfg(state.available ? (state.config || {}) : {});
       // Un reglage fait avant l'arrivee du composant n'existe que dans ce
       // navigateur. On le confie au serveur pour que les autres appareils le
@@ -11561,7 +11569,12 @@ export default function App() {
       const msg = r ? String((r.message || r.error || r.code || r)) : '';
       if (!/service|entity|not_found|unauthorized|timeout|connection/i.test(msg) && !(r && r.code)) return;
       ev.preventDefault();
-      setToast('Commande non exécutée — Home Assistant a refusé ou n’a pas répondu');
+      // Un reglage de la maison refuse n'est pas une panne : c'est une regle.
+      // Le message generique laissait croire a un incident, et l'on cherchait
+      // du cote de Home Assistant une explication qui etait ici.
+      setToast(r && r.code === 'not_admin'
+        ? 'Réglage non enregistré — il appartient à la maison, et seul un administrateur Home Assistant peut le changer'
+        : 'Commande non exécutée — Home Assistant a refusé ou n’a pas répondu');
       clearTimeout(toastTRef.current); toastTRef.current = setTimeout(() => setToast(null), 4000);
     };
     window.addEventListener('unhandledrejection', h);
@@ -11743,11 +11756,13 @@ export default function App() {
     // On se garde bien de pousser la liste par defaut : un appareil vierge
     // ecraserait alors les vrais profils.
     const parDefaut = users.length === 1 && !users[0].haId && users[0].name === 'Administrateur';
-    if (!usersPousses.current && users.length && !parDefaut) {
+    // Depuis un compte ordinaire, le serveur refuse : la tentative ne
+    // servirait qu'a afficher une erreur a chaque ouverture.
+    if (haAdmin && !usersPousses.current && users.length && !parDefaut) {
       usersPousses.current = true;
       cfgSet({ loggia_users: users });
     }
-  }, [serverCfg, users]);
+  }, [serverCfg, users, haAdmin]);
 
   const [pinTarget, setPinTarget] = useState(null);
   // Chip « n allumées » du header : compte les luminaires HA à l'état on.
@@ -11798,9 +11813,14 @@ export default function App() {
     autoUserRef.current = true;
     // Premiere reconnaissance par le nom : on grave le lien, les fois
     // suivantes passeront par l'identifiant.
-    if (hu.id && users[i].haId !== hu.id) persistUsers(users.map((u, j) => j === i ? { ...u, haId: hu.id } : u));
+    // Le lien profil <-> compte est une ecriture de MAISON. Depuis un compte
+    // ordinaire elle partait autrefois dans une section privee, ou elle
+    // masquait ensuite toute la liste des profils : c'est ce qui figeait
+    // une tablette sur des roles perimes. Le serveur la refuse maintenant ;
+    // on ne la tente donc que depuis un compte qui a le droit de l'ecrire.
+    if (haAdmin && hu.id && users[i].haId !== hu.id) persistUsers(users.map((u, j) => j === i ? { ...u, haId: hu.id } : u));
     applyUser(i);
-  }, [hass, users]);
+  }, [hass, users, haAdmin]);
   // Retour haptique léger au tap sur un élément interactif (Android ; iOS web n'expose pas vibrate → seul le rebond visuel s'affiche).
   // Vibre au pointerup si le doigt n'a presque pas bougé — poser le doigt pour scroller ne doit PAS vibrer.
   useEffect(() => {

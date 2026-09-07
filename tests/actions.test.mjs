@@ -303,8 +303,13 @@ test('le rejet d’une commande atteint le seul canal visible', () => {
   // elle, tous les appels directs échouent en silence.
   assert.match(app, /window\.addEventListener\('unhandledrejection', h\)/,
     'l’écoute globale des rejets a disparu : une commande refusée redevient invisible');
-  assert.match(app, /setToast\('Commande non exécutée/,
+  assert.match(app, /'Commande non exécutée — Home Assistant a refusé/,
     'le toast d’échec a disparu');
+  // Deux messages, pas un. Un réglage de la maison refusé n'est pas une
+  // panne : c'est une règle. Le message générique envoyait chercher du
+  // côté de Home Assistant une explication qui était dans le dashboard.
+  assert.match(app, /r\.code === 'not_admin'/,
+    'un refus de réglage de maison redevient un « Home Assistant n’a pas répondu » trompeur');
   /* Et `commander` doit relancer : `runPlan` attrape le rejet pour en donner la
    * raison, ce qui l'empêcherait d'atteindre l'écoute.
    *

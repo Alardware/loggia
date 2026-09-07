@@ -75,6 +75,20 @@ PERSONAL_KEYS: frozenset[str] = frozenset(
 # en tete au moment de nommer.
 PERSONAL_SUFFIXES: tuple[str, ...] = ("panel",)
 
+# Cles de la maison qu un compte ordinaire a le droit d ecrire.
+#
+# `loggia_active_user` dit QUI se sert du dashboard en ce moment. Elle
+# appartient a la maison depuis le 03/09 — on veut se retrouver au meme
+# endroit quel que soit l ecran que l on prend — mais la refuser aux comptes
+# ordinaires empecherait une tablette de famille de changer de profil, ce qui
+# est son usage premier.
+#
+# Ce n est pas une porte derobee. Les profils Loggia ne sont pas une frontiere
+# de securite : ils ne changent rien aux droits Home Assistant, et le composant
+# le dit deja ailleurs. Surtout, `loggia_users` reste refuse — personne ne se
+# donne un role en ecrivant, ce qui etait le vrai danger.
+OUVERTES_A_TOUS: frozenset[str] = frozenset({"loggia_active_user"})
+
 
 def est_personnelle(key: str) -> bool:
     """Cette cle reste-t-elle attachee a un seul compte ?"""
@@ -99,6 +113,16 @@ def _taille(contenu: dict) -> int:
     except (TypeError, ValueError):
         # Non serialisable : la sauvegarde echouera de toute facon plus loin.
         return 0
+
+
+class MaisonReserveeError(PermissionError):
+    """Un compte non administrateur a tente d'ecrire un reglage de la maison.
+
+    Distincte de `ValueError`, que la couche WebSocket traduit en
+    « format invalide » : ce n'est pas la forme du message qui pose
+    probleme, c'est le droit de l'ecrire. Le client doit pouvoir faire la
+    difference pour le dire clairement.
+    """
 
 
 class LoggiaStore:
@@ -128,7 +152,13 @@ class LoggiaStore:
             raw.setdefault("shared", {})
             if not isinstance(raw["shared"], dict):
                 raw["shared"] = {}
-            if self._migrer(raw) or renomme:
+            # ORDRE IMPORTANT : la remontee d'abord, le menage ensuite.
+            # `_migrer` prend la configuration d'un compte pour en faire
+            # celle de la maison ; purger avant elle effacerait la seule
+            # copie existante, et le dashboard repartirait vide.
+            remontee = self._migrer(raw)
+            menage = self._purger_ombres(raw)
+            if remontee or menage or renomme:
                 await self._store.async_save(raw)
             self._data = raw
         return self._data
@@ -227,6 +257,38 @@ class LoggiaStore:
         )
         return True
 
+    @staticmethod
+    def _purger_ombres(raw: dict[str, Any]) -> bool:
+        """Retire des sections de compte tout ce qui appartient a la maison.
+
+        `async_get_user` ignore deja ces cles a la lecture : le dashboard est
+        donc juste des cette version, purge ou non. Ce menage sert a ce que le
+        fichier dise la meme chose que le code — sans lui, chaque section garde
+        une liste de profils fantome, une de plus par compte, que personne ne
+        lit et que le prochain lecteur du fichier prendra pour la verite.
+
+        Rien n'est remonte vers le commun au passage, et c'est voulu. Trois
+        appareils peuvent porter trois codes administrateur differents ; en
+        choisir un reviendrait a tirer au sort. Le commun garde ce qu'il a, et
+        ce qui lui manque se redonne une fois depuis un compte administrateur.
+        """
+        change = False
+        for uid, reglages in list(raw["users"].items()):
+            if not isinstance(reglages, dict):
+                continue
+            ombres = [k for k in reglages if not est_personnelle(k)]
+            if not ombres:
+                continue
+            for cle in ombres:
+                reglages.pop(cle, None)
+            change = True
+            _LOGGER.info(
+                "Loggia : %d reglages de maison retires de la section du compte %s",
+                len(ombres),
+                uid[:8],
+            )
+        return change
+
     async def async_get_shared(self, key: str, default: Any = None) -> Any:
         """Une valeur de la partie commune, pour les modules serveur.
 
@@ -282,15 +344,36 @@ class LoggiaStore:
             await self._store.async_save(data)
 
     async def async_get_user(self, user_id: str) -> dict[str, Any]:
-        """Configuration vue par un utilisateur : le commun, puis le sien.
+        """Configuration vue par un utilisateur : le commun, puis ses cles d'appareil.
 
-        Ses reglages d'appareil l'emportent sur le commun — c'est le seul cas ou
-        deux valeurs coexistent pour une meme cle.
+        SEULE une cle PERSONNELLE peut couvrir la valeur commune. La regle a
+        l'air evidente ; elle ne l'etait pas, et c'est ce qui a fait mentir le
+        dashboard.
+
+        La fusion s'ecrivait `{**shared, **perso}`, sans filtre. N'importe
+        quelle cle restee dans la section d'un compte l'emportait donc sur la
+        maison, definitivement :
+
+        - un compte NON administrateur ecrit tout chez lui (voir _set_locked),
+          et le dashboard pousse `loggia_users` de lui-meme pour y inscrire
+          l'identifiant Home Assistant du profil reconnu. Une tablette
+          connectee sous un compte ordinaire se figeait ainsi sur la liste des
+          profils du jour ou elle avait servi, et plus rien de ce qui se faisait
+          ailleurs ne l'atteignait. Vider le cache du navigateur n'y changeait
+          rien : l'ombre etait sur le SERVEUR.
+        - le code administrateur et le profil actif etaient personnels avant le
+          03/09. Les copies ecrites avant cette date sont restees en place et
+          masquaient toujours la valeur commune — un code par appareil, ce que
+          le partage devait justement supprimer.
+
+        Ce filtre rend le commun visible partout sans rien effacer.
+        `_purger_ombres` fait ensuite le menage dans le fichier.
         """
         data = await self._load()
         value = data["users"].get(user_id)
         perso = dict(value) if isinstance(value, dict) else {}
-        return {**data["shared"], **perso}
+        couvre = {k: v for k, v in perso.items() if est_personnelle(k)}
+        return {**data["shared"], **couvre}
 
     async def async_set_user(
         self,
@@ -305,12 +388,22 @@ class LoggiaStore:
         Une valeur a None supprime la cle : c'est ainsi que le frontend efface un
         reglage sans avoir besoin d'une commande dediee.
 
-        SEUL un administrateur Home Assistant ecrit dans la partie commune. Pour
-        les autres, TOUT atterrit dans leur propre section : leurs reglages
-        s'appliquent chez eux et n'y sont pas perdus, mais le dashboard de la
-        maison reste intact. Sans cette regle, n'importe quel compte authentifie
-        pourrait vider ou reecrire la configuration de tout le foyer — et, en
-        reecrivant `loggia_users`, se donner le role administrateur dans Loggia.
+        SEUL un administrateur Home Assistant ecrit dans la partie commune.
+        Sans cette regle, n'importe quel compte authentifie pourrait vider ou
+        reecrire la configuration de tout le foyer — et, en reecrivant
+        `loggia_users`, se donner le role administrateur dans Loggia.
+
+        Les autres comptes se voyaient jusqu'ici REROUTER vers leur propre
+        section : leur reglage semblait pris, il l'etait meme, mais chez eux
+        seuls. L'intention etait douce ; l'effet ne l'etait pas. Le dashboard
+        pousse `loggia_users` de lui-meme, alors une tablette connectee sous un
+        compte ordinaire se fabriquait une liste de profils privee des le
+        premier chargement, puis s'y tenait — et vider le cache du navigateur
+        n'y changeait rien, l'ombre etant sur le serveur.
+
+        Un refus explicite vaut mieux qu'un enregistrement qui ne sert a
+        personne : l'appelant apprend que ce reglage appartient a la maison, le
+        fichier reste propre, et le meme dashboard s'affiche partout.
         """
         async with self._lock:
             return await self._set_locked(user_id, patch, replace=replace, is_admin=is_admin)
@@ -323,6 +416,17 @@ class LoggiaStore:
         replace: bool,
         is_admin: bool,
     ) -> dict[str, Any]:
+        maison = sorted(
+            k for k in patch
+            if not est_personnelle(k) and k not in OUVERTES_A_TOUS
+        )
+        if maison and not is_admin:
+            # Nomme les cles : le client saura lesquelles retirer, et le
+            # journal dira pourquoi un reglage n'a pas pris.
+            raise MaisonReserveeError(
+                "reglages reserves aux administrateurs Home Assistant : "
+                + ", ".join(maison)
+            )
         data = await self._load()
         # `replace` ne remet a zero QUE la section de l'appelant. Vider la partie
         # commune effacerait le dashboard de tout le foyer sur un simple appel
@@ -339,12 +443,18 @@ class LoggiaStore:
             if key in FORBIDDEN_KEYS:
                 _LOGGER.warning("Loggia : cle refusee a l'enregistrement (%s)", key)
                 continue
-            vers_commun = is_admin and not est_personnelle(key)
+            # Le droit d'ecrire le commun, une fois pour les trois branches.
+            # Il tenait auparavant a `is_admin` seul : la cle ouverte a tous
+            # echappait bien au refus, mais l'aiguillage la rangeait quand meme
+            # dans la section du compte — une ombre de plus, celle-la creee par
+            # le correctif lui-meme.
+            peut_commun = is_admin or key in OUVERTES_A_TOUS
+            vers_commun = peut_commun and not est_personnelle(key)
             if value is None:
                 # On efface des DEUX cotes : une cle ayant change de categorie
                 # laisserait sinon une valeur orpheline, invisible mais agissante.
                 perso.pop(key, None)
-                if is_admin:
+                if peut_commun:
                     commun.pop(key, None)
             elif vers_commun:
                 commun[key] = value
@@ -353,7 +463,7 @@ class LoggiaStore:
                 perso[key] = value
                 # Meme raison en sens inverse : sans ce nettoyage, l'ancienne
                 # valeur commune resterait visible par tous les autres comptes.
-                if is_admin:
+                if peut_commun:
                     commun.pop(key, None)
 
         if len(perso) > MAX_KEYS_PER_USER or len(commun) > MAX_KEYS_PER_USER:

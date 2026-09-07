@@ -33,7 +33,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 
 from .discovery import async_index
-from .store import MAX_TOTAL_BYTES, MAX_VALUE_BYTES, LoggiaStore
+from .store import MAX_TOTAL_BYTES, MAX_VALUE_BYTES, LoggiaStore, MaisonReserveeError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -130,6 +130,12 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                 replace=bool(msg.get("replace")),
                 is_admin=bool(connection.user.is_admin),
             )
+        except MaisonReserveeError as err:
+            # Un code a part : ce n'est pas la forme du message qui cloche,
+            # c'est le droit de l'ecrire. Le dashboard le dit tel quel
+            # plutot que d'accuser un « format invalide » incomprehensible.
+            connection.send_error(msg["id"], "not_admin", str(err))
+            return
         except ValueError as err:
             connection.send_error(msg["id"], "invalid_format", str(err))
             return

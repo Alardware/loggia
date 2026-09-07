@@ -28,21 +28,58 @@ def test_admin_ecrit_dans_le_commun(creer_store):
     assert "loggia_rooms" not in data["users"].get("u1", {})
 
 
-def test_non_admin_n_ecrit_que_chez_lui(creer_store):
+def test_non_admin_ne_peut_pas_ecrire_la_maison(creer_store, store_module):
     """Le point de securite : sans cela, tout compte authentifie reecrivait le
     dashboard de toute la maison — et pouvait se donner le role admin en
-    reecrivant `loggia_users`."""
+    reecrivant `loggia_users`.
+
+    Le refus a remplace un reroutage. Le reglage partait auparavant dans la
+    section du compte, ou il l'emportait sur le commun a la lecture : une
+    tablette connectee sous un compte ordinaire se figeait sur la liste des
+    profils du jour ou elle avait servi. Un enregistrement qui ne sert a
+    personne et qui fige un appareil vaut moins qu'un refus dit clairement.
+    """
     magasin = creer_store({"users": {}, "shared": {"loggia_rooms": ["Salon"]}, "migrated": True})
-    lancer(magasin.async_set_user(
-        "intrus",
-        {"loggia_rooms": ["PIRATE"], "loggia_users": [{"role": "Admin"}]},
-        is_admin=False,
-    ))
+    with pytest.raises(store_module.MaisonReserveeError) as refus:
+        lancer(magasin.async_set_user(
+            "intrus",
+            {"loggia_rooms": ["PIRATE"], "loggia_users": [{"role": "Admin"}]},
+            is_admin=False,
+        ))
+    # Le message nomme les cles : le client saura lesquelles retirer.
+    assert "loggia_rooms" in str(refus.value) and "loggia_users" in str(refus.value)
+
     data = lancer(magasin._load())
     assert data["shared"]["loggia_rooms"] == ["Salon"], "le commun a ete altere"
     assert "loggia_users" not in data["shared"], "un non-admin a injecte un profil admin"
-    # Ses reglages ne sont pas perdus pour autant : ils valent pour lui seul.
-    assert data["users"]["intrus"]["loggia_rooms"] == ["PIRATE"]
+    assert data["users"].get("intrus", {}) == {}, "une ombre a ete laissee dans sa section"
+
+
+def test_tout_le_monde_peut_changer_de_profil(creer_store):
+    """Le profil actif est la seule cle de maison ouverte a tous.
+
+    Elle dit qui se sert du dashboard en ce moment. La refuser aux comptes
+    ordinaires empecherait une tablette de famille de changer de profil, ce
+    qui est son usage premier. `loggia_users` reste refuse dans le meme
+    mouvement — c est lui qui porte les roles, et lui le vrai danger.
+    """
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    lancer(magasin.async_set_user("famille", {"loggia_active_user": "2"}, is_admin=False))
+    data = lancer(magasin._load())
+    assert data["shared"]["loggia_active_user"] == "2"
+    assert data["users"].get("famille", {}) == {}, "la valeur a fini dans une ombre"
+
+
+def test_non_admin_garde_ses_reglages_d_appareil(creer_store):
+    """Le refus ne porte que sur la maison. Les marges de son ecran et ses
+    panneaux replies restent a lui, sans quoi un compte ordinaire ne pourrait
+    plus rien regler du tout."""
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    lancer(magasin.async_set_user(
+        "u2", {"loggia-topoffset": 14, "loggia-secpanel": "0"}, is_admin=False))
+    data = lancer(magasin._load())
+    assert data["users"]["u2"] == {"loggia-topoffset": 14, "loggia-secpanel": "0"}
+    assert data["shared"] == {}
 
 
 def test_cles_personnelles_restent_personnelles(creer_store):
@@ -54,13 +91,33 @@ def test_cles_personnelles_restent_personnelles(creer_store):
     assert data["shared"] == {}, "un reglage d'appareil a fui dans le commun"
 
 
-def test_le_personnel_prime_a_la_lecture(creer_store):
+def test_seul_le_personnel_prime_a_la_lecture(creer_store):
+    """Une cle de la maison restee dans une section de compte ne doit PLUS
+    couvrir le commun.
+
+    La fusion s'ecrivait `{**shared, **perso}`, sans filtre : n'importe quelle
+    cle laissee la l'emportait, pour toujours. Le code administrateur et le
+    profil actif etaient personnels avant le 03/09 ; leurs copies d'alors
+    masquaient encore la valeur commune, et donnaient un code different par
+    appareil — precisement ce que le partage devait supprimer.
+    """
     magasin = creer_store({
-        "users": {"u1": {"t": "moi"}},
-        "shared": {"t": "maison", "z": "commun"},
+        "users": {"u1": {"loggia-topoffset": 8, "loggia_admin_pin": "0000"}},
+        "shared": {"loggia-topoffset": 0, "loggia_admin_pin": "4271", "loggia_look": "clair"},
         "migrated": True,
     })
-    assert lancer(magasin.async_get_user("u1")) == {"t": "moi", "z": "commun"}
+    # Le menage du chargement a deja retire l'ombre du fichier. On la remet a
+    # la main : sans cela le filtre de lecture ne serait jamais eprouve, et le
+    # retirer ne ferait echouer aucun test. Il ne fait pas doublon avec le
+    # menage — il vaut aussi pour une ombre apparue APRES lui, qu'un chemin
+    # d'ecriture futur ou un fichier retouche a la main y remettrait.
+    data = lancer(magasin._load())
+    data["users"]["u1"]["loggia_admin_pin"] = "0000"
+
+    vu = lancer(magasin.async_get_user("u1"))
+    assert vu["loggia-topoffset"] == 8, "un reglage d'appareil ne suit plus son appareil"
+    assert vu["loggia_admin_pin"] == "4271", "une ombre masque encore le code de la maison"
+    assert vu["loggia_look"] == "clair"
 
 
 # ── `replace` : le defaut qui effacait la maison ────────────────────────────
@@ -140,8 +197,8 @@ def test_migration_ne_se_rejoue_pas_apres_effacement(creer_store):
     ressuscitait au redemarrage ce qu'un administrateur venait d'effacer.
 
     Le second compte porte volontairement des cles communes : la migration ne
-    purge QUE la source qu'elle a choisie, donc sans lui un rejeu ne remonterait
-    rien et passerait inapercu — le test ne prouverait alors plus rien.
+    remonte QUE la source qu'elle a choisie, donc sans lui un rejeu ne
+    remonterait rien et passerait inapercu — le test ne prouverait plus rien.
     """
     magasin = creer_store({"users": {
         "u1": {"loggia_rooms": ["Salon"], "loggia_look": "x", "loggia_active_user": 0},
@@ -150,11 +207,32 @@ def test_migration_ne_se_rejoue_pas_apres_effacement(creer_store):
     lancer(magasin._load())
     apres = magasin._store.contenu
     assert apres["shared"], "la premiere migration n'a rien remonte"
-    assert apres["users"]["u2"]["loggia_rooms"] == ["Ancien"], "u2 n'a pas ete epargne"
+    # Le menage passe apres la remontee et vide les sections de compte de tout
+    # ce qui appartient a la maison — y compris celles que la migration n'a pas
+    # choisies. C'est ce qui empeche une tablette de garder une configuration
+    # fantome que plus personne ne voit.
+    assert apres["users"]["u2"] == {}, "u2 garde une ombre de la maison"
 
     apres["shared"] = {}                      # l'admin a tout efface
     magasin2 = creer_store(apres)
     assert lancer(magasin2._load())["shared"] == {}, "la migration a rejoue"
+
+
+def test_le_menage_ne_remonte_rien_de_lui_meme(creer_store):
+    """Le menage efface, il ne promeut pas.
+
+    Trois appareils peuvent porter trois codes administrateur differents : en
+    choisir un reviendrait a tirer au sort, et l'installation retiendrait un
+    code que personne n'a voulu. Le commun garde ce qu'il a.
+    """
+    magasin = creer_store({
+        "users": {"u1": {"loggia_admin_pin": "1111"}, "u2": {"loggia_admin_pin": "2222"}},
+        "shared": {},
+        "migrated": True,
+    })
+    data = lancer(magasin._load())
+    assert data["shared"] == {}, "le menage a promu une valeur au hasard"
+    assert data["users"]["u1"] == {} and data["users"]["u2"] == {}
 
 
 def test_migration_marquee_meme_sans_rien_a_remonter(creer_store):
@@ -187,8 +265,12 @@ def test_reprise_de_l_ancien_fichier(creer_store):
     data = lancer(magasin._load())
     assert data["shared"]["loggia_rooms"] == ["Salon"]
     assert data["shared"]["loggia-theme"] == "sombre"
-    assert data["users"]["u1"]["loggia_active_user"] == 2
-    assert data["users"]["u1"]["loggia-secpanel"] == "0"
+    # `loggia_active_user` appartient a la maison depuis le 03/09 : on veut se
+    # retrouver au meme endroit quel que soit l'ecran que l'on prend. Le fichier
+    # etant deja marque `migrated`, rien ne le remonte — le menage le retire de
+    # la section du compte, ou il ne servait qu'a figer cet appareil.
+    assert "loggia_active_user" not in data["users"]["u1"]
+    assert data["users"]["u1"]["loggia-secpanel"] == "0", "le personnel a ete emporte"
     assert not [k for k in data["shared"] if k.startswith("orion")]
     assert magasin._store.ecritures == 1, "la reprise n'a pas ete enregistree"
 
