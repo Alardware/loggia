@@ -25,6 +25,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ESLint } from 'eslint';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(RACINE, 'src');
@@ -155,4 +156,35 @@ test('src ne contient que du code et ses ressources', () => {
   parcourir(SRC);
   assert.deepEqual(etrangers.sort(), [],
     'un fichier étranger dort dans src : aucun outil ne le lit, et il ne se signalera qu’en polluant les recherches');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Troisième défaut de la même famille : l'import que plus personne ne lit.
+//
+// Découper un fichier laisse du gravier derrière lui. La 2.97.16 a livré cinq
+// imports morts dans la vue Système — `LOGGIA_RESOLVED`, `loggiaEnt`, `peut`,
+// `sysKeys`, `SYS_SLOTS` — sans que rien ne proteste : `no-unused-vars` est
+// réglé sur « avertissement », et l'avertissement se tenait au milieu de
+// trente-neuf autres. Il était là. Personne ne le lisait.
+//
+// Un import mort ne coûte pas que de la lecture : il maintient une arête dans
+// le graphe des modules. `import { CamLive, HaImage }` retient `camera.jsx`
+// même si `HaImage` n'est plus appelé nulle part, et un jour cette arête sera
+// la seule à garder un module entier dans le bundle de démarrage.
+//
+// Ce test promeut le seul avertissement `no-unused-vars` en échec. Les autres
+// règles restent ce qu'elles sont — celles des dépendances de hooks sont
+// délibérément tolérées, et `tests/dependances.test.mjs` en tient l'inventaire.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('aucun nom déclaré ne reste sans lecteur', async () => {
+  const morts = [];
+  for (const f of await new ESLint({ cwd: RACINE }).lintFiles([SRC])) {
+    for (const m of f.messages) {
+      if (m.ruleId !== 'no-unused-vars') continue;
+      morts.push(court(f.filePath) + ':' + m.line + ' → ' + m.message.split(' is defined')[0]);
+    }
+  }
+  assert.deepEqual(morts.sort(), [],
+    'un nom déclaré n’est lu nulle part : un découpage a laissé son gravier');
 });

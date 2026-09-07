@@ -1,7 +1,7 @@
 {
   "name": "loggia",
   "private": true,
-  "version": "2.97.16",
+  "version": "2.97.17",
   "type": "module",
   "scripts": {
     "dev": "vite",

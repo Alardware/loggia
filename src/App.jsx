@@ -16,8 +16,7 @@ const ParametresContent = lazy(() => import('./views/parametres.jsx').then(m => 
 const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling } from './discovery.js';
 import { planAction as actionsPlan, availableActions as actionsAvailable,
-  planAction, runPlan, capaciteDe, actionCtx, peut, commander, commanderService } from './actions.js';
-import { entityCaps } from './capabilities.js';
+  peut, commander, commanderService } from './actions.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
 import { deviceCard, presentableDevices, presentationSummary, cleCamera } from './present.js';
 import { healthReport, healthText } from './health.js';
@@ -26,19 +25,21 @@ import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
 import { isViewAvailable, viewReason } from './views.js';
 import {
-  REDUCE_MOTION, Fi, Anim, useTilt, editBtn, ViewEditBar, HIDDEN_VIEWS, readViewsCfg, cl_hexRgb, HX_TOKENS,
+  REDUCE_MOTION, Fi, Anim, useTilt, editBtn, ViewEditBar, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
   Gauge, BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain
 } from './ui.jsx';
 import { WX_BG, WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
-import { RoomActivityCard, SysArea, useSysHist, etatJournal, grouperJournal, useRoomLogbook } from './historique.jsx';
+import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook } from './historique.jsx';
 import { sysKeys } from './sysconf.js';
+import { CamLive } from './camera.jsx';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
-const VacPlan = lazy(() => import('./vacplan.jsx'));
+/* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
+const AspirateurContent = lazy(() => import('./views/aspirateur.jsx'));
 import {
   LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle,
-  feederScript, enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, vacRooms,
+  feederScript, enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS,
   vacSensors
 } from './state.js';
 // L'accueil de premiere installation ne sert qu'une fois : son code n'a pas a
@@ -4032,189 +4033,6 @@ const CAMERAS = () => [
 ];
 
 // ── Snapshot proxy authentifié (repli) ──
-function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = 'cover' }) {
-  const [src, setSrc] = useState(null);
-  const token = hass && hass.auth && hass.auth.data ? hass.auth.data.access_token : null;
-  useEffect(() => {
-    if (!haid || !token) { setSrc(null); return; }
-    let alive = true, last = null, tour = 0;
-    const endpoint = kind === 'image' ? 'image_proxy' : 'camera_proxy';
-    const fetchSnap = async () => {
-      /* Chaque appel porte son numero. Sur une camera lente, la reponse d'un
-       * tour ancien arrivait apres une plus recente et remontait une image
-       * perimee a l'ecran ; les vignettes semblaient reculer dans le temps. */
-      const mien = ++tour;
-      try {
-        const res = await fetch(`/api/${endpoint}/${haid}`, { headers: { Authorization: `Bearer ${token}` } });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const blob = await res.blob();
-        if (!alive || mien !== tour) return;
-        const url = URL.createObjectURL(blob);
-        if (last) URL.revokeObjectURL(last);
-        last = url; setSrc(url);
-      } catch { /* garde le fond en repli */ }
-    };
-    fetchSnap();
-    const id = setInterval(fetchSnap, refreshMs);
-    return () => { alive = false; clearInterval(id); if (last) URL.revokeObjectURL(last); };
-  }, [haid, token, refreshMs, kind]);
-  if (!src) return null;
-  return <img src={src} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit }} />;
-}
-
-/**
- * Les serveurs ICE, demandes a Home Assistant.
- *
- * Un `stun:stun.l.google.com` etait ecrit ici en dur. Sur le reseau local cela
- * ne se voyait pas : les deux extremites sont sur le meme reseau, les candidats
- * « host » suffisent et aucun serveur n'est consulte. Depuis l'exterieur, en
- * revanche, il faut traverser deux NAT — et un STUN ne sert qu'a decouvrir sa
- * propre adresse publique, il ne relaie rien. Sans TURN la negociation
- * echouait, la camera restait noire, et l'interface de Home Assistant affichait
- * pourtant le flux : elle, elle demande sa configuration.
- *
- * `camera/webrtc/get_client_config` repond ce que l'installation a de mieux —
- * chez l'auteur, les STUN de Home Assistant et de Cloudflare, et surtout deux
- * TURN avec identifiants, dont un joignable en TLS sur le port 443.
- *
- * Le tableau vide est un repli volontaire : une version de Home Assistant qui
- * ignore cette commande n'a pas de WebRTC non plus, et sur un reseau local on
- * se connecte tres bien sans aucun serveur. Coder un service public en dur
- * serait doublement fautif — le projet s'interdit toute ressource externe, et
- * cela reviendrait a annoncer l'adresse publique de l'utilisateur a un tiers
- * qu'il n'a pas choisi.
- */
-async function iceServers(conn, haid) {
-  if (!conn) return [];
-  try {
-    const r = await conn.sendMessagePromise({ type: 'camera/webrtc/get_client_config', entity_id: haid });
-    const s = r && r.configuration && r.configuration.iceServers;
-    return Array.isArray(s) ? s : [];
-  } catch {
-    return [];
-  }
-}
-
-// ── Lecteur caméra LIVE (porté de V1) : WebRTC → HLS natif → MJPEG signé → snapshot ──
-function CamLive({ hass, haid, online = true }) {
-  const vidRef = useRef(null);
-  const imgRef = useRef(null);
-  const [mode, setMode] = useState('loading'); // loading | video | mjpeg | snap | off
-  const token = hass && hass.auth && hass.auth.data ? hass.auth.data.access_token : null;
-  const conn = hass && hass.connection ? hass.connection : null;
-  useEffect(() => {
-    let cancelled = false, cleanupRtc = null;
-    setMode('loading');
-    if (!online || !token || !conn) { setMode('off'); return; }
-    /* Un flux qui a réussi à se connecter peut mourir en route — la 5G
-     * capricieuse gèle la vidéo sans la fermer, et l'image figée a l'air d'un
-     * direct. Sans nouvelle frame décodée pendant trois relevés (9 s), on
-     * abandonne le direct pour le repli : mieux vaut un instantané de 2 s
-     * qu'un faux direct. */
-    let gelIv = null;
-    const armerGel = () => {
-      clearInterval(gelIv);
-      let vues = -1, immobiles = 0;
-      gelIv = setInterval(() => {
-        const v = vidRef.current;
-        if (cancelled || !v) return;
-        const n = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality().totalVideoFrames
-          : (v.webkitDecodedFrameCount != null ? v.webkitDecodedFrameCount : null);
-        if (n == null) { clearInterval(gelIv); return; } // pas de compteur : impossible de juger
-        if (n === vues) {
-          immobiles += 1;
-          if (immobiles >= 3) {
-            clearInterval(gelIv);
-            if (cleanupRtc) { try { cleanupRtc(); } catch {} cleanupRtc = null; }
-            startMjpeg();
-          }
-        } else { vues = n; immobiles = 0; }
-      }, 3000);
-    };
-    const startMjpeg = async () => {
-      if (cancelled) return;
-      clearInterval(gelIv); // le direct est abandonné : plus rien à surveiller
-      try {
-        const r = await conn.sendMessagePromise({ type: 'auth/sign_path', path: `/api/camera_proxy_stream/${haid}`, expires: 3600 });
-        if (cancelled) return;
-        if (r && r.path && imgRef.current) { imgRef.current.onerror = () => { if (!cancelled) setMode('snap'); }; imgRef.current.src = r.path; setMode('mjpeg'); }
-        else setMode('snap');
-      } catch { setMode('snap'); }
-    };
-    const startHls = async () => {
-      if (cancelled) return;
-      const v = vidRef.current;
-      const nativeHls = v && v.canPlayType && v.canPlayType('application/vnd.apple.mpegurl');
-      if (nativeHls) {
-        try {
-          const res = await conn.sendMessagePromise({ type: 'camera/stream', entity_id: haid, format: 'hls' });
-          if (cancelled) return;
-          if (res && res.url && vidRef.current) { vidRef.current.srcObject = null; vidRef.current.onerror = () => { if (!cancelled) startMjpeg(); }; vidRef.current.src = res.url; setMode('video'); armerGel(); vidRef.current.play && vidRef.current.play().catch(() => {}); return; }
-        } catch { /* HLS indispo → MJPEG */ }
-      }
-      startMjpeg();
-    };
-    const startRtc = async () => {
-      if (typeof RTCPeerConnection === 'undefined') return false;
-      let sessionId = null, gotTrack = false, unsub = null;
-      /* La configuration ICE arrive du serveur : entre la demande et la reponse,
-       * le composant peut avoir ete demonte. Sans cette garde, le nettoyage
-       * passait alors que `cleanupRtc` valait encore `null`, puis l'execution
-       * reprenait ici et ouvrait une connexion que plus personne ne fermait.
-       * Changer de vue rapidement accumulait sessions et sockets. */
-      const glacons = await iceServers(conn, haid);
-      if (cancelled) return false;
-      const pc = new RTCPeerConnection({ iceServers: glacons });
-      cleanupRtc = () => { try { unsub && unsub(); } catch {} try { pc.close(); } catch {} };
-      if (cancelled) { cleanupRtc(); cleanupRtc = null; return false; }
-      try { pc.addTransceiver('video', { direction: 'recvonly' }); pc.addTransceiver('audio', { direction: 'recvonly' }); } catch {}
-      pc.addEventListener('track', (e) => { if (cancelled) return; gotTrack = true; if (vidRef.current && e.streams && e.streams[0]) { vidRef.current.srcObject = e.streams[0]; setMode('video'); armerGel(); vidRef.current.play && vidRef.current.play().catch(() => {}); } });
-      pc.addEventListener('icecandidate', (e) => { if (cancelled || !sessionId || !e.candidate) return; conn.sendMessagePromise({ type: 'camera/webrtc/candidate', entity_id: haid, session_id: sessionId, candidate: { candidate: e.candidate.candidate, sdpMLineIndex: e.candidate.sdpMLineIndex, sdpMid: e.candidate.sdpMid } }).catch(() => {}); });
-      try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        unsub = await conn.subscribeMessage((msg) => {
-          if (cancelled || !msg) return;
-          if (msg.type === 'session') sessionId = msg.session_id;
-          else if (msg.type === 'answer') pc.setRemoteDescription({ type: 'answer', sdp: msg.answer }).catch(() => {});
-          else if (msg.type === 'candidate' && msg.candidate) { try { pc.addIceCandidate(new RTCIceCandidate(typeof msg.candidate === 'string' ? { candidate: msg.candidate, sdpMLineIndex: 0 } : msg.candidate)); } catch {} }
-        }, { type: 'camera/webrtc/offer', entity_id: haid, offer: pc.localDescription.sdp });
-      } catch { cleanupRtc(); cleanupRtc = null; return false; }
-      /* Quatre secondes suffisent en direct, sur le reseau local. Passer par un
-       * relais TURN en demande davantage : allocation aupres du relais, puis
-       * chaque paquet fait un detour. On accorde donc jusqu'a douze secondes,
-       * mais seulement tant qu'ICE progresse — un etat `failed` ou `closed`
-       * rend la main tout de suite, sans faire attendre le repli. */
-      return await new Promise((resolve) => {
-        const debut = Date.now();
-        const fini = (v) => { clearInterval(iv); resolve(v); };
-        const iv = setInterval(() => {
-          if (gotTrack) return fini(true);
-          if (cancelled) return fini(false);
-          const et = pc.iceConnectionState;
-          if (et === 'failed' || et === 'closed') return fini(false);
-          const ecoule = Date.now() - debut;
-          const encours = et === 'new' || et === 'checking';
-          if (ecoule > (encours ? 12000 : 4000)) return fini(false);
-        }, 150);
-      });
-    };
-    (async () => { const ok = await startRtc(); if (cancelled) return; if (!ok) { if (cleanupRtc) { try { cleanupRtc(); } catch {} cleanupRtc = null; } await startHls(); } })();
-    // Captures : dans le nettoyage, `ref.current` peut avoir change.
-    const vidCapture = vidRef.current;
-    const imgCapture = imgRef.current;
-    return () => { cancelled = true; clearInterval(gelIv); if (cleanupRtc) { try { cleanupRtc(); } catch {} } const v = vidCapture; if (v) { try { v.pause(); } catch {} try { v.srcObject = null; } catch {} v.removeAttribute('src'); try { v.load(); } catch {} } const im = imgCapture; if (im) { im.onerror = null; im.removeAttribute('src'); } };
-  }, [haid, online, token, conn]);
-  const cover = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' };
-  if (mode === 'off') return null; // repli sur le fond gradient de la tuile
-  return (
-    <>
-      <video ref={vidRef} aria-label={tr('Flux de la caméra')} autoPlay muted playsInline style={{ ...cover, display: mode === 'video' ? 'block' : 'none' }} />
-      <img ref={imgRef} alt="" style={{ ...cover, display: mode === 'mjpeg' ? 'block' : 'none' }} />
-      {mode === 'snap' && <HaImage hass={hass} haid={haid} refreshMs={2000} kind="camera" />}
-    </>
-  );
-}
 
 /* Popup caméra : le flux en grand, dans la feuille habituelle. */
 function CamSheet({ haid, nom, hass, onClose }) {
@@ -7970,165 +7788,6 @@ function EnergieView({ hass, edit = false, onEnt }) {
 const VAC_KEYS = [];   // le poll vient de vacKeys() : préfixe de domaine + entités résolues
 // Consommables : la plupart des aspirateurs n'exposent pas d'entité d'usure → valeurs indicatives.
 
-function AspirateurContent({ hass }) {
-  const S = (hass && hass.states) || null;
-  const stTxt = (id) => { const e = S && S[id]; return (e && e.state != null && e.state !== 'unknown' && e.state !== 'unavailable') ? e.state : null; };
-  const num = (id, def = null) => { const e = S && S[id]; if (!e) return def; const n = parseFloat(e.state); return isNaN(n) ? def : n; };
-
-  // ── Resolution (etape 3) : plus aucun entity_id impose ──
-  // `legacy(id)` ne rend l'identifiant que si l'entite existe REELLEMENT chez
-  // l'utilisateur courant. C'est ce qui permet de garder l'affichage d'origine
-  // ici sans imposer ces entites a qui ne les a pas.
-  const { resolved } = useLoggia();
-  const vac = (resolved && resolved.vacuum && resolved.vacuum.available) ? resolved.vacuum : null;
-  // Identifiants maison : configuration utilisateur (loggia_entities.vacuum),
-  // repli sur la constante le temps de la transition.
-  const entVac = useEntities('vacuum', null) || {};
-  const entRooms = useEntities('vacuumRooms', null) || [];
-  const legacy = (id) => (id && S && S[id]) ? id : null;
-  const idBat = (vac && vac.battery) || legacy(entVac.battery);
-  const idSurf = (vac && vac.area_cleaned) || legacy(entVac.surface);
-  const idMap = (vac && vac.map) || legacy(entVac.map);
-  // Camera de surveillance du passage, optionnelle : le robot n'en fournit pas.
-  const idCam = legacy(entVac.camera);
-  // L'entite vacuum elle-meme : c'est elle qui publie la liste des pieces.
-  const idVac = (vac && vac.main) || legacy(entVac.main) || legacy(entVac.vacuum);
-
-  // L'etat vient de l'entite `vacuum` (garanti partout) ; le capteur maison,
-  // deja traduit, reste prioritaire chez qui le possede.
-  const raw = vac ? vac.state : null;
-  const idEtat = legacy(entVac.etat);
-  const etat = (idEtat && stTxt(idEtat)) || (raw && tr(VACUUM_STATE_FR[raw])) || tr("À la station d'accueil");
-  const cleaning = raw ? raw === 'cleaning' : stTxt(entVac.cleaning) === 'on';
-  const paused = raw ? raw === 'paused' : /pause/i.test(etat);
-  // batterie : attribut de l'entite d'abord, capteur ensuite
-  const batteryRaw = (vac && vac.batteryLevel != null) ? vac.batteryLevel : num(idBat, null); // indispo → « — », jamais un faux 100 %
-  const battery = batteryRaw != null ? Math.round(batteryRaw) : null;
-  const surfRaw = num(idSurf, null);
-  const surface = surfRaw != null ? String(Math.round(surfRaw)) : null;
-  const sOn = (id) => stTxt(id) === 'on';
-  // Pieces reelles du robot, rattachees aux zones configurees (couleur, icone,
-  // interrupteur). La liste des boutons et les zones cliquables du plan sortent
-  // toutes deux d'ICI : un clic sur la carte fait donc exactement ce que fait
-  // le bouton correspondant.
-  const rooms = vacRooms(hass, idVac, entRooms);
-  const ssig = rooms.map(r => sOn(r.toggle) ? 1 : 0).join('') + '|' + rooms.map(r => r.id).join(',');
-  const [sel, setSel] = useState(() => Object.fromEntries(rooms.map(r => [r.id, sOn(r.toggle)])));
-  // `ssig` resume l'etat des interrupteurs ET la liste des pieces : se caler
-  // dessus evite de resynchroniser a chaque rendu, `rooms` etant reconstruit.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setSel(Object.fromEntries(rooms.map(r => [r.id, sOn(r.toggle)]))); }, [ssig]);
-  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const runScript = (id) => call('script', 'turn_on', { entity_id: id });
-  // Un script maison fait souvent plus que le service standard (selection de
-  // pieces, sequence). On le garde donc quand il existe, et on retombe sinon
-  // sur le service du domaine `vacuum`, disponible chez tout le monde.
-  const vacScript = (k) => { const c = loggiaEnt('vacuumScripts', null); return (c && c[k]) || null; };
-  const runOr = (scriptId, svc) => {
-    if (S && S[scriptId]) runScript(scriptId);
-    else if (vac) call('vacuum', svc, { entity_id: vac.main });
-  };
-  // Une piece que le robot connait mais qu'aucun interrupteur ne pilote reste
-  // affichee ; la basculer n'aurait rien a envoyer, on s'abstient plutot que
-  // d'appeler le service a vide.
-  const toggleRoom = (r) => {
-    if (!r || !r.toggle) return;
-    const on = !sel[r.id];
-    setSel(s => ({ ...s, [r.id]: on }));
-    call('input_boolean', on ? 'turn_on' : 'turn_off', { entity_id: r.toggle });
-  };
-  const picked = rooms.filter(r => sel[r.id]);
-  const mainAction = () => paused ? runOr(vacScript('reprendre'), 'start') : cleaning ? runOr(vacScript('pause'), 'pause') : runOr(vacScript('nettoyer_tout'), 'start');
-  const mainLabel = paused ? tr('Reprendre') : cleaning ? tr('Mettre en pause') : tr('Démarrer le nettoyage');
-  const onBlue = cleaning && !paused;
-  const onBase = raw ? raw === 'docked' : stTxt(entVac.onBase) === 'on';
-  // Bandeau + carte de synthese repliables (patron Atrium)
-  const stateTag = onBlue ? tr('NETTOYAGE EN COURS') : paused ? tr('EN PAUSE') : onBase ? tr('SUR LA BASE') : tr('AU REPOS');
-  const stateCol = onBlue ? 'var(--o-accent)' : paused ? '#ffb347' : 'var(--o-ok)';
-  const stateRgb = onBlue ? 'var(--o-accent-rgb)' : paused ? '255,179,71' : 'var(--o-ok-rgb)';
-  const barBtn = { padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: 'var(--o-s1)', color: 'var(--o-text1)' };
-
-  return (
-    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>Aspirateur</h1>
-          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{etat} · {tr('batterie')} {battery != null ? battery + ' %' : '—'}{surface ? ' · ' + surface + ' m² aujourd’hui' : ''}{picked.length ? ' · ' + (picked.length > 1 ? tr('{n} zones ciblées', { n: picked.length }) : tr('{n} zone ciblée', { n: picked.length })) : ''}</div>
-        </div>
-        <span style={{ flex: 1 }} />
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: `rgba(${stateRgb},.14)`, color: stateCol }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: stateCol, animation: onBlue ? 'pulse 1.4s infinite' : 'none' }} />{stateTag}</span>
-      </div>
-
-      {/* réglages rapides : marche/arrêt, retour à la base, localisation */}
-      <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Robot</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={mainAction} style={{ ...barBtn, background: onBlue ? 'rgba(var(--o-accent-rgb),.18)' : 'rgba(var(--o-ok-rgb),.18)', color: onBlue ? 'var(--o-accent-soft)' : 'var(--o-ok)' }}>{mainLabel}</button>
-            <button onClick={() => runOr(vacScript('retour_base'), 'return_to_base')} style={barBtn}>Base</button>
-            <button onClick={() => runOr(vacScript('localiser'), 'locate')} style={barBtn}>Localiser</button>
-          </div>
-        </div>
-        <span style={{ flex: 1 }} />
-      </div>
-
-      <div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 18, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Carte du logement')}</div><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', padding: '4px 11px', borderRadius: 999 }}>Live · 10s</span></div>
-        <Suspense fallback={<div style={{ aspectRatio: '16/10', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-well2)' }} />}>
-          <VacPlan hass={hass} haid={idMap} zones={rooms} selection={sel} onToggle={toggleRoom} />
-        </Suspense>
-      </div>
-
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Nettoyage ciblé')}</div>
-      <div className="grid-vac-map" style={{ display: 'grid', gridTemplateColumns: idCam ? 'minmax(0,1.3fr) minmax(260px,1fr)' : '1fr', gap: 16, alignItems: 'start' }}>
-        <div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 20, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Zones à nettoyer')}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>
-              {picked.length ? (picked.length > 1 ? tr('{n} pièces sélectionnées', { n: picked.length }) : tr('{n} pièce sélectionnée', { n: picked.length })) : tr('passage complet')}
-            </div>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 16 }}>{tr('Sur la carte ou dans la liste — laisse vide pour un passage complet')}</div>
-          <div className="grid-vac-rooms" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
-            {rooms.map(r => {
-              const on = !!sel[r.id];
-              const sans = !r.toggle;
-              return (
-                <button key={r.id} onClick={() => toggleRoom(r)} aria-pressed={on} disabled={sans}
-                  title={sans ? 'Aucun interrupteur ne pilote cette pièce' : undefined}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 14px', borderRadius: 14,
-                    border: '1px solid ' + (on ? r.color + '66' : 'var(--o-bd2)'), cursor: sans ? 'default' : 'pointer',
-                    fontWeight: 700, fontSize: 13, textAlign: 'left', transition: 'all .2s', opacity: sans ? .5 : 1,
-                    background: on ? `rgba(${cl_hexRgb(r.color)},.14)` : 'var(--o-s2)',
-                    color: on ? r.color : 'var(--o-text2)' }}>
-                  <span style={{ width: 9, height: 9, borderRadius: 4, flexShrink: 0, background: on ? r.color : 'var(--o-text3)' }} />
-                  {r.name}
-                </button>
-              );
-            })}
-          </div>
-          <button onClick={() => { const sc = vacScript('pieces_selectionnees'); if (picked.length && sc) runScript(sc); }} style={{ width: '100%', marginTop: 14, padding: 13, borderRadius: 14, border: 'none', cursor: picked.length ? 'pointer' : 'default', fontWeight: 800, fontSize: 13, transition: 'all .2s', background: picked.length ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: picked.length ? '#fff' : 'var(--o-text3)', boxShadow: picked.length ? '0 8px 20px rgba(var(--o-accent-rgb),.35)' : 'none' }}>{picked.length ? (picked.length > 1 ? tr('Nettoyer {n} pièces', { n: picked.length }) : tr('Nettoyer {n} pièce', { n: picked.length })) : tr('Sélectionne des pièces')}</button>
-        </div>
-        {idCam && (
-          <div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Caméra')}</div>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, fontSize: 11, fontWeight: 800, background: 'rgba(var(--o-ok-rgb),.14)', color: 'var(--o-ok)' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-ok)' }} />EN DIRECT
-              </span>
-            </div>
-            <div style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', aspectRatio: '16/10', background: 'var(--o-well2)' }}>
-              <CamLive hass={hass} haid={idCam} />
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 10, lineHeight: 1.5 }}>
-              Suit le passage du robot. Choisis la caméra dans Paramètres → Entités.
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // Vue atteinte alors que l'installation n'a pas de quoi la remplir.
 const VIEW_TITLES = {
