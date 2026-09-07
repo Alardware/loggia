@@ -50,22 +50,24 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
  * tableau contenait une expression, la règle refusait de le vérifier ENTIER —
  * y compris les dépendances correctement nommées à côté. */
 const VERIFIE = {
-  /* Passé de 43 à 41 en retirant le code mort : deux effets ne servaient qu'à
-   * remplir un état que personne ne lisait. Ils sont partis avec lui, et leurs
-   * dépendances omises avec eux. */
+  /* Passé de 43 à 41 en retirant le code mort, puis à 38 : le journal
+   * d'activité et la vue Système ont quitté `App.jsx`. Aucun manquement n'a
+   * disparu ni apparu — les mêmes, rangés ailleurs. C'est ce qu'on attend d'un
+   * déplacement, et c'est ce que cette liste sert à prouver. */
   'src/App.jsx': [
-    'HIST_IDS, SYS.host.online, and hass', 'S', 'S', 'S',
-    'S', 'S and domaineOk', 'S and ids', 'S and lecteurs',
-    'S and zonesHaids', 'a and dashHass', 'ancre', 'api and plage',
-    'applyUser', 'autoOn', 'choisis and tousCals', 'cle and hass',
-    'cv.name', 'dc', 'debutGrille and finGrille', 'derived',
-    'derived', 'derivedCovers', 'discovery', 'discovery',
-    'domaineOk', 'hass', 'hass', 'hass',
-    'hass', 'hass', 'hass and live', 'hass, ids, and metrics',
-    'hidden', 'ids', 'keys and noisyKeys', 'lights and presentRooms',
-    'loggiaRuntime.index', 'noms', 'seulement', 'vuSig',
-    'vuesAutorisees',
+    'S', 'S', 'S', 'S',
+    'S and domaineOk', 'S and ids', 'S and lecteurs', 'S and zonesHaids',
+    'a and dashHass', 'ancre', 'api and plage', 'applyUser',
+    'autoOn', 'choisis and tousCals', 'cle and hass', 'cv.name',
+    'dc', 'debutGrille and finGrille', 'derived', 'derived',
+    'derivedCovers', 'discovery', 'discovery', 'domaineOk',
+    'hass', 'hass', 'hass', 'hass',
+    'hass and live', 'hass, ids, and metrics', 'hidden', 'keys and noisyKeys',
+    'lights and presentRooms', 'loggiaRuntime.index', 'noms', 'seulement',
+    'vuSig', 'vuesAutorisees',
   ],
+  'src/historique.jsx': ['hass', 'ids'],
+  'src/views/systeme.jsx': ['HIST_IDS, SYS.host.online, and hass'],
   /* `src/ciel3d.jsx` figurait ici avec « exposure and limitMag ». Le fichier a
    * disparu : un ciel étoilé de 284 lignes qu'aucun import n'atteignait. */
   'src/ui.jsx': ['cur'],
