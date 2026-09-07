@@ -34,7 +34,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ESLint } from 'eslint';
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -70,8 +70,14 @@ const ANTISLASH = String.fromCharCode(92);
 /** Ce que l'outil voit aujourd'hui, dans la même forme. */
 async function releve() {
   const par = {};
-  for (const f of await new ESLint().lintFiles(['src'])) {
-    const nom = f.filePath.replace(/.*OrionV2-source./, '').split(ANTISLASH).join('/');
+  // Le dossier par son chemin absolu, et non `'src'` : ESLint résoudrait
+  // relativement au répertoire courant, qui n'a pas à être celui du dépôt.
+  for (const f of await new ESLint({ cwd: RACINE }).lintFiles([join(RACINE, 'src')])) {
+    // Relatif à la racine du dépôt, jamais à un nom de dossier : sur un poste
+    // de développement le projet s'appelle « OrionV2-source », sur le runner
+    // d'intégration « loggia ». Découper sur un nom en dur passait ici et
+    // échouait partout ailleurs — c'est exactement ce qui est arrivé.
+    const nom = relative(RACINE, f.filePath).split(ANTISLASH).join('/');
     for (const m of f.messages) {
       if (m.ruleId !== 'react-hooks/exhaustive-deps') continue;
       const d = m.message.match(/missing dependenc[a-z]*: (.*?)\. Either/);
