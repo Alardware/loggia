@@ -176,6 +176,41 @@ const PLANS = {
 };
 
 /**
+ * L'inverse de `PLANS` : d'un couple (domaine, service) vers la capacité.
+ *
+ * Le dashboard appelle encore les services par leur nom, à travers des aides
+ * locales — `call('light', 'turn_on', { entity_id, brightness_pct })`. Les
+ * réécrire une par une, ce sont cinquante retouches à la main dans un fichier
+ * de douze mille lignes, chacune une occasion de se tromper.
+ *
+ * Cette fonction fait le chemin dans l'autre sens, une fois, à partir de la
+ * même table. Un appel par son nom retrouve donc la capacité correspondante, et
+ * avec elle les vérifications : l'entité déclare-t-elle savoir le faire, et la
+ * valeur tient-elle dans ses bornes réelles.
+ *
+ * Le champ présent dans `data` tranche quand plusieurs capacités mènent au même
+ * service : `light.turn_on` vaut `set_brightness` avec `brightness_pct`,
+ * `set_color` avec `rgb_color`, et un simple `turn_on` sans rien.
+ *
+ * Rend `null` quand rien ne correspond — `alarm_disarm`, `play_media`,
+ * `update_entity` n'ont pas de capacité, et l'appelant garde alors sa route
+ * directe plutôt que de voir sa commande disparaître.
+ */
+export function capaciteDe(domain, service, data = {}) {
+  const table = PLANS[domain] || {};
+  const candidats = Object.keys(table).filter(c => table[c].service === service);
+  // D'abord celle dont le champ est fourni : c'est elle qu'on demande.
+  const avecChamp = candidats.find(c => table[c].field && data[table[c].field] !== undefined);
+  if (avecChamp) return { capacite: avecChamp, champ: table[avecChamp].field };
+  const sansChamp = candidats.find(c => !table[c].field);
+  if (sansChamp) return { capacite: sansChamp, champ: null };
+  // `turn_on` / `turn_off` / `toggle` ne sont pas dans la table : ils valent
+  // pour tout domaine allumable, et `planAction` les traite à part.
+  if (BASCULE.has(service)) return { capacite: service, champ: null };
+  return null;
+}
+
+/**
  * Allumer, éteindre, basculer.
  *
  * Home Assistant offre `homeassistant.turn_on` pour tous les domaines, mais le

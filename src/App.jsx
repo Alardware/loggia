@@ -14,7 +14,7 @@ const ParametresContent = lazy(() => import('./views/parametres.jsx').then(m => 
 const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling } from './discovery.js';
 import { planAction as actionsPlan, availableActions as actionsAvailable,
-  planAction, runPlan } from './actions.js';
+  planAction, runPlan, capaciteDe } from './actions.js';
 import { entityCaps } from './capabilities.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
 import { deviceCard, presentableDevices, presentationSummary, cleCamera } from './present.js';
@@ -384,7 +384,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], isAdmin = f
   NAV.forEach(g => g.items.forEach(it => { const vid = LABEL_VIEW[it.label]; if (BUILT.has(vid) && isViewAvailable(avail, vid) && match(it.label)) results.push({ group: tr('Vues'), label: tr(it.label), icon: it.svg, act: (close) => { onNav(vid); close(); } }); }));
   HIDDEN_VIEWS().forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: tr('Vues'), label: tr(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
   customViews.forEach(cv => { if (match(cv.name)) results.push({ group: tr('Vues'), label: cv.name, icon: <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" />, act: (close) => { onNav('cv:' + cv.id); close(); } }); });
-  quickScenes().forEach(s => { if (!match(s.name)) return; results.push({ group: tr('Scènes'), label: s.name, sub: s.sub, icon: <Fi i={s.icon} color="var(--o-purple)" />, run: true, act: (close) => { const h = getHass(); if (h && h.callService) h.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid }); close(); } }); });
+  quickScenes().forEach(s => { if (!match(s.name)) return; results.push({ group: tr('Scènes'), label: s.name, sub: s.sub, icon: <Fi i={s.icon} color="var(--o-purple)" />, run: true, act: (close) => { const h = getHass(); if (h && h.callService) commander(h, s.haid, 'turn_on'); close(); } }); });
   // Appareils : par nom, dès deux caractères tapés — le déluge n'aide personne.
   // Les togglables se basculent sur place ; les autres mènent à leur vue.
   if (nq.length >= 2) {
@@ -407,7 +407,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], isAdmin = f
         group: tr('Appareils'), label: nom, sub: id, run: togglable, runLabel: tr('Basculer'),
         icon: <Fi i={DOMS[dom]} color="var(--o-cyan)" />,
         act: (close) => {
-          if (togglable) { h.callService('homeassistant', 'toggle', { entity_id: id }); }
+          if (togglable) { commander(h, id, 'toggle'); }
           else if (VUE_DOM[dom]) onNav(VUE_DOM[dom]);
           close();
         },
@@ -1442,7 +1442,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   // Filet : si HA n'a pas confirmé sous 6 s (commande rejetée), retour à l'état réel au lieu de rester désynchronisé
   const ovRevertRef = useRef(0);
   useEffect(() => () => clearTimeout(ovRevertRef.current), []);
-  const toggle = (e) => { e.stopPropagation(); flash(accent); setOv(!on); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); if (hass && hass.callService) hass.callService('homeassistant', on ? 'turn_off' : 'turn_on', { entity_id: id }); };
+  const toggle = (e) => { e.stopPropagation(); flash(accent); setOv(!on); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); commander(hass, id, on ? 'turn_off' : 'turn_on'); };
   // Luminosité optimiste : fenêtre fixe 4 s (l'écho Zigbee rejoue l'ancienne valeur).
   const [ovBri, setOvBri] = useState(null);
   const ovBriRef = useRef(0);
@@ -1450,7 +1450,8 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const poseBri = (pct) => {
     setOvBri(pct); setOv(pct > 0);
     clearTimeout(ovBriRef.current); ovBriRef.current = setTimeout(() => { setOvBri(null); setOv(null); }, 4000);
-    if (hass && hass.callService) { if (pct > 0) hass.callService('light', 'turn_on', { entity_id: id, brightness_pct: pct }); else hass.callService('light', 'turn_off', { entity_id: id }); }
+    if (pct > 0) commander(hass, id, 'set_brightness', pct);
+    else commander(hass, id, 'turn_off');
   };
   const briAff = ovBri != null ? ovBri : (on ? bri : 0);
   // Glissière épaisse : peinture DOM directe pendant le geste, commit au relâcher.
@@ -1529,7 +1530,7 @@ function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
   const mort = !st || s === 'unavailable';
   const en = dom === 'vacuum' ? s === 'cleaning' : s === 'mowing';
   const actif = en || s === 'returning';
-  const call = (svc) => { if (hass && hass.callService) hass.callService(dom, svc, { entity_id: id }); };
+  const call = (svc) => commanderService(hass, id, dom, svc, { entity_id: id });
   const f = a.supported_features || 0;
   // La batterie vit rarement dans l'attribut : le capteur SŒUR fait foi.
   const bat = (() => {
@@ -1691,7 +1692,6 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   const [ov, setOv] = useState(null);
   useEffect(() => { setOv(null); }, [realPos]);
   const pos = ov != null ? ov : realPos;
-  const call = (svc, data) => { if (hass && hass.callService) hass.callService('cover', svc, { entity_id: id, ...(data || {}) }); };
   const mort = !st || st.state === 'unavailable';
   const drag = (e) => {
     e.preventDefault();
@@ -1735,7 +1735,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
         {/* Les mêmes trois gestes que la carte compacte : ouvrir, stop, fermer — le slider règle le reste. */}
         <div style={{ display: 'flex', gap: 8 }}>
           <button aria-label={tr('Ouvrir')} title={tr('Ouvrir')} onClick={(e) => { e.stopPropagation(); setOv(100); commander(hass, id, 'open'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-up" size={14} /></button>
-          <button aria-label={tr('Stop')} title={tr('Stop')} onClick={(e) => { e.stopPropagation(); call('stop_cover'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="square" size={12} /></button>
+          <button aria-label={tr('Stop')} title={tr('Stop')} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'stop'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="square" size={12} /></button>
           <button aria-label={tr('Fermer')} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-down" size={14} /></button>
         </div>
       </div>
@@ -1753,7 +1753,20 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
 /** Le contexte du moteur d'actions, depuis le pont Home Assistant. */
 function actionCtx(h) {
   const hs = h || getHass();
-  return { states: (hs && hs.states) || {}, services: (hs && hs.services) || null };
+  /* Une carte de services VIDE n'est pas une information.
+   *
+   * `planAction` refuse une commande dont le service n'apparait pas dans cette
+   * carte — c'est la garde qui empeche d'envoyer `set_cover_position` a un
+   * volet qui ne la publie pas. Mais `{}` ne dit pas « aucun service n'existe »,
+   * il dit « je ne sais pas ». Home Assistant en publie toujours des centaines.
+   *
+   * La demo, elle, annonce `services: {}`. Chaque commande passee par
+   * `commander` y etait donc refusee — et l'affichage optimiste le masquait :
+   * l'interrupteur basculait, revenait quatre secondes plus tard, et on croyait
+   * a une lenteur. Le seul chemin verifie du dashboard etait inerte la ou on
+   * l'essaye. */
+  const svc = hs && hs.services;
+  return { states: (hs && hs.states) || {}, services: (svc && Object.keys(svc).length) ? svc : null };
 }
 
 /**
@@ -1785,10 +1798,52 @@ function peut(hass, id, capability) {
  * Rend `null` si l'entite ne declare pas la capacite — la vue ne doit alors
  * afficher aucun changement, puisqu'il n'y en aura pas.
  */
+/**
+ * Un appel de service par son nom, passe par la validation quand c'est possible.
+ *
+ * Le dashboard garde des aides locales qui prennent un domaine et un service —
+ * `call('light', 'turn_on', { entity_id, brightness_pct })`. Les reecrire une
+ * par une, ce sont cinquante retouches a la main dans douze mille lignes.
+ *
+ * `capaciteDe` fait le chemin inverse a partir de la meme table : de (domaine,
+ * service, champ) vers la capacite. L'appel retrouve donc `planAction`, et avec
+ * lui les deux verifications qui manquaient — l'entite declare-t-elle savoir le
+ * faire, et la valeur tient-elle dans SES bornes plutot que dans une constante.
+ *
+ * Ce qui n'a pas de capacite garde sa route directe : `alarm_disarm`,
+ * `play_media`, `update_entity` n'en ont pas, et une commande qui disparait
+ * vaudrait moins qu'une commande non verifiee.
+ */
+function commanderService(hass, id, domaine, service, data) {
+  const d = data || {};
+  const trad = id ? capaciteDe(domaine, service, d) : null;
+  /* `planAction` ne rebatit que le champ de la capacite : tout ce que l'appel
+   * portait en plus serait perdu en chemin. Un `code` d'alarme, une duree de
+   * transition, un `enqueue` de lecteur — la commande partirait amputee, et
+   * personne ne le verrait. On ne passe donc par la validation que si l'appel
+   * ne transporte rien d'autre que l'entite et la valeur attendue. */
+  const extras = Object.keys(d).filter(k => k !== 'entity_id' && k !== (trad && trad.champ));
+  if (trad && !extras.length) {
+    return commander(hass, id, trad.capacite, trad.champ ? d[trad.champ] : undefined);
+  }
+  if (hass && hass.callService) hass.callService(domaine, service, d);
+  return null;
+}
+
 function commander(hass, id, capability, value, champ) {
   const ctx = actionCtx(hass);
   const p = planAction(id, capability, value, ctx);
-  if (!p.ok) return null;
+  if (!p.ok) {
+    /* Un plan refuse etait muet : `planAction` dit pourquoi — l'entite ne
+     * declare pas la capacite, le service n'existe pas, la valeur ne tient pas
+     * dans ses bornes — et cette raison mourait ici. On appuyait, rien ne se
+     * passait, et rien ne l'expliquait : exactement le defaut que ce moteur
+     * existe pour corriger, reproduit au dernier metre.
+     *
+     * Meme canal qu'un echec d'envoi : le toast dit qu'il ne s'est rien passe. */
+    Promise.reject(Object.assign(new Error(p.reason || 'commande impossible'), { code: 'service_error' }));
+    return null;
+  }
   /* `runPlan` attrape le rejet pour pouvoir en donner la raison — et l'echec
    * s'arretait la. L'ecoute globale des rejets, seul canal d'erreur visible du
    * dashboard, ne voyait donc jamais passer une commande refusee : le toast
@@ -1925,7 +1980,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const target = ov != null ? ov : (z.target != null ? z.target : 19);
   const off = z.mode === 'off';
   const heating = !off && z.current != null && z.current < target;
-  const call = (d, s, data) => { if (hass && hass.callService) hass.callService(d, s, data || {}); };
+  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const setT = (d) => { const v = Math.max(5, Math.min(30, Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
   const options = zoneModes(S, zone);
   const nextMode = () => {
@@ -1965,7 +2020,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
   const target = ov != null ? ov : (z.target != null ? z.target : 19);
   const off = z.mode === 'off';
   const heating = !off && z.current != null && z.current < target;
-  const call = (d, s, data) => { if (hass && hass.callService) hass.callService(d, s, data || {}); };
+  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const setT = (d) => { const v = Math.max(5, Math.min(30, Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
   // La température vécue : le capteur de la zone s'il existe (état numérique, requête légère),
   // sinon l'attribut current_temperature du climate.
@@ -2406,7 +2461,7 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
   const S = (hass && hass.states) || null;
   const np = mpRead(S, id); // fusion compagnon Music Assistant (titre/pochette) comme la vue Médias
   const a = (S && S[id] && S[id].attributes) || {};
-  const call = (svc, data, ent) => { if (hass && hass.callService) hass.callService('media_player', svc, { entity_id: ent || id, ...(data || {}) }); };
+  const call = (svc, data, ent) => commanderService(hass, ent || id, 'media_player', svc, { entity_id: ent || id, ...(data || {}) });
   const sub = [np.artist, np.album].filter(Boolean).join(' · ');
   const vol = np.hasVol ? np.vol : null;
   // Filigrane appareil (comme la vue Objets) : Apple TV ou Echo selon le lecteur configuré
@@ -2456,7 +2511,7 @@ function RoomCoverSheet({ id, hass, onClose }) {
   const [ov, setOv] = useState(null);
   useEffect(() => { setOv(null); }, [realPos]);
   const pos = ov != null ? ov : realPos;
-  const call = (d, s, data) => { if (hass && hass.callService) hass.callService(d, s, data || {}); };
+  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const cov = (svc, data) => call('cover', svc, { entity_id: id, ...(data || {}) });
   // Pas d'entite de mode : pas de mode. Supposer « Manuel » — un mot francais,
   // compare plus loin par `schedActive` — declarait le planning inactif en
@@ -2607,7 +2662,7 @@ function RoomLightSheet({ light, hass, onClose }) {
   useEffect(() => { if (!dragRef.current) { setOn(realOn); setBri(realBri); } }, [realOn, realBri]);
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : light.color;
   const acc = (light.rgb && color) ? color : '#ffce73';
-  const toggle = () => { const v = !on; setOn(v); hass.callService('homeassistant', v ? 'turn_on' : 'turn_off', { entity_id: light.id }); };
+  const toggle = () => { const v = !on; setOn(v); commander(hass, light.id, v ? 'turn_on' : 'turn_off'); };
   const shown = on ? bri : 0;
   const dragVert = (e) => {
     e.preventDefault();
@@ -3254,7 +3309,7 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
   const a = (st && st.attributes) || {};
   const dom = String(id).split('.')[0];
   const label = nom || (a.friendly_name || id).replace(/^[^:]*: ?/, '');
-  const call = (d, s, data) => { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); };
+  const call = (d, s, data) => commanderService(hass, id, d, s, { entity_id: id, ...(data || {}) });
   const mort = !st || st.state === 'unavailable';
   /* Optimisme : l'écran répond au doigt, Home Assistant confirme après.
    * Sans lui, chaque clic attend l'aller-retour Zigbee PUIS le poll — mou.
@@ -3460,7 +3515,7 @@ function FicheMachineHero({ id, hass }) {
   const s = st ? st.state : null;
   const mort = !st || s === 'unavailable';
   const en = dom === 'vacuum' ? s === 'cleaning' : s === 'mowing';
-  const call = (svc) => { if (hass && hass.callService) hass.callService(dom, svc, { entity_id: id }); };
+  const call = (svc) => commanderService(hass, id, dom, svc, { entity_id: id });
   const f = a.supported_features || 0;
   const bat = (() => {
     if (a.battery_level != null) return a.battery_level;
@@ -3523,7 +3578,7 @@ function FicheMachineHero({ id, hass }) {
             {vitesses.map((v, vi) => {
               const on = v === a.fan_speed;
               return (
-                <button key={v} onClick={() => { hass.callService('vacuum', 'set_fan_speed', { entity_id: id, fan_speed: v }); }}
+                <button key={v} onClick={() => { commander(hass, id, 'set_fan_speed', v); }}
                   aria-pressed={on} style={{ flex: 1, minWidth: 0, padding: '9px 4px 8px', borderRadius: 14, cursor: 'pointer',
                     border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)',
                     color: on ? '#fff' : 'var(--o-text1)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, transition: 'background .2s' }}>
@@ -3944,7 +3999,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
    * barre. */
   const S = (hass && hass.states) || {};
   const dom = (id) => id.slice(0, id.indexOf('.'));
-  const call = (d, svc, data) => { if (hass && hass.callService) hass.callService(d, svc, data); };
+  const call = (d, svc, data) => commanderService(hass, (data || {}).entity_id, d, svc, data || {});
   const lightIds = ents.filter(id => dom(id) === 'light');
   const coverIds = ents.filter(id => dom(id) === 'cover');
   const lightsOn = lightIds.filter(id => S[id] && S[id].state === 'on');
@@ -4125,7 +4180,7 @@ function QuickScenes({ hass }) {
   useEffect(() => () => clearTimeout(fRef.current), []);
   const run = (s) => {
     setFlash(s.haid); clearTimeout(fRef.current); fRef.current = setTimeout(() => setFlash(null), 2500);
-    if (hass && hass.callService) hass.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid });
+    if (hass && hass.callService) commander(hass, s.haid, 'turn_on');
   };
   return (
     <>
@@ -4514,7 +4569,7 @@ function ObjetsView({ hass, onNav, edit = false }) {
   const num = (id, d = null) => { const e = S && S[id]; if (!e) return d; const n = parseFloat(e.state); return isNaN(n) ? d : n; };
   const stTxt = (id) => { const e = S && S[id]; return (e && e.state != null && e.state !== 'unknown' && e.state !== 'unavailable') ? e.state : null; };
   const isOn = (id) => { const e = S && S[id]; return !!(e && e.state === 'on'); };
-  const call = (d, s, data) => { if (hass && hass.callService) hass.callService(d, s, data || {}); };
+  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const [sheet, setSheet] = useState(null);
   const batCol = (b) => b == null ? 'var(--o-text3)' : b > 40 ? 'var(--o-ok)' : b > 15 ? '#ffb347' : '#f87171';
 
@@ -4938,7 +4993,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
   const lancerScene = (s) => {
     setScFlash(s.haid); clearTimeout(scRef.current); scRef.current = setTimeout(() => setScFlash(null), 1600);
     // Le refus remonte à l'écoute globale : un `try/catch` ne le verrait pas.
-    const h = getHass(); if (h && h.callService) h.callService(s.haid.indexOf('scene.') === 0 ? 'scene' : 'script', 'turn_on', { entity_id: s.haid });
+    const h = getHass(); if (h && h.callService) commander(h, s.haid, 'turn_on');
   };
   const hm = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const capit = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
@@ -6404,7 +6459,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
   }, [sig]);
   const setBri = (id, v) => setLights(ls => ls.map(l => l.id === id ? { ...l, bri: v, on: true } : l));
   // homeassistant.turn_on/off gère light ET switch (interrupteurs traités comme lumières).
-  const callHa = (svc, data) => { if (hass && hass.callService) hass.callService('homeassistant', svc, data); };
+  const callHa = (svc, data) => commanderService(hass, (data || {}).entity_id, 'homeassistant', svc, data || {});
   const toggle = (l) => { markPending([l.id], !l.on); setLights(ls => ls.map(x => x.id === l.id ? { ...x, on: !x.on, bri: !x.on ? (x.bri || 100) : x.bri } : x)); callHa(l.on ? 'turn_off' : 'turn_on', { entity_id: l.id }); };
   const setAll = (on) => { const ids = lights.map(x => x.id); markPending(ids, on); setLights(ls => ls.map(x => ({ ...x, on, bri: on ? (x.bri || 100) : x.bri }))); if (ids.length) callHa(on ? 'turn_on' : 'turn_off', { entity_id: ids }); };
   const pick = (id, c) => { setLights(ls => ls.map(l => l.id === id ? { ...l, color: c, on: true } : l)); const n = parseInt(c.slice(1), 16); commander(hass, id, 'set_color', [(n >> 16) & 255, (n >> 8) & 255, n & 255]); };
@@ -6829,7 +6884,7 @@ function ScenesContent({ hass }) {
   const [cat, setCat] = useState(selCat || 'classics');
   useEffect(() => { if (selCat) setCat(selCat); }, [selCat]);
 
-  const call = (d, s, data) => { if (hass && hass.callService) hass.callService(d, s, data || {}); };
+  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   // Applique une scène : le script configuré s'il existe, sinon la luminosité
   // seule sur les lampes variables.
   const applyScene = (data) => {
@@ -7083,7 +7138,7 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   const [selZone, setSelZone] = useState('poele');
   const sig = derived.map(t => `${t.id}:${t.mode}:${t.target}:${t.current}:${t.auto}`).join('|');
   useEffect(() => { setThermos(derived); }, [sig]);
-  const call = (d, s, data) => { if (hass && hass.callService) hass.callService(d, s, data || {}); };
+  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const zoneOf = (id) => climateZones(S).find(z => z.id === id);
   const upLocal = (id, patch) => setThermos(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t));
   const commitTarget = (id, v) => { v = Math.max(5, Math.min(30, Math.round(v * 2) / 2)); upLocal(id, { target: v }); call('input_number', 'set_value', { entity_id: zoneOf(id).tempCible, value: v }); };
@@ -7345,7 +7400,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
     }
   });
 
-  const call = (d, s, data) => { if (hass && hass.callService) hass.callService(d, s, data || {}); };
+  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const allOpen = () => { setCovers(cs => cs.map(c => ({ ...c, pos: 100 }))); call('cover', 'open_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
   const allClose = () => { setCovers(cs => cs.map(c => ({ ...c, pos: 0 }))); call('cover', 'close_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
   const pickMode = (m) => { setModeLocal(m); call('input_select', 'select_option', { entity_id: voletMode(), option: m }); };
@@ -8153,7 +8208,7 @@ function AspirateurContent({ hass }) {
   // dessus evite de resynchroniser a chaque rendu, `rooms` etant reconstruit.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setSel(Object.fromEntries(rooms.map(r => [r.id, sOn(r.toggle)]))); }, [ssig]);
-  const call = (d, s, data) => { if (hass && hass.callService) hass.callService(d, s, data || {}); };
+  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const runScript = (id) => call('script', 'turn_on', { entity_id: id });
   // Un script maison fait souvent plus que le service standard (selection de
   // pieces, sequence). On le garde donc quand il existe, et on retombe sinon
@@ -8341,7 +8396,7 @@ function CroquettesContent({ hass }) {
   const [levelLocal, setLevelLocal] = useState(null);
   useEffect(() => { setLevelLocal(null); }, [reservoirG]); // toute variation confirmée du capteur reprend la main sur l'optimiste
   const level = levelLocal != null ? levelLocal : (reservoirG == null ? 0 : Math.max(0, Math.min(100, Math.round(reservoirG / croqMax(S) * 100))));
-  const call = (d, s, data) => { if (hass && hass.callService) hass.callService(d, s, data || {}); };
+  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   // Distribuer demande un script propre a l'installation : rien de standard.
   // Sans lui, le geste ne fait rien plutot que d'appeler un script absent.
   const dispense = (n) => { const sc = (loggiaEnt('feeder', null) || {}).script; if (sc) call('script', 'turn_on', { entity_id: sc, variables: { portions: n } }); };
@@ -9300,7 +9355,7 @@ function cvIcoEntite(dom, id, st, name) {
 }
 function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   const st = hass && hass.states ? hass.states[id] : null;
-  const call = (d, s, data) => { if (hass && hass.callService) hass.callService(d, s, { entity_id: id, ...(data || {}) }); };
+  const call = (d, s, data) => commanderService(hass, id, d, s, { entity_id: id, ...(data || {}) });
   // Consigne optimiste de la compacte climat (fenêtre fixe 4 s, comme partout).
   const [ovT, setOvT] = useState(null);
   const ovTRef = useRef(0);
@@ -9638,7 +9693,7 @@ function CvBigToggle({ id, hass }) {
   const lum = cvEstLumiere(id);
   const rgbTok = lum ? 'var(--o-gold-rgb)' : 'var(--o-accent-rgb)';
   const txtCol = lum ? 'var(--o-warn)' : 'var(--o-accent-soft)';
-  const toggle = () => { if (hass && hass.callService) hass.callService('homeassistant', 'toggle', { entity_id: id }); };
+  const toggle = () => commander(hass, id, 'toggle');
   return (
     <button className={'o-piece' + (mort ? ' o-panne' : '')} onClick={toggle} disabled={mort}
       style={{ ...CV_CADRE, height: '100%', minHeight: 150, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
@@ -9983,7 +10038,7 @@ function RailSerrure({ id, hass }) {
     // plus tard. Le service dit bien lui-même s'il a échoué — par l'écoute
     // globale et son toast, pas par un bloc synchrone.
     if (hass && hass.callService) {
-      hass.callService('lock', verrouille ? 'unlock' : 'lock', { entity_id: id });
+      commander(hass, id, verrouille ? 'unlock' : 'lock');
     }
   };
 

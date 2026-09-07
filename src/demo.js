@@ -534,8 +534,19 @@ export function installerDemo() {
     states[id] = { state: patch != null ? String(patch) : cur.state, attributes: { ...cur.attributes, ...(attrs || {}) }, last_updated: maintenant(), last_changed: maintenant() };
     el.hass = { ...el.hass, states };
   };
-  const callService = (domaine, service, data) => {
-    const id = data && data.entity_id;
+  /* `target` compte autant que `data`.
+   *
+   * Home Assistant accepte l'entite des deux facons : dans les donnees du
+   * service, ou dans une cible a part — `callService(domaine, service, data,
+   * target)`. Le moteur d'actions de Loggia emploie la seconde, parce que c'est
+   * celle que Home Assistant recommande.
+   *
+   * La demo n'en prenait que trois arguments : la cible tombait, l'entite valait
+   * `undefined`, et la commande ne touchait rien. Rien ne le signalait — la
+   * carte peignait l'etat demande, puis revenait quatre secondes plus tard. Tout
+   * le chemin verifie du dashboard etait donc inerte ici, la ou on l'essaye. */
+  const callService = (domaine, service, data, target) => {
+    const id = (data && data.entity_id) || (target && target.entity_id);
     if (domaine === 'homeassistant' || domaine === 'light' || domaine === 'switch' || domaine === 'fan') {
       if (service === 'turn_on') toucher(id, 'on');
       else if (service === 'turn_off') toucher(id, 'off');

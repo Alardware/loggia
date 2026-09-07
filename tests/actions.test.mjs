@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { planAction, runAction, availableActions } from '../src/actions.js';
+import { planAction, runAction, availableActions, capaciteDe } from '../src/actions.js';
 
 const et = (state, attributes = {}) => ({ state: String(state), attributes });
 
@@ -311,4 +311,82 @@ test('le rejet d’une commande atteint le seul canal visible', () => {
   const corps = app.slice(i, app.indexOf('\n}', i));
   assert.match(corps, /Promise\.reject\(Object\.assign\(new Error\(motif\), \{ code: 'service_error' \}\)\)/,
     'commander avale de nouveau le rejet : les commandes qui passent par lui échoueront sans un mot');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D'un service à sa capacité, pour que les appels par leur nom soient vérifiés.
+//
+// Le dashboard gardait des aides locales prenant un domaine et un service —
+// `call('light', 'turn_on', { entity_id, brightness_pct })`. Les réécrire une
+// par une, c'étaient cinquante retouches à la main dans douze mille lignes.
+// `capaciteDe` fait le chemin inverse à partir de la même table, une fois.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('le champ tranche entre deux capacités du même service', () => {
+  // `light.turn_on` en sert quatre : sans le champ, on ne saurait pas laquelle.
+  assert.deepEqual(capaciteDe('light', 'turn_on', { brightness_pct: 40 }),
+    { capacite: 'set_brightness', champ: 'brightness_pct' });
+  assert.deepEqual(capaciteDe('light', 'turn_on', { rgb_color: [1, 2, 3] }),
+    { capacite: 'set_color', champ: 'rgb_color' });
+  assert.deepEqual(capaciteDe('light', 'turn_on', {}),
+    { capacite: 'turn_on', champ: null });
+});
+
+test('les services sans champ se retrouvent aussi', () => {
+  assert.deepEqual(capaciteDe('cover', 'close_cover', {}), { capacite: 'close', champ: null });
+  assert.deepEqual(capaciteDe('cover', 'set_cover_position', { position: 30 }),
+    { capacite: 'set_position', champ: 'position' });
+  assert.deepEqual(capaciteDe('select', 'select_option', { option: 'nuit' }),
+    { capacite: 'select_option', champ: 'option' });
+});
+
+test('allumer et éteindre valent pour tout domaine', () => {
+  // `turn_on` / `turn_off` / `toggle` ne sont pas dans la table : `planAction`
+  // les traite à part, pour tout domaine allumable.
+  assert.deepEqual(capaciteDe('switch', 'toggle', {}), { capacite: 'toggle', champ: null });
+  assert.deepEqual(capaciteDe('script', 'turn_on', {}), { capacite: 'turn_on', champ: null });
+});
+
+test('ce qui n’a pas de capacité le dit', () => {
+  // Rendre une capacité fausse ferait disparaître la commande : mieux vaut
+  // rendre null et laisser l'appelant garder sa route directe.
+  assert.equal(capaciteDe('alarm_control_panel', 'alarm_disarm', {}), null);
+  assert.equal(capaciteDe('media_player', 'play_media', { media_content_id: 'x' }), null);
+  assert.equal(capaciteDe('homeassistant', 'update_entity', {}), null);
+});
+
+test('une carte de services vide vaut « je ne sais pas »', () => {
+  const app = readFileSync(join(RACINE_SRC, 'App.jsx'), 'utf8');
+  /* `planAction` refuse un service absent de la carte fournie. Mais `{}` ne dit
+   * pas « aucun service n'existe » : il dit qu'on ne sait pas. La démo annonçait
+   * `services: {}`, et chaque commande passée par `commander` y était refusée —
+   * masquée par l'affichage optimiste, qui basculait puis revenait. */
+  assert.match(app, /services: \(svc && Object\.keys\(svc\)\.length\) \? svc : null/,
+    'une carte de services vide redevient une interdiction : tout le chemin vérifié serait inerte');
+});
+
+test('la démo lit l’entité dans la cible autant que dans les données', () => {
+  const demo = readFileSync(join(RACINE_SRC, 'demo.js'), 'utf8');
+  // `planAction` met l'entité dans `target`, comme Home Assistant le recommande.
+  // La démo n'en prenait que trois arguments : la cible tombait, et la commande
+  // ne touchait rien.
+  assert.match(demo, /const callService = \(domaine, service, data, target\) =>/,
+    'la démo ignore de nouveau la cible : les commandes vérifiées n’y feront plus rien');
+  assert.match(demo, /\(data && data\.entity_id\) \|\| \(target && target\.entity_id\)/,
+    'la démo ne lit plus l’entité dans la cible');
+});
+
+test('un plan refusé ne meurt plus en silence', () => {
+  const app = readFileSync(join(RACINE_SRC, 'App.jsx'), 'utf8');
+  const i = app.indexOf('function commander(');
+  const corps = app.slice(i, app.indexOf('\n}', i));
+  /* `planAction` dit POURQUOI il refuse. Cette raison mourait ici : on appuyait,
+   * rien ne se passait, rien ne l'expliquait.
+   *
+   * On cherche le message du REFUS, pas un `Promise.reject` quelconque : une
+   * première version acceptait `if (!p.ok) { … } … Promise.reject` avec un
+   * joker gourmand, et attrapait la relance qui suit l'envoi. Le test passait
+   * alors qu'on avait rendu le refus muet. */
+  assert.match(corps, /new Error\(p\.reason \|\| 'commande impossible'\)/,
+    'un plan refusé redevient muet : la commande disparaît sans un mot');
 });
