@@ -141,12 +141,25 @@ const PLANS = {
     stop: { service: 'stop_valve' },
     set_position: { service: 'set_valve_position', field: 'position', kind: 'pct' },
   },
+  /* `accepte` : ce que le service prend EN PLUS de la valeur de la capacite.
+   *
+   * Un panneau protege par un code refuse la commande sans lui. Le plan ne
+   * batissait que le champ de la capacite, donc le code tombait — et trois
+   * appels gardaient leur route directe pour cette seule raison.
+   *
+   * La liste est etroite a dessein : elle nomme les champs legitimes, service
+   * par service. Sans elle, `options` deviendrait une porte ouverte par ou
+   * n'importe quoi rejoindrait la charge utile, et la verification ne voudrait
+   * plus rien dire. */
   alarm_control_panel: {
-    arm_home: { service: 'alarm_arm_home' },
-    arm_away: { service: 'alarm_arm_away' },
-    arm_night: { service: 'alarm_arm_night' },
-    arm_vacation: { service: 'alarm_arm_vacation' },
-    trigger: { service: 'alarm_trigger' },
+    arm_home: { service: 'alarm_arm_home', accepte: ['code'] },
+    arm_away: { service: 'alarm_arm_away', accepte: ['code'] },
+    arm_night: { service: 'alarm_arm_night', accepte: ['code'] },
+    arm_vacation: { service: 'alarm_arm_vacation', accepte: ['code'] },
+    arm_custom_bypass: { service: 'alarm_arm_custom_bypass', accepte: ['code'] },
+    // Desarmer n'a pas de bit dans `supported_features` : on en sort toujours.
+    disarm: { service: 'alarm_disarm', accepte: ['code'] },
+    trigger: { service: 'alarm_trigger', accepte: ['code'] },
   },
   number: {
     set_value: {
@@ -201,12 +214,12 @@ export function capaciteDe(domain, service, data = {}) {
   const candidats = Object.keys(table).filter(c => table[c].service === service);
   // D'abord celle dont le champ est fourni : c'est elle qu'on demande.
   const avecChamp = candidats.find(c => table[c].field && data[table[c].field] !== undefined);
-  if (avecChamp) return { capacite: avecChamp, champ: table[avecChamp].field };
+  if (avecChamp) return { capacite: avecChamp, champ: table[avecChamp].field, accepte: table[avecChamp].accepte || [] };
   const sansChamp = candidats.find(c => !table[c].field);
-  if (sansChamp) return { capacite: sansChamp, champ: null };
+  if (sansChamp) return { capacite: sansChamp, champ: null, accepte: table[sansChamp].accepte || [] };
   // `turn_on` / `turn_off` / `toggle` ne sont pas dans la table : ils valent
   // pour tout domaine allumable, et `planAction` les traite à part.
-  if (BASCULE.has(service)) return { capacite: service, champ: null };
+  if (BASCULE.has(service)) return { capacite: service, champ: null, accepte: [] };
   return null;
 }
 
@@ -289,7 +302,48 @@ function valeur(plan, brute, attrs) {
  * @param {object} ctx         { states, services }
  * @returns {object} { ok, domain, service, data, target } ou { ok:false, reason }
  */
-export function planAction(entityId, capability, value, ctx = {}) {
+/**
+ * Le meme plan pour plusieurs entites, sans mentir sur celles qu'on ecarte.
+ *
+ * Trois commandes du dashboard visent un groupe : eteindre les lampes d'une
+ * piece, ouvrir ou fermer ses volets, changer le mode de ses thermostats. Elles
+ * gardaient la route directe parce que `planAction` ne prenait qu'une entite —
+ * donc aucune verification, et le lot partait entier meme si la moitie ne
+ * savait pas obeir.
+ *
+ * Ici chaque entite est planifiee separement, et l'on ne garde que celles qui
+ * aboutissent au MEME appel. Deux raisons de ne pas se contenter du premier
+ * plan : une entite peut ne pas declarer la capacite, et une autre peut voir sa
+ * valeur ramenee a ses propres bornes — deux volets, l'un qui accepte 30 %,
+ * l'autre plafonne a 20, ne peuvent pas partir dans le meme envoi sans que l'un
+ * des deux recoive autre chose que ce qu'on a demande.
+ *
+ * `ecartees` nomme les laissees-pour-compte. Un appelant qui les ignore se
+ * comporte comme avant ; un appelant qui les lit peut enfin le dire.
+ */
+function planGroupe(ids, capability, value, ctx, options) {
+  const liste = ids.filter(Boolean);
+  if (!liste.length) return { ok: false, reason: 'aucune entité' };
+  const plans = liste.map(id => ({ id, p: planAction(id, capability, value, ctx, options) }));
+  const bons = plans.filter(x => x.p.ok);
+  if (!bons.length) {
+    return { ok: false, reason: plans[0].p.reason, ecartees: liste };
+  }
+  const ref = bons[0].p;
+  const memeAppel = (p) => p.domain === ref.domain && p.service === ref.service
+    && JSON.stringify(p.data) === JSON.stringify(ref.data);
+  const retenues = bons.filter(x => memeAppel(x.p)).map(x => x.id);
+  const ecartees = liste.filter(id => retenues.indexOf(id) < 0);
+  return {
+    ...ref,
+    target: { entity_id: retenues },
+    ecartees: ecartees.length ? ecartees : null,
+  };
+}
+
+export function planAction(entityId, capability, value, ctx = {}, options = {}) {
+  // Un tableau d'entites suit le meme chemin, entite par entite.
+  if (Array.isArray(entityId)) return planGroupe(entityId, capability, value, ctx, options);
   const states = ctx.states || {};
   const services = ctx.services || null;
   const domain = domaineDe(entityId);
@@ -333,6 +387,11 @@ export function planAction(entityId, capability, value, ctx = {}) {
 
   const data = {};
   if (plan.field && v.v !== undefined) data[plan.field] = v.v;
+  // Et rien d'autre que ce que ce service declare accepter.
+  (plan.accepte || []).forEach((k) => {
+    const x = options[k];
+    if (x !== undefined && x !== null && x !== '') data[k] = x;
+  });
 
   return {
     ok: true,

@@ -1823,16 +1823,22 @@ function commanderService(hass, id, domaine, service, data) {
    * personne ne le verrait. On ne passe donc par la validation que si l'appel
    * ne transporte rien d'autre que l'entite et la valeur attendue. */
   const extras = Object.keys(d).filter(k => k !== 'entity_id' && k !== (trad && trad.champ));
-  if (trad && !extras.length) {
-    return commander(hass, id, trad.capacite, trad.champ ? d[trad.champ] : undefined);
+  /* Sauf ce que le service declare accepter : un code d'alarme n'est pas un
+   * champ perdu, c'est un champ prevu. `capaciteDe` le nomme, `planAction` le
+   * remet dans la charge utile, et rien d'autre ne passe par la. */
+  const admis = trad ? extras.filter(k => (trad.accepte || []).indexOf(k) >= 0) : [];
+  if (trad && extras.length === admis.length) {
+    const options = {};
+    admis.forEach((k) => { options[k] = d[k]; });
+    return commander(hass, id, trad.capacite, trad.champ ? d[trad.champ] : undefined, null, options);
   }
   if (hass && hass.callService) hass.callService(domaine, service, d);
   return null;
 }
 
-function commander(hass, id, capability, value, champ) {
+function commander(hass, id, capability, value, champ, options) {
   const ctx = actionCtx(hass);
-  const p = planAction(id, capability, value, ctx);
+  const p = planAction(id, capability, value, ctx, options || {});
   if (!p.ok) {
     /* Un plan refuse etait muet : `planAction` dit pourquoi — l'entite ne
      * declare pas la capacite, le service n'existe pas, la valeur ne tient pas
@@ -5892,7 +5898,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     const ms = roomMainsOf(name);
     if (!ms || !ms.length || !dashHass || !dashHass.callService) return;
     const svc = ms.some(l => l.on) ? 'turn_off' : 'turn_on';
-    dashHass.callService('homeassistant', svc, { entity_id: ms.map(l => l.id) });
+    commanderService(dashHass, ms.map(l => l.id), 'homeassistant', svc, { entity_id: ms.map(l => l.id) });
   };
   // ── Volets et clim par pièce : les minis des tuiles ──────────────────────
   // Agir sans ouvrir la pièce. Double chemin de rattachement, comme les
@@ -5924,7 +5930,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     if (!ex || !ex.covers.length) return null;
     const S = dashHass.states;
     const open = ex.covers.some(id => { const st = S[id]; return st && (st.state === 'open' || st.state === 'opening'); });
-    return { open, onToggle: () => { dashHass.callService('cover', open ? 'close_cover' : 'open_cover', { entity_id: ex.covers }); } };
+    return { open, onToggle: () => { commanderService(dashHass, ex.covers, 'cover', open ? 'close_cover' : 'open_cover', { entity_id: ex.covers }); } };
   };
   // ── Héros contextuel : « ce qui compte maintenant » ──────────────────────
   // TOUS les candidats, par intérêt : les lecteurs qui jouent (les plus
@@ -5955,7 +5961,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
       // Rallumer : le premier mode que l'entité connaît, le chauffage d'abord.
       const modes = (st.attributes || {}).hvac_modes || [];
       const cible = on ? 'off' : (['heat', 'auto', 'heat_cool', 'cool'].find(mo => modes.indexOf(mo) >= 0) || 'heat');
-      dashHass.callService('climate', 'set_hvac_mode', { entity_id: ex.clim, hvac_mode: cible });
+      commanderService(dashHass, ex.clim, 'climate', 'set_hvac_mode', { entity_id: ex.clim, hvac_mode: cible });
     } };
   };
 
@@ -8791,7 +8797,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   };
   const callAlarm = (svc, mode, code) => {
     setAlarm(mode);
-    if (hass && hass.callService && alarmId) hass.callService('alarm_control_panel', svc, { entity_id: alarmId, ...(code ? { code } : {}) });
+    if (alarmId) commanderService(hass, alarmId, 'alarm_control_panel', svc, { entity_id: alarmId, ...(code ? { code } : {}) });
     clearTimeout(alarmRevertRef.current);
     alarmRevertRef.current = setTimeout(() => { const cur = getHass(); const st = (cur && cur.states && alarmId && cur.states[alarmId]) ? cur.states[alarmId].state : null; const m = (st === 'armed_away' || st === 'armed_vacation') ? 'away' : st === 'armed_home' ? 'home' : st === 'armed_night' ? 'night' : st === 'triggered' ? 'triggered' : (st === 'arming' || st === 'pending') ? mode : 'off'; setAlarm(m); }, 6000);
   };
@@ -10111,7 +10117,7 @@ function RailArm({ id, hass }) {
    * désarmer, et tout était à refaire là-bas (retour 03/09). */
   const [demande, setDemande] = useState(null);
   const [code, setCode] = useState('');
-  const call = (svc, c) => { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id, ...(c ? { code: c } : {}) }); };
+  const call = (svc, c) => commanderService(hass, id, 'alarm_control_panel', svc, { entity_id: id, ...(c ? { code: c } : {}) });
   const agir = (svc) => {
     const faut = svc === 'alarm_disarm' ? !!a.code_format : (!!a.code_format && a.code_arm_required !== false);
     if (faut) { setDemande(svc); setCode(''); return; }
@@ -10170,7 +10176,7 @@ function CvAlarm({ id, hass, sans = false }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const s = st ? st.state : null;
   const aAl = (st && st.attributes) || {};
-  const call = (svc, code) => { if (hass && hass.callService) hass.callService('alarm_control_panel', svc, { entity_id: id, ...(code ? { code } : {}) }); };
+  const call = (svc, code) => commanderService(hass, id, 'alarm_control_panel', svc, { entity_id: id, ...(code ? { code } : {}) });
   // Si le panneau exige un code (code_format), on le demande avant d'agir :
   // Home Assistant refuserait silencieusement sans lui.
   const codeRequis = !!aAl.code_format;

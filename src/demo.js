@@ -46,7 +46,13 @@ function etatsInitiaux() {
     'weather.maison': s('partlycloudy', { friendly_name: 'Météo', temperature: 24, humidity: 52, temperature_unit: '°C',
       apparent_temperature: 26, wind_speed: 9, wind_gust_speed: 20, wind_bearing: 281, wind_speed_unit: 'km/h',
       pressure: 1014, uv_index: 3, visibility: 12 }),
-    'alarm_control_panel.maison': s('disarmed', { friendly_name: 'Alarme' }),
+    /* 39 = maison (1) + absent (2) + nuit (4) + vacances (32), les quatre modes
+     * que `callService` modelise plus bas. Un vrai panneau publie ce masque, et
+     * c'est lui qui dit au moteur d'actions quels armements l'entite accepte :
+     * sans lui, aucun mode n'etait declare, et chaque armement se faisait
+     * refuser des qu'il passait par la verification. Desarmer, lui, n'a pas de
+     * bit — on en sort toujours. */
+    'alarm_control_panel.maison': s('disarmed', { friendly_name: 'Alarme', supported_features: 39 }),
     'lock.porte_entree': s('locked', { friendly_name: 'Porte d’entrée' }),
     'sensor.production_solaire': s(1840, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.reseau': s(-460, { friendly_name: 'Réseau', unit_of_measurement: 'W', device_class: 'power' }),

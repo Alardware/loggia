@@ -325,34 +325,43 @@ test('le rejet d’une commande atteint le seul canal visible', () => {
 test('le champ tranche entre deux capacités du même service', () => {
   // `light.turn_on` en sert quatre : sans le champ, on ne saurait pas laquelle.
   assert.deepEqual(capaciteDe('light', 'turn_on', { brightness_pct: 40 }),
-    { capacite: 'set_brightness', champ: 'brightness_pct' });
+    { capacite: 'set_brightness', champ: 'brightness_pct', accepte: [] });
   assert.deepEqual(capaciteDe('light', 'turn_on', { rgb_color: [1, 2, 3] }),
-    { capacite: 'set_color', champ: 'rgb_color' });
+    { capacite: 'set_color', champ: 'rgb_color', accepte: [] });
   assert.deepEqual(capaciteDe('light', 'turn_on', {}),
-    { capacite: 'turn_on', champ: null });
+    { capacite: 'turn_on', champ: null, accepte: [] });
 });
 
 test('les services sans champ se retrouvent aussi', () => {
-  assert.deepEqual(capaciteDe('cover', 'close_cover', {}), { capacite: 'close', champ: null });
+  assert.deepEqual(capaciteDe('cover', 'close_cover', {}), { capacite: 'close', champ: null, accepte: [] });
   assert.deepEqual(capaciteDe('cover', 'set_cover_position', { position: 30 }),
-    { capacite: 'set_position', champ: 'position' });
+    { capacite: 'set_position', champ: 'position', accepte: [] });
   assert.deepEqual(capaciteDe('select', 'select_option', { option: 'nuit' }),
-    { capacite: 'select_option', champ: 'option' });
+    { capacite: 'select_option', champ: 'option', accepte: [] });
 });
 
 test('allumer et éteindre valent pour tout domaine', () => {
   // `turn_on` / `turn_off` / `toggle` ne sont pas dans la table : `planAction`
   // les traite à part, pour tout domaine allumable.
-  assert.deepEqual(capaciteDe('switch', 'toggle', {}), { capacite: 'toggle', champ: null });
-  assert.deepEqual(capaciteDe('script', 'turn_on', {}), { capacite: 'turn_on', champ: null });
+  assert.deepEqual(capaciteDe('switch', 'toggle', {}), { capacite: 'toggle', champ: null, accepte: [] });
+  assert.deepEqual(capaciteDe('script', 'turn_on', {}), { capacite: 'turn_on', champ: null, accepte: [] });
 });
 
 test('ce qui n’a pas de capacité le dit', () => {
   // Rendre une capacité fausse ferait disparaître la commande : mieux vaut
   // rendre null et laisser l'appelant garder sa route directe.
-  assert.equal(capaciteDe('alarm_control_panel', 'alarm_disarm', {}), null);
   assert.equal(capaciteDe('media_player', 'play_media', { media_content_id: 'x' }), null);
   assert.equal(capaciteDe('homeassistant', 'update_entity', {}), null);
+});
+
+test('désarmer est une capacité comme les autres', () => {
+  // Elle n'a pas de bit dans `supported_features` — celui-ci dit quels MODES
+  // d'armement un panneau accepte, pas qu'on puisse en sortir. Le moteur ne
+  // savait donc pas planifier la seule commande qu'aucune alarme ne refuse.
+  assert.deepEqual(capaciteDe('alarm_control_panel', 'alarm_disarm', {}),
+    { capacite: 'disarm', champ: null, accepte: ['code'] });
+  assert.deepEqual(capaciteDe('alarm_control_panel', 'alarm_arm_night', {}),
+    { capacite: 'arm_night', champ: null, accepte: ['code'] });
 });
 
 test('une carte de services vide vaut « je ne sais pas »', () => {
@@ -389,4 +398,95 @@ test('un plan refusé ne meurt plus en silence', () => {
    * alors qu'on avait rendu le refus muet. */
   assert.match(corps, /new Error\(p\.reason \|\| 'commande impossible'\)/,
     'un plan refusé redevient muet : la commande disparaît sans un mot');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Le code d'alarme, et les commandes qui visent un groupe.
+//
+// Six appels gardaient la route directe pour deux raisons précises. Trois
+// portaient un code : `planAction` ne bâtissait que le champ de la capacité, le
+// code tombait, et un panneau protégé aurait refusé la commande. Trois visaient
+// plusieurs entités à la fois, quand le moteur n'en prenait qu'une — donc aucune
+// vérification, et le lot partait entier même si la moitié ne savait pas obéir.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const svcAlarme = {
+  alarm_control_panel: {
+    alarm_arm_home: {}, alarm_arm_away: {}, alarm_arm_night: {},
+    alarm_arm_vacation: {}, alarm_disarm: {}, alarm_trigger: {},
+  },
+};
+
+test('désarmer se planifie, sans bit dans supported_features', () => {
+  // Le masque dit quels MODES d'armement le panneau accepte. En sortir se fait
+  // toujours : sans capacité `disarm`, la seule commande qu'aucune alarme ne
+  // refuse était la seule que le moteur ne savait pas planifier.
+  const states = { 'alarm_control_panel.x': et('armed_home', { supported_features: 3 }) };
+  const p = planAction('alarm_control_panel.x', 'disarm', null, { states, services: svcAlarme });
+  assert.equal(p.ok, true);
+  assert.equal(p.service, 'alarm_disarm');
+});
+
+test('le code accompagne la commande', () => {
+  const states = { 'alarm_control_panel.x': et('disarmed', { supported_features: 3 }) };
+  const ctx = { states, services: svcAlarme };
+  assert.deepEqual(planAction('alarm_control_panel.x', 'arm_home', null, ctx, { code: '1234' }).data,
+    { code: '1234' });
+  // Sans code, rien n'est ajouté : un panneau non protégé n'en veut pas.
+  assert.deepEqual(planAction('alarm_control_panel.x', 'arm_home', null, ctx).data, {});
+  assert.deepEqual(planAction('alarm_control_panel.x', 'arm_home', null, ctx, { code: '' }).data, {});
+});
+
+test('on ne fait pas passer n’importe quoi par cette porte', () => {
+  // `accepte` nomme les champs légitimes, service par service. Sans cette
+  // liste, `options` deviendrait un tunnel vers la charge utile et la
+  // vérification ne voudrait plus rien dire.
+  const states = { 'alarm_control_panel.x': et('disarmed', { supported_features: 3 }) };
+  const p = planAction('alarm_control_panel.x', 'arm_home', null,
+    { states, services: svcAlarme }, { code: '1234', entity_id: 'light.pirate', bidon: 1 });
+  assert.deepEqual(p.data, { code: '1234' });
+});
+
+test('un groupe ne garde que les entités qui savent obéir', () => {
+  const states = {
+    'cover.a': et('open', { supported_features: 15 }),
+    'cover.b': et('open', { supported_features: 15 }),
+    'cover.c': et('open', { supported_features: 3 }),   // ni position ni inclinaison
+  };
+  const p = planAction(['cover.a', 'cover.b', 'cover.c'], 'set_position', 40, { states, services });
+  assert.equal(p.ok, true);
+  assert.deepEqual(p.target, { entity_id: ['cover.a', 'cover.b'] });
+  // Et il dit qui reste dehors, plutôt que de le taire.
+  assert.deepEqual(p.ecartees, ['cover.c']);
+});
+
+test('une valeur ramenée différemment sépare le lot', () => {
+  // Deux thermostats, l'un qui accepte 34°, l'autre plafonné à 22 : les envoyer
+  // ensemble ferait recevoir au second autre chose que ce qu'on a demandé.
+  const states = {
+    'climate.a': et('heat', { supported_features: 401, min_temp: 5, max_temp: 35 }),
+    'climate.b': et('heat', { supported_features: 401, min_temp: 5, max_temp: 22 }),
+  };
+  const p = planAction(['climate.a', 'climate.b'], 'set_temperature', 34, { states, services });
+  assert.deepEqual(p.data, { temperature: 34 });
+  assert.deepEqual(p.target, { entity_id: ['climate.a'] });
+  assert.deepEqual(p.ecartees, ['climate.b']);
+});
+
+test('un groupe dont personne ne sait faire est refusé', () => {
+  const states = { 'cover.c': et('open', { supported_features: 3 }) };
+  const p = planAction(['cover.c'], 'set_position', 40, { states, services });
+  assert.equal(p.ok, false);
+  assert.deepEqual(p.ecartees, ['cover.c']);
+});
+
+test('un groupe unanime ne signale personne', () => {
+  const states = {
+    'light.a': et('on', { supported_color_modes: ['brightness'] }),
+    'light.b': et('off', { supported_color_modes: ['brightness'] }),
+  };
+  const p = planAction(['light.a', 'light.b'], 'turn_off', null, { states, services });
+  assert.equal(p.ok, true);
+  assert.deepEqual(p.target, { entity_id: ['light.a', 'light.b'] });
+  assert.equal(p.ecartees, null, 'personne d’écarté ne doit pas se lire comme une liste vide');
 });

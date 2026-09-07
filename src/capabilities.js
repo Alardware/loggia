@@ -232,6 +232,11 @@ export function entityCaps(entityId, st, services = null) {
   if (ALLUMABLES.has(domain)) { can.add('turn_on'); can.add('turn_off'); can.add('toggle'); }
   if (domain === 'cover' || domain === 'valve') can.add('toggle');
   if (domain === 'lock') { can.add('lock'); can.add('unlock'); }
+  /* Desarmer n'a pas de bit, et c'est logique : `supported_features` dit quels
+   * MODES d'armement un panneau accepte — maison, absent, nuit, vacances. En
+   * sortir se fait toujours. Sans cette ligne, la seule commande qu'aucune
+   * alarme ne refuse etait la seule que le moteur ne savait pas planifier. */
+  if (domain === 'alarm_control_panel') can.add('disarm');
   // Changer de mode n'a pas de bit : `climate.set_hvac_mode` vaut pour toute
   // entité du domaine, et c'est la liste `hvac_modes` qui dit lesquels.
   if (domain === 'climate') can.add('set_hvac_mode');
