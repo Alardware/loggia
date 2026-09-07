@@ -1565,12 +1565,19 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
         {/* Glissière épaisse + préréglages, le même bas de carte pour toutes
           * les lumières — GRISÉ quand la lampe ne se règle pas. */}
         {!prise && <>
+          {/* Ce curseur EST accessible quand la lampe se regle : role `slider`,
+            * `aria-valuenow`, tabulation et fleches. Les deux regles ci-dessous ne
+            * visent que l'autre cas — une lampe qui ne se regle pas, ou il ne reste
+            * qu'un affichage et un `onPointerDown` sans effet. Les satisfaire
+            * demanderait de scinder le composant en deux pour un gain nul. */}
+          {/* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
           <span onPointerDown={glisse} role={adjustable ? 'slider' : undefined} aria-label={adjustable ? tr('Luminosité') + ' ' + (label || a.friendly_name || id) : undefined}
             aria-valuenow={adjustable ? briAff : undefined} aria-valuemin={0} aria-valuemax={100} tabIndex={adjustable ? 0 : -1}
             onKeyDown={adjustable ? (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); poseBri(Math.max(0, Math.min(100, briAff + (e.key === 'ArrowRight' ? 5 : -5)))); } } : undefined}
             style={{ display: 'block', height: 24, borderRadius: 14, marginTop: 8, overflow: 'hidden', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', opacity: adjustable ? 1 : .35, cursor: adjustable ? 'ew-resize' : 'default', touchAction: 'none' }}>
             <span data-fill style={{ display: 'block', height: '100%', width: (adjustable ? briAff : (on ? 100 : 0)) + '%', borderRadius: 14, background: grade ? grade : 'linear-gradient(90deg,#ffce73,#f59e0b)', transition: 'width .3s' }} />
           </span>
+          {/* eslint-enable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
           <span className="o-lightpresets" style={{ display: 'flex', gap: 8, marginTop: 7 }}>
             {PRESETS.map(([nom, pct]) => (
               <span key={nom} role="button" tabIndex={adjustable ? 0 : -1} aria-disabled={!adjustable} aria-label={nom + ' ' + pct + '%'}
@@ -1798,7 +1805,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
         <div style={RM_NAME}>{titre || a.friendly_name || id}</div>
         {/* Glissière épaisse, même dessin que la carte lumière : le remplissage
           * violet EST la position — plus de bouton-curseur à attraper. */}
-        <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => { e.stopPropagation(); drag(e); }} {...kbSlider('Position ' + (a.friendly_name || id), pos, (nv) => { setOv(nv); commander(hass, id, 'set_position', nv); })} style={{ margin: '8px 0 7px', cursor: 'ew-resize', touchAction: 'none' }}>
+        <div role="presentation" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => { e.stopPropagation(); drag(e); }} {...kbSlider('Position ' + (a.friendly_name || id), pos, (nv) => { setOv(nv); commander(hass, id, 'set_position', nv); })} style={{ margin: '8px 0 7px', cursor: 'ew-resize', touchAction: 'none' }}>
           <div style={{ position: 'relative', height: 24, borderRadius: 14, overflow: 'hidden', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
             <div data-fill style={{ position: 'absolute', inset: '0 auto 0 0', width: pos + '%', background: 'linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))', borderRadius: 14, transition: 'width .25s' }} />
           </div>
@@ -2409,6 +2416,9 @@ function RoomMediaSheet({ id, hass, onClose }) {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <div style={{ position: 'relative', width: 96, height: 96, flexShrink: 0, borderRadius: 18, overflow: 'hidden', background: 'linear-gradient(135deg,var(--o-purple),var(--o-accent) 65%,var(--o-ok))', boxShadow: '0 14px 32px rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {/* `onError` n'est pas une interaction : c'est le repli quand la pochette
+                  * ne charge pas. La regle vise les clics poses sur un element inerte. */}
+                {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
                 {artOk && <img src={np.art} alt="" onError={() => setArtErr(np.art)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                 {!artOk && <Fi i={/^(video|tvshow|movie|episode|channel)$/.test(np.mtype || '') ? 'tv-music' : 'music'} size={30} color="rgba(255,255,255,.92)" />}
               </div>
@@ -2428,12 +2438,12 @@ function RoomMediaSheet({ id, hass, onClose }) {
             {/* contrôles */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 4 }}>
               <button aria-label={tr('Aléatoire')} onClick={() => commander(hass, np.ctl, 'set_shuffle', !np.shuffle)} title={tr('Aléatoire')} style={{ ...glass(40, 14), color: np.shuffle ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg></button>
-              <button onClick={() => commander(hass, np.ctl, 'previous_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8zM7 4v16H5V4z" /></svg></button>
+              <button aria-label={tr('Piste précédente')} onClick={() => commander(hass, np.ctl, 'previous_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8zM7 4v16H5V4z" /></svg></button>
               <button onClick={() => commander(hass, np.ctl, 'play_pause')} style={{ ...glass(76, '50%'), background: onArt ? 'linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.07))' : 'var(--o-s1)' }}>
                 {np.playing && <span aria-hidden style={{ position: 'absolute', inset: -6, borderRadius: 'inherit', border: '1px solid rgba(255,255,255,.22)', animation: 'np-pulse 2.4s ease-out infinite', pointerEvents: 'none' }} />}
                 {np.playing ? <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> : <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 3 }}><path d="M7 5l12 7-12 7z" /></svg>}
               </button>
-              <button onClick={() => commander(hass, np.ctl, 'next_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4l10 8-10 8zM17 4h2v16h-2z" /></svg></button>
+              <button aria-label={tr('Piste suivante')} onClick={() => commander(hass, np.ctl, 'next_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4l10 8-10 8zM17 4h2v16h-2z" /></svg></button>
               <button onClick={() => { const o = ['off', 'all', 'one'], i = o.indexOf(np.repeat); commander(hass, np.ctl, 'set_repeat', o[(i + 1) % 3]); }} title={tr('Répéter')} style={{ ...glass(40, 14), color: np.repeat !== 'off' ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" /></svg>{np.repeat === 'one' && <span style={{ position: 'absolute', top: 3, right: 6, fontSize: 10, fontWeight: 800 }}>1</span>}</button>
             </div>
             {/* volume */}
@@ -2493,6 +2503,9 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
         : art && <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 96, height: 96, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.13, pointerEvents: 'none' }} />}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(np.on ? 'rgba(167,139,250,.16)' : 'var(--o-s1)', np.on ? 'var(--o-purple)' : 'var(--o-text3)')}>
+          {/* `onError` n'est pas une interaction : c'est le repli quand la pochette
+            * ne charge pas. La regle vise les clics poses sur un element inerte. */}
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
           {np.art ? <img src={np.art} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Fi i="tv-music" size={17} />}
         </span>
         <button aria-label={np.playing ? tr('Mettre en pause') : tr('Lecture')} onClick={(e) => { e.stopPropagation(); call('media_play_pause', null, np.ctl); }} style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={np.playing ? 'pause' : 'play'} size={13} /></button>
@@ -2711,12 +2724,12 @@ function RoomLightSheet({ light, hass, onClose }) {
         )}
         {on && light.rgb && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, maxWidth: 280, margin: '22px auto 0' }}>
-            {LIGHT_PALETTE.map(c => { const sel = (color || '').toLowerCase() === c.toLowerCase(); return <button key={c} onClick={() => { const n = parseInt(c.slice(1), 16); commander(hass, light.id, 'set_color', [(n >> 16) & 255, (n >> 8) & 255, n & 255]); }} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: sel ? '3px solid #fff' : '3px solid transparent', boxShadow: sel ? `0 0 0 2px ${c}` : 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />; })}
+            {LIGHT_PALETTE.map(c => { const sel = (color || '').toLowerCase() === c.toLowerCase(); return <button key={c} aria-label={tr('Couleur') + ' ' + c} onClick={() => { const n = parseInt(c.slice(1), 16); commander(hass, light.id, 'set_color', [(n >> 16) & 255, (n >> 8) & 255, n & 255]); }} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: sel ? '3px solid #fff' : '3px solid transparent', boxShadow: sel ? `0 0 0 2px ${c}` : 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />; })}
           </div>
         )}
         {on && light.ct && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, maxWidth: 280, margin: '22px auto 0' }}>
-            {WHITE_TEMPS().map(([n, k, c]) => <button key={k} title={n + ' · ' + k + 'K'} onClick={() => commander(hass, light.id, 'set_color_temp', k)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
+            {WHITE_TEMPS().map(([n, k, c]) => <button key={k} aria-label={n + ' · ' + k + 'K'} title={n + ' · ' + k + 'K'} onClick={() => commander(hass, light.id, 'set_color_temp', k)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
           </div>
         )}
       </>)}
@@ -3482,7 +3495,7 @@ function Epingles({ pourId, hass, max = 3, avecAncre = false }) {
   if (!liste.length) return null;
   // La carte parente s'ouvre au clic : les épingles agissent SANS ouvrir.
   return (
-    <div onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} style={{ marginTop: 10 }}>
+    <div role="presentation" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} style={{ marginTop: 10 }}>
       {liste.map(eid => <LigneEntite key={eid} id={eid} hass={hass} nom={(index.entityMeta.get(eid) || {}).name || undefined} />)}
     </div>
   );
@@ -6835,15 +6848,15 @@ function LumieresContent({ hass, edit = false, onEnt }) {
         const briBig = pl.on ? pl.bri : 0;
         const segBase = { width: 42, height: 42, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', overflow: 'hidden', transition: 'box-shadow .2s' };
         return (
-          <div onClick={closePop} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.32)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', animation: popClosing ? 'o-fadeOut .3s ease forwards' : 'o-fadeIn .25s ease' }}>
-            <div onClick={e => e.stopPropagation()}
+          <div role="presentation" onClick={closePop} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.32)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', animation: popClosing ? 'o-fadeOut .3s ease forwards' : 'o-fadeIn .25s ease' }}>
+            <div role="presentation" onClick={e => e.stopPropagation()}
               onAnimationEnd={(e) => { if (popClosing && e.target === e.currentTarget) { setPopupId(null); setPopClosing(false); } }}
               style={{ position: 'fixed', left: '50%', bottom: 0, transform: 'translate(-50%,0)', width: 'min(480px,100%)', maxHeight: '88vh', overflowY: 'auto', background: 'var(--o-surfA)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', borderLeft: 'var(--o-bw,1px) solid var(--o-bd1)', borderRight: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: '26px 26px 0 0', padding: '10px 22px calc(24px + var(--o-safe-bottom,0px))', boxShadow: '0 -10px 50px rgba(0,0,0,.35)', animation: popClosing ? 'o-sheetOut .3s cubic-bezier(.32,.72,.25,1) forwards' : 'o-sheetIn .46s cubic-bezier(.22,1.28,.36,1)' }}>
               {/* poignée */}
               <div style={{ width: 38, height: 5, borderRadius: 4, background: 'var(--o-bd1)', margin: '4px auto 14px' }} />
               {/* header : croix + nom + toggle */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <button onClick={closePop} style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+                <button aria-label={tr('Fermer')} onClick={closePop} style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
                 <span style={{ flex: 1, fontSize: 19, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pl.name}</span>
                 <span role="switch" aria-checked={pl.on} tabIndex={0} aria-label={(pl.on ? 'Éteindre ' : 'Allumer ') + pl.name} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(pl); } }} onClick={() => toggle(pl)} style={{ width: 48, height: 27, borderRadius: 14, background: pl.on ? '#FF2D78' : 'rgba(150,162,184,.2)', position: 'relative', cursor: 'pointer', flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: pl.on ? 24 : 3, width: 21, height: 21, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span>
               </div>
@@ -6861,20 +6874,20 @@ function LumieresContent({ hass, edit = false, onEnt }) {
               )}
               {/* segment de contrôle : power · luminosité · couleur · temp */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--o-s1)', borderRadius: 999, padding: 6, margin: '22px auto 0', width: 'max-content' }}>
-                <button onClick={() => toggle(pl)} style={{ ...segBase, background: 'transparent', color: 'var(--o-text1)' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 3v9M6.5 7a8 8 0 1 0 11 0" /></svg></button>
-                <button style={{ ...segBase, background: 'var(--o-accent-fond)', color: '#fff', boxShadow: '0 4px 14px rgba(var(--o-accent-rgb),.5)', cursor: 'default' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3M4 4l2 2M18 18l2 2M18 6l2-2M4 20l2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg></button>
-                {pl.rgb && <button onClick={() => setPopMode('color')} style={{ ...segBase, background: 'transparent', boxShadow: popMode === 'color' ? '0 0 0 2px var(--o-text)' : 'none' }}><span style={{ width: 22, height: 22, borderRadius: '50%', background: 'conic-gradient(from 0deg,#ff5f57,var(--o-gold),var(--o-ok),var(--o-accent),var(--o-purple),#ff5f57)' }} /></button>}
-                {pl.ct && <button onClick={() => setPopMode('white')} style={{ ...segBase, background: 'transparent', boxShadow: popMode === 'white' ? '0 0 0 2px var(--o-text)' : 'none' }}><span style={{ width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(90deg,#fff,#ffd27a)' }} /></button>}
+                <button aria-label={tr('Allumer ou éteindre')} onClick={() => toggle(pl)} style={{ ...segBase, background: 'transparent', color: 'var(--o-text1)' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 3v9M6.5 7a8 8 0 1 0 11 0" /></svg></button>
+                <button aria-label={tr('Luminosité')} style={{ ...segBase, background: 'var(--o-accent-fond)', color: '#fff', boxShadow: '0 4px 14px rgba(var(--o-accent-rgb),.5)', cursor: 'default' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3M4 4l2 2M18 18l2 2M18 6l2-2M4 20l2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg></button>
+                {pl.rgb && <button aria-label={tr('Couleur')} onClick={() => setPopMode('color')} style={{ ...segBase, background: 'transparent', boxShadow: popMode === 'color' ? '0 0 0 2px var(--o-text)' : 'none' }}><span style={{ width: 22, height: 22, borderRadius: '50%', background: 'conic-gradient(from 0deg,#ff5f57,var(--o-gold),var(--o-ok),var(--o-accent),var(--o-purple),#ff5f57)' }} /></button>}
+                {pl.ct && <button aria-label={tr('Blanc')} onClick={() => setPopMode('white')} style={{ ...segBase, background: 'transparent', boxShadow: popMode === 'white' ? '0 0 0 2px var(--o-text)' : 'none' }}><span style={{ width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(90deg,#fff,#ffd27a)' }} /></button>}
               </div>
               {/* palette : 2 rangées de 4 (couleurs ou blancs) */}
               {pl.on && popMode === 'color' && pl.rgb && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, maxWidth: 280, margin: '22px auto 0' }}>
-                  {LIGHT_PALETTE.map(c => { const sel = (pl.color || '').toLowerCase() === c.toLowerCase(); return <button key={c} onClick={() => pick(pl.id, c)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: sel ? '3px solid #fff' : '3px solid transparent', boxShadow: sel ? `0 0 0 2px ${c}` : 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />; })}
+                  {LIGHT_PALETTE.map(c => { const sel = (pl.color || '').toLowerCase() === c.toLowerCase(); return <button key={c} aria-label={tr('Couleur') + ' ' + c} onClick={() => pick(pl.id, c)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: sel ? '3px solid #fff' : '3px solid transparent', boxShadow: sel ? `0 0 0 2px ${c}` : 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />; })}
                 </div>
               )}
               {pl.on && popMode === 'white' && pl.ct && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, maxWidth: 280, margin: '22px auto 0' }}>
-                  {WHITE_TEMPS().map(([n, k, c]) => <button key={k} title={n + ' · ' + k + 'K'} onClick={() => setWhite(pl.id, k)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
+                  {WHITE_TEMPS().map(([n, k, c]) => <button key={k} aria-label={n + ' · ' + k + 'K'} title={n + ' · ' + k + 'K'} onClick={() => setWhite(pl.id, k)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
                 </div>
               )}
             </div>
