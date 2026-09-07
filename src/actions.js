@@ -23,6 +23,7 @@
  */
 
 import { entityCaps } from './capabilities.js';
+import { getHass } from './state.js';
 
 const domaineDe = (id) => (typeof id === 'string' ? id.slice(0, id.indexOf('.')) : '');
 
@@ -469,4 +470,133 @@ export function availableActions(entityId, ctx = {}) {
     if (p.ok) out.set(c, p);
   });
   return out;
+}
+
+/* ── Le dernier metre : de la capacite a la commande envoyee ────────────────
+ *
+ * Ces quatre fonctions vivaient dans `App.jsx`. Elles n'y avaient rien a faire :
+ * elles ne rendent aucune vue, et deux d'entre elles sont le seul chemin verifie
+ * du dashboard. Les vues, elles, ne pouvaient pas les appeler — `parametres.jsx`
+ * gardait deux commandes sur la route directe pour cette seule raison, sans
+ * verification ni bornes.
+ *
+ * Elles rejoignent donc le moteur dont elles sont le dernier metre. */
+/** Le contexte du moteur d'actions, depuis le pont Home Assistant. */
+export function actionCtx(h) {
+  const hs = h || getHass();
+  /* Une carte de services VIDE n'est pas une information.
+   *
+   * `planAction` refuse une commande dont le service n'apparait pas dans cette
+   * carte — c'est la garde qui empeche d'envoyer `set_cover_position` a un
+   * volet qui ne la publie pas. Mais `{}` ne dit pas « aucun service n'existe »,
+   * il dit « je ne sais pas ». Home Assistant en publie toujours des centaines.
+   *
+   * La demo, elle, annonce `services: {}`. Chaque commande passee par
+   * `commander` y etait donc refusee — et l'affichage optimiste le masquait :
+   * l'interrupteur basculait, revenait quatre secondes plus tard, et on croyait
+   * a une lenteur. Le seul chemin verifie du dashboard etait inerte la ou on
+   * l'essaye. */
+  const svc = hs && hs.services;
+  return { states: (hs && hs.states) || {}, services: (svc && Object.keys(svc).length) ? svc : null };
+}
+
+/**
+ * L'entite accepte-t-elle cette capacite ?
+ *
+ * Sert a ne PAS dessiner un bouton inerte. Home Assistant refuse explicitement
+ * un service qu'une entite ne declare pas — « does not support action » — donc
+ * un bouton de pause sur une enceinte qui n'a pas le bit PAUSE ne fait rien
+ * d'autre que promettre. Mieux vaut ne rien montrer que montrer un mensonge.
+ *
+ * On interroge la CAPACITE seule, sans valeur : une commande a liste comme le
+ * choix d'un mode serait refusee faute de valeur d'essai, alors qu'elle est
+ * bien offerte.
+ */
+export function peut(hass, id, capability) {
+  if (!id) return false;
+  const ctx = actionCtx(hass);
+  return entityCaps(id, ctx.states[id], ctx.services).can.has(capability);
+}
+
+/**
+ * Commande une entite par sa CAPACITE, et rend la valeur reellement envoyee.
+ *
+ * Elle peut differer de celle demandee : les bornes appartiennent a l'entite,
+ * et une consigne de 34° passe sur une climatisation qui monte a 35 mais serait
+ * ramenee a 24 sur un plancher chauffant. L'interface affiche donc ce qui a ete
+ * envoye, jamais ce qui a ete demande.
+ *
+ * Rend `null` si l'entite ne declare pas la capacite — la vue ne doit alors
+ * afficher aucun changement, puisqu'il n'y en aura pas.
+ */
+/**
+ * Un appel de service par son nom, passe par la validation quand c'est possible.
+ *
+ * Le dashboard garde des aides locales qui prennent un domaine et un service —
+ * `call('light', 'turn_on', { entity_id, brightness_pct })`. Les reecrire une
+ * par une, ce sont cinquante retouches a la main dans douze mille lignes.
+ *
+ * `capaciteDe` fait le chemin inverse a partir de la meme table : de (domaine,
+ * service, champ) vers la capacite. L'appel retrouve donc `planAction`, et avec
+ * lui les deux verifications qui manquaient — l'entite declare-t-elle savoir le
+ * faire, et la valeur tient-elle dans SES bornes plutot que dans une constante.
+ *
+ * Ce qui n'a pas de capacite garde sa route directe : `alarm_disarm`,
+ * `play_media`, `update_entity` n'en ont pas, et une commande qui disparait
+ * vaudrait moins qu'une commande non verifiee.
+ */
+export function commanderService(hass, id, domaine, service, data) {
+  const d = data || {};
+  const trad = id ? capaciteDe(domaine, service, d) : null;
+  /* `planAction` ne rebatit que le champ de la capacite : tout ce que l'appel
+   * portait en plus serait perdu en chemin. Un `code` d'alarme, une duree de
+   * transition, un `enqueue` de lecteur — la commande partirait amputee, et
+   * personne ne le verrait. On ne passe donc par la validation que si l'appel
+   * ne transporte rien d'autre que l'entite et la valeur attendue. */
+  const extras = Object.keys(d).filter(k => k !== 'entity_id' && k !== (trad && trad.champ));
+  /* Sauf ce que le service declare accepter : un code d'alarme n'est pas un
+   * champ perdu, c'est un champ prevu. `capaciteDe` le nomme, `planAction` le
+   * remet dans la charge utile, et rien d'autre ne passe par la. */
+  const admis = trad ? extras.filter(k => (trad.accepte || []).indexOf(k) >= 0) : [];
+  if (trad && extras.length === admis.length) {
+    const options = {};
+    admis.forEach((k) => { options[k] = d[k]; });
+    return commander(hass, id, trad.capacite, trad.champ ? d[trad.champ] : undefined, null, options);
+  }
+  if (hass && hass.callService) hass.callService(domaine, service, d);
+  return null;
+}
+
+export function commander(hass, id, capability, value, champ, options) {
+  const ctx = actionCtx(hass);
+  const p = planAction(id, capability, value, ctx, options || {});
+  if (!p.ok) {
+    /* Un plan refuse etait muet : `planAction` dit pourquoi — l'entite ne
+     * declare pas la capacite, le service n'existe pas, la valeur ne tient pas
+     * dans ses bornes — et cette raison mourait ici. On appuyait, rien ne se
+     * passait, et rien ne l'expliquait : exactement le defaut que ce moteur
+     * existe pour corriger, reproduit au dernier metre.
+     *
+     * Meme canal qu'un echec d'envoi : le toast dit qu'il ne s'est rien passe. */
+    Promise.reject(Object.assign(new Error(p.reason || 'commande impossible'), { code: 'service_error' }));
+    return null;
+  }
+  /* `runPlan` attrape le rejet pour pouvoir en donner la raison — et l'echec
+   * s'arretait la. L'ecoute globale des rejets, seul canal d'erreur visible du
+   * dashboard, ne voyait donc jamais passer une commande refusee : le toast
+   * « Commande non executee » ne pouvait pas se declencher pour les cinquante et
+   * quelques appels qui passent par ici.
+   *
+   * Le mensonge durait : une carte de volet peint la position demandee, puis
+   * attend que l'etat reel bouge pour se recaler. Refusee, la commande ne fait
+   * bouger personne, et la carte reste sur une position que rien n'a atteinte.
+   *
+   * On relance donc le rejet, sans le traiter, pour que l'ecoute s'en saisisse.
+   * `code` le fait passer le filtre de l'ecouteur. */
+  runPlan(hass, p).then((r) => {
+    if (r && r.ok) return;
+    const motif = (r && r.reason) ? String(r.reason) : 'service';
+    Promise.reject(Object.assign(new Error(motif), { code: 'service_error' }));
+  });
+  return champ ? p.data[champ] : (p.data || {});
 }

@@ -305,10 +305,15 @@ test('le rejet d’une commande atteint le seul canal visible', () => {
     'l’écoute globale des rejets a disparu : une commande refusée redevient invisible');
   assert.match(app, /setToast\('Commande non exécutée/,
     'le toast d’échec a disparu');
-  // Et `commander` doit relancer : `runPlan` attrape le rejet pour en donner la
-  // raison, ce qui l'empêcherait d'atteindre l'écoute.
-  const i = app.indexOf('function commander(');
-  const corps = app.slice(i, app.indexOf('\n}', i));
+  /* Et `commander` doit relancer : `runPlan` attrape le rejet pour en donner la
+   * raison, ce qui l'empêcherait d'atteindre l'écoute.
+   *
+   * Il vit désormais dans `actions.js` : il n'a jamais rendu de vue, et les
+   * vues, elles, ne pouvaient pas l'appeler — deux commandes des Paramètres
+   * gardaient la route directe pour cette seule raison. */
+  const moteur = readFileSync(join(RACINE_SRC, 'actions.js'), 'utf8');
+  const i = moteur.indexOf('export function commander(');
+  const corps = moteur.slice(i, moteur.indexOf('\n}', i));
   assert.match(corps, /Promise\.reject\(Object\.assign\(new Error\(motif\), \{ code: 'service_error' \}\)\)/,
     'commander avale de nouveau le rejet : les commandes qui passent par lui échoueront sans un mot');
 });
@@ -365,12 +370,12 @@ test('désarmer est une capacité comme les autres', () => {
 });
 
 test('une carte de services vide vaut « je ne sais pas »', () => {
-  const app = readFileSync(join(RACINE_SRC, 'App.jsx'), 'utf8');
+  const moteur = readFileSync(join(RACINE_SRC, 'actions.js'), 'utf8');
   /* `planAction` refuse un service absent de la carte fournie. Mais `{}` ne dit
    * pas « aucun service n'existe » : il dit qu'on ne sait pas. La démo annonçait
    * `services: {}`, et chaque commande passée par `commander` y était refusée —
    * masquée par l'affichage optimiste, qui basculait puis revenait. */
-  assert.match(app, /services: \(svc && Object\.keys\(svc\)\.length\) \? svc : null/,
+  assert.match(moteur, /services: \(svc && Object\.keys\(svc\)\.length\) \? svc : null/,
     'une carte de services vide redevient une interdiction : tout le chemin vérifié serait inerte');
 });
 
@@ -386,9 +391,9 @@ test('la démo lit l’entité dans la cible autant que dans les données', () =
 });
 
 test('un plan refusé ne meurt plus en silence', () => {
-  const app = readFileSync(join(RACINE_SRC, 'App.jsx'), 'utf8');
-  const i = app.indexOf('function commander(');
-  const corps = app.slice(i, app.indexOf('\n}', i));
+  const moteur = readFileSync(join(RACINE_SRC, 'actions.js'), 'utf8');
+  const i = moteur.indexOf('export function commander(');
+  const corps = moteur.slice(i, moteur.indexOf('\n}', i));
   /* `planAction` dit POURQUOI il refuse. Cette raison mourait ici : on appuyait,
    * rien ne se passait, rien ne l'expliquait.
    *
@@ -489,4 +494,37 @@ test('un groupe unanime ne signale personne', () => {
   assert.equal(p.ok, true);
   assert.deepEqual(p.target, { entity_id: ['light.a', 'light.b'] });
   assert.equal(p.ecartees, null, 'personne d’écarté ne doit pas se lire comme une liste vide');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Le moteur ne doit rien devoir à la vue.
+//
+// `actionCtx`, `peut`, `commander` et `commanderService` vivaient dans
+// `App.jsx`. Elles n'y avaient rien à faire — aucune ne rend quoi que ce soit —
+// et surtout, les vues ne pouvaient pas les appeler : `parametres.jsx` gardait
+// deux commandes sur la route directe pour cette seule raison, sans vérification
+// ni bornes.
+//
+// Les ramener dans `App.jsx` par un import refermerait la boucle et rendrait le
+// déplacement inutile.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('le moteur d’actions n’importe rien de la vue', () => {
+  const moteur = readFileSync(join(RACINE_SRC, 'actions.js'), 'utf8');
+  const cibles = [...moteur.matchAll(/import\s[^;]*?from\s*['"]([^'"]+)['"]/g)].map(m => m[1]);
+  const interdites = cibles.filter(c => /App\.jsx|ui\.jsx|views\//.test(c));
+  assert.deepEqual(interdites, [],
+    'le moteur importe la vue : le cycle est refermé, et les vues ne pourront plus l’appeler');
+});
+
+test('les quatre fonctions déplacées sont exportées', () => {
+  const moteur = readFileSync(join(RACINE_SRC, 'actions.js'), 'utf8');
+  for (const f of ['actionCtx', 'peut', 'commander', 'commanderService']) {
+    assert.ok(moteur.includes('export function ' + f + '('),
+      `${f} n’est plus exporté : la vue qui l’appelle ne le trouvera pas`);
+  }
+  // Et elles ne doivent pas être restées en double dans App.jsx.
+  const app = readFileSync(join(RACINE_SRC, 'App.jsx'), 'utf8');
+  assert.ok(!/\nfunction commander\(/.test(app),
+    'commander existe de nouveau dans App.jsx : deux versions divergeront');
 });

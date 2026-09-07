@@ -20,6 +20,7 @@ import {
   lireFondPhoto, compresserImage
 } from '../ui.jsx';
 import { useLoggia } from '../runtime.js';
+import { commanderService } from '../actions.js';
 import { viewReason } from '../views.js';
 import { autoFamille } from '../autos.js';
 import { InterrupteursSection } from './interrupteurs.jsx';
@@ -860,7 +861,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       return ch ? n : o;
     });
   }, [autoSig]);
-  const autoCall = (svc, id) => { if (hass && hass.callService) hass.callService('automation', svc, { entity_id: id }); };
+  const autoCall = (svc, id) => commanderService(hass, id, 'automation', svc, { entity_id: id });
   // ── Entités (config du dashboard) : édition des mappings, persistés localStorage, appliqués au rechargement ──
   const { ent, setEnt, entSet, saveEnt, resetEnt, dlists } = useEntConfig(hass);
   const entIds = [...ent.rooms.flatMap(r => [r.temp, r.humidity, r.co2]), ent.energy.consoNow, ent.energy.surplusNow, ent.energy.solarOutput, ent.alarm, ...ent.people.map(x => x.haid), ...ent.switches.map(x => x.haid), ...ent.cams.map(x => x.haid), ...ent.medias.flatMap(x => [x.haid, x.ma])].filter(Boolean);
@@ -888,7 +889,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const [updBusy, setUpdBusy] = useState({}); // id → timestamp : « Installation… » optimiste dès le clic (HA met du temps à passer in_progress)
   const updTimer = useRef(null);
   useEffect(() => () => clearTimeout(updTimer.current), []);
-  const updCall = (svc, id) => { if (hass && hass.callService) hass.callService('update', svc, { entity_id: id }); };
+  const updCall = (svc, id) => commanderService(hass, id, 'update', svc, { entity_id: id });
   const askInstall = (u) => {
     if (updConfirm === u.id) { setUpdConfirm(null); clearTimeout(updTimer.current); setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updCall('install', u.id); return; }
     setUpdConfirm(u.id); clearTimeout(updTimer.current); updTimer.current = setTimeout(() => setUpdConfirm(null), 4000);
