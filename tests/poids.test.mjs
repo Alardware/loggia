@@ -124,3 +124,35 @@ test('le fond météo attend la première peinture', () => {
   assert.match(app, /onPaintReady\(\(\) => \{ if \(vivant\) setFondPret\(true\); \}\);/,
     'plus rien ne relâche le fond après la peinture : il ne s’afficherait jamais');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rien d'étranger dans `src/`.
+//
+// `src/App.jsx.avant-atrium` — 552 ko, une copie de travail du 19 août — y a
+// dormi des semaines. Rien ne la voyait : le linter ne lit que `.js` et `.jsx`,
+// le test des modules injoignables aussi, et le bundler ne l'atteignait pas.
+// Son extension la faisait passer entre toutes les mailles. Elle ne se
+// signalait qu'en polluant les recherches — une requête sur le code tombait
+// dessus, et sur du code qui n'existe plus.
+//
+// Elle n'a pas été supprimée : le dépôt commence le 24 août, elle date du 19,
+// et elle diffère du premier commit par 6845 lignes. C'était le seul exemplaire
+// d'un état qui n'est dans aucun commit. Elle vit maintenant hors de `src/`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EXTENSIONS = new Set(['js', 'jsx', 'css', 'svg', 'webp']);
+
+test('src ne contient que du code et ses ressources', () => {
+  const etrangers = [];
+  const parcourir = (dossier) => {
+    for (const f of readdirSync(dossier)) {
+      const p = join(dossier, f);
+      if (statSync(p).isDirectory()) { parcourir(p); continue; }
+      const ext = f.split('.').pop();
+      if (!EXTENSIONS.has(ext)) etrangers.push(court(p));
+    }
+  };
+  parcourir(SRC);
+  assert.deepEqual(etrangers.sort(), [],
+    'un fichier étranger dort dans src : aucun outil ne le lit, et il ne se signalera qu’en polluant les recherches');
+});

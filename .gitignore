@@ -11,3 +11,16 @@ HANDOFF.md
 
 # Sauvegardes de travail
 src/*.avant-*
+
+# Copies de travail d'avant le depot.
+#
+# `src/App.jsx.avant-atrium` — 552 ko, date du 19/08 — a longtemps dormi dans
+# `src/`. Le depot, lui, commence le 24/08 : ce fichier est le seul exemplaire
+# d'un etat qui n'est dans aucun commit, et il differe du premier commit par
+# 6845 lignes. Le supprimer aurait detruit la seule copie.
+#
+# Il vit desormais ici, hors de `src/`, ou il ne se melange plus aux sources :
+# une recherche dans le code tombait dessus, et aucun outil ne savait qu'il
+# fallait l'ecarter — son extension le faisait passer entre les mailles des
+# tests comme du linter.
+/.archives/
