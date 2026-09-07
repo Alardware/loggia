@@ -125,3 +125,34 @@ test('la recherche ne propose pas une section qu’on ne peut pas ouvrir', () =>
   assert.ok(app.indexOf('if (droit && droits.indexOf(droit) < 0) return;') >= 0,
     'la recherche ne filtre plus les sections des Paramètres');
 });
+
+test('le rôle ne garde plus rien qui relève du mode édition', () => {
+  // Le test précédent cherchait `editMode && isAdmin`. Il a laissé passer un
+  // quatorzième usage, écrit autrement : sur l'Accueil, la barre d'édition
+  // dépendait de `onEnt={isAdmin ? … : null}`, sans `editMode &&` devant.
+  //
+  // Le résultat n'était pas « rien ne se passe », ce qui aurait sauté aux yeux,
+  // mais un mode édition à moitié : les poignées de déplacement apparaissaient,
+  // les cartes se supprimaient, et la barre manquait — ni Défaire, ni Refaire,
+  // ni « Entités de la vue », ni le réglage de la bannière.
+  //
+  // D'où un contrôle qui ne cherche plus une tournure mais compte les usages.
+  // `isAdmin` n'a plus le droit d'apparaître que là où il désigne le rôle
+  // lui-même, restreint les vues, ou passe aux Paramètres — qui gardent la
+  // gestion des profils. En ajouter un oblige à passer par ici.
+  const app = lire('src', 'App.jsx');
+  const usages = (app.match(/isAdmin[^,}\n]{0,60}/g) || []).map(s => s.trim()).sort();
+  assert.deepEqual(usages, [
+    // Les vues autorisées : un admin n'en a aucune de restreinte.
+    'isAdmin && users[userIdx] && Array.isArray(users[userIdx].vues) &&',
+    // La définition, et la seule.
+    "isAdmin = !!(users[userIdx] && users[userIdx].role === 'Admin');",
+    // La signature de `ParametresView`, puis les deux passages de la prop.
+    'isAdmin',
+    'isAdmin={isAdmin',
+    'isAdmin={isAdmin',
+  ].sort(), 'le rôle sert de nouveau à garder un pouvoir : c’est `peutEditer` qu’il faut, ou une autorisation du catalogue');
+
+  assert.ok(app.indexOf('onEnt={isAdmin') < 0,
+    'la barre d’édition d’une vue dépend de nouveau du rôle : un profil autorisé aurait les poignées sans les commandes');
+});
