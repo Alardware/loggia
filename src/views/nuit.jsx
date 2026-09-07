@@ -5,7 +5,7 @@
  * fondu que la lampe ne tiendra pas est pire que de ne pas le proposer.
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { cvName, RegleEntete, usePli } from '../ui.jsx';
+import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
 // Le bit TRANSITION de Home Assistant : une lampe qui ne l'a pas ne sait pas
@@ -16,24 +16,13 @@ const JOURS_NUIT = () => [tr('lun'), tr('mar'), tr('mer'), tr('jeu'), tr('ven'),
 
 export function NuitReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
-  const [etat, setEtat] = useState(null);
-  const [err, setErr] = useState('');
+  const { etat, setEtat, err, setErr, vivant } =
+    useEtatServeur(hass, 'loggia/nuit/etat', 5000, tr('Réglages indisponibles.'));
   /* Un pli par regle — avec les autres etats : un hook ne vit pas apres
    * un retour conditionnel. */
   const [pliVeilleuse, plierVeilleuse] = usePli('nuit:veilleuse');
   const [pliCoucher, plierCoucher] = usePli('nuit:coucher');
-  const vivant = useRef(true);
 
-  useEffect(() => {
-    vivant.current = true;
-    if (!h) { setErr(tr('Home Assistant n’est pas joignable.')); return undefined; }
-    const lire = () => h.callWS({ type: 'loggia/nuit/etat' })
-      .then(r => { if (vivant.current) { setEtat(r); setErr(''); } })
-      .catch(e => { if (vivant.current) setErr((e && (e.message || e.code)) || tr('Réglages indisponibles.')); });
-    lire();
-    const t = setInterval(lire, 5000);
-    return () => { vivant.current = false; clearInterval(t); };
-  }, [!!h]);
 
   const cfg = (etat && etat.config) || null;
 

@@ -12,7 +12,7 @@
  * est fermé — c'est bien le moins pour un interrupteur.
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { BottomSheet, EntPicker, cvName } from '../ui.jsx';
+import { BottomSheet, EntPicker, cvName , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 import { entityCaps } from '../capabilities.js';
 
@@ -94,25 +94,14 @@ const SOURCES = { z2m: 'Zigbee2MQTT', zha: 'ZHA', deconz: 'deCONZ' };
 
 export function InterrupteursSection({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
-  const [etat, setEtat] = useState(null);
-  const [err, setErr] = useState('');
+  const { etat, setEtat, err, setErr } =
+    useEtatServeur(hass, 'loggia/interrupteurs/etat', 1500, tr('Écoute indisponible.'));
   const [cible, setCible] = useState(null);   // { cle, nom, action }
-  const vivant = useRef(true);
 
   /* Sondage régulier plutôt qu'un abonnement : le journal ne vit qu'en mémoire
    * du serveur, et une page de réglages ouverte quelques minutes ne justifie
    * pas d'ouvrir un canal à elle. Une seconde et demie suffit pour qu'un appui
    * paraisse instantané. */
-  useEffect(() => {
-    vivant.current = true;
-    if (!h) { setErr(tr('Home Assistant n’est pas joignable.')); return undefined; }
-    const lire = () => h.callWS({ type: 'loggia/interrupteurs/etat' })
-      .then(r => { if (vivant.current) { setEtat(r); setErr(''); } })
-      .catch(e => { if (vivant.current) setErr((e && (e.message || e.code)) || tr('Écoute indisponible.')); });
-    lire();
-    const t = setInterval(lire, 1500);
-    return () => { vivant.current = false; clearInterval(t); };
-  }, [!!h]);
 
   const affecter = async (cle, action, gestes, nom) => {
     if (!h) return;

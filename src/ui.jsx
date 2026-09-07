@@ -502,6 +502,49 @@ export function usePli(cle) {
  * `onPlier` absent, ou regle eteinte, l'en-tete redevient ce qu'il etait : un
  * titre inerte. On ne replie pas ce qui n'affiche rien.
  */
+/* ── L'état d'une famille de règles, relu périodiquement ──────────────────────
+ *
+ * Six vues faisaient exactement cela, à la ligne près : un premier appel, un
+ * intervalle, un drapeau « vivant » pour ne pas écrire dans un composant
+ * démonté, et `[!!h]` en dépendance.
+ *
+ * `[!!h]` est voulu. Home Assistant REMPLACE son objet `hass` à chaque
+ * changement d'état de la maison : en dépendre relancerait le sondage plusieurs
+ * fois par seconde, chaque fois qu'une lampe s'allume. Mais la fermeture gardait
+ * alors le `hass` du tout premier rendu, et pour toujours.
+ *
+ * Rien ne cassait — la connexion, elle, survit à ces remplacements. C'est
+ * précisément ce qui rendait le défaut invisible : il ne tenait pas au code
+ * écrit ici, mais à une propriété de Home Assistant que personne n'avait notée
+ * nulle part, et que rien n'oblige à rester vraie.
+ *
+ * La référence vivante rend la question sans objet : chaque tour lit le `hass`
+ * du moment, et la dépendance redevient un booléen que l'outil sait vérifier.
+ */
+export function useEtatServeur(hass, type, ms, siErreur) {
+  const [etat, setEtat] = useState(null);
+  const [err, setErr] = useState('');
+  const vivant = useRef(true);
+  const hRef = useRef(null);
+  const courant = hass && typeof hass.callWS === 'function' ? hass : null;
+  /* Sans tableau : à chaque rendu, avant l'effet de sondage déclaré plus bas. */
+  useEffect(() => { hRef.current = courant; });
+  const connecte = !!courant;
+
+  useEffect(() => {
+    vivant.current = true;
+    if (!connecte) { setErr(tr('Home Assistant n’est pas joignable.')); return undefined; }
+    const lire = () => hRef.current.callWS({ type })
+      .then(r => { if (vivant.current) { setEtat(r); setErr(''); } })
+      .catch(e => { if (vivant.current) setErr((e && (e.message || e.code)) || siErreur); });
+    lire();
+    const t = setInterval(lire, ms);
+    return () => { vivant.current = false; clearInterval(t); };
+  }, [connecte, type, ms, siErreur]);
+
+  return { etat, setEtat, err, setErr, vivant };
+}
+
 export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, zone = null }) {
   const titre = { fontSize: 15, fontWeight: 700 };
   const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };

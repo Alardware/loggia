@@ -10,7 +10,7 @@
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { LOGGIA_INDEX } from '../state.js';
-import { cvName, RegleEntete, usePli } from '../ui.jsx';
+import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
 /* Ce qui compte comme ouvrant : Home Assistant le dit lui-même dans la
@@ -34,22 +34,11 @@ const chauffeSurement = (id, nom) => id.indexOf('climate.') === 0 || MOTS_CHAUFF
 
 export function FenetresReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
-  const [etat, setEtat] = useState(null);
-  const [err, setErr] = useState('');
+  const { etat, setEtat, err, setErr, vivant } =
+    useEtatServeur(hass, 'loggia/fenetres/etat', 5000, tr('Réglages indisponibles.'));
   /* Le pli de cette regle — avec les autres etats. */
   const [pliFen, plierFen] = usePli('fenetres:coupure');
-  const vivant = useRef(true);
 
-  useEffect(() => {
-    vivant.current = true;
-    if (!h) { setErr(tr('Home Assistant n’est pas joignable.')); return undefined; }
-    const lire = () => h.callWS({ type: 'loggia/fenetres/etat' })
-      .then(r => { if (vivant.current) { setEtat(r); setErr(''); } })
-      .catch(e => { if (vivant.current) setErr((e && (e.message || e.code)) || tr('Réglages indisponibles.')); });
-    lire();
-    const t = setInterval(lire, 5000);
-    return () => { vivant.current = false; clearInterval(t); };
-  }, [!!h]);
 
   const cfg = (etat && etat.config) || null;
 

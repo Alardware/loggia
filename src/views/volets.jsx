@@ -9,7 +9,7 @@
  * sud-ouest. Le serveur, lui, travaille en degrés.
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { BottomSheet, EntPicker, cvName, RegleEntete, usePli } from '../ui.jsx';
+import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
 const CARDINAUX = () => [
@@ -52,26 +52,15 @@ function fusion(cfg, patch) {
 
 export function VoletsReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
-  const [etat, setEtat] = useState(null);
-  const [err, setErr] = useState('');
+  const { etat, setEtat, err, setErr, vivant } =
+    useEtatServeur(hass, 'loggia/volets/etat', 5000, tr('Réglages indisponibles.'));
   const [picker, setPicker] = useState(null);   // { section, champ, domaines }
   /* Un pli par regle — avec les autres etats : un hook ne peut pas vivre
    * apres un retour conditionnel. */
   const [pliPlan, plierPlan] = usePli('volets:planning');
   const [pliSol, plierSol] = usePli('volets:soleil');
   const [pliVent, plierVent] = usePli('volets:vent');
-  const vivant = useRef(true);
 
-  useEffect(() => {
-    vivant.current = true;
-    if (!h) { setErr(tr('Home Assistant n’est pas joignable.')); return undefined; }
-    const lire = () => h.callWS({ type: 'loggia/volets/etat' })
-      .then(r => { if (vivant.current) { setEtat(r); setErr(''); } })
-      .catch(e => { if (vivant.current) setErr((e && (e.message || e.code)) || tr('Réglages indisponibles.')); });
-    lire();
-    const t = setInterval(lire, 5000);
-    return () => { vivant.current = false; clearInterval(t); };
-  }, [!!h]);
 
   const cfg = (etat && etat.config) || null;
 
