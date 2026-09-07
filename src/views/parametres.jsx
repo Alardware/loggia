@@ -110,6 +110,7 @@ function AlertesTele({ hass, cardSt }) {
   const [services, setServices] = useState([]);
   const [msg, setMsg] = useState('');
   const [journal, setJournal] = useState([]);
+  const connecte = !!h;
   useEffect(() => {
     if (!h) { setCfg(ALERTES_DEF()); return; }
     h.callWS({ type: 'loggia/config/get' }).then(r => {
@@ -124,7 +125,7 @@ function AlertesTele({ hass, cardSt }) {
       const n = (r && r.notify) || {};
       setServices(Object.keys(n).filter(s => ['notify', 'persistent_notification', 'send_message'].indexOf(s) < 0).sort());
     }).catch(() => {});
-  }, [!!h]);
+  }, [connecte]);
   const save = (patch) => {
     const n = { ...cfg, ...patch };
     setCfg(n); setMsg('');
@@ -903,11 +904,13 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     return { id, name: at.friendly_name || at.title || id.replace('update.', '').replace(/_/g, ' '), avail: s.state === 'on', installed: at.installed_version, latest: at.latest_version, prog, pic: at.entity_picture, notes: lienSur(at.release_url) };
   }) : [];
   // purge l'optimiste dès que HA prend le relais (in_progress réel) ou que la MàJ est terminée (state off)
+  const connecte = !!hass;
+  const upsSig = upsAll.map(u => u.id + ':' + u.avail + ':' + String(u.prog)).join('|');
   useEffect(() => {
     const ids = Object.keys(updBusy); if (!ids.length || !hass || !hass.states) return;
     const done = ids.filter(id => { const s = hass.states[id]; if (!s) return true; const at = s.attributes || {}; return s.state !== 'on' || at.in_progress === true || typeof at.in_progress === 'number'; });
     if (done.length) setUpdBusy(b => { const n = { ...b }; done.forEach(id => delete n[id]); return n; });
-  }, [autoSig, upsAll.map(u => u.id + ':' + u.avail + ':' + String(u.prog)).join('|')]);
+  }, [autoSig, upsSig]);
   // on n'affiche QUE les mises à jour disponibles ou en cours — celles déjà faites n'encombrent pas la liste
   const ups = upsAll.filter(u => u.avail || u.prog !== false).sort((a, b) => a.name.localeCompare(b.name));
   const upsAvail = ups.filter(u => u.avail).length;
@@ -933,7 +936,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         setNbInter(Object.values(t).reduce((n, a) => n + Object.keys((a && a.actions) || {}).length, 0));
       })
       .catch(() => { /* composant trop ancien, ou ecoute absente */ });
-  }, [!!hass, isAdmin]);
+  }, [connecte, isAdmin]);
 
   // Combien de regles tournent, volets et chauffage confondus : le chiffre du
   // sommaire. Les deux commandes sont demandees ensemble, et l'absence de
@@ -972,7 +975,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         compter();
       })
       .catch(() => { /* idem */ });
-  }, [!!hass, isAdmin]);
+  }, [connecte, isAdmin]);
 
   // Sections du sommaire : chiffre mis en avant + accroche.
   const SECTIONS = [

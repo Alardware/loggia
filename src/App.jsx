@@ -1897,7 +1897,8 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const a = (st && st.attributes) || {};
   const realTarget = a.temperature != null ? a.temperature : 20;
   const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realTarget, st && st.state]);
+  const etatSt = st && st.state;
+  useEffect(() => { setOv(null); }, [realTarget, etatSt]);
   const target = ov != null ? ov : realTarget;
   const cur = a.current_temperature;
   const mode = st ? st.state : 'off';
@@ -2613,7 +2614,8 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const a = (st && st.attributes) || {};
   const realTarget = a.temperature != null ? a.temperature : 20;
   const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realTarget, st && st.state]);
+  const etatSt = st && st.state;
+  useEffect(() => { setOv(null); }, [realTarget, etatSt]);
   const target = ov != null ? ov : realTarget;
   const cur = a.current_temperature;
   const mode = st ? st.state : 'off';
@@ -2795,6 +2797,7 @@ function RoomNav({ room, onNav, hass }) {
 function RoomChips({ rooms, room, onNav }) {
   const wrapRef = useRef(null);
   const [pill, setPill] = useState(null);
+  const roomsSig = rooms.join('|');
   useEffect(() => {
     const w = wrapRef.current; if (!w) return;
     const el = w.querySelector('[data-room-active="1"]');
@@ -2812,7 +2815,7 @@ function RoomChips({ rooms, room, onNav }) {
     const cible = el.offsetLeft - (w.clientWidth - el.offsetWidth) / 2;
     try { w.scrollTo({ left: Math.max(0, cible), behavior: REDUCE_MOTION ? 'auto' : 'smooth' }); }
     catch (e) { w.scrollLeft = Math.max(0, cible); }
-  }, [room, rooms.join('|')]);
+  }, [room, roomsSig]);
   return (
     <div ref={wrapRef} className="o-room-scroll" style={{ position: 'relative', display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
       {pill && <span aria-hidden="true" className="o-roompill" style={{ position: 'absolute', top: 0, left: 0, width: pill.w, height: pill.h, transform: `translateX(${pill.x}px)`, borderRadius: 999, background: 'var(--o-accent-fond)', pointerEvents: 'none' }} />}
@@ -3061,9 +3064,10 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
   const entId = 'o-cardent-champ-' + (dom || 'x');
   // Meme domaine seulement : un poste de puissance n'a rien a faire sur une
   // lampe, et la liste complete est illisible.
+  const nbEntites = Object.keys(S).length;
   const options = useMemo(
     () => (estEntite ? Object.keys(S).filter(k => k.indexOf(dom + '.') === 0).sort() : []),
-    [dom, estEntite, Object.keys(S).length]);
+    [dom, estEntite, nbEntites]);
   const cible = estEntite && String(ent).trim() ? prefixe + String(ent).trim() : id;
   const etat = S[cible.indexOf(':') >= 0 ? cible.slice(cible.indexOf(':') + 1) : cible];
 
@@ -3257,15 +3261,17 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
   const domaineOk = (id) => domaines.indexOf(id.slice(0, id.indexOf('.'))) >= 0;
 
   // Entites de la zone Home Assistant homonyme : le plus souvent, la reponse.
+  const domainesSig = domaines.join('|');
+  const nbEntites = Object.keys(S).length;
   const zoneIds = useMemo(() => {
     const ix = LOGGIA_INDEX;
     if (!ix || !ix.areaList) return [];
     const cible = String(room).toLowerCase();
     const a = ix.areaList.find(x => String(x.name).toLowerCase() === cible);
     return (a && room) ? (a.entities || []).filter(domaineOk) : [];
-  }, [room, domaines.join('|')]);
+  }, [room, domainesSig]);
 
-  const tous = useMemo(() => Object.keys(S).filter(domaineOk).sort(), [Object.keys(S).length, domaines.join('|')]);
+  const tous = useMemo(() => Object.keys(S).filter(domaineOk).sort(), [nbEntites, domainesSig]);
 
   const terme = q.trim().toLowerCase();
   const trouves = terme
@@ -4010,9 +4016,10 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   const [cardEdit, setCardEdit] = useState(null);
 
   // Ce que la decouverte propose pour cette piece, avant agencement.
+  const hiddenSig = hidden.join('|');
   const derived = useMemo(
     () => roomEntitiesBrutes(hass, room).filter(id => hidden.indexOf(id) < 0),
-    [hass, room, hidden.join('|')]
+    [hass, room, hiddenSig]
   );
   // Meme editeur que la vue Objets : retrait, ajout, ordre, intertitres.
   const ed = useLayoutEditor(ROOM_LAYOUT_KEY, room, derived);
@@ -5401,9 +5408,13 @@ function habillagePiece(nom, mdi) {
 function useAgenda(hass, seulement = null, plage = null) {
   const [events, setEvents] = useState([]);
   const S = hass && hass.states;
-  const ids = useMemo(() => (seulement && seulement.length) ? seulement : (S ? Object.keys(S).filter(id => id.indexOf('calendar.') === 0) : []), [S, seulement ? seulement.join('|') : '']);
+  const seulementSig = seulement ? seulement.join('|') : '';
+  const ids = useMemo(() => (seulement && seulement.length) ? seulement : (S ? Object.keys(S).filter(id => id.indexOf('calendar.') === 0) : []), [S, seulementSig]);
   const sig = ids.join('|');
   const api = hass && hass.callApi ? hass.callApi.bind(hass) : null;
+  const apiPret = api ? 1 : 0;
+  const plageDebutMs = plage ? plage.debut.getTime() : 0;
+  const plageFinMs = plage ? plage.fin.getTime() : 0;
   useEffect(() => {
     if (!api || !sig) { setEvents([]); return; }
     let mort = false;
@@ -5426,7 +5437,7 @@ function useAgenda(hass, seulement = null, plage = null) {
     lire();
     const iv = setInterval(lire, 15 * 60000);
     return () => { mort = true; clearInterval(iv); };
-  }, [api ? 1 : 0, sig, plage ? plage.debut.getTime() : 0, plage ? plage.fin.getTime() : 0]);
+  }, [apiPret, sig, plageDebutMs, plageFinMs]);
   return events;
 }
 
@@ -6018,6 +6029,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     }
     return out;
   }, [dashHass]);
+  const indexA = a && a.index;
   const roomLightMap = useMemo(() => {
     if (!dashHass) return null;
     try {
@@ -6031,7 +6043,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     } catch (e) { return null; }
     // L'index doit figurer parmi les dependances : il arrive APRES le premier
     // rendu, et sans lui la piece d'une lumiere se deduit encore de son nom.
-  }, [lightsSig, a && a.index]);
+  }, [lightsSig, indexA]);
   const roomLightsOf = (name) => {
     if (!roomLightMap) return null;
     // La zone Home Assistant fait foi quand la piece en a une : c'est ainsi
@@ -6759,6 +6771,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
   const presentRooms = lightRooms(lights);
   // Agencement : la decouverte propose un intertitre par piece, suivi de ses
   // luminaires. Tout se renomme, se deplace, se retire ensuite.
+  const presentRoomsSig = presentRooms.join('|');
   const derived = useMemo(() => {
     const out = [];
     presentRooms.forEach(r => {
@@ -6768,7 +6781,7 @@ function LumieresContent({ hass, edit = false, onEnt }) {
       ls.forEach(l => out.push(l.id));
     });
     return out;
-  }, [sig, presentRooms.join('|')]);
+  }, [sig, presentRoomsSig]);
   const ed = useLayoutEditor('loggia_lightlayout', 'lumieres', derived);
   const dc = useDomainCards(hass);
   const [cardEdit, setCardEdit] = useState(null);
@@ -7522,10 +7535,12 @@ function ClimatContent({ hass, edit = false, onEnt }) {
   // Agencement des zones : les zones configurees d'abord, puis les thermostats
   // que Home Assistant expose et qu'aucune zone ne couvre deja.
   const zonesHaids = climateZones(S).map(z => z.haid).filter(Boolean);
+  const zonesSig = zonesHaids.join('|');
+  const nbEntites = Object.keys(S).length;
   const climDerived = useMemo(() => [
     ...climateZones(S).map(z => 'zone:' + z.id),
     ...Object.keys(S).filter(k => k.indexOf('climate.') === 0 && zonesHaids.indexOf(k) < 0).sort(),
-  ], [sig, zonesHaids.join('|'), Object.keys(S).length]);
+  ], [sig, zonesSig, nbEntites]);
   const ed = useLayoutEditor('loggia_climlayout', 'climat', climDerived);
   const dc = useDomainCards(hass);
   const [cardEdit, setCardEdit] = useState(null);
@@ -7714,6 +7729,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
    * c'est lui qui commande, et le remplacer par des boutons sans effet serait
    * mentir sur qui pilote. */
   const [modeLoggia, setModeLoggia] = useState(null);
+  const connecte = !!hass;
   useEffect(() => {
     if (!hass || typeof hass.callWS !== 'function') return undefined;
     let vivant = true;
@@ -7726,7 +7742,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
     lire();
     const t = setInterval(lire, 15000);
     return () => { vivant = false; clearInterval(t); };
-  }, [!!hass]);
+  }, [connecte]);
   const MODES_LOGGIA = () => [
     { id: 'auto', label: tr('Auto lever/coucher') },
     { id: 'nuit', label: tr('Fermeture nuit') },
@@ -7746,10 +7762,11 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
   useEffect(() => { setDays(Object.fromEntries(voletDays().map(d => [d.k, dayOn(d.haid)]))); }, [dsig]);
 
   // Agencement : la découverte propose, l'utilisateur dispose.
+  const nbEntites = Object.keys(S).length;
   const derivedX = useMemo(() => {
     const dejaLa = voletCovers(S).map(c => c.haid).filter(Boolean);
     return [...dejaLa, ...Object.keys(S).filter(k => k.indexOf('cover.') === 0 && dejaLa.indexOf(k) < 0).sort()];
-  }, [Object.keys(S).length, csig]);
+  }, [nbEntites, csig]);
   const ed = useLayoutEditor('loggia_coverlayout', 'volets', derivedX);
   // La feuille du volet porte la programmation nocturne — la vue n'a pas a la
   // repeter en pleine largeur. Mais elle ne vaut que pour les chambres : le
@@ -9125,10 +9142,11 @@ function MediasContent({ hass, edit = false, onEnt }) {
   const [, medTick] = useState(0);
   // Agencement : les lecteurs configurés d'abord, puis ceux que Home Assistant
   // expose et que la configuration ne nomme pas.
+  const nbEntites = Object.keys(S).length;
   const derivedMed = useMemo(() => {
     const dejaLa = lecteurs.map(p => p.haid).filter(Boolean);
     return [...dejaLa, ...Object.keys(S).filter(k => k.indexOf('media_player.') === 0 && dejaLa.indexOf(k) < 0).sort()];
-  }, [Object.keys(S).length]);
+  }, [nbEntites]);
   const ed = useLayoutEditor('loggia_medlayout', 'medias', derivedMed);
   const dc = useDomainCards(hass);
   const [cardEdit, setCardEdit] = useState(null);
@@ -9372,6 +9390,7 @@ const ACTIFS = ['on', 'true', 'True', 'detected', 'Detected', 'home'];
 function useCamHist(hass, ids) {
   const [data, setData] = useState(null);
   const cle = ids.filter(Boolean).join('|');
+  const connecte = hass ? 1 : 0;
   useEffect(() => {
     let vivant = true;
     if (!hass || !hass.callApi || !cle) { setData(null); return undefined; }
@@ -9403,7 +9422,7 @@ function useCamHist(hass, ids) {
       })
       .catch(() => { if (vivant) setData(null); });
     return () => { vivant = false; };
-  }, [hass ? 1 : 0, cle]);
+  }, [connecte, cle]);
   return data;
 }
 
@@ -9740,6 +9759,7 @@ const sysMachines = () => [
 function useSysHist(hass, ids, hours, refreshKey) {
   const [data, setData] = useState({});
   const key = ids.filter(Boolean).join('|');
+  const connecte = hass ? 1 : 0;
   useEffect(() => {
     let alive = true;
     if (!hass || !hass.callApi || !key) { setData({}); return undefined; }
@@ -9754,7 +9774,7 @@ function useSysHist(hass, ids, hours, refreshKey) {
       setData(m);
     });
     return () => { alive = false; };
-  }, [hass ? 1 : 0, key, hours, refreshKey]);
+  }, [connecte, key, hours, refreshKey]);
   return data;
 }
 // Jauge circulaire (design Claude Design) : arc 288°, couleur auto selon le niveau.
@@ -9891,6 +9911,7 @@ function SystemeContent({ hass }) {
   if (!hOnline) alerts.push({ key: 'offhost', m: sysNames().host, target: 'host', sev: 'bad', txt: tr('Machine hors ligne — dernier état inconnu.') });
   // Journal : logbook HA sur les entités système suivies (24 h), meilleur effort
   const [logbook, setLogbook] = useState(null);
+  const connecte = hass ? 1 : 0;
   useEffect(() => {
     let alive = true;
     if (!hass || !hass.callApi) { setLogbook(null); return undefined; }
@@ -9900,7 +9921,7 @@ function SystemeContent({ hass }) {
       .then(res => { if (alive) setLogbook(Array.isArray(res) ? res.slice(-8).reverse() : null); })
       .catch(() => { if (alive) setLogbook(null); });
     return () => { alive = false; };
-  }, [hass ? 1 : 0, refreshKey]);
+  }, [connecte, refreshKey]);
 
   // ── Patron Atrium (22/08) : bandeau Alimentation, machine HAOS, journaux ──
   const relFetch = (() => { const sec = Math.round((Date.now() - lastFetch.getTime()) / 1000); if (sec < 60) return tr('il y a {n} s', { n: sec }); const mn = Math.round(sec / 60); return mn < 60 ? tr('il y a {n} min', { n: mn }) : tr('il y a {n} h', { n: Math.round(mn / 60) }); })();
@@ -10559,6 +10580,7 @@ function CvChips({ x = null, hass, dc = null, demo = null }) {
    * cliquable. Le résumé automatique de la maison a été retiré (retour
    * 01/09) — il donnait des pastilles muettes que personne n'avait demandées. */
   const ids = (x && Array.isArray(x.ids)) ? x.ids.filter(i => S[i]) : [];
+  const idsSig = ids.join('|');
   const chips = useMemo(() => {
     if (demo) return demo;
     return ids.map(id => {
@@ -10571,7 +10593,7 @@ function CvChips({ x = null, hass, dc = null, demo = null }) {
             : 'var(--o-accent-soft)';
       return { id, ic: cvIcoEntite(d, id, st, cvName(st, id)) || 'bolt', txt: chipTexte(id, st), col, vif };
     });
-  }, [hass, demo, ids.join('|')]);
+  }, [hass, demo, idsSig]);
   const ouvrir = (c) => { if (c.id && dc && dc.ouvrir) dc.ouvrir(c.id); };
   return (
     /* `justifyContent: center` sur le CADRE, pas sur la rangée : CV_CADRE
@@ -11323,7 +11345,8 @@ function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
  */
 function FeuilleCalendrier({ hass, onClose }) {
   const S = (hass && hass.states) || {};
-  const tousCals = useMemo(() => Object.keys(S).filter(k => k.indexOf('calendar.') === 0).sort(), [Object.keys(S).length]);
+  const nbEntites = Object.keys(S).length;
+  const tousCals = useMemo(() => Object.keys(S).filter(k => k.indexOf('calendar.') === 0).sort(), [nbEntites]);
   /* Les agendas retenus. Rien de choisi = tous : une maison qui n'a jamais
    * ouvert ce reglage doit voir son calendrier, pas un mois vide. */
   const [choisis, setChoisis] = useState(() => {
@@ -11331,10 +11354,12 @@ function FeuilleCalendrier({ hass, onClose }) {
     return Array.isArray(c) && c.length ? c.filter(x => typeof x === 'string') : null;
   });
   const [reglages, setReglages] = useState(false);
+  const choisisSig = choisis ? choisis.join('|') : '';
+  const calsSig = tousCals.join('|');
   const actifs = useMemo(() => {
     const l = (choisis || tousCals).filter(k => tousCals.indexOf(k) >= 0);
     return l.length ? l : tousCals;
-  }, [choisis ? choisis.join('|') : '', tousCals.join('|')]);
+  }, [choisisSig, calsSig]);
 
   const auj = new Date(); auj.setHours(0, 0, 0, 0);
   const [ancre, setAncre] = useState(() => new Date(auj.getFullYear(), auj.getMonth(), 1));
@@ -11343,11 +11368,14 @@ function FeuilleCalendrier({ hass, onClose }) {
   /* La grille commence au LUNDI qui precede le 1er et tient six semaines :
    * un mois qui commence un dimanche en occupe six, et une grille qui change
    * de hauteur d'un mois a l'autre fait sauter tout ce qui est dessous. */
+  const ancreMs = ancre.getTime();
   const debutGrille = useMemo(() => {
     const d = new Date(ancre); d.setDate(1 - ((ancre.getDay() + 6) % 7)); d.setHours(0, 0, 0, 0); return d;
-  }, [ancre.getTime()]);
-  const finGrille = useMemo(() => new Date(debutGrille.getTime() + 42 * 864e5), [debutGrille.getTime()]);
-  const plage = useMemo(() => ({ debut: debutGrille, fin: finGrille }), [debutGrille.getTime(), finGrille.getTime()]);
+  }, [ancreMs]);
+  const debutMs = debutGrille.getTime();
+  const finGrille = useMemo(() => new Date(debutMs + 42 * 864e5), [debutMs]);
+  const finMs = finGrille.getTime();
+  const plage = useMemo(() => ({ debut: debutGrille, fin: finGrille }), [debutMs, finMs]);
   const events = useAgenda(hass, actifs, plage);
 
   const cleJour = (d) => d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
@@ -11358,7 +11386,7 @@ function FeuilleCalendrier({ hass, onClose }) {
     return m;
   }, [events]);
 
-  const jours = useMemo(() => Array.from({ length: 42 }, (_, i) => new Date(debutGrille.getTime() + i * 864e5)), [debutGrille.getTime()]);
+  const jours = useMemo(() => Array.from({ length: 42 }, (_, i) => new Date(debutMs + i * 864e5)), [debutMs]);
   const duJour = parJour.get(cleJour(choisi)) || [];
   const moisAns = ancre.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
   const bougerMois = (n) => {
@@ -12187,6 +12215,8 @@ const sigHash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 
 function useHass(keys, noisyKeys) {
   const [, force] = useState(0);
   const ref = useRef(null);
+  const keysSig = keys.join(',');
+  const noisySig = noisyKeys ? noisyKeys.join(',') : '';
   useEffect(() => {
     const noisy = noisyKeys && noisyKeys.length ? {} : null;
     if (noisy) for (const k of noisyKeys) noisy[k] = 1;
@@ -12221,7 +12251,7 @@ function useHass(keys, noisyKeys) {
     tick();
     const iv = setInterval(tick, HASS_POLL_MS);
     return () => clearInterval(iv);
-  }, [keys.join(','), noisyKeys ? noisyKeys.join(',') : '']);
+  }, [keysSig, noisySig]);
   return ref.current;
 }
 
@@ -13313,11 +13343,12 @@ export default function App() {
   const vuesAutorisees = (!isAdmin && users[userIdx] && Array.isArray(users[userIdx].vues) && users[userIdx].vues.length)
     ? new Set(users[userIdx].vues) : null;
   // Une vue interdite atteinte autrement (restauration, lien) retombe sur l'accueil.
+  const vuesSig = vuesAutorisees ? [...vuesAutorisees].join('|') : '';
   useEffect(() => {
     if (!vuesAutorisees) return;
     const base = view.indexOf('room:') === 0 ? 'pieces' : view;
     if (base !== 'accueil' && base !== 'parametres' && !vuesAutorisees.has(base)) setView('accueil');
-  }, [view, vuesAutorisees ? [...vuesAutorisees].join('|') : '']);
+  }, [view, vuesSig]);
   useEffect(() => { if (!isAdmin) setEditMode(false); }, [isAdmin]);
   // Édition en place des vues intégrées : sheet « Entités de cette vue » (crayon actif + vue configurable).
   const [entSheet, setEntSheet] = useState(false);

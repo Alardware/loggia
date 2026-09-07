@@ -39,21 +39,29 @@ import { fileURLToPath } from 'node:url';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** L'inventaire relu le 7 septembre 2026, par fichier et par dépendance. */
+/* L'inventaire relu le 7 septembre 2026, par fichier et par dépendance.
+ *
+ * Il en comptait 46 pour `App.jsx`. Nommer les expressions posées en dur dans
+ * les tableaux en a retiré deux : `finGrille` et `jours` lisaient
+ * `debutGrille.getTime()`, ils lisent maintenant la constante `debutMs`, qui
+ * EST une dépendance en bonne et due forme. La règle ne réclame plus rien là.
+ *
+ * C'est le gain qu'on n'attendait pas d'un simple renommage : tant qu'un
+ * tableau contenait une expression, la règle refusait de le vérifier ENTIER —
+ * y compris les dépendances correctement nommées à côté. */
 const VERIFIE = {
   'src/App.jsx': [
     'HIST_IDS, SYS.host.online, and hass', 'S', 'S', 'S',
     'S', 'S and domaineOk', 'S and ids', 'S and lecteurs',
     'S and zonesHaids', 'a and dashHass', 'ancre', 'api and plage',
     'applyUser', 'autoOn', 'choisis and tousCals', 'cle and hass',
-    'cv.name', 'dayOn', 'dc', 'debutGrille',
-    'debutGrille', 'debutGrille and finGrille', 'derived', 'derived',
-    'derivedCovers', 'derivedVols', 'discovery', 'discovery',
-    'domaineOk', 'hass', 'hass', 'hass',
-    'hass', 'hass', 'hass', 'hass and live',
-    'hass, ids, and metrics', 'hidden', 'ids', 'keys and noisyKeys',
-    'lights and presentRooms', 'loggiaRuntime.index', 'noms', 'seulement',
-    'vuSig', 'vuesAutorisees',
+    'cv.name', 'dayOn', 'dc', 'debutGrille and finGrille',
+    'derived', 'derived', 'derivedCovers', 'derivedVols',
+    'discovery', 'discovery', 'domaineOk', 'hass',
+    'hass', 'hass', 'hass', 'hass',
+    'hass', 'hass and live', 'hass, ids, and metrics', 'hidden',
+    'ids', 'keys and noisyKeys', 'lights and presentRooms', 'loggiaRuntime.index',
+    'noms', 'seulement', 'vuSig', 'vuesAutorisees',
   ],
   'src/ciel3d.jsx': ['exposure and limitMag'],
   'src/ui.jsx': ['cur'],
@@ -66,6 +74,31 @@ const VERIFIE = {
 
 const APOSTROPHE = String.fromCharCode(39);
 const ANTISLASH = String.fromCharCode(92);
+
+/** Les expressions posées en dur dans un tableau de dépendances, s'il en reste. */
+async function expressions() {
+  const out = [];
+  for (const f of await new ESLint({ cwd: RACINE }).lintFiles([join(RACINE, 'src')])) {
+    const nom = relative(RACINE, f.filePath).split(ANTISLASH).join('/');
+    const lignes = readFileSync(f.filePath, 'utf8').split(String.fromCharCode(10));
+    for (const m of f.messages) {
+      if (m.ruleId !== 'react-hooks/exhaustive-deps') continue;
+      if (!/complex expression/.test(m.message)) continue;
+      const l = lignes[m.line - 1] || '';
+      out.push(`${nom}:${m.line} → ${l.slice(m.column - 1, (m.endColumn || m.column + 40) - 1)}`);
+    }
+  }
+  return out;
+}
+
+test('aucune expression posée en dur dans un tableau de dépendances', async () => {
+  // Il y en avait 38, sur 26 crochets. Tant qu'un tableau en contient une, la
+  // règle refuse de le vérifier ENTIER — les dépendances correctement nommées
+  // à côté cessent d'être contrôlées avec lui. C'est ce qui masquait deux
+  // manquements du calendrier, apparus dès que les expressions ont eu un nom.
+  assert.deepEqual(await expressions(), [],
+    'une expression est revenue dans un tableau de dépendances : donne-lui un nom, sinon tout le tableau cesse d’être vérifié');
+});
 
 /** Ce que l'outil voit aujourd'hui, dans la même forme. */
 async function releve() {

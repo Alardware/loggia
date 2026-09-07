@@ -45,10 +45,21 @@ test('changer de mois relit les événements', () => {
   const c = corps('function useAgenda(');
   const i = c.lastIndexOf('}, [');
   const deps = c.slice(i, c.indexOf(']);', i));
+  /* Chaque identifiant du tableau est remplacé par ce qu'il vaut, s'il est
+   * déclaré dans la même fonction.
+   *
+   * La première version cherchait `plage ? plage.debut.getTime()` à la lettre
+   * dans le tableau. Les bornes ont ensuite été sorties dans des constantes
+   * nommées — même valeur, même moment — et le test a crié alors que rien
+   * n'avait bougé. Il vérifiait une écriture, pas la propriété. */
+  const resolu = deps.replace(/[A-Za-z_$][\w$]*/g, (nom) => {
+    const m = c.match(new RegExp('const ' + nom + ' = ([^;]*);'));
+    return m ? m[1] : nom;
+  });
   // Sans les bornes dans les dépendances, la grille changerait de mois en
   // gardant les événements du précédent : des anneaux sur les mauvais jours.
-  assert.match(deps, /plage \? plage\.debut\.getTime\(\)/, 'le début de plage n’est pas suivi');
-  assert.match(deps, /plage \? plage\.fin\.getTime\(\)/, 'la fin de plage n’est pas suivie');
+  assert.match(resolu, /plage\.debut\.getTime\(\)/, 'le début de plage n’est pas suivi');
+  assert.match(resolu, /plage\.fin\.getTime\(\)/, 'la fin de plage n’est pas suivie');
 });
 
 test('aucun agenda coché veut dire tous', () => {
