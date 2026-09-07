@@ -5603,6 +5603,13 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   const wx = (editMode && override) ? override : (weatherMode || 'clouds'); // suit l'entité météo, sauf override en mode édition
   // Fond GLSL : état HA brut prioritaire ; les overrides du mode édition sont mappés vers un preset proche
   const WX3D_FROM_MODE = { sun: 'sunny', partly: 'partlycloudy', clouds: 'cloudy', wind: 'windy', rain: 'rainy', snow: 'snowy', storm: 'lightning-rainy', night: 'clear-night' };
+  /* Vrai une fois la première peinture passée : le décor météo s'y accroche. */
+  const [fondPret, setFondPret] = useState(PAINT_READY);
+  useEffect(() => {
+    let vivant = true;
+    onPaintReady(() => { if (vivant) setFondPret(true); });
+    return () => { vivant = false; };
+  }, []);
   const cond3d = (editMode && override) ? (WX3D_FROM_MODE[override] || 'partlycloudy')
     : (weatherRaw && WX_PRESETS[weatherRaw] ? weatherRaw : (WX3D_FROM_MODE[weatherMode] || 'partlycloudy'));
   const [wxHour, setWxHour] = useState(wxHourEq);
@@ -5900,7 +5907,19 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <Header />
-      {!REDUCE_MOTION && wxFx && (
+      {/* Le fond météo attend que le tableau de bord soit peint.
+        *
+        * `WeatherGL` est chargé à la demande — mais il était monté dès le
+        * premier rendu, ce qui déclenchait aussitôt son import : 448 ko de
+        * Three.js, 113 ko une fois compressés, en concurrence avec le contenu
+        * que l'on est venu lire. La paresse ne servait donc à rien ici : elle
+        * décalait le téléchargement de quelques millisecondes, pas d'une
+        * peinture.
+        *
+        * `onPaintReady` attend deux images puis rend la main — le même signal
+        * dont les jauges se servent pour ne pas s'animer avant d'être vues. Le
+        * décor arrive après le contenu, ce qui est sa place. */}
+      {!REDUCE_MOTION && wxFx && fondPret && (
         <div className="o-wx3d" aria-hidden="true">
           <Suspense fallback={null}><WeatherGL condition={cond3d} hourEq={wxHour} /></Suspense>
           <div className="o-wx3d-veil" />

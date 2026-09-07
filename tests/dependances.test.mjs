@@ -66,7 +66,8 @@ const VERIFIE = {
     'loggiaRuntime.index', 'noms', 'seulement', 'vuSig',
     'vuesAutorisees',
   ],
-  'src/ciel3d.jsx': ['exposure and limitMag'],
+  /* `src/ciel3d.jsx` figurait ici avec « exposure and limitMag ». Le fichier a
+   * disparu : un ciel étoilé de 284 lignes qu'aucun import n'atteignait. */
   'src/ui.jsx': ['cur'],
   'src/views/meteo.jsx': ['hass'],
   'src/views/parametres.jsx': [
