@@ -265,8 +265,10 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
         margin: '0 auto' }}>
         {/* L'image sert de source au canvas ; c'est le canvas qui est affiche,
             deja pivote. */}
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         {src && <img ref={imgRef} src={src} alt="" onLoad={analyser} style={{ display: 'none' }} />}
         {src
+          /* eslint-disable-next-line jsx-a11y/no-interactive-element-to-noninteractive-role */
           ? <canvas ref={cvRef} role="img" aria-label={tr('Plan du logement')} style={{ display: 'block', width: '100%', height: 'auto' }} />
           : <div style={{ aspectRatio: '4/3', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>Carte indisponible</div>}
 

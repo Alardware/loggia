@@ -262,7 +262,8 @@ export function TplForm({ onAdd, hass = null, initial = null }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <input aria-label={tr('Titre de la carte (optionnel)')} value={nom} onChange={e => setNom(e.target.value)} placeholder={tr('Titre de la carte (optionnel)')} style={cvInp} />
-      <textarea value={src} onChange={e => setSrc(e.target.value)} rows={4} spellCheck={false}
+      <textarea aria-label={tr('Modèle Jinja')}
+        value={src} onChange={e => setSrc(e.target.value)} rows={4} spellCheck={false}
         placeholder={"{{ now().strftime('%H:%M') }}"}
         style={{ ...cvInp, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, resize: 'vertical', minHeight: 88 }} />
       {ok && conn && (
@@ -376,11 +377,17 @@ export function BottomSheet({ onClose, children }) {
      * feuille partait alors à la section et l'ajout ne se faisait jamais
      * (retour 01/09). Les gestes internes (poignée, boutons) sont plus bas
      * dans l'arbre : ils continuent de fonctionner. */
-    <div onPointerDown={(e) => { e.stopPropagation(); partiDuVoile.current = e.target === e.currentTarget; }}
+    <div role="presentation"
+      onPointerDown={(e) => { e.stopPropagation(); partiDuVoile.current = e.target === e.currentTarget; }}
       onPointerMove={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
       onClick={(e) => { if (e.target === e.currentTarget && partiDuVoile.current) close(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.32)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', animation: closing ? 'o-fadeOut .3s ease forwards' : 'o-fadeIn .25s ease' }}>
+      {/* Une boite de dialogue qui ecoute le clavier n'est pas une anomalie :
+        * Echap la ferme et Tab y boucle, ce que la regle nomme justement
+        * comme le motif attendu ailleurs. Elle voit ici un role passif a qui
+        * on aurait rajoute des gestes. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <div ref={sheetRef} className="o-sheet" role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
@@ -432,11 +439,12 @@ export function EntPicker({ hass, exclude = [], onPick, autoFocus = false, domai
       {results.length > 0 && (
         <div style={{ maxHeight: 240, overflowY: 'auto', marginTop: 8, border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: 14 }}>
           {results.map(e => (
-            <div key={e.id} onClick={() => onPick(e.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', cursor: 'pointer', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+            <button type="button" key={e.id} onClick={() => onPick(e.id)}
+              style={{ width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit', background: 'none', border: 0, borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', cursor: 'pointer' }}>
               <span style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text2)' }}><Fi i={CV_DOM_ICON[e.dom] || 'bolt'} size={13} /></span>
               <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span><span style={{ display: 'block', fontSize: 11, color: 'var(--o-text3)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.id}</span></span>
               <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-accent-soft)' }}>+</span>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -514,7 +522,7 @@ export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, z
         </div>
         <div style={sous}>{desc}</div>
       </button>
-      <Bascule on={!!on} cb={cb} />
+      <Bascule nom={nom} on={!!on} cb={cb} />
     </div>
   );
 }
@@ -525,9 +533,9 @@ export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, z
  * variables de couleur. Un composant partage qui change l'apparence en passant
  * n'est pas une extraction, c'est une refonte — et personne ne l'a demandee.
  */
-export function Bascule({ on, cb }) {
+export function Bascule({ on, cb, nom = null }) {
   return (
-    <button type="button" onClick={cb} role="switch" aria-checked={!!on}
+    <button type="button" onClick={cb} role="switch" aria-checked={!!on} aria-label={nom || undefined}
       style={{ width: 46, height: 26, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 3,
         background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
       <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />

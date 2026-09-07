@@ -119,7 +119,7 @@ function FluxCanvas() {
     if (io) io.observe(c);
     return () => { stopped = true; cancelAnimationFrame(raf); window.removeEventListener('resize', onResize); if (io) io.disconnect(); };
   }, []);
-  return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', WebkitMaskImage: 'radial-gradient(120% 78% at 50% 50%,#000 52%,transparent 100%),linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)', WebkitMaskComposite: 'source-in', maskImage: 'radial-gradient(120% 78% at 50% 50%,#000 52%,transparent 100%),linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)', maskComposite: 'intersect' }} />;
+  return <canvas ref={ref} aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', WebkitMaskImage: 'radial-gradient(120% 78% at 50% 50%,#000 52%,transparent 100%),linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)', WebkitMaskComposite: 'source-in', maskImage: 'radial-gradient(120% 78% at 50% 50%,#000 52%,transparent 100%),linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)', maskComposite: 'intersect' }} />;
 }
 
 // ── Effet météo du bandeau (suit `weather`) ──
@@ -3083,6 +3083,11 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
           </div>
 
           <label htmlFor={nomId} style={etiquette}>{tr('NOM')}</label>
+          {/* `control-has-associated-label` ne suit pas `htmlFor` : elle cherche
+            * une etiquette AUTOUR du champ, ou un texte dedans. Celle de ce champ
+            * est juste au-dessus et le designe par son identifiant —
+            * `label-has-associated-control`, elle, le verifie. */}
+          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
           <input id={nomId} value={val} onChange={(e) => setVal(e.target.value)} placeholder={origine || nom}
             onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} autoFocus />
           {!estSection && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>
@@ -3098,6 +3103,11 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
                 * regle lit ici l'<option> d'un <select>, ou le texte compte. */}
               {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
               <datalist id={dlId}>{options.map(k => <option key={k} value={k} />)}</datalist>
+              {/* `control-has-associated-label` ne suit pas `htmlFor` : elle cherche
+                * une etiquette AUTOUR du champ, ou un texte dedans. Celle de ce champ
+                * est juste au-dessus et le designe par son identifiant —
+                * `label-has-associated-control`, elle, le verifie. */}
+              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
               <input id={entId} value={ent} onChange={(e) => setEnt(e.target.value)} list={dlId} spellCheck={false}
                 placeholder={dom + '.…'} onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} />
               <div style={{ fontSize: 12, fontWeight: 600, color: etat ? 'var(--o-text3)' : 'var(--o-warn2)', margin: '6px 2px 0' }}>
@@ -4484,7 +4494,7 @@ function CamLive({ hass, haid, online = true }) {
   if (mode === 'off') return null; // repli sur le fond gradient de la tuile
   return (
     <>
-      <video ref={vidRef} autoPlay muted playsInline style={{ ...cover, display: mode === 'video' ? 'block' : 'none' }} />
+      <video ref={vidRef} aria-label={tr('Flux de la caméra')} autoPlay muted playsInline style={{ ...cover, display: mode === 'video' ? 'block' : 'none' }} />
       <img ref={imgRef} alt="" style={{ ...cover, display: mode === 'mjpeg' ? 'block' : 'none' }} />
       {mode === 'snap' && <HaImage hass={hass} haid={haid} refreshMs={2000} kind="camera" />}
     </>
@@ -6393,6 +6403,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           const railRow = (k, label, desc, val, col, vue = null) => {
             const clic = vue && onNav ? () => onNav(vue) : null;
             return (
+              /* Role, tabulation, clic et touche tiennent tous a `clic` :
+               * ensemble ou pas du tout. La regle lit les attributs un par un
+               * et ne suit pas le ternaire. */
+              /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
               <div key={k} role={clic ? 'button' : undefined} tabIndex={clic ? 0 : undefined}
                 onClick={clic || undefined} onKeyDown={clic ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clic(); } } : undefined}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', cursor: clic ? 'pointer' : 'default' }}>
@@ -8175,8 +8189,13 @@ function EnPuissances({ series, h = 190 }) {
     setSurvol({ f, t, vals: vives.map(s => ({ nom: s.nom, couleur: s.couleur, v: prochePoint(s.pts, t) })) });
   };
   return (
-    <div style={{ position: 'relative' }} onMouseMove={surPointeur} onMouseLeave={() => setSurvol(null)}>
-      <svg viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height: h, display: 'block', overflow: 'visible' }}>
+    /* Le conteneur ne fait que positionner et suivre le pointeur : ce n'est
+     * pas une commande. Le survol reste cependant le SEUL chemin vers les
+     * valeurs point par point — limite connue, faute d'un parcours au
+     * clavier des points. Le trace annonce au moins ce qu'il montre. */
+    <div role="presentation" style={{ position: 'relative' }} onMouseMove={surPointeur} onMouseLeave={() => setSurvol(null)}>
+      <svg role="img" aria-label={tr('Puissances sur 24 h : {n}', { n: vives.map(v => v.nom).join(', ') })}
+        viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height: h, display: 'block', overflow: 'visible' }}>
         {[0, .5, 1].map(f => <line key={f} x1="0" x2={W} y1={PAD + f * (h - PAD * 2)} y2={PAD + f * (h - PAD * 2)} stroke="var(--o-bd3)" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
         <line x1="0" x2={W} y1={yZero} y2={yZero} stroke="var(--o-text3)" strokeWidth="1" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
         {vives.map(s => (
@@ -10025,7 +10044,7 @@ const FAN_FR = () => ({ quiet: tr('Silencieux'), normal: 'Normal', max: 'Max', m
 function MenuDeroulant({ icone = null, etiquette, valeur, options, surChoix, rendre = (v) => v }) {
   const [ouvert, setOuvert] = useState(false);
   return (
-    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+    <div role="presentation" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
       <button onClick={() => setOuvert(o => !o)} aria-haspopup="listbox" aria-expanded={ouvert}
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 13px', borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', textAlign: 'left' }}>
         {icone && <Fi i={icone} size={14} color="var(--o-text2)" />}
@@ -12470,10 +12489,13 @@ function PinModal({ expected, onClose, onSuccess }) {
     });
   };
   return (
-    <div onPointerDown={(e) => { partiDuVoile.current = e.target === e.currentTarget; }}
+    <div role="presentation"
+      onPointerDown={(e) => { partiDuVoile.current = e.target === e.currentTarget; }}
       onClick={(e) => { if (e.target === e.currentTarget && partiDuVoile.current) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.62)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div ref={boiteRef} role="dialog" aria-modal="true" aria-label="Code administrateur" tabIndex={-1}
+      {/* Une boite de dialogue qui ecoute Echap n'est pas une anomalie. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+      <div ref={boiteRef} role="dialog" aria-modal="true" aria-label={tr('Code administrateur')} tabIndex={-1}
         onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}
         onClick={e => e.stopPropagation()} style={{ width: 296, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 'var(--o-radius,18px)', padding: 24, boxShadow: '0 30px 70px rgba(0,0,0,.6)', animation: error ? 'm-shake .45s' : 'none' }}>
         <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700 }}>Code administrateur</div>
@@ -13375,7 +13397,7 @@ export default function App() {
                 : { t: ast === 'armed_away' || ast === 'armed_vacation' ? 'Alarme armée · Absent' : 'Alarme armée · Présent', c: '255,179,71' };
         return { online: ok, devCount, alarmTxt: al.t, alarmRgb: al.c };
       })()} />
-      {navOpen && <div className="loggia-backdrop" onClick={() => setNavOpen(false)} />}
+      {navOpen && <div className="loggia-backdrop" role="presentation" onClick={() => setNavOpen(false)} />}
       {pinTarget != null && <PinModal expected={adminPin} onClose={() => setPinTarget(null)} onSuccess={() => { applyUser(pinTarget); setPinTarget(null); }} />}
       <div key={view} className="o-view" style={{ display: 'flex', flex: 1, minWidth: 0 }}>
       {/* Tant que la decouverte n'a pas repondu, on ne monte aucune vue autre que

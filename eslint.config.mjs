@@ -66,6 +66,17 @@ export default [
        * identiques disent moins bien la meme chose, et la dix-neuvieme serait
        * posee sans reflechir. */
       'jsx-a11y/no-autofocus': 'off',
+      /* `label-has-for` est depreciee par ses propres auteurs.
+       *
+       * Elle exigeait qu'une etiquette entoure son champ EN PLUS de le designer
+       * par `htmlFor` — une contrainte de mise en page deguisee en regle
+       * d'accessibilite, et fausse : `htmlFor` suffit, c'est le lien que le
+       * navigateur et les lecteurs d'ecran suivent.
+       *
+       * Sa remplacante, `label-has-associated-control`, est active juste
+       * au-dessus et sait lire ce lien. Garder les deux, c'est faire crier la
+       * vieille sur ce que la neuve vient d'approuver. */
+      'jsx-a11y/label-has-for': 'off',
       // Un hook appele sous condition casse l'ordre des hooks : React lit
       // alors l'etat d'un autre. Erreur, jamais negociable.
       // LE filet : `no-undef` ne voit pas les composants JSX. Un composant

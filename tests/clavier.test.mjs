@@ -78,3 +78,49 @@ test('les étiquettes de la feuille d’édition désignent un champ existant', 
       `aucun champ ne porte l’identifiant « ${c} » : l’étiquette ne désigne rien`);
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Un nom passé n'est pas un nom reçu.
+//
+// Trois appels écrivaient `<Bascule nom={…} on={…} cb={…} />`. Le composant, lui,
+// ne déclarait que `{ on, cb }` : le nom était accepté par JSX, ignoré par la
+// fonction, et jeté sans un mot. À l'écran tout allait bien — c'est le libellé
+// voisin qu'on lit. Une synthèse vocale, elle, annonçait « interrupteur, activé »
+// sans jamais dire de quoi.
+//
+// C'est la forme la plus discrète d'un réglage manquant : le code de l'appelant
+// a l'air correct, et il l'est.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('l’interrupteur des règles reçoit vraiment le nom qu’on lui passe', () => {
+  const ui = readFileSync(join(RACINE, 'src', 'ui.jsx'), 'utf8');
+  const i = ui.indexOf('export function Bascule(');
+  assert.notEqual(i, -1, 'l’interrupteur partagé a disparu');
+  const corps = ui.slice(i, ui.indexOf('\n}', i));
+  assert.match(corps, /export function Bascule\(\{[^}]*\bnom\b/,
+    'le composant ne déclare plus « nom » : les appels le passeront dans le vide');
+  assert.match(corps, /aria-label=\{nom/,
+    'le nom est déclaré mais jamais porté : l’interrupteur reste anonyme');
+});
+
+test('tous les appels nomment leur interrupteur', () => {
+  const fautes = [];
+  for (const [nom, src] of sources()) {
+    for (const m of src.match(/<Bascule[\s\S]*?\/>/g) || []) {
+      if (!/\bnom=/.test(m)) fautes.push(`${nom} → ${m.replace(/\s+/g, ' ').slice(0, 60)}`);
+    }
+  }
+  assert.deepEqual(fautes, [],
+    'un interrupteur s’annonce sans dire ce qu’il commande');
+});
+
+test('un résultat de recherche d’entité se choisit au clavier', () => {
+  const ui = readFileSync(join(RACINE, 'src', 'ui.jsx'), 'utf8');
+  const i = ui.indexOf('onPick(e.id)');
+  assert.notEqual(i, -1, 'le choix d’une entité a disparu');
+  // On pouvait taper la recherche, mais pas retenir un résultat : la
+  // tabulation sautait la liste entière.
+  const ouvre = ui.lastIndexOf('<', i);
+  assert.equal(ui.slice(ouvre, ouvre + 7), '<button',
+    'les résultats redeviennent des conteneurs cliquables : la liste sort du parcours clavier');
+});
