@@ -102,30 +102,6 @@ class LoggiaErrorBoundary extends React.Component {
   }
 }
 
-/* Filet : les commandes envoyées à Home Assistant partaient sans recours.
- *
- * Quarante endroits écrivent `try { hass.callService(…) } catch {}`, et deux
- * choses s'y cachent.
- *
- * La première : `callService` rend une PROMESSE. Le `try/catch` n'attrape que
- * ce qui échoue tout de suite ; un refus du serveur — permission manquante,
- * entité disparue, service inexistant — rejette la promesse plus tard, hors de
- * portée du bloc. Le `catch` donnait donc une impression de prudence sans rien
- * couvrir de ce qui échoue vraiment.
- *
- * La seconde : personne ne le voyait. On appuie sur un bouton, rien ne bouge,
- * et la console reste muette.
- *
- * `actions.js` fait déjà les choses proprement — `runPlan` attend la promesse
- * et rend `{ ok: false, reason }`. Faire passer les quarante appels par lui est
- * un vrai chantier, et ce n'en est pas un. Ceci rend seulement l'échec visible
- * à qui cherche, au lieu de le laisser disparaître. */
-window.addEventListener('unhandledrejection', (ev) => {
-  const r = ev && ev.reason;
-  console.error('Loggia : promesse rejetée sans recours',
-    (r && (r.message || r.error || r.code)) || r);
-});
-
 createRoot(document.getElementById('root')).render(
   <LoggiaErrorBoundary><App /></LoggiaErrorBoundary>
 );

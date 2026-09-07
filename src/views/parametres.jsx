@@ -860,7 +860,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       return ch ? n : o;
     });
   }, [autoSig]);
-  const autoCall = (svc, id) => { try { if (hass && hass.callService) hass.callService('automation', svc, { entity_id: id }); } catch {} };
+  const autoCall = (svc, id) => { if (hass && hass.callService) hass.callService('automation', svc, { entity_id: id }); };
   // ── Entités (config du dashboard) : édition des mappings, persistés localStorage, appliqués au rechargement ──
   const { ent, setEnt, entSet, saveEnt, resetEnt, dlists } = useEntConfig(hass);
   const entIds = [...ent.rooms.flatMap(r => [r.temp, r.humidity, r.co2]), ent.energy.consoNow, ent.energy.surplusNow, ent.energy.solarOutput, ent.alarm, ...ent.people.map(x => x.haid), ...ent.switches.map(x => x.haid), ...ent.cams.map(x => x.haid), ...ent.medias.flatMap(x => [x.haid, x.ma])].filter(Boolean);
@@ -888,7 +888,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const [updBusy, setUpdBusy] = useState({}); // id → timestamp : « Installation… » optimiste dès le clic (HA met du temps à passer in_progress)
   const updTimer = useRef(null);
   useEffect(() => () => clearTimeout(updTimer.current), []);
-  const updCall = (svc, id) => { try { if (hass && hass.callService) hass.callService('update', svc, { entity_id: id }); } catch {} };
+  const updCall = (svc, id) => { if (hass && hass.callService) hass.callService('update', svc, { entity_id: id }); };
   const askInstall = (u) => {
     if (updConfirm === u.id) { setUpdConfirm(null); clearTimeout(updTimer.current); setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updCall('install', u.id); return; }
     setUpdConfirm(u.id); clearTimeout(updTimer.current); updTimer.current = setTimeout(() => setUpdConfirm(null), 4000);
@@ -1644,7 +1644,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <SecGroup label="Installer">
             <div style={{ display: 'flex', gap: 4 }}>
               {upsAvail > 1 && <button onClick={() => { if (!updAllConfirm) { setUpdAllConfirm(true); setTimeout(() => setUpdAllConfirm(false), 4000); return; } setUpdAllConfirm(false); ups.filter(u => u.avail && u.prog === false).forEach(u => { setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updCall('install', u.id); }); }} style={secBtn(!!updAllConfirm)}>{updAllConfirm ? 'Confirmer ?' : 'Tout installer (' + upsAvail + ')'}</button>}
-              <button onClick={() => { try { if (hass && hass.callService && upsAll.length) hass.callService('homeassistant', 'update_entity', { entity_id: upsAll.map(u => u.id) }); } catch {} }} style={secBtn(false)}>{tr('Vérifier')}</button>
+              <button onClick={() => { if (hass && hass.callService && upsAll.length) hass.callService('homeassistant', 'update_entity', { entity_id: upsAll.map(u => u.id) }); }} style={secBtn(false)}>{tr('Vérifier')}</button>
             </div>
           </SecGroup>
         </SecBar>

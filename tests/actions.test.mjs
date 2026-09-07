@@ -235,27 +235,29 @@ test('les actions réellement possibles, avec leurs bornes', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Une commande qui part sans recours.
+// Un `catch` qui ne pouvait rien attraper.
 //
-// Quarante endroits écrivent encore `try { hass.callService(…) } catch {}` au
-// lieu de passer par `runPlan`. Deux choses s'y cachent.
+// Trente-six endroits écrivaient `try { hass.callService(…) } catch {}`.
+// `callService` rend une PROMESSE : un refus du serveur — permission manquante,
+// entité disparue, service inexistant — la rejette PLUS TARD, hors de portée
+// d'un bloc synchrone. Ce `catch` n'aurait attrapé qu'une erreur levée
+// sur-le-champ, ce que la garde `if (hass && hass.callService)` juste devant
+// rend déjà improbable.
 //
-// `callService` rend une PROMESSE. Le `try/catch` n'attrape que ce qui échoue
-// tout de suite ; un refus du serveur — permission manquante, entité disparue,
-// service inexistant — rejette la promesse plus tard, hors de portée du bloc.
-// Le `catch` donnait donc une impression de prudence sans couvrir ce qui échoue
-// vraiment. Et personne ne le voyait : on appuie, rien ne bouge, la console
-// reste muette.
+// Il ne protégeait donc rien, et faisait croire le contraire.
 //
-// `boot.jsx` pose maintenant un filet qui rend ces rejets visibles. Ce test
-// tient le compte pour que le motif ne se répande pas en attendant la migration
-// vers `runPlan` : un quarante et unième fait échouer la suite, et un de moins
-// aussi — pour qu'on descende le compteur plutôt que de le laisser mentir.
+// Ce qu'il ne cachait PAS, contrairement à ce qu'on pourrait croire : l'échec
+// est visible depuis toujours. Le rejet remonte jusqu'à l'écoute globale
+// d'`App.jsx`, qui affiche « Commande non exécutée — Home Assistant a refusé ou
+// n'a pas répondu ». Vérifié dans le navigateur en provoquant un rejet.
+//
+// C'est même pour cela que `commander()` RELANCE le rejet après l'avoir lu :
+// `runPlan` l'attrape pour en donner la raison, et sans cette relance le seul
+// canal d'erreur visible du dashboard ne verrait jamais passer une commande
+// refusée.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RACINE_SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
-
-const SANS_RECOURS = { 'App.jsx': 36, 'parametres.jsx': 3, 'state.js': 1 };
 
 function sansCommentaires(s) {
   const sansBloc = s.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -272,26 +274,41 @@ function sources(dossier = RACINE_SRC) {
   return out;
 }
 
-test('aucune commande de plus ne part sans recours', () => {
-  const vu = {};
+test('aucun appel de service n’est enveloppé d’un catch qui ne peut rien attraper', () => {
+  const menteurs = [];
   for (const [nom, p] of sources()) {
-    // Les commentaires sont retirés : celui de `boot.jsx` décrit le motif, et
-    // se comptait lui-même.
+    // Les commentaires sont retirés : ceux qui décrivent ce motif se
+    // compteraient eux-mêmes.
     const src = sansCommentaires(readFileSync(p, 'utf8'));
     for (const m of src.matchAll(/try\s*\{([\s\S]{0,400}?)\}\s*catch\s*\{\s*\}/g)) {
-      if (/call(Service|WS|Api)/.test(m[1])) vu[nom] = (vu[nom] || 0) + 1;
+      if (!/call(Service|WS|Api)/.test(m[1])) continue;
+      /* `await` change tout : il ramène le rejet DANS le bloc, et le `catch`
+       * l'attrape pour de bon. Deux appels s'écrivent ainsi — la résolution
+       * d'un média, la lecture de la config — et ils ont raison.
+       *
+       * La première version de ce test les signalait aussi, faute de faire la
+       * différence. Elle demandait de retirer un `try/catch` qui, lui,
+       * fonctionne. */
+      if (/\bawait\b/.test(m[1])) continue;
+      menteurs.push(`${nom} → ${m[1].trim().slice(0, 60)}`);
     }
   }
-  assert.deepEqual(vu, SANS_RECOURS,
-    'le compte des appels de service sans recours a changé : soit un de plus, soit un corrigé — dans les deux cas, mets cette liste à jour');
+  assert.deepEqual(menteurs, [],
+    'un appel de service est de nouveau enveloppé d’un try/catch : il ne peut pas attraper le rejet de la promesse, et laisse croire que si');
 });
 
-test('les rejets sans recours sont au moins rendus visibles', () => {
-  const boot = readFileSync(join(RACINE_SRC, 'boot.jsx'), 'utf8');
-  // Sans ce filet, un refus du serveur disparaît sans laisser de trace nulle
-  // part : ni écran, ni console.
-  assert.match(boot, /addEventListener\('unhandledrejection'/,
-    'le filet a disparu : une commande refusée redevient invisible');
-  assert.match(boot, /console\.error\('Loggia : promesse rejetée sans recours'/,
-    'le filet ne dit plus rien');
+test('le rejet d’une commande atteint le seul canal visible', () => {
+  const app = readFileSync(join(RACINE_SRC, 'App.jsx'), 'utf8');
+  // L'écoute globale est le seul endroit où un refus devient visible. Sans
+  // elle, tous les appels directs échouent en silence.
+  assert.match(app, /window\.addEventListener\('unhandledrejection', h\)/,
+    'l’écoute globale des rejets a disparu : une commande refusée redevient invisible');
+  assert.match(app, /setToast\('Commande non exécutée/,
+    'le toast d’échec a disparu');
+  // Et `commander` doit relancer : `runPlan` attrape le rejet pour en donner la
+  // raison, ce qui l'empêcherait d'atteindre l'écoute.
+  const i = app.indexOf('function commander(');
+  const corps = app.slice(i, app.indexOf('\n}', i));
+  assert.match(corps, /Promise\.reject\(Object\.assign\(new Error\(motif\), \{ code: 'service_error' \}\)\)/,
+    'commander avale de nouveau le rejet : les commandes qui passent par lui échoueront sans un mot');
 });
