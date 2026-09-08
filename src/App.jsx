@@ -639,7 +639,8 @@ const THEME_KEYS = ['--o-bg', '--o-bggrad', '--o-bg2', '--o-side1', '--o-side2',
   /* Les teintes des pieces. Elles suivent un theme qui n'a qu'une couleur,
    * et redeviennent celles d'avant des qu'on en change. */
   '--o-piece-ambre', '--o-piece-ambre-rgb', '--o-piece-tendre',
-  '--o-piece-tendre-rgb', '--o-piece-vert', '--o-piece-vert-rgb'];
+  '--o-piece-tendre-rgb', '--o-piece-vert', '--o-piece-vert-rgb',
+  '--o-piece-chambre', '--o-piece-chambre-rgb', '--o-piece-bain', '--o-piece-bain-rgb'];
 // Thèmes natifs Loggia (créés pour Loggia, adaptés des thèmes HA fournis). Chaque preset a une variante claire + sombre,
 // pilotée par le Mode d'affichage. Forme = entrée de applyVars (bg/surface/text/accent/radius/shadow/border/font/bggrad).
 const LOGGIA_PRESETS = {
@@ -813,13 +814,13 @@ const LOGGIA_PRESETS = {
         // L'avertissement garde sa chaleur : c'est ce qui le fait lire comme
         // un avertissement. Juste assez rabattu pour ne pas jurer.
         '--o-warn': '#f2c97d', '--o-warn-rgb': '242,201,125',
-        /* Les pièces. Une charte à une seule teinte ne peut pas les
-         * distinguer par la couleur — c'est l'icône qui les identifie, le
-         * canapé, les couverts, le lit. La couleur, elle, les échelonne :
-         * du bleu vif au bleu pâle, sans jamais sortir de la gamme. */
-        '--o-piece-ambre': '#7fb3d5', '--o-piece-ambre-rgb': '127,179,213',
-        '--o-piece-tendre': '#a9cfe8', '--o-piece-tendre-rgb': '169,207,232',
-        '--o-piece-vert': '#5fa8bf', '--o-piece-vert-rgb': '95,168,191',
+        /* Les teintes des PIÈCES ne sont pas reprises ici, et c'est un choix.
+         *
+         * Elles ont été ramenées dans la gamme une fois : sept pièces d'un
+         * même bleu, échelonnées par la clarté. Le résultat était cohérent et
+         * illisible — on ne repère plus la cuisine du coin de l'œil, il faut
+         * lire l'icône. Ces couleurs n'habillent pas, elles identifient, et
+         * une charte de marque ne l'emporte pas là-dessus. */
         // Au survol, la lumière plutôt que l'ombre : c'est le geste de la charte.
         '--o-shadow-hover': '0 22px 48px rgba(2,96,147,.4)',
       },
@@ -857,12 +858,6 @@ const LOGGIA_PRESETS = {
         // 4,14:1 sur blanc : sous le seuil. Assombri a 4,82:1.
         '--o-warn': '#9a6809', '--o-warn-rgb': '154,104,9',
         // Mêmes rôles, assombris : sur blanc c'est la profondeur qui range.
-        // 4,38:1 et 3,33:1 au premier jet, tous deux sous le seuil : les
-        // deux teintes les plus claires de l'échelle sont aussi celles qui
-        // souffrent le plus du passage sur blanc.
-        '--o-piece-ambre': '#37769c', '--o-piece-ambre-rgb': '55,118,156',
-        '--o-piece-tendre': '#437c9f', '--o-piece-tendre-rgb': '67,124,159',
-        '--o-piece-vert': '#2b7a8c', '--o-piece-vert-rgb': '43,122,140',
         '--o-shadow-hover': '0 18px 40px rgba(5,31,45,.14)',
       },
     },
@@ -1087,10 +1082,10 @@ function uiconDeMdi(mdi) {
 const PIECES = [
   { name: 'Séjour', bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13, icon: <Ico name="couch" color="var(--o-accent)" size={22} />, status: { kind: 'active', n: 2 }, temp: '18.1°', tc: 'var(--o-accent-soft)', hum: '63%', badge: '412 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' },
   { name: 'Cuisine', bg: 'rgba(var(--o-piece-ambre-rgb),.16)', box: 44, rad: 13, icon: <Ico name="utensils" color="var(--o-piece-ambre)" size={22} />, status: { kind: 'active', n: 1 }, temp: '22.0°', tc: 'var(--o-piece-ambre)', hum: '53%', badge: '486 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' },
-  { name: 'Chambre', bg: 'rgba(var(--o-purple-rgb),.16)', box: 44, rad: 13, icon: <Ico name="bed-alt" color="var(--o-purple)" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: 'var(--o-purple)', hum: '60%', badge: '529 ppm', bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' },
+  { name: 'Chambre', bg: 'rgba(var(--o-piece-chambre-rgb),.16)', box: 44, rad: 13, icon: <Ico name="bed-alt" color="var(--o-piece-chambre)" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: 'var(--o-piece-chambre)', hum: '60%', badge: '529 ppm', bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' },
   { name: 'Chambre enfant', bg: 'rgba(var(--o-piece-tendre-rgb),.16)', box: 44, rad: 13, icon: <Ico name="teddy-bear" color="var(--o-piece-tendre)" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: 'var(--o-piece-tendre)', hum: '61%', badge: '641 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
   { name: 'Bureau', bg: 'rgba(var(--o-piece-ambre-rgb),.16)', box: 44, rad: 13, icon: <Ico name="briefcase" color="var(--o-piece-ambre)" size={22} />, status: { kind: 'repos' }, temp: '17.8°', tc: 'var(--o-piece-ambre)', hum: '64%', badge: '712 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
-  { name: 'Salle de bain', bg: 'rgba(var(--o-cyan-rgb),.16)', box: 44, rad: 13, icon: <Ico name="hot-tub" color="var(--o-cyan)" size={22} />, status: { kind: 'repos' }, temp: '15.5°', tc: 'var(--o-cyan)', hum: '80%', badge: '498 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' },
+  { name: 'Salle de bain', bg: 'rgba(var(--o-piece-bain-rgb),.16)', box: 44, rad: 13, icon: <Ico name="hot-tub" color="var(--o-piece-bain)" size={22} />, status: { kind: 'repos' }, temp: '15.5°', tc: 'var(--o-piece-bain)', hum: '80%', badge: '498 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' },
   { name: 'Extérieur', bg: 'rgba(var(--o-piece-vert-rgb),.16)', box: 36, rad: 11, icon: <Ico name="tree" color="var(--o-piece-vert)" size={22} />, status: { kind: 'ext' }, temp: '6.2°', tc: 'var(--o-accent-soft)', hum: '84%', badge: 'Vent 12', bc: 'var(--o-text2)', bbg: 'var(--o-bd3)' },
 ];
 
@@ -10112,39 +10107,51 @@ function CvCalendrier({ id, hass, onOpen = null }) {
       aria-label={onOpen ? tr('Ouvrir le calendrier') : undefined}
       style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden', cursor: onOpen ? 'pointer' : undefined }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 25, fontWeight: 400, textTransform: 'capitalize', letterSpacing: '-.01em' }}>{mois}</span>
-        <span style={{ fontSize: 34, fontWeight: 800, lineHeight: 1, letterSpacing: '-.02em' }}>{auj.getDate()}</span>
+        {/* Le mois et le quantieme au MEME poids, l'un a gauche, l'autre a
+          * droite. Le quantieme etait deux fois plus gras : il ecrasait le
+          * mois, et la ligne se lisait comme un chiffre suivi d'une legende
+          * plutot que comme une date. */}
+        <span style={{ fontSize: 31, fontWeight: 300, lineHeight: 1.05, textTransform: 'capitalize', letterSpacing: '-.02em' }}>{mois}</span>
+        <span style={{ fontSize: 31, fontWeight: 300, lineHeight: 1.05, letterSpacing: '-.02em' }}>{auj.getDate()}</span>
       </div>
       <div style={{ flex: 1, minHeight: 10 }} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', rowGap: 6, textAlign: 'center' }}>
         {semaine.map((d, i) => <span key={'e' + i} style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em', color: 'var(--o-text3)', textTransform: 'uppercase' }}>{d.toLocaleDateString(locale(), { weekday: 'narrow' })}</span>)}
-        {/* La marque est SUR le jour, pas sous lui : un point en dessous
-          * demandait une ligne entiere pour dire ce qu'un anneau dit sur
-          * place, et laissait le chiffre muet. Les jours passes s'effacent —
-          * la semaine se lit alors d'un coup, de ce qui est fait vers ce qui
-          * vient. */}
+        {/* Un point SOUS le jour, et le jour même dans un carré arrondi.
+          *
+          * C'était l'inverse : un anneau autour du chiffre, épaissi à deux
+          * rendez-vous. L'anneau tenait sur une seule ligne, ce qui était son
+          * seul mérite — il se confondait avec la pastille d'aujourd'hui, deux
+          * cercles concentriques quand les deux tombaient ensemble, et il
+          * serrait le chiffre qu'il devait mettre en avant.
+          *
+          * Le point coûte une ligne de quatre pixels. En échange, le chiffre
+          * respire, la marque ne ressemble plus à la pastille, et deux points
+          * disent « chargé » plus vite qu'un trait plus épais.
+          *
+          * Les jours passés s'effacent : la semaine se lit d'un coup, de ce
+          * qui est fait vers ce qui vient. */}
         {semaine.map((d, i) => {
           const cJour = d.toDateString() === auj.toDateString();
           const passe = !cJour && d < auj;
           const n = parJour.get(cleJour(d)) || 0;
           return (
-            <span key={'j' + i} style={{ position: 'relative', width: 26, height: 26, justifySelf: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {/* L'anneau : fin quand le jour vient, efface quand il est passe.
-                * Deux rendez-vous l'epaississent — c'est la seule facon de
-                * distinguer une journee chargee d'une journee ordinaire sans
-                * ecrire un chiffre de plus. */}
-              {n > 0 && !cJour && (
-                <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%',
-                  border: (n > 1 ? 2 : 1.5) + 'px solid var(--o-accent-soft)', opacity: passe ? .3 : 1 }} />
-              )}
-              {cJour && <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />}
-              {/* Aujourd'hui ET un rendez-vous : la pastille garde son halo,
-                * sinon le jour le plus important serait le seul sans marque. */}
-              {cJour && n > 0 && (
-                <span aria-hidden="true" style={{ position: 'absolute', inset: -3, borderRadius: '50%', border: '1.5px solid var(--o-accent-soft)', opacity: .55 }} />
-              )}
-              <span style={{ position: 'relative', fontSize: 12, fontWeight: cJour ? 800 : n > 0 ? 700 : 600,
-                color: cJour ? '#fff' : 'var(--o-text1)', opacity: cJour ? 1 : passe ? .72 : n > 0 ? 1 : .86 }}>{d.getDate()}</span>
+            <span key={'j' + i} style={{ justifySelf: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+              {/* Carré arrondi plutôt que rond : il tient le chiffre sans le
+                * serrer, et ne peut pas se lire comme un point de plus. */}
+              <span style={{ width: 26, height: 26, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: cJour ? 'var(--o-accent-fond)' : 'transparent' }}>
+                <span style={{ fontSize: 12.5, fontWeight: cJour ? 700 : 500,
+                  color: cJour ? '#fff' : 'var(--o-text1)', opacity: cJour ? 1 : passe ? .5 : .92 }}>{d.getDate()}</span>
+              </span>
+              {/* Aujourd'hui garde son point : sans lui, le jour le plus
+                * important serait le seul muet sur ce qu'il contient. */}
+              <span aria-hidden="true" style={{ height: 4, display: 'flex', gap: 3, alignItems: 'center' }}>
+                {n > 0 && Array.from({ length: Math.min(n, 2) }).map((_, k) => (
+                  <span key={k} style={{ width: 4, height: 4, borderRadius: '50%',
+                    background: 'var(--o-accent-soft)', opacity: passe ? .35 : cJour ? 1 : .85 }} />
+                ))}
+              </span>
             </span>
           );
         })}

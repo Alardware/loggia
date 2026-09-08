@@ -64,7 +64,9 @@ button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-sce
      Un thème monochrome, lui, peut les ramener dans sa gamme. */
   --o-piece-ambre:#ff9d3c; --o-piece-ambre-rgb:255,157,60;   /* cuisine, bureau */
   --o-piece-tendre:#f472b6; --o-piece-tendre-rgb:244,114,182; /* chambre enfant */
-  --o-piece-vert:var(--o-ok); --o-piece-vert-rgb:var(--o-ok-rgb); /* extérieur */
+  --o-piece-chambre:#a78bfa; --o-piece-chambre-rgb:167,139,250; /* chambre */
+  --o-piece-bain:#54c8f0; --o-piece-bain-rgb:84,200,240;        /* salle de bain */
+  --o-piece-vert:#34d399; --o-piece-vert-rgb:52,211,153;        /* extérieur */
   /* accents décoratifs devenus theme-aware (texte lisible en clair) : or, violet, cyan */
   --o-gold:#ffd166; --o-gold-rgb:255,209,102; --o-purple:#a78bfa; --o-purple-rgb:167,139,250; --o-cyan:#54c8f0; --o-cyan-rgb:84,200,240;
   /* ombre multi-couches (profondeur réaliste : 2 couches douces empilées, pas une grosse tache) */

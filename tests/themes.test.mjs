@@ -127,16 +127,51 @@ test('The Projekt reteint les accents décoratifs, dans les deux modes', () => {
   // trait de feutre. Chaque accent décoratif doit donc être redéfini — et dans
   // les DEUX variantes, sans quoi le mode clair récupère le violet.
   const p = projekt();
-  const attendus = ['--o-purple', '--o-cyan', '--o-gold', '--o-cold', '--o-warn', '--o-sky',
-    // Et les teintes des pièces. Sans elles, l'orange de la cuisine et le rose
-    // de la chambre d'enfant traversaient le thème — c'est ce qui restait de
-    // visible après le premier passage.
-    '--o-piece-ambre', '--o-piece-tendre', '--o-piece-vert'];
+  const attendus = ['--o-purple', '--o-cyan', '--o-gold', '--o-cold', '--o-warn', '--o-sky'];
   for (const [nom, part] of [['sombre', p.dark], ['clair', p.light]]) {
     const manquants = attendus.filter(k => part.indexOf("'" + k + "'") < 0);
     assert.deepEqual(manquants, [],
       `variante ${nom} : ces accents retombent sur leur valeur par défaut, hors charte`);
   }
+});
+
+test('aucun thème ne reteint les pièces', () => {
+  // Essayé une fois, sur The Projekt : sept pièces d'un même bleu, échelonnées
+  // par la clarté. Cohérent, et illisible — on ne repère plus la cuisine du
+  // coin de l'œil, il faut lire l'icône.
+  //
+  // Ces teintes n'habillent pas, elles identifient. Une charte de marque ne
+  // l'emporte pas là-dessus. Le jeton existe pour qu'aucune valeur ne traîne
+  // en dur, pas pour qu'un thème s'en serve.
+  const jetons = ['--o-piece-ambre', '--o-piece-tendre', '--o-piece-vert',
+    '--o-piece-chambre', '--o-piece-bain'];
+  const bloc = blocPresets();
+  const repris = jetons.filter(k => bloc.indexOf("'" + k + "'") >= 0);
+  assert.deepEqual(repris, [],
+    'un thème reteint les couleurs des pièces : elles servent à les reconnaître, pas à décorer');
+});
+
+test('les pièces ne suivent aucun accent décoratif', () => {
+  // La Chambre passait par `--o-purple`, qui est AUSSI la couleur des volets ;
+  // la Salle de bain par `--o-cyan`. Reteindre les volets pour une charte
+  // emportait donc les deux pièces avec eux, sans que rien ne le laisse
+  // prévoir. Chacune a maintenant son jeton.
+  //
+  // Le contrôle ne porte que sur les trois champs d'IDENTITÉ — le lavis, la
+  // couleur de l'icône et celle du relevé. `bc` et `bbg`, eux, peignent la
+  // pastille de CO2 : celle-là doit rester sémantique, verte puis ambre puis
+  // rouge, et emprunte `--o-warn2` à bon droit.
+  const i = app.indexOf('const PIECES = [');
+  const bloc = app.slice(i, app.indexOf('\n];', i));
+  const identite = [
+    ...[...bloc.matchAll(/\bbg: '([^']*)'/g)].map(m => m[1]),
+    ...[...bloc.matchAll(/color="([^"]*)"/g)].map(m => m[1]),
+    ...[...bloc.matchAll(/\btc: '([^']*)'/g)].map(m => m[1]),
+  ];
+  assert.ok(identite.length >= 20, 'les champs d’identité des pièces n’ont pas été relus correctement');
+  const empruntes = identite.filter(v => /--o-(purple|cyan|warn2|ok)\b/.test(v));
+  assert.deepEqual(empruntes, [],
+    'une pièce emprunte un jeton qui sert à autre chose : le reteindre ailleurs la déplacera aussi');
 });
 
 test('The Projekt distingue l’accent qui remplit de celui qui écrit', () => {
