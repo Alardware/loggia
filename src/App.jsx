@@ -16,7 +16,7 @@ const ParametresContent = lazy(() => import('./views/parametres.jsx').then(m => 
 const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling } from './discovery.js';
 import { planAction as actionsPlan, availableActions as actionsAvailable, runPlan, actionCtx,
-  datesEvenement, finApresDebut, peut, commander, commanderService } from './actions.js';
+  datesEvenement, finApresDebut, champsDepuisEvenement, peut, commander, commanderService } from './actions.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
 import { deviceCard, presentableDevices, presentationSummary, cleCamera } from './present.js';
 import { healthReport, healthText } from './health.js';
@@ -9945,7 +9945,13 @@ function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
  * le lendemain. C'est la convention iCalendar, et l'oublier fabrique un
  * événement de durée nulle que rien n'affiche.
  */
-function NouvelEvenement({ hass, cals, jour, onFait, onClose }) {
+function NouvelEvenement({ hass, cals, jour, evenement = null, onFait, onClose }) {
+  /* Le meme formulaire cree et modifie. Les champs sont les memes, les regles
+   * de date aussi ; seuls le titre du panneau, le libelle du bouton et la
+   * commande envoyee changent. En faire deux composants aurait duplique la
+   * validation, c'est-a-dire l'endroit ou une divergence ne se verrait pas. */
+  const edition = !!(evenement && evenement.uid);
+  const depart = edition ? champsDepuisEvenement(evenement) : null;
   const dd = (n) => String(n).padStart(2, '0');
   const isoJour = (d) => d.getFullYear() + '-' + dd(d.getMonth() + 1) + '-' + dd(d.getDate());
   /* L'heure proposée est la prochaine demie, pas l'heure courante : personne ne
@@ -9955,13 +9961,14 @@ function NouvelEvenement({ hass, cals, jour, onFait, onClose }) {
     d.setMinutes(d.getMinutes() >= 30 ? 60 : 30, 0, 0);
     return dd(d.getHours()) + ':' + dd(d.getMinutes());
   };
-  const [cal, setCal] = useState(cals[0]);
-  const [titre, setTitre] = useState('');
-  const [journee, setJournee] = useState(false);
-  const [dDebut, setDDebut] = useState(() => isoJour(jour));
-  const [dFin, setDFin] = useState(() => isoJour(jour));
-  const [hDebut, setHDebut] = useState(prochaineDemie);
+  const [cal, setCal] = useState(edition ? evenement._cal : cals[0]);
+  const [titre, setTitre] = useState(edition ? (evenement.summary || '') : '');
+  const [journee, setJournee] = useState(edition ? depart.journee : false);
+  const [dDebut, setDDebut] = useState(() => (edition ? depart.dDebut : isoJour(jour)));
+  const [dFin, setDFin] = useState(() => (edition ? depart.dFin : isoJour(jour)));
+  const [hDebut, setHDebut] = useState(() => (edition ? (depart.hDebut || prochaineDemie()) : prochaineDemie()));
   const [hFin, setHFin] = useState(() => {
+    if (edition && depart.hFin) return depart.hFin;
     const [h, m] = prochaineDemie().split(':');
     return dd((Number(h) + 1) % 24) + ':' + m;
   });
@@ -9980,14 +9987,22 @@ function NouvelEvenement({ hass, cals, jour, onFait, onClose }) {
       setErreur(tr('La fin doit venir après le début.'));
       return;
     }
-    const options = datesEvenement(journee, dDebut, hDebut, dFin, hFin);
+    const dates = datesEvenement(journee, dDebut, hDebut, dFin, hFin);
     setErreur(null); setEnvoi(true);
     /* `planAction` + `runPlan` plutôt que `commander` : celui-ci ne rend pas de
      * promesse — il signale ses échecs au toast global et rend la valeur
      * envoyée. Un formulaire, lui, doit savoir QUAND c'est fait, pour se fermer
      * et rafraîchir la liste, et POURQUOI ça ne l'est pas, pour le dire sur
      * place plutôt que dans un bandeau qui passe. */
-    const p = actionsPlan(cal, 'creer_evenement', t, actionCtx(hass), options);
+    /* `calendar/event/update` prend les nouvelles valeurs dans un OBJET
+     * `event`, pas a plat — le serveur le dit lui-meme si on l'oublie. Et
+     * `recurrence_id`, quand il existe, dit QUELLE occurrence d'une serie on
+     * touche : sans lui, Home Assistant ne saurait pas laquelle. */
+    const p = edition
+      ? actionsPlan(evenement._cal, 'modifier_evenement', evenement.uid, actionCtx(hass),
+        Object.assign({ event: { summary: t, ...dates } },
+          evenement.recurrence_id ? { recurrence_id: evenement.recurrence_id } : null))
+      : actionsPlan(cal, 'creer_evenement', t, actionCtx(hass), dates);
     if (!p.ok) { setEnvoi(false); setErreur(p.reason || tr('Home Assistant a refusé.')); return; }
     const r = await runPlan(hass, p);
     setEnvoi(false);
@@ -10005,7 +10020,7 @@ function NouvelEvenement({ hass, cals, jour, onFait, onClose }) {
   return (
     <div style={{ marginBottom: 14, padding: 13, borderRadius: 16, background: 'var(--o-s1)', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ flex: 1, fontSize: 13, fontWeight: 800 }}>{tr('Nouvel événement')}</span>
+        <span style={{ flex: 1, fontSize: 13, fontWeight: 800 }}>{edition ? tr('Modifier l’événement') : tr('Nouvel événement')}</span>
         <button onClick={onClose} aria-label={tr('Fermer')}
           style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'var(--o-s2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Fi i="cross" size={12} />
@@ -10020,7 +10035,7 @@ function NouvelEvenement({ hass, cals, jour, onFait, onClose }) {
           aria-label={tr('Titre de l’événement')} placeholder={tr('Dentiste, dîner, anniversaire…')} style={champ} />
       </div>
 
-      {cals.length > 1 && (
+      {!edition && cals.length > 1 && (
         <div>
           <div style={legende}>{tr('AGENDA')}</div>
           <select value={cal} onChange={e => setCal(e.target.value)} aria-label={tr('Agenda')} style={champ}>
@@ -10057,7 +10072,7 @@ function NouvelEvenement({ hass, cals, jour, onFait, onClose }) {
       <button onClick={envoyer} disabled={envoi}
         style={{ padding: '12px 16px', minHeight: 44, borderRadius: 14, border: 'none', cursor: envoi ? 'default' : 'pointer',
           background: 'var(--o-accent-fond)', color: '#fff', fontSize: 13, fontWeight: 800, opacity: envoi ? .6 : 1 }}>
-        {envoi ? tr('Envoi…') : tr('Créer l’événement')}
+        {envoi ? tr('Envoi…') : edition ? tr('Enregistrer') : tr('Créer l’événement')}
       </button>
     </div>
   );
@@ -10078,6 +10093,12 @@ function FeuilleCalendrier({ hass, onClose }) {
   /* Incremente apres une creation : le sondage de l'agenda relit aussitot,
    * au lieu d'attendre son quart d'heure. */
   const [tick, setTick] = useState(0);
+  const [edition, setEdition] = useState(null);
+  /* L'uid du rendez-vous dont on demande confirmation avant d'effacer. Un
+   * seul a la fois : deux confirmations ouvertes, c'est un clic de trop au
+   * mauvais endroit. */
+  const [confirme, setConfirme] = useState(null);
+  const [errListe, setErrListe] = useState(null);
   const choisisSig = choisis ? choisis.join('|') : '';
   const calsSig = tousCals.join('|');
   const actifs = useMemo(() => {
@@ -10106,6 +10127,25 @@ function FeuilleCalendrier({ hass, onClose }) {
    * s'afficherait pour ouvrir un formulaire condamne d'avance. Calcule a
    * chaque rendu — il y a une poignee d'agendas, pas un millier. */
   const calsEcrivables = tousCals.filter(k => peut(hass, k, 'creer_evenement'));
+
+  /* Supprimer.
+   *
+   * `portee` vaut '' pour la seule occurrence — le defaut de Home Assistant —
+   * ou 'THISANDFUTURE' pour celle-ci et les suivantes. `recurrence_id` ne part
+   * que s'il existe : sur un rendez-vous unique il n'y en a pas, et l'envoyer
+   * vide ferait echouer la commande. */
+  const supprimer = async (e, portee) => {
+    const options = {};
+    if (e.recurrence_id) {
+      options.recurrence_id = e.recurrence_id;
+      if (portee) options.recurrence_range = portee;
+    }
+    const p = actionsPlan(e._cal, 'supprimer_evenement', e.uid, actionCtx(hass), options);
+    if (!p.ok) { setErrListe(p.reason || tr('Home Assistant a refusé.')); return; }
+    const r = await runPlan(hass, p);
+    if (!r || !r.ok) { setErrListe((r && r.reason) ? String(r.reason) : tr('Home Assistant a refusé.')); return; }
+    setConfirme(null); setErrListe(null); setTick(t => t + 1);
+  };
 
   const cleJour = (d) => d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
   const dateDe = (e) => new Date(e.start.dateTime || (e.start.date + 'T00:00:00'));
@@ -10164,6 +10204,12 @@ function FeuilleCalendrier({ hass, onClose }) {
           onFait={() => { setNouveau(false); setTick(t => t + 1); }} />
       )}
 
+      {edition && (
+        <NouvelEvenement hass={hass} cals={calsEcrivables} jour={choisi} evenement={edition}
+          onClose={() => setEdition(null)}
+          onFait={() => { setEdition(null); setTick(t => t + 1); }} />
+      )}
+
       {reglages && (
         <div style={{ marginBottom: 14, padding: 12, borderRadius: 16, background: 'var(--o-s1)', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78 }}>{tr('AGENDAS AFFICHÉS')}</div>
@@ -10218,16 +10264,71 @@ function FeuilleCalendrier({ hass, onClose }) {
           ? <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text1)', opacity: .62, paddingBottom: 4 }}>{tr('Rien de prévu')}</div>
           : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {duJour.map((e, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 13, background: 'var(--o-s1)' }}>
-                  <span style={{ width: 3, alignSelf: 'stretch', borderRadius: 2, background: 'var(--o-accent-soft)', flexShrink: 0 }} />
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.summary}</span>
-                    {tousCals.length > 1 && e._cal && <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text1)', opacity: .6, marginTop: 1 }}>{nomCal(e._cal)}</span>}
-                  </span>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--o-text1)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{heureDe(e)}</span>
-                </div>
-              ))}
+              {duJour.map((e, i) => {
+                /* Un agenda peut savoir creer sans savoir modifier : les trois
+                 * bits sont independants. On demande donc les deux separement,
+                 * et l'`uid` en plus — sans lui, aucune des deux commandes ne
+                 * sait de quel rendez-vous on parle. */
+                const modifiable = !!(e._cal && e.uid && peut(hass, e._cal, 'modifier_evenement'));
+                const supprimable = !!(e._cal && e.uid && peut(hass, e._cal, 'supprimer_evenement'));
+                const aConfirmer = confirme === e.uid;
+                const btnLigne = {
+                  width: 32, height: 32, borderRadius: 10, border: 'none', background: 'var(--o-s2)',
+                  color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                };
+                const btnTexte = (fort) => ({
+                  padding: '8px 12px', minHeight: 36, borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                  border: fort ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)',
+                  background: fort ? 'rgba(var(--o-bad-rgb),.16)' : 'transparent',
+                  color: fort ? 'var(--o-bad)' : 'var(--o-text1)',
+                });
+                return (
+                  <div key={e.uid || i} style={{ padding: '10px 12px', borderRadius: 13, background: 'var(--o-s1)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                      <span style={{ width: 3, alignSelf: 'stretch', minHeight: 26, borderRadius: 2, background: 'var(--o-accent-soft)', flexShrink: 0 }} />
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.summary}</span>
+                        {tousCals.length > 1 && e._cal && <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text1)', opacity: .6, marginTop: 1 }}>{nomCal(e._cal)}</span>}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--o-text1)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{heureDe(e)}</span>
+                      {modifiable && (
+                        <button onClick={() => { setEdition(e); setNouveau(false); setConfirme(null); }}
+                          aria-label={tr('Modifier') + ' · ' + e.summary} style={btnLigne}><Fi i="pencil" size={12} /></button>
+                      )}
+                      {supprimable && (
+                        <button onClick={() => { setConfirme(aConfirmer ? null : e.uid); setErrListe(null); }}
+                          aria-label={tr('Supprimer') + ' · ' + e.summary} aria-expanded={aConfirmer}
+                          style={{ ...btnLigne, background: aConfirmer ? 'rgba(var(--o-bad-rgb),.16)' : 'var(--o-s2)', color: aConfirmer ? 'var(--o-bad)' : 'var(--o-text1)' }}><Fi i="trash" size={12} /></button>
+                      )}
+                    </div>
+
+                    {/* Supprimer est irreversible : on demande, et le bouton
+                      * dangereux ne se pose pas la ou etait le bouton innocent.
+                      * Un rendez-vous qui se repete ouvre un choix de plus —
+                      * sans lui, on ne saurait pas si l'on efface une occurrence
+                      * ou toute la serie, et le defaut silencieux de Home
+                      * Assistant est « celle-ci seulement ». */}
+                    {aConfirmer && (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+                        <span style={{ flex: '1 1 100%', fontSize: 12, fontWeight: 600, color: 'var(--o-text1)', opacity: .8 }}>
+                          {e.recurrence_id ? tr('Ce rendez-vous se répète. Que supprimer ?') : tr('Supprimer ce rendez-vous ?')}
+                        </span>
+                        <button onClick={() => supprimer(e, '')} style={btnTexte(true)}>
+                          {e.recurrence_id ? tr('Cette fois') : tr('Supprimer')}
+                        </button>
+                        {e.recurrence_id && (
+                          <button onClick={() => supprimer(e, 'THISANDFUTURE')} style={btnTexte(true)}>{tr('Celle-ci et les suivantes')}</button>
+                        )}
+                        <button onClick={() => setConfirme(null)} style={btnTexte(false)}>{tr('Annuler')}</button>
+                      </div>
+                    )}
+                    {aConfirmer && errListe && (
+                      <div role="alert" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)', marginTop: 8 }}>{errListe}</div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
       </div>

@@ -497,23 +497,35 @@ function parcoursDemo(cid) {
   return { title: 'Podcasts', children: [] };
 }
 
+/* Ce que la demo retient des gestes faits sur l'agenda.
+ *
+ * Sans cette memoire, supprimer un rendez-vous ne se voyait pas : la liste
+ * se reconstruit a chaque lecture, l'evenement revenait aussitot, et la
+ * demonstration montrait un geste sans effet — exactement le defaut que le
+ * reste du dashboard s'emploie a eviter. */
+const calSupprimes = new Set();
+const calModifies = new Map();
+
 function calendrierDemo(id) {
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
-  if (id === 'calendar.travail') return [
-    { summary: 'Point d equipe', start: { dateTime: h(1, 9) }, end: { dateTime: h(1, 10) } },
-    { summary: 'Livrable client', start: { dateTime: h(3, 17) }, end: { dateTime: h(3, 18) } },
-  ];
-  return [
-    { summary: 'Ramassage des poubelles', start: { date: j(1) }, end: { date: j(2) } },
-    { summary: 'Café avec Sam', start: { dateTime: h(2, 10) }, end: { dateTime: h(2, 11) } },
-    { summary: 'Contrôle chaudière', start: { dateTime: h(4, 14) }, end: { dateTime: h(4, 15) } },
+  const vivants = (l) => l
+    .filter(e => !calSupprimes.has(e.uid))
+    .map(e => (calModifies.has(e.uid) ? { ...e, ...calModifies.get(e.uid) } : e));
+  if (id === 'calendar.travail') return vivants([
+    { uid: 'demo-equipe', summary: 'Point d equipe', start: { dateTime: h(1, 9) }, end: { dateTime: h(1, 10) } },
+    { uid: 'demo-livrable', summary: 'Livrable client', start: { dateTime: h(3, 17) }, end: { dateTime: h(3, 18) } },
+  ]);
+  return vivants([
+    { uid: 'demo-poubelles', summary: 'Ramassage des poubelles', start: { date: j(1) }, end: { date: j(2) } },
+    { uid: 'demo-cafe', summary: 'Café avec Sam', start: { dateTime: h(2, 10) }, end: { dateTime: h(2, 11) } },
+    { uid: 'demo-chaudiere', summary: 'Contrôle chaudière', start: { dateTime: h(4, 14) }, end: { dateTime: h(4, 15) } },
     // Un rendez-vous AUJOURD'HUI et une journee a deux : sans eux, deux etats
     // du calendrier ne se voyaient nulle part — le halo du jour courant et
     // l'anneau epaissi d'une journee chargee.
-    { summary: 'Livraison colis', start: { dateTime: h(0, 16) }, end: { dateTime: h(0, 17) } },
-    { summary: 'Visite du ramoneur', start: { dateTime: h(2, 15) }, end: { dateTime: h(2, 16) } },
-  ];
+    { uid: 'demo-colis', summary: 'Livraison colis', start: { dateTime: h(0, 16) }, end: { dateTime: h(0, 17) } },
+    { uid: 'demo-ramoneur', summary: 'Visite du ramoneur', start: { dateTime: h(2, 15) }, end: { dateTime: h(2, 16) } },
+  ]);
 }
 
 export function installerDemo() {
@@ -646,6 +658,27 @@ export function installerDemo() {
       if (msg && msg.type === 'loggia/veilles/config') {
         return Promise.resolve({ config: veillesPatch(msg.patch) });
       }
+      /* Modifier et supprimer un rendez-vous : les seules commandes du
+       * dashboard qui ne passent pas par un service. Sans elles ici, le geste
+       * echouerait sur « pas de composant serveur » et la demo montrerait un
+       * bouton qui ne fait rien. */
+      if (msg && msg.type === 'calendar/event/delete') {
+        calSupprimes.add(msg.uid);
+        return Promise.resolve({});
+      }
+      if (msg && msg.type === 'calendar/event/update') {
+        const ev = msg.event || {};
+        const patch = { summary: ev.summary };
+        if (ev.start_date) { patch.start = { date: ev.start_date }; patch.end = { date: ev.end_date }; }
+        else if (ev.start_date_time) {
+          // La demo garde l'heure locale telle qu'envoyee : `T` a la place de
+          // l'espace suffit a en refaire une date que le dashboard sait lire.
+          patch.start = { dateTime: String(ev.start_date_time).replace(' ', 'T') };
+          patch.end = { dateTime: String(ev.end_date_time).replace(' ', 'T') };
+        }
+        calModifies.set(msg.uid, patch);
+        return Promise.resolve({});
+      }
       if (msg && msg.type === 'loggia/discovery') return Promise.resolve({ index: indexDemo(states) });
       return Promise.reject(new Error('démonstration : pas de composant serveur'));
     },
@@ -664,11 +697,11 @@ export function installerDemo() {
 
   // Un calendrier dans les états, pour que la carte Agenda se montre.
   /* Deux agendas, et un seul qui accepte qu'on y ecrive : `supported_features`
-   * a 1 est le bit CREATE_EVENT de Home Assistant. Sans cet ecart, la demo ne
-   * montrerait pas ce qui compte — le bouton n'apparait que pour les agendas
-   * ou l'on peut vraiment creer, et « Travail » reste en lecture seule comme
-   * l'est un abonnement iCal. */
-  states['calendar.maison'] = s('off', { friendly_name: 'Calendrier maison', supported_features: 1 });
+   * a 7 vaut creer + supprimer + modifier ; a 0, rien. Sans cet ecart, la demo
+   * ne montrerait pas ce qui compte — les boutons n'apparaissent que la ou le
+   * geste aboutira, et « Travail » reste en lecture seule comme l'est un
+   * abonnement iCal. */
+  states['calendar.maison'] = s('off', { friendly_name: 'Calendrier maison', supported_features: 7 });
   states['calendar.travail'] = s('off', { friendly_name: 'Travail', supported_features: 0 });
 
   // ── 3. Le badge ───────────────────────────────────────────────────────────

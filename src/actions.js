@@ -203,6 +203,28 @@ const PLANS = {
       accepte: ['description', 'location',
         'start_date_time', 'end_date_time', 'start_date', 'end_date'],
     },
+    /* Modifier et supprimer ne sont PAS des services.
+     *
+     * Home Assistant n'expose que `create_event` et `get_events` ; les deux
+     * autres gestes passent par des commandes WebSocket. Le moteur les porte
+     * quand meme : la verification de capacite, le refus explique et le canal
+     * d'echec valent pour eux comme pour le reste. Seul le dernier metre
+     * change, et `runPlan` s'en charge.
+     *
+     * L'identifiant `uid` vient de l'API des agendas, qui le rend avec chaque
+     * evenement — verifie : il est present partout, aux cotes de
+     * `recurrence_id` et `rrule`.
+     *
+     * `event` est un OBJET imbrique, pas des champs a plat : le serveur le dit
+     * lui-meme quand on l'omet — « required key not provided at 'event' ». */
+    modifier_evenement: {
+      ws: 'calendar/event/update', field: 'uid', kind: 'raw',
+      accepte: ['event', 'recurrence_id', 'recurrence_range'],
+    },
+    supprimer_evenement: {
+      ws: 'calendar/event/delete', field: 'uid', kind: 'raw',
+      accepte: ['recurrence_id', 'recurrence_range'],
+    },
   },
   siren: { turn_on: { service: 'turn_on' }, turn_off: { service: 'turn_off' } },
 };
@@ -397,7 +419,9 @@ export function planAction(entityId, capability, value, ctx = {}, options = {}) 
   }
   if (!plan) return { ok: false, reason: 'aucune traduction connue pour « ' + capability + ' »' };
 
-  if (services && !(services[domaineAppele] && services[domaineAppele][plan.service])) {
+  // Une commande WebSocket n'est pas un service : la chercher dans la liste
+  // des services la declarerait absente a tort.
+  if (!plan.ws && services && !(services[domaineAppele] && services[domaineAppele][plan.service])) {
     return { ok: false, reason: 'service absent : ' + domaineAppele + '.' + plan.service };
   }
 
@@ -412,6 +436,15 @@ export function planAction(entityId, capability, value, ctx = {}, options = {}) 
     if (x !== undefined && x !== null && x !== '') data[k] = x;
   });
 
+  if (plan.ws) {
+    /* La commande WebSocket porte l'entite DANS son message, pas dans une
+     * cible a part : `callWS({ type, entity_id, uid, … })`. */
+    return {
+      ok: true, domain: domaineAppele, ws: plan.ws, target: null,
+      data: { entity_id: entityId, ...data },
+      clamped: false, bounds: null, available: caps.available,
+    };
+  }
   return {
     ok: true,
     domain: domaineAppele,
@@ -449,6 +482,20 @@ export async function runAction(hass, entityId, capability, value, ctx = {}) {
  */
 export async function runPlan(hass, plan) {
   if (!plan || !plan.ok) return plan || { ok: false, reason: 'aucun plan' };
+  /* Le dernier metre, quand la commande n'est pas un service. Tout ce qui
+   * precede — capacite declaree, valeur validee, refus explique — vaut
+   * identiquement ; seul l'envoi differe. */
+  if (plan.ws) {
+    if (!hass || typeof hass.callWS !== 'function') {
+      return { ok: false, reason: 'Home Assistant indisponible', plan };
+    }
+    try {
+      await hass.callWS({ type: plan.ws, ...plan.data });
+      return { ok: true, plan };
+    } catch (e) {
+      return { ok: false, reason: (e && (e.message || e.error)) || String(e), plan };
+    }
+  }
   if (!hass || typeof hass.callService !== 'function') {
     return { ok: false, reason: 'Home Assistant indisponible', plan };
   }
@@ -583,6 +630,37 @@ export function datesEvenement(journee, dDebut, hDebut, dFin, hFin) {
   f.setDate(f.getDate() + 1);
   const dd = (n) => String(n).padStart(2, '0');
   return { start_date: dDebut, end_date: f.getFullYear() + '-' + dd(f.getMonth() + 1) + '-' + dd(f.getDate()) };
+}
+
+/**
+ * L'inverse exact de `datesEvenement` : d'un evenement de l'API vers les champs
+ * du formulaire.
+ *
+ * Le piege est le meme, pris a l'envers. L'API rend `end.date` EXCLUSIVE : un
+ * rendez-vous du 10 revient « du 10 au 11 ». L'afficher tel quel ferait croire
+ * a deux jours, et le reenregistrer en ajouterait un a chaque passage — un
+ * evenement qui s'allonge tout seul a chaque modification.
+ *
+ * Les deux fonctions doivent donc rester symetriques, et un test le verifie en
+ * faisant l'aller-retour.
+ */
+export function champsDepuisEvenement(e) {
+  const dd = (n) => String(n).padStart(2, '0');
+  const iso = (d) => d.getFullYear() + '-' + dd(d.getMonth() + 1) + '-' + dd(d.getDate());
+  const hm = (d) => dd(d.getHours()) + ':' + dd(d.getMinutes());
+  const s = (e && e.start) || {};
+  const f = (e && e.end) || {};
+  if (s.date) {
+    const fin = new Date((f.date || s.date) + 'T00:00:00');
+    fin.setDate(fin.getDate() - 1);
+    // Une journee entiere d'un seul jour revient « du 10 au 11 » : on retire le
+    // jour ajoute a l'ecriture, sans jamais passer avant le debut.
+    const dFin = fin < new Date(s.date + 'T00:00:00') ? s.date : iso(fin);
+    return { journee: true, dDebut: s.date, hDebut: '', dFin, hFin: '' };
+  }
+  const a = new Date(s.dateTime);
+  const b = new Date(f.dateTime || s.dateTime);
+  return { journee: false, dDebut: iso(a), hDebut: hm(a), dFin: iso(b), hFin: hm(b) };
 }
 
 /**

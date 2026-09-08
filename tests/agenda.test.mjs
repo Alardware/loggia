@@ -15,12 +15,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { entityCaps } from '../src/capabilities.js';
-import { planAction, datesEvenement, finApresDebut } from '../src/actions.js';
+import { planAction, runPlan, datesEvenement, finApresDebut, champsDepuisEvenement } from '../src/actions.js';
 
-const AGENDA = { state: 'off', attributes: { friendly_name: 'Maison', supported_features: 1 } };
+const AGENDA = { state: 'off', attributes: { friendly_name: 'Maison', supported_features: 7 } };
+// Un agenda qui sait creer et RIEN d'autre : les trois bits sont independants.
+const CREE_SEUL = { state: 'off', attributes: { friendly_name: 'Partagé', supported_features: 1 } };
 const LECTURE = { state: 'off', attributes: { friendly_name: 'Jours fériés', supported_features: 0 } };
 const CTX = {
-  states: { 'calendar.maison': AGENDA, 'calendar.feries': LECTURE },
+  states: { 'calendar.maison': AGENDA, 'calendar.feries': LECTURE, 'calendar.partage': CREE_SEUL },
   services: { calendar: { create_event: {} } },
 };
 
@@ -119,4 +121,126 @@ test('une journée entière sur un seul jour est valide', () => {
 
 test('un rendez-vous qui passe minuit est valide', () => {
   assert.equal(finApresDebut(false, '2026-09-10', '23:00', '2026-09-11', '01:00'), true);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modifier et supprimer : deux gestes qui ne sont PAS des services.
+//
+// Relevé sur une installation réelle plutôt que supposé. `hass.services.calendar`
+// ne contient que `create_event` et `get_events` ; `calendar/event/update` et
+// `calendar/event/delete` répondent « format invalide » là où une commande
+// inconnue répond « unknown_command ». Le serveur a même dicté leur schéma :
+// « required key not provided at 'uid' », puis « … at 'event' ».
+//
+// Le moteur les porte quand même — capacité vérifiée, refus expliqué, canal
+// d'échec commun. Seul le dernier mètre change.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('les trois bits sont lus séparément', () => {
+  const c = entityCaps('calendar.maison', AGENDA, null).can;
+  assert.ok(c.has('creer_evenement') && c.has('supprimer_evenement') && c.has('modifier_evenement'));
+  // Un agenda partagé en écriture peut n'autoriser que l'ajout.
+  const seul = entityCaps('calendar.partage', CREE_SEUL, null).can;
+  assert.ok(seul.has('creer_evenement'));
+  assert.ok(!seul.has('supprimer_evenement') && !seul.has('modifier_evenement'));
+});
+
+test('un agenda qui ne sait qu’ajouter refuse la suppression', () => {
+  const p = planAction('calendar.partage', 'supprimer_evenement', 'uid-1', CTX, {});
+  assert.equal(p.ok, false);
+  assert.match(p.reason, /supprimer_evenement/);
+});
+
+test('supprimer produit une commande WebSocket, pas un service', () => {
+  const p = planAction('calendar.maison', 'supprimer_evenement', 'uid-42', CTX, {});
+  assert.equal(p.ok, true);
+  assert.equal(p.ws, 'calendar/event/delete');
+  assert.equal(p.service, undefined);
+  // L'entité voyage DANS le message, pas dans une cible à part : c'est ce que
+  // `callWS` attend, et ce que le serveur a réclamé quand on l'a omise.
+  assert.equal(p.target, null);
+  assert.deepEqual(p.data, { entity_id: 'calendar.maison', uid: 'uid-42' });
+});
+
+test('modifier imbrique les nouvelles valeurs dans « event »', () => {
+  // À plat, le serveur répond « required key not provided at 'event' ».
+  const p = planAction('calendar.maison', 'modifier_evenement', 'uid-42', CTX,
+    { event: { summary: 'Dentiste', start_date_time: '2026-09-10 09:00:00', end_date_time: '2026-09-10 10:00:00' } });
+  assert.equal(p.ws, 'calendar/event/update');
+  assert.deepEqual(p.data, {
+    entity_id: 'calendar.maison',
+    uid: 'uid-42',
+    event: { summary: 'Dentiste', start_date_time: '2026-09-10 09:00:00', end_date_time: '2026-09-10 10:00:00' },
+  });
+});
+
+test('une occurrence de série emporte son identifiant et sa portée', () => {
+  // Sans `recurrence_id`, Home Assistant ne saurait pas de quelle occurrence on
+  // parle ; sans `recurrence_range`, il n'en efface qu'une — son défaut.
+  const p = planAction('calendar.maison', 'supprimer_evenement', 'uid-42', CTX,
+    { recurrence_id: '20260910T090000', recurrence_range: 'THISANDFUTURE' });
+  assert.deepEqual(p.data, {
+    entity_id: 'calendar.maison', uid: 'uid-42',
+    recurrence_id: '20260910T090000', recurrence_range: 'THISANDFUTURE',
+  });
+});
+
+test('un plan WebSocket part par callWS, un plan de service par callService', async () => {
+  const vus = [];
+  const hass = {
+    callWS: (m) => { vus.push(['ws', m.type]); return Promise.resolve({}); },
+    callService: (d, s) => { vus.push(['service', d + '.' + s]); return Promise.resolve(); },
+  };
+  await runPlan(hass, planAction('calendar.maison', 'supprimer_evenement', 'uid-42', CTX, {}));
+  await runPlan(hass, planAction('calendar.maison', 'creer_evenement', 'Dentiste', CTX,
+    { start_date: '2026-09-10', end_date: '2026-09-11' }));
+  assert.deepEqual(vus, [['ws', 'calendar/event/delete'], ['service', 'calendar.create_event']]);
+});
+
+test('un échec WebSocket revient à l’appelant, il ne se perd pas', () => {
+  // Le formulaire doit pouvoir dire POURQUOI, sur place. Un `catch` muet ici
+  // rendrait le bouton silencieux — le défaut que ce moteur existe pour éviter.
+  const hass = { callWS: () => Promise.reject(new Error('not allowed')), callService: () => Promise.resolve() };
+  return runPlan(hass, planAction('calendar.maison', 'supprimer_evenement', 'uid-42', CTX, {}))
+    .then((r) => {
+      assert.equal(r.ok, false);
+      assert.match(r.reason, /not allowed/);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// L'aller-retour : lire un événement, le réécrire, retrouver le même.
+//
+// C'est le piège de la fin exclusive, pris à l'envers. L'API rend `end.date`
+// exclusive : un rendez-vous du 10 revient « du 10 au 11 ». L'afficher tel quel
+// ferait croire à deux jours — et le réenregistrer en ajouterait un à chaque
+// passage, un événement qui s'allonge tout seul à chaque modification.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('une journée entière relue perd le jour ajouté à l’écriture', () => {
+  assert.deepEqual(champsDepuisEvenement({ start: { date: '2026-09-10' }, end: { date: '2026-09-11' } }),
+    { journee: true, dDebut: '2026-09-10', hDebut: '', dFin: '2026-09-10', hFin: '' });
+});
+
+test('l’aller-retour ne déplace rien, journée entière', () => {
+  const avant = { start: { date: '2026-09-10' }, end: { date: '2026-09-13' } };
+  const c = champsDepuisEvenement(avant);
+  const apres = datesEvenement(c.journee, c.dDebut, c.hDebut, c.dFin, c.hFin);
+  assert.deepEqual(apres, { start_date: '2026-09-10', end_date: '2026-09-13' });
+});
+
+test('l’aller-retour ne déplace rien, avec des heures', () => {
+  const c = champsDepuisEvenement({
+    start: { dateTime: '2026-09-10T09:00:00' }, end: { dateTime: '2026-09-10T10:30:00' },
+  });
+  assert.deepEqual(c, { journee: false, dDebut: '2026-09-10', hDebut: '09:00', dFin: '2026-09-10', hFin: '10:30' });
+  assert.deepEqual(datesEvenement(c.journee, c.dDebut, c.hDebut, c.dFin, c.hFin),
+    { start_date_time: '2026-09-10 09:00:00', end_date_time: '2026-09-10 10:30:00' });
+});
+
+test('une journée entière sans fin ne remonte pas avant son début', () => {
+  // Un agenda qui omet `end` laisserait sinon une fin la veille du début, et le
+  // formulaire s'ouvrirait sur des dates impossibles.
+  const c = champsDepuisEvenement({ start: { date: '2026-09-10' }, end: {} });
+  assert.equal(c.dFin, '2026-09-10');
 });

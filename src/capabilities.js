@@ -98,11 +98,17 @@ const BITS = {
     8: 'move_item', 16: 'set_due_date', 32: 'set_due_datetime', 64: 'set_description',
   },
   notify: { 1: 'title' },
-  /* `CalendarEntityFeature` de Home Assistant : 1 creer, 2 supprimer,
-   * 4 modifier. Seule la creation figure ici. Declarer une capacite que le
-   * moteur ne sait pas traduire ferait proposer un geste impossible — c'est
-   * exactement ce que cette table existe pour eviter. */
-  calendar: { 1: 'creer_evenement' },
+  /* `CalendarEntityFeature` de Home Assistant.
+   *
+   * Les trois gestes n'empruntent pas le meme chemin, et c'est verifie sur
+   * une installation reelle plutot que suppose : `hass.services.calendar` ne
+   * contient que `create_event` et `get_events`. Modifier et supprimer sont
+   * des commandes WEBSOCKET — `calendar/event/update` et
+   * `calendar/event/delete` — qui repondent « format invalide » la ou une
+   * commande inconnue repond « unknown_command ».
+   *
+   * Le bit, lui, se lit pareil pour les trois. */
+  calendar: { 1: 'creer_evenement', 2: 'supprimer_evenement', 4: 'modifier_evenement' },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
