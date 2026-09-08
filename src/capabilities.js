@@ -98,6 +98,11 @@ const BITS = {
     8: 'move_item', 16: 'set_due_date', 32: 'set_due_datetime', 64: 'set_description',
   },
   notify: { 1: 'title' },
+  /* `CalendarEntityFeature` de Home Assistant : 1 creer, 2 supprimer,
+   * 4 modifier. Seule la creation figure ici. Declarer une capacite que le
+   * moteur ne sait pas traduire ferait proposer un geste impossible — c'est
+   * exactement ce que cette table existe pour eviter. */
+  calendar: { 1: 'creer_evenement' },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

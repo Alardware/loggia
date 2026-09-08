@@ -663,8 +663,13 @@ export function installerDemo() {
   document.documentElement.appendChild(el);
 
   // Un calendrier dans les états, pour que la carte Agenda se montre.
-  states['calendar.maison'] = s('off', { friendly_name: 'Calendrier maison' });
-  states['calendar.travail'] = s('off', { friendly_name: 'Travail' });
+  /* Deux agendas, et un seul qui accepte qu'on y ecrive : `supported_features`
+   * a 1 est le bit CREATE_EVENT de Home Assistant. Sans cet ecart, la demo ne
+   * montrerait pas ce qui compte — le bouton n'apparait que pour les agendas
+   * ou l'on peut vraiment creer, et « Travail » reste en lecture seule comme
+   * l'est un abonnement iCal. */
+  states['calendar.maison'] = s('off', { friendly_name: 'Calendrier maison', supported_features: 1 });
+  states['calendar.travail'] = s('off', { friendly_name: 'Travail', supported_features: 0 });
 
   // ── 3. Le badge ───────────────────────────────────────────────────────────
   const badge = document.createElement('div');

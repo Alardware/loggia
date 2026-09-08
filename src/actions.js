@@ -186,6 +186,24 @@ const PLANS = {
     start: { service: 'start' }, pause: { service: 'pause' },
     cancel: { service: 'cancel' }, finish: { service: 'finish' },
   },
+  /* Creer un rendez-vous.
+   *
+   * `calendar.create_event` prend le titre par `summary` et la date par DEUX
+   * paires exclusives : `start_date_time`/`end_date_time` quand il y a une
+   * heure, `start_date`/`end_date` pour une journee entiere. Le moteur ne
+   * choisit pas entre les deux — l'appelant sait s'il a une heure ou non, et
+   * une paire panachee serait refusee par Home Assistant, qui le dira.
+   *
+   * `end_date` d'une journee entiere est EXCLUSIVE : un evenement d'un seul
+   * jour finit le lendemain. C'est la convention iCalendar, et l'oublier
+   * fabrique un rendez-vous de duree nulle. */
+  calendar: {
+    creer_evenement: {
+      service: 'create_event', field: 'summary', kind: 'raw',
+      accepte: ['description', 'location',
+        'start_date_time', 'end_date_time', 'start_date', 'end_date'],
+    },
+  },
   siren: { turn_on: { service: 'turn_on' }, turn_off: { service: 'turn_off' } },
 };
 
@@ -545,6 +563,41 @@ export function peut(hass, id, capability) {
  * `play_media`, `update_entity` n'en ont pas, et une commande qui disparait
  * vaudrait moins qu'une commande non verifiee.
  */
+/**
+ * Les champs de date d'un `calendar.create_event`.
+ *
+ * Deux paires exclusives, et une regle qui se paie cher quand on l'oublie :
+ * `end_date` d'une journee entiere est EXCLUSIVE. Un rendez-vous du 10 va donc
+ * du 10 au 11. Ecrire du 10 au 10 fabrique une duree nulle — Home Assistant
+ * l'accepte sans broncher, et rien ne s'affiche ensuite.
+ *
+ * Les dates arrivent en `AAAA-MM-JJ` et les heures en `HH:MM`, telles que les
+ * champs du navigateur les rendent. Le service veut du temps LOCAL, sans
+ * fuseau : on concatene, on n'convertit pas.
+ */
+export function datesEvenement(journee, dDebut, hDebut, dFin, hFin) {
+  if (!journee) {
+    return { start_date_time: dDebut + ' ' + hDebut + ':00', end_date_time: dFin + ' ' + hFin + ':00' };
+  }
+  const f = new Date(dFin + 'T00:00:00');
+  f.setDate(f.getDate() + 1);
+  const dd = (n) => String(n).padStart(2, '0');
+  return { start_date: dDebut, end_date: f.getFullYear() + '-' + dd(f.getMonth() + 1) + '-' + dd(f.getDate()) };
+}
+
+/**
+ * La fin vient-elle apres le debut ?
+ *
+ * Le seul cas que Home Assistant accepte sans rien dire tout en ne creant rien
+ * de visible. Une journee entiere se compare sur la date seule — le 10 au 10
+ * est valide, c'est une journee ; un horaire exige une fin STRICTEMENT apres,
+ * sinon la duree est nulle.
+ */
+export function finApresDebut(journee, dDebut, hDebut, dFin, hFin) {
+  if (journee) return dFin >= dDebut;
+  return new Date(dFin + 'T' + hFin) > new Date(dDebut + 'T' + hDebut);
+}
+
 export function commanderService(hass, id, domaine, service, data) {
   const d = data || {};
   const trad = id ? capaciteDe(domaine, service, d) : null;

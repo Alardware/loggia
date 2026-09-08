@@ -15,8 +15,8 @@ const SystemeContent = lazy(() => import('./views/systeme.jsx'));
 const ParametresContent = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ParametresContent })));
 const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling } from './discovery.js';
-import { planAction as actionsPlan, availableActions as actionsAvailable,
-  peut, commander, commanderService } from './actions.js';
+import { planAction as actionsPlan, availableActions as actionsAvailable, runPlan, actionCtx,
+  datesEvenement, finApresDebut, peut, commander, commanderService } from './actions.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
 import { deviceCard, presentableDevices, presentationSummary, cleCamera } from './present.js';
 import { healthReport, healthText } from './health.js';
@@ -4968,7 +4968,12 @@ function habillagePiece(nom, mdi) {
 /* `plage` : { debut, fin } pour lire un mois entier au lieu des sept jours
  * qui suffisent au rail. Sans elle, rien ne change — les appelants d'origine
  * gardent leur fenetre et leur plafond de huit evenements. */
-function useAgenda(hass, seulement = null, plage = null) {
+/* `tick` : un compteur que l'appelant incremente pour forcer une relecture.
+ *
+ * Sans lui, un rendez-vous cree depuis le dashboard n'apparaissait qu'au
+ * sondage suivant — un quart d'heure plus tard. On venait de l'ecrire et il
+ * n'etait pas la : le geste semblait avoir echoue. */
+function useAgenda(hass, seulement = null, plage = null, tick = 0) {
   const [events, setEvents] = useState([]);
   const S = hass && hass.states;
   const seulementSig = seulement ? seulement.join('|') : '';
@@ -5000,7 +5005,7 @@ function useAgenda(hass, seulement = null, plage = null) {
     lire();
     const iv = setInterval(lire, 15 * 60000);
     return () => { mort = true; clearInterval(iv); };
-  }, [apiPret, sig, plageDebutMs, plageFinMs]);
+  }, [apiPret, sig, plageDebutMs, plageFinMs, tick]);
   return events;
 }
 
@@ -9926,6 +9931,138 @@ function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
  * Le jour choisi montre ses evenements dessous. Un mois sans cela ne serait
  * qu'un almanach : on saurait QUE quelque chose arrive, jamais quoi.
  */
+/* Créer un rendez-vous depuis le dashboard.
+ *
+ * Home Assistant sait le faire par `calendar.create_event`, mais seulement pour
+ * les agendas qui le déclarent : un calendrier en lecture seule — un flux
+ * d'anniversaires, un abonnement iCal — n'a pas le bit `CREATE_EVENT`. La liste
+ * `cals` est donc filtrée par la capacité, en amont : mieux vaut ne pas montrer
+ * le bouton que d'ouvrir un formulaire qui finira refusé.
+ *
+ * Le service prend la date par DEUX paires exclusives. Avec une heure,
+ * `start_date_time` et `end_date_time` ; pour une journée entière, `start_date`
+ * et `end_date`, cette dernière EXCLUSIVE — un rendez-vous d'un seul jour finit
+ * le lendemain. C'est la convention iCalendar, et l'oublier fabrique un
+ * événement de durée nulle que rien n'affiche.
+ */
+function NouvelEvenement({ hass, cals, jour, onFait, onClose }) {
+  const dd = (n) => String(n).padStart(2, '0');
+  const isoJour = (d) => d.getFullYear() + '-' + dd(d.getMonth() + 1) + '-' + dd(d.getDate());
+  /* L'heure proposée est la prochaine demie, pas l'heure courante : personne ne
+   * crée un rendez-vous qui commence à 14h37. */
+  const prochaineDemie = () => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() >= 30 ? 60 : 30, 0, 0);
+    return dd(d.getHours()) + ':' + dd(d.getMinutes());
+  };
+  const [cal, setCal] = useState(cals[0]);
+  const [titre, setTitre] = useState('');
+  const [journee, setJournee] = useState(false);
+  const [dDebut, setDDebut] = useState(() => isoJour(jour));
+  const [dFin, setDFin] = useState(() => isoJour(jour));
+  const [hDebut, setHDebut] = useState(prochaineDemie);
+  const [hFin, setHFin] = useState(() => {
+    const [h, m] = prochaineDemie().split(':');
+    return dd((Number(h) + 1) % 24) + ':' + m;
+  });
+  const [erreur, setErreur] = useState(null);
+  const [envoi, setEnvoi] = useState(false);
+
+  const nomCal = (id) => ((((hass && hass.states) || {})[id] || {}).attributes || {}).friendly_name || id.replace('calendar.', '');
+
+  const envoyer = async () => {
+    const t = titre.trim();
+    if (!t) { setErreur(tr('Il faut un titre.')); return; }
+    /* Une fin avant le début est le seul cas que Home Assistant accepte sans
+     * broncher tout en ne créant rien de visible. On le refuse ici, où l'on
+     * peut encore le dire. */
+    if (!finApresDebut(journee, dDebut, hDebut, dFin, hFin)) {
+      setErreur(tr('La fin doit venir après le début.'));
+      return;
+    }
+    const options = datesEvenement(journee, dDebut, hDebut, dFin, hFin);
+    setErreur(null); setEnvoi(true);
+    /* `planAction` + `runPlan` plutôt que `commander` : celui-ci ne rend pas de
+     * promesse — il signale ses échecs au toast global et rend la valeur
+     * envoyée. Un formulaire, lui, doit savoir QUAND c'est fait, pour se fermer
+     * et rafraîchir la liste, et POURQUOI ça ne l'est pas, pour le dire sur
+     * place plutôt que dans un bandeau qui passe. */
+    const p = actionsPlan(cal, 'creer_evenement', t, actionCtx(hass), options);
+    if (!p.ok) { setEnvoi(false); setErreur(p.reason || tr('Home Assistant a refusé.')); return; }
+    const r = await runPlan(hass, p);
+    setEnvoi(false);
+    if (!r || !r.ok) { setErreur((r && r.reason) ? String(r.reason) : tr('Home Assistant a refusé.')); return; }
+    onFait();
+  };
+
+  const champ = {
+    padding: '10px 12px', borderRadius: 12, background: 'var(--o-s2)', color: 'var(--o-text)',
+    border: 'var(--o-bw,1px) solid var(--o-bd2)', fontSize: 13, fontWeight: 600,
+    boxSizing: 'border-box', minHeight: 44, width: '100%',
+  };
+  const legende = { fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78, marginBottom: 5 };
+
+  return (
+    <div style={{ marginBottom: 14, padding: 13, borderRadius: 16, background: 'var(--o-s1)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ flex: 1, fontSize: 13, fontWeight: 800 }}>{tr('Nouvel événement')}</span>
+        <button onClick={onClose} aria-label={tr('Fermer')}
+          style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'var(--o-s2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Fi i="cross" size={12} />
+        </button>
+      </div>
+
+      <div>
+        <div style={legende}>{tr('TITRE')}</div>
+        {/* `autoFocus` délibéré : ce panneau s'ouvre sur un clic, pour saisir un
+          * titre. La règle vise les champs focalisés au CHARGEMENT d'une page. */}
+        <input value={titre} autoFocus onChange={e => setTitre(e.target.value)}
+          aria-label={tr('Titre de l’événement')} placeholder={tr('Dentiste, dîner, anniversaire…')} style={champ} />
+      </div>
+
+      {cals.length > 1 && (
+        <div>
+          <div style={legende}>{tr('AGENDA')}</div>
+          <select value={cal} onChange={e => setCal(e.target.value)} aria-label={tr('Agenda')} style={champ}>
+            {cals.map(k => <option key={k} value={k}>{nomCal(k)}</option>)}
+          </select>
+        </div>
+      )}
+
+      <button onClick={() => setJournee(v => !v)} aria-pressed={journee}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', minHeight: 44, borderRadius: 12, cursor: 'pointer',
+          border: 'var(--o-bw,1px) solid var(--o-bd2)', background: journee ? 'rgba(var(--o-accent-rgb),.12)' : 'transparent', color: 'var(--o-text1)', textAlign: 'left' }}>
+        <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: journee ? 'var(--o-accent-fond)' : 'transparent', border: journee ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+          {journee && <Fi i="check" size={11} color="#fff" />}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>{tr('Journée entière')}</span>
+      </button>
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={legende}>{tr('DÉBUT')}</div>
+          <input type="date" value={dDebut} onChange={e => setDDebut(e.target.value)} aria-label={tr('Date de début')} style={champ} />
+          {!journee && <input type="time" value={hDebut} onChange={e => setHDebut(e.target.value)} aria-label={tr('Heure de début')} style={{ ...champ, marginTop: 7 }} />}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={legende}>{tr('FIN')}</div>
+          <input type="date" value={dFin} onChange={e => setDFin(e.target.value)} aria-label={tr('Date de fin')} style={champ} />
+          {!journee && <input type="time" value={hFin} onChange={e => setHFin(e.target.value)} aria-label={tr('Heure de fin')} style={{ ...champ, marginTop: 7 }} />}
+        </div>
+      </div>
+
+      {erreur && <div role="alert" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{erreur}</div>}
+
+      <button onClick={envoyer} disabled={envoi}
+        style={{ padding: '12px 16px', minHeight: 44, borderRadius: 14, border: 'none', cursor: envoi ? 'default' : 'pointer',
+          background: 'var(--o-accent-fond)', color: '#fff', fontSize: 13, fontWeight: 800, opacity: envoi ? .6 : 1 }}>
+        {envoi ? tr('Envoi…') : tr('Créer l’événement')}
+      </button>
+    </div>
+  );
+}
+
 function FeuilleCalendrier({ hass, onClose }) {
   const S = (hass && hass.states) || {};
   const nbEntites = Object.keys(S).length;
@@ -9937,6 +10074,10 @@ function FeuilleCalendrier({ hass, onClose }) {
     return Array.isArray(c) && c.length ? c.filter(x => typeof x === 'string') : null;
   });
   const [reglages, setReglages] = useState(false);
+  const [nouveau, setNouveau] = useState(false);
+  /* Incremente apres une creation : le sondage de l'agenda relit aussitot,
+   * au lieu d'attendre son quart d'heure. */
+  const [tick, setTick] = useState(0);
   const choisisSig = choisis ? choisis.join('|') : '';
   const calsSig = tousCals.join('|');
   const actifs = useMemo(() => {
@@ -9959,7 +10100,12 @@ function FeuilleCalendrier({ hass, onClose }) {
   const finGrille = useMemo(() => new Date(debutMs + 42 * 864e5), [debutMs]);
   const finMs = finGrille.getTime();
   const plage = useMemo(() => ({ debut: debutGrille, fin: finGrille }), [debutMs, finMs]);
-  const events = useAgenda(hass, actifs, plage);
+  const events = useAgenda(hass, actifs, plage, tick);
+  /* Les agendas qui acceptent qu'on y ecrive. Un flux d'anniversaires ou un
+   * abonnement iCal n'a pas le bit `CREATE_EVENT` : sans ce filtre, le bouton
+   * s'afficherait pour ouvrir un formulaire condamne d'avance. Calcule a
+   * chaque rendu — il y a une poignee d'agendas, pas un millier. */
+  const calsEcrivables = tousCals.filter(k => peut(hass, k, 'creer_evenement'));
 
   const cleJour = (d) => d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
   const dateDe = (e) => new Date(e.start.dateTime || (e.start.date + 'T00:00:00'));
@@ -10002,11 +10148,21 @@ function FeuilleCalendrier({ hass, onClose }) {
         <span style={{ flex: 1, fontSize: 17, fontWeight: 800, textTransform: 'capitalize', letterSpacing: '-.01em' }}>{moisAns}</span>
         <button onClick={() => bougerMois(-1)} aria-label={tr('Mois précédent')} style={btnRond}><Fi i="angle-left" size={14} /></button>
         <button onClick={() => bougerMois(1)} aria-label={tr('Mois suivant')} style={btnRond}><Fi i="angle-right" size={14} /></button>
+        {calsEcrivables.length > 0 && (
+          <button onClick={() => { setNouveau(v => !v); setReglages(false); }} aria-label={tr('Nouvel événement')} aria-pressed={nouveau}
+            style={{ ...btnRond, background: nouveau ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: nouveau ? '#fff' : 'var(--o-text1)' }}><Fi i="plus" size={14} /></button>
+        )}
         {tousCals.length > 1 && (
-          <button onClick={() => setReglages(v => !v)} aria-label={tr('Choisir les agendas')} aria-pressed={reglages}
+          <button onClick={() => { setReglages(v => !v); setNouveau(false); }} aria-label={tr('Choisir les agendas')} aria-pressed={reglages}
             style={{ ...btnRond, background: reglages ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: reglages ? '#fff' : 'var(--o-text1)' }}><Fi i="settings-sliders" size={14} /></button>
         )}
       </div>
+
+      {nouveau && calsEcrivables.length > 0 && (
+        <NouvelEvenement hass={hass} cals={calsEcrivables} jour={choisi}
+          onClose={() => setNouveau(false)}
+          onFait={() => { setNouveau(false); setTick(t => t + 1); }} />
+      )}
 
       {reglages && (
         <div style={{ marginBottom: 14, padding: 12, borderRadius: 16, background: 'var(--o-s1)', display: 'flex', flexDirection: 'column', gap: 8 }}>
