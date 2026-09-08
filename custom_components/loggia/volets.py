@@ -14,9 +14,11 @@ Ce module la porte. Trois regles, chacune debrayable :
   planning   ouvrir au lever, fermer au coucher, avec un decalage en minutes
              de part et d'autre et le choix des jours.
   soleil     l'ete, quand le soleil frappe une facade, baisser les volets de
-             ce cote-la, puis les rouvrir quand il est passe. L'orientation se
-             donne une fois par volet ; l'azimut et l'elevation viennent de
-             `sun.sun`, que Home Assistant tient a jour.
+             ce cote-la, puis les remettre ou ils etaient quand il est passe.
+             L'orientation se donne une fois par volet ; l'azimut et
+             l'elevation viennent de `sun.sun`, que Home Assistant tient a
+             jour. Cette regle ne fait que BAISSER : un volet deja plus bas
+             que la consigne n'est pas touche.
   vent       au-dela d'un seuil, tout remonter. Un volet baisse dans une
              rafale est un volet plie, et cette regle PRIME sur les deux
              autres — sans quoi la protection solaire le rabaisserait dans la
@@ -240,7 +242,11 @@ class LoggiaVolets:
         self.cfg: dict[str, Any] = {}
         # Ce que la derniere evaluation a decide, volet par volet. Sert a ne
         # pas renvoyer dix fois la meme commande, et a savoir quoi rouvrir.
-        self.abaisses: set[str] = set()
+        # Les volets que la protection solaire a baisses, et la position
+        # qu'ils avaient AVANT. Un simple ensemble ne suffisait pas : a la
+        # sortie du cone, tout remontait a 100, quelle que soit la hauteur
+        # d'ou l'on venait.
+        self.abaisses: dict[str, Any] = {}
         self.a_l_abri = False
         self.journal: list[dict[str, Any]] = []
         self._defait: list[Any] = []
@@ -411,19 +417,45 @@ class LoggiaVolets:
             frappe = au_soleil(azimut, elevation, orientation, ouverture, elev_min,
                                marge=HYSTERESE_DEG if deja else 0.0)
             if frappe and not deja:
+                avant = self._position_actuelle(haid)
+                # Une protection qui OUVRE n'en est pas une.
+                #
+                # « Descendre a 30 % » etait envoye tel quel. Un volet ferme
+                # pour la nuit — une chambre reglee pour se fermer chaque
+                # soir et ne jamais se rouvrir seule — se retrouvait donc
+                # OUVERT a 30 % au premier soleil de midi, sur une regle
+                # dont le nom promet l'inverse.
+                #
+                # Position INCONNUE : on ne fait rien non plus. Un volet
+                # indisponible ou en plein mouvement n'en dit rien, et
+                # baisser a l'aveugle est exactement ce qui a ouvert la
+                # chambre. La regle repasse a la prochaine minute de
+                # soleil ; on ne perd qu'un peu d'ombre, jamais le
+                # sommeil de quelqu'un.
+                if avant is None or avant <= position:
+                    continue
                 await self._async_position(haid, position)
-                self.abaisses.add(haid)
+                self.abaisses[haid] = avant
                 self._noter("proteger", "soleil", 1, detail=haid)
             elif not frappe and deja:
-                await self._async_position(haid, 100)
-                self.abaisses.discard(haid)
-                self._noter("rouvrir", "soleil", 1, detail=haid)
+                await self._async_rendre(haid)
+
+    async def _async_rendre(self, haid: str) -> None:
+        """Remet un volet la ou la protection l'a pris.
+
+        Elle le remontait a 100. Un volet entrouvert a 40 le matin se
+        retrouvait grand ouvert le soir, sans que rien ne l'ait demande :
+        la regle rendait plus qu'elle n'avait pris. On ne connait pas
+        toujours la position de depart — un volet qui ne sait pas se placer
+        n'en publie pas — et 100 reste alors le seul repli raisonnable.
+        """
+        avant = self.abaisses.pop(haid, None)
+        await self._async_position(haid, 100 if avant is None else int(avant))
+        self._noter("rouvrir", "soleil", 1, detail=haid)
 
     async def _async_rouvrir_proteges(self) -> None:
         for haid in list(self.abaisses):
-            await self._async_position(haid, 100)
-            self.abaisses.discard(haid)
-            self._noter("rouvrir", "soleil", 1, detail=haid)
+            await self._async_rendre(haid)
 
     # ── Les commandes ──────────────────────────────────────────────────────
     def _tous_les_covers(self) -> list:
@@ -450,6 +482,26 @@ class LoggiaVolets:
             return float(st.state)
         except (TypeError, ValueError):
             return None
+
+    def _position_actuelle(self, haid: str):
+        """Ou en est ce volet : 0 ferme, 100 ouvert, None si l'on ne sait pas.
+
+        `current_position` quand le volet le publie ; sinon l'etat suffit a
+        distinguer les deux extremes, qui sont les seuls qu'un volet sans
+        positionnement puisse prendre. Un volet en mouvement, ou
+        indisponible, ne rend rien : mieux vaut ne pas savoir que se tromper.
+        """
+        st = self.hass.states.get(haid)
+        if st is None:
+            return None
+        pos = (st.attributes or {}).get("current_position")
+        if isinstance(pos, (int, float)) and not isinstance(pos, bool):
+            return int(pos)
+        if st.state == "closed":
+            return 0
+        if st.state == "open":
+            return 100
+        return None
 
     def _sait_se_placer(self, haid: str) -> bool:
         st = self.hass.states.get(haid)

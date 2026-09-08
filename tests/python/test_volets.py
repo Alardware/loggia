@@ -83,7 +83,9 @@ def creer(module, store_module):
         v.hass = FauxHass(etats or {})
         v.store = magasin
         v.cfg = lancer(v.async_config())
-        v.abaisses = set()
+        # Un dictionnaire : la protection retient AUSSI d'ou elle a pris
+        # chaque volet, pour l'y remettre plutot que de tout ouvrir a 100.
+        v.abaisses = {}
         v.a_l_abri = False
         v.journal = []
         v._defait = []
@@ -283,7 +285,9 @@ def test_le_volet_expose_descend(creer):
     assert v.hass.services.appels == [
         ("cover", "set_cover_position", {"entity_id": ["cover.salon"], "position": 30})
     ]
-    assert v.abaisses == {"cover.salon"}
+    # `open` sans `current_position` : le volet est en haut, la protection
+    # le baisse et retient 100.
+    assert v.abaisses == {"cover.salon": 100}
 
 
 def test_le_volet_ne_redescend_pas_deux_fois(creer):
@@ -301,7 +305,139 @@ def test_le_volet_remonte_quand_le_soleil_est_passe(creer):
     assert v.hass.services.appels[-1] == (
         "cover", "set_cover_position", {"entity_id": ["cover.salon"], "position": 100}
     )
-    assert v.abaisses == set()
+    assert v.abaisses == {}
+
+
+# ── « Descendre a 30 % » ne doit jamais faire monter ────────────────────────
+#
+# Signale le 08/09 : le volet d une chambre s est OUVERT a 30 % vers midi,
+# pendant que quelqu un dormait derriere.
+#
+# Il etait ferme, comme chaque nuit — son planning le ferme tous les jours et
+# ne le rouvre aucun. La protection solaire, elle, envoyait sa consigne telle
+# quelle : `set_cover_position` a 30 sur un volet a 0, c est une OUVERTURE. La
+# regle promettait de proteger du soleil et laissait entrer le jour.
+# ───────────────────────────────────────────────────────────────────────────
+
+FERME = {"cover.salon": FauxEtat("closed", {"supported_features": 15, "current_position": 0})}
+
+
+def test_un_volet_ferme_reste_ferme(creer):
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **FERME})
+    lancer(v._async_soleil())
+    assert v.hass.services.appels == [], "la protection a ouvert un volet ferme"
+    # Et il ne doit pas non plus etre COMPTE comme abaisse : sinon la sortie du
+    # cone, le soir, le rouvrirait pour de bon.
+    assert v.abaisses == {}
+
+
+def test_un_volet_ferme_sans_position_publiee_reste_ferme(creer):
+    """Tous les volets ne publient pas `current_position`.
+
+    Pour ceux-la, l etat suffit : `closed` vaut 0, et un volet a 0 est deja plus
+    bas que n importe quelle consigne. Sans cette lecture, la protection leur
+    envoyait un `close_cover` qu ils avaient deja execute — sans dommage ici,
+    mais sur la meme erreur de raisonnement que pour les autres.
+    """
+    simple = {"cover.salon": FauxEtat("closed", {"supported_features": 11})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **simple})
+    lancer(v._async_soleil())
+    assert v.hass.services.appels == []
+    assert v.abaisses == {}
+
+
+def test_un_volet_deja_plus_bas_que_la_consigne_est_laisse_tranquille(creer):
+    entrouvert = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 20})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **entrouvert})
+    lancer(v._async_soleil())
+    assert v.hass.services.appels == []
+
+
+def test_un_volet_pile_a_la_consigne_ne_bouge_pas(creer):
+    """Le cas limite : egal, ce n est ni descendre ni proteger davantage."""
+    pile = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 30})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **pile})
+    lancer(v._async_soleil())
+    assert v.hass.services.appels == []
+
+
+def test_un_volet_plus_haut_descend_bien(creer):
+    """La contre-epreuve : sans elle, tout refuser passerait le test ci-dessus."""
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 70})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(v._async_soleil())
+    assert v.hass.services.appels == [
+        ("cover", "set_cover_position", {"entity_id": ["cover.salon"], "position": 30})
+    ]
+    assert v.abaisses == {"cover.salon": 70}
+
+
+def test_le_volet_retrouve_sa_hauteur_pas_le_grand_ouvert(creer):
+    """La protection rendait plus qu elle n avait pris.
+
+    Un volet entrouvert a 70 le matin, baisse a 30 le midi, se retrouvait grand
+    ouvert le soir. Personne ne l avait demande.
+    """
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 70})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(v._async_soleil())
+    v.hass.states.table["sun.sun"] = FauxEtat("above_horizon", {"azimuth": 60, "elevation": 30})
+    lancer(v._async_soleil())
+    assert v.hass.services.appels[-1] == (
+        "cover", "set_cover_position", {"entity_id": ["cover.salon"], "position": 70}
+    )
+    assert v.abaisses == {}
+
+
+def test_la_chaleur_retombee_rend_aussi_la_hauteur(creer):
+    """Meme promesse par l autre chemin : la temperature repasse sous le seuil."""
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 70})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(v._async_soleil())
+    v.hass.states.table["sensor.dehors"] = FauxEtat("18.0")
+    lancer(v._async_soleil())
+    assert v.hass.services.appels[-1] == (
+        "cover", "set_cover_position", {"entity_id": ["cover.salon"], "position": 70}
+    )
+
+
+def test_position_inconnue_on_ne_touche_a_rien(creer):
+    """Ne pas savoir n est pas une raison d agir.
+
+    Ce test disait l inverse il y a une heure : position inconnue, on baissait
+    quand meme, quitte a rendre le grand ouvert ensuite. La mesure sur
+    l installation reelle a tranche — les quatre volets y etaient
+    `unavailable`, donc sans position connue, donc sur ce chemin-la. Le
+    garde-fou pose contre l ouverture de la chambre ne mordait pas ou il
+    fallait.
+
+    Un volet indisponible ou en plein mouvement ne dit rien de sa hauteur. La
+    regle repasse a chaque minute de soleil : on ne perd qu un peu d ombre.
+    """
+    for etat in ("unavailable", "unknown", "opening"):
+        muet = {"cover.salon": FauxEtat(etat, {"supported_features": 15})}
+        v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **muet})
+        lancer(v._async_soleil())
+        assert v.hass.services.appels == [], "volet " + etat + " : commande envoyee a l aveugle"
+        assert v.abaisses == {}
+
+
+def test_le_repli_reste_le_grand_ouvert(creer):
+    """La position d avant peut avoir ete perdue entre-temps.
+
+    Elle est retenue au moment ou l on baisse. Un volet devenu indisponible
+    depuis, ou une version anterieure qui n en retenait aucune, laisse un
+    `None` : le grand ouvert reste alors le seul repli possible.
+    """
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 70})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(v._async_soleil())
+    v.abaisses["cover.salon"] = None
+    v.hass.states.table["sun.sun"] = FauxEtat("above_horizon", {"azimuth": 60, "elevation": 30})
+    lancer(v._async_soleil())
+    assert v.hass.services.appels[-1] == (
+        "cover", "set_cover_position", {"entity_id": ["cover.salon"], "position": 100}
+    )
 
 
 def test_sans_chaleur_pas_de_protection(creer):
@@ -350,7 +486,7 @@ def test_le_vent_prime_sur_le_soleil(creer):
     v = creer(cfg_vent(), etats)
     lancer(v._async_evaluer())
     assert [a[1] for a in v.hass.services.appels] == ["open_cover"]
-    assert v.abaisses == set()
+    assert v.abaisses == {}
 
 
 def test_le_calme_revenu_ne_suffit_pas_de_justesse(creer):
