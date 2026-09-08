@@ -623,7 +623,19 @@ function cssToRgb(c) {
 
 const THEME_KEYS = ['--o-bg', '--o-bggrad', '--o-bg2', '--o-side1', '--o-side2', '--o-surfA', '--o-surfB', '--o-header', '--o-text', '--o-text1', '--o-text2', '--o-text3', '--o-bd1', '--o-bd2', '--o-bd3', '--o-s1', '--o-s2', '--o-s3', '--o-s4', '--o-s5', '--o-well', '--o-well2', '--o-well0', '--o-accent', '--o-accent-rgb', '--o-accent-soft', '--o-accent-soft-rgb', '--o-shadow', '--o-bw', '--o-font',
   // tokens fins des presets (Atrium) — purgés au changement de thème comme les autres
-  '--o-ok', '--o-ok-rgb', '--o-warn2', '--o-warn2-rgb', '--o-bad', '--o-bad-rgb', '--o-shadow-hover'];
+  '--o-ok', '--o-ok-rgb', '--o-warn2', '--o-warn2-rgb', '--o-bad', '--o-bad-rgb', '--o-shadow-hover',
+  // Le voile du bandeau meteo. Un preset qui le teinte sans qu'il figure
+  // ici le laisserait au theme suivant : le bleu de l'un sur le fond de
+  // l'autre, jusqu'au rechargement.
+  '--o-sky',
+  /* Accents decoratifs. Ils portent chacun un ROLE : `--o-purple` est la
+   * couleur des volets d'un bout a l'autre du dashboard, `--o-cyan` celle
+   * des scenes, `--o-gold` celle de ce qu'on epingle. Un theme peut donc
+   * les reteindre sans rien brouiller, tant qu'ils restent distincts entre
+   * eux — et il le faut pour une charte monochrome, ou un violet detonne. */
+  '--o-purple', '--o-purple-rgb', '--o-cyan', '--o-cyan-rgb',
+  '--o-cold', '--o-cold-rgb', '--o-gold', '--o-gold-rgb',
+  '--o-warn', '--o-warn-rgb'];
 // Thèmes natifs Loggia (créés pour Loggia, adaptés des thèmes HA fournis). Chaque preset a une variante claire + sombre,
 // pilotée par le Mode d'affichage. Forme = entrée de applyVars (bg/surface/text/accent/radius/shadow/border/font/bggrad).
 const LOGGIA_PRESETS = {
@@ -724,6 +736,116 @@ const LOGGIA_PRESETS = {
         '--o-ok': '#15803d', '--o-ok-rgb': '34,197,94', '--o-warn2': '#b45309', '--o-warn2-rgb': '245,165,36',
         '--o-bad': '#b42318', '--o-bad-rgb': '240,104,90',
         '--o-shadow-hover': '0 16px 34px rgba(16,24,40,.12)',
+      },
+    },
+  },
+  /* ── The Projekt ────────────────────────────────────────────────────────
+   *
+   * D'après la planche de charte : dix teintes, une seule source de lumière.
+   *
+   * Le noir n'y est jamais neutre — #020D12 tire sur le bleu — et l'azur
+   * #3CA2D9 ne sert qu'à désigner ce qui agit. La glace #BEE8FF, elle, ne
+   * remplit rien : elle écrit.
+   *
+   * Trois choix viennent de la planche et non de l'habitude.
+   *
+   * Le fond n'est pas plat. Toutes les vignettes montrent une lueur venue du
+   * haut ; `bggrad` la reproduit, et c'est elle qui donne la profondeur que
+   * les autres thèmes vont chercher dans une ombre portée.
+   *
+   * Les traits et les remplissages sont teintés de GLACE, jamais de blanc. Un
+   * `rgba(255,255,255,.1)` posé sur ce fond vire au gris et casse la dominante
+   * froide en un coup ; `rgba(190,232,255,…)` la tient.
+   *
+   * Et l'accent qui remplit n'est pas celui qui écrit. #3CA2D9 sur #020D12
+   * passe tout juste ; #BEE8FF y respire. D'où `accent` d'un côté,
+   * `accentText` de l'autre — la charte fait la même distinction en donnant
+   * deux bleus là où un seul aurait suffi.
+   */
+  projekt: {
+    dark: {
+      bg: '#020D12', surface: '#06202E', surfaceElevated: '#0A2A3B', text: '#ffffff', muted: '#6c8ea3',
+      border: 'rgba(190,232,255,.12)', accent: '#3ca2d9', accentText: '#bee8ff',
+      radius: '14px', borderWidth: '1px',
+      shadow: '0 4px 12px rgba(0,0,0,.45), 0 18px 40px rgba(1,10,15,.4)',
+      // La lueur du haut, reprise de la planche : elle éclaire l'en-tête et
+      // s'éteint avant le bas de page, comme sur chaque vignette.
+      bggrad: 'radial-gradient(118% 78% at 50% -14%, #0b3d57 0%, #06283a 30%, #03151e 58%, #020D12 82%)',
+      font: "'Manrope', -apple-system, sans-serif",
+      fine: {
+        '--o-surfA': '#0a2a3b', '--o-surfB': '#06202e',
+        '--o-bg2': '#03131c', '--o-side1': '#04161f', '--o-side2': '#020d12',
+        '--o-header': 'rgba(2,13,18,.8)',
+        '--o-well': '#051b27', '--o-well0': '#0a2a3b', '--o-well2': '#020d12',
+        // Quatre niveaux de texte : blanc pur pour les titres, TP-10 pour le
+        // courant, puis deux gris bleutés — TP-09 ferme la marche.
+        // TP-09 (#6c8ea3) tombait a 4,29:1 sur la carte haute : mesure, pas
+        // impression. Eclairci juste assez pour passer, sans quitter l'acier.
+        '--o-text': '#ffffff', '--o-text1': '#d9e2e7', '--o-text2': '#9db6c5', '--o-text3': '#7597ab',
+        '--o-bd1': 'rgba(190,232,255,.17)', '--o-bd2': 'rgba(190,232,255,.11)', '--o-bd3': 'rgba(190,232,255,.075)',
+        '--o-s1': 'rgba(190,232,255,.1)', '--o-s2': 'rgba(190,232,255,.065)', '--o-s3': 'rgba(190,232,255,.045)',
+        '--o-s4': 'rgba(190,232,255,.03)', '--o-s5': 'rgba(190,232,255,.03)',
+        // Le voile du bandeau météo : lui aussi vire au bleu de la charte,
+        // sinon il ramène le gris que tout le reste évite.
+        '--o-sky': 'rgba(60,162,217,.34)',
+        // Sémantique : le texte change d'un thème à l'autre, pas la lecture
+        // d'un point vert ou d'une jauge rouge. On les refroidit, sans plus.
+        '--o-ok': '#4fd1a5', '--o-ok-rgb': '79,209,165',
+        '--o-warn2': '#f0b25e', '--o-warn2-rgb': '240,178,94',
+        '--o-bad': '#f58c7f', '--o-bad-rgb': '245,140,127',
+        /* Accents décoratifs : la charte n'a qu'une teinte, la hiérarchie s'y
+         * fait par la CLARTÉ. Chacun garde son rôle — les volets restent d'une
+         * seule couleur partout — mais aucun ne sort du bleu. Un violet de
+         * volet sur ce fond se voyait de l'autre bout de la pièce. */
+        '--o-gold': '#bee8ff', '--o-gold-rgb': '190,232,255',
+        '--o-cold': '#8fc6e8', '--o-cold-rgb': '143,198,232',
+        '--o-cyan': '#5bc8f5', '--o-cyan-rgb': '91,200,245',
+        /* Les volets prennent l'ACIER, pas un second azur. Le premier essai,
+         * #4e8fcb, faisait deux bleus vifs a onze degres de teinte l'un de
+         * l'autre — et 4,35:1, sous le seuil. L'acier desature s'oppose au
+         * vif de l'accent par la saturation, comme la charte le fait elle-meme
+         * en donnant #3CA2D9 ET #6C8EA3. */
+        '--o-purple': '#8aafc4', '--o-purple-rgb': '138,175,196',
+        // L'avertissement garde sa chaleur : c'est ce qui le fait lire comme
+        // un avertissement. Juste assez rabattu pour ne pas jurer.
+        '--o-warn': '#f2c97d', '--o-warn-rgb': '242,201,125',
+        // Au survol, la lumière plutôt que l'ombre : c'est le geste de la charte.
+        '--o-shadow-hover': '0 22px 48px rgba(2,96,147,.4)',
+      },
+    },
+    light: {
+      bg: '#e7eef3', surface: '#ffffff', surfaceElevated: '#ffffff', text: '#020d12', muted: '#4b6879',
+      border: 'rgba(5,31,45,.13)', accent: '#026093', accentText: '#014e78',
+      radius: '14px', borderWidth: '1px',
+      shadow: '0 1px 2px rgba(5,31,45,.06), 0 10px 26px rgba(5,31,45,.07)',
+      // La planche a aussi ses plages claires — #FFFFFF, #E0E0E0, #D9E2E7. La
+      // lueur reste, retournée : le blanc en haut, le gris bleuté en bas.
+      bggrad: 'radial-gradient(118% 78% at 50% -14%, #ffffff 0%, #edf3f7 34%, #dde7ed 72%, #d9e2e7 100%)',
+      font: "'Manrope', -apple-system, sans-serif",
+      fine: {
+        '--o-surfA': '#ffffff', '--o-surfB': '#fbfdfe',
+        '--o-bg2': '#eff4f7', '--o-side1': '#ffffff', '--o-side2': '#e7eef3',
+        '--o-header': 'rgba(247,250,252,.88)',
+        '--o-well': '#ffffff', '--o-well0': '#ffffff', '--o-well2': '#e7eef3',
+        // Sur blanc, TP-09 ne donne que 3,48:1. Assombri jusqu'a 4,58:1.
+        '--o-text': '#020d12', '--o-text1': '#051f2d', '--o-text2': '#3f5a69', '--o-text3': '#587a8d',
+        '--o-bd1': 'rgba(5,31,45,.16)', '--o-bd2': 'rgba(5,31,45,.11)', '--o-bd3': 'rgba(5,31,45,.075)',
+        '--o-s1': 'rgba(5,31,45,.075)', '--o-s2': 'rgba(5,31,45,.05)', '--o-s3': 'rgba(5,31,45,.035)',
+        '--o-s4': 'rgba(5,31,45,.022)', '--o-s5': 'rgba(5,31,45,.022)',
+        '--o-sky': 'rgba(2,96,147,.22)',
+        // Assombris pour rester lisibles sur blanc, comme le veut le thème clair.
+        '--o-ok': '#0f7a5a', '--o-ok-rgb': '52,211,153',
+        '--o-warn2': '#a85b0b', '--o-warn2-rgb': '245,158,11',
+        '--o-bad': '#b4231a', '--o-bad-rgb': '239,68,68',
+        // Mêmes rôles, retournés : sur blanc c'est le plus SOMBRE qui
+        // ressort. L'ordre de clarté s'inverse, la hiérarchie tient.
+        '--o-gold': '#01507b', '--o-gold-rgb': '1,80,123',
+        '--o-cold': '#0d6f9f', '--o-cold-rgb': '13,111,159',
+        '--o-cyan': '#0a6e9e', '--o-cyan-rgb': '10,110,158',
+        '--o-purple': '#4b6e82', '--o-purple-rgb': '75,110,130',
+        // 4,14:1 sur blanc : sous le seuil. Assombri a 4,82:1.
+        '--o-warn': '#9a6809', '--o-warn-rgb': '154,104,9',
+        '--o-shadow-hover': '0 18px 40px rgba(5,31,45,.14)',
       },
     },
   },

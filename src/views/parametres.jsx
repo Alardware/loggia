@@ -83,6 +83,7 @@ const PRESET_META = () => [
   { id: 'lavande', name: 'Lavande', desc: 'Charcoal, lavande douce', cols: ['#c3b5e6', '#2b2b2f', '#d6cdea'] },
   { id: 'plum', name: 'Plum Wine', desc: tr('Prune, rose poudré'), cols: ['#eda4b6', '#341624', '#f2c6cf'] },
   { id: 'atrium', name: 'Atrium', desc: tr('A plat, sans ombre'), cols: ['#5b8cff', '#050609', '#2dd4bf'] },
+  { id: 'projekt', name: 'The Projekt', desc: tr('Nuit bleue, lumière froide'), cols: ['#3ca2d9', '#020d12', '#bee8ff'] },
 ];
 // Luminance 0..1 d'une couleur (hex/rgb) → choix sombre/clair
 
@@ -1172,7 +1173,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </div>
         );
         const ACCENTS = [['', 'Couleur du thème'], ['#4f8cff', 'Bleu'], ['#2dd4bf', 'Turquoise'], ['#a78bfa', 'Violet'], ['#f5a524', 'Ambre'], ['#f87171', 'Rouge']];
-        const NATIFS = ['', 'atrium', 'ios', 'google', 'neumorphix'];
+        const NATIFS = ['', 'projekt', 'atrium', 'ios', 'google', 'neumorphix'];
         const COMMU = ['frosted', 'onedark', 'dracula', 'github', 'tokyo', 'nightowl', 'plum', 'material', 'lavande'];
         const ids = themeTab === 'natifs' ? NATIFS : COMMU;
         const themeList = ids.map(id => PRESET_META().find(x => x.id === id)).filter(Boolean);

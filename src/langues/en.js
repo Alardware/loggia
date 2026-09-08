@@ -814,6 +814,7 @@ export default {
   "La caméra de la tablette réveille l'écran quand quelqu'un passe. Tout reste local — rien n'est envoyé ni enregistré. Nécessite un accès HTTPS (Nabu Casa) et l'autorisation caméra.": 'The tablet camera wakes the screen when someone walks by. Everything stays local — nothing is sent or recorded. Requires HTTPS access (Nabu Casa) and camera permission.',
   'VUES AUTORISÉES': 'ALLOWED VIEWS',
   'AUTORISATIONS': 'PERMISSIONS',
+  'Nuit bleue, lumière froide': 'Blue night, cold light',
   'Rien de coché = aucune. Ajouter, modifier ou supprimer un profil, et le code admin, restent réservés à un administrateur.':
     'Nothing ticked = none. Adding, editing or deleting a profile, and the admin code, stay reserved to an administrator.',
   "Rien de coché = tout est visible. L'Accueil et les fiches restent toujours accessibles.": 'Nothing checked = everything is visible. Home and detail sheets always stay reachable.',
