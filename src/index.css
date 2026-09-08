@@ -58,6 +58,13 @@ button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-sce
   /* statuts texte theme-aware (assombris en clair) : warn=jaune, warn2=orange, bad=rouge, cold=bleu froid */
   --o-warn:#ffce73; --o-warn-rgb:255,206,115; --o-warn2:#f59e0b; --o-warn2-rgb:245,158,11;
   --o-bad:#ef4444; --o-bad-rgb:239,68,68; --o-cold:#60a5fa; --o-cold-rgb:96,165,250;
+  /* Teintes d'identification des PIÈCES. Elles ne décorent pas : elles font
+     reconnaître une carte sans la lire. Les valeurs ci-dessous sont celles
+     qui étaient écrites en dur — sans surcharge de thème, rien ne change.
+     Un thème monochrome, lui, peut les ramener dans sa gamme. */
+  --o-piece-ambre:#ff9d3c; --o-piece-ambre-rgb:255,157,60;   /* cuisine, bureau */
+  --o-piece-tendre:#f472b6; --o-piece-tendre-rgb:244,114,182; /* chambre enfant */
+  --o-piece-vert:var(--o-ok); --o-piece-vert-rgb:var(--o-ok-rgb); /* extérieur */
   /* accents décoratifs devenus theme-aware (texte lisible en clair) : or, violet, cyan */
   --o-gold:#ffd166; --o-gold-rgb:255,209,102; --o-purple:#a78bfa; --o-purple-rgb:167,139,250; --o-cyan:#54c8f0; --o-cyan-rgb:84,200,240;
   /* ombre multi-couches (profondeur réaliste : 2 couches douces empilées, pas une grosse tache) */

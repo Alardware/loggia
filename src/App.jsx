@@ -635,7 +635,11 @@ const THEME_KEYS = ['--o-bg', '--o-bggrad', '--o-bg2', '--o-side1', '--o-side2',
    * eux — et il le faut pour une charte monochrome, ou un violet detonne. */
   '--o-purple', '--o-purple-rgb', '--o-cyan', '--o-cyan-rgb',
   '--o-cold', '--o-cold-rgb', '--o-gold', '--o-gold-rgb',
-  '--o-warn', '--o-warn-rgb'];
+  '--o-warn', '--o-warn-rgb',
+  /* Les teintes des pieces. Elles suivent un theme qui n'a qu'une couleur,
+   * et redeviennent celles d'avant des qu'on en change. */
+  '--o-piece-ambre', '--o-piece-ambre-rgb', '--o-piece-tendre',
+  '--o-piece-tendre-rgb', '--o-piece-vert', '--o-piece-vert-rgb'];
 // Thèmes natifs Loggia (créés pour Loggia, adaptés des thèmes HA fournis). Chaque preset a une variante claire + sombre,
 // pilotée par le Mode d'affichage. Forme = entrée de applyVars (bg/surface/text/accent/radius/shadow/border/font/bggrad).
 const LOGGIA_PRESETS = {
@@ -809,6 +813,13 @@ const LOGGIA_PRESETS = {
         // L'avertissement garde sa chaleur : c'est ce qui le fait lire comme
         // un avertissement. Juste assez rabattu pour ne pas jurer.
         '--o-warn': '#f2c97d', '--o-warn-rgb': '242,201,125',
+        /* Les pièces. Une charte à une seule teinte ne peut pas les
+         * distinguer par la couleur — c'est l'icône qui les identifie, le
+         * canapé, les couverts, le lit. La couleur, elle, les échelonne :
+         * du bleu vif au bleu pâle, sans jamais sortir de la gamme. */
+        '--o-piece-ambre': '#7fb3d5', '--o-piece-ambre-rgb': '127,179,213',
+        '--o-piece-tendre': '#a9cfe8', '--o-piece-tendre-rgb': '169,207,232',
+        '--o-piece-vert': '#5fa8bf', '--o-piece-vert-rgb': '95,168,191',
         // Au survol, la lumière plutôt que l'ombre : c'est le geste de la charte.
         '--o-shadow-hover': '0 22px 48px rgba(2,96,147,.4)',
       },
@@ -845,6 +856,13 @@ const LOGGIA_PRESETS = {
         '--o-purple': '#4b6e82', '--o-purple-rgb': '75,110,130',
         // 4,14:1 sur blanc : sous le seuil. Assombri a 4,82:1.
         '--o-warn': '#9a6809', '--o-warn-rgb': '154,104,9',
+        // Mêmes rôles, assombris : sur blanc c'est la profondeur qui range.
+        // 4,38:1 et 3,33:1 au premier jet, tous deux sous le seuil : les
+        // deux teintes les plus claires de l'échelle sont aussi celles qui
+        // souffrent le plus du passage sur blanc.
+        '--o-piece-ambre': '#37769c', '--o-piece-ambre-rgb': '55,118,156',
+        '--o-piece-tendre': '#437c9f', '--o-piece-tendre-rgb': '67,124,159',
+        '--o-piece-vert': '#2b7a8c', '--o-piece-vert-rgb': '43,122,140',
         '--o-shadow-hover': '0 18px 40px rgba(5,31,45,.14)',
       },
     },
@@ -1048,14 +1066,32 @@ function uiconDeMdi(mdi) {
   return MDI_VERS_UICON[cle] || null;
 }
 
+/* Les teintes qui identifient une piece.
+ *
+ * `tc` — la couleur du releve de temperature — pointait sur `--o-warn2`
+ * pour la Cuisine et le Bureau. C'est la couleur d'AVERTISSEMENT : elle ne
+ * disait rien de ces deux pieces, seulement que leur teinte d'origine etait
+ * un orange proche. Elle suit maintenant la teinte de la piece, comme les
+ * autres — une cuisine n'est pas une alerte.
+ *
+ * Elles ne decorent pas : elles permettent de reconnaitre une carte sans la
+ * lire. C'est pourquoi elles ne suivaient AUCUN theme — et c'est aussi
+ * pourquoi elles doivent pouvoir en suivre un, quand ce theme n'a qu'une
+ * teinte. Chacune passe donc par un jeton, dont le defaut est exactement la
+ * couleur d'avant : sans surcharge, rien ne bouge.
+ *
+ * Trois valeurs etaient ecrites en dur A COTE de leur jeton — le lavis de la
+ * Chambre restait violet quand son icone suivait `--o-purple`, celui de la
+ * Salle de bain bleu clair quand l'icone suivait `--o-cyan`. Invisible tant
+ * qu'aucun theme ne les deplacait ; voyant des le premier qui le fait. */
 const PIECES = [
-  { name: 'Séjour', bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13, icon: <Ico name="couch" color="var(--o-accent)" size={22} />, status: { kind: 'active', n: 2 }, temp: '18.1°', tc: 'var(--o-accent-soft)', hum: '63%', badge: '412 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
-  { name: 'Cuisine', bg: 'rgba(255,157,60,.16)', box: 44, rad: 13, icon: <Ico name="utensils" color="#ff9d3c" size={22} />, status: { kind: 'active', n: 1 }, temp: '22.0°', tc: 'var(--o-warn2)', hum: '53%', badge: '486 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
-  { name: 'Chambre', bg: 'rgba(167,139,250,.16)', box: 44, rad: 13, icon: <Ico name="bed-alt" color="var(--o-purple)" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: 'var(--o-purple)', hum: '60%', badge: '529 ppm', bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' },
-  { name: 'Chambre enfant', bg: 'rgba(244,114,182,.16)', box: 44, rad: 13, icon: <Ico name="teddy-bear" color="#f472b6" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: '#f472b6', hum: '61%', badge: '641 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
-  { name: 'Bureau', bg: 'rgba(255,157,60,.16)', box: 44, rad: 13, icon: <Ico name="briefcase" color="#ff9d3c" size={22} />, status: { kind: 'repos' }, temp: '17.8°', tc: 'var(--o-warn2)', hum: '64%', badge: '712 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
-  { name: 'Salle de bain', bg: 'rgba(84,200,240,.16)', box: 44, rad: 13, icon: <Ico name="hot-tub" color="var(--o-cyan)" size={22} />, status: { kind: 'repos' }, temp: '15.5°', tc: 'var(--o-cyan)', hum: '80%', badge: '498 ppm', bc: 'var(--o-ok)', bbg: 'rgba(52,211,153,.14)' },
-  { name: 'Extérieur', bg: 'rgba(52,211,153,.16)', box: 36, rad: 11, icon: <Ico name="tree" color="var(--o-ok)" size={22} />, status: { kind: 'ext' }, temp: '6.2°', tc: 'var(--o-accent-soft)', hum: '84%', badge: 'Vent 12', bc: 'var(--o-text2)', bbg: 'var(--o-bd3)' },
+  { name: 'Séjour', bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13, icon: <Ico name="couch" color="var(--o-accent)" size={22} />, status: { kind: 'active', n: 2 }, temp: '18.1°', tc: 'var(--o-accent-soft)', hum: '63%', badge: '412 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' },
+  { name: 'Cuisine', bg: 'rgba(var(--o-piece-ambre-rgb),.16)', box: 44, rad: 13, icon: <Ico name="utensils" color="var(--o-piece-ambre)" size={22} />, status: { kind: 'active', n: 1 }, temp: '22.0°', tc: 'var(--o-piece-ambre)', hum: '53%', badge: '486 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' },
+  { name: 'Chambre', bg: 'rgba(var(--o-purple-rgb),.16)', box: 44, rad: 13, icon: <Ico name="bed-alt" color="var(--o-purple)" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: 'var(--o-purple)', hum: '60%', badge: '529 ppm', bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' },
+  { name: 'Chambre enfant', bg: 'rgba(var(--o-piece-tendre-rgb),.16)', box: 44, rad: 13, icon: <Ico name="teddy-bear" color="var(--o-piece-tendre)" size={22} />, status: { kind: 'repos' }, temp: '18.1°', tc: 'var(--o-piece-tendre)', hum: '61%', badge: '641 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
+  { name: 'Bureau', bg: 'rgba(var(--o-piece-ambre-rgb),.16)', box: 44, rad: 13, icon: <Ico name="briefcase" color="var(--o-piece-ambre)" size={22} />, status: { kind: 'repos' }, temp: '17.8°', tc: 'var(--o-piece-ambre)', hum: '64%', badge: '712 ppm', bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' },
+  { name: 'Salle de bain', bg: 'rgba(var(--o-cyan-rgb),.16)', box: 44, rad: 13, icon: <Ico name="hot-tub" color="var(--o-cyan)" size={22} />, status: { kind: 'repos' }, temp: '15.5°', tc: 'var(--o-cyan)', hum: '80%', badge: '498 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' },
+  { name: 'Extérieur', bg: 'rgba(var(--o-piece-vert-rgb),.16)', box: 36, rad: 11, icon: <Ico name="tree" color="var(--o-piece-vert)" size={22} />, status: { kind: 'ext' }, temp: '6.2°', tc: 'var(--o-accent-soft)', hum: '84%', badge: 'Vent 12', bc: 'var(--o-text2)', bbg: 'var(--o-bd3)' },
 ];
 
 // Mini-pilule d'action des tuiles pièces — même gabarit 38×26 r9 que les

@@ -127,7 +127,11 @@ test('The Projekt reteint les accents décoratifs, dans les deux modes', () => {
   // trait de feutre. Chaque accent décoratif doit donc être redéfini — et dans
   // les DEUX variantes, sans quoi le mode clair récupère le violet.
   const p = projekt();
-  const attendus = ['--o-purple', '--o-cyan', '--o-gold', '--o-cold', '--o-warn', '--o-sky'];
+  const attendus = ['--o-purple', '--o-cyan', '--o-gold', '--o-cold', '--o-warn', '--o-sky',
+    // Et les teintes des pièces. Sans elles, l'orange de la cuisine et le rose
+    // de la chambre d'enfant traversaient le thème — c'est ce qui restait de
+    // visible après le premier passage.
+    '--o-piece-ambre', '--o-piece-tendre', '--o-piece-vert'];
   for (const [nom, part] of [['sombre', p.dark], ['clair', p.light]]) {
     const manquants = attendus.filter(k => part.indexOf("'" + k + "'") < 0);
     assert.deepEqual(manquants, [],
@@ -140,6 +144,19 @@ test('The Projekt distingue l’accent qui remplit de celui qui écrit', () => {
   // le second respire. Les confondre rend illisible tout libellé d'accent.
   assert.match(projekt().seg, /accent: '#3ca2d9', accentText: '#bee8ff'/,
     'les deux bleus de la charte ont été confondus en un seul');
+});
+
+test('aucune teinte de pièce n’est écrite en dur', () => {
+  // Elles l'étaient toutes, et trois l'étaient DEUX FOIS : une valeur littérale
+  // pour le lavis, un jeton pour l'icône. Tant qu'aucun thème ne les déplaçait,
+  // l'écart ne se voyait pas — le lavis de la Chambre restait violet quand son
+  // icône passait à l'acier.
+  const i = app.indexOf('const PIECES = [');
+  assert.notEqual(i, -1, 'la table des pièces a disparu');
+  const bloc = app.slice(i, app.indexOf('\n];', i));
+  const dures = [...bloc.matchAll(/(?:#[0-9a-f]{6}|rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+)/gi)].map(m => m[0]);
+  assert.deepEqual(dures, [],
+    'une teinte de pièce est de nouveau écrite en dur : aucun thème ne pourra la suivre');
 });
 
 test('The Projekt garde sa lueur, dans les deux modes', () => {
