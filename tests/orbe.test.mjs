@@ -40,11 +40,35 @@ test('le canevas est transparent, et effacé en transparent', () => {
   assert.match(SRC, /setClearColor\(0x000000,\s*0\)/);
 });
 
-test('le contexte attend des couleurs droites, comme celles qu’il reçoit', () => {
-  // La passe finale rend `vec4(c, a)` : la lumière d'un côté, son intensité de
-  // l'autre. Laisser le défaut — prémultiplié — ferait compter la couleur deux
-  // fois et déposerait un voile sur tout le carré.
-  assert.match(SRC, /premultipliedAlpha\s*:\s*false/);
+test('les couleurs sortent prémultipliées, comme le navigateur les attend', () => {
+  /* Ce test disait l'inverse, et il avait tort.
+   *
+   * Passer `premultipliedAlpha` à FAUX faisait composer `fond × (1 − a) + c × a`.
+   * Comme `a` vaut ici l'éclat de la couleur, `c × a` est de l'ordre de `a` au
+   * carré : négligeable là où `a` est faible. Le halo retirait donc du fond
+   * sans rien rendre à la place, et déposait un carré SOMBRE autour de l'orbe.
+   *
+   * Invisible sur la feuille noire de la popup, flagrant sur la miniature de
+   * l'appui long, qui se pose sur le tableau de bord. Mesuré le 09/09/2026 en
+   * plaçant le canevas sur un gris uni : le carré était nettement plus foncé
+   * que la plaque autour.
+   *
+   * Le défaut — prémultiplié — est le bon régime pour ce qui ÉMET : le
+   * navigateur calcule `fond × (1 − a) + c`, donc le halo ajoute sa lumière au
+   * lieu d'en retirer. */
+  // L'OPTION, pas le mot : le commentaire qui explique ce choix le contient
+  // forcément, et une expression trop large échouerait sur sa propre raison.
+  assert.doesNotMatch(SRC, /premultipliedAlpha\s*:/,
+    'laisser `premultipliedAlpha` à son défaut : le préciser ici, c’est le mettre à faux');
+});
+
+test('le fond uniforme du flou est ramené à zéro', () => {
+  /* Le plus large des quatre flous porte jusqu'aux bords et dépose sur TOUT le
+   * carré un fond faible mais uniforme. Aucun régime de composition ne le
+   * rattrape : il se voit plus clair en additif, plus sombre en alpha droit.
+   * Le seul remède est de le retrancher avant de composer — ce qui reste sous
+   * le seuil vaut zéro, et zéro ne se compose pas. */
+  assert.match(SRC, /c = max\(c - 0\.020, 0\.0\);/);
 });
 
 test('la passe finale rend de la lumière, pas une image opaque', () => {

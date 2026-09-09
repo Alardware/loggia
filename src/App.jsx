@@ -11502,6 +11502,16 @@ function BoutonAssistant({ onAssistant, sens = 'haut', variante = 'nav' }) {
 
   const gestes = {
     onPointerDown: debut, onPointerMove: bouge, onPointerUp: fin, onPointerCancel: fin,
+    /* Sans cela, maintenir le bouton SELECTIONNE le texte autour.
+     *
+     * `mousedown` a pour effet par defaut d'amorcer un glissement de
+     * selection dans le document. `user-select: none` sur le bouton empeche
+     * de selectionner SON contenu, pas de partir de lui pour surligner ce
+     * qu'il y a a cote — la date de l'en-tete, les etiquettes de la barre.
+     * Le refuser coupe la selection a la racine, et n'empeche NI le
+     * `pointerdown` qui arme l'appui long, NI le `click` qui suit. Seul le
+     * focus au clic disparait ; la tabulation le donne toujours. */
+    onMouseDown: (e) => e.preventDefault(),
     onContextMenu: (e) => e.preventDefault(),
     onClick: () => { if (long.current) { long.current = false; return; } onAssistant(); },
     onKeyDown: () => { long.current = false; },

@@ -119,13 +119,19 @@ export function creerOrbe(hote) {
    * transparent, et c'est la lumiere seule qui se depose. */
   const renderer = new THREE.WebGLRenderer({
     antialias:false, alpha:true, powerPreference:'high-performance',
-    /* `premultipliedAlpha` par defaut vaut VRAI : le navigateur croit alors
-     * que chaque couleur a deja ete multipliee par son opacite. La passe
-     * finale rend des couleurs DROITES — la lumiere d'un cote, son intensite
-     * de l'autre. Le desaccord ne se voit pas sur l'orbe, qui est brillante,
-     * mais depose un voile uniforme sur tout le reste du carre : un cadre
-     * pale autour d'elle, exactement aux bords du canevas. */
-    premultipliedAlpha: false,
+    /* On garde `premultipliedAlpha` a sa valeur par defaut — VRAI — et la
+     * passe finale rend donc des couleurs DEJA multipliees par leur opacite.
+     * C'est le bon regime pour ce qui EMET de la lumiere : le navigateur
+     * calcule `fond x (1 - a) + c`, donc le halo ajoute sa lumiere au lieu
+     * d'en retirer.
+     *
+     * L'avoir mis a FAUX etait une erreur, et elle se voyait : en alpha droit
+     * le calcul devient `fond x (1 - a) + c x a`. Comme `a` vaut ici l'eclat
+     * de la couleur, `c x a` est de l'ordre de `a` au carre — negligeable la
+     * ou `a` est faible. Le halo retirait donc du fond sans rien rendre, et
+     * deposait un carre SOMBRE autour de l'orbe. Mesure sur un gris uni le
+     * 09/09/2026 : le carre du canevas etait nettement plus fonce que la
+     * plaque qui l'entourait. */
   });
   const DPR = Math.min(1.5, window.devicePixelRatio || 1);
   renderer.setPixelRatio(DPR);
@@ -561,10 +567,18 @@ export function creerOrbe(hote) {
       vec3 burn = 1.0 - exp(-c);
       c = mix(hue, burn, smoothstep(1.6, 4.5, L) * 0.55);
       c = pow(clamp(c, 0.0, 1.0), vec3(0.94));
-      /* Le fond degrade et l'alpha a 1 dessinaient un disque. Ce qui sort
-         d'ici n'est plus une image mais de la LUMIERE : sa couleur, et son
-         intensite pour opacite. La ou l'orbe ne brille pas, la feuille se
-         voit au travers ; la ou elle brille, elle couvre. */
+      /* Le plus large des quatre flous porte a lui seul jusqu'aux bords : il
+         depose sur TOUT le carre un fond faible mais uniforme. Rien ne le
+         voit sur fond noir — c'etait le cas de la page d'origine, qui
+         occupait l'ecran. Pose sur autre chose, ce fond dessine le carre du
+         canevas, quel que soit le regime de composition : plus clair en
+         additif, plus sombre en alpha droit.
+         On le retranche donc a la source. Ce qui reste sous le seuil vaut
+         zero, et zero ne se compose pas. */
+      c = max(c - 0.020, 0.0);
+      /* Ce qui sort d'ici n'est pas une image mais de la LUMIERE : sa couleur
+         deja multipliee par son intensite, et cette intensite pour opacite.
+         La ou l'orbe brille, elle couvre ; ailleurs, rien. */
       float a = clamp(max(max(c.r, c.g), c.b), 0.0, 1.0);
       gl_FragColor = vec4(c, a);
     }` });

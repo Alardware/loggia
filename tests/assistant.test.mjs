@@ -74,6 +74,17 @@ test('le bouton écoute le pointeur, pas seulement le clic', () => {
   }
 });
 
+test('maintenir le bouton ne surligne pas le texte d’à côté', () => {
+  /* `mousedown` a pour effet par défaut d'amorcer un glissement de sélection
+   * dans le document. `user-select: none` sur le bouton empêche de
+   * sélectionner SON contenu — pas de partir de lui pour surligner ce qu'il y
+   * a autour : la date de l'en-tête, les étiquettes de la barre du bas.
+   *
+   * Le refuser coupe la sélection à la racine, et n'empêche ni le
+   * `pointerdown` qui arme l'appui long, ni le `click` qui suit. */
+  assert.match(BOUTON, /onMouseDown: \(e\) => e\.preventDefault\(\)/);
+});
+
 test('le clic qui suit un appui long n’ouvre pas la conversation', () => {
   assert.match(BOUTON, /onClick: \(\) => \{ if \(long\.current\) \{ long\.current = false; return; \} onAssistant\(\); \}/);
 });
