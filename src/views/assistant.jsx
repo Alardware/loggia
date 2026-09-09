@@ -74,6 +74,18 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
   const [niveau, setNiveau] = useState(null);
   const sessionRef = useRef(null);
   const micro = voixDisponible();
+  /* La reponse a voix haute.
+   *
+   * Elle ne part QUE si la question est venue du micro. On a parle, elle
+   * repond ; on a tape, elle ecrit. Faire parler la maison parce qu'on a
+   * ecrit une phrase serait une surprise, et une mauvaise.
+   *
+   * `reponseRef` accumule les fragments : l'etat des messages est fait pour
+   * l'affichage, et le lire au moment du `done` donnerait la valeur du rendu
+   * precedent. */
+  const vocalRef = useRef(false);
+  const reponseRef = useRef('');
+  const audioRef = useRef(null);
   const [etat, setEtat] = useState('idle');
   const [erreur, setErreur] = useState(null);
   const [outils, setOutils] = useState([]);
@@ -133,7 +145,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
       const dit = await session.texte;
       sessionRef.current = null;
       setEcoute(false); setNiveau(null);
-      if (dit) envoyerTexte(dit);
+      if (dit) envoyerTexte(dit, { parle: true });
       else setErreur(tr('Rien n\u2019a ete entendu.'));
     } catch (e) {
       if (session) { try { session.annuler(); } catch { /* deja ferme */ } }
@@ -150,17 +162,51 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
   useEffect(() => {
     if (posee.current || !question || !ws) return;
     posee.current = true;
-    envoyerTexte(question);
+    envoyerTexte(question, { parle: true });
   }, [question, ws]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Le micro ne survit pas a la popup.
-  useEffect(() => () => { if (sessionRef.current) { try { sessionRef.current.annuler(); } catch { /* deja ferme */ } } }, []);
+  useEffect(() => () => {
+    if (sessionRef.current) { try { sessionRef.current.annuler(); } catch { /* deja ferme */ } }
+    // Et la voix se tait avec la popup, sinon elle finit sa phrase toute seule.
+    if (audioRef.current) { try { audioRef.current.pause(); } catch { /* deja arrete */ } }
+  }, []);
 
   const envoyer = () => envoyerTexte(texte);
 
-  const envoyerTexte = async (brut) => {
+  /* Dire la reponse.
+   *
+   * `speak` synthetise cote Home Assistant et rend une URL de MEME ORIGINE :
+   * la popup n'a donc ni requete a signer ni jeton a manipuler, elle pose
+   * l'adresse dans un element audio et c'est tout. La voix est celle du
+   * pipeline Assist — l'assistant parle pareil ici et depuis un satellite.
+   *
+   * Sans voix configuree, la commande repond `tts_unavailable`. Ce n'est pas
+   * une panne : la reponse reste ecrite, et l'on n'affiche rien. */
+  const dire = async (quoi) => {
+    const t = String(quoi || '').trim();
+    if (!ws || !t) { setEtat('idle'); return; }
+    try {
+      const r = await ws.callWS({ type: `${ns}/speak`, text: t });
+      if (!r || !r.url) { setEtat('idle'); return; }
+      if (audioRef.current) { try { audioRef.current.pause(); } catch { /* deja arrete */ } }
+      const son = new Audio(r.url);
+      audioRef.current = son;
+      const fini = () => { if (audioRef.current === son) audioRef.current = null; setEtat('idle'); };
+      son.onended = fini;
+      son.onerror = fini;
+      setEtat('speaking');
+      await son.play();
+    } catch {
+      setEtat('idle');   // pas de voix : la reponse reste lisible
+    }
+  };
+
+  const envoyerTexte = async (brut, { parle = false } = {}) => {
     const t = String(brut || '').trim();
     if (!t || !ws || etat !== 'idle') return;
+    vocalRef.current = parle;
+    reponseRef.current = '';
     setTexte(''); setErreur(null); setOutils([]);
     setMessages(l => [...l, { qui: 'moi', texte: t, ts: Date.now() }]);
     colleRef.current = true;
@@ -181,6 +227,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
            * créer d'avance laisserait une bulle vide pendant que l'assistant réfléchit,
            * et l'on ne saurait pas si elle a commencé. */
           setEtat('speaking');
+          reponseRef.current += evt.text || '';
           setMessages((l) => {
             const dernier = l[l.length - 1];
             if (dernier && dernier.qui === 'assistant' && dernier.encours) {
@@ -195,9 +242,10 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
           setOutils(o => [...o, evt.name || evt.tool || tr('outil')]);
           break;
         case 'done':
-          setEtat('idle');
           messageRef.current = null;
           setMessages(l => l.map((m, i) => (i === l.length - 1 ? { ...m, encours: false } : m)));
+          // On a parle : elle repond. On a tape : elle ecrit.
+          if (vocalRef.current) dire(reponseRef.current); else setEtat('idle');
           break;
         case 'error':
           setEtat('idle');

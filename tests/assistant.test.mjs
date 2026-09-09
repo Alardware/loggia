@@ -232,9 +232,45 @@ test('le pipeline choisi sait transcrire', () => {
   assert.match(VOIX, /if \(!equipes\.length\) return null;/);
 });
 
+test('la reponse se dit quand la question etait parlee', () => {
+  /* Et seulement dans ce cas. Faire parler la maison parce qu'on a ecrit une
+   * phrase serait une surprise, et une mauvaise. */
+  assert.match(FEUILLE, /const envoyerTexte = async \(brut, \{ parle = false \} = \{\}\) => \{/);
+  assert.match(FEUILLE, /vocalRef\.current = parle;/);
+  assert.match(FEUILLE, /if \(dit\) envoyerTexte\(dit, \{ parle: true \}\);/);
+  assert.match(FEUILLE, /envoyerTexte\(question, \{ parle: true \}\);/);
+  assert.match(FEUILLE, /if \(vocalRef\.current\) dire\(reponseRef\.current\); else setEtat\('idle'\);/);
+  // Le texte parle vient d'une reference, pas de l'etat : lu au `done`,
+  // l'etat rendrait la valeur du rendu precedent.
+  assert.match(FEUILLE, /reponseRef\.current \+= evt\.text \|\| '';/);
+});
+
+test('la voix vient du composant, pas d une URL bricolee', () => {
+  // `speak` synthetise cote serveur et rend une URL de meme origine : pas de
+  // jeton a manipuler dans la popup.
+  assert.match(FEUILLE, /ws\.callWS\(\{ type: `\$\{ns\}\/speak`, text: t \}\)/);
+  assert.match(FEUILLE, /const son = new Audio\(r\.url\);/);
+  // Sans voix configuree la commande echoue : la reponse doit rester lisible.
+  assert.match(FEUILLE, /\} catch \{[\s\S]{0,60}setEtat\('idle'\);/);
+});
+
+test('la voix se tait avec la popup', () => {
+  /* DEUX fois, et il faut les compter — le même piège que pour le micro.
+   *
+   * `dire()` coupe la phrase précédente avant d'en commencer une nouvelle, et
+   * le nettoyage coupe tout à la fermeture. Une seule expression, sans
+   * compter, se satisfaisait de celle de `dire` : retirer celle du nettoyage
+   * laissait l'assistant finir sa phrase alors que la conversation était
+   * fermée, et le test ne bronchait pas. Constaté en mutant ce test. */
+  const coupures = FEUILLE.split('audioRef.current.pause();').length - 1;
+  assert.equal(coupures, 2, 'la voix doit se couper avant une nouvelle phrase ET à la fermeture');
+});
+
 test('le micro se referme toujours', () => {
   // Un micro laissé ouvert allume la pastille rouge de l'onglet, et l'y laisse.
-  assert.match(FEUILLE, /useEffect\(\(\) => \(\) => \{ if \(sessionRef\.current\) \{ try \{ sessionRef\.current\.annuler\(\); \}/);
+  // La forme du nettoyage a change quand la voix s'y est ajoutee : on vise ce
+  // qu'il FAIT, pas comment il est ecrit sur une ligne ou sur quatre.
+  assert.match(FEUILLE, /if \(sessionRef\.current\) \{ try \{ sessionRef\.current\.annuler\(\); \}/);
   assert.match(BOUTON, /if \(session\.current\) \{ try \{ session\.current\.annuler\(\); \}/);
   /* DEUX fois, et il faut les compter.
    *

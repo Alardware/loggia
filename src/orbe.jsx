@@ -576,6 +576,16 @@ export function creerOrbe(hote) {
          On le retranche donc a la source. Ce qui reste sous le seuil vaut
          zero, et zero ne se compose pas. */
       c = max(c - 0.020, 0.0);
+      /* Et la lumiere doit s'eteindre AVANT le bord du cadre.
+         Le seuil ci-dessus vide les coins, pas le reste du pourtour : mesure
+         du 09/09/2026, alpha maximum sur le bord = 17 sur 255. Faible, mais
+         coupe net au ras du canevas — et c'est ce trait droit que l'on voit,
+         pas l'orbe. On suit donc la forme du CADRE et non un cercle : la
+         distance de Tchebychev vaut 1 sur tout le pourtour, coins compris, la
+         ou un rayon les manquerait. La rampe commence a 0,86, bien au-dela de
+         l'orbe elle-meme. */
+      vec2 q = abs(vUv - 0.5) * 2.0;
+      c *= 1.0 - smoothstep(0.86, 1.0, max(q.x, q.y));
       /* Ce qui sort d'ici n'est pas une image mais de la LUMIERE : sa couleur
          deja multipliee par son intensite, et cette intensite pour opacite.
          La ou l'orbe brille, elle couvre ; ailleurs, rien. */

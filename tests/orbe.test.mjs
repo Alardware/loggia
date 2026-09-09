@@ -62,6 +62,23 @@ test('les couleurs sortent prémultipliées, comme le navigateur les attend', ()
     'laisser `premultipliedAlpha` à son défaut : le préciser ici, c’est le mettre à faux');
 });
 
+test('la lumière s’éteint avant le bord du cadre', () => {
+  /* Le carré signalé quatre fois. Ce n'était ni les couleurs, ni l'alpha, ni
+   * le verre dépoli de la feuille — c'était un trait droit, et un trait droit
+   * vient d'une coupure.
+   *
+   * Mesure du 09/09/2026, alpha lu sur TOUT le pourtour du canevas et non sur
+   * les seuls coins : maximum 17 sur 255. Faible, mais tranché net au ras du
+   * cadre — et c'est ce trait que l'œil voit, pas l'orbe. Après extinction :
+   * 0 sur tout le pourtour, 10 à trois pixels du bord, 250 au cœur. L'orbe
+   * elle-même est intacte, seule la frange coupée disparaît.
+   *
+   * La distance de Tchebychev et non un rayon : elle vaut 1 sur tout le
+   * pourtour, coins compris, là où un cercle les manquerait. */
+  assert.match(SRC, /vec2 q = abs\(vUv - 0\.5\) \* 2\.0;/);
+  assert.match(SRC, /c \*= 1\.0 - smoothstep\(0\.86, 1\.0, max\(q\.x, q\.y\)\);/);
+});
+
 test('le fond uniforme du flou est ramené à zéro', () => {
   /* Le plus large des quatre flous porte jusqu'aux bords et dépose sur TOUT le
    * carré un fond faible mais uniforme. Aucun régime de composition ne le
