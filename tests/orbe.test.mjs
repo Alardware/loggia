@@ -81,3 +81,32 @@ test('la boucle et ses écoutes se libèrent au démontage', () => {
   assert.match(SRC, /suiviTaille\.disconnect\(\)/);
   assert.match(SRC, /renderer\.dispose\(\)/);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Le garde-fou de developpement.
+//
+// L'orbe nait dans un effet a dependances vides. Le remplacement a chaud de
+// Vite echange le module sans rejouer cet effet : l'orbe qui tourne reste
+// celle du chargement initial, batie avec l'ancien code. On corrige, on
+// regarde l'ecran, et on voit l'ancien rendu.
+//
+// Mesure du 09/09/2026 : un temoin pose sur `window` survivait a l'edition du
+// fichier — donc pas de rechargement. Avec le garde-fou, il disparait.
+//
+// Ce bloc ne part jamais en production : `import.meta.hot` vaut `undefined` au
+// build, et le chunk produit garde exactement le meme condensat qu'avant son
+// ajout. Ce test le garde en place, et surtout garde le rechargement SOUS la
+// condition — un `location.reload()` qui s'echapperait rechargerait le
+// dashboard de la maison.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('en developpement, une edition de ce fichier recharge la page', () => {
+  assert.ok(SRC.includes('if (import.meta.hot) {'), 'garde-fou de developpement absent');
+  assert.ok(SRC.includes('import.meta.hot.accept(() => { window.location.reload(); });'),
+    'le garde-fou ne recharge plus la page');
+});
+
+test('aucun rechargement ne vit hors de cette garde', () => {
+  const nb = SRC.split('location.reload').length - 1;
+  assert.equal(nb, 1, 'un seul rechargement, et seulement sous `import.meta.hot`');
+});

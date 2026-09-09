@@ -836,3 +836,26 @@ export default function Orbe({ etat = 'idle', niveau = null, onToucher = null, t
     )
   );
 }
+
+/* ── En developpement, ce fichier force un rechargement complet ──────────────
+ *
+ * L'orbe nait dans un `useEffect(…, [])` : un contexte WebGL, une boucle
+ * d'animation, quelques dizaines de milliers de particules. Le remplacement a
+ * chaud de Vite echange bien le module, mais il ne rejoue PAS cet effet.
+ * L'orbe qui tourne a l'ecran reste donc celle du chargement initial, batie
+ * avec l'ancien code — on corrige, on regarde, et on voit l'ancien rendu.
+ *
+ * Ce n'est pas une hypothese : mesure du 09/09/2026 sur la demo, un temoin
+ * pose sur `window` survivait a l'edition du fichier. Trois corrections
+ * d'affilee ont ainsi paru sans effet, et la quatrieme a paru revenir en
+ * arriere.
+ *
+ * Recharger tout est brutal, et c'est justement ce qu'il faut ici : l'orbe ne
+ * sait pas se reconstruire a moitie. Le cout est nul — cette page se recharge
+ * en une seconde, et on ne modifie pas ce fichier dix fois par minute.
+ *
+ * `import.meta.hot` vaut `undefined` au build : rien de ceci n'est livre.
+ */
+if (import.meta.hot) {
+  import.meta.hot.accept(() => { window.location.reload(); });
+}
