@@ -29,12 +29,20 @@
 //
 // Aucune de ces trois n'apparaissait au lint, aux tests ou dans la console.
 //
-// La règle vérifiée ici est étroite à dessein : elle ne dit pas « jamais de
-// composant interne », elle dit « pas de composant interne AUTOUR d'un
-// contrôle de formulaire ». C'est exactement la faute, elle se constate sans
-// liste d'exceptions à entretenir, et elle se déclenche le jour où quelqu'un
-// ajoute un champ dans un composant interne — c'est-à-dire au moment précis où
-// cela devient un bug.
+// La règle était d'abord étroite — « pas de composant interne autour d'un
+// champ » — parce que onze autres en violaient l'esprit sans rien casser. Ils
+// sont montés à leur tour le 09/09/2026, et la règle est donc ABSOLUE :
+// aucun composant employé comme balise ne se définit dans un autre.
+//
+// Absolue plutôt qu'étroite, une fois que c'est tenable, parce que le coût est
+// réel même sans champ. `Item`, dans la Bibliothèque, est employé quarante-huit
+// fois : à chaque rendu du parent, quarante-huit sous-arbres jetés et refaits,
+// et toute transition CSS en cours qui repart de zéro. Et surtout : la version
+// étroite laissait la faute s'installer partout, en attendant que quelqu'un
+// ajoute un champ au mauvais endroit.
+//
+// Le message d'échec dit toujours si un champ est en jeu — c'est ce qui
+// distingue « lent pour rien » de « impossible à remplir ».
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from 'node:test';
@@ -126,20 +134,19 @@ function internes(src) {
   return trouves;
 }
 
-test('aucun composant interne n’enveloppe un contrôle de formulaire', () => {
+test('aucun composant n’est défini dans un autre composant', () => {
   const fautes = [];
   for (const [chemin, src] of sources()) {
     for (const c of internes(src)) {
-      const dedans = CONTROLE.test(corps(src, c.index));
-      const dessous = CONTROLE.test(enfants(src, c.nom));
-      if (dedans || dessous) {
-        const ligne = src.slice(0, c.index).split('\n').length;
-        fautes.push(`${chemin}:${ligne} ${c.nom} (${dedans ? 'contient' : 'reçoit'} un champ)`);
-      }
+      const ligne = src.slice(0, c.index).split('\n').length;
+      // Le champ ne change pas le verdict, seulement l'urgence : sans lui on
+      // refait du travail pour rien, avec lui la saisie devient impossible.
+      const champ = CONTROLE.test(corps(src, c.index)) || CONTROLE.test(enfants(src, c.nom));
+      fautes.push(chemin + ':' + ligne + ' ' + c.nom + (champ ? '  ← entoure un champ de saisie' : ''));
     }
   }
   assert.deepEqual(fautes, [],
-    'composants internes autour d’un champ — les remonter au niveau du module :\n  ' + fautes.join('\n  '));
+    'composants définis dans un autre composant — les remonter au niveau du module :\n  ' + fautes.join('\n  '));
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

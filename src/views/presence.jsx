@@ -14,6 +14,31 @@ import {
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
+/* Au niveau du module, et non dans le composant.
+ *
+ * Une fonction declaree dans un corps de composant est recreee a chaque
+ * rendu : React voit un type different au meme endroit et remonte tout le
+ * sous-arbre. Ici rien ne prend le focus, donc rien ne se voyait — mais le
+ * travail etait refait pour rien a chaque frappe, et toute transition CSS en
+ * cours repartait de zero. Voir `tests/composants.test.mjs`. */
+
+const Bascule = ({ on, cb, nom }) => (
+  <button aria-label={nom} onClick={cb} style={{ width: 46, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 2, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
+    <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
+  </button>
+);
+
+const Rangee = ({ nom, desc, on, cb }) => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+    <span style={{ minWidth: 0 }}>
+      <span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{nom}</span>
+      {desc ? <span style={{ display: 'block', fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 2 }}>{desc}</span> : null}
+    </span>
+    <Bascule nom={nom} on={on} cb={cb} />
+  </div>
+);
+
+
 export function PresenceReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const { etat, setEtat, err, setErr, vivant } =
@@ -85,21 +110,7 @@ export function PresenceReglages({ hass, cardSt }) {
   const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
   const champ = { padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
 
-  const Bascule = ({ on, cb, nom }) => (
-    <button aria-label={nom} onClick={cb} style={{ width: 46, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 2, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
-      <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
-    </button>
-  );
 
-  const Rangee = ({ nom, desc, on, cb }) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-      <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{nom}</span>
-        {desc ? <span style={{ display: 'block', fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 2 }}>{desc}</span> : null}
-      </span>
-      <Bascule nom={nom} on={on} cb={cb} />
-    </div>
-  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

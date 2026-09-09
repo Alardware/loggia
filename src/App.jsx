@@ -56,6 +56,99 @@ import energyEvImg from './assets/energy/ev-car-home.webp';
 import energyBatImg from './assets/energy/battery.webp';
 import { tr, trHA, preparerLangue, locale } from './i18n.js';
 
+/* ── Briques d'affichage, au niveau du module ────────────────────────────────
+ *
+ * Elles vivaient dans le corps de leur composant. Une fonction declaree la est
+ * recreee a chaque rendu : React voit un type different au meme endroit et
+ * remonte tout le sous-arbre — l'ancien noeud est jete, un neuf prend sa place.
+ *
+ * Aucune de celles-ci n'entoure de champ de saisie, donc rien ne se voyait :
+ * c'est un champ qui rend la faute visible, en perdant son focus a chaque
+ * lettre. Le gaspillage, lui, etait bien la — `Item` est employe quarante-huit
+ * fois dans la Bibliotheque, et toute transition CSS en cours repartait de
+ * zero a chaque rendu du parent.
+ *
+ * `rad` devient RAD pour la meme raison qu'il monte : un autre composant du
+ * fichier declare son propre `rad`, et une constante de module masquee par une
+ * locale du meme nom se lit mal.
+ *
+ * Voir `tests/composants.test.mjs`.
+ */
+
+const Ligne = ({ id, on, nom, onToggle }) => {
+  return (
+    <div role="checkbox" aria-checked={on} tabIndex={0} onClick={() => onToggle(id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(id); } }}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 11px', borderRadius: 10, cursor: 'pointer', border: '1px solid ' + (on ? 'rgba(var(--o-accent-rgb),.4)' : 'var(--o-bd3)'), background: on ? 'rgba(var(--o-accent-rgb),.11)' : 'var(--o-s2)' }}>
+      <span style={{ width: 19, height: 19, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--o-accent-fond)' : 'transparent', border: on ? 'none' : '1.5px solid var(--o-bd1)' }}>
+        {on && <Fi i="check" size={10} color="#06121f" />}
+      </span>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom(id)}</div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{id}</div>
+      </div>
+    </div>
+  );
+};
+
+// Bloc du bandeau : libellé + contrôle, comme la vue Pièce
+const QuickBox = ({ label, children }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
+    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{label}</span>
+    {children}
+  </div>
+);
+
+const RAD = Math.PI / 180;
+
+// Chip SVG façon Helios : icône mini + texte (soleil/panneau/maison/pylône)
+const CHIP_ICONS = {
+  sun: (c) => <g stroke={c} strokeWidth="1.2" fill="none"><circle cx="0" cy="0" r="2.6" fill={c} stroke="none" />{[0, 60, 120, 180, 240, 300].map(a => <line key={a} x1={4 * Math.cos(a * RAD)} y1={4 * Math.sin(a * RAD)} x2={5.8 * Math.cos(a * RAD)} y2={5.8 * Math.sin(a * RAD)} />)}</g>,
+  panel: (c) => <path d="M 1.5 -5.5 L -3.5 0.5 L -0.5 0.5 L -1.5 5.5 L 3.5 -0.5 L 0.5 -0.5 Z" fill={c} />,
+  house: (c) => <path d="M -5 0.5 L 0 -4.5 L 5 0.5 L 3.6 0.5 L 3.6 5 L -3.6 5 L -3.6 0.5 Z" fill={c} />,
+  pylon: (c) => <g stroke={c} strokeWidth="1.3" fill="none"><path d="M -3.5 5.5 L -1 -5 L 1 -5 L 3.5 5.5" /><line x1="-4.8" y1="-2.6" x2="4.8" y2="-2.6" /><line x1="-2.6" y1="2" x2="2.6" y2="2" /></g>,
+};
+
+const Chip = ({ x, y, color, txt, icon, live = false }) => {
+  const w = 22 + txt.length * 6.4 + 12;
+  return (
+    <g transform={`translate(${x - w / 2} ${y - 11})`}>
+      {live && !REDUCE_MOTION && <rect x="-3" y="-3" width={w + 6} height="28" rx="14" fill="none" stroke={color} strokeWidth="1.4" opacity=".45"><animate attributeName="opacity" values=".45;.08;.45" dur="2.4s" repeatCount="indefinite" /><animate attributeName="x" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="y" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="width" values={`${w + 6};${w + 12};${w + 6}`} dur="2.4s" repeatCount="indefinite" /><animate attributeName="height" values="28;34;28" dur="2.4s" repeatCount="indefinite" /></rect>}
+      <rect width={w} height="22" rx="11" fill="rgba(8,13,22,.9)" stroke={color} strokeWidth="1.6" />
+      <g transform="translate(13 11)">{(CHIP_ICONS[icon] || CHIP_ICONS.sun)(color)}</g>
+      <text x={(w + 22) / 2 - 1} y="15" textAnchor="middle" fontSize="11" fontWeight="800" fill="#eaf0fb" fontFamily="var(--o-font)">{txt}</text>
+    </g>
+  );
+};
+
+const SunMark = ({ x, y, hm }) => (
+  <g className="o-sunmark" opacity=".8">
+    <circle cx={x} cy={y} r="3.4" fill="none" stroke="var(--o-gold)" strokeWidth="1.3" />
+    {[0, 45, 90, 135, 180, 225, 270, 315].map(a => <line key={a} x1={x + 5.4 * Math.cos(a * RAD)} y1={y + 5.4 * Math.sin(a * RAD)} x2={x + 7.4 * Math.cos(a * RAD)} y2={y + 7.4 * Math.sin(a * RAD)} stroke="var(--o-gold)" strokeWidth="1.1" />)}
+    <text x={x} y={y + 19} textAnchor="middle" fontSize="9.5" fontWeight="700" fill="var(--o-text3)" fontFamily="var(--o-font)">{hm}</text>
+  </g>
+);
+
+const Titre = ({ i, c, t }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '26px 0 12px' }}>
+    <Fi i={i} size={16} color={c} />
+    <span style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 500 }}>{t}</span>
+  </div>
+);
+
+/* Chaque exemplaire vit dans un gabarit à hauteur FIXE, comme dans les
+ * vraies grilles : compacte = 88 px, standard = 184 px. La vitrine montre
+ * exactement ce que les vues montreront. */
+const Item = ({ l, w = 250, h = 184, children }) => (
+  <div style={{ width: w, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)', textTransform: 'uppercase' }}>{l}</span>
+    <div className="o-bibitem" style={{ minWidth: 0, height: h }}>{children}</div>
+  </div>
+);
+
+const Rangee = ({ children }) => <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>{children}</div>;
+
+
 // Contexte barre du haut : expose les actions globales (sidebar, thème, édition, nav) au Header partagé.
 const HeaderCtx = createContext(null);
 
@@ -3275,22 +3368,6 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
     ? tous.filter(id => id.toLowerCase().indexOf(terme) >= 0 || String(nom(id)).toLowerCase().indexOf(terme) >= 0).slice(0, 60)
     : [];
 
-  const Ligne = ({ id }) => {
-    const on = present.indexOf(id) >= 0;
-    return (
-      <div role="checkbox" aria-checked={on} tabIndex={0} onClick={() => onToggle(id)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(id); } }}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 11px', borderRadius: 10, cursor: 'pointer', border: '1px solid ' + (on ? 'rgba(var(--o-accent-rgb),.4)' : 'var(--o-bd3)'), background: on ? 'rgba(var(--o-accent-rgb),.11)' : 'var(--o-s2)' }}>
-        <span style={{ width: 19, height: 19, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--o-accent-fond)' : 'transparent', border: on ? 'none' : '1.5px solid var(--o-bd1)' }}>
-          {on && <Fi i="check" size={10} color="#06121f" />}
-        </span>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom(id)}</div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{id}</div>
-        </div>
-      </div>
-    );
-  };
 
   const titre = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 8px' };
 
@@ -3313,7 +3390,7 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
             <>
               <div style={titre}>DANS LA ZONE « {String(room).toUpperCase()} » ({zoneIds.length})</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {zoneIds.map(id => <Ligne key={id} id={id} />)}
+                {zoneIds.map(id => <Ligne key={id} id={id} on={present.indexOf(id) >= 0} nom={nom} onToggle={onToggle} />)}
               </div>
             </>
           )}
@@ -3326,7 +3403,7 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
             <>
               <div style={titre}>{trouves.length ? trouves.length + ' RÉSULTAT' + (trouves.length > 1 ? 'S' : '') : 'AUCUN RÉSULTAT'}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {trouves.map(id => <Ligne key={id} id={id} />)}
+                {trouves.map(id => <Ligne key={id} id={id} on={present.indexOf(id) >= 0} nom={nom} onToggle={onToggle} />)}
               </div>
             </>
           )}
@@ -6719,13 +6796,6 @@ function ScenesContent({ hass }) {
     else { const ids = dimmableLights(hass); if (ids.length) call('light', 'turn_on', { entity_id: ids, brightness_pct: v }); }
   };
   const totalScenes = Object.values(HUE_SCENES).reduce((n, c) => n + c.scenes.length, 0);
-  // Bloc du bandeau : libellé + contrôle, comme la vue Pièce
-  const QuickBox = ({ label, children }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{label}</span>
-      {children}
-    </div>
-  );
   const miniBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' });
 
   return (
@@ -7477,34 +7547,8 @@ function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null }) 
   // sous-courbe 0→t (subdivision de De Casteljau)
   const Ct = [P0[0] + (C[0] - P0[0]) * t, P0[1] + (C[1] - P0[1]) * t];
   const day = s.day;
-  const rad = Math.PI / 180;
-  const irr = day ? Math.max(0, Math.round(1090 * Math.pow(Math.max(0, Math.sin(s.elevation * rad)), 1.15))) : 0; // irradiance ciel clair estimée
+  const irr = day ? Math.max(0, Math.round(1090 * Math.pow(Math.max(0, Math.sin(s.elevation * RAD)), 1.15))) : 0; // irradiance ciel clair estimée
   const fmtKW = (w) => Math.abs(w) >= 995 ? (w / 1000).toFixed(1).replace('.', ',') + ' kW' : Math.round(w) + ' W';
-  // Chip SVG façon Helios : icône mini + texte (soleil/panneau/maison/pylône)
-  const CHIP_ICONS = {
-    sun: (c) => <g stroke={c} strokeWidth="1.2" fill="none"><circle cx="0" cy="0" r="2.6" fill={c} stroke="none" />{[0, 60, 120, 180, 240, 300].map(a => <line key={a} x1={4 * Math.cos(a * rad)} y1={4 * Math.sin(a * rad)} x2={5.8 * Math.cos(a * rad)} y2={5.8 * Math.sin(a * rad)} />)}</g>,
-    panel: (c) => <path d="M 1.5 -5.5 L -3.5 0.5 L -0.5 0.5 L -1.5 5.5 L 3.5 -0.5 L 0.5 -0.5 Z" fill={c} />,
-    house: (c) => <path d="M -5 0.5 L 0 -4.5 L 5 0.5 L 3.6 0.5 L 3.6 5 L -3.6 5 L -3.6 0.5 Z" fill={c} />,
-    pylon: (c) => <g stroke={c} strokeWidth="1.3" fill="none"><path d="M -3.5 5.5 L -1 -5 L 1 -5 L 3.5 5.5" /><line x1="-4.8" y1="-2.6" x2="4.8" y2="-2.6" /><line x1="-2.6" y1="2" x2="2.6" y2="2" /></g>,
-  };
-  const Chip = ({ x, y, color, txt, icon, live = false }) => {
-    const w = 22 + txt.length * 6.4 + 12;
-    return (
-      <g transform={`translate(${x - w / 2} ${y - 11})`}>
-        {live && !REDUCE_MOTION && <rect x="-3" y="-3" width={w + 6} height="28" rx="14" fill="none" stroke={color} strokeWidth="1.4" opacity=".45"><animate attributeName="opacity" values=".45;.08;.45" dur="2.4s" repeatCount="indefinite" /><animate attributeName="x" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="y" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="width" values={`${w + 6};${w + 12};${w + 6}`} dur="2.4s" repeatCount="indefinite" /><animate attributeName="height" values="28;34;28" dur="2.4s" repeatCount="indefinite" /></rect>}
-        <rect width={w} height="22" rx="11" fill="rgba(8,13,22,.9)" stroke={color} strokeWidth="1.6" />
-        <g transform="translate(13 11)">{(CHIP_ICONS[icon] || CHIP_ICONS.sun)(color)}</g>
-        <text x={(w + 22) / 2 - 1} y="15" textAnchor="middle" fontSize="11" fontWeight="800" fill="#eaf0fb" fontFamily="var(--o-font)">{txt}</text>
-      </g>
-    );
-  };
-  const SunMark = ({ x, y, hm }) => (
-    <g className="o-sunmark" opacity=".8">
-      <circle cx={x} cy={y} r="3.4" fill="none" stroke="var(--o-gold)" strokeWidth="1.3" />
-      {[0, 45, 90, 135, 180, 225, 270, 315].map(a => <line key={a} x1={x + 5.4 * Math.cos(a * rad)} y1={y + 5.4 * Math.sin(a * rad)} x2={x + 7.4 * Math.cos(a * rad)} y2={y + 7.4 * Math.sin(a * rad)} stroke="var(--o-gold)" strokeWidth="1.1" />)}
-      <text x={x} y={y + 19} textAnchor="middle" fontSize="9.5" fontWeight="700" fill="var(--o-text3)" fontFamily="var(--o-font)">{hm}</text>
-    </g>
-  );
   return (
     <svg viewBox="0 0 600 250" preserveAspectRatio="xMidYMid meet" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
       {/* arc complet estompé + segment parcouru brillant (style Helios) */}
@@ -10559,22 +10603,6 @@ function BiblioView() {
     icon: <Fi i="home" color="#60a5fa" size={17} />, box: 44, rad: 13,
     live: { temp: 21.4, hum: 47 }, status: { kind: 'repos' }, badge: '612 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)',
   };
-  const Titre = ({ i, c, t }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '26px 0 12px' }}>
-      <Fi i={i} size={16} color={c} />
-      <span style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 500 }}>{t}</span>
-    </div>
-  );
-  /* Chaque exemplaire vit dans un gabarit à hauteur FIXE, comme dans les
-   * vraies grilles : compacte = 88 px, standard = 184 px. La vitrine montre
-   * exactement ce que les vues montreront. */
-  const Item = ({ l, w = 250, h = 184, children }) => (
-    <div style={{ width: w, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)', textTransform: 'uppercase' }}>{l}</span>
-      <div className="o-bibitem" style={{ minWidth: 0, height: h }}>{children}</div>
-    </div>
-  );
-  const Rangee = ({ children }) => <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>{children}</div>;
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, padding: '26px 28px 40px', overflowX: 'hidden' }}>
       <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Bibliothèque')}</h1>

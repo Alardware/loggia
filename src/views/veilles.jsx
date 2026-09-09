@@ -11,6 +11,30 @@ import {
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
+/* Au niveau du module, et non dans le composant.
+ *
+ * Une fonction declaree dans un corps de composant est recreee a chaque
+ * rendu : React voit un type different au meme endroit et remonte tout le
+ * sous-arbre. Ici rien ne prend le focus, donc rien ne se voyait — mais le
+ * travail etait refait pour rien a chaque frappe, et toute transition CSS en
+ * cours repartait de zero. Voir `tests/composants.test.mjs`. */
+
+const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
+
+const Choix = ({ liste, retenues, champNom, section, enregistrer }) => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+    {liste.map(x => {
+      const on = (retenues || []).indexOf(x.id) >= 0;
+      return (
+        <button key={x.id}
+          onClick={() => enregistrer({ [section]: { [champNom]: on ? retenues.filter(y => y !== x.id) : [...(retenues || []), x.id] } })}
+          style={puce(on)}>{x.nom}</button>
+      );
+    })}
+  </div>
+);
+
+
 export function VeillesReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const { etat, setEtat, err, setErr, vivant } =
@@ -80,22 +104,9 @@ export function VeillesReglages({ hass, cardSt }) {
   const titre = { fontSize: 15, fontWeight: 700 };
   const label = { fontSize: 12, fontWeight: 700 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
-  const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
   const champ = { padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
 
 
-  const Choix = ({ liste, retenues, champNom, section }) => (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-      {liste.map(x => {
-        const on = (retenues || []).indexOf(x.id) >= 0;
-        return (
-          <button key={x.id}
-            onClick={() => enregistrer({ [section]: { [champNom]: on ? retenues.filter(y => y !== x.id) : [...(retenues || []), x.id] } })}
-            style={puce(on)}>{x.nom}</button>
-        );
-      })}
-    </div>
-  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -131,13 +142,13 @@ export function VeillesReglages({ hass, cardSt }) {
                   ? tr('Aucun capteur de CO2 trouvé.')
                   : tr('Sans choix, tous les capteurs de CO2 sont surveillés.')}
               </div>
-              <Choix liste={(etat.capteurs_co2 || []).map(id => ({ id, nom: nomDe(id) }))}
+              <Choix enregistrer={enregistrer} liste={(etat.capteurs_co2 || []).map(id => ({ id, nom: nomDe(id) }))}
                 retenues={co2.capteurs} champNom="capteurs" section="co2" />
             </div>
             {commandables.length > 0 && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ ...label, marginBottom: 8 }}>{tr('Et lancer, si tu veux')}</div>
-                <Choix liste={commandables} retenues={co2.ventilation} champNom="ventilation" section="co2" />
+                <Choix enregistrer={enregistrer} liste={commandables} retenues={co2.ventilation} champNom="ventilation" section="co2" />
               </div>
             )}
           </div>
@@ -199,7 +210,7 @@ export function VeillesReglages({ hass, cardSt }) {
                 <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 8 }}>
                   {tr('Une prise n’est pas une machine chargée : la notification reste le plus sûr.')}
                 </div>
-                <Choix liste={commandables} retenues={cr.prises} champNom="prises" section="creuses" />
+                <Choix enregistrer={enregistrer} liste={commandables} retenues={cr.prises} champNom="prises" section="creuses" />
               </div>
             )}
           </div>

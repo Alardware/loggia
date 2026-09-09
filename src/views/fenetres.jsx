@@ -15,6 +15,21 @@ import { LOGGIA_INDEX } from '../state.js';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
+/* Au niveau du module, et non dans le composant.
+ *
+ * Une fonction declaree dans un corps de composant est recreee a chaque
+ * rendu : React voit un type different au meme endroit et remonte tout le
+ * sous-arbre. Ici rien ne prend le focus, donc rien ne se voyait — mais le
+ * travail etait refait pour rien a chaque frappe, et toute transition CSS en
+ * cours repartait de zero. Voir `tests/composants.test.mjs`. */
+
+const Bascule = ({ on, cb, nom }) => (
+  <button aria-label={nom} onClick={cb} style={{ width: 46, height: 26, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 3, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
+    <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
+  </button>
+);
+
+
 /* Ce qui compte comme ouvrant : Home Assistant le dit lui-même dans la
  * `device_class`, plutôt que de le deviner sur le nom de l'entité. */
 const CLASSES_OUVRANT = ['window', 'door', 'garage_door', 'opening'];
@@ -95,11 +110,6 @@ export function FenetresReglages({ hass, cardSt }) {
   const label = { fontSize: 12, fontWeight: 700 };
   const puce = (on) => ({ padding: '6px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
 
-  const Bascule = ({ on, cb, nom }) => (
-    <button aria-label={nom} onClick={cb} style={{ width: 46, height: 26, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 3, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
-      <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
-    </button>
-  );
 
   /* Deux nombres dans une meme phrase, chacun avec son accord : une seule cle
    * aurait donne « 1 ouvrants ». */
