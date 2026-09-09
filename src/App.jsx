@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext, cloneElement, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext, cloneElement, lazy, Suspense, Fragment } from 'react';
 // Les deux fonds animes tirent three.js : 448 Ko a analyser, pour un decor. En
 // import direct, ce cout etait paye a CHAQUE ouverture, meme par quelqu'un qui
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
@@ -32,11 +32,15 @@ import {
 import { WX_BG, WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook } from './historique.jsx';
 import { sysKeys } from './sysconf.js';
+import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 /* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
 const AspirateurContent = lazy(() => import('./views/aspirateur.jsx'));
+/* L'assistant : sa popup tire l'orbe, qui tire Three.js. Rien de tout cela
+ * ne se telecharge tant qu'on ne lui a pas parle. */
+const AssistantSheet = lazy(() => import('./views/assistant.jsx'));
 import {
   LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle,
   feederScript, enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, droitsDe, usersSig,
@@ -11388,7 +11392,34 @@ function PinModal({ expected, onClose, onSuccess }) {
 }
 
 // Barre de navigation du bas — mobile uniquement (masquée en CSS au-dessus de 820px), activable/désactivable.
-function MobileNav({ view, onNav, onMenu }) {
+/* Le bouton de Luna, au centre de la barre.
+ *
+ * Rond et sorti de son rang, la ou les autres sont carres et alignes : ce
+ * n'est pas une vue de plus, c'est quelqu'un a qui parler. La difference de
+ * forme dit ce qu'une etiquette aurait mis trois mots a dire.
+ *
+ * Il ne monte PAS l'orbe. Trois cents particules et un contexte WebGL pour un
+ * bouton de quarante pixels, presents sur chaque ecran du dashboard, se
+ * paieraient a chaque ouverture. Un halo suffit a l'annoncer. */
+function BoutonAssistant({ onAssistant }) {
+  return (
+    <button onClick={onAssistant} aria-label={tr('Parler à l’assistant')}
+      style={{ flex: '0 0 auto', width: 62, border: 'none', background: 'transparent', cursor: 'pointer',
+        padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span aria-hidden="true" style={{
+        width: 46, height: 46, borderRadius: '50%', marginTop: -14,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'radial-gradient(circle at 38% 32%, rgba(var(--o-accent-soft-rgb),.95), var(--o-accent-fond) 62%)',
+        boxShadow: '0 0 0 5px var(--o-header), 0 6px 18px rgba(var(--o-accent-rgb),.45)',
+      }}>
+        <span style={{ width: 13, height: 13, borderRadius: '50%', background: 'rgba(255,255,255,.92)',
+          boxShadow: '0 0 10px 2px rgba(255,255,255,.55)' }} />
+      </span>
+    </button>
+  );
+}
+
+function MobileNav({ view, onNav, onMenu, onAssistant = null }) {
   const { views: avail } = useLoggia();
   // Le safe-area du bas est géré par le dashboard (card_mod padding-bottom) → l'iframe s'arrête au-dessus du home indicator.
   // Alignée sur la sidebar épurée — sans Pièces (accessibles via cartes Accueil), avec Énergie + Sécurité (demande user).
@@ -11415,12 +11446,20 @@ function MobileNav({ view, onNav, onMenu }) {
   }, []);
   return (
     <nav ref={navRef} className="loggia-mobilenav" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, alignItems: 'stretch', background: 'var(--o-header)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', paddingBottom: 'calc(var(--o-safe-bottom, 0px) + 6px)', boxShadow: '0 -8px 24px rgba(0,0,0,.22)' }}>
-      {items.map(it => { const on = view === it.id; return (
-        <button key={it.id} onClick={() => onNav(it.id)} style={cell(on)}>
+      {/* Luna prend le MILIEU, pas un bout.
+        * C'est le seul geste de la barre qui ne soit pas une navigation : on
+        * ne va pas quelque part, on adresse la parole a quelqu'un. Le mettre
+        * au bout, entre deux vues, l'aurait fait passer pour une sixieme vue.
+        * Au centre, sous le pouce, il se distingue de lui-meme. */}
+      {items.map((it, i) => { const on = view === it.id; return (
+        <Fragment key={it.id}>
+        {onAssistant && i === Math.ceil(items.length / 2) && <BoutonAssistant onAssistant={onAssistant} />}
+        <button onClick={() => onNav(it.id)} style={cell(on)}>
           {on && <span style={{ position: 'absolute', top: 0, width: 28, height: 3, borderRadius: '0 0 3px 3px', background: 'var(--o-accent-fond)' }} />}
           <Fi i={it.icon} size={20} color={on ? 'var(--o-accent)' : 'var(--o-text2)'} />
           <span>{it.label}</span>
         </button>
+        </Fragment>
       ); })}
       <button onClick={onMenu} style={cell(false)}>
         <Ico name="menu-burger" size={20} color="var(--o-text2)" />
@@ -12217,6 +12256,11 @@ export default function App() {
   useEffect(() => { if (!peutEditer) setEditMode(false); }, [peutEditer]);
   // Édition en place des vues intégrées : sheet « Entités de cette vue » (crayon actif + vue configurable).
   const [entSheet, setEntSheet] = useState(false);
+  /* L'assistant : le bouton n'apparait que si un nom est regle ET que le
+   * composant repond. Une popup qui s'ouvre sur « indisponible » ne vaut pas
+   * mieux qu'un bouton absent. */
+  const assistantNs = useAssistant(hass);
+  const [assistantOuvert, setAssistantOuvert] = useState(false);
   useEffect(() => { setEntSheet(false); }, [view, editMode]);
   const addUser = (data) => persistUsers([...users, { ...data, _k: 'u' + Date.now() }]);
   const updateUser = (i, data) => persistUsers(users.map((u, j) => j === i ? { ...u, ...data } : u));
@@ -12309,7 +12353,8 @@ export default function App() {
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
         : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
       </div>
-      {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} />}
+      {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} />}
+      {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} onClose={() => setAssistantOuvert(false)} /></Suspense>}
       {entSheet && editMode && peutEditer && <Suspense fallback={null}><ViewEntSheet view={view} hass={hass} onClose={() => setEntSheet(false)} /></Suspense>}
     </div>
     </HeaderCtx.Provider>

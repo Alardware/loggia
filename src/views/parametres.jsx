@@ -812,6 +812,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // Adresses du serveur : locales a cet appareil. Loggia n'ouvre PAS de session par ces URL
   // (il emprunte celle du navigateur) — elles servent au test de joignabilite, au repli
   // Nabu Casa et a l'intervalle de rafraichissement du pont hass.
+  const [assistantDraft, setAssistantDraft] = useState(() => String(cfgVal('loggia_assistant', '') || ''));
   const [haDraft, setHaDraft] = useState(() => {
     const c = { ...HA_CFG_DEF, ...(cfgVal('loggia_haCfg', null) || {}) };
     if (!c.local && accessKind === tr('réseau local')) c.local = accessOrigin;
@@ -1347,6 +1348,23 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       </>)}
 
       {tab === 'connexion' && (<>
+        {/* L'assistant conversationnel.
+          *
+          * Son nom vit ici et non dans le code : un assistant porte souvent le
+          * prénom de quelqu'un, et le code de Loggia est public. Réglé, il fait
+          * apparaître un bouton au centre de la barre du bas ; vide, Loggia ne
+          * cherche rien. Le nom attendu est celui de ses commandes — celui qui
+          * précède la barre oblique dans `xxx/info`. */}
+        <SecBar>
+          <SecGroup label={<span>{tr('Assistant')}<span className="o-bar-sub"><br /><span style={{ fontWeight: 600, color: 'var(--o-text3)' }}>{tr('vide = aucun')}</span></span></span>}>
+            <input value={assistantDraft} onChange={e => setAssistantDraft(e.target.value)}
+              onBlur={() => cfgSet({ loggia_assistant: assistantDraft.trim().toLowerCase() || null })}
+              aria-label={tr('Nom du composant assistant')} placeholder="assistant" spellCheck={false}
+              style={{ width: 150, padding: '9px 12px', minHeight: 44, borderRadius: 12, background: 'var(--o-s2)',
+                color: 'var(--o-text)', border: 'var(--o-bw,1px) solid var(--o-bd2)', fontSize: 13, fontWeight: 600, boxSizing: 'border-box' }} />
+          </SecGroup>
+        </SecBar>
+
         <SecBar>
           <SecGroup label={<span>Bascule Nabu Casa<span className="o-bar-sub"><br /><span style={{ fontWeight: 600, color: 'var(--o-text3)' }}>{tr('hors du réseau local')}</span></span></span>}>
             <SecTgl on={!!haDraft.fallback} cb={toggleFallback} label={tr('Proposer la bascule Nabu Casa')} />

@@ -116,6 +116,10 @@ function etatsInitiaux() {
  * la lit comme s'il lisait le localStorage. */
 function configDemo() {
   return {
+    /* La demo se donne un assistant, pour que le bouton du bas existe et que
+     * la popup ait quelque chose a raconter. Le nom vaut ce qu'il dit : c'est
+     * un reglage, chacun met le sien. */
+    loggia_assistant: 'demo',
     loggia_rooms: PIECES.map(([cle, nom, , , co2]) => ({
       room: nom,
       haid: { temp: 'sensor.' + cle + '_temperature', humidity: 'sensor.' + cle + '_humidite', co2: co2 != null ? 'sensor.' + cle + '_co2' : null },
@@ -679,8 +683,40 @@ export function installerDemo() {
         calModifies.set(msg.uid, patch);
         return Promise.resolve({});
       }
+      /* L'assistant de demonstration. Il ne pense rien : il rend un historique
+       * court, puis recopie mot a mot une reponse ecrite d'avance. Ce qui se
+       * montre ici n'est pas son intelligence, c'est le chemin — l'orbe qui
+       * change d'etat, la bulle qui se remplit, l'arret qui arrete. */
+      if (msg && msg.type === 'demo/info') return Promise.resolve({ addon: { version: 'demo' }, identity: null, phases: [], profile: null });
+      if (msg && msg.type === 'demo/history') {
+        return Promise.resolve({ conversation_id: 'demo-1', messages: [
+          { role: 'user', text: 'Il fait quel temps dehors ?', ts: Date.now() - 7 * 60000 },
+          { role: 'assistant', text: 'Onze degres et couvert. Il devrait pleuvoir vers vingt-trois heures.', ts: Date.now() - 7 * 60000 + 4000 },
+        ] });
+      }
+      if (msg && msg.type === 'demo/cancel') return Promise.resolve({});
       if (msg && msg.type === 'loggia/discovery') return Promise.resolve({ index: indexDemo(states) });
       return Promise.reject(new Error('démonstration : pas de composant serveur'));
+    },
+    /* `connection.subscribeMessage` : le seul endroit ou la demo doit imiter
+     * un FLUX et non une reponse. L'assistant repond mot a mot ; rendre la
+     * phrase d'un bloc montrerait autre chose que ce qui se passe vraiment. */
+    connection: {
+      subscribeMessage: (rappel, msg) => {
+        if (!msg || msg.type !== 'demo/chat') return Promise.reject(new Error('démonstration : pas de composant serveur'));
+        const phrase = 'Je suis la demonstration : je ne sais rien de ta maison, mais je sais montrer le chemin. Pose la meme question a ton assistant, et il repondra pour de vrai.';
+        const mots = phrase.split(' ');
+        let i = 0, mort = false;
+        rappel({ event: 'accepted', message_id: 'demo-' + Date.now(), conversation_id: 'demo-1' });
+        const suite = () => {
+          if (mort) return;
+          if (i >= mots.length) { rappel({ event: 'done' }); return; }
+          rappel({ event: 'delta', text: (i ? ' ' : '') + mots[i++] });
+          setTimeout(suite, 55);
+        };
+        setTimeout(suite, 700);
+        return Promise.resolve(() => { mort = true; });
+      },
     },
     callService,
     callApi: (methode, chemin) => {
