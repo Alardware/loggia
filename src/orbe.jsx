@@ -112,11 +112,29 @@ export function creerOrbe(hote) {
 
   /* ══ renderer ══ */
   const stage = hote;
-  const renderer = new THREE.WebGLRenderer({ antialias:false, alpha:false, powerPreference:'high-performance' });
+  /* `alpha` et non le noir opaque de la page d'origine.
+   * Elle occupait tout l'ecran : peindre le fond en noir n'y coutait rien.
+   * Dans une popup, ce meme noir devient un DISQUE pose sur la feuille — on
+   * voit le cadre de l'orbe avant de voir l'orbe. Le canevas est donc
+   * transparent, et c'est la lumiere seule qui se depose. */
+  const renderer = new THREE.WebGLRenderer({
+    antialias:false, alpha:true, powerPreference:'high-performance',
+    /* `premultipliedAlpha` par defaut vaut VRAI : le navigateur croit alors
+     * que chaque couleur a deja ete multipliee par son opacite. La passe
+     * finale rend des couleurs DROITES — la lumiere d'un cote, son intensite
+     * de l'autre. Le desaccord ne se voit pas sur l'orbe, qui est brillante,
+     * mais depose un voile uniforme sur tout le reste du carre : un cadre
+     * pale autour d'elle, exactement aux bords du canevas. */
+    premultipliedAlpha: false,
+  });
   const DPR = Math.min(1.5, window.devicePixelRatio || 1);
   renderer.setPixelRatio(DPR);
-  renderer.setClearColor(0x000000, 1);
+  renderer.setClearColor(0x000000, 0);
   renderer.autoClear = false;
+  // Aucun fond propre : ce qui n'est pas de la lumiere doit laisser voir la
+  // feuille, pas une plaque de la couleur par defaut du navigateur.
+  renderer.domElement.style.background = 'transparent';
+  renderer.domElement.style.display = 'block';
   stage.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -522,8 +540,8 @@ export function creerOrbe(hote) {
       c += (texture2D(tex,vUv+o*1.3846153846)+texture2D(tex,vUv-o*1.3846153846))*0.3162162162;
       c += (texture2D(tex,vUv+o*3.2307692308)+texture2D(tex,vUv-o*3.2307692308))*0.0702702703;
       gl_FragColor = c; }` });
-  const compMat = new THREE.ShaderMaterial({ uniforms:{ tScene:{value:null}, tB0:{value:null}, tB1:{value:null}, tB2:{value:null}, tB3:{value:null}, uExp:{value:1}, uBloom:{value:1}, uBg:{value:new THREE.Color()} }, vertexShader:VS,
-    fragmentShader:`uniform sampler2D tScene,tB0,tB1,tB2,tB3; uniform float uExp,uBloom; uniform vec3 uBg; varying vec2 vUv;
+  const compMat = new THREE.ShaderMaterial({ uniforms:{ tScene:{value:null}, tB0:{value:null}, tB1:{value:null}, tB2:{value:null}, tB3:{value:null}, uExp:{value:1}, uBloom:{value:1} }, vertexShader:VS,
+    fragmentShader:`uniform sampler2D tScene,tB0,tB1,tB2,tB3; uniform float uExp,uBloom; varying vec2 vUv;
     void main(){
       vec3 s = texture2D(tScene,vUv).rgb;
       /* Les quatre niveaux vont du plus fin (1/2) au plus large (1/16). Les
@@ -543,14 +561,23 @@ export function creerOrbe(hote) {
       vec3 burn = 1.0 - exp(-c);
       c = mix(hue, burn, smoothstep(1.6, 4.5, L) * 0.55);
       c = pow(clamp(c, 0.0, 1.0), vec3(0.94));
-      float d = distance(vUv, vec2(0.5));
-      gl_FragColor = vec4(uBg*(1.0 - 0.55*d) + c, 1.0);
+      /* Le fond degrade et l'alpha a 1 dessinaient un disque. Ce qui sort
+         d'ici n'est plus une image mais de la LUMIERE : sa couleur, et son
+         intensite pour opacite. La ou l'orbe ne brille pas, la feuille se
+         voit au travers ; la ou elle brille, elle couvre. */
+      float a = clamp(max(max(c.r, c.g), c.b), 0.0, 1.0);
+      gl_FragColor = vec4(c, a);
     }` });
 
   function resize(){
     const w = stage.clientWidth, h = stage.clientHeight;
     if (!w || !h) return;
-    renderer.setSize(w, h, false);
+    /* Sans le troisieme argument, three pose AUSSI la taille CSS du canevas.
+     * La page d'origine s'en passait : sa feuille de style l'etirait a 100 %.
+     * Ici rien ne l'etirait — le canevas gardait donc sa taille en pixels,
+     * une fois et demie trop grande sur un ecran dense, et debordait de son
+     * hote par le bas et la droite. */
+    renderer.setSize(w, h);
     camera.aspect = w/h; camera.updateProjectionMatrix();
     U.uPx.value = h*DPR*.0105;
     const pw = Math.round(w*DPR), ph = Math.round(h*DPR);
@@ -690,7 +717,6 @@ export function creerOrbe(hote) {
     U.uDeep.value.setRGB(curPal.deep[0], curPal.deep[1], curPal.deep[2]);
     U.uMid.value.setRGB(curPal.mid[0], curPal.mid[1], curPal.mid[2]);
     U.uHot.value.setRGB(curPal.hot[0], curPal.hot[1], curPal.hot[2]);
-    compMat.uniforms.uBg.value.setRGB(curPal.deep[0]*.012, curPal.deep[1]*.014, curPal.deep[2]*.022);
     compMat.uniforms.uExp.value = 1.34 - S.energy*.16;
     compMat.uniforms.uBloom.value = 0.90 - S.energy*.34;
 
@@ -762,9 +788,12 @@ export function creerOrbe(hote) {
  * démontage, et reçoit ses ordres entre les deux.
  */
 export default function Orbe({ etat = 'idle', niveau = null, onToucher = null, taille = 240 }) {
+  /* Ni bord arrondi ni rognage : il n'y a plus rien a rogner. Le disque
+   * venait du fond noir, pas d'un masque — le masque ne faisait que lui
+   * donner sa forme ronde. */
   const cadre = {
     width: taille, height: taille, margin: '0 auto',
-    borderRadius: '50%', overflow: 'hidden', position: 'relative',
+    display: 'block', position: 'relative',
   };
   const hoteRef = useRef(null);
   const orbeRef = useRef(null);
