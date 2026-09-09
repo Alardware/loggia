@@ -124,6 +124,35 @@ test('l’orbe n’est demandée qu’à l’appui', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// La feuille de l'assistant renonce au verre depoli.
+//
+// Le canevas WebGL est promu en couche de composition a part, et le flou
+// d'arriere-plan ne s'applique pas sous elle : on voit le tableau de bord NET
+// dans la boite exacte du canevas — un carre autour de l'orbe.
+//
+// Mesure du 09/09/2026, thème Frosted Glass : filtre retire, carre disparu ;
+// filtre deplace dans une couche fille, carre toujours la ; `will-change:
+// backdrop-filter`, carre toujours la. Il n'y a pas d'astuce CSS — tant qu'un
+// fond translucide se trouve derriere le canevas, sa boite se voit.
+//
+// La couleur, elle, ne change pas : `--o-surfA` posee sur une base pleine
+// donne exactement la teinte qu'elle avait sur fond sombre.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const UI = readFileSync(join(SRC, 'ui.jsx'), 'utf8');
+const FEUILLE = readFileSync(join(SRC, 'views', 'assistant.jsx'), 'utf8');
+
+test('la feuille qui porte l’orbe est opaque', () => {
+  assert.match(FEUILLE, /<BottomSheet onClose=\{onClose\} opaque>/,
+    'sans `opaque`, le carre revient sous le theme Frosted Glass');
+  assert.match(UI, /export function BottomSheet\(\{ onClose, children, opaque = false \}\)/);
+  assert.match(UI, /background: opaque \? 'linear-gradient\(var\(--o-surfA\), var\(--o-surfA\)\), var\(--o-bg\)' : 'var\(--o-surfA\)'/);
+  assert.match(UI, /className=\{opaque \? 'o-sheet o-sheet-opaque' : 'o-sheet'\}/);
+  // Et la regle qui desarme le flou du theme, sans quoi la classe ne sert a rien.
+  assert.match(CSS, /html\.loggia-frosted \.o-sheet-opaque \{ -webkit-backdrop-filter: none; backdrop-filter: none; \}/);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Le poste fixe.
 //
 // La barre du bas n'existe qu'en dessous de 820 px, ou sur un écran tactile.

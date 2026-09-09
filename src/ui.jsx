@@ -339,7 +339,7 @@ export function FlipText({ text, style, live = false }) {
 
 // Bottom sheet réutilisable : monte du bas (courbe drawer iOS), scrim fondu, poignée, fermeture animée.
 // children peut être une fonction (close) => JSX pour brancher la croix sur la fermeture ANIMÉE.
-export function BottomSheet({ onClose, children }) {
+export function BottomSheet({ onClose, children, opaque = false }) {
   const [closing, setClosing] = useState(false);
   const close = () => { if (closing) return; setClosing(true); setTimeout(onClose, 420); }; // timeout filet si l'anim ne fire pas
   const sheetRef = useRef(null);
@@ -388,7 +388,7 @@ export function BottomSheet({ onClose, children }) {
         * comme le motif attendu ailleurs. Elle voit ici un role passif a qui
         * on aurait rajoute des gestes. */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-      <div ref={sheetRef} className="o-sheet" role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
+      <div ref={sheetRef} className={opaque ? 'o-sheet o-sheet-opaque' : 'o-sheet'} role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
           // Piège de focus : Tab boucle dans la feuille — derrière, la page vit
@@ -403,7 +403,7 @@ export function BottomSheet({ onClose, children }) {
           }
         }}
         onAnimationEnd={(e) => { if (closing && e.target === e.currentTarget) onClose(); }}
-        style={{ position: 'fixed', left: '50%', bottom: 0, transform: 'translate(-50%,0)', width: 'min(480px,100%)', maxHeight: '88vh', overflowY: 'auto', background: 'var(--o-surfA)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', borderLeft: 'var(--o-bw,1px) solid var(--o-bd1)', borderRight: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: '26px 26px 0 0', padding: '10px 22px calc(24px + var(--o-safe-bottom,0px))', boxShadow: '0 -10px 50px rgba(0,0,0,.35)', animation: closing ? 'o-sheetOut .3s cubic-bezier(.32,.72,.25,1) forwards' : 'o-sheetIn .46s cubic-bezier(.22,1.28,.36,1)' }}>
+        style={{ position: 'fixed', left: '50%', bottom: 0, transform: 'translate(-50%,0)', width: 'min(480px,100%)', maxHeight: '88vh', overflowY: 'auto', background: opaque ? 'linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg)' : 'var(--o-surfA)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', borderLeft: 'var(--o-bw,1px) solid var(--o-bd1)', borderRight: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: '26px 26px 0 0', padding: '10px 22px calc(24px + var(--o-safe-bottom,0px))', boxShadow: '0 -10px 50px rgba(0,0,0,.35)', animation: closing ? 'o-sheetOut .3s cubic-bezier(.32,.72,.25,1) forwards' : 'o-sheetIn .46s cubic-bezier(.22,1.28,.36,1)' }}>
         <div onPointerDown={dragClose} style={{ touchAction: 'none', cursor: 'grab', padding: '8px 60px 12px', margin: '-10px auto 2px', width: 'fit-content' }}>
           <div style={{ width: 38, height: 5, borderRadius: 4, background: 'var(--o-bd1)', margin: '0 auto' }} />
         </div>

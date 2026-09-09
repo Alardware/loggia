@@ -185,7 +185,9 @@ export default function AssistantSheet({ hass, ns, onClose }) {
   );
 
   return (
-    <BottomSheet onClose={onClose}>
+    /* `opaque` : la feuille renonce au verre depoli, et il y a une raison.
+     * Voir `.o-sheet-opaque` dans index.css. */
+    <BottomSheet onClose={onClose} opaque>
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <span style={{ flex: 1, minWidth: 0 }}>
