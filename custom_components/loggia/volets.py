@@ -201,6 +201,47 @@ def groupes_horaires(plan, covers, sens: str, quand=None) -> dict:
     return groupes
 
 
+def decalages_du_plan(plan, sens: str) -> set:
+    """Les decalages DISTINCTS d'un sens, tires de la CONFIGURATION seule.
+
+    C'est le coeur d'un defaut qui a laisse les regles mortes sans un mot.
+
+    L'armement lisait la liste des volets pour former ses groupes. Or Loggia
+    demarre en meme temps que MQTT et Zigbee2MQTT : a cet instant, les `cover.*`
+    peuvent ne pas exister encore. `groupes_horaires` rendait alors un
+    dictionnaire VIDE, la boucle qui pose les rendez-vous ne tournait pas une
+    seule fois, et plus rien ne se declenchait — ni le matin, ni le soir —
+    jusqu'au prochain enregistrement de la configuration. Aucune erreur nulle
+    part : il n'y avait simplement rien a faire, ce jour-la.
+
+    Les decalages, eux, viennent du reglage. Ils existent avant les entites et
+    ne dependent d'aucun ordre de demarrage. On arme donc sur eux, et l'on
+    resout les volets QUAND LA CLOCHE SONNE — moment ou l'installation est,
+    elle, entierement chargee.
+    """
+    section = plan.get(sens)
+    if not isinstance(section, dict):
+        section = {}
+    try:
+        general = int(section.get("decalage") or 0)
+    except (TypeError, ValueError):
+        general = 0
+    valeurs = {general}
+    par_volet = plan.get("volets") or {}
+    if isinstance(par_volet, dict):
+        for reglage in par_volet.values():
+            if not isinstance(reglage, dict) or reglage.get("exclu"):
+                continue
+            propre = reglage.get(sens)
+            if propre in (None, ""):
+                continue
+            try:
+                valeurs.add(int(propre))
+            except (TypeError, ValueError):
+                pass
+    return valeurs
+
+
 # Les trois positions du mode, reprises de celles que les installations
 # ecrivaient a la main dans un `input_select`. `actif` dit si la regle existe ;
 # le mode dit ce qu'elle fait aujourd'hui, et c'est lui qu'on change au
@@ -301,32 +342,37 @@ class LoggiaVolets:
 
         # Un rendez-vous par decalage DISTINCT, et non un par volet : trois
         # chambres qui s'ouvrent une heure plus tard partagent le leur.
-        covers = self._tous_les_covers()
-        if not covers:
-            self.raison = "aucun volet dans l'installation"
-            return
+        #
+        # Les decalages viennent de la CONFIGURATION, jamais des entites — voir
+        # `decalages_du_plan`. Lire les volets ici laissait les regles mortes
+        # quand ils n'etaient pas encore la.
         for sens, poser in (("ouverture", async_track_sunrise), ("fermeture", async_track_sunset)):
-            groupes = groupes_horaires(plan, covers, sens)
-            for decalage, cibles in groupes.items():
+            valeurs = decalages_du_plan(plan, sens)
+            for decalage in sorted(valeurs):
                 self._defait_soleil.append(
-                    poser(self.hass, self._rendezvous(sens, list(cibles)), timedelta(minutes=decalage))
+                    poser(self.hass, self._rendezvous(sens, decalage), timedelta(minutes=decalage))
                 )
-                self.armes[sens][str(decalage)] = list(cibles)
-            _LOGGER.info("Loggia volets : %s armee en %d groupe(s)", sens, len(groupes))
+                self.armes[sens][str(decalage)] = True
+            _LOGGER.info("Loggia volets : %s armee en %d groupe(s)", sens, len(valeurs))
         total = sum(len(g) for g in self.armes.values())
-        self.raison = "" if total else "aucun groupe : tous les volets sont exclus"
+        self.raison = "" if total else "aucun decalage : le planning ne dit rien"
 
-    def _rendezvous(self, sens: str, cibles: list):
-        """Le rappel d'un groupe, avec les volets qu'il commande."""
+    def _rendezvous(self, sens: str, decalage: int):
+        """Le rappel d'un groupe.
+
+        Il ne porte PAS la liste des volets : elle serait celle du demarrage,
+        et un volet ajoute depuis n'en ferait jamais partie. Il porte son
+        decalage, et la liste se recalcule au moment ou il sonne.
+        """
         quoi = "ouvrir" if sens == "ouverture" else "fermer"
 
         @callback
         def sonne(*_):
-            self.hass.async_create_task(self._async_planifie(quoi, cibles))
+            self.hass.async_create_task(self._async_planifie(quoi, decalage=decalage))
 
         return sonne
 
-    async def _async_planifie(self, sens: str, cibles=None) -> None:
+    async def _async_planifie(self, sens: str, cibles=None, decalage=None) -> None:
         from homeassistant.util import dt as dt_util
 
         plan = self.cfg.get("planning") or {}
@@ -338,7 +384,22 @@ class LoggiaVolets:
         # pas ce qui est deja ouvert pour cette raison.
         if self.a_l_abri:
             return
-        cibles = list(cibles) if cibles else self._tous_les_covers()
+        sens_long = "ouverture" if sens == "ouvrir" else "fermeture"
+        if cibles is not None:
+            cibles = list(cibles)
+        elif decalage is not None:
+            # Les volets de CE decalage, resolus maintenant : l'installation est
+            # chargee depuis longtemps quand la cloche sonne.
+            #
+            # Une liste vide veut dire « aucun volet a cette heure », jamais
+            # « tous ». Le repli general applique ici faisait bouger toute la
+            # maison a une heure que plus personne n'avait demandee — un
+            # decalage arme dont on avait retire le dernier volet.
+            cibles = list(
+                groupes_horaires(plan, self._tous_les_covers(), sens_long).get(decalage, [])
+            )
+        else:
+            cibles = self._tous_les_covers()
         # Les jours propres a chaque volet, evalues MAINTENANT.
         cibles = volets_du_jour(plan, cibles, 'ouverture' if sens == 'ouvrir' else 'fermeture', dt_util.now())
         if not cibles:
@@ -569,10 +630,20 @@ class LoggiaVolets:
             # Ce qui est ARME, et quand cela sonnera. Une regle qu'on ne peut
             # pas inspecter ne se debogue pas : quand rien ne bouge le matin, la
             # premiere question est de savoir si le rendez-vous existe.
-            "armes": {s: dict(g) for s, g in self.armes.items()},
+            "armes": {s: self._volets_armes(s) for s in self.armes},
             "raison": self.raison,
             "prochains": self._prochains(),
         }
+
+    def _volets_armes(self, sens: str) -> dict[str, Any]:
+        """Quels volets chaque decalage arme commanderait, s'il sonnait la.
+
+        Resolu MAINTENANT et non a l'armement : c'est le sens meme de la
+        correction, et l'etat doit dire ce qui se passerait vraiment.
+        """
+        plan = self.cfg.get("planning") or {}
+        groupes = groupes_horaires(plan, self._tous_les_covers(), sens)
+        return {d: list(groupes.get(int(d), [])) for d in self.armes.get(sens, {})}
 
     def _prochains(self) -> dict[str, Any]:
         """Quand sonnera chaque groupe arme, en clair."""

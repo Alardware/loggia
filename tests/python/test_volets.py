@@ -635,7 +635,31 @@ def test_le_declenchement_quotidien_applique_le_filtre():
     # Et il ne doit PAS revenir a la programmation, sinon le rendez-vous
     # n'est jamais pose pour un volet ecarte le jour de l'enregistrement.
     prog = texte[texte.index("async def _async_reprogrammer"):debut]
-    assert "groupes_horaires(plan, covers, sens)" in prog,         "la programmation filtre de nouveau par jour : le rendez-vous ne sera pas pose"
+    # La programmation ne doit filtrer NI par jour, NI par entite.
+    #
+    # Ce test exigeait auparavant `groupes_horaires(plan, covers, sens)` — sans
+    # `quand`, donc sans filtre de jour. C'etait la bonne intention et la
+    # mauvaise garde : elle imposait de lire la liste des volets a l'armement.
+    #
+    # Or Loggia demarre en meme temps que MQTT et Zigbee2MQTT. Ce jour-la les
+    # `cover.*` peuvent ne pas exister encore : `groupes_horaires` rendait un
+    # dictionnaire vide, la boucle qui pose les rendez-vous ne tournait pas une
+    # seule fois, et plus rien ne se declenchait — ni le matin, ni le soir —
+    # jusqu'au prochain enregistrement. Aucune erreur nulle part.
+    #
+    # L'armement se fait donc sur les DECALAGES, qui viennent de la
+    # configuration et existent avant toute entite.
+    assert "decalages_du_plan(plan, sens)" in prog,         "l'armement lit de nouveau les entites : il sera muet si les volets arrivent apres Loggia"
+    assert "_tous_les_covers()" not in prog,         "l'armement ne doit dependre d'aucune entite"
+    assert "groupes_horaires" not in prog,         "les groupes se resolvent au coup de cloche, pas a l'armement"
+    # Et le cablage entre les deux : le rendez-vous doit PORTER son decalage.
+    #
+    # Sans lui, `_async_planifie` ne recoit ni liste ni horaire, tombe sur le
+    # repli general, et chaque cloche commande TOUS les volets — celui de 8 h
+    # comme celui de 9 h. Les tests qui appellent la fonction directement ne
+    # voient pas ce chainon : il faut le lire ici. Constate en mutant.
+    rdv = texte[texte.index("def _rendezvous"):texte.index("async def _async_planifie")]
+    assert "self._async_planifie(quoi, decalage=decalage)" in rdv,         "le rendez-vous ne transmet plus son horaire : chaque cloche commanderait tout"
 
 def test_une_section_de_planning_corrompue_ne_plante_pas(module):
     """La meme cle porte deux formes selon le niveau.
@@ -652,3 +676,103 @@ def test_une_section_de_planning_corrompue_ne_plante_pas(module):
     for mauvais in ("corrompu", 15, [1, 2], True):
         g = module.groupes_horaires({"ouverture": mauvais, "volets": {}}, COVERS, "ouverture")
         assert COVERS[0] in [x for v in g.values() for x in v],             f"une section {type(mauvais).__name__} fait disparaitre les volets"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Les decalages viennent de la configuration, pas des entites.
+#
+# Signale le 09/09/2026 : « les volets ne se ferment pas le soir et le salon ne
+# s'ouvre pas le matin ». L'historique de quatre jours ne montrait aucun
+# mouvement au lever ni au coucher, et rien dans aucun journal.
+#
+# La cause : l'armement lisait `hass.states.async_entity_ids("cover")`. Loggia
+# demarre en meme temps que MQTT et Zigbee2MQTT — si les volets ne sont pas
+# encore la, il n'y a aucun groupe, donc aucun rendez-vous, et les regles
+# restent mortes jusqu'au prochain enregistrement de la configuration.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_les_decalages_sortent_du_reglage_general(module):
+    decalages_du_plan = module.decalages_du_plan
+    plan = {"ouverture": {"decalage": 30}, "fermeture": {"decalage": -15}}
+    assert decalages_du_plan(plan, "ouverture") == {30}
+    assert decalages_du_plan(plan, "fermeture") == {-15}
+
+
+def test_un_volet_avec_son_propre_decalage_ajoute_le_sien(module):
+    decalages_du_plan = module.decalages_du_plan
+    plan = {
+        "ouverture": {"decalage": 30},
+        "volets": {"cover.chambre": {"ouverture": 60}, "cover.salon": {"ouverture": 30}},
+    }
+    # Le general reste : un volet sans reglage propre le suit.
+    assert decalages_du_plan(plan, "ouverture") == {30, 60}
+
+
+def test_un_volet_exclu_n_arme_pas_son_decalage(module):
+    decalages_du_plan = module.decalages_du_plan
+    plan = {"ouverture": {"decalage": 0},
+            "volets": {"cover.groupe": {"exclu": True, "ouverture": 90}}}
+    assert decalages_du_plan(plan, "ouverture") == {0}
+
+
+def test_les_decalages_ne_dependent_d_aucune_entite(module):
+    """Le coeur de la correction : aucun volet en vue, et l'armement tient.
+
+    Avec l'ancienne forme, une installation dont les volets arrivent apres
+    Loggia n'armait RIEN. Ici la configuration suffit.
+    """
+    decalages_du_plan, groupes_horaires = module.decalages_du_plan, module.groupes_horaires
+    plan = {"ouverture": {"decalage": 30},
+            "volets": {"cover.salon": {"ouverture": 30}}}
+    # Aucune entite connue au moment de l'armement.
+    assert groupes_horaires(plan, [], "ouverture") == {}
+    # Et pourtant le rendez-vous est arme.
+    assert decalages_du_plan(plan, "ouverture") == {30}
+    # Quand la cloche sonne, l'installation est chargee et le volet se retrouve.
+    assert groupes_horaires(plan, ["cover.salon"], "ouverture") == {30: ["cover.salon"]}
+
+
+def test_un_decalage_illisible_ne_fait_pas_tout_tomber(module):
+    decalages_du_plan = module.decalages_du_plan
+    plan = {"ouverture": {"decalage": "trente"},
+            "volets": {"cover.a": {"ouverture": "tot"}, "cover.b": {"ouverture": 45}}}
+    # Le general illisible retombe a zero, le volet illisible est ignore, et
+    # celui qui est lisible garde le sien.
+    assert decalages_du_plan(plan, "ouverture") == {0, 45}
+
+
+def test_chaque_horaire_ne_commande_que_ses_volets(creer):
+    """La cloche de 8 h ne doit pas ouvrir le volet regle sur 9 h.
+
+    `_async_planifie` recoit un DECALAGE et non une liste : c'est lui qui
+    resout les volets, au moment ou la cloche sonne. Sans cette resolution, le
+    repli « tous les volets » s'applique — et chacun bouge a chaque horaire.
+    Constate en mutant ce test le 09/09/2026 : retirer la resolution laissait
+    tout passer.
+    """
+    etats = {
+        "cover.tot": FauxEtat("open", {"supported_features": 15}),
+        "cover.tard": FauxEtat("open", {"supported_features": 15}),
+    }
+    v = creer({"planning": {"actif": True, "mode": "auto",
+                            "ouverture": {"decalage": 0},
+                            "volets": {"cover.tard": {"ouverture": 60}}}}, etats)
+    lancer(v._async_planifie("ouvrir", decalage=0))
+    assert [a[2]["entity_id"] for a in v.hass.services.appels] == [["cover.tot"]],         "l'horaire general a emporte le volet regle plus tard"
+    v.hass.services.appels.clear()
+    lancer(v._async_planifie("ouvrir", decalage=60))
+    assert [a[2]["entity_id"] for a in v.hass.services.appels] == [["cover.tard"]]
+
+
+def test_un_horaire_sans_volet_ne_commande_rien(creer):
+    """Un decalage arme dont plus aucun volet ne depend doit rester muet.
+
+    Sans garde, le repli « tous les volets » ferait tout bouger a une heure
+    que plus personne n'a demandee.
+    """
+    etats = {"cover.salon": FauxEtat("open", {"supported_features": 15})}
+    v = creer({"planning": {"actif": True, "mode": "auto",
+                            "ouverture": {"decalage": 0}}}, etats)
+    lancer(v._async_planifie("ouvrir", decalage=120))
+    assert v.hass.services.appels == []
