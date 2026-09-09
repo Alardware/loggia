@@ -62,6 +62,28 @@ test('les couleurs sortent prémultipliées, comme le navigateur les attend', ()
     'laisser `premultipliedAlpha` à son défaut : le préciser ici, c’est le mettre à faux');
 });
 
+test('l’orbe ne remplit pas son cadre', () => {
+  /* C'etait la vraie cause du carre, signale cinq fois.
+   *
+   * Dans la page d'origine l'orbe remplissait son cadre, et c'etait sans
+   * consequence : le cadre etait l'ecran. Ici il fait deux cents pixels, et
+   * l'orbe VARIE — elle respire, elle pulse, elle s'etale quand elle repond.
+   * A chaque battement elle atteignait le bord du canevas et s'y coupait net.
+   * Aucun reglage de couleur ne pouvait retirer ce trait : il fallait lui
+   * laisser de la place.
+   *
+   * Mesure du 09/09/2026, alpha maximum par anneau, dans l'etat le plus
+   * etale — quand elle repond :
+   *
+   *      avant (cadre 200)   0,75 -> 128     bord -> 17
+   *      apres (cadre 230)   0,70 ->  83     0,80 -> 8     bord -> 0
+   *
+   * La camera recule d'un tiers, et les appelants agrandissent le cadre
+   * d'autant : l'orbe garde sa taille a l'ecran, elle a seulement de l'air. */
+  assert.match(SRC, /camera\.position\.set\(0, \.34, 5\.81\);/);
+  assert.doesNotMatch(SRC, /camera\.position\.set\(0, \.25, 4\.3\);/);
+});
+
 test('la lumière s’éteint avant le bord du cadre', () => {
   /* Le carré signalé quatre fois. Ce n'était ni les couleurs, ni l'alpha, ni
    * le verre dépoli de la feuille — c'était un trait droit, et un trait droit

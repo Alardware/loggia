@@ -11456,7 +11456,9 @@ function PinModal({ expected, onClose, onSuccess }) {
  * La voix elle-meme n'est pas encore branchee. Ce qui vit ici, c'est le geste
  * et son retour visible ; `demarrerVoix` et `arreterVoix` sont les deux points
  * ou l'ecoute viendra se poser, et rien d'autre n'aura a bouger. */
-const ORBE_MINI = 96;
+/* Le cadre est plus large que l'orbe : elle varie, et doit pouvoir gonfler
+ * sans toucher le bord. Voir la camera dans `orbe.jsx`. */
+const ORBE_MINI = 130;
 
 function BoutonAssistant({ onAssistant, onDictee = null, hass = null, sens = 'haut', variante = 'nav' }) {
   const [voix, setVoix] = useState(false);

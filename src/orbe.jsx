@@ -145,7 +145,23 @@ export function creerOrbe(hote) {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(36, 1, .1, 60);
-  camera.position.set(0, .25, 4.3);
+  /* La camera est RECULEE d'un tiers par rapport a la page d'origine.
+   *
+   * La-bas l'orbe remplissait son cadre, et c'etait sans consequence : le
+   * cadre etait l'ecran entier. Ici il fait deux cents pixels, et l'orbe
+   * VARIE — elle respire, elle pulse, elle s'etale quand on lui parle. A
+   * chaque battement elle atteignait le bord du canevas et s'y coupait net.
+   * C'est ce trait droit que l'on voyait, et aucun reglage de couleur ne
+   * pouvait le retirer : il fallait lui laisser de la place.
+   *
+   * Mesure du 09/09/2026 : au repos, la lumiere portait jusqu'aux trois
+   * quarts de la demi-largeur. Reculee d'un tiers, elle s'arrete a un peu
+   * plus de la moitie — le reste est la marge dans laquelle elle peut
+   * respirer sans jamais toucher le cadre.
+   *
+   * Les appelants agrandissent le cadre d'autant : l'orbe garde sa taille
+   * a l'ecran, elle a seulement de l'air autour. */
+  camera.position.set(0, .34, 5.81);
   const controls = new MiniOrbit(camera, renderer.domElement);
   controls.enablePan = false; controls.enableDamping = true; controls.dampingFactor = .06;
   controls.minDistance = 2.2; controls.maxDistance = 9; controls.rotateSpeed = .5; controls.zoomSpeed = .7;

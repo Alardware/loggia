@@ -318,7 +318,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
           * tout ce qui est dessous sauterait de deux cents pixels quand
           * Three.js finit d'arriver. */}
         <Suspense fallback={<div style={{ height: 200 }} />}>
-          <Orbe etat={ecoute ? 'listening' : etat} niveau={niveau} taille={200} />
+          <Orbe etat={ecoute ? 'listening' : etat} niveau={niveau} taille={230} />
         </Suspense>
 
         <div ref={filRef}
