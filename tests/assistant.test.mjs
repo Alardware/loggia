@@ -249,7 +249,7 @@ test('la voix vient du composant, pas d une URL bricolee', () => {
   // `speak` synthetise cote serveur et rend une URL de meme origine : pas de
   // jeton a manipuler dans la popup.
   assert.match(FEUILLE, /ws\.callWS\(\{ type: `\$\{ns\}\/speak`, text: t \}\)/);
-  assert.match(FEUILLE, /const son = new Audio\(r\.url\);/);
+  assert.match(FEUILLE, /const parti = await jouer\(r\.url, \(\) => setEtat\('idle'\)\);/);
   // Sans voix configuree la commande echoue : la reponse doit rester lisible.
   assert.match(FEUILLE, /\} catch \{[\s\S]{0,60}setEtat\('idle'\);/);
 });
@@ -262,8 +262,56 @@ test('la voix se tait avec la popup', () => {
    * compter, se satisfaisait de celle de `dire` : retirer celle du nettoyage
    * laissait l'assistant finir sa phrase alors que la conversation était
    * fermée, et le test ne bronchait pas. Constaté en mutant ce test. */
-  const coupures = FEUILLE.split('audioRef.current.pause();').length - 1;
+  const coupures = FEUILLE.split('couperLecture();').length - 1;
   assert.equal(coupures, 2, 'la voix doit se couper avant une nouvelle phrase ET à la fermeture');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Le mobile, où rien de tout cela ne marchait.
+//
+// Deux règles que seul le téléphone applique vraiment, et qui rendaient la voix
+// muette sans qu'aucune erreur ne paraisse nulle part.
+//
+//   • un contexte audio y naît SUSPENDU. Le geste a déjà servi à demander le
+//     micro, et `onaudioprocess` ne part jamais : on capte, on n'envoie rien,
+//     Home Assistant ne transcrit rien, l'assistant ne répond pas ;
+//   • un élément audio ne démarre que s'il a été débloqué PAR un geste. La
+//     réponse arrive des secondes plus tard : trop tard pour demander.
+//
+// Sur un poste fixe les deux passent — le contexte démarre actif, et le
+// navigateur finit par autoriser la lecture au vu de l'usage du site. D'où un
+// défaut qui ne se voyait que sur téléphone.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('le contexte audio est réveillé avant de capter', () => {
+  assert.match(VOIX, /if \(ctx\.state === 'suspended'\) \{ try \{ await ctx\.resume\(\); \}/);
+  // Et s'il refuse de se réveiller, on le DIT plutôt que de capter dans le vide.
+  assert.match(VOIX, /throw new Error\('suspendu'\);/);
+  assert.match(VOIX, /raison === 'suspendu'/);
+});
+
+test('la lecture se débloque pendant le geste, jamais après', () => {
+  // Les deux gestes qui mènent à une réponse parlée : le micro du champ de
+  // saisie, et le maintien du bouton.
+  assert.match(FEUILLE, /preparerLecture\(\);/);
+  assert.match(BOUTON, /voixMod\.preparerLecture\(\);/);
+  assert.match(VOIX, /const SILENCE = 'data:audio\/wav;base64,/);
+  /* Et la lecture RÉUTILISE l'élément débloqué : elle lui pose une adresse.
+   *
+   * En construire un neuf pour chaque réponse annulerait tout le mécanisme —
+   * le nouveau n'aurait jamais été touché par un geste, et le navigateur le
+   * refuserait. C'est le seul point qui compte vraiment ici. */
+  assert.match(VOIX, /lecteur\.src = url;/);
+  assert.doesNotMatch(VOIX, /new Audio\(url\)/);
+  assert.doesNotMatch(FEUILLE, /new Audio\(/,
+    'la popup ne doit plus fabriquer son propre élément audio');
+});
+
+test('un refus de lecture ne laisse pas la conversation figée', () => {
+  // `jouer` rend faux : sans ce retour, l'orbe resterait en « parle » pour
+  // toujours et le champ de saisie serait bloque.
+  assert.match(VOIX, /return false;      \/\/ autoplay refuse/);
+  assert.match(FEUILLE, /if \(!parti\) setEtat\('idle'\);/);
 });
 
 test('le micro se referme toujours', () => {
@@ -279,7 +327,8 @@ test('le micro se referme toujours', () => {
    * de l'une ou de l'autre : retirer celle de `ranger` — le chemin normal —
    * passait sans un mot. Constaté en mutant ce test le 09/09/2026. */
   const relaches = VOIX.split('flux.getTracks().forEach((t) => t.stop());').length - 1;
-  assert.equal(relaches, 2, 'le micro doit être relâché à la fermeture ET à l’arrêt');
+  assert.equal(relaches, 3,
+    'le micro doit être relâché à la fermeture, à l’arrêt, ET si le contexte audio refuse de se réveiller');
 });
 
 /** Le contenu d'un bloc `@media`, par équilibrage des accolades.

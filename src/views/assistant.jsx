@@ -34,7 +34,7 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { tr, locale } from '../i18n.js';
 import { Fi, BottomSheet } from '../ui.jsx';
-import { ecouter, voixDisponible, raisonLisible } from '../voix.js';
+import { ecouter, voixDisponible, raisonLisible, preparerLecture, jouer, couperLecture } from '../voix.js';
 
 /* L'orbe tire Three.js — 448 ko. Elle ne se charge donc qu'à l'ouverture de la
  * popup, jamais au démarrage du dashboard. Même raison que le fond météo. */
@@ -85,7 +85,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
    * precedent. */
   const vocalRef = useRef(false);
   const reponseRef = useRef('');
-  const audioRef = useRef(null);
+
   const [etat, setEtat] = useState('idle');
   const [erreur, setErreur] = useState(null);
   const [outils, setOutils] = useState([]);
@@ -137,6 +137,10 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
   const basculerEcoute = async () => {
     if (sessionRef.current) { sessionRef.current.arreter(); return; }
     setErreur(null);
+    /* ICI, dans le geste, et nulle part ailleurs : c'est le seul moment ou le
+     * navigateur accepte de debloquer la lecture. La reponse arrive plusieurs
+     * secondes plus tard, quand il est trop tard pour demander. */
+    preparerLecture();
     let session = null;
     try {
       session = await ecouter(hass, { onNiveau: setNiveau });
@@ -169,7 +173,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
   useEffect(() => () => {
     if (sessionRef.current) { try { sessionRef.current.annuler(); } catch { /* deja ferme */ } }
     // Et la voix se tait avec la popup, sinon elle finit sa phrase toute seule.
-    if (audioRef.current) { try { audioRef.current.pause(); } catch { /* deja arrete */ } }
+    couperLecture();
   }, []);
 
   const envoyer = () => envoyerTexte(texte);
@@ -189,14 +193,11 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
     try {
       const r = await ws.callWS({ type: `${ns}/speak`, text: t });
       if (!r || !r.url) { setEtat('idle'); return; }
-      if (audioRef.current) { try { audioRef.current.pause(); } catch { /* deja arrete */ } }
-      const son = new Audio(r.url);
-      audioRef.current = son;
-      const fini = () => { if (audioRef.current === son) audioRef.current = null; setEtat('idle'); };
-      son.onended = fini;
-      son.onerror = fini;
+      couperLecture();
       setEtat('speaking');
-      await son.play();
+      // `jouer` rend faux si le navigateur refuse : la reponse reste ecrite.
+      const parti = await jouer(r.url, () => setEtat('idle'));
+      if (!parti) setEtat('idle');
     } catch {
       setEtat('idle');   // pas de voix : la reponse reste lisible
     }

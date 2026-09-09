@@ -58,6 +58,7 @@ export function raisonLisible(raison, tr = (x) => x) {
   if (raison === 'socket') return tr('Liaison à Home Assistant interrompue.');
   if (raison === 'pipeline') return tr('Aucun moteur de transcription dans Home Assistant.');
   if (raison === 'refus') return tr('Accès au micro refusé.');
+  if (raison === 'suspendu') return tr('Le son n’a pas démarré. Touche l’écran, puis réessaie.');
   return tr('Écoute impossible.');
 }
 
@@ -119,6 +120,21 @@ export async function ecouter(hass, { onNiveau, onEtape } = {}) {
 
   const Ctx = window.AudioContext || window.webkitAudioContext;
   const ctx = new Ctx({ sampleRate: TAUX });
+  /* Sur mobile, un contexte audio nait SUSPENDU.
+   *
+   * Il ne se reveille que sur un geste — et le notre a deja servi a demander
+   * le micro. Suspendu, `onaudioprocess` ne part jamais : on capte le micro,
+   * on n'envoie rien, Home Assistant ne transcrit rien, et l'assistant ne
+   * repond pas. Rien n'echoue nulle part, c'est simplement muet.
+   *
+   * Sur un poste fixe le contexte demarre actif, d'ou un defaut qui ne se
+   * voit QUE sur telephone. */
+  if (ctx.state === 'suspended') { try { await ctx.resume(); } catch { /* refus : dit juste apres */ } }
+  if (ctx.state === 'suspended') {
+    try { ctx.close(); } catch { /* deja ferme */ }
+    flux.getTracks().forEach((t) => t.stop());
+    throw new Error('suspendu');
+  }
   const source = ctx.createMediaStreamSource(flux);
   /* `createScriptProcessor` est déprécié, et c'est pourtant lui qu'on emploie.
    * `AudioWorklet` demande un second fichier chargé par URL — un module de plus
@@ -241,4 +257,54 @@ export async function ecouter(hass, { onNiveau, onEtape } = {}) {
       resoudre('');
     },
   };
+}
+
+/* ── La lecture de la reponse ────────────────────────────────────────────────
+ *
+ * Un element audio ne peut demarrer que s'il a ete DEBLOQUE par un geste. La
+ * reponse, elle, arrive plusieurs secondes apres — le geste est loin, et le
+ * navigateur refuse. Sur un poste fixe cela passe souvent : il tient un score
+ * d'usage du site et finit par autoriser. Sur telephone, jamais.
+ *
+ * On prepare donc l'element PENDANT le geste, en lui faisant jouer un silence.
+ * Il reste debloque ensuite, et la reponse s'y pose sans rien redemander.
+ *
+ * Un seul element pour toute l'application : deux se marcheraient dessus, et
+ * seul le premier serait debloque.
+ */
+
+// Un WAV valide et vide : quarante-quatre octets d'en-tete, zero echantillon.
+const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+
+let lecteur = null;
+
+/** A appeler DANS le geste — l'appui sur le micro, le maintien du bouton. */
+export function preparerLecture() {
+  try {
+    if (!lecteur) { lecteur = new Audio(); lecteur.preload = 'auto'; }
+    lecteur.src = SILENCE;
+    const p = lecteur.play();
+    if (p && p.catch) p.catch(() => { /* deja debloque, ou refuse : on verra a la lecture */ });
+  } catch { /* pas d'audio ici : la reponse restera ecrite */ }
+  return lecteur;
+}
+
+/** Joue une reponse. Rend `false` si le navigateur a refuse. */
+export async function jouer(url, onFini) {
+  if (!url) return false;
+  try {
+    if (!lecteur) { lecteur = new Audio(); lecteur.preload = 'auto'; }
+    lecteur.onended = onFini || null;
+    lecteur.onerror = onFini || null;
+    lecteur.src = url;
+    await lecteur.play();
+    return true;
+  } catch {
+    return false;      // autoplay refuse : la reponse reste lisible
+  }
+}
+
+/** Couper la parole en cours. */
+export function couperLecture() {
+  if (lecteur) { try { lecteur.pause(); } catch { /* deja arrete */ } }
 }

@@ -11481,6 +11481,10 @@ function BoutonAssistant({ onAssistant, onDictee = null, hass = null, sens = 'ha
      * d'amorcage d'un tableau de bord. */
     import('./voix.js').then(async (voixMod) => {
       if (!voixMod.voixDisponible().ok) return;
+      /* Le maintien EST le geste : c'est le seul moment ou le navigateur
+       * accepte de debloquer la lecture de la reponse. Elle arrivera bien
+       * plus tard, quand il sera trop tard pour demander. */
+      voixMod.preparerLecture();
       let s2 = null;
       try {
         s2 = await voixMod.ecouter(hass, { onNiveau: setNiveau });
