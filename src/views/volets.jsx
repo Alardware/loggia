@@ -14,6 +14,28 @@ import {
 import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
+/* `champ` et `Nombre` vivent ici, et non dans le composant.
+ *
+ * Un composant defini dans un autre est recree a chaque rendu : React voit un
+ * type different au meme endroit et remonte le sous-arbre. Pour un champ de
+ * saisie, chaque frappe detruisait donc le champ et emportait le focus — il
+ * fallait recliquer entre deux chiffres. Le style le suit : il ne depend de
+ * rien d'autre que des variables CSS. */
+
+const champ = { padding: '9px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
+
+/* `nom` sert d'intitule : le champ n'a pas d'etiquette propre, et l'unite
+ * affichee a cote (« min apres le lever ») ne dit pas de quoi il s'agit. */
+const Nombre = ({ v, min, max, pas = 1, unite, nom, cb }) => (
+  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+    <input aria-label={nom || unite} type="number" value={v} min={min} max={max} step={pas}
+      onChange={e => cb(Math.max(min, Math.min(max, Number(e.target.value) || 0)))}
+      style={{ ...champ, width: 78 }} />
+    <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{unite}</span>
+  </span>
+);
+
+
 const CARDINAUX = () => [
   { deg: 0, court: 'N' },
   { deg: 45, court: 'NE' },
@@ -106,19 +128,8 @@ export function VoletsReglages({ hass, cardSt }) {
   const label = { fontSize: 12, fontWeight: 700, marginBottom: 6 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
   const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
-  const champ = { padding: '9px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
 
 
-  /* `nom` sert d'intitule : le champ n'a pas d'etiquette propre, et l'unite
-   * affichee a cote (« min apres le lever ») ne dit pas de quoi il s'agit. */
-  const Nombre = ({ v, min, max, pas = 1, unite, nom, cb }) => (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-      <input aria-label={nom || unite} type="number" value={v} min={min} max={max} step={pas}
-        onChange={e => cb(Math.max(min, Math.min(max, Number(e.target.value) || 0)))}
-        style={{ ...champ, width: 78 }} />
-      <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{unite}</span>
-    </span>
-  );
 
   const choisirEntite = (section, champNom, domaines) => setPicker({ section, champ: champNom, domaines });
 

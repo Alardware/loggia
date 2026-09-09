@@ -32,118 +32,6 @@ import { VeillesReglages } from './veilles.jsx';
 import { weatherEntity } from '../wxutil.jsx';
 import { tr, choixLangue, languesDisponibles } from '../i18n.js';
 
-/* ── Les briques d'affichage, au niveau du module ────────────────────────────
- *
- * Elles vivaient DANS le composant. Un composant defini dans un autre est
- * recree a chaque rendu : React voit un type different au meme endroit, et
- * remonte tout le sous-arbre. L'ancien noeud est jete, un neuf prend sa place.
- *
- * Sur un bouton cela ne se voit pas. Sur un champ de saisie, c'est fatal : a
- * chaque lettre tapee le champ est detruit, le focus tombe sur le document, et
- * il faut recliquer pour la lettre suivante. Pire, `onBlur` ne part jamais —
- * un noeud retire du document ne perd pas le focus, il l'emporte —, donc ce que
- * l'on tape n'est jamais enregistre. C'est ce qui rendait le nom de
- * l'assistant impossible a saisir, et le remettait a vide au rechargement.
- *
- * Definies ici, leur identite ne change plus : React reconnait le meme type,
- * garde le meme noeud, et le champ garde son focus.
- */
-
-const Tgl = ({ on, cb, label, off = false }) => (
-  <span onClick={off ? undefined : cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={off ? -1 : 0} onKeyDown={(e) => { if (!off && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); cb(); } }}
-    style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: off ? 'not-allowed' : 'pointer', opacity: off ? .45 : 1, flexShrink: 0, transition: 'background .25s', display: 'inline-block' }}>
-    <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
-  </span>
-);
-
-// sur une ligne rend la barre illisible. Le reste vit dans les cartes en lignes denses.
-const SecBar = ({ children }) => (
-  <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-    {children}
-    <span style={{ flex: 1 }} />
-  </div>
-);
-
-const SecGroup = ({ label, children }) => (
-  /*  : le groupe tenait ses boutons sur une seule ligne et
-   * debordait de l'ecran d'un telephone, la barre ayant beau savoir se
-   * replier (retour 03/09). */
-  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', maxWidth: '100%', padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{label}</span>
-    {children}
-  </div>
-);
-
-const SecTgl = ({ on, cb, label }) => (
-  <span onClick={cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } }}
-    style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 10, cursor: 'pointer', background: on ? 'var(--o-accent-fond)' : 'var(--o-s4)', border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}>
-    <span style={{ position: 'absolute', top: 2, left: on ? 19 : 2, width: 17, height: 17, borderRadius: '50%', background: '#fff', transition: 'left .2s cubic-bezier(.4,1.3,.5,1)' }} />
-  </span>
-);
-
-// Carte de reglages : en-tete a fond leger + corps en lignes denses (patron Atrium).
-const AppCard = ({ title, sub, note, action, children }) => (
-  <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', background: 'var(--o-s4)', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 14, fontWeight: 700 }}>{title}</span>
-      {sub ? <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{sub}</span> : null}
-      <span style={{ flex: 1 }} />
-      {note ? <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', fontFamily: 'ui-monospace,monospace' }}>{note}</span> : null}
-      {action}
-    </div>
-    <div style={{ padding: '4px 18px 16px' }}>{children}</div>
-  </div>
-);
-
-const OptRow = ({ title, desc, children }) => (
-  <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '13px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-    <div style={{ flex: 1, minWidth: 0, maxWidth: '62ch' }}>
-      <div style={{ fontSize: 13, fontWeight: 700 }}>{title}</div>
-      <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{children}</div>
-  </div>
-);
-
-// Segment : 2 a 3 choix mutuellement exclusifs, sur une piste unique.
-const Seg = ({ value, opts, onPick, disabled = false }) => (
-  <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', opacity: disabled ? .5 : 1 }}>
-    {opts.map(([v, lb]) => (
-      <button key={String(v)} disabled={disabled} onClick={() => onPick(v)} style={{ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: value === v ? 'var(--o-surfA)' : 'transparent', color: value === v ? 'var(--o-text)' : 'var(--o-text2)', boxShadow: value === v ? '0 1px 3px rgba(0,0,0,.25)' : 'none' }}>{lb}</button>
-    ))}
-  </div>
-);
-
-const stepBtn = { width: 30, height: 30, borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd1)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
-// Marge : stepper + glissiere absolue. « auto » = valeur calculee, non figee.
-const MarginRow = ({ label, px, auto, onStep, onSet }) => (
-  <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '11px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-    <div style={{ fontSize: 13, fontWeight: 700, width: 108, flexShrink: 0 }}>{label}</div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
-      <button onClick={() => onStep(-2)} style={stepBtn} aria-label={'Réduire ' + label}>−</button>
-      <span style={{ minWidth: 48, textAlign: 'center', fontWeight: 800, fontSize: 12, fontFamily: 'ui-monospace,monospace', color: auto ? 'var(--o-text3)' : 'var(--o-text)' }}>{auto ? 'auto' : Math.round(px) + 'px'}</span>
-      <button onClick={() => onStep(2)} style={stepBtn} aria-label={'Augmenter ' + label}>+</button>
-    </div>
-    <input type="range" min={0} max={100} step={1} value={Math.round(px) || 0} onChange={e => onSet && onSet(+e.target.value)} aria-label={label}
-      style={{ flex: 1, minWidth: 60, accentColor: 'var(--o-accent)', cursor: 'pointer' }} />
-  </div>
-);
-
-const fleche = { width: 26, height: 26, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 };
-const Row = ({ icon, c, name, sub, on, locked, onT, onUp, onDown, onEntites }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
-    <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', opacity: on ? 1 : .55 }}><Fi i={icon} size={15} color={c || 'var(--o-text2)'} /></span>
-    <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700, color: on ? 'var(--o-text)' : 'var(--o-text3)' }}>{name}</div><div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600 }}>{on ? sub: tr('masquée')}</div></div>
-    {onUp && <button onClick={onUp} title={tr('Monter')} aria-label={tr('Monter') + ' ' + name} style={fleche}><Fi i="angle-up" size={12} /></button>}
-    {onDown && <button onClick={onDown} title={tr('Descendre')} aria-label={tr('Descendre') + ' ' + name} style={fleche}><Fi i="angle-down" size={12} /></button>}
-    <button onClick={onEntites} style={{ padding: '6px 11px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>{tr('Entités')}</button>
-    {locked
-      ? <span style={{ width: 46, textAlign: 'center', flexShrink: 0 }}><Fi i="lock" size={13} color="var(--o-text3)" /></span>
-      : <span onClick={onT} role="switch" aria-checked={on} aria-label={name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onT(); } }} style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
-  </div>
-);
-
-
 /**
  * Ce que l'installation est REELLEMENT.
  *
@@ -252,6 +140,12 @@ function AlertesTele({ hass, cardSt }) {
       setMsg(tr('Test envoyé — regarde ton téléphone.'));
     } catch { setMsg("Envoi impossible."); }
   };
+  const Tgl = ({ on, cb, label }) => (
+    <span onClick={cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } }}
+      style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}>
+      <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
+    </span>
+  );
   const ligne = { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' };
   const lbl = (t, d) => (
     <div style={{ flex: 1, minWidth: 0 }}>
@@ -919,16 +813,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // (il emprunte celle du navigateur) — elles servent au test de joignabilite, au repli
   // Nabu Casa et a l'intervalle de rafraichissement du pont hass.
   const [assistantDraft, setAssistantDraft] = useState(() => String(cfgVal('loggia_assistant', '') || ''));
-  /* Enregistre le nom de l'assistant.
-   *
-   * Appelee depuis `onBlur` ET depuis la touche Entree. La seule sortie du
-   * champ ne suffit pas : on tape un nom, on appuie sur Entree, et rien ne
-   * partait — le champ gardait la valeur a l'ecran, mais elle n'existait
-   * nulle part. Au rechargement suivant, plus de nom. */
-  const validerAssistant = () => {
-    const nom = assistantDraft.trim().toLowerCase();
-    cfgSet({ loggia_assistant: nom || null });
-  };
   const [haDraft, setHaDraft] = useState(() => {
     const c = { ...HA_CFG_DEF, ...(cfgVal('loggia_haCfg', null) || {}) };
     if (!c.local && accessKind === tr('réseau local')) c.local = accessOrigin;
@@ -1145,7 +1029,29 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // Interrupteur du bandeau (Tgl n'existe que dans la portée d'Apparence)
   const curSection = SECTIONS.find(x => x.id === tab);
   // Bandeau d'une section : volontairement LEGER (1 a 2 groupes) — entasser dix reglages
+  // sur une ligne rend la barre illisible. Le reste vit dans les cartes en lignes denses.
+  const SecBar = ({ children }) => (
+    <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+      {children}
+      <span style={{ flex: 1 }} />
+    </div>
+  );
+  const SecGroup = ({ label, children }) => (
+    /*  : le groupe tenait ses boutons sur une seule ligne et
+     * debordait de l'ecran d'un telephone, la barre ayant beau savoir se
+     * replier (retour 03/09). */
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', maxWidth: '100%', padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{label}</span>
+      {children}
+    </div>
+  );
   const secBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' });
+  const SecTgl = ({ on, cb, label }) => (
+    <span onClick={cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } }}
+      style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 10, cursor: 'pointer', background: on ? 'var(--o-accent-fond)' : 'var(--o-s4)', border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}>
+      <span style={{ position: 'absolute', top: 2, left: on ? 19 : 2, width: 17, height: 17, borderRadius: '50%', background: '#fff', transition: 'left .2s cubic-bezier(.4,1.3,.5,1)' }} />
+    </span>
+  );
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1217,6 +1123,56 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <div className="grid-appar" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 264px', gap: 16, alignItems: 'start' }}>
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>{(() => {
         const notFollow = haTheme !== 'FOLLOW';
+        // Carte de reglages : en-tete a fond leger + corps en lignes denses (patron Atrium).
+        const AppCard = ({ title, sub, note, action, children }) => (
+          <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', background: 'var(--o-s4)', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>{title}</span>
+              {sub ? <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{sub}</span> : null}
+              <span style={{ flex: 1 }} />
+              {note ? <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', fontFamily: 'ui-monospace,monospace' }}>{note}</span> : null}
+              {action}
+            </div>
+            <div style={{ padding: '4px 18px 16px' }}>{children}</div>
+          </div>
+        );
+        const OptRow = ({ title, desc, children }) => (
+          <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '13px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+            <div style={{ flex: 1, minWidth: 0, maxWidth: '62ch' }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>{title}</div>
+              <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{children}</div>
+          </div>
+        );
+        const Tgl = ({ on, cb, label, off = false }) => (
+          <span onClick={off ? undefined : cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={off ? -1 : 0} onKeyDown={(e) => { if (!off && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); cb(); } }}
+            style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: off ? 'not-allowed' : 'pointer', opacity: off ? .45 : 1, flexShrink: 0, transition: 'background .25s', display: 'inline-block' }}>
+            <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
+          </span>
+        );
+        // Segment : 2 a 3 choix mutuellement exclusifs, sur une piste unique.
+        const Seg = ({ value, opts, onPick, disabled = false }) => (
+          <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', opacity: disabled ? .5 : 1 }}>
+            {opts.map(([v, lb]) => (
+              <button key={String(v)} disabled={disabled} onClick={() => onPick(v)} style={{ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: value === v ? 'var(--o-surfA)' : 'transparent', color: value === v ? 'var(--o-text)' : 'var(--o-text2)', boxShadow: value === v ? '0 1px 3px rgba(0,0,0,.25)' : 'none' }}>{lb}</button>
+            ))}
+          </div>
+        );
+        const stepBtn = { width: 30, height: 30, borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd1)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
+        // Marge : stepper + glissiere absolue. « auto » = valeur calculee, non figee.
+        const MarginRow = ({ label, px, auto, onStep, onSet }) => (
+          <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '11px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, width: 108, flexShrink: 0 }}>{label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
+              <button onClick={() => onStep(-2)} style={stepBtn} aria-label={'Réduire ' + label}>−</button>
+              <span style={{ minWidth: 48, textAlign: 'center', fontWeight: 800, fontSize: 12, fontFamily: 'ui-monospace,monospace', color: auto ? 'var(--o-text3)' : 'var(--o-text)' }}>{auto ? 'auto' : Math.round(px) + 'px'}</span>
+              <button onClick={() => onStep(2)} style={stepBtn} aria-label={'Augmenter ' + label}>+</button>
+            </div>
+            <input type="range" min={0} max={100} step={1} value={Math.round(px) || 0} onChange={e => onSet && onSet(+e.target.value)} aria-label={label}
+              style={{ flex: 1, minWidth: 60, accentColor: 'var(--o-accent)', cursor: 'pointer' }} />
+          </div>
+        );
         const ACCENTS = [['', 'Couleur du thème'], ['#4f8cff', 'Bleu'], ['#2dd4bf', 'Turquoise'], ['#a78bfa', 'Violet'], ['#f5a524', 'Ambre'], ['#f87171', 'Rouge']];
         const NATIFS = ['', 'projekt', 'atrium', 'ios', 'google', 'neumorphix'];
         const COMMU = ['frosted', 'onedark', 'dracula', 'github', 'tokyo', 'nightowl', 'plum', 'material', 'lavande'];
@@ -1402,8 +1358,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <SecBar>
           <SecGroup label={<span>{tr('Assistant')}<span className="o-bar-sub"><br /><span style={{ fontWeight: 600, color: 'var(--o-text3)' }}>{tr('vide = aucun')}</span></span></span>}>
             <input value={assistantDraft} onChange={e => setAssistantDraft(e.target.value)}
-              onBlur={validerAssistant}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); validerAssistant(); e.currentTarget.blur(); } }}
+              onBlur={() => cfgSet({ loggia_assistant: assistantDraft.trim().toLowerCase() || null })}
               aria-label={tr('Nom du composant assistant')} placeholder="assistant" spellCheck={false}
               style={{ width: 150, padding: '9px 12px', minHeight: 44, borderRadius: 12, background: 'var(--o-s2)',
                 color: 'var(--o-text)', border: 'var(--o-bw,1px) solid var(--o-bd2)', fontSize: 13, fontWeight: 600, boxSizing: 'border-box' }} />
@@ -1521,6 +1476,19 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           const t2 = ids[i]; ids[i] = ids[j]; ids[j] = t2;
           const c = readViewsCfg(); c.order = ids; writeViewsCfg(c); bump();
         };
+        const fleche = { width: 26, height: 26, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 };
+        const Row = ({ icon, c, name, sub, on, locked, onT, onUp, onDown }) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
+            <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', opacity: on ? 1 : .55 }}><Fi i={icon} size={15} color={c || 'var(--o-text2)'} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700, color: on ? 'var(--o-text)' : 'var(--o-text3)' }}>{name}</div><div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600 }}>{on ? sub: tr('masquée')}</div></div>
+            {onUp && <button onClick={onUp} title={tr('Monter')} aria-label={tr('Monter') + ' ' + name} style={fleche}><Fi i="angle-up" size={12} /></button>}
+            {onDown && <button onClick={onDown} title={tr('Descendre')} aria-label={tr('Descendre') + ' ' + name} style={fleche}><Fi i="angle-down" size={12} /></button>}
+            <button onClick={() => setTab('entites')} style={{ padding: '6px 11px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>{tr('Entités')}</button>
+            {locked
+              ? <span style={{ width: 46, textAlign: 'center', flexShrink: 0 }}><Fi i="lock" size={13} color="var(--o-text3)" /></span>
+              : <span onClick={onT} role="switch" aria-checked={on} aria-label={name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onT(); } }} style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
+          </div>
+        );
         return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <SecBar>
@@ -1532,11 +1500,11 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 6px' }}>Masque celles que tu n'utilises pas, ou réactive une vue retirée. La barre mobile garde ses raccourcis.</div>
           <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
             {ordonnes.map(([vid, name, icon, sub, locked], idx) => { const why = viewReason(availViews, vid); return (
-              <Row key={vid} onEntites={() => setTab('entites')} icon={icon} name={name} sub={why || sub} locked={locked || !!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)}
+              <Row key={vid} icon={icon} name={name} sub={why || sub} locked={locked || !!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)}
                 onUp={idx > 0 ? () => bouger(vid, -1) : null} onDown={idx < ordonnes.length - 1 ? () => bouger(vid, 1) : null} />
             ); })}
             {HIDDEN_VIEWS().map(h => { const why = viewReason(availViews, h.vid); return (
-              <Row key={h.vid} onEntites={() => setTab('entites')} icon={h.icon} c={h.c} name={h.label} sub={why || 'vue retirée, accessible par la recherche'} locked={!!why} on={!why && cfg.shown.has(h.vid)} onT={() => toggleExtra(h.vid)} />
+              <Row key={h.vid} icon={h.icon} c={h.c} name={h.label} sub={why || 'vue retirée, accessible par la recherche'} locked={!!why} on={!why && cfg.shown.has(h.vid)} onT={() => toggleExtra(h.vid)} />
             ); })}
           </div>
         </div>
