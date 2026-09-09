@@ -162,9 +162,88 @@ test('la feuille qui porte l’orbe est opaque', () => {
 test('l’en-tête reçoit de quoi ouvrir l’assistant', () => {
   assert.match(APP, /onAssistant: assistantNs \? \(\) => setAssistantOuvert\(true\) : null/,
     'le contexte ne passe plus `onAssistant` : l’assistant disparaît du poste fixe');
-  assert.match(APP, /notifs = \[\], customViews = \[\], rooms = \[\], onAssistant = null \} = ctx;/,
-    'l’en-tête ne lit plus `onAssistant`');
-  assert.match(APP, /\{onAssistant && <BoutonAssistant onAssistant=\{onAssistant\} sens="bas" variante="entete" \/>\}/);
+  assert.match(APP, /rooms = \[\], onAssistant = null, onDictee = null, hass: hassCtx = null \} = ctx;/,
+    'l’en-tête ne lit plus ce qu’il faut pour ouvrir ni pour dicter');
+  assert.match(APP, /\{onAssistant && <BoutonAssistant onAssistant=\{onAssistant\} onDictee=\{onDictee\} hass=\{hassCtx\} sens="bas" variante="entete" \/>\}/);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// La voix.
+//
+// L'assistant ne transcrit pas : sa commande `chat` ne prend que du texte, et
+// son `identity/voice` sert aux empreintes vocales. C'est le pipeline Assist de
+// Home Assistant qui écoute, et Loggia qui lui passe le son — voir `voix.js`.
+//
+// L'appui long écoute AVANT que la conversation existe. La phrase dictée doit
+// donc attendre quelque part, et partir une seule fois : deux rendus de suite
+// l'enverraient deux fois, et l'assistant répondrait en double.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const VOIX = readFileSync(join(SRC, 'voix.js'), 'utf8');
+
+test('le module d’écoute reste hors du paquet d’amorçage', () => {
+  // Il ouvre un micro, un contexte audio et un pipeline. Rien de tout cela ne
+  // doit être analysé par quelqu'un qui vient juste regarder ses lumières.
+  assert.doesNotMatch(APP, /^import .*from '\.\/voix\.js'/m);
+  assert.match(BOUTON, /import\('\.\/voix\.js'\)\.then\(/);
+});
+
+test('l’appui long écoute vraiment', () => {
+  assert.match(BOUTON, /voixMod\.ecouter\(hass, \{ onNiveau: setNiveau \}\)/);
+  // Le doigt peut repartir pendant que le micro s'ouvre : sans cette garde, le
+  // micro resterait ouvert après le relâchement.
+  assert.match(BOUTON, /if \(!long\.current\) \{ s2\.annuler\(\); return; \}/);
+  // Relâcher ferme le son, pas la transcription : la phrase arrive après.
+  assert.match(BOUTON, /session\.current\.arreter\(\)/);
+  assert.match(BOUTON, /<OrbeMini etat="listening" niveau=\{niveau\} taille=\{ORBE_MINI\} \/>/);
+});
+
+test('la phrase dictée traverse jusqu’à la conversation', () => {
+  assert.match(APP, /const poserQuestion = \(dit\) => \{ setQuestionVocale\(dit\); setAssistantOuvert\(true\); \};/);
+  assert.match(APP, /<AssistantSheet hass=\{hass\} ns=\{assistantNs\} question=\{questionVocale\}/);
+  // Fermer efface la question : sans cela, rouvrir la popup la reposerait.
+  assert.match(APP, /setAssistantOuvert\(false\); setQuestionVocale\(''\);/);
+  assert.match(FEUILLE, /export default function AssistantSheet\(\{ hass, ns, onClose, question = '' \}\)/);
+  assert.match(FEUILLE, /if \(posee\.current \|\| !question \|\| !ws\) return;\s*\n\s*posee\.current = true;/);
+});
+
+test('le micro ne s’affiche que s’il peut servir', () => {
+  // Mesuré : en HTTP local, `isSecureContext` est faux et `mediaDevices` vaut
+  // `undefined`. Un bouton posé là n'aurait rien pu faire.
+  assert.match(VOIX, /if \(!window\.isSecureContext\) return \{ ok: false, raison: 'https' \};/);
+  assert.match(FEUILLE, /const micro = voixDisponible\(\);/);
+  assert.match(FEUILLE, /\{micro\.ok && \(/);
+});
+
+test('le son part au format que le pipeline attend', () => {
+  // Mono, 16 kHz, entiers 16 bits signés, précédés de l'identifiant de canal.
+  assert.match(VOIX, /const TAUX = 16000;/);
+  assert.match(VOIX, /input: \{ sample_rate: TAUX \}/);
+  assert.match(VOIX, /trame\[0\] = idBinaire;/);
+  // La trame vide — l'identifiant seul — dit « c'est fini ».
+  assert.match(VOIX, /socket\.send\(new Uint8Array\(\[idBinaire\]\)\)/);
+});
+
+test('le pipeline choisi sait transcrire', () => {
+  /* Relevé sur l'installation : le pipeline nommé « Home Assistant » n'a AUCUN
+   * moteur de transcription, et deux autres en ont un. Prendre le préféré sans
+   * regarder aurait donné un pipeline muet et une erreur incompréhensible. */
+  assert.match(VOIX, /tous\.filter\(\(p\) => p && p\.stt_engine\)/);
+  assert.match(VOIX, /if \(!equipes\.length\) return null;/);
+});
+
+test('le micro se referme toujours', () => {
+  // Un micro laissé ouvert allume la pastille rouge de l'onglet, et l'y laisse.
+  assert.match(FEUILLE, /useEffect\(\(\) => \(\) => \{ if \(sessionRef\.current\) \{ try \{ sessionRef\.current\.annuler\(\); \}/);
+  assert.match(BOUTON, /if \(session\.current\) \{ try \{ session\.current\.annuler\(\); \}/);
+  /* DEUX fois, et il faut les compter.
+   *
+   * `ranger()` libère quand tout se termine, `arreter()` quand on coupe court
+   * avant la transcription. Une seule expression, sans compter, se satisfaisait
+   * de l'une ou de l'autre : retirer celle de `ranger` — le chemin normal —
+   * passait sans un mot. Constaté en mutant ce test le 09/09/2026. */
+  const relaches = VOIX.split('flux.getTracks().forEach((t) => t.stop());').length - 1;
+  assert.equal(relaches, 2, 'le micro doit être relâché à la fermeture ET à l’arrêt');
 });
 
 /** Le contenu d'un bloc `@media`, par équilibrage des accolades.

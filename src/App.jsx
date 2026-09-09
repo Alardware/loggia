@@ -588,7 +588,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
 
 function Header() {
   const ctx = useContext(HeaderCtx) || {};
-  const { onToggleTheme, onToggleNav, onNav, editMode, onToggleEdit, users = [], userIdx = 0, onSwitchUser, peutEditer = false, droits = [], notifs = [], customViews = [], rooms = [], onAssistant = null } = ctx;
+  const { onToggleTheme, onToggleNav, onNav, editMode, onToggleEdit, users = [], userIdx = 0, onSwitchUser, peutEditer = false, droits = [], notifs = [], customViews = [], rooms = [], onAssistant = null, onDictee = null, hass: hassCtx = null } = ctx;
   const cur = users[userIdx] || { name: 'Administrateur', role: 'Admin', grad: 'linear-gradient(135deg,#ffb347,#f87171)' };
   const curBg = userBg(cur);
   const hbtn = { width: 42, height: 42, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 };
@@ -677,7 +677,7 @@ function Header() {
         {/* Sur un poste fixe il n'y a pas de barre du bas : sans cette entree,
             l'assistant n'existerait tout simplement pas. Elle s'efface des que
             la barre du bas parait — voir `.o-hdr-assist` dans index.css. */}
-        {onAssistant && <BoutonAssistant onAssistant={onAssistant} sens="bas" variante="entete" />}
+        {onAssistant && <BoutonAssistant onAssistant={onAssistant} onDictee={onDictee} hass={hassCtx} sens="bas" variante="entete" />}
         {peutEditer && <button onClick={onToggleEdit} title={editMode ? 'Quitter le mode édition' : tr('Mode édition')} style={editBtn}><Ico name="edit" size={17} /></button>}
         <button onClick={onToggleTheme} title={tr('Changer de thème')} style={hbtn}><Ico name="brightness" size={18} /></button>
         <button onClick={() => { setNotifOpen(o => { const n = !o; if (n) marquerVues(); return n; }); setUserOpen(false); }} title="Notifications" style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{nonVues && <span className="o-livedot" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: '#f87171', border: '2px solid var(--o-bg2)' }} />}</button>
@@ -11458,21 +11458,48 @@ function PinModal({ expected, onClose, onSuccess }) {
  * ou l'ecoute viendra se poser, et rien d'autre n'aura a bouger. */
 const ORBE_MINI = 96;
 
-function BoutonAssistant({ onAssistant, sens = 'haut', variante = 'nav' }) {
+function BoutonAssistant({ onAssistant, onDictee = null, hass = null, sens = 'haut', variante = 'nav' }) {
   const [voix, setVoix] = useState(false);
+  const [niveau, setNiveau] = useState(null);
   const minuteur = useRef(null);
   const depart = useRef(null);
   const long = useRef(false);
-  useEffect(() => () => clearTimeout(minuteur.current), []);
+  const session = useRef(null);
+  useEffect(() => () => {
+    clearTimeout(minuteur.current);
+    if (session.current) { try { session.current.annuler(); } catch { /* deja ferme */ } }
+  }, []);
 
   const demarrerVoix = () => {
     try { if (navigator.vibrate) navigator.vibrate(35); } catch { /* pas de vibreur : le visuel porte seul */ }
     setVoix(true);
-    // Ici viendra l'ecoute : micro, transcription, `setLevel` sur l'orbe.
+    if (!hass || !onDictee) return;      // rien a qui parler : l'orbe seule
+    /* Le module d'ecoute est charge a la volee, comme l'orbe : le micro, le
+     * contexte audio et le pipeline n'ont rien a faire dans le paquet
+     * d'amorcage d'un tableau de bord. */
+    import('./voix.js').then(async (voixMod) => {
+      if (!voixMod.voixDisponible().ok) return;
+      let s2 = null;
+      try {
+        s2 = await voixMod.ecouter(hass, { onNiveau: setNiveau });
+        // Le doigt peut etre reparti pendant que le micro s'ouvrait.
+        if (!long.current) { s2.annuler(); return; }
+        session.current = s2;
+        const dit = await s2.texte;
+        session.current = null;
+        if (dit) onDictee(dit);
+      } catch {
+        if (s2) { try { s2.annuler(); } catch { /* deja ferme */ } }
+        session.current = null;
+      }
+    }).catch(() => { /* module injoignable : l'orbe aura au moins paru */ });
   };
   const arreterVoix = () => {
     setVoix(false);
-    // Ici viendra l'envoi de ce qui a ete dit.
+    setNiveau(null);
+    /* On ferme le robinet du son, pas la transcription : Home Assistant rend
+     * la phrase apres coup, et c'est elle qui ouvrira la conversation. */
+    if (session.current) { try { session.current.arreter(); } catch { /* deja ferme */ } }
   };
 
   const debut = (e) => {
@@ -11528,7 +11555,7 @@ function BoutonAssistant({ onAssistant, sens = 'haut', variante = 'nav' }) {
       marginBottom: sens === 'haut' ? 14 : 0, marginTop: sens === 'haut' ? 0 : 14,
     }}>
       <Suspense fallback={<span style={{ display: 'block', width: ORBE_MINI, height: ORBE_MINI }} />}>
-        <OrbeMini etat="listening" taille={ORBE_MINI} />
+        <OrbeMini etat="listening" niveau={niveau} taille={ORBE_MINI} />
       </Suspense>
     </span>
   ) : null;
@@ -12412,6 +12439,11 @@ export default function App() {
    * mieux qu'un bouton absent. */
   const assistantNs = useAssistant(hass);
   const [assistantOuvert, setAssistantOuvert] = useState(false);
+  /* Ce qui a ete dicte au bouton, en attendant que la conversation s'ouvre.
+   * L'appui long ecoute AVANT que la popup existe : la phrase doit donc
+   * l'attendre quelque part, et partir des qu'elle est la. */
+  const [questionVocale, setQuestionVocale] = useState('');
+  const poserQuestion = (dit) => { setQuestionVocale(dit); setAssistantOuvert(true); };
   useEffect(() => { setEntSheet(false); }, [view, editMode]);
   const addUser = (data) => persistUsers([...users, { ...data, _k: 'u' + Date.now() }]);
   const updateUser = (i, data) => persistUsers(users.map((u, j) => j === i ? { ...u, ...data } : u));
@@ -12459,7 +12491,7 @@ export default function App() {
   return (
     <LoggiaContext.Provider value={loggiaRuntime}>
     {showOnboarding && <Suspense fallback={null}><Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} /></Suspense>}
-    <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, peutEditer, droits, notifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn, onAssistant: assistantNs ? () => setAssistantOuvert(true) : null }}>
+    <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, peutEditer, droits, notifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn, onAssistant: assistantNs ? () => setAssistantOuvert(true) : null, onDictee: assistantNs ? poserQuestion : null, hass }}>
     <div className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)',
       // isolate : notre propre contexte d'empilement. Sans lui, le z-index
       // négatif du calque photo l'envoie sous le fond OPAQUE de tout wrapper
@@ -12504,8 +12536,8 @@ export default function App() {
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
         : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
       </div>
-      {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} />}
-      {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} onClose={() => setAssistantOuvert(false)} /></Suspense>}
+      {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
+      {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}
       {entSheet && editMode && peutEditer && <Suspense fallback={null}><ViewEntSheet view={view} hass={hass} onClose={() => setEntSheet(false)} /></Suspense>}
     </div>
     </HeaderCtx.Provider>

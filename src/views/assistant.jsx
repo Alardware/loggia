@@ -34,6 +34,7 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { tr, locale } from '../i18n.js';
 import { Fi, BottomSheet } from '../ui.jsx';
+import { ecouter, voixDisponible, raisonLisible } from '../voix.js';
 
 /* L'orbe tire Three.js — 448 ko. Elle ne se charge donc qu'à l'ouverture de la
  * popup, jamais au démarrage du dashboard. Même raison que le fond météo. */
@@ -54,11 +55,25 @@ const heure = (ts) => {
   catch { return ''; }
 };
 
-export default function AssistantSheet({ hass, ns, onClose }) {
+export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
   // Le titre affiché vient du réglage, jamais du code.
   const titre = ns ? ns.charAt(0).toUpperCase() + ns.slice(1) : tr('Assistant');
   const [messages, setMessages] = useState([]);
   const [texte, setTexte] = useState('');
+  /* L'ecoute.
+   *
+   * `niveau` porte l'amplitude du micro jusqu'a l'orbe : c'est ce qui la
+   * fait respirer au rythme de la voix plutot que de la sienne. `null` lui
+   * rend sa respiration propre.
+   *
+   * La session vit dans une reference et non dans l'etat : on doit pouvoir
+   * l'arreter depuis le nettoyage du composant, ou elle garderait le micro
+   * ouvert apres la fermeture de la popup — la pastille rouge de l'onglet
+   * resterait allumee. */
+  const [ecoute, setEcoute] = useState(false);
+  const [niveau, setNiveau] = useState(null);
+  const sessionRef = useRef(null);
+  const micro = voixDisponible();
   const [etat, setEtat] = useState('idle');
   const [erreur, setErreur] = useState(null);
   const [outils, setOutils] = useState([]);
@@ -98,8 +113,53 @@ export default function AssistantSheet({ hass, ns, onClose }) {
   // remplir un état que plus personne ne regarde.
   useEffect(() => () => { if (desabonnerRef.current) { try { desabonnerRef.current(); } catch { /* déjà fermé */ } } }, []);
 
-  const envoyer = async () => {
-    const t = texte.trim();
+  /* Parler.
+   *
+   * Un appui ouvre le micro, un second le ferme — mais le second est
+   * facultatif : Home Assistant detecte lui-meme la fin de la parole et rend
+   * la phrase. Le bouton reste pour couper court.
+   *
+   * L'assistant ne transcrit pas : sa commande `chat` ne prend que du texte.
+   * C'est le pipeline Assist de Home Assistant qui ecoute, et Loggia qui lui
+   * passe le son. Voir `src/voix.js`. */
+  const basculerEcoute = async () => {
+    if (sessionRef.current) { sessionRef.current.arreter(); return; }
+    setErreur(null);
+    let session = null;
+    try {
+      session = await ecouter(hass, { onNiveau: setNiveau });
+      sessionRef.current = session;
+      setEcoute(true);
+      const dit = await session.texte;
+      sessionRef.current = null;
+      setEcoute(false); setNiveau(null);
+      if (dit) envoyerTexte(dit);
+      else setErreur(tr('Rien n\u2019a ete entendu.'));
+    } catch (e) {
+      if (session) { try { session.annuler(); } catch { /* deja ferme */ } }
+      sessionRef.current = null;
+      setEcoute(false); setNiveau(null);
+      setErreur(raisonLisible(e && e.message, tr));
+    }
+  };
+
+  /* La phrase dictee au bouton part une fois, des que la liaison est prete.
+   * Une reference et non un etat : deux rendus de suite l'enverraient deux
+   * fois, et l'assistant repondrait en double a la meme question. */
+  const posee = useRef(false);
+  useEffect(() => {
+    if (posee.current || !question || !ws) return;
+    posee.current = true;
+    envoyerTexte(question);
+  }, [question, ws]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Le micro ne survit pas a la popup.
+  useEffect(() => () => { if (sessionRef.current) { try { sessionRef.current.annuler(); } catch { /* deja ferme */ } } }, []);
+
+  const envoyer = () => envoyerTexte(texte);
+
+  const envoyerTexte = async (brut) => {
+    const t = String(brut || '').trim();
     if (!t || !ws || etat !== 'idle') return;
     setTexte(''); setErreur(null); setOutils([]);
     setMessages(l => [...l, { qui: 'moi', texte: t, ts: Date.now() }]);
@@ -210,7 +270,7 @@ export default function AssistantSheet({ hass, ns, onClose }) {
           * tout ce qui est dessous sauterait de deux cents pixels quand
           * Three.js finit d'arriver. */}
         <Suspense fallback={<div style={{ height: 200 }} />}>
-          <Orbe etat={etat} taille={200} />
+          <Orbe etat={ecoute ? 'listening' : etat} niveau={niveau} taille={200} />
         </Suspense>
 
         <div ref={filRef}
@@ -253,6 +313,28 @@ export default function AssistantSheet({ hass, ns, onClose }) {
               border: 'var(--o-bw,1px) solid var(--o-bd2)', fontSize: 13.5, fontWeight: 600, boxSizing: 'border-box',
             }}
           />
+          {/* Le micro n'apparait que s'il peut servir.
+            *
+            * Mesure du 09/09/2026 : sur l'adresse locale en HTTP,
+            * `isSecureContext` vaut faux et `navigator.mediaDevices` est
+            * `undefined` — le navigateur INTERDIT la capture audio hors
+            * contexte securise. Un bouton pose la n'aurait rien pu faire, et
+            * ne l'aurait dit qu'apres l'appui. Sur l'adresse https, tout
+            * s'ouvre : contexte securise, politique de l'iframe, permission. */}
+          {micro.ok && (
+            <button onClick={basculerEcoute} disabled={etat !== 'idle' && !ecoute}
+              aria-label={ecoute ? tr('Arreter l\u2019ecoute') : tr('Parler \u00e0 l\u2019assistant')}
+              title={ecoute ? tr('Arreter l\u2019ecoute') : tr('Parler \u00e0 l\u2019assistant')}
+              style={{
+                width: 46, height: 46, borderRadius: '50%', flexShrink: 0,
+                border: 'var(--o-bw,1px) solid ' + (ecoute ? 'transparent' : 'var(--o-bd2)'),
+                background: ecoute ? 'var(--o-accent-fond)' : 'var(--o-s2)',
+                color: ecoute ? '#fff' : 'var(--o-text2)',
+                cursor: (etat !== 'idle' && !ecoute) ? 'default' : 'pointer',
+                opacity: (etat !== 'idle' && !ecoute) ? .45 : 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}><Fi i={ecoute ? 'square' : 'microphone'} size={16} /></button>
+          )}
           <button onClick={envoyer} disabled={!texte.trim() || etat !== 'idle'} aria-label={tr('Envoyer')}
             style={{
               width: 46, height: 46, borderRadius: '50%', border: 'none', flexShrink: 0,
