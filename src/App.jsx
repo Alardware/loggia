@@ -41,6 +41,10 @@ const AspirateurContent = lazy(() => import('./views/aspirateur.jsx'));
 /* L'assistant : sa popup tire l'orbe, qui tire Three.js. Rien de tout cela
  * ne se telecharge tant qu'on ne lui a pas parle. */
 const AssistantSheet = lazy(() => import('./views/assistant.jsx'));
+/* L'orbe seule, pour la miniature de l'appui long. Meme module que celui de
+ * la popup : le paquet n'est telecharge qu'une fois, quel que soit celui des
+ * deux qui le demande en premier. */
+const OrbeMini = lazy(() => import('./orbe.jsx'));
 import {
   LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle,
   feederScript, enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, droitsDe, usersSig,
@@ -584,7 +588,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
 
 function Header() {
   const ctx = useContext(HeaderCtx) || {};
-  const { onToggleTheme, onToggleNav, onNav, editMode, onToggleEdit, users = [], userIdx = 0, onSwitchUser, peutEditer = false, droits = [], notifs = [], customViews = [], rooms = [] } = ctx;
+  const { onToggleTheme, onToggleNav, onNav, editMode, onToggleEdit, users = [], userIdx = 0, onSwitchUser, peutEditer = false, droits = [], notifs = [], customViews = [], rooms = [], onAssistant = null } = ctx;
   const cur = users[userIdx] || { name: 'Administrateur', role: 'Admin', grad: 'linear-gradient(135deg,#ffb347,#f87171)' };
   const curBg = userBg(cur);
   const hbtn = { width: 42, height: 42, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 };
@@ -670,6 +674,10 @@ function Header() {
       <div className="o-hdr-date" style={{ textAlign: 'right', lineHeight: 1.15 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{dateStr}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}><FlipText text={timeStr} /></div></div>
       <div className="o-hdr-div" style={{ width: 1, height: 30, background: 'var(--o-bd1)' }} />
       <div data-hdr-menu style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
+        {/* Sur un poste fixe il n'y a pas de barre du bas : sans cette entree,
+            l'assistant n'existerait tout simplement pas. Elle s'efface des que
+            la barre du bas parait — voir `.o-hdr-assist` dans index.css. */}
+        {onAssistant && <BoutonAssistant onAssistant={onAssistant} sens="bas" variante="entete" />}
         {peutEditer && <button onClick={onToggleEdit} title={editMode ? 'Quitter le mode édition' : tr('Mode édition')} style={editBtn}><Ico name="edit" size={17} /></button>}
         <button onClick={onToggleTheme} title={tr('Changer de thème')} style={hbtn}><Ico name="brightness" size={18} /></button>
         <button onClick={() => { setNotifOpen(o => { const n = !o; if (n) marquerVues(); return n; }); setUserOpen(false); }} title="Notifications" style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{nonVues && <span className="o-livedot" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: '#f87171', border: '2px solid var(--o-bg2)' }} />}</button>
@@ -11420,30 +11428,135 @@ function PinModal({ expected, onClose, onSuccess }) {
 }
 
 // Barre de navigation du bas — mobile uniquement (masquée en CSS au-dessus de 820px), activable/désactivable.
-/* Le bouton de Luna, au centre de la barre.
+/* Le bouton de l'assistant : deux gestes, un seul bouton.
  *
  * Rond et sorti de son rang, la ou les autres sont carres et alignes : ce
  * n'est pas une vue de plus, c'est quelqu'un a qui parler. La difference de
  * forme dit ce qu'une etiquette aurait mis trois mots a dire.
  *
- * Il ne monte PAS l'orbe. Trois cents particules et un contexte WebGL pour un
- * bouton de quarante pixels, presents sur chaque ecran du dashboard, se
- * paieraient a chaque ouverture. Un halo suffit a l'annoncer. */
-function BoutonAssistant({ onAssistant }) {
-  return (
-    <button onClick={onAssistant} aria-label={tr('Parler à l’assistant')}
-      style={{ flex: '0 0 auto', width: 62, border: 'none', background: 'transparent', cursor: 'pointer',
-        padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span aria-hidden="true" style={{
-        width: 46, height: 46, borderRadius: '50%', marginTop: -14,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'radial-gradient(circle at 38% 32%, rgba(var(--o-accent-soft-rgb),.95), var(--o-accent-fond) 62%)',
-        boxShadow: '0 0 0 5px var(--o-header), 0 6px 18px rgba(var(--o-accent-rgb),.45)',
-      }}>
-        <span style={{ width: 13, height: 13, borderRadius: '50%', background: 'rgba(255,255,255,.92)',
-          boxShadow: '0 0 10px 2px rgba(255,255,255,.55)' }} />
+ * Appui COURT : la conversation ecrite s'ouvre.
+ * Appui LONG  : l'orbe parait en miniature au-dessus du bouton et la voix
+ *               s'active — le geste du bouton d'accueil d'autrefois.
+ *
+ * Le seuil et la vibration sont ceux du reste du dashboard : 380 ms, 35 ms de
+ * retour tactile, dix pixels de tolerance. Au-dela on defile, on ne maintient
+ * pas — sans cette tolerance, tout debut de defilement appellerait la voix.
+ *
+ * Le clic qui SUIT un appui long ne doit pas ouvrir la conversation en plus.
+ * Le navigateur envoie le `click` apres le `pointerup`, et rien dans
+ * l'evenement ne dit combien de temps le doigt est reste pose : d'ou le
+ * drapeau. Il se relache aussi au clavier, sinon une frappe bien plus tard
+ * serait avalee a son tour par un appui long termine depuis longtemps.
+ *
+ * L'orbe n'est PAS montee tant qu'on n'appuie pas. Un contexte WebGL et
+ * quelques dizaines de milliers de particules pour un bouton present sur
+ * chaque ecran se paieraient a chaque ouverture du dashboard. Le module part
+ * en telechargement des l'appui, pour etre la quand le seuil tombe.
+ *
+ * La voix elle-meme n'est pas encore branchee. Ce qui vit ici, c'est le geste
+ * et son retour visible ; `demarrerVoix` et `arreterVoix` sont les deux points
+ * ou l'ecoute viendra se poser, et rien d'autre n'aura a bouger. */
+const ORBE_MINI = 96;
+
+function BoutonAssistant({ onAssistant, sens = 'haut', variante = 'nav' }) {
+  const [voix, setVoix] = useState(false);
+  const minuteur = useRef(null);
+  const depart = useRef(null);
+  const long = useRef(false);
+  useEffect(() => () => clearTimeout(minuteur.current), []);
+
+  const demarrerVoix = () => {
+    try { if (navigator.vibrate) navigator.vibrate(35); } catch { /* pas de vibreur : le visuel porte seul */ }
+    setVoix(true);
+    // Ici viendra l'ecoute : micro, transcription, `setLevel` sur l'orbe.
+  };
+  const arreterVoix = () => {
+    setVoix(false);
+    // Ici viendra l'envoi de ce qui a ete dit.
+  };
+
+  const debut = (e) => {
+    long.current = false;
+    depart.current = { x: e.clientX, y: e.clientY };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* capture refusee : le pointerup suffit */ }
+    import('./orbe.jsx').catch(() => { /* deja la, ou reseau coupe : le repli s'en charge */ });
+    clearTimeout(minuteur.current);
+    minuteur.current = setTimeout(() => {
+      if (!depart.current) return;
+      long.current = true;
+      demarrerVoix();
+    }, 380);
+  };
+  const bouge = (e) => {
+    if (!depart.current || long.current) return;
+    if (Math.abs(e.clientX - depart.current.x) > 10 || Math.abs(e.clientY - depart.current.y) > 10) {
+      clearTimeout(minuteur.current);
+      depart.current = null;
+    }
+  };
+  const fin = () => {
+    clearTimeout(minuteur.current);
+    depart.current = null;
+    if (long.current) arreterVoix();
+  };
+
+  const gestes = {
+    onPointerDown: debut, onPointerMove: bouge, onPointerUp: fin, onPointerCancel: fin,
+    onContextMenu: (e) => e.preventDefault(),
+    onClick: () => { if (long.current) { long.current = false; return; } onAssistant(); },
+    onKeyDown: () => { long.current = false; },
+  };
+  const tenue = { touchAction: 'manipulation', WebkitTouchCallout: 'none', userSelect: 'none' };
+  const halo = 'radial-gradient(circle at 38% 32%, rgba(var(--o-accent-soft-rgb),.95), var(--o-accent-fond) 62%)';
+
+  /* Hors du <button> : un bouton n'accepte que du contenu de phrase, et l'orbe
+   * pose un <div>. Le cadre positionne les deux l'un par rapport a l'autre. */
+  const miniature = voix ? (
+    <span aria-hidden="true" style={{
+      position: 'absolute', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 60,
+      bottom: sens === 'haut' ? '100%' : 'auto', top: sens === 'haut' ? 'auto' : '100%',
+      marginBottom: sens === 'haut' ? 14 : 0, marginTop: sens === 'haut' ? 0 : 14,
+    }}>
+      <Suspense fallback={<span style={{ display: 'block', width: ORBE_MINI, height: ORBE_MINI }} />}>
+        <OrbeMini etat="listening" taille={ORBE_MINI} />
+      </Suspense>
+    </span>
+  ) : null;
+
+  if (variante === 'entete') {
+    return (
+      <span className="o-hdr-assist" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+        <button {...gestes} aria-label={tr('Parler à l’assistant')} title={tr('Parler à l’assistant')}
+          style={{ ...tenue, width: 42, height: 42, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', background: halo,
+            boxShadow: voix ? '0 0 0 4px rgba(var(--o-accent-rgb),.30)' : '0 3px 12px rgba(var(--o-accent-rgb),.38)',
+            transition: REDUCE_MOTION ? 'none' : 'box-shadow .2s' }}>
+          <span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(255,255,255,.92)',
+            boxShadow: '0 0 9px 2px rgba(255,255,255,.55)' }} />
+        </button>
+        {miniature}
       </span>
-    </button>
+    );
+  }
+  return (
+    <span style={{ position: 'relative', flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
+      <button {...gestes} aria-label={tr('Parler à l’assistant')}
+        style={{ ...tenue, width: 62, border: 'none', background: 'transparent', cursor: 'pointer',
+          padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span aria-hidden="true" style={{
+          width: 46, height: 46, borderRadius: '50%', marginTop: -14,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', background: halo,
+          boxShadow: voix
+            ? '0 0 0 5px var(--o-header), 0 0 0 9px rgba(var(--o-accent-rgb),.28), 0 6px 18px rgba(var(--o-accent-rgb),.45)'
+            : '0 0 0 5px var(--o-header), 0 6px 18px rgba(var(--o-accent-rgb),.45)',
+          transition: REDUCE_MOTION ? 'none' : 'box-shadow .2s',
+        }}>
+          <span style={{ width: 13, height: 13, borderRadius: '50%', background: 'rgba(255,255,255,.92)',
+            boxShadow: '0 0 10px 2px rgba(255,255,255,.55)' }} />
+        </span>
+      </button>
+      {miniature}
+    </span>
   );
 }
 
@@ -12336,7 +12449,7 @@ export default function App() {
   return (
     <LoggiaContext.Provider value={loggiaRuntime}>
     {showOnboarding && <Suspense fallback={null}><Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} /></Suspense>}
-    <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, peutEditer, droits, notifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn }}>
+    <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, peutEditer, droits, notifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn, onAssistant: assistantNs ? () => setAssistantOuvert(true) : null }}>
     <div className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)',
       // isolate : notre propre contexte d'empilement. Sans lui, le z-index
       // négatif du calque photo l'envoie sous le fond OPAQUE de tout wrapper

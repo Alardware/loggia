@@ -118,6 +118,7 @@ html.loggia-tactile .loggia-aside.is-closed .o-nav-item { justify-content: flex-
 html.loggia-tactile .loggia-aside.is-open { transform: translateX(0); }
 html.loggia-tactile .loggia-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 90; }
 html.loggia-tactile .loggia-mobilenav { display: flex !important; }
+html.loggia-tactile .o-hdr-assist { display: none !important; }
 /* Sans la barre du haut, le contenu commence au ras de l'écran : les titres
  * touchaient le bord (et l'encoche). Il faut donc de l'air — mais SANS
  * l'additionner à la zone sûre.
@@ -429,6 +430,9 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .grid-sys-power > button { flex-direction: column !important; gap: 8px !important; padding: 12px 6px !important; font-size: 11.5px !important; text-align: center !important; line-height: 1.25 !important; }
   /* Barre de navigation du bas (mobile) : visible, + on libère de la place sous le contenu et on remonte le bouton thème */
   .loggia-mobilenav { display: flex !important; }
+  /* L'assistant vit alors au centre de cette barre. Le garder aussi dans
+     l'en-tête ferait deux entrées pour le même geste sur le même écran. */
+  .o-hdr-assist { display: none !important; }
   .o-navbar-on .loggia-content { padding-bottom: calc(112px + var(--o-safe-bottom, 0px)) !important; }
   .grid-pieces, .grid-etats, .grid-lights { grid-template-columns: 1fr 1fr !important; }
   /* Vue Objets mobile : appareils + plantes en 2 colonnes, cartes resserrées */
