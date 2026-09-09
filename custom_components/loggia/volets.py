@@ -251,6 +251,13 @@ class LoggiaVolets:
         self.journal: list[dict[str, Any]] = []
         self._defait: list[Any] = []
         self._defait_soleil: list[Any] = []
+        # Ce que la derniere programmation a REELLEMENT arme, par sens :
+        # {decalage: [entity_id]}. Sans cela, une regle qui ne se declenche
+        # pas ne se distingue pas d'une regle qui n'a jamais ete posee — et
+        # c'est exactement la question qu'on se pose quand rien ne bouge.
+        self.armes: dict[str, dict] = {"ouverture": {}, "fermeture": {}}
+        # Pourquoi rien n'est arme, quand rien ne l'est.
+        self.raison: str = "jamais programme"
         hass.async_create_task(self._async_demarrer())
 
     async def _async_demarrer(self) -> None:
@@ -285,21 +292,29 @@ class LoggiaVolets:
                 _LOGGER.debug("Loggia volets : rendez-vous deja retire")
         self._defait_soleil.clear()
 
+        self.armes = {"ouverture": {}, "fermeture": {}}
         plan = self.cfg.get("planning") or {}
         if not plan.get("actif"):
+            self.raison = "planning desactive"
             return
         from homeassistant.helpers.event import async_track_sunrise, async_track_sunset
 
         # Un rendez-vous par decalage DISTINCT, et non un par volet : trois
         # chambres qui s'ouvrent une heure plus tard partagent le leur.
         covers = self._tous_les_covers()
+        if not covers:
+            self.raison = "aucun volet dans l'installation"
+            return
         for sens, poser in (("ouverture", async_track_sunrise), ("fermeture", async_track_sunset)):
             groupes = groupes_horaires(plan, covers, sens)
             for decalage, cibles in groupes.items():
                 self._defait_soleil.append(
                     poser(self.hass, self._rendezvous(sens, list(cibles)), timedelta(minutes=decalage))
                 )
+                self.armes[sens][str(decalage)] = list(cibles)
             _LOGGER.info("Loggia volets : %s armee en %d groupe(s)", sens, len(groupes))
+        total = sum(len(g) for g in self.armes.values())
+        self.raison = "" if total else "aucun groupe : tous les volets sont exclus"
 
     def _rendezvous(self, sens: str, cibles: list):
         """Le rappel d'un groupe, avec les volets qu'il commande."""
@@ -551,7 +566,31 @@ class LoggiaVolets:
             "abaisses": sorted(self.abaisses),
             "a_l_abri": self.a_l_abri,
             "journal": list(self.journal),
+            # Ce qui est ARME, et quand cela sonnera. Une regle qu'on ne peut
+            # pas inspecter ne se debogue pas : quand rien ne bouge le matin, la
+            # premiere question est de savoir si le rendez-vous existe.
+            "armes": {s: dict(g) for s, g in self.armes.items()},
+            "raison": self.raison,
+            "prochains": self._prochains(),
         }
+
+    def _prochains(self) -> dict[str, Any]:
+        """Quand sonnera chaque groupe arme, en clair."""
+        try:
+            from homeassistant.components.sun import get_astral_event_next
+            from homeassistant.const import SUN_EVENT_SUNRISE, SUN_EVENT_SUNSET
+        except Exception:  # noqa: BLE001
+            return {}
+        sortie: dict[str, Any] = {}
+        for sens, evenement in (("ouverture", SUN_EVENT_SUNRISE), ("fermeture", SUN_EVENT_SUNSET)):
+            for decalage in self.armes.get(sens, {}):
+                try:
+                    quand = get_astral_event_next(
+                        self.hass, evenement, offset=timedelta(minutes=int(decalage)))
+                    sortie.setdefault(sens, {})[decalage] = quand.isoformat()
+                except Exception:  # noqa: BLE001
+                    continue
+        return sortie
 
     async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
         cfg = await self.async_config()
