@@ -277,9 +277,12 @@ def jour_actif(jours, quand) -> bool:
 class LoggiaVolets:
     """Tient les regles de volets : planning, soleil, mise a l'abri."""
 
-    def __init__(self, hass: HomeAssistant, store: "LoggiaStore") -> None:
+    def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
         self.store = store
+        # Le socle commun : journal unifie et respect du geste manuel.
+        # Toute commande passe par lui — voir `regles.py`.
+        self.regles = regles
         self.cfg: dict[str, Any] = {}
         # Ce que la derniere evaluation a decide, volet par volet. Sert a ne
         # pas renvoyer dix fois la meme commande, et a savoir quoi rouvrir.
@@ -289,7 +292,6 @@ class LoggiaVolets:
         # d'ou l'on venait.
         self.abaisses: dict[str, Any] = {}
         self.a_l_abri = False
-        self.journal: list[dict[str, Any]] = []
         self._defait: list[Any] = []
         self._defait_soleil: list[Any] = []
         # Ce que la derniere programmation a REELLEMENT arme, par sens :
@@ -417,14 +419,23 @@ class LoggiaVolets:
         # mangeait donc la regle en silence, chaque fois.
         joignables = [h for h in cibles if self._joignable(h)]
         absents = [h for h in cibles if h not in joignables]
+        motif = "lever" if sens == "ouvrir" else "coucher"
+        if decalage:
+            motif += " %+d min" % int(decalage)
+        partis = []
         if joignables:
-            await self._async_service("open_cover" if sens == "ouvrir" else "close_cover", joignables)
+            partis = await self._async_service(
+                "open_cover" if sens == "ouvrir" else "close_cover", joignables,
+                regle="planning", quoi=sens, motif=motif)
         if absents:
             self._mettre_en_attente(absents, sens)
         if sens == "ouvrir":
             self.abaisses.clear()
-        self._noter(sens, "planning", len(joignables),
-                    detail=("%d en attente" % len(absents)) if absents else "")
+        # Une ligne de plus SEULEMENT si quelque chose manque : `agir` a deja
+        # note ce qui est parti. Deux lignes pour un meme ordre se liraient mal.
+        if absents or not joignables:
+            await self._noter(sens, "planning", len(partis), motif=motif,
+                              detail=("%d en attente" % len(absents)) if absents else "")
 
     # ── Le soleil et le vent ───────────────────────────────────────────────
     @callback
@@ -433,6 +444,12 @@ class LoggiaVolets:
 
     async def _async_evaluer(self) -> None:
         """Met a l'abri si le vent l'exige, sinon protege du soleil."""
+        # On declare ici les volets au socle, et non a la programmation : les
+        # entites peuvent ne pas exister au demarrage — c'est le defaut qui a
+        # laisse le planning muet pendant des jours. Le soleil, lui, bouge
+        # toutes les quelques minutes, et cette fonction avec lui. `suivre`
+        # ne fait rien quand la liste n'a pas change.
+        self.regles.suivre("volets", self._tous_les_covers())
         if await self._async_vent():
             return
         await self._async_soleil()
@@ -454,8 +471,9 @@ class LoggiaVolets:
             if not self.a_l_abri:
                 cibles = self._tous_les_covers()
                 if cibles:
-                    await self._async_service("open_cover", cibles)
-                    self._noter("ouvrir", "vent", len(cibles), detail=str(valeur))
+                    await self._async_service("open_cover", cibles, regle="vent",
+                                              quoi="ouvrir",
+                                              motif="vent %s" % valeur)
                 self.a_l_abri = True
                 self.abaisses.clear()
             return True
@@ -527,9 +545,10 @@ class LoggiaVolets:
                 # sommeil de quelqu'un.
                 if avant is None or avant <= position:
                     continue
-                await self._async_position(haid, position)
+                await self._async_position(haid, position, regle="soleil",
+                                           quoi="proteger",
+                                           motif="soleil a %s°" % round(azimut))
                 self.abaisses[haid] = avant
-                self._noter("proteger", "soleil", 1, detail=haid)
             elif not frappe and deja:
                 await self._async_rendre(haid)
 
@@ -543,8 +562,9 @@ class LoggiaVolets:
         n'en publie pas — et 100 reste alors le seul repli raisonnable.
         """
         avant = self.abaisses.pop(haid, None)
-        await self._async_position(haid, 100 if avant is None else int(avant))
-        self._noter("rouvrir", "soleil", 1, detail=haid)
+        await self._async_position(haid, 100 if avant is None else int(avant),
+                                   regle="soleil", quoi="rouvrir",
+                                   motif="soleil parti")
 
     async def _async_rouvrir_proteges(self) -> None:
         for haid in list(self.abaisses):
@@ -620,14 +640,16 @@ class LoggiaVolets:
         for haid, ordre in list(self.attente.items()):
             if maintenant > ordre.get("expire", 0):
                 del self.attente[haid]
-                self._noter(ordre.get("sens", "?"), "attente expiree", 0, detail=haid)
+                await self._noter(ordre.get("sens", "?"), "attente expiree", 0,
+                                  detail=haid, motif="ordre perime")
                 continue
             if not self._joignable(haid):
                 continue
             del self.attente[haid]
             await self._async_service(
-                "open_cover" if ordre.get("sens") == "ouvrir" else "close_cover", [haid])
-            self._noter(ordre.get("sens", "?"), "rattrapage", 1, detail=haid)
+                "open_cover" if ordre.get("sens") == "ouvrir" else "close_cover", [haid],
+                regle="rattrapage", quoi=ordre.get("sens", "?"),
+                motif="volet revenu")
         self._suivre_attente()
 
     def _nombre(self, haid):
@@ -669,26 +691,39 @@ class LoggiaVolets:
         except (TypeError, ValueError):
             return False
 
-    async def _async_position(self, haid: str, position: int) -> None:
+    async def _async_position(self, haid: str, position: int, *, regle: str = "",
+                              quoi: str = "", motif: str = "") -> list:
         """Place un volet, ou l'ouvre / le ferme s'il ne sait pas se placer."""
         if self._sait_se_placer(haid):
-            await self._async_service("set_cover_position", [haid], {"position": position})
-        else:
-            await self._async_service("open_cover" if position >= 50 else "close_cover", [haid])
+            return await self._async_service("set_cover_position", [haid],
+                                             {"position": position},
+                                             regle=regle, quoi=quoi, motif=motif)
+        return await self._async_service(
+            "open_cover" if position >= 50 else "close_cover", [haid],
+            regle=regle, quoi=quoi, motif=motif)
 
-    async def _async_service(self, service: str, cibles: list, extra=None) -> None:
-        data = {"entity_id": cibles}
-        if extra:
-            data.update(extra)
-        try:
-            await self.hass.services.async_call("cover", service, data, blocking=False)
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia volets : cover.%s a echoue", service)
+    async def _async_service(self, service: str, cibles: list, extra=None, *,
+                             regle: str = "", quoi: str = "", motif: str = "") -> list:
+        """Commande, par le socle commun.
 
-    def _noter(self, quoi: str, regle: str, combien: int, detail: str = "") -> None:
-        self.journal.insert(0, {"quoi": quoi, "regle": regle, "n": combien,
-                                "detail": detail, "ts": time.time()})
-        del self.journal[30:]
+        C'est lui qui ecarte ce que quelqu'un tient dans la main et qui tient
+        le journal. Avant, chaque module appelait le service directement et
+        notait ce qu'il AVAIT DEMANDE : le journal disait « ferme 2 » quand un
+        seul volet avait bouge.
+        """
+        return await self.regles.agir("volets", regle, "cover", service, cibles, extra,
+                                      quoi=quoi or service, motif=motif)
+
+    async def _noter(self, quoi: str, regle: str, combien: int, detail: str = "",
+                     motif: str = "") -> None:
+        """Une ligne de journal, dans le journal COMMUN.
+
+        Il vivait ici, en memoire, et repartait a zero a chaque redemarrage —
+        au point qu'une regle muette pendant la nuit ne laissait rien a lire
+        le lendemain.
+        """
+        await self.regles.noter("volets", regle, quoi, n=combien,
+                                detail=detail, motif=motif)
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     async def async_config(self) -> dict[str, Any]:
@@ -708,7 +743,7 @@ class LoggiaVolets:
             "soleil": {"azimut": attrs.get("azimuth"), "elevation": attrs.get("elevation")},
             "abaisses": sorted(self.abaisses),
             "a_l_abri": self.a_l_abri,
-            "journal": list(self.journal),
+            "journal": await self.regles.journal(limite=40, module="volets"),
             # Ce qui est ARME, et quand cela sonnera. Une regle qu'on ne peut
             # pas inspecter ne se debogue pas : quand rien ne bouge le matin, la
             # premiere question est de savoir si le rendez-vous existe.

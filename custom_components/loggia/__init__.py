@@ -108,6 +108,18 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
 
+    # Le socle commun des regles : journal unifie et respect du geste manuel.
+    # Il vient AVANT les modules de regles — chacun le recoit et lui confie
+    # ses commandes. Sans lui, chaque module reecrivait sa propre plomberie,
+    # et cinq journaux en memoire repartaient a zero a chaque redemarrage.
+    if not data.get("regles") and data.get("store"):
+        try:
+            from .regles import Regles
+
+            data["regles"] = Regles(hass, data["store"])
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : socle des regles indisponible")
+
     # Alertes de surete poussees sur telephone. Meme regime que le WebSocket :
     # le listener vit jusqu'a l'arret du process, on ne l'enregistre qu'une fois,
     # et son absence ne doit pas empecher le reste de fonctionner.
@@ -133,11 +145,11 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
     # Regles de volets : planning du soleil, protection solaire, mise a l'abri.
     # Meme regime : les abonnements vivent jusqu'a l'arret du process, et une
     # maison sans volet ne doit pas s'en trouver genee.
-    if not data.get("volets") and data.get("store"):
+    if not data.get("volets") and data.get("store") and data.get("regles"):
         try:
             from .volets import LoggiaVolets
 
-            data["volets"] = LoggiaVolets(hass, data["store"])
+            data["volets"] = LoggiaVolets(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : regles de volets indisponibles")
 

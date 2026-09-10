@@ -61,6 +61,22 @@ def _poser_doublures() -> None:
         sys.modules[nom] = module
     # `@callback` decore les fonctions du composant : sans lui, l'import echoue.
     sys.modules["homeassistant.core"].callback = lambda f: f
+
+    # `Context` porte deux choses qui comptent pour `regles.py` : un `id`
+    # unique — c'est lui qui permet de reconnaitre nos propres ordres — et un
+    # `user_id`, rempli quand le changement vient d'une personne. La doublure
+    # doit donc etre un vrai objet, pas une classe vide : un `id` partage
+    # entre deux contextes ferait passer une main pour une regle.
+    class _Context:
+        _n = 0
+
+        def __init__(self, user_id=None, parent_id=None, id=None):  # noqa: A002
+            _Context._n += 1
+            self.id = id or ("ctx-%d" % _Context._n)
+            self.user_id = user_id
+            self.parent_id = parent_id
+
+    sys.modules["homeassistant.core"].Context = _Context
     # `from homeassistant.util import dt` va chercher un ATTRIBUT du paquet,
     # pas seulement une entree de `sys.modules` : il faut relier les deux.
     import datetime as _dt

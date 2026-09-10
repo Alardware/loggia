@@ -41,7 +41,11 @@ class FauxServices:
     def __init__(self):
         self.appels = []
 
-    async def async_call(self, domaine, service, data, blocking=False):
+    async def async_call(self, domaine, service, data, blocking=False, context=None):
+        # Le socle attache SON contexte a chaque ordre : c'est ce qui lui
+        # permet de ne pas prendre son propre effet pour un geste humain.
+        # On l'accepte et on garde la forme a trois elements, que trente-quatre
+        # assertions lisent deja.
         self.appels.append((domaine, service, dict(data)))
 
 
@@ -67,7 +71,12 @@ def module():
 
 
 @pytest.fixture
-def creer(module, store_module):
+def regles_module():
+    return charger("regles")
+
+
+@pytest.fixture
+def creer(module, store_module, regles_module):
     faits = []
 
     def fabrique(config=None, etats=None):
@@ -87,9 +96,13 @@ def creer(module, store_module):
         # chaque volet, pour l'y remettre plutot que de tout ouvrir a 100.
         v.abaisses = {}
         v.a_l_abri = False
-        v.journal = []
         v._defait = []
         v._defait_soleil = []
+        # Le socle commun. Un vrai, pas une doublure : c'est lui qui ecarte
+        # les entites sous la main et qui tient le journal, et les tests des
+        # volets doivent voir exactement ce que verra l'installation.
+        v.regles = regles_module.Regles(v.hass, magasin)
+        v.regles._depot = FauxStore(None)
         # Les ordres qu'un volet indisponible n'a pas pu recevoir, et l'ecoute
         # qui les rattrape a son retour. Le vrai constructeur les pose ; ici on
         # les recree, sinon la fabrique ment sur l'objet qu'elle rend.
@@ -833,8 +846,9 @@ def test_le_journal_ne_compte_pas_ce_qui_n_est_pas_parti(creer):
     pendant des jours."""
     v = creer({"planning": {"actif": True, "mode": "auto"}}, ABSENT)
     lancer(v._async_planifie("ouvrir"))
-    assert v.journal[0]["n"] == 0
-    assert "attente" in v.journal[0]["detail"]
+    ligne = lancer(v.regles.journal())[0]
+    assert ligne["n"] == 0
+    assert "attente" in ligne["detail"]
 
 
 def test_l_ordre_repart_quand_le_volet_revient(creer):
@@ -871,3 +885,91 @@ def test_les_volets_joignables_partent_quand_meme(creer):
     lancer(v._async_planifie("fermer"))
     assert [a[2]["entity_id"] for a in v.hass.services.appels] == [["cover.la"]]
     assert list(v.attente) == ["cover.absent"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Le socle commun.
+#
+# Les volets sont le premier module a passer dessus. Ce qui suit verifie le
+# BRANCHEMENT, pas le socle lui-meme — `test_regles.py` s'en charge.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_une_main_sur_un_volet_arrete_la_regle(creer):
+    """Le premier motif d'abandon : on remonte un volet, le dashboard le
+    redescend, on le remonte encore, et l'on finit par tout debrancher."""
+    from homeassistant.core import Context
+    etats = {"cover.salon": FauxEtat("open", {"supported_features": 15})}
+    v = creer({"planning": {"actif": True, "mode": "auto"}}, etats)
+
+    class Evt:
+        data = {"entity_id": "cover.salon"}
+        context = Context(user_id="quelqu-un")
+
+    v.regles.suivre("volets", ["cover.salon"])
+    v.regles._sur_changement(Evt())
+    lancer(v._async_planifie("fermer"))
+    assert v.hass.services.appels == [], "la regle a bouscule une main"
+
+
+def test_le_journal_dit_POURQUOI(creer):
+    """La colonne qui manquait : « ferme » sans motif ne s'explique pas."""
+    etats = {"cover.salon": FauxEtat("open", {"supported_features": 15})}
+    v = creer({"planning": {"actif": True, "mode": "auto",
+                            "fermeture": {"decalage": 30}}}, etats)
+    lancer(v._async_planifie("fermer", decalage=30))
+    ligne = lancer(v.regles.journal())[0]
+    assert ligne["module"] == "volets"
+    assert ligne["regle"] == "planning"
+    assert ligne["motif"] == "coucher +30 min"
+    assert ligne["cibles"] == ["cover.salon"]
+
+
+def test_le_module_declare_ses_volets_au_socle(creer):
+    """Sans declaration, aucune main n'est vue et le gel ne s'arme jamais.
+
+    Elle se fait a l'evaluation du soleil et non a la programmation : les
+    entites peuvent ne pas exister au demarrage.
+    """
+    etats = {"cover.salon": FauxEtat("open", {"supported_features": 15})}
+    v = creer({"soleil": {"actif": False}}, etats)
+    lancer(v._async_evaluer())
+    assert v.regles._pilotees.get("volets") == {"cover.salon"}
+
+
+def test_l_etat_montre_le_journal_commun(creer):
+    """`async_etat` doit rendre le journal PARTAGE, pas une liste vide.
+
+    Sans cette verification, remplacer la lecture du socle par `[]` passait
+    inapercu — et l'ecran des volets serait muet sans que rien ne le dise.
+    """
+    etats = {"cover.salon": FauxEtat("open", {"supported_features": 15})}
+    v = creer({"planning": {"actif": True, "mode": "auto",
+                            "fermeture": {"decalage": 30}}}, etats)
+    lancer(v._async_planifie("fermer", decalage=30))
+    etat = lancer(v.async_etat())
+    assert etat["journal"], "l'etat ne montre plus rien de ce que la regle a fait"
+    assert etat["journal"][0]["regle"] == "planning"
+    assert etat["journal"][0]["motif"] == "coucher +30 min"
+
+
+def test_le_composant_transmet_le_socle_aux_volets():
+    """Le cablage, lu dans la source.
+
+    `__init__.py` importe le coeur de Home Assistant : il ne s'execute pas
+    dans ces doublures. Mais un socle qu'on oublie de transmettre laisse
+    `self.regles` a None, et la premiere commande leve une AttributeError en
+    pleine nuit — vu qu'aucun test ne l'exercait, autant le lire.
+    """
+    from pathlib import Path
+    src = Path(__file__).resolve().parents[2] / "custom_components" / "loggia" / "__init__.py"
+    texte = src.read_text(encoding="utf-8")
+    # La GARDE aussi, pas seulement la ligne : desarmee, le socle n'est jamais
+    # cree, la ligne reste pourtant lisible dans le fichier, et le test passe.
+    assert 'if not data.get("regles") and data.get("store"):' in texte, \
+        "la garde du socle a saute : il ne serait plus cree"
+    assert 'data["regles"] = Regles(hass, data["store"])' in texte, \
+        "le socle n'est plus cree"
+    assert 'LoggiaVolets(hass, data["store"], data.get("regles"))' in texte,         "les volets ne recoivent plus le socle"
+    # Et il naît AVANT eux, sinon ils recevraient None.
+    assert texte.index('data["regles"] = Regles') < texte.index("LoggiaVolets(hass"),         "le socle est cree apres les volets : ils recevraient None"
