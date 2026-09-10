@@ -90,6 +90,13 @@ def creer(module, store_module):
         v.journal = []
         v._defait = []
         v._defait_soleil = []
+        # Les ordres qu'un volet indisponible n'a pas pu recevoir, et l'ecoute
+        # qui les rattrape a son retour. Le vrai constructeur les pose ; ici on
+        # les recree, sinon la fabrique ment sur l'objet qu'elle rend.
+        v.attente = {}
+        v._defait_attente = None
+        v.armes = {"ouverture": {}, "fermeture": {}}
+        v.raison = ""
         faits.append(v)
         return v
 
@@ -795,3 +802,72 @@ def test_les_heures_viennent_du_bon_module(module):
     assert "from homeassistant.components.sun import" not in corps
     # Et l'echec se DIT, il ne rend plus un vide indistinguable d'un succes.
     assert "heures indisponibles" in corps,         "un garde-fou muet ne garde rien : l'erreur doit remonter"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Un ordre attend son volet.
+#
+# Mesure du 10/09/2026 : le rendez-vous du matin a sonne a la seconde exacte,
+# `open_cover` est parti, et le volet n'a pas bouge — il etait `unavailable`
+# depuis dix-neuf minutes et l'est reste cinq heures (integration Netatmo, qui
+# decroche regulierement). Le journal notait pourtant « ouvrir 1 ».
+#
+# Une commande envoyee a une entite absente ne fait rien et ne dit rien. Elle
+# est desormais mise en attente, et repart des que le volet revient — mais
+# jamais au-dela du moment ou l'ordre INVERSE viendrait.
+# ─────────────────────────────────────────────────────────────────────────────
+
+ABSENT = {"cover.salon": FauxEtat("unavailable", {"supported_features": 15})}
+
+
+def test_un_volet_indisponible_ne_recoit_rien_et_n_est_pas_perdu(creer):
+    v = creer({"planning": {"actif": True, "mode": "auto"}}, ABSENT)
+    lancer(v._async_planifie("fermer"))
+    assert v.hass.services.appels == [], "on a commande une entite absente"
+    assert "cover.salon" in v.attente
+    assert v.attente["cover.salon"]["sens"] == "fermer"
+
+
+def test_le_journal_ne_compte_pas_ce_qui_n_est_pas_parti(creer):
+    """« ouvrir 1 » alors que rien n'a bouge : c'est ce qui a masque le defaut
+    pendant des jours."""
+    v = creer({"planning": {"actif": True, "mode": "auto"}}, ABSENT)
+    lancer(v._async_planifie("ouvrir"))
+    assert v.journal[0]["n"] == 0
+    assert "attente" in v.journal[0]["detail"]
+
+
+def test_l_ordre_repart_quand_le_volet_revient(creer):
+    v = creer({"planning": {"actif": True, "mode": "auto"}}, ABSENT)
+    lancer(v._async_planifie("fermer"))
+    assert v.hass.services.appels == []
+    # Le volet revient.
+    v.hass.states.table["cover.salon"] = FauxEtat("open", {"supported_features": 15})
+    lancer(v._async_rattraper())
+    assert [a[1] for a in v.hass.services.appels] == ["close_cover"]
+    assert v.attente == {}, "l'ordre doit etre consomme, pas rejoue a chaque retour"
+
+
+def test_un_ordre_perime_est_jete_plutot_qu_applique(creer):
+    """Ouvrir a vingt-trois heures parce que l'integration est enfin revenue
+    serait pire que de n'avoir rien fait."""
+    import time as _t
+    v = creer({"planning": {"actif": True, "mode": "auto"}}, ABSENT)
+    lancer(v._async_planifie("ouvrir"))
+    v.attente["cover.salon"]["expire"] = _t.time() - 1
+    v.hass.states.table["cover.salon"] = FauxEtat("open", {"supported_features": 15})
+    lancer(v._async_rattraper())
+    assert v.hass.services.appels == [], "un ordre perime a ete applique"
+    assert v.attente == {}
+
+
+def test_les_volets_joignables_partent_quand_meme(creer):
+    """Un seul volet absent ne doit pas retenir les autres."""
+    etats = {
+        "cover.la": FauxEtat("open", {"supported_features": 15}),
+        "cover.absent": FauxEtat("unavailable", {"supported_features": 15}),
+    }
+    v = creer({"planning": {"actif": True, "mode": "auto"}}, etats)
+    lancer(v._async_planifie("fermer"))
+    assert [a[2]["entity_id"] for a in v.hass.services.appels] == [["cover.la"]]
+    assert list(v.attente) == ["cover.absent"]

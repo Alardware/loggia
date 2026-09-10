@@ -299,6 +299,10 @@ class LoggiaVolets:
         self.armes: dict[str, dict] = {"ouverture": {}, "fermeture": {}}
         # Pourquoi rien n'est arme, quand rien ne l'est.
         self.raison: str = "jamais programme"
+        # Les ordres qui n'ont pas pu partir, faute de volet joignable.
+        # {entity_id: {"sens": "ouvrir"|"fermer", "expire": horodatage}}
+        self.attente: dict[str, Any] = {}
+        self._defait_attente = None
         hass.async_create_task(self._async_demarrer())
 
     async def _async_demarrer(self) -> None:
@@ -404,10 +408,23 @@ class LoggiaVolets:
         cibles = volets_du_jour(plan, cibles, 'ouverture' if sens == 'ouvrir' else 'fermeture', dt_util.now())
         if not cibles:
             return
-        await self._async_service("open_cover" if sens == "ouvrir" else "close_cover", cibles)
+        # Un volet indisponible n'obeit pas, et rien ne le dit.
+        #
+        # Mesure du 10/09/2026 : le rendez-vous du matin a sonne a la seconde
+        # exacte, la commande est partie, et le volet n'a pas bouge — il etait
+        # `unavailable` depuis dix-neuf minutes et l'est reste cinq heures. Le
+        # journal notait pourtant « ouvrir 1 ». Une integration qui decroche
+        # mangeait donc la regle en silence, chaque fois.
+        joignables = [h for h in cibles if self._joignable(h)]
+        absents = [h for h in cibles if h not in joignables]
+        if joignables:
+            await self._async_service("open_cover" if sens == "ouvrir" else "close_cover", joignables)
+        if absents:
+            self._mettre_en_attente(absents, sens)
         if sens == "ouvrir":
             self.abaisses.clear()
-        self._noter(sens, "planning", len(cibles))
+        self._noter(sens, "planning", len(joignables),
+                    detail=("%d en attente" % len(absents)) if absents else "")
 
     # ── Le soleil et le vent ───────────────────────────────────────────────
     @callback
@@ -548,6 +565,71 @@ class LoggiaVolets:
         except Exception:  # noqa: BLE001
             return []
 
+    # ── Les ordres qui attendent leur volet ────────────────────────────────
+    def _joignable(self, haid: str) -> bool:
+        """Le volet repond-il ? Une entite absente ou indisponible n'obeit pas."""
+        st = self.hass.states.get(haid)
+        return st is not None and st.state not in ("unavailable", "unknown")
+
+    def _expiration(self, sens: str) -> float:
+        """Jusqu'a quand un ordre en attente reste valable.
+
+        JAMAIS au-dela du moment ou l'ordre inverse viendrait. Ouvrir les
+        volets a vingt-trois heures parce que l'integration est enfin revenue
+        serait pire que de n'avoir rien fait : on rattraperait le matin en
+        pleine nuit.
+        """
+        try:
+            from homeassistant.helpers.sun import get_astral_event_next
+            from homeassistant.const import SUN_EVENT_SUNRISE, SUN_EVENT_SUNSET
+            evenement = SUN_EVENT_SUNSET if sens == "ouvrir" else SUN_EVENT_SUNRISE
+            return get_astral_event_next(self.hass, evenement).timestamp()
+        except Exception:  # noqa: BLE001
+            # Sans le soleil, une demi-journee : assez pour rattraper un
+            # decrochage, trop court pour agir a contretemps.
+            return time.time() + 12 * 3600
+
+    def _mettre_en_attente(self, cibles: list, sens: str) -> None:
+        expire = self._expiration(sens)
+        for haid in cibles:
+            self.attente[haid] = {"sens": sens, "expire": expire}
+        self._suivre_attente()
+
+    def _suivre_attente(self) -> None:
+        """(Re)pose l'ecoute sur les seuls volets qu'on attend."""
+        if self._defait_attente is not None:
+            try:
+                self._defait_attente()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia volets : ecoute d'attente deja retiree")
+            self._defait_attente = None
+        if not self.attente:
+            return
+        from homeassistant.helpers.event import async_track_state_change_event
+
+        self._defait_attente = async_track_state_change_event(
+            self.hass, list(self.attente), self._sur_retour)
+
+    @callback
+    def _sur_retour(self, _event) -> None:
+        self.hass.async_create_task(self._async_rattraper())
+
+    async def _async_rattraper(self) -> None:
+        """Applique les ordres dont le volet est revenu, jette ceux qui ont expire."""
+        maintenant = time.time()
+        for haid, ordre in list(self.attente.items()):
+            if maintenant > ordre.get("expire", 0):
+                del self.attente[haid]
+                self._noter(ordre.get("sens", "?"), "attente expiree", 0, detail=haid)
+                continue
+            if not self._joignable(haid):
+                continue
+            del self.attente[haid]
+            await self._async_service(
+                "open_cover" if ordre.get("sens") == "ouvrir" else "close_cover", [haid])
+            self._noter(ordre.get("sens", "?"), "rattrapage", 1, detail=haid)
+        self._suivre_attente()
+
     def _nombre(self, haid):
         if not haid:
             return None
@@ -631,6 +713,7 @@ class LoggiaVolets:
             # pas inspecter ne se debogue pas : quand rien ne bouge le matin, la
             # premiere question est de savoir si le rendez-vous existe.
             "armes": {s: self._volets_armes(s) for s in self.armes},
+            "attente": {h: dict(o) for h, o in self.attente.items()},
             "raison": self.raison,
             "prochains": self._prochains(),
         }
@@ -682,6 +765,12 @@ class LoggiaVolets:
 
     @callback
     def async_arreter(self) -> None:
+        if self._defait_attente is not None:
+            try:
+                self._defait_attente()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia volets : ecoute d'attente deja retiree")
+            self._defait_attente = None
         for source in (self._defait, self._defait_soleil):
             for defaire in source:
                 try:
