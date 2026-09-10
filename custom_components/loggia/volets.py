@@ -647,11 +647,16 @@ class LoggiaVolets:
 
     def _prochains(self) -> dict[str, Any]:
         """Quand sonnera chaque groupe arme, en clair."""
+        # `helpers.sun`, et non `components.sun` : c'est la que vit la fonction.
+        # La premiere version se trompait de module, et son `except` avalait
+        # l'ImportError — `prochains` rendait un dictionnaire vide sans un mot,
+        # dans la fonction meme dont le role est de rendre les regles visibles.
+        # Un garde-fou muet ne garde rien : l'erreur se dit, maintenant.
         try:
-            from homeassistant.components.sun import get_astral_event_next
+            from homeassistant.helpers.sun import get_astral_event_next
             from homeassistant.const import SUN_EVENT_SUNRISE, SUN_EVENT_SUNSET
-        except Exception:  # noqa: BLE001
-            return {}
+        except Exception as err:  # noqa: BLE001
+            return {"erreur": "heures indisponibles : %s" % err}
         sortie: dict[str, Any] = {}
         for sens, evenement in (("ouverture", SUN_EVENT_SUNRISE), ("fermeture", SUN_EVENT_SUNSET)):
             for decalage in self.armes.get(sens, {}):
@@ -659,8 +664,8 @@ class LoggiaVolets:
                     quand = get_astral_event_next(
                         self.hass, evenement, offset=timedelta(minutes=int(decalage)))
                     sortie.setdefault(sens, {})[decalage] = quand.isoformat()
-                except Exception:  # noqa: BLE001
-                    continue
+                except Exception as err:  # noqa: BLE001
+                    sortie.setdefault(sens, {})[decalage] = "erreur : %s" % err
         return sortie
 
     async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:

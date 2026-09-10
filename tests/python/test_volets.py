@@ -776,3 +776,22 @@ def test_un_horaire_sans_volet_ne_commande_rien(creer):
                             "ouverture": {"decalage": 0}}}, etats)
     lancer(v._async_planifie("ouvrir", decalage=120))
     assert v.hass.services.appels == []
+
+
+def test_les_heures_viennent_du_bon_module(module):
+    """`get_astral_event_next` vit dans `helpers.sun`, pas dans `components.sun`.
+
+    La premiere version se trompait de module, et son `except` avalait
+    l'ImportError : `prochains` rendait un dictionnaire vide sans un mot — dans
+    la fonction meme dont le role est de rendre les regles visibles. Constate
+    le 10/09/2026 sur l'installation, apres redemarrage : `armes` etait juste,
+    `prochains` etait vide.
+    """
+    from pathlib import Path
+    src = Path(module.__file__)
+    texte = src.read_text(encoding="utf-8")
+    corps = texte[texte.index("def _prochains"):]
+    assert "from homeassistant.helpers.sun import get_astral_event_next" in corps
+    assert "from homeassistant.components.sun import" not in corps
+    # Et l'echec se DIT, il ne rend plus un vide indistinguable d'un succes.
+    assert "heures indisponibles" in corps,         "un garde-fou muet ne garde rien : l'erreur doit remonter"
