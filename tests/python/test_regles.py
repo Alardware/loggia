@@ -237,3 +237,105 @@ def test_chaque_ordre_a_son_propre_contexte(socle):
     lancer(r.agir("volets", "planning", "cover", "close_cover", ["cover.a"]))
     lancer(r.agir("nuit", "veilleuse", "light", "turn_off", ["light.a"]))
     assert r.hass.services.appels[0][3].id != r.hass.services.appels[1][3].id
+
+
+# ── Les priorites ───────────────────────────────────────────────────────────
+
+def test_une_regle_forte_tient_contre_une_faible(socle):
+    """« Vent fort passe avant les deux autres », generalise : chaque regle
+    declare son niveau, et le plus haut l'emporte."""
+    r = socle()
+    lancer(r.agir("volets", "vent", "cover", "open_cover", ["cover.a"], priorite=100, tenir=True))
+    partis = lancer(r.agir("volets", "planning", "cover", "close_cover", ["cover.a"], priorite=60))
+    assert partis == []
+    assert len(r.hass.services.appels) == 1, "le planning a baisse un volet que le vent tenait"
+    assert "1 tenu par vent" in lancer(r.journal())[0]["detail"]
+
+
+def test_une_regle_plus_forte_passe_et_reprend(socle):
+    """Commander par-dessus une tenue la reprend : la regle qui tenait ne
+    rendra pas l'entite derriere nous."""
+    r = socle()
+    lancer(r.agir("volets", "soleil", "cover", "set_cover_position", ["cover.a"],
+                  {"position": 30}, priorite=50, tenir=True))
+    assert r.tient("volets", "soleil", "cover.a")
+    partis = lancer(r.agir("volets", "planning", "cover", "close_cover", ["cover.a"], priorite=60))
+    assert partis == ["cover.a"]
+    assert not r.tient("volets", "soleil", "cover.a"), "le soleil rouvrirait un volet ferme pour la nuit"
+
+
+def test_a_egalite_rien_ne_retient(socle):
+    r = socle()
+    lancer(r.agir("volets", "a", "cover", "open_cover", ["cover.a"], priorite=50, tenir=True))
+    assert lancer(r.agir("volets", "b", "cover", "close_cover", ["cover.a"], priorite=50)) == ["cover.a"]
+
+
+def test_rendre_libere_les_plus_faibles(socle):
+    r = socle()
+    lancer(r.agir("volets", "vent", "cover", "open_cover", ["cover.a"], priorite=100, tenir=True))
+    r.relacher("volets", "vent")
+    assert lancer(r.agir("volets", "planning", "cover", "close_cover", ["cover.a"], priorite=60)) == ["cover.a"]
+
+
+def test_une_main_reprend_ce_qu_une_regle_tenait(socle):
+    """Sans cela, la regle rendrait l'entite a la fin du gel : la protection
+    solaire rouvrant un volet qu'on venait de baisser a la main."""
+    r = socle()
+    r.suivre("volets", ["cover.a"])
+    lancer(r.agir("volets", "soleil", "cover", "close_cover", ["cover.a"], priorite=50, tenir=True))
+    r._sur_changement(FauxEvenement("cover.a", contexte(user_id="u1")))
+    assert not r.tient("volets", "soleil", "cover.a")
+
+
+def test_une_tenue_oubliee_finit_par_tomber(socle):
+    """Un filet : une regle qui oublie de rendre ne bloque pas les autres pour toujours."""
+    r = socle()
+    lancer(r.agir("volets", "vent", "cover", "open_cover", ["cover.a"], priorite=100, tenir=True))
+    r._tenues["cover.a"]["fin"] = time.time() - 1
+    assert lancer(r.agir("volets", "planning", "cover", "close_cover", ["cover.a"], priorite=60)) == ["cover.a"]
+
+
+def test_relacher_tout_un_module_et_lui_seul(socle):
+    r = socle()
+    lancer(r.agir("volets", "vent", "cover", "open_cover", ["cover.a"], priorite=100, tenir=True))
+    lancer(r.agir("volets", "soleil", "cover", "close_cover", ["cover.b"], priorite=50, tenir=True))
+    lancer(r.agir("nuit", "veilleuse", "light", "turn_on", ["light.a"], priorite=10, tenir=True))
+    r.relacher("volets")
+    assert r.tenues("volets") == {}
+    assert r.tenues("nuit") == {"light.a": "veilleuse"}
+
+
+# ── La simulation ───────────────────────────────────────────────────────────
+
+def test_la_simulation_n_envoie_rien_mais_note_tout(socle):
+    """« Observer sans agir » : ce qui donne confiance a un tiers avant de
+    laisser le dashboard piloter sa maison."""
+    r = socle()
+    partis = lancer(r.agir("volets", "planning", "cover", "close_cover", ["cover.a", "cover.b"],
+                           motif="coucher", simuler=True))
+    assert r.hass.services.appels == [], "la simulation a commande la maison"
+    assert partis == ["cover.a", "cover.b"], "la simulation doit dire ce qui SERAIT parti"
+    ligne = lancer(r.journal())[0]
+    assert ligne["simule"] is True
+    assert ligne["n"] == 2
+    assert ligne["motif"] == "coucher"
+
+
+def test_la_simulation_respecte_les_mains_et_les_priorites(socle):
+    """Elle raconte la meme histoire que le reel : une entite gelee, ou tenue
+    par plus fort, n'y part pas davantage."""
+    r = socle()
+    r.suivre("volets", ["cover.a", "cover.b"])
+    r._sur_changement(FauxEvenement("cover.a", contexte(user_id="u1")))
+    lancer(r.agir("volets", "vent", "cover", "open_cover", ["cover.b"], priorite=100,
+                  tenir=True, simuler=True))
+    partis = lancer(r.agir("volets", "planning", "cover", "close_cover", ["cover.a", "cover.b"],
+                           priorite=60, simuler=True))
+    assert partis == []
+    assert r.hass.services.appels == []
+
+
+def test_une_ligne_reelle_n_est_pas_simulee(socle):
+    r = socle()
+    lancer(r.agir("volets", "planning", "cover", "close_cover", ["cover.a"]))
+    assert lancer(r.journal())[0]["simule"] is False

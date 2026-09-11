@@ -11,7 +11,7 @@
 import {
   useState, useMemo
 } from 'react';
-import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
+import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur, Bascule } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
 /* `champ` et `Nombre` vivent ici, et non dans le composant.
@@ -49,6 +49,12 @@ const CARDINAUX = () => [
 
 // Nomme ainsi, et non `JOURS`, pour ne pas se confondre avec le tableau du
 // meme nom dans meteo.jsx : l un s appelle, l autre s indexe.
+/* Le nom d'une règle dans l'ordre de priorité — celui qu'on lit à l'écran. */
+const nomPriorite = (r) => ({
+  vent: tr('vent fort'), coucher: tr('fermeture du soir'),
+  soleil: tr('protection solaire'), lever: tr('ouverture du matin'),
+}[r] || r);
+
 const JOURS_COURTS = () => [tr('lun'), tr('mar'), tr('mer'), tr('jeu'), tr('ven'), tr('sam'), tr('dim')];
 
 /* Le point cardinal le plus proche d'un azimut — pour relire ce que le serveur
@@ -124,6 +130,7 @@ export function VoletsReglages({ hass, cardSt }) {
   const plan = cfg.planning || {};
   const sol = cfg.soleil || {};
   const vent = cfg.vent || {};
+  const simu = cfg.simulation || {};
   const titre = { fontSize: 15, fontWeight: 700 };
   const label = { fontSize: 12, fontWeight: 700, marginBottom: 6 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
@@ -135,6 +142,13 @@ export function VoletsReglages({ hass, cardSt }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* La simulation se dit EN HAUT, pas seulement dans son réglage : sinon
+        * on cherche pourquoi les volets ne bougent plus. */}
+      {simu.actif && (
+        <div role="status" style={{ ...cardSt, border: 'var(--o-bw,1px) solid var(--o-warn2)', fontSize: 12.5, fontWeight: 700, color: 'var(--o-warn2)' }}>
+          {tr('Simulation : les volets ne bougent pas, les manœuvres sont notées.')}
+        </div>
+      )}
       {/* ── Le planning ── */}
       <div style={cardSt}>
         <RegleEntete nom={tr('Lever et coucher du soleil')}
@@ -378,14 +392,41 @@ export function VoletsReglages({ hass, cardSt }) {
         )}
       </div>
 
+      {/* ── Observer sans agir ── */}
+      {/* Un MODE, pas une règle : il ne commande rien et n'a rien à replier.
+        * D'où la bascule seule, et non l'en-tête des règles — dont chacun
+        * pilote un pli. */}
+      <div style={cardSt}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={titre}>{tr('Observer sans agir')}</div>
+            <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>
+              {tr('Les règles notent ce qu’elles auraient fait, sans toucher aux volets.')}
+            </div>
+          </div>
+          <Bascule nom={tr('Observer sans agir')} on={!!simu.actif}
+            cb={() => enregistrer({ simulation: { actif: !simu.actif } })} />
+        </div>
+      </div>
+
       {/* ── Ce qui s'est passé ── */}
       {etat.journal && etat.journal.length > 0 && (
         <div style={cardSt}>
           <div style={titre}>{tr('Dernières manœuvres')}</div>
+          {/* Qui l'emporte quand deux règles visent le même volet : le dire,
+            * plutôt que laisser deviner pourquoi l'une a cédé. */}
+          {Array.isArray(etat.priorites) && etat.priorites.length > 1 && (
+            <div style={{ marginTop: 4, fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>
+              {tr('Qui l’emporte')} : {etat.priorites.map(nomPriorite).join(' › ')}
+            </div>
+          )}
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
             {etat.journal.slice(0, 8).map((j, i) => (
               <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
-                <span>{j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.detail ? ' · ' + j.detail : ''}</span></span>
+                <span>
+                  {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
+                  {j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
+                </span>
                 <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString()}</span>
               </div>
             ))}

@@ -973,3 +973,100 @@ def test_le_composant_transmet_le_socle_aux_volets():
     assert 'LoggiaVolets(hass, data["store"], data.get("regles"))' in texte,         "les volets ne recoivent plus le socle"
     # Et il naît AVANT eux, sinon ils recevraient None.
     assert texte.index('data["regles"] = Regles') < texte.index("LoggiaVolets(hass"),         "le socle est cree apres les volets : ils recevraient None"
+
+
+PLAN = {"actif": True, "jours": [0, 1, 2, 3, 4, 5, 6]}
+
+
+# ── Les priorites declarees ─────────────────────────────────────────────────
+
+def test_les_priorites_sont_declarees_une_fois_dans_cet_ordre(module):
+    p = module.PRIORITES
+    assert p["vent"] > p["coucher"] > p["soleil"] > p["lever"]
+
+
+def test_la_nuit_ferme_ce_que_le_soleil_tenait_et_rien_ne_le_rouvre(creer):
+    """Le defaut : le soleil baisse un volet l'apres-midi ; la fermeture du
+    soir, decalee tot, le ferme ; puis le soleil quitte la facade et la
+    protection le « rendait » a sa position d'avant — a la nuit tombee."""
+    v = creer({**cfg_soleil(), "planning": PLAN}, {**SOLEIL_HAUT, **CHAUD, **VOLET})
+    lancer(v._async_soleil())
+    lancer(v._async_planifie("fermer"))
+    assert v.hass.services.appels[-1][1] == "close_cover"
+    v.hass.states.table["sun.sun"] = FauxEtat("above_horizon", {"azimuth": 60, "elevation": 30})
+    lancer(v._async_soleil())
+    assert v.hass.services.appels[-1][1] == "close_cover", "la protection a rouvert un volet ferme pour la nuit"
+
+
+def test_la_protection_ne_rend_pas_ce_qu_elle_ne_tient_plus(creer):
+    """Une main, ou plus fort, a pris le volet depuis : la protection ne le
+    remet pas ou elle l'avait trouve."""
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **VOLET})
+    lancer(v._async_soleil())
+    v.regles._tenues.pop("cover.salon", None)
+    v.hass.states.table["sun.sun"] = FauxEtat("above_horizon", {"azimuth": 60, "elevation": 30})
+    avant = len(v.hass.services.appels)
+    lancer(v._async_soleil())
+    assert len(v.hass.services.appels) == avant, "la protection a rendu un volet qu'elle ne tenait plus"
+    assert v.abaisses == {}
+
+
+def test_le_matin_n_ouvre_pas_un_volet_que_le_soleil_protege(creer):
+    v = creer({**cfg_soleil(), "planning": PLAN}, {**SOLEIL_HAUT, **CHAUD, **VOLET})
+    lancer(v._async_soleil())
+    avant = len(v.hass.services.appels)
+    lancer(v._async_planifie("ouvrir"))
+    assert len(v.hass.services.appels) == avant, "le matin a ouvert face au soleil"
+    assert v.abaisses == {"cover.salon": 100}, "la protection a oublie ce qu'elle tient"
+    assert "1 tenu par soleil" in lancer(v.regles.journal())[0]["detail"]
+
+
+def test_le_vent_tient_les_volets_puis_les_rend(creer):
+    etats = {**SOLEIL_HAUT, **CHAUD, **VOLET, "sensor.vent": FauxEtat("70")}
+    v = creer({**cfg_vent(), **cfg_soleil()}, etats)
+    lancer(v._async_vent())
+    assert v.regles.tenues("volets") == {"cover.salon": "vent"}
+    v.hass.states.table["sensor.vent"] = FauxEtat("30")
+    lancer(v._async_vent())
+    assert v.regles.tenues("volets") == {}, "calme revenu, le vent retient encore les volets"
+
+
+# ── Observer sans agir ──────────────────────────────────────────────────────
+
+def test_en_simulation_rien_ne_bouge_mais_tout_est_note(creer):
+    v = creer({"planning": PLAN, "simulation": {"actif": True}}, VOLET)
+    lancer(v._async_planifie("fermer"))
+    assert v.hass.services.appels == [], "la simulation a ferme un volet"
+    ligne = lancer(v.regles.journal())[0]
+    assert ligne["simule"] is True
+    assert ligne["n"] == 1
+
+
+def test_changer_de_mode_repart_de_la_maison_reelle(creer):
+    """Une mise a l'abri simulee laissait `a_l_abri` vrai : le vrai vent,
+    ensuite, ne remontait rien — la regle croyait l'avoir fait."""
+    etats = {**SOLEIL_HAUT, **CHAUD, **VOLET, "sensor.vent": FauxEtat("70")}
+    v = creer({**cfg_vent(), "simulation": {"actif": True}}, etats)
+    lancer(v._async_vent())
+    assert v.a_l_abri is True
+    assert v.hass.services.appels == []
+    v._repartir_de_zero()
+    assert v.a_l_abri is False
+    assert v.regles.tenues("volets") == {}
+    v.cfg["simulation"]["actif"] = False
+    lancer(v._async_vent())
+    assert [a[1] for a in v.hass.services.appels] == ["open_cover"], "le vrai vent n'a rien remonte"
+
+
+def test_basculer_la_simulation_remet_les_regles_a_zero(module):
+    import inspect
+    texte = inspect.getsource(module.LoggiaVolets.async_enregistrer)
+    assert "!= simulait" in texte
+    assert "self._repartir_de_zero()" in texte
+
+
+def test_l_etat_dit_qui_l_emporte(creer):
+    v = creer({}, VOLET)
+    etat = lancer(v.async_etat())
+    assert etat["priorites"] == ["vent", "coucher", "soleil", "lever"]
+    assert etat["tenues"] == {}

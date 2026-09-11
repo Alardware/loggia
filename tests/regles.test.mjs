@@ -198,3 +198,23 @@ test('la relation disparaît avec la région', () => {
   assert.match(corps, /aria-controls=\{pliable && zone && !plie \? zone : undefined\}/,
     'l’en-tête garde aria-controls une fois replié : il désigne alors une région démontée');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Les priorités déclarées et le mode simulation (11/09/2026).
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('on peut observer sans agir, et l’écran le dit', () => {
+  assert.ok(src.includes('enregistrer({ simulation: { actif: !simu.actif } })'), 'plus d’interrupteur de simulation');
+  // Tant qu'elle tourne, un bandeau en haut : sinon on cherche pourquoi les
+  // volets ne bougent plus.
+  assert.ok(src.includes('{simu.actif && ('), 'plus de bandeau de simulation');
+  // Et chaque ligne simulée est marquée comme telle.
+  assert.ok(src.includes('{j.simule && <span'), 'une ligne simulée se lirait comme une vraie manœuvre');
+});
+
+test('le journal dit pourquoi, et qui l’emporte', () => {
+  // Le motif — « coucher +30 min », « vent 62 » — était tenu par le serveur
+  // depuis la v3.7.0, mais jamais affiché.
+  assert.ok(src.includes("{j.motif ? ' · ' + j.motif : ''}"), 'le motif ne s’affiche plus');
+  assert.ok(src.includes("etat.priorites.map(nomPriorite).join(' › ')"), 'l’ordre de priorité ne s’affiche plus');
+});

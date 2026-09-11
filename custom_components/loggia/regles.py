@@ -14,9 +14,8 @@ memes defauts s'y repetaient :
   * une seule priorite, ecrite en dur au milieu d'une fonction.
 
 Ce fichier tient ces choses une fois pour toutes. Une regle qui passe par
-`agir()` herite du journal et du respect du geste manuel sans une ligne de
-plus — et heritera des priorites declarees et du mode simulation par le meme
-chemin.
+`agir()` herite du journal, du respect du geste manuel, des priorites
+declarees et du mode simulation — sans une ligne de plus.
 
 ── Ce que « geste manuel » veut dire, exactement ────────────────────────────
 
@@ -60,6 +59,10 @@ DELAI_ECRITURE = 20.0
 # Combien de temps une entite touchee a la main echappe aux regles.
 GEL_DEFAUT = 30 * 60
 
+# Combien de temps une tenue survit si la regle qui l'a prise oublie de la
+# rendre. Un filet, pas un reglage : les regles rendent leurs tenues.
+TENUE_MAX = 12 * 3600
+
 
 class Regles:
     """Journal, geste manuel, et l'entonnoir par lequel toute regle commande."""
@@ -80,6 +83,10 @@ class Regles:
         # prendrait son propre effet pour un geste humain et se gelerait
         # elle-meme au premier ordre.
         self._miens: list[str] = []
+        # Qui tient quoi : {entity_id: {"module", "regle", "priorite", "fin"}}.
+        # Une regle qui TIENT une entite la protege des regles plus faibles
+        # jusqu'a ce qu'elle la rende — voir `agir`.
+        self._tenues: dict[str, dict[str, Any]] = {}
         self._ecriture = None
         self._depot = None
 
@@ -125,7 +132,7 @@ class Regles:
 
     async def noter(self, module: str, regle: str, quoi: str, *,
                     cibles=(), n: int | None = None, motif: str = "",
-                    detail: str = "") -> dict[str, Any]:
+                    detail: str = "", simule: bool = False) -> dict[str, Any]:
         """Une ligne de journal, commune a toutes les regles.
 
         `motif` est ce qui a declenche — « lever + 30 », « vent 62 km/h »,
@@ -144,6 +151,9 @@ class Regles:
             "n": len(cibles) if n is None else int(n),
             "motif": motif,
             "detail": detail,
+            # Ce qui AURAIT ete fait : le mode simulation. L'ecran le marque,
+            # pour qu'on ne cherche pas pourquoi rien n'a bouge.
+            "simule": bool(simule),
         }
         self._entrees.insert(0, entree)
         del self._entrees[MAX_JOURNAL:]
@@ -205,6 +215,10 @@ class Regles:
         if not haid:
             return
         self._gel[haid] = time.time() + self.duree_gel
+        # La main reprend aussi ce qu'une regle tenait. Sans cela, la regle
+        # rendrait l'entite derriere elle a la fin du gel — la protection
+        # solaire rouvrant un volet qu'on venait de baisser a la main.
+        self._tenues.pop(haid, None)
 
     def gele(self, haid: str) -> bool:
         """Cette entite est-elle sous la main de quelqu'un ?"""
@@ -225,23 +239,80 @@ class Regles:
         """Rendre la main aux regles avant l'heure — un bouton, un depart."""
         self._gel.pop(haid, None)
 
+    # ── Les priorites ──────────────────────────────────────────────────────
+    def _tenue(self, haid: str):
+        """La tenue en cours sur cette entite, ou None — echue, elle tombe."""
+        t = self._tenues.get(haid)
+        if t is not None and time.time() >= t["fin"]:
+            del self._tenues[haid]
+            return None
+        return t
+
+    def tient(self, module: str, regle: str, haid: str) -> bool:
+        """Cette regle tient-elle encore cette entite ?
+
+        A demander avant de « rendre » : une regle plus forte, ou une main,
+        a pu la prendre depuis — et la rendre la contredirait.
+        """
+        t = self._tenue(haid)
+        return t is not None and t["module"] == module and t["regle"] == regle
+
+    def tenues(self, module: str) -> dict[str, str]:
+        """Ce que tiennent les regles d'un module : {entity_id: regle}."""
+        return {h: t["regle"] for h, t in list(self._tenues.items())
+                if t["module"] == module and self._tenue(h) is not None}
+
+    def relacher(self, module: str, regle: str | None = None, cibles=None) -> None:
+        """Rend ce qu'une regle tenait — tout le module si `regle` est None."""
+        for haid, t in list(self._tenues.items()):
+            if t["module"] != module or (regle is not None and t["regle"] != regle):
+                continue
+            if cibles is not None and haid not in cibles:
+                continue
+            del self._tenues[haid]
+
     # ── L'entonnoir ────────────────────────────────────────────────────────
     async def agir(self, module: str, regle: str, domaine: str, service: str,
                    cibles, data: dict | None = None, *,
-                   quoi: str = "", motif: str = "") -> list:
+                   quoi: str = "", motif: str = "", priorite: int = 0,
+                   tenir: bool = False, simuler: bool = False) -> list:
         """Commande, en respectant ce que les regles doivent toutes respecter.
 
         Rend la liste des entites REELLEMENT commandees — jamais la liste
         demandee. C'est la difference qui manquait partout : une regle qui
         note « ferme 2 » alors qu'un volet etait gele mentait a celui qui lit
         le journal, et le defaut restait invisible.
+
+        Deux choses retiennent une entite :
+          * une MAIN posee dessus — le gel ;
+          * une regle plus FORTE qui la tient. `priorite` se compare a la
+            sienne et la plus haute l'emporte ; l'egalite ne retient pas.
+
+        `tenir` : la regle garde ce qu'elle vient de commander et le protege
+        des plus faibles, jusqu'a le rendre — `relacher`, ou une commande sans
+        `tenir`. Commander par-dessus une tenue la reprend : la regle qui
+        tenait ne rendra pas l'entite derriere nous.
+
+        `simuler` : rien ne part. Le journal note ce qui SERAIT parti, et les
+        tenues bougent comme en vrai — la simulation raconte la meme histoire
+        que le reel, sans toucher a la maison.
         """
         await self._charger()
         demandees = [h for h in cibles if isinstance(h, str)]
         geles = [h for h in demandees if self.gele(h)]
-        retenues = [h for h in demandees if h not in geles]
+        tenus_par: dict[str, int] = {}
+        retenues = []
+        for h in demandees:
+            if h in geles:
+                continue
+            t = self._tenue(h)
+            if (t is not None and (t["module"], t["regle"]) != (module, regle)
+                    and t["priorite"] > priorite):
+                tenus_par[t["regle"]] = tenus_par.get(t["regle"], 0) + 1
+                continue
+            retenues.append(h)
 
-        if retenues:
+        if retenues and not simuler:
             # Un contexte a NOUS : les changements d'etat qui en decouleront
             # seront reconnus comme les notres, et non pris pour une main.
             ctx = Context()
@@ -257,9 +328,20 @@ class Regles:
                 _LOGGER.exception("Loggia regles : %s.%s a echoue", domaine, service)
                 retenues = []
 
-        detail = "%d sous la main de quelqu'un" % len(geles) if geles else ""
+        for h in retenues:
+            if tenir:
+                self._tenues[h] = {"module": module, "regle": regle,
+                                   "priorite": priorite, "fin": time.time() + TENUE_MAX}
+            else:
+                self._tenues.pop(h, None)
+
+        details = []
+        if geles:
+            details.append("%d sous la main de quelqu'un" % len(geles))
+        for autre, nb in tenus_par.items():
+            details.append("%d tenu%s par %s" % (nb, "s" if nb > 1 else "", autre))
         await self.noter(module, regle, quoi or service, cibles=retenues,
-                         motif=motif, detail=detail)
+                         motif=motif, detail=" · ".join(details), simule=simuler)
         return retenues
 
     @callback
