@@ -171,14 +171,18 @@ test('le champ nombre des volets est au niveau du module', () => {
   assert.match(VOL, /^const champ = \{/m);
 });
 
-test('le nom de l’assistant s’enregistre à la sortie ET sur Entrée', () => {
-  // La sortie du champ seule ne suffisait pas : on tape, on appuie sur Entrée,
-  // et rien ne partait — sans que rien ne le signale.
-  assert.match(PAR, /const validerAssistant = \(\) => \{/);
-  assert.match(PAR, /onBlur=\{validerAssistant\}/);
-  assert.match(PAR, /onKeyDown=\{\(e\) => \{ if \(e\.key === 'Enter'\)/);
-  assert.match(PAR, /validerAssistant\(\); e\.currentTarget\.blur\(\)/);
-  // Vide efface la clé au lieu d'écrire une chaîne vide, sinon `nomAssistant`
-  // recevrait '' et interrogerait un composant sans nom.
-  assert.match(PAR, /cfgSet\(\{ loggia_assistant: nom \|\| null \}\)/);
+test('l’assistant se choisit dans la liste, et s’enregistre au geste', () => {
+  /* C'était un champ où taper un nom de composant : on se trompait d'une
+   * lettre, on oubliait d'appuyer sur Entrée — et rien ne le signalait. On
+   * choisit désormais une entité de conversation parmi celles que la maison
+   * publie, et le choix s'enregistre au toucher. */
+  assert.ok(PAR.includes('conversationsDe(hass)'), 'la liste ne vient plus des entités de la maison');
+  assert.ok(PAR.includes('onPick={choisirAssistant}'));
+  // « Aucun » efface la clé au lieu d'écrire une chaîne vide, sans quoi
+  // l'assistant interrogerait un composant sans nom.
+  assert.ok(PAR.includes('cfgSet({ loggia_assistant: v || null });'));
+  // L'ancienne forme du réglage reste affichée tant qu'elle ne correspond à
+  // aucune entité : un réglage qui marche ne disparaît pas de l'écran.
+  assert.ok(PAR.includes('assistantOpts.push([assistantChoix, assistantChoix]);'));
+  assert.ok(!PAR.includes('validerAssistant'), 'le champ texte est revenu');
 });

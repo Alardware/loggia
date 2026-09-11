@@ -15,6 +15,7 @@ import {
   exportConfigComplete, importConfigComplete, resetLoggiaComplet, cheminPanneau, lirePageAccueil,
   definirPageAccueil, DROITS
 } from '../state.js';
+import { conversationsDe, entiteChoisie, choixAssistant } from '../assistant.js';
 import {
   CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS, BottomSheet, EntPicker, FOND_PHOTO_CLE,
   lireFondPhoto, compresserImage
@@ -106,8 +107,10 @@ const OptRow = ({ title, desc, children }) => (
 );
 
 // Segment : 2 a 3 choix mutuellement exclusifs, sur une piste unique.
-const Seg = ({ value, opts, onPick, disabled = false }) => (
-  <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', opacity: disabled ? .5 : 1 }}>
+/* `wrap` : une liste dont on ne connait pas la longueur — les entites d'une
+ * maison — se replie au lieu de deborder de l'ecran d'un telephone. */
+const Seg = ({ value, opts, onPick, disabled = false, wrap = false }) => (
+  <div style={{ display: 'flex', flexWrap: wrap ? 'wrap' : 'nowrap', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', opacity: disabled ? .5 : 1 }}>
     {opts.map(([v, lb]) => (
       <button key={String(v)} disabled={disabled} onClick={() => onPick(v)} style={{ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: value === v ? 'var(--o-surfA)' : 'transparent', color: value === v ? 'var(--o-text)' : 'var(--o-text2)', boxShadow: value === v ? '0 1px 3px rgba(0,0,0,.25)' : 'none' }}>{lb}</button>
     ))}
@@ -918,16 +921,24 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // Adresses du serveur : locales a cet appareil. Loggia n'ouvre PAS de session par ces URL
   // (il emprunte celle du navigateur) — elles servent au test de joignabilite, au repli
   // Nabu Casa et a l'intervalle de rafraichissement du pont hass.
-  const [assistantDraft, setAssistantDraft] = useState(() => String(cfgVal('loggia_assistant', '') || ''));
-  /* Enregistre le nom de l'assistant.
+  /* L'assistant : une entité de conversation, choisie dans la liste de celles
+   * que la maison publie.
    *
-   * Appelee depuis `onBlur` ET depuis la touche Entree. La seule sortie du
-   * champ ne suffit pas : on tape un nom, on appuie sur Entree, et rien ne
-   * partait — le champ gardait la valeur a l'ecran, mais elle n'existait
-   * nulle part. Au rechargement suivant, plus de nom. */
-  const validerAssistant = () => {
-    const nom = assistantDraft.trim().toLowerCase();
-    cfgSet({ loggia_assistant: nom || null });
+   * C'était un champ où taper le nom d'un composant. On se trompait d'une
+   * lettre, on oubliait d'appuyer sur Entrée, et rien ne le signalait. Le
+   * choix s'enregistre maintenant au toucher — et « Aucun » efface la clé au
+   * lieu d'écrire une chaîne vide.
+   *
+   * L'ancienne forme du réglage, un nom de composant, reste affichée tant
+   * qu'elle ne correspond à aucune entité : un réglage qui marche ne
+   * disparaît pas de l'écran parce que l'écran a changé. */
+  const [assistantVu, setAssistantVu] = useState(null);
+  const assistantChoix = assistantVu != null ? assistantVu : (entiteChoisie(hass) || choixAssistant());
+  const assistantOpts = [['', tr('Aucun')], ...conversationsDe(hass).map((c) => [c.id, c.nom])];
+  if (assistantChoix && !assistantOpts.some(([v]) => v === assistantChoix)) assistantOpts.push([assistantChoix, assistantChoix]);
+  const choisirAssistant = (v) => {
+    setAssistantVu(v);
+    cfgSet({ loggia_assistant: v || null });
   };
   const [haDraft, setHaDraft] = useState(() => {
     const c = { ...HA_CFG_DEF, ...(cfgVal('loggia_haCfg', null) || {}) };
@@ -1397,16 +1408,12 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           * Son nom vit ici et non dans le code : un assistant porte souvent le
           * prénom de quelqu'un, et le code de Loggia est public. Réglé, il fait
           * apparaître un bouton au centre de la barre du bas ; vide, Loggia ne
-          * cherche rien. Le nom attendu est celui de ses commandes — celui qui
-          * précède la barre oblique dans `xxx/info`. */}
+          * cherche rien. C'est une entité de conversation qu'on choisit :
+          * Assist, un modèle en ligne, un composant d'assistant — celui qui a
+          * son propre protocole est reconnu seul, et en profite. */}
         <SecBar>
-          <SecGroup label={<span>{tr('Assistant')}<span className="o-bar-sub"><br /><span style={{ fontWeight: 600, color: 'var(--o-text3)' }}>{tr('vide = aucun')}</span></span></span>}>
-            <input value={assistantDraft} onChange={e => setAssistantDraft(e.target.value)}
-              onBlur={validerAssistant}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); validerAssistant(); e.currentTarget.blur(); } }}
-              aria-label={tr('Nom du composant assistant')} placeholder="assistant" spellCheck={false}
-              style={{ width: 150, padding: '9px 12px', minHeight: 44, borderRadius: 12, background: 'var(--o-s2)',
-                color: 'var(--o-text)', border: 'var(--o-bw,1px) solid var(--o-bd2)', fontSize: 13, fontWeight: 600, boxSizing: 'border-box' }} />
+          <SecGroup label={<span>{tr('Assistant')}<span className="o-bar-sub"><br /><span style={{ fontWeight: 600, color: 'var(--o-text3)' }}>{tr('entité de conversation')}</span></span></span>}>
+            <Seg value={assistantChoix} opts={assistantOpts} onPick={choisirAssistant} wrap />
           </SecGroup>
         </SecBar>
 

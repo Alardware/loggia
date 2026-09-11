@@ -842,3 +842,30 @@ html.loggia-light .o-wx-card-veil { background: linear-gradient(180deg, rgba(238
   .o-entrow > span > span:not(.o-entlabel) { top: auto !important; bottom: 13px !important; transform: none !important; }
   .o-entrow > button { width: 100% !important; height: 34px !important; }
 }
+
+/* ── L'assistant : l'écran « Parler » ─────────────────────────────────────────
+ * La hauteur est FIXE : l'orbe prend ce qui reste une fois l'en-tête, la
+ * légende, le micro et les suggestions posés — ni plus, sinon la feuille
+ * déborderait et défilerait ; ni moins, sinon l'orbe flotterait dans le vide.
+ * 56 px : le rembourrage de la feuille et sa poignée. Sur écran tactile, la
+ * barre du bas recouvre la feuille et s'y retire deux fois, comme le fait
+ * déjà `.o-sheet` pour son rembourrage et pour sa hauteur. */
+.o-assist { height: min(680px, calc(88vh - 56px - var(--o-safe-bottom, 0px))); }
+html.loggia-tactile .o-assist { height: min(680px, calc(94vh - 2 * var(--o-navh, 60px) - 56px)); }
+.o-assist-mic { transition: transform .12s ease, background-color .2s ease, opacity .2s ease; }
+.o-assist-mic:active:not(:disabled) { transform: scale(.94); }
+.o-assist-chips { scrollbar-width: none; }
+.o-assist-chips::-webkit-scrollbar { display: none; }
+.o-assist-msg { animation: o-assist-rise .3s cubic-bezier(.22,1,.36,1) both; }
+.o-assist-dots i { animation: o-assist-bob 1.15s ease-in-out infinite; }
+.o-assist-dots i:nth-child(2) { animation-delay: .14s; }
+.o-assist-dots i:nth-child(3) { animation-delay: .28s; }
+.o-assist-fil { animation: o-assist-filIn .32s cubic-bezier(.32,.72,0,1); }
+.o-assist-fil.sortant { animation: o-assist-filOut .26s cubic-bezier(.32,.72,.25,1) forwards; }
+@keyframes o-assist-rise { from { opacity: 0; transform: translateY(7px); } }
+@keyframes o-assist-bob { 0%, 100% { opacity: .3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-4px); } }
+@keyframes o-assist-filIn { from { transform: translateY(100%); } }
+@keyframes o-assist-filOut { to { transform: translateY(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .o-assist-msg, .o-assist-dots i, .o-assist-fil, .o-assist-fil.sortant { animation: none; }
+}

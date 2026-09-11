@@ -173,3 +173,34 @@ test('aucun rechargement ne vit hors de cette garde', () => {
   const nb = SRC.split('location.reload').length - 1;
   assert.equal(nb, 1, 'un seul rechargement, et seulement sous `import.meta.hot`');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Les teintes de la maison.
+//
+// L'orbe prend la couleur de ce dont l'assistant parle : le chauffage en
+// orangé, ce qui est fait en vert, l'alerte en rouge. Sa couleur à ELLE ne
+// bouge pas — c'est celle qu'on a choisi de garder ; les teintes s'y ajoutent
+// sans la remplacer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('la couleur propre de l’orbe ne change pas', () => {
+  assert.ok(SRC.includes('{ deep:[.02,.16,.62], mid:[.22,.66,1.0], hot:[.92,.99,1.0] },'),
+    'la première palette — la couleur de l’orbe — a été touchée');
+});
+
+test('les quatre teintes de la maison existent', () => {
+  const debut = SRC.indexOf('const TEINTES = {');
+  assert.notEqual(debut, -1, 'plus de teintes');
+  const bloc = SRC.slice(debut, SRC.indexOf('};', debut));
+  for (const nom of ['chaud:', 'froid:', 'bien:', 'alerte:']) assert.ok(bloc.includes(nom), 'teinte absente : ' + nom);
+});
+
+test('une teinte se pilote, et se rend', () => {
+  // Tout nom inconnu, « base » compris, rend la couleur propre ; et seules les
+  // clés PROPRES comptent — « toString » est aussi une propriété de l'objet.
+  assert.ok(SRC.includes('setTeinte(nom) { S.teinte = Object.prototype.hasOwnProperty.call(TEINTES, nom) ? nom : null; },'));
+  assert.ok(SRC.includes('const P = (S.teinte && TEINTES[S.teinte]) || PAL[S.pal]'),
+    'la boucle ne fond plus vers la teinte demandée');
+  assert.ok(SRC.includes("teinte = 'base' }) {"), 'le composant ne prend plus de teinte');
+  assert.ok(SRC.includes('useEffect(() => { if (orbeRef.current) orbeRef.current.setTeinte(teinte); }, [teinte]);'));
+});

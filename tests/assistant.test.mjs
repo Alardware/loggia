@@ -255,15 +255,18 @@ test('la voix vient du composant, pas d une URL bricolee', () => {
 });
 
 test('la voix se tait avec la popup', () => {
-  /* DEUX fois, et il faut les compter — le même piège que pour le micro.
+  /* TROIS fois, et il faut les compter — le même piège que pour le micro.
    *
    * `dire()` coupe la phrase précédente avant d'en commencer une nouvelle, et
    * le nettoyage coupe tout à la fermeture. Une seule expression, sans
    * compter, se satisfaisait de celle de `dire` : retirer celle du nettoyage
    * laissait l'assistant finir sa phrase alors que la conversation était
-   * fermée, et le test ne bronchait pas. Constaté en mutant ce test. */
+   * fermée, et le test ne bronchait pas. Constaté en mutant ce test.
+   *
+   * La troisième est celle d'« Arrêter » : le bouton restait affiché pendant
+   * qu'elle parlait, et n'y faisait rien. */
   const coupures = FEUILLE.split('couperLecture();').length - 1;
-  assert.equal(coupures, 2, 'la voix doit se couper avant une nouvelle phrase ET à la fermeture');
+  assert.equal(coupures, 3, 'la voix doit se couper avant une nouvelle phrase, à la fermeture ET sur « Arrêter »');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

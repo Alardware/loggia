@@ -695,6 +695,17 @@ export function installerDemo() {
         ] });
       }
       if (msg && msg.type === 'demo/cancel') return Promise.resolve({});
+      /* L'API commune de Home Assistant, celle des entites de conversation
+       * qui n'ont pas de protocole a elles : une reponse d'un bloc, sans
+       * historique ni flux. */
+      if (msg && msg.type === 'conversation/process') {
+        return new Promise((ok) => setTimeout(() => ok({
+          conversation_id: msg.conversation_id || 'demo-assist',
+          response: { response_type: 'action_done', language: 'fr', data: {}, speech: { plain: {
+            speech: "Ici l'agent integre de Home Assistant, dans la demo : une reponse d'un bloc, sans historique ni flux. Change d'entite dans l'en-tete pour comparer.",
+          } } },
+        }), 600));
+      }
       if (msg && msg.type === 'loggia/discovery') return Promise.resolve({ index: indexDemo(states) });
       return Promise.reject(new Error('démonstration : pas de composant serveur'));
     },
@@ -704,7 +715,15 @@ export function installerDemo() {
     connection: {
       subscribeMessage: (rappel, msg) => {
         if (!msg || msg.type !== 'demo/chat') return Promise.reject(new Error('démonstration : pas de composant serveur'));
-        const phrase = 'Je suis la demonstration : je ne sais rien de ta maison, mais je sais montrer le chemin. Pose la meme question a ton assistant, et il repondra pour de vrai.';
+        /* Deux sujets reconnus, pour que la demo montre aussi la teinte de
+         * l'orbe : le chauffage en orange, ce qui est ferme en vert. Le reste
+         * recoit la phrase qui dit ce qu'est la demo. */
+        const q = String(msg.text || '');
+        const phrase = /chauff|radiateur|thermostat|heat/i.test(q)
+          ? 'Le chauffage tient dix-neuf degres dans le salon, et la chambre remonte doucement.'
+          : /ferm|verrou|closed|lock/i.test(q)
+            ? 'Tout est ferme : les volets sont baisses et les lumieres du salon sont eteintes.'
+            : 'Je suis la demonstration : je ne sais rien de ta maison, mais je sais montrer le chemin. Pose la meme question a ton assistant, et il repondra pour de vrai.';
         const mots = phrase.split(' ');
         let i = 0, mort = false;
         rappel({ event: 'accepted', message_id: 'demo-' + Date.now(), conversation_id: 'demo-1' });
@@ -739,6 +758,12 @@ export function installerDemo() {
    * abonnement iCal. */
   states['calendar.maison'] = s('off', { friendly_name: 'Calendrier maison', supported_features: 7 });
   states['calendar.travail'] = s('off', { friendly_name: 'Travail', supported_features: 0 });
+
+  /* Deux entites de conversation, pour que le choix de l'assistant se montre :
+   * celle de la demo, qui parle son propre protocole, et l'agent integre de
+   * Home Assistant, qui passe par l'API commune. */
+  states['conversation.demo'] = s('unknown', { friendly_name: 'Démo' });
+  states['conversation.home_assistant'] = s('unknown', { friendly_name: 'Home Assistant' });
 
   // ── 3. Le badge ───────────────────────────────────────────────────────────
   const badge = document.createElement('div');

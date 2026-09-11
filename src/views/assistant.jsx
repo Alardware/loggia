@@ -10,10 +10,11 @@
  * ne cherche rien et n'affiche rien.
  *
  * En échange, ce fichier parle à N'IMPORTE QUEL composant de cette forme, et
- * pas seulement à celui d'ici.
+ * pas seulement à celui d'ici — et, à défaut, à n'importe quelle entité de
+ * conversation de Home Assistant.
  *
  * Le protocole, relevé sur l'installation plutôt que deviné — `ns` est le nom
- * réglé :
+ * du composant :
  *
  *   ns/history {limit}   → { conversation_id, messages: [{ role, text, ts }] }
  *   ns/chat  {text, client_id, device, conversation_id?}
@@ -24,21 +25,69 @@
  *                          proposal       — ce qu'il propose de faire
  *                          done | error
  *   ns/cancel {message_id}
+ *   ns/speak {text}      → { url } — la réponse, dite par la voix d'Assist
  *   ns/info              → { addon, identity, phases, profile }
  *
- * Ce que cette première version NE fait pas, et le dit : la voix. Le micro, la
- * reconnaissance et l'apprentissage des empreintes vocales sont un morceau à
- * part entière. L'orbe, elle, est déjà prête à écouter — son API prend un
- * niveau d'amplitude, il ne restera qu'à le lui donner.
+ * ── L'écran ────────────────────────────────────────────────────────────────
+ *
+ * Celui de la maquette « Sentinel Mobile » (09/2026). On ouvre cette popup
+ * pour PARLER : l'écran est donc fait pour la voix. L'orbe au centre ; dessous,
+ * la phrase — la question entendue, puis la réponse, le mot prononcé allumé ;
+ * le gros micro ; quelques suggestions. La conversation écrite monte en
+ * feuille par-dessus, et c'est le même fil : ce qu'on a dit s'y relit, ce
+ * qu'on y écrit reçoit sa réponse.
+ *
+ * L'orbe reste celle de `orbe.jsx`. La maquette en apportait une autre ; seules
+ * ses couleurs ont fait le voyage — la teinte de ce dont l'assistant parle,
+ * voir `parole.js`.
  */
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { tr, locale } from '../i18n.js';
-import { Fi, BottomSheet } from '../ui.jsx';
-import { ecouter, voixDisponible, raisonLisible, preparerLecture, jouer, couperLecture } from '../voix.js';
+import { cfgSet } from '../state.js';
+import { Fi, BottomSheet, REDUCE_MOTION } from '../ui.jsx';
+import { conversationsDe, entiteChoisie } from '../assistant.js';
+import { ecouter, voixDisponible, raisonLisible, preparerLecture, jouer, couperLecture, positionLecture, synthese } from '../voix.js';
+import { teinteDe, mots, poidsDesMots, motAuTemps, phraseAutour } from '../parole.js';
 
 /* L'orbe tire Three.js — 448 ko. Elle ne se charge donc qu'à l'ouverture de la
  * popup, jamais au démarrage du dashboard. Même raison que le fond météo. */
 const Orbe = lazy(() => import('../orbe.jsx'));
+
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
+/* Des questions qu'on pose à SA maison, et non à une maison en particulier :
+ * ce dépôt est public, et l'assistant d'ici n'est pas celui d'ailleurs. Le
+ * premier texte s'affiche, le second part. */
+const SUGGESTIONS = [
+  ['Briefing', 'Fais-moi le briefing.'],
+  ['État de la maison', 'Fais le point sur la maison.'],
+  ['Tout est fermé ?', 'Est-ce que tout est bien fermé ?'],
+  ['Résumé du jour', 'Résume-moi la journée.'],
+];
+
+/* Combien de temps l'orbe garde la couleur du sujet, une fois la réponse
+ * finie. */
+const TEINTE_MS = 9000;
+
+/* Le point d'état de l'en-tête, repris de la maquette : vert au repos,
+ * l'accent quand on s'écoute ou qu'elle parle, l'ambre quand elle réfléchit. */
+const POINT = {
+  idle: 'var(--o-ok)', listening: 'var(--o-accent)', thinking: 'var(--o-warn2)', speaking: 'var(--o-accent)',
+};
+
+const TITRE = { fontSize: 13, fontWeight: 800, letterSpacing: '.24em', textTransform: 'uppercase' };
+
+/* Le mot prononcé : la couleur de l'accent, et un halo, comme l'orbe. */
+const MOT_LU = { color: 'var(--o-accent)', textShadow: '0 0 16px rgba(var(--o-accent-rgb), .8)' };
+
+/** Un bouton carré de l'en-tête — `actif` quand ce qu'il ouvre est ouvert. */
+const carre = (actif) => ({
+  width: 36, height: 36, borderRadius: 11, flexShrink: 0, cursor: 'pointer', padding: 0,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  border: 'var(--o-bw,1px) solid ' + (actif ? 'rgba(var(--o-accent-rgb), .45)' : 'var(--o-bd2)'),
+  background: actif ? 'rgba(var(--o-accent-rgb), .13)' : 'transparent',
+  color: actif ? 'var(--o-accent)' : 'var(--o-text1)',
+});
 
 /** L'appareil, pour qu'il sache d'où on lui parle. Stable par navigateur. */
 function idAppareil() {
@@ -55,9 +104,105 @@ const heure = (ts) => {
   catch { return ''; }
 };
 
+/* Le côté du carré qui tient dans la zone de l'orbe.
+ *
+ * L'orbe prend la place qui reste une fois tout le reste posé. On mesure la
+ * ZONE, pas l'orbe : celle-ci y est posée en absolu, et sa taille ne peut donc
+ * pas agrandir ce qui la mesure — sans quoi chacune pousserait l'autre, sans
+ * fin. */
+function useCote(ref, repli) {
+  const [cote, setCote] = useState(repli);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const suivi = new ResizeObserver(() => {
+      const c = Math.floor(Math.min(el.clientWidth, el.clientHeight));
+      if (c > 0) setCote(Math.max(100, Math.min(320, c)));
+    });
+    suivi.observe(el);
+    return () => suivi.disconnect();
+  }, [ref]);
+  return cote;
+}
+
+/* La ligne sous l'orbe : l'invitation, la question entendue, ou la réponse.
+ *
+ * Pendant que la voix lit, elle ne montre que la PHRASE en cours, le mot
+ * prononcé allumé — des sous-titres. La réponse entière n'y tiendrait pas, et
+ * le mot allumé finirait sous la coupure des quatre lignes. */
+function Legende({ legende, mot, invite }) {
+  const cadre = {
+    textAlign: 'center', fontSize: 15.5, fontWeight: 500, lineHeight: 1.5, color: 'var(--o-text2)',
+    padding: '8px 6px 0', minHeight: 52, textWrap: 'pretty', overflowWrap: 'anywhere',
+    display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 4, overflow: 'hidden',
+  };
+  if (!legende) return <div style={cadre}>{invite}</div>;
+  if (legende.genre === 'question') {
+    return <div style={cadre}><b style={{ color: 'var(--o-text)', fontWeight: 600 }}>{legende.texte}</b></div>;
+  }
+  const liste = mots(legende.texte);
+  const [debut, fin] = mot >= 0 ? phraseAutour(liste, mot) : [0, liste.length - 1];
+  return (
+    <div style={cadre}>
+      {liste.slice(debut, fin + 1).map((m, k) => (
+        <span key={debut + k} style={{ transition: 'color .12s, text-shadow .12s', ...(debut + k === mot ? MOT_LU : null) }}>
+          {m}{debut + k < fin ? ' ' : ''}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Une bulle du fil. L'heure dessous, hors de la bulle, comme sur la maquette. */
+function Bulle({ m }) {
+  const moi = m.qui === 'moi';
+  return (
+    <div className="o-assist-msg" style={{ display: 'flex', flexDirection: 'column', alignItems: moi ? 'flex-end' : 'flex-start' }}>
+      <div style={{
+        maxWidth: '86%', padding: '10px 14px', borderRadius: 16,
+        borderBottomRightRadius: moi ? 5 : 16, borderBottomLeftRadius: moi ? 16 : 5,
+        background: moi ? 'var(--o-accent-fond)' : 'var(--o-s1)',
+        border: moi ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)',
+        color: moi ? '#fff' : 'var(--o-text)',
+        fontSize: 14, fontWeight: 500, lineHeight: 1.48, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+      }}>{m.texte}</div>
+      {m.ts ? <span style={{ marginTop: 4, fontFamily: MONO, fontSize: 9.5, color: 'var(--o-text3)' }}>{heure(m.ts)}</span> : null}
+    </div>
+  );
+}
+
+/** Trois points : elle a reçu la question, sa réponse n'a pas commencé. */
+function Points() {
+  const point = { display: 'block', width: 5, height: 5, borderRadius: '50%', background: 'var(--o-text2)' };
+  return (
+    <div className="o-assist-msg o-assist-dots" aria-hidden="true" style={{
+      display: 'flex', gap: 4, padding: '13px 15px', width: 'fit-content',
+      background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 16, borderBottomLeftRadius: 5,
+    }}><i style={point} /><i style={point} /><i style={point} /></div>
+  );
+}
+
 export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
-  // Le titre affiché vient du réglage, jamais du code.
-  const titre = ns ? ns.charAt(0).toUpperCase() + ns.slice(1) : tr('Assistant');
+  /* Deux façons de parler à un assistant.
+   *
+   *   • son PROTOCOLE, quand son composant en a un — `ns` est alors son nom :
+   *     la réponse arrive mot à mot, avec l'historique et ce qu'il est allé
+   *     chercher ;
+   *   • l'API commune de Home Assistant sinon — `ns` est alors l'identifiant
+   *     de l'entité de conversation. Ni historique ni flux : la réponse
+   *     arrive d'un bloc. Mais toute entité de conversation la comprend.
+   *
+   * Le point les distingue : un nom de composant n'en a pas. */
+  const entite = ns && ns.indexOf('.') > 0 ? ns : null;
+  /* L'entité choisie — y compris quand son composant parle son propre
+   * protocole, et que `ns` est alors le nom du composant. L'en-tête affiche
+   * SON nom, le même que dans la liste : « Démo » et non « Demo ». */
+  const actuelle = entiteChoisie(hass);
+  const etatEntite = hass && hass.states ? hass.states[entite || actuelle] : null;
+  // Le titre affiché vient du réglage ou de la maison, jamais du code.
+  const titre = etatEntite
+    ? String((etatEntite.attributes || {}).friendly_name || entite || actuelle)
+    : (ns ? ns.charAt(0).toUpperCase() + ns.slice(1) : tr('Assistant'));
   const [messages, setMessages] = useState([]);
   const [texte, setTexte] = useState('');
   /* L'ecoute.
@@ -92,9 +237,29 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
   const conversationRef = useRef(null);
   const messageRef = useRef(null);
   const desabonnerRef = useRef(null);
+  /* Le tour de parole en cours. « Arrêter » en ouvre un nouveau : les
+   * événements de l'ancien peuvent encore arriver — le serveur finit parfois
+   * sa phrase — et doivent tomber dans le vide au lieu de remplir la bulle. */
+  const tourRef = useRef(0);
   const filRef = useRef(null);
 
+  /* La conversation écrite : fermée, ouverte, ou en train de redescendre. */
+  const [fil, setFil] = useState('ferme');
+  const saisieRef = useRef(null);
+  const basculeRef = useRef(null);
+  const focaliserRef = useRef(false);
+  const [menu, setMenu] = useState(false);
+
+  /* La ligne sous l'orbe. `null` au départ : la popup s'ouvre sur une
+   * invitation, pas sur le dernier message d'hier, que l'historique ramène. */
+  const [legende, setLegende] = useState(null);
+  const [mot, setMot] = useState(-1);
+  const [teinte, setTeinte] = useState('base');
+  const zoneRef = useRef(null);
+  const cote = useCote(zoneRef, 240);
+
   const ws = hass && typeof hass.callWS === 'function' ? hass : null;
+  const lie = !!ws;
 
   /* Le fil se recolle en bas à chaque message — sauf si l'on est remonté lire
    * plus haut, auquel cas le déplacer sous les doigts serait une brimade. */
@@ -105,8 +270,41 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
   }, []);
   useEffect(() => { defiler(); }, [messages, defiler]);
 
+  /* La feuille s'ouvre sur le dernier message, et le champ prend la main si
+   * c'est pour écrire qu'on l'a ouverte. */
   useEffect(() => {
+    if (fil !== 'ouvert') return;
+    colleRef.current = true;
+    defiler();
+    if (focaliserRef.current && saisieRef.current) {
+      focaliserRef.current = false;
+      saisieRef.current.focus({ preventScroll: true });
+    }
+  }, [fil, defiler]);
+
+  /* Redescendre. L'animation porte la fin — mais une animation peut ne pas
+   * finir (onglet caché, mouvement réduit), d'où le filet. */
+  useEffect(() => {
+    if (fil !== 'sortant') return undefined;
+    const id = setTimeout(() => setFil('ferme'), 360);
+    return () => clearTimeout(id);
+  }, [fil]);
+
+  // Le choix de l'assistant se referme dès qu'elle écoute ou répond.
+  useEffect(() => { if (etat !== 'idle' || ecoute) setMenu(false); }, [etat, ecoute]);
+
+  const ouvrirFil = () => { setMenu(false); setFil('ouvert'); };
+  const fermerFil = () => setFil((f) => (f === 'ferme' ? f : (REDUCE_MOTION ? 'ferme' : 'sortant')));
+  const ecrire = () => { focaliserRef.current = true; ouvrirFil(); };
+
+  useEffect(() => {
+    // Un autre assistant, un autre fil : rien du précédent ne doit rester.
+    conversationRef.current = null;
+    setLegende(null); setErreur(null); setOutils([]);
     if (!ws) return undefined;
+    /* L'API commune n'a pas d'historique : le fil commence vide, et
+     * `conversation_id` garde le contexte le temps de l'échange. */
+    if (entite) { setMessages([]); return undefined; }
     let vivant = true;
     ws.callWS({ type: `${ns}/history`, limit: 50 })
       .then((r) => {
@@ -117,9 +315,11 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
       })
       .catch(() => { if (vivant) setErreur(tr('L’assistant n’a pas répondu.')); });
     return () => { vivant = false; };
-    // `ns` en dependance : changer d'assistant doit relire son historique,
-    // pas garder celui du precedent a l'ecran.
-  }, [ws, ns]);
+    /* `ns` : changer d'assistant doit relire son historique, pas garder celui
+     * du précédent à l'écran. La LIAISON et non l'objet `hass` : celui-ci
+     * change à chaque état de la maison, et l'historique se relisait sans
+     * cesse — de quoi vider le fil d'une entité qui n'en a pas. */
+  }, [lie, ns]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Un envoi en cours doit mourir avec la popup, sinon son flux continue de
   // remplir un état que plus personne ne regarde.
@@ -150,7 +350,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
       sessionRef.current = null;
       setEcoute(false); setNiveau(null);
       if (dit) envoyerTexte(dit, { parle: true });
-      else setErreur(tr('Rien n\u2019a ete entendu.'));
+      else setErreur(tr('Rien n’a été entendu.'));
     } catch (e) {
       if (session) { try { session.annuler(); } catch { /* deja ferme */ } }
       sessionRef.current = null;
@@ -176,6 +376,38 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
     couperLecture();
   }, []);
 
+  /* Le mot prononcé.
+   *
+   * Home Assistant rend un fichier audio, pas les frontières des mots : on
+   * les estime depuis la position de la lecture (voir `parole.js`). Cette
+   * position vient du fichier que l'on ENTEND et non d'une horloge à part :
+   * une voix plus lente ou un fichier qui tarde ne décalent rien, et le
+   * dernier mot s'allume à la fin. */
+  const texteDit = legende && legende.genre === 'reponse' ? legende.texte : '';
+  useEffect(() => {
+    if (etat !== 'speaking' || !vocalRef.current || !texteDit) return undefined;
+    const poids = poidsDesMots(mots(texteDit));
+    let id = 0;
+    let dernier = -2;
+    const suivre = () => {
+      const p = positionLecture();
+      const i = p ? motAuTemps(poids, p.t / p.d) : -1;
+      if (i !== dernier) { dernier = i; setMot(i); }
+      id = requestAnimationFrame(suivre);
+    };
+    id = requestAnimationFrame(suivre);
+    return () => cancelAnimationFrame(id);
+  }, [etat, texteDit]);
+
+  /* La teinte tient le temps de la réponse, puis TEINTE_MS : assez pour qu'on
+   * la voie en relevant les yeux, pas au point de colorer la question
+   * suivante. */
+  useEffect(() => {
+    if (etat !== 'idle' || teinte === 'base') return undefined;
+    const id = setTimeout(() => setTeinte('base'), TEINTE_MS);
+    return () => clearTimeout(id);
+  }, [etat, teinte]);
+
   const envoyer = () => envoyerTexte(texte);
 
   /* Dire la reponse.
@@ -184,6 +416,8 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
    * la popup n'a donc ni requete a signer ni jeton a manipuler, elle pose
    * l'adresse dans un element audio et c'est tout. La voix est celle du
    * pipeline Assist — l'assistant parle pareil ici et depuis un satellite.
+   * Une entité sans protocole n'a pas de `speak` : le pipeline de la maison
+   * dit sa réponse à sa place.
    *
    * Sans voix configuree, la commande repond `tts_unavailable`. Ce n'est pas
    * une panne : la reponse reste ecrite, et l'on n'affiche rien. */
@@ -191,7 +425,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
     const t = String(quoi || '').trim();
     if (!ws || !t) { setEtat('idle'); return; }
     try {
-      const r = await ws.callWS({ type: `${ns}/speak`, text: t });
+      const r = entite ? await synthese(ws, t) : await ws.callWS({ type: `${ns}/speak`, text: t });
       if (!r || !r.url) { setEtat('idle'); return; }
       couperLecture();
       setEtat('speaking');
@@ -208,15 +442,46 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
     if (!t || !ws || etat !== 'idle') return;
     vocalRef.current = parle;
     reponseRef.current = '';
+    tourRef.current += 1;
+    const tour = tourRef.current;
     setTexte(''); setErreur(null); setOutils([]);
+    setTeinte('base');
+    setLegende({ genre: 'question', texte: t });
     setMessages(l => [...l, { qui: 'moi', texte: t, ts: Date.now() }]);
     colleRef.current = true;
     setEtat('thinking');
+
+    /* Une entité de conversation, par l'API commune : la réponse arrive d'un
+     * bloc. On la pose comme si elle venait d'arriver en entier — la suite,
+     * teinte, voix et mot allumé, est la même. */
+    if (entite) {
+      try {
+        const demande = { type: 'conversation/process', text: t, agent_id: entite };
+        if (conversationRef.current) demande.conversation_id = conversationRef.current;
+        const r = await ws.callWS(demande);
+        if (tour !== tourRef.current) return;   // arrêtée entre-temps
+        if (r && r.conversation_id) conversationRef.current = r.conversation_id;
+        const rep = String(((((r && r.response) || {}).speech || {}).plain || {}).speech || '').trim();
+        reponseRef.current = rep;
+        if (rep) {
+          setLegende({ genre: 'reponse', texte: rep });
+          setMessages(l => [...l, { qui: 'assistant', texte: rep, ts: Date.now() }]);
+        }
+        setTeinte(teinteDe(rep));
+        if (vocalRef.current && rep) dire(rep); else setEtat('idle');
+      } catch (e) {
+        if (tour !== tourRef.current) return;
+        setEtat('idle');
+        setErreur((e && e.message) ? String(e.message) : tr('L’assistant n’a pas répondu.'));
+      }
+      return;
+    }
 
     const message = { type: `${ns}/chat`, text: t, client_id: 'loggia', device: idAppareil() };
     if (conversationRef.current) message.conversation_id = conversationRef.current;
 
     const surEvenement = (evt) => {
+      if (tour !== tourRef.current) return;   // un tour arrêté : ses restes tombent dans le vide
       if (!evt) return;
       switch (evt.event) {
         case 'accepted':
@@ -229,6 +494,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
            * et l'on ne saurait pas si elle a commencé. */
           setEtat('speaking');
           reponseRef.current += evt.text || '';
+          setLegende({ genre: 'reponse', texte: reponseRef.current });
           setMessages((l) => {
             const dernier = l[l.length - 1];
             if (dernier && dernier.qui === 'assistant' && dernier.encours) {
@@ -245,6 +511,8 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
         case 'done':
           messageRef.current = null;
           setMessages(l => l.map((m, i) => (i === l.length - 1 ? { ...m, encours: false } : m)));
+          // La couleur de ce dont elle a parlé — le temps qu'on la voie.
+          setTeinte(teinteDe(reponseRef.current));
           // On a parle : elle repond. On a tape : elle ecrit.
           if (vocalRef.current) dire(reponseRef.current); else setEtat('idle');
           break;
@@ -266,134 +534,287 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
     }
   };
 
+  /* Arrêter : la réponse qui s'écrit ET la voix qui la dit.
+   *
+   * Le bouton restait affiché pendant qu'elle parlait, et n'y faisait rien :
+   * `cancel` vise un message en cours, et une réponse déjà écrite n'en est
+   * plus un. */
   const annuler = () => {
+    tourRef.current += 1;
+    vocalRef.current = false;
+    couperLecture();
+    setEtat('idle');
+    setMessages((l) => l.map((m, i) => (i === l.length - 1 && m.encours ? { ...m, encours: false } : m)));
     if (!ws || !messageRef.current) return;
     ws.callWS({ type: `${ns}/cancel`, message_id: messageRef.current }).catch(() => { /* déjà fini */ });
-    setEtat('idle');
     messageRef.current = null;
   };
 
-  const sousTitre = etat === 'thinking' ? tr('Réfléchit…')
-    : etat === 'speaking' ? tr('Répond…')
-      : tr('Prête');
+  /* Changer d'assistant sans quitter la popup. Plus d'une entité de
+   * conversation dans la maison : le nom de l'en-tête devient un choix, et le
+   * choix est le réglage lui-même — la popup suivante s'ouvre sur lui. */
+  const choix = conversationsDe(hass);
+  const choisir = (id) => {
+    setMenu(false);
+    if (id !== actuelle) cfgSet({ loggia_assistant: id });
+  };
 
-  const bulle = (m, i) => (
-    <div key={i} style={{ display: 'flex', justifyContent: m.qui === 'moi' ? 'flex-end' : 'flex-start' }}>
-      <div style={{
-        maxWidth: '82%', padding: '10px 13px', borderRadius: 16,
-        borderBottomRightRadius: m.qui === 'moi' ? 5 : 16,
-        borderBottomLeftRadius: m.qui === 'moi' ? 16 : 5,
-        background: m.qui === 'moi' ? 'var(--o-accent-fond)' : 'var(--o-s1)',
-        color: m.qui === 'moi' ? '#fff' : 'var(--o-text)',
-        fontSize: 13.5, fontWeight: 500, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-      }}>
-        {m.texte}
-        {m.ts ? <span style={{ display: 'block', marginTop: 4, fontSize: 10, fontWeight: 600, opacity: .6 }}>{heure(m.ts)}</span> : null}
-      </div>
-    </div>
-  );
+  const etiquette = ecoute ? tr('Écoute…')
+    : etat === 'thinking' ? tr('Réfléchit…')
+      : etat === 'speaking' ? tr('Répond…')
+        : tr('Prête');
+  const etatVu = ecoute ? 'listening' : etat;
+  const occupe = etat !== 'idle';
+  const ouvert = fil === 'ouvert';
+  const pret = !!texte.trim() && !occupe && lie;
+  const invite = ecoute ? tr('Parle, je t’écoute.')
+    : micro.ok ? tr('Appuie et parle, j’écoute jusqu’au silence.')
+      : raisonLisible(micro.raison, tr);
+  const motLu = etat === 'speaking' ? mot : -1;
+  const redescendre = () => { fermerFil(); if (basculeRef.current) basculeRef.current.focus({ preventScroll: true }); };
 
   return (
     /* `opaque` : la feuille renonce au verre depoli, et il y a une raison.
      * Voir `.o-sheet-opaque` dans index.css. */
     <BottomSheet onClose={onClose} opaque>
-      {close => (<>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'block', fontSize: 16, fontWeight: 800, letterSpacing: '.08em' }}>{titre}</span>
-            <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{sousTitre}</span>
-          </span>
-          {etat !== 'idle' && (
-            <button onClick={annuler} style={{
-              padding: '8px 13px', minHeight: 36, borderRadius: 11, cursor: 'pointer', fontSize: 12, fontWeight: 700,
-              border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'transparent', color: 'var(--o-text1)',
-            }}>{tr('Arrêter')}</button>
-          )}
-          <button onClick={close} aria-label={tr('Fermer')} style={{
-            width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'var(--o-s1)',
-            color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}><Fi i="cross" size={14} /></button>
-        </div>
+      {close => (
+        <div className="o-assist" style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          {/* L'en-tête : le point d'état, le nom, ce qu'elle fait. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 8 }}>
+            <span aria-hidden="true" style={{
+              width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: POINT[etatVu],
+              boxShadow: `0 0 10px 1px color-mix(in srgb, ${POINT[etatVu]} 70%, transparent)`,
+              transition: 'background .3s, box-shadow .3s',
+            }} />
+            {choix.length > 1 ? (
+              <button onClick={() => setMenu((m) => !m)} disabled={occupe} aria-expanded={menu}
+                aria-label={titre + ' — ' + tr('Choisir l’assistant')} title={tr('Choisir l’assistant')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4, minHeight: 36, padding: '0 2px', minWidth: 0,
+                  background: 'none', border: 0, color: 'var(--o-text)', cursor: occupe ? 'default' : 'pointer',
+                }}>
+                <span style={{ ...TITRE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{titre}</span>
+                <Fi i="angle-small-down" size={15} color="var(--o-text2)" />
+              </button>
+            ) : <span style={TITRE}>{titre}</span>}
+            <span aria-live="polite" style={{
+              fontFamily: MONO, fontSize: 10.5, color: 'var(--o-text2)', letterSpacing: '.04em',
+              textTransform: 'lowercase', whiteSpace: 'nowrap',
+            }}>{etiquette}</span>
+            <span style={{ flex: 1 }} />
+            {occupe && (
+              <button onClick={annuler} style={{
+                padding: '0 13px', height: 36, borderRadius: 11, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'transparent', color: 'var(--o-text1)',
+              }}>{tr('Arrêter')}</button>
+            )}
+            <button ref={basculeRef} onClick={() => (ouvert ? fermerFil() : ouvrirFil())}
+              aria-label={ouvert ? tr('Refermer la conversation') : tr('Ouvrir la conversation')}
+              aria-expanded={ouvert} style={carre(ouvert)}><Fi i="comment" size={15} /></button>
+            <button onClick={close} aria-label={tr('Fermer')} style={carre(false)}><Fi i="cross" size={13} /></button>
+          </div>
 
-        {/* L'orbe. Un vide de la même hauteur pendant le chargement : sans lui,
-          * tout ce qui est dessous sauterait de deux cents pixels quand
-          * Three.js finit d'arriver. */}
-        <Suspense fallback={<div style={{ height: 200 }} />}>
-          <Orbe etat={ecoute ? 'listening' : etat} niveau={niveau} taille={230} />
-        </Suspense>
-
-        <div ref={filRef}
-          onScroll={(e) => {
-            const el = e.currentTarget;
-            colleRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-          }}
-          style={{ maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
-          {messages.length === 0 && !erreur && (
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', textAlign: 'center', padding: '10px 0' }}>
-              {tr('Pose-lui une question.')}
+          {/* Les entités de conversation de la maison. */}
+          {menu && (
+            <div role="group" aria-label={tr('Choisir l’assistant')} style={{
+              position: 'absolute', top: 46, left: 0, right: 0, zIndex: 5, padding: 6,
+              display: 'flex', flexDirection: 'column', gap: 2, borderRadius: 14,
+              background: 'linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg)',
+              border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: 'var(--o-shadow)',
+            }}>
+              {choix.map((c) => {
+                const sur = c.id === actuelle;
+                return (
+                  <button key={c.id} onClick={() => choisir(c.id)} aria-pressed={sur} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 44, padding: '0 12px',
+                    borderRadius: 10, border: 0, cursor: 'pointer', textAlign: 'left',
+                    background: sur ? 'rgba(var(--o-accent-rgb), .13)' : 'transparent',
+                    color: sur ? 'var(--o-accent)' : 'var(--o-text)', fontSize: 13.5, fontWeight: 700,
+                  }}>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nom}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 500, color: 'var(--o-text3)' }}>{c.id}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
-          {messages.map(bulle)}
-        </div>
 
-        {outils.length > 0 && (
-          <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {outils.map((o, i) => (
-              <span key={i} style={{
-                padding: '4px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-                background: 'var(--o-s2)', color: 'var(--o-text2)',
-              }}>{o}</span>
-            ))}
+          {/* L'écran « Parler », et la conversation qui monte par-dessus. */}
+          <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{
+              flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column',
+              /* Recouvert, cet écran se cache — une fois la feuille montée, pas
+               * avant, sinon il disparaîtrait sous elle pendant qu'elle monte.
+               * Ses boutons quittent alors l'ordre de tabulation. */
+              visibility: fil === 'ouvert' ? 'hidden' : 'visible',
+              transition: fil === 'ouvert' && !REDUCE_MOTION ? 'visibility 0s linear .32s' : 'none',
+            }}>
+              {/* L'orbe prend la place qui reste. Pas de vide réservé pendant
+                * que Three.js arrive : la zone a déjà sa taille, rien ne saute. */}
+              <div ref={zoneRef} style={{ position: 'relative', flex: '1 1 0', minHeight: 0 }}>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Suspense fallback={null}>
+                    <Orbe etat={etatVu} niveau={niveau} taille={cote} teinte={teinte} />
+                  </Suspense>
+                </div>
+              </div>
+
+              <div style={{
+                textAlign: 'center', fontSize: 11, fontWeight: 600, letterSpacing: '.2em',
+                textTransform: 'uppercase', color: 'var(--o-text2)',
+              }}>{titre} · <b style={{ color: 'var(--o-text)', fontWeight: 800 }}>{etiquette}</b></div>
+
+              <Legende legende={ecoute ? null : legende} mot={motLu} invite={invite} />
+              {erreur && !ouvert && (
+                <div role="alert" style={{ textAlign: 'center', marginTop: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{erreur}</div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 12px' }}>
+                {/* Le micro n'apparait que s'il peut servir.
+                  *
+                  * Mesure du 09/09/2026 : sur l'adresse locale en HTTP,
+                  * `isSecureContext` vaut faux et `navigator.mediaDevices` est
+                  * `undefined` — le navigateur INTERDIT la capture audio hors
+                  * contexte securise. Un bouton pose la n'aurait rien pu faire, et
+                  * ne l'aurait dit qu'apres l'appui. Sur l'adresse https, tout
+                  * s'ouvre : contexte securise, politique de l'iframe, permission. */}
+                {micro.ok && (
+                  <button className="o-assist-mic" onClick={basculerEcoute} disabled={occupe && !ecoute}
+                    aria-label={ecoute ? tr('Arrêter l’écoute') : tr('Parler à l’assistant')}
+                    title={ecoute ? tr('Arrêter l’écoute') : tr('Parler à l’assistant')}
+                    style={{
+                      position: 'relative', width: 78, height: 78, borderRadius: '50%', border: 'none', flexShrink: 0,
+                      background: ecoute ? 'var(--o-bad)' : 'var(--o-accent-fond)', color: '#fff',
+                      cursor: (occupe && !ecoute) ? 'default' : 'pointer', opacity: (occupe && !ecoute) ? .45 : 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: ecoute ? 'none' : '0 10px 30px rgba(var(--o-accent-rgb), .28)',
+                    }}>
+                    {/* L'anneau bat à l'amplitude captée : on voit qu'elle entend. */}
+                    <span aria-hidden="true" style={{
+                      position: 'absolute', inset: -6, borderRadius: '50%', border: '2px solid var(--o-bad)',
+                      opacity: ecoute ? .9 : 0, transform: `scale(${1 + (niveau || 0) * 0.3})`,
+                      transition: 'opacity .2s, transform .08s linear', pointerEvents: 'none',
+                    }} />
+                    <Fi i={ecoute ? 'square' : 'microphone'} size={26} />
+                  </button>
+                )}
+                {/* Sans micro, le gros bouton ne ment pas : il ouvre la
+                  * conversation, et la phrase au-dessus dit pourquoi la voix
+                  * manque. */}
+                {!micro.ok && (
+                  <button className="o-assist-mic" onClick={ecrire}
+                    aria-label={tr('Écrire à l’assistant')} title={tr('Écrire à l’assistant')}
+                    style={{
+                      width: 78, height: 78, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
+                      border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}><Fi i="keyboard" size={26} /></button>
+                )}
+              </div>
+
+              <div className="o-assist-chips" style={{ display: 'flex', gap: 7, overflowX: 'auto', padding: '2px 0 4px' }}>
+                {SUGGESTIONS.map(([libelle, q]) => (
+                  <button key={libelle} onClick={() => { ouvrirFil(); envoyerTexte(tr(q)); }} disabled={occupe || !lie}
+                    style={{
+                      flex: 'none', padding: '0 14px', height: 36, borderRadius: 999, whiteSpace: 'nowrap',
+                      border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)',
+                      fontSize: 12.5, fontWeight: 600,
+                      cursor: (occupe || !lie) ? 'default' : 'pointer', opacity: (occupe || !lie) ? .45 : 1,
+                    }}>{tr(libelle)}</button>
+                ))}
+              </div>
+
+              <button onClick={ouvrirFil} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%',
+                padding: '10px 0 0', minHeight: 36, background: 'none', border: 0, cursor: 'pointer',
+                fontSize: 12, fontWeight: 700, letterSpacing: '.04em', color: 'var(--o-text2)',
+              }}>
+                <span aria-hidden="true" style={{ width: 26, height: 3, borderRadius: 99, background: 'var(--o-text3)', opacity: .45 }} />
+                {tr('Conversation')}
+              </button>
+            </div>
+
+            {/* La conversation n'existe que quand on l'ouvre. Cachée seulement,
+              * ses boutons resteraient dans l'ordre de tabulation, et le piège
+              * de focus de la feuille — qui boucle entre le premier et le
+              * dernier de la liste — bouclerait sur un bouton invisible. */}
+            {fil !== 'ferme' && (
+              <section aria-label={tr('Conversation')}
+                className={fil === 'sortant' ? 'o-assist-fil sortant' : 'o-assist-fil'}
+                onAnimationEnd={(e) => { if (e.target === e.currentTarget && fil === 'sortant') setFil('ferme'); }}
+                style={{
+                  position: 'absolute', inset: 0, zIndex: 2, display: 'flex', flexDirection: 'column',
+                  background: 'linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg)',
+                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+                  <button onClick={redescendre} aria-label={tr('Refermer la conversation')} style={carre(false)}>
+                    <Fi i="angle-small-down" size={18} />
+                  </button>
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 800 }}>{tr('Conversation')}</span>
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--o-text3)' }}>{tr('même fil que la voix')}</span>
+                </div>
+
+                <div ref={filRef}
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    colleRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+                  }}
+                  style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, padding: '14px 2px 10px' }}>
+                  {messages.length === 0 && !occupe && (
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', textAlign: 'center', padding: '10px 0' }}>
+                      {tr('Pose-lui une question.')}
+                    </div>
+                  )}
+                  {messages.map((m, i) => <Bulle key={i} m={m} />)}
+                  {etat === 'thinking' && <Points />}
+                </div>
+
+                {outils.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', paddingBottom: 8 }}>
+                    {outils.map((o, i) => (
+                      <span key={i} style={{
+                        padding: '4px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                        background: 'var(--o-s2)', color: 'var(--o-text2)',
+                      }}>{o}</span>
+                    ))}
+                  </div>
+                )}
+                {erreur && ouvert && (
+                  <div role="alert" style={{ paddingBottom: 8, fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{erreur}</div>
+                )}
+
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingTop: 12, borderTop: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+                  <input
+                    ref={saisieRef}
+                    value={texte}
+                    onChange={e => setTexte(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyer(); return; }
+                      // Échap redescend la conversation, sans fermer toute la popup.
+                      if (e.key === 'Escape') { e.stopPropagation(); redescendre(); }
+                    }}
+                    maxLength={4000}
+                    aria-label={tr('Écrire à l’assistant')}
+                    placeholder={tr('Écrire…')}
+                    style={{
+                      flex: 1, minWidth: 0, height: 46, padding: '0 16px', borderRadius: 23,
+                      background: 'var(--o-s2)', color: 'var(--o-text)',
+                      border: 'var(--o-bw,1px) solid var(--o-bd2)', fontSize: 14, fontWeight: 600, boxSizing: 'border-box',
+                    }}
+                  />
+                  <button onClick={envoyer} disabled={!pret} aria-label={tr('Envoyer')}
+                    style={{
+                      width: 46, height: 46, borderRadius: '50%', border: 'none', flexShrink: 0,
+                      background: 'var(--o-accent-fond)', color: '#fff',
+                      cursor: pret ? 'pointer' : 'default', opacity: pret ? 1 : .4,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}><Fi i="paper-plane" size={16} /></button>
+                </div>
+              </section>
+            )}
           </div>
-        )}
-
-        {erreur && <div role="alert" style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{erreur}</div>}
-
-        <div style={{ display: 'flex', gap: 9, marginTop: 14, alignItems: 'center' }}>
-          <input
-            value={texte}
-            onChange={e => setTexte(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyer(); } }}
-            aria-label={tr('Écrire à l’assistant')}
-            placeholder={tr('Écrire…')}
-            style={{
-              flex: 1, minWidth: 0, padding: '12px 15px', minHeight: 46, borderRadius: 999,
-              background: 'var(--o-s2)', color: 'var(--o-text)',
-              border: 'var(--o-bw,1px) solid var(--o-bd2)', fontSize: 13.5, fontWeight: 600, boxSizing: 'border-box',
-            }}
-          />
-          {/* Le micro n'apparait que s'il peut servir.
-            *
-            * Mesure du 09/09/2026 : sur l'adresse locale en HTTP,
-            * `isSecureContext` vaut faux et `navigator.mediaDevices` est
-            * `undefined` — le navigateur INTERDIT la capture audio hors
-            * contexte securise. Un bouton pose la n'aurait rien pu faire, et
-            * ne l'aurait dit qu'apres l'appui. Sur l'adresse https, tout
-            * s'ouvre : contexte securise, politique de l'iframe, permission. */}
-          {micro.ok && (
-            <button onClick={basculerEcoute} disabled={etat !== 'idle' && !ecoute}
-              aria-label={ecoute ? tr('Arreter l\u2019ecoute') : tr('Parler \u00e0 l\u2019assistant')}
-              title={ecoute ? tr('Arreter l\u2019ecoute') : tr('Parler \u00e0 l\u2019assistant')}
-              style={{
-                width: 46, height: 46, borderRadius: '50%', flexShrink: 0,
-                border: 'var(--o-bw,1px) solid ' + (ecoute ? 'transparent' : 'var(--o-bd2)'),
-                background: ecoute ? 'var(--o-accent-fond)' : 'var(--o-s2)',
-                color: ecoute ? '#fff' : 'var(--o-text2)',
-                cursor: (etat !== 'idle' && !ecoute) ? 'default' : 'pointer',
-                opacity: (etat !== 'idle' && !ecoute) ? .45 : 1,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}><Fi i={ecoute ? 'square' : 'microphone'} size={16} /></button>
-          )}
-          <button onClick={envoyer} disabled={!texte.trim() || etat !== 'idle'} aria-label={tr('Envoyer')}
-            style={{
-              width: 46, height: 46, borderRadius: '50%', border: 'none', flexShrink: 0,
-              background: 'var(--o-accent-fond)', color: '#fff',
-              cursor: (!texte.trim() || etat !== 'idle') ? 'default' : 'pointer',
-              opacity: (!texte.trim() || etat !== 'idle') ? .45 : 1,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}><Fi i="paper-plane" size={16} /></button>
         </div>
-      </>)}
+      )}
     </BottomSheet>
   );
 }

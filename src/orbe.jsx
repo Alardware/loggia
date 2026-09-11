@@ -106,8 +106,24 @@ export function creerOrbe(hote) {
     { deep:[.20,.06,.55], mid:[.62,.42,1.0], hot:[.99,.96,1.0] },
     { deep:[.52,.14,.01], mid:[1.0,.58,.12], hot:[1.0,.94,.76] }
   ];
+  /* Les teintes de la maison : la couleur de ce dont elle parle.
+   *
+   * Reprises de la maquette du panneau (09/2026) et calees sur les jetons
+   * d'index.css : --o-ok pour ce qui est fait, --o-bad pour l'alerte, le chaud
+   * en miroir du froid faute de jeton chaud. Le froid est pousse vers le
+   * glace : repris tel quel (#60a5fa, soit .38/.65/.98), il tombait a deux pas
+   * du bleu propre de cette orbe (.22/.66/1.0) et ne se serait pas vu.
+   *
+   * Aucune n'est LA couleur de l'orbe. Celle-la reste PAL[S.pal], et l'orbe y
+   * revient d'elle-meme des qu'on ne lui en donne plus d'autre. */
+  const TEINTES = {
+    chaud:  { deep:[.55,.22,.02], mid:[.98,.62,.38], hot:[1.0,.94,.82] },
+    froid:  { deep:[.00,.30,.50], mid:[.42,.86,1.0], hot:[.94,1.0,1.0] },
+    bien:   { deep:[.02,.42,.30], mid:[.20,.83,.60], hot:[.90,1.0,.96] },
+    alerte: { deep:[.55,.05,.05], mid:[.94,.27,.27], hot:[1.0,.90,.88] },
+  };
   const S = { mode:'repos', level:1, charge:0, energy:.3, flow:.35, turb:.35, pulse:0, mic:0, micLevel:0, pal:0, count:0, curves:0, voice:0, busy:false,
-              phase:0, iph:0, dir:1, force:null };
+              phase:0, iph:0, dir:1, force:null, teinte:null };
   const waves = [];
 
   /* ══ renderer ══ */
@@ -748,7 +764,9 @@ export function creerOrbe(hote) {
     U.uPhase.value = S.phase; U.uIph.value = S.iph;
     U.uDirS.value = S.dir >= 0 ? 1 : -1;
 
-    const P = PAL[S.pal], pk = Math.min(1, dt*3.0);
+    /* La teinte du sujet quand on en donne une, la couleur propre sinon. Le
+       fondu est le meme dans les deux sens : elle y va, elle en revient. */
+    const P = (S.teinte && TEINTES[S.teinte]) || PAL[S.pal], pk = Math.min(1, dt*3.0);
     for (let i=0;i<3;i++){
       curPal.deep[i] = lerp(curPal.deep[i], P.deep[i], pk);
       curPal.mid[i]  = lerp(curPal.mid[i],  P.mid[i],  pk);
@@ -792,8 +810,15 @@ export function creerOrbe(hote) {
      * écoute. Tant qu'il est posé, l'orbe ne respire plus toute seule. */
     setLevel(v) { S.force = Math.max(0, Math.min(1, +v || 0)); },
     releaseLevel() { S.force = null; },
+    /* La couleur de ce dont elle parle : « chaud », « froid », « bien »,
+     * « alerte ». Tout autre nom, « base » compris, lui rend la sienne — un
+     * sujet mal ecrit ne doit pas la laisser sur la teinte precedente. Le
+     * test porte sur les cles PROPRES : « toString » est aussi une propriete
+     * de l'objet, et la boucle y chercherait une palette. */
+    setTeinte(nom) { S.teinte = Object.prototype.hasOwnProperty.call(TEINTES, nom) ? nom : null; },
     pulse() { waves.push({ r: 0, life: 1 }); S.pulse = Math.min(1.7, S.pulse + 1); },
     get state() { return MODE_ORB[S.mode] || S.mode; },
+    get teinte() { return S.teinte || 'base'; },
     /* Tout rendre. L'ordre compte : d'abord la boucle, sinon elle dessine sur
      * un contexte qu'on vient de libérer. */
     dispose() {
@@ -823,11 +848,14 @@ export function creerOrbe(hote) {
  * à l'orbe sa respiration propre. `onToucher` sert au geste de la maquette :
  * toucher l'orbe pour parler.
  *
+ * `teinte` est la couleur de ce dont elle parle — « chaud », « froid »,
+ * « bien », « alerte ». « base », ou rien, lui rend la sienne.
+ *
  * Le composant ne remonte JAMAIS l'orbe : la créer coûte un contexte WebGL et
  * quelques dizaines de milliers de particules. Elle naît au montage, meurt au
  * démontage, et reçoit ses ordres entre les deux.
  */
-export default function Orbe({ etat = 'idle', niveau = null, onToucher = null, taille = 240 }) {
+export default function Orbe({ etat = 'idle', niveau = null, onToucher = null, taille = 240, teinte = 'base' }) {
   /* Ni bord arrondi ni rognage : il n'y a plus rien a rogner. Le disque
    * venait du fond noir, pas d'un masque — le masque ne faisait que lui
    * donner sa forme ronde. */
@@ -854,6 +882,7 @@ export default function Orbe({ etat = 'idle', niveau = null, onToucher = null, t
   }, []);
 
   useEffect(() => { if (orbeRef.current) orbeRef.current.setState(etat); }, [etat]);
+  useEffect(() => { if (orbeRef.current) orbeRef.current.setTeinte(teinte); }, [teinte]);
   useEffect(() => {
     const o = orbeRef.current;
     if (!o) return;

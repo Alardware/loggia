@@ -308,3 +308,60 @@ export async function jouer(url, onFini) {
 export function couperLecture() {
   if (lecteur) { try { lecteur.pause(); } catch { /* deja arrete */ } }
 }
+
+/**
+ * Où en est la lecture — pour allumer le mot prononcé. `null` si rien ne se lit.
+ *
+ * `duration` vaut `NaN` tant que le fichier n'a pas livré ses métadonnées, et
+ * `Infinity` quand la voix arrive en flux : ni l'un ni l'autre ne situe un
+ * mot. On rend alors `null`, et la réponse s'affiche entière, sans surlignage
+ * — mieux qu'un mot allumé au hasard.
+ */
+export function positionLecture() {
+  if (!lecteur || lecteur.paused || lecteur.ended) return null;
+  const d = lecteur.duration;
+  if (!Number.isFinite(d) || d <= 0) return null;
+  return { t: lecteur.currentTime, d };
+}
+
+/**
+ * Faire dire un texte par le pipeline Assist de la maison.
+ *
+ * Pour une entité de conversation qui n'a pas de voix à elle : l'API commune
+ * rend du texte, et c'est le pipeline préféré qui le dit — la voix qu'ont
+ * déjà les enceintes. L'étape `tts` seule : rien n'est transcrit ni compris,
+ * le texte est seulement dit.
+ *
+ * Rend `{ url }` — la même forme que `speak` —, ou `null` si le pipeline n'a
+ * pas de voix : la réponse reste alors écrite.
+ */
+export function synthese(hass, texte) {
+  const conn = hass && hass.connection;
+  if (!texte || !conn || typeof conn.subscribeMessage !== 'function') return Promise.resolve(null);
+  return new Promise((rendre) => {
+    let fini = false;
+    let garde = null;
+    let desabonner = null;
+    const lacher = (d) => { try { Promise.resolve(d()).catch(() => {}); } catch { /* déjà clos */ } };
+    const finir = (v) => {
+      if (fini) return;
+      fini = true;
+      clearTimeout(garde);
+      if (desabonner) lacher(desabonner);
+      rendre(v);
+    };
+    // Une voix qui ne vient pas en quinze secondes ne viendra plus.
+    garde = setTimeout(() => finir(null), 15000);
+    conn.subscribeMessage((ev) => {
+      const quoi = ev && ev.type;
+      if (quoi === 'tts-end') {
+        const sortie = (ev.data && ev.data.tts_output) || {};
+        finir(sortie.url ? { url: sortie.url } : null);
+      } else if (quoi === 'error' || quoi === 'run-end') {
+        finir(null);
+      }
+    }, { type: 'assist_pipeline/run', start_stage: 'tts', end_stage: 'tts', input: { text: texte } })
+      .then((d) => { desabonner = d; if (fini) lacher(d); })
+      .catch(() => finir(null));
+  });
+}
