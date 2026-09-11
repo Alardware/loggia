@@ -548,6 +548,13 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
     : micro.ok ? tr('Appuie et parle, j’écoute jusqu’au silence.')
       : raisonLisible(micro.raison, tr);
   const motLu = etat === 'speaking' ? mot : -1;
+  /* La couleur de l'orbe, dans l'ordre où elle l'emporte :
+   *   • l'ALERTE, toujours — elle n'attend pas la fin d'une phrase ;
+   *   • le CYAN tant qu'elle parle — l'accent de sa voix, repris de la
+   *     maquette ;
+   *   • puis le sujet de la réponse — le vert de ce qui est fait, l'orangé
+   *     du chauffage —, tenu TEINTE_MS une fois qu'elle s'est tue. */
+  const teinteVue = teinte === 'alerte' ? 'alerte' : (etat === 'speaking' ? 'parle' : teinte);
   const redescendre = () => { fermerFil(); if (basculeRef.current) basculeRef.current.focus({ preventScroll: true }); };
 
   return (
@@ -631,7 +638,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
               <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0 }}>
                 <div style={{ position: 'absolute', inset: 0 }}>
                   <Suspense fallback={null}>
-                    <Orbe etat={etatVu} niveau={niveau} remplir teinte={teinte} />
+                    <Orbe etat={etatVu} niveau={niveau} remplir teinte={teinteVue} />
                   </Suspense>
                 </div>
               </div>

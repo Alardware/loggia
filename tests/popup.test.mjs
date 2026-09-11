@@ -60,7 +60,10 @@ test('la popup s’ouvre sur une invitation, pas sur hier', () => {
 test('l’orbe prend la couleur du sujet, puis revient à la sienne', () => {
   assert.ok(FEUILLE.includes('setTeinte(teinteDe(reponseRef.current));'),
     'la réponse ne donne plus sa teinte à l’orbe');
-  assert.ok(FEUILLE.includes('teinte={teinte}'), 'l’orbe ne reçoit plus la teinte');
+  assert.ok(FEUILLE.includes('teinte={teinteVue}'), 'l’orbe ne reçoit plus la teinte');
+  // L'alerte d'abord ; le cyan pendant qu'elle parle ; le sujet ensuite.
+  assert.ok(FEUILLE.includes("const teinteVue = teinte === 'alerte' ? 'alerte' : (etat === 'speaking' ? 'parle' : teinte);"),
+    'l’ordre des couleurs a changé : une alerte attendrait la fin de la phrase, ou la voix perdrait son cyan');
   // Et elle la rend : sans ce retour, une question sur le chauffage
   // laisserait l'orbe orangée jusqu'à la fermeture.
   assert.ok(FEUILLE.includes("setTimeout(() => setTeinte('base'), TEINTE_MS)"));
@@ -167,5 +170,5 @@ test('l’écran « Parler » a une hauteur fixe, barre du bas comprise', () => 
   assert.ok(FEUILLE.includes('className="o-assist"'));
   // Et l'orbe prend TOUTE la zone, largeur et hauteur : dans un carré taillé
   // sur le plus petit côté, elle restait petite au milieu d'un grand vide.
-  assert.ok(FEUILLE.includes('<Orbe etat={etatVu} niveau={niveau} remplir teinte={teinte} />'));
+  assert.ok(FEUILLE.includes('<Orbe etat={etatVu} niveau={niveau} remplir teinte={teinteVue} />'));
 });

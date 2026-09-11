@@ -715,11 +715,13 @@ export function installerDemo() {
     connection: {
       subscribeMessage: (rappel, msg) => {
         if (!msg || msg.type !== 'demo/chat') return Promise.reject(new Error('démonstration : pas de composant serveur'));
-        /* Deux sujets reconnus, pour que la demo montre aussi la teinte de
-         * l'orbe : le chauffage en orange, ce qui est ferme en vert. Le reste
-         * recoit la phrase qui dit ce qu'est la demo. */
+        /* Trois sujets reconnus, pour que la demo montre aussi la teinte de
+         * l'orbe : l'alerte en rouge, le chauffage en orange, ce qui est ferme
+         * en vert. Le reste recoit la phrase qui dit ce qu'est la demo. */
         const q = String(msg.text || '');
-        const phrase = /chauff|radiateur|thermostat|heat/i.test(q)
+        const phrase = /fum|alarm|fuite|intrus|smoke|leak/i.test(q)
+          ? 'Alerte : de la fumee est detectee dans la cuisine. Aere, et verifie la plaque de cuisson.'
+          : /chauff|radiateur|thermostat|heat/i.test(q)
           ? 'Le chauffage tient dix-neuf degres dans le salon, et la chambre remonte doucement.'
           : /ferm|verrou|closed|lock/i.test(q)
             ? 'Tout est ferme : les volets sont baisses et les lumieres du salon sont eteintes.'

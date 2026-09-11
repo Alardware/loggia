@@ -203,11 +203,36 @@ test('la couleur propre de l’orbe ne change pas', () => {
     'la première palette — la couleur de l’orbe — a été touchée');
 });
 
-test('les quatre teintes de la maison existent', () => {
+test('les teintes existent : celles de la maison, et le cyan de sa voix', () => {
   const debut = SRC.indexOf('const TEINTES = {');
   assert.notEqual(debut, -1, 'plus de teintes');
   const bloc = SRC.slice(debut, SRC.indexOf('};', debut));
-  for (const nom of ['chaud:', 'froid:', 'bien:', 'alerte:']) assert.ok(bloc.includes(nom), 'teinte absente : ' + nom);
+  for (const nom of ['parle:', 'chaud:', 'froid:', 'bien:', 'alerte:']) assert.ok(bloc.includes(nom), 'teinte absente : ' + nom);
+});
+
+/** Les trois crans d'une teinte, lus dans la source : deep, mid, hot. */
+function palette(nom) {
+  const debut = SRC.indexOf('const TEINTES = {');
+  const ligne = SRC.slice(debut).split(String.fromCharCode(10)).find((l) => l.trim().startsWith(nom + ':'));
+  assert.ok(ligne, 'teinte introuvable : ' + nom);
+  const n = (ligne.match(/[.0-9]+/g) || []).map(Number);
+  return { deep: n.slice(0, 3), mid: n.slice(3, 6), hot: n.slice(6, 9) };
+}
+
+test('« fait » est vert, l’alerte rouge — jusqu’au cœur des veines', () => {
+  /* Repris de la maquette, « fait » sortait sarcelle, trop proche du cyan de
+   * la voix, et l'alerte rose : le `hot`, qu'on voit d'abord, y restait
+   * presque blanc. Demandé le 11/09/2026 : « fait en vert, alerte en rouge ». */
+  const bien = palette('bien');
+  const alerte = palette('alerte');
+  for (const cran of ['mid', 'hot']) {
+    const [r, g, b] = bien[cran];
+    assert.ok(g - Math.max(r, b) >= 0.25, '« fait » n’est plus franchement vert (' + cran + ')');
+    const [r2, g2, b2] = alerte[cran];
+    assert.ok(r2 - Math.max(g2, b2) >= 0.4, 'l’alerte n’est plus franchement rouge (' + cran + ')');
+  }
+  // Et le vert ne se confond pas avec le cyan de la voix : le bleu les sépare.
+  assert.ok(palette('parle').mid[2] - bien.mid[2] >= 0.4, '« fait » et la voix se confondraient');
 });
 
 test('une teinte se pilote, et se rend', () => {

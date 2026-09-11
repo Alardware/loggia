@@ -117,13 +117,22 @@ export function creerOrbe(hote) {
    * glace : repris tel quel (#60a5fa, soit .38/.65/.98), il tombait a deux pas
    * du bleu propre de cette orbe (.22/.66/1.0) et ne se serait pas vu.
    *
+   * `parle` est le cyan de la maquette Sentinel (#4FD8EB) : l'accent de sa
+   * voix, tant qu'elle parle.
+   *
+   * « Fait » et « alerte » tirent franchement vers le vert et le rouge. Repris
+   * de la maquette, le premier sortait sarcelle — trop proche du cyan de la
+   * voix — et le second rose : le `hot`, qui porte le coeur des veines et
+   * qu'on voit d'abord, y restait presque blanc. Il est teinte lui aussi.
+   *
    * Aucune n'est LA couleur de l'orbe. Celle-la reste PAL[S.pal], et l'orbe y
    * revient d'elle-meme des qu'on ne lui en donne plus d'autre. */
   const TEINTES = {
+    parle:  { deep:[.02,.28,.40], mid:[.31,.85,.92], hot:[.86,.99,1.0] },
     chaud:  { deep:[.55,.22,.02], mid:[.98,.62,.38], hot:[1.0,.94,.82] },
     froid:  { deep:[.00,.30,.50], mid:[.42,.86,1.0], hot:[.94,1.0,1.0] },
-    bien:   { deep:[.02,.42,.30], mid:[.20,.83,.60], hot:[.90,1.0,.96] },
-    alerte: { deep:[.55,.05,.05], mid:[.94,.27,.27], hot:[1.0,.90,.88] },
+    bien:   { deep:[.02,.36,.05], mid:[.20,.90,.30], hot:[.70,1.0,.62] },
+    alerte: { deep:[.55,.02,.02], mid:[1.0,.16,.12], hot:[1.0,.50,.42] },
   };
   const S = { mode:'repos', level:1, charge:0, energy:.3, flow:.35, turb:.35, pulse:0, mic:0, micLevel:0, pal:0, count:0, curves:0, voice:0, busy:false,
               phase:0, iph:0, dir:1, force:null, teinte:null };
@@ -823,7 +832,7 @@ export function creerOrbe(hote) {
     setLevel(v) { S.force = Math.max(0, Math.min(1, +v || 0)); },
     releaseLevel() { S.force = null; },
     /* La couleur de ce dont elle parle : « chaud », « froid », « bien »,
-     * « alerte ». Tout autre nom, « base » compris, lui rend la sienne — un
+     * « alerte », ou « parle » pour sa voix. Tout autre nom, « base » compris, lui rend la sienne — un
      * sujet mal ecrit ne doit pas la laisser sur la teinte precedente. Le
      * test porte sur les cles PROPRES : « toString » est aussi une propriete
      * de l'objet, et la boucle y chercherait une palette. */
