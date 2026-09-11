@@ -172,3 +172,23 @@ test('l’écran « Parler » a une hauteur fixe, barre du bas comprise', () => 
   // sur le plus petit côté, elle restait petite au milieu d'un grand vide.
   assert.ok(FEUILLE.includes('<Orbe etat={etatVu} niveau={niveau} remplir teinte={teinteVue} />'));
 });
+
+test('la conversation ne cache pas l’orbe : elle se replie au-dessus', () => {
+  /* Demandé le 11/09/2026 : « c'est pénible que la zone de chat cache l'orbe,
+   * on ne voit pas son animation ». Montée par-dessus tout l'écran, la feuille
+   * recouvrait l'orbe — ses couleurs, sa voix, ses états. Elle s'arrête
+   * désormais sous une bande où l'orbe se replie, à la taille de la maquette. */
+  assert.ok(FEUILLE.includes('const BANDE = 132;'));
+  assert.ok(FEUILLE.includes('top: BANDE, left: 0, right: 0, bottom: 0'),
+    'la conversation recouvre de nouveau tout l’écran');
+  assert.ok(FEUILLE.includes("transform: ouvert ? `scale(${replie})` : 'none'"), 'l’orbe ne se replie plus');
+  // Et l'orbe n'est pas dans ce qui se cache quand le fil monte : elle se
+  // cacherait avec lui.
+  assert.ok(FEUILLE.indexOf('remplir teinte={teinteVue}') < FEUILLE.indexOf("visibility: fil === 'ouvert' ? 'hidden' : 'visible'"),
+    'l’orbe est retombée dans la partie de l’écran qui se cache');
+  // Sa zone se mesure tout de suite, puis à chaque changement : sans la
+  // première mesure, la hauteur restait nulle tant que l'observateur ne
+  // s'était pas prononcé, et l'orbe ne se repliait pas.
+  assert.equal(FEUILLE.split('setH(el.clientHeight)').length - 1, 2,
+    'la zone de l’orbe n’est plus mesurée au montage ET à chaque changement');
+});

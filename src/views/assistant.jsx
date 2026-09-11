@@ -69,6 +69,10 @@ const SUGGESTIONS = [
  * finie. */
 const TEINTE_MS = 9000;
 
+/* La hauteur de l'orbe repliée, conversation ouverte — celle de la maquette
+ * Luna Loggia. Elle garde sa présence, le fil gagne la place. */
+const BANDE = 132;
+
 /* Le point d'état de l'en-tête, repris de la maquette : vert au repos,
  * l'accent quand on s'écoute ou qu'elle parle, l'ambre quand elle réfléchit. */
 const POINT = {
@@ -103,6 +107,26 @@ const heure = (ts) => {
   try { return new Date(ts).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); }
   catch { return ''; }
 };
+
+/* La hauteur de la zone de l'orbe : de combien la replier quand la
+ * conversation monte. */
+function useHauteur(ref) {
+  const [h, setH] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    /* Mesurée TOUT DE SUITE, et pas seulement quand l'observateur parle : il
+     * ne se prononce qu'à l'image suivante. Mesure du 11/09/2026, onglet sans
+     * rendu : il ne s'est jamais prononcé, la hauteur est restée à zéro, et
+     * l'orbe ne s'est pas repliée sous la conversation ouverte. */
+    setH(el.clientHeight);
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const suivi = new ResizeObserver(() => setH(el.clientHeight));
+    suivi.observe(el);
+    return () => suivi.disconnect();
+  }, [ref]);
+  return h;
+}
 
 /* La ligne sous l'orbe : l'invitation, la question entendue, ou la réponse.
  *
@@ -234,6 +258,8 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
   const [legende, setLegende] = useState(null);
   const [mot, setMot] = useState(-1);
   const [teinte, setTeinte] = useState('base');
+  const zoneRef = useRef(null);
+  const hZone = useHauteur(zoneRef);
 
   const ws = hass && typeof hass.callWS === 'function' ? hass : null;
   const lie = !!ws;
@@ -548,6 +574,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
     : micro.ok ? tr('Appuie et parle, j’écoute jusqu’au silence.')
       : raisonLisible(micro.raison, tr);
   const motLu = etat === 'speaking' ? mot : -1;
+  const replie = hZone > 0 ? Math.min(1, BANDE / hZone) : 1;
   /* La couleur de l'orbe, dans l'ordre où elle l'emporte :
    *   • l'ALERTE, toujours — elle n'attend pas la fin d'une phrase ;
    *   • le CYAN tant qu'elle parle — l'accent de sa voix, repris de la
@@ -625,24 +652,36 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
 
           {/* L'écran « Parler », et la conversation qui monte par-dessus. */}
           <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {/* L'orbe prend la place qui reste. Pas de vide réservé pendant
+              * que Three.js arrive : la zone a déjà sa taille, rien ne saute.
+              *
+              * Et elle reste visible quand la conversation monte : elle se
+              * replie dans une bande en haut, au-dessus du fil, au lieu de
+              * disparaître dessous — ses couleurs et sa voix se voient pendant
+              * qu'on écrit. Réduite par une transformation et non par sa
+              * taille : son canevas ne change pas, rien n'est recréé pendant
+              * le mouvement. */}
+            <div ref={zoneRef} style={{ position: 'relative', flex: '1 1 0', minHeight: 0 }}>
+              <div style={{
+                position: 'absolute', inset: 0, transformOrigin: '50% 0',
+                transform: ouvert ? `scale(${replie})` : 'none',
+                transition: REDUCE_MOTION ? 'none' : 'transform .32s cubic-bezier(.32,.72,0,1)',
+              }}>
+                <Suspense fallback={null}>
+                  <Orbe etat={etatVu} niveau={niveau} remplir teinte={teinteVue} />
+                </Suspense>
+              </div>
+            </div>
+
             <div style={{
-              flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column',
-              /* Recouvert, cet écran se cache — une fois la feuille montée, pas
-               * avant, sinon il disparaîtrait sous elle pendant qu'elle monte.
-               * Ses boutons quittent alors l'ordre de tabulation. */
+              display: 'flex', flexDirection: 'column',
+              /* Recouvert, le reste de l'écran se cache — une fois la feuille
+               * montée, pas avant, sinon il disparaîtrait sous elle pendant
+               * qu'elle monte. Ses boutons quittent alors l'ordre de
+               * tabulation. */
               visibility: fil === 'ouvert' ? 'hidden' : 'visible',
               transition: fil === 'ouvert' && !REDUCE_MOTION ? 'visibility 0s linear .32s' : 'none',
             }}>
-              {/* L'orbe prend la place qui reste. Pas de vide réservé pendant
-                * que Three.js arrive : la zone a déjà sa taille, rien ne saute. */}
-              <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0 }}>
-                <div style={{ position: 'absolute', inset: 0 }}>
-                  <Suspense fallback={null}>
-                    <Orbe etat={etatVu} niveau={niveau} remplir teinte={teinteVue} />
-                  </Suspense>
-                </div>
-              </div>
-
               <div style={{
                 textAlign: 'center', fontSize: 11, fontWeight: 600, letterSpacing: '.2em',
                 textTransform: 'uppercase', color: 'var(--o-text2)',
@@ -727,7 +766,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
                 className={fil === 'sortant' ? 'o-assist-fil sortant' : 'o-assist-fil'}
                 onAnimationEnd={(e) => { if (e.target === e.currentTarget && fil === 'sortant') setFil('ferme'); }}
                 style={{
-                  position: 'absolute', inset: 0, zIndex: 2, display: 'flex', flexDirection: 'column',
+                  position: 'absolute', top: BANDE, left: 0, right: 0, bottom: 0, zIndex: 2, display: 'flex', flexDirection: 'column',
                   background: 'linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg)',
                 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0 12px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
