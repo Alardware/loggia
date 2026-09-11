@@ -162,7 +162,10 @@ test('l’écran « Parler » a une hauteur fixe, barre du bas comprise', () => 
    * se replie à sa taille minimale sous le micro. Sur écran tactile, la barre
    * du bas recouvre la feuille — elle s'y retire deux fois. */
   const CSS = readFileSync(join(SRC, 'index.css'), 'utf8');
-  assert.ok(CSS.includes('.o-assist { height: min(680px, calc(88vh - 56px - var(--o-safe-bottom, 0px))); }'));
-  assert.ok(CSS.includes('html.loggia-tactile .o-assist { height: min(680px, calc(94vh - 2 * var(--o-navh, 60px) - 56px)); }'));
+  assert.ok(CSS.includes('.o-assist { height: min(760px, calc(88vh - 56px - var(--o-safe-bottom, 0px))); }'));
+  assert.ok(CSS.includes('html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh, 60px) - 56px)); }'));
   assert.ok(FEUILLE.includes('className="o-assist"'));
+  // Et l'orbe prend TOUTE la zone, largeur et hauteur : dans un carré taillé
+  // sur le plus petit côté, elle restait petite au milieu d'un grand vide.
+  assert.ok(FEUILLE.includes('<Orbe etat={etatVu} niveau={niveau} remplir teinte={teinte} />'));
 });

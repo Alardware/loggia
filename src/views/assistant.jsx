@@ -104,27 +104,6 @@ const heure = (ts) => {
   catch { return ''; }
 };
 
-/* Le côté du carré qui tient dans la zone de l'orbe.
- *
- * L'orbe prend la place qui reste une fois tout le reste posé. On mesure la
- * ZONE, pas l'orbe : celle-ci y est posée en absolu, et sa taille ne peut donc
- * pas agrandir ce qui la mesure — sans quoi chacune pousserait l'autre, sans
- * fin. */
-function useCote(ref, repli) {
-  const [cote, setCote] = useState(repli);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === 'undefined') return undefined;
-    const suivi = new ResizeObserver(() => {
-      const c = Math.floor(Math.min(el.clientWidth, el.clientHeight));
-      if (c > 0) setCote(Math.max(100, Math.min(320, c)));
-    });
-    suivi.observe(el);
-    return () => suivi.disconnect();
-  }, [ref]);
-  return cote;
-}
-
 /* La ligne sous l'orbe : l'invitation, la question entendue, ou la réponse.
  *
  * Pendant que la voix lit, elle ne montre que la PHRASE en cours, le mot
@@ -255,8 +234,6 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
   const [legende, setLegende] = useState(null);
   const [mot, setMot] = useState(-1);
   const [teinte, setTeinte] = useState('base');
-  const zoneRef = useRef(null);
-  const cote = useCote(zoneRef, 240);
 
   const ws = hass && typeof hass.callWS === 'function' ? hass : null;
   const lie = !!ws;
@@ -651,10 +628,10 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
             }}>
               {/* L'orbe prend la place qui reste. Pas de vide réservé pendant
                 * que Three.js arrive : la zone a déjà sa taille, rien ne saute. */}
-              <div ref={zoneRef} style={{ position: 'relative', flex: '1 1 0', minHeight: 0 }}>
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0 }}>
+                <div style={{ position: 'absolute', inset: 0 }}>
                   <Suspense fallback={null}>
-                    <Orbe etat={etatVu} niveau={niveau} taille={cote} teinte={teinte} />
+                    <Orbe etat={etatVu} niveau={niveau} remplir teinte={teinte} />
                   </Suspense>
                 </div>
               </div>
@@ -669,7 +646,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
                 <div role="alert" style={{ textAlign: 'center', marginTop: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{erreur}</div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 8px' }}>
                 {/* Le micro n'apparait que s'il peut servir.
                   *
                   * Mesure du 09/09/2026 : sur l'adresse locale en HTTP,

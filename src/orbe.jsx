@@ -74,8 +74,11 @@ export function creerOrbe(hote) {
         this.dR += Math.sign(e.deltaY) * 0.28 * this.zoomSpeed;
       }, { passive: false });
     }
-    update() {
-      if (this.autoRotate) this.theta -= this.autoRotateSpeed * 0.012;
+    update(dt = 1 / 60) {
+      /* Par SECONDE, et non par image : a pas fixe, elle tournait deux fois
+       * plus vite sur un ecran a 120 Hz qu'a 60. 0,72 = 0,012 x 60 : la meme
+       * allure qu'avant, a 60 images par seconde. */
+      if (this.autoRotate) this.theta -= this.autoRotateSpeed * 0.72 * dt;
       this.theta += this.dTheta; this.phi += this.dPhi; this.r += this.dR;
       const k = this.enableDamping ? Math.max(0, 1 - this.dampingFactor * 3) : 0;
       this.dTheta *= k; this.dPhi *= k; this.dR *= k;
@@ -92,7 +95,7 @@ export function creerOrbe(hote) {
 
   /* ══ state ══ */
   const MODES = {
-    repos:  { label:'REPOS',      flow:.35, turb:.35, energy:.30, spin:.10 },
+    repos:  { label:'REPOS',      flow:.32, turb:.30, energy:.28, spin:.10 },   // le repos de la maquette : plus calme
     flux:   { label:'FLUX',       flow:1.0, turb:.65, energy:.60, spin:.22 },
     analyse:{ label:'ANALYSE',    flow:1.7, turb:.95, energy:.82, spin:.55 },
     turbu:  { label:'TURBULENCE', flow:2.0, turb:1.5, energy:.90, spin:.40 },
@@ -161,23 +164,20 @@ export function creerOrbe(hote) {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(36, 1, .1, 60);
-  /* La camera est RECULEE d'un tiers par rapport a la page d'origine.
+  /* La camera, en deux temps.
    *
-   * La-bas l'orbe remplissait son cadre, et c'etait sans consequence : le
-   * cadre etait l'ecran entier. Ici il fait deux cents pixels, et l'orbe
-   * VARIE — elle respire, elle pulse, elle s'etale quand on lui parle. A
-   * chaque battement elle atteignait le bord du canevas et s'y coupait net.
-   * C'est ce trait droit que l'on voyait, et aucun reglage de couleur ne
-   * pouvait le retirer : il fallait lui laisser de la place.
+   * Le 09/09/2026 elle avait RECULE d'un tiers : l'orbe remplissait son
+   * cadre et, a chaque battement, en touchait le bord et s'y coupait net. Le
+   * recul a fait disparaitre le trait — et rendu l'orbe petite, ramassee au
+   * milieu d'un grand vide.
    *
-   * Mesure du 09/09/2026 : au repos, la lumiere portait jusqu'aux trois
-   * quarts de la demi-largeur. Reculee d'un tiers, elle s'arrete a un peu
-   * plus de la moitie — le reste est la marge dans laquelle elle peut
-   * respirer sans jamais toucher le cadre.
-   *
-   * Les appelants agrandissent le cadre d'autant : l'orbe garde sa taille
-   * a l'ecran, elle a seulement de l'air autour. */
-  camera.position.set(0, .34, 5.81);
+   * Le 11/09/2026 elle revient pres, a la distance de la maquette Sentinel
+   * Mobile : l'orbe occupe de nouveau son cadre. Ce n'est plus la marge qui
+   * protege le bord, c'est un FONDU — la lumiere decroit en cercle et vaut
+   * zero sur le cercle inscrit dans le cadre (voir la passe finale). L'orbe
+   * peut respirer et s'etaler : ses franges s'estompent au lieu de se
+   * couper. */
+  camera.position.set(0, .25, 4.2);
   const controls = new MiniOrbit(camera, renderer.domElement);
   controls.enablePan = false; controls.enableDamping = true; controls.dampingFactor = .06;
   controls.minDistance = 2.2; controls.maxDistance = 9; controls.rotateSpeed = .5; controls.zoomSpeed = .7;
@@ -578,8 +578,8 @@ export function creerOrbe(hote) {
       c += (texture2D(tex,vUv+o*1.3846153846)+texture2D(tex,vUv-o*1.3846153846))*0.3162162162;
       c += (texture2D(tex,vUv+o*3.2307692308)+texture2D(tex,vUv-o*3.2307692308))*0.0702702703;
       gl_FragColor = c; }` });
-  const compMat = new THREE.ShaderMaterial({ uniforms:{ tScene:{value:null}, tB0:{value:null}, tB1:{value:null}, tB2:{value:null}, tB3:{value:null}, uExp:{value:1}, uBloom:{value:1} }, vertexShader:VS,
-    fragmentShader:`uniform sampler2D tScene,tB0,tB1,tB2,tB3; uniform float uExp,uBloom; varying vec2 vUv;
+  const compMat = new THREE.ShaderMaterial({ uniforms:{ tScene:{value:null}, tB0:{value:null}, tB1:{value:null}, tB2:{value:null}, tB3:{value:null}, uExp:{value:1}, uBloom:{value:1}, uAspect:{value:1} }, vertexShader:VS,
+    fragmentShader:`uniform sampler2D tScene,tB0,tB1,tB2,tB3; uniform float uExp,uBloom,uAspect; varying vec2 vUv;
     void main(){
       vec3 s = texture2D(tScene,vUv).rgb;
       /* Les quatre niveaux vont du plus fin (1/2) au plus large (1/16). Les
@@ -618,6 +618,14 @@ export function creerOrbe(hote) {
          l'orbe elle-meme. */
       vec2 q = abs(vUv - 0.5) * 2.0;
       c *= 1.0 - smoothstep(0.86, 1.0, max(q.x, q.y));
+      /* Et l'orbe s'estompe vers ses franges, EN CERCLE cette fois.
+         La distance se compte en demi-cotes du PETIT cote du cadre : elle
+         vaut 1 sur le cercle inscrit, qui touche le bord la ou il est le plus
+         proche. La lumiere y vaut zero — donc sur tout le pourtour — et
+         decroit des 0,6 : le coeur de l'orbe reste entier, ses franges
+         s'eteignent doucement au lieu de se couper net. */
+      vec2 e = (vUv - 0.5) * 2.0 * vec2(max(uAspect, 1.0), max(1.0 / uAspect, 1.0));
+      c *= 1.0 - smoothstep(0.6, 1.0, length(e));
       /* Ce qui sort d'ici n'est pas une image mais de la LUMIERE : sa couleur
          deja multipliee par son intensite, et cette intensite pour opacite.
          La ou l'orbe brille, elle couvre ; ailleurs, rien. */
@@ -635,6 +643,7 @@ export function creerOrbe(hote) {
      * hote par le bas et la droite. */
     renderer.setSize(w, h);
     camera.aspect = w/h; camera.updateProjectionMatrix();
+    compMat.uniforms.uAspect.value = w / h;
     U.uPx.value = h*DPR*.0105;
     const pw = Math.round(w*DPR), ph = Math.round(h*DPR);
     if (rtScene) rtScene.dispose();
@@ -784,10 +793,13 @@ export function creerOrbe(hote) {
     for (let i=waves.length-1;i>=0;i--){ const w = waves[i]; w.r += 1.9*dt; w.life -= dt*.8; if (w.life <= 0 || w.r > 2.6) waves.splice(i,1); }
     for (let i=0;i<4;i++){ const w = waves[i]; U.uWaves.value[i].set(w ? w.r : -9, w ? Math.max(0, w.life) : 0, 0, 0); }
 
-    controls.autoRotateSpeed = .2 + M.spin*1.2;
+    /* Au repos elle tourne plus lentement : un tour en trois quarts de
+       minute, la ou la maquette en met une demi. Les autres regimes gardent
+       leur allure. */
+    controls.autoRotateSpeed = (S.mode === 'repos' ? .08 : .2) + M.spin*1.2;
     orb.rotation.x = Math.sin(t*.10)*.10;
     orb.rotation.z = Math.cos(t*.07)*.07;
-    controls.update();
+    controls.update(dt);
     composite();
 
   }
@@ -855,14 +867,16 @@ export function creerOrbe(hote) {
  * quelques dizaines de milliers de particules. Elle naît au montage, meurt au
  * démontage, et reçoit ses ordres entre les deux.
  */
-export default function Orbe({ etat = 'idle', niveau = null, onToucher = null, taille = 240, teinte = 'base' }) {
+export default function Orbe({ etat = 'idle', niveau = null, onToucher = null, taille = 240, teinte = 'base', remplir = false }) {
   /* Ni bord arrondi ni rognage : il n'y a plus rien a rogner. Le disque
    * venait du fond noir, pas d'un masque — le masque ne faisait que lui
-   * donner sa forme ronde. */
-  const cadre = {
-    width: taille, height: taille, margin: '0 auto',
-    display: 'block', position: 'relative',
-  };
+   * donner sa forme ronde.
+   *
+   * `remplir` : l'orbe prend toute la place de son parent, largeur ET
+   * hauteur, au lieu d'un carre. C'est alors la popup qui fait sa taille. */
+  const cadre = remplir
+    ? { width: '100%', height: '100%', display: 'block', position: 'relative' }
+    : { width: taille, height: taille, margin: '0 auto', display: 'block', position: 'relative' };
   const hoteRef = useRef(null);
   const orbeRef = useRef(null);
 

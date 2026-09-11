@@ -850,8 +850,8 @@ html.loggia-light .o-wx-card-veil { background: linear-gradient(180deg, rgba(238
  * 56 px : le rembourrage de la feuille et sa poignée. Sur écran tactile, la
  * barre du bas recouvre la feuille et s'y retire deux fois, comme le fait
  * déjà `.o-sheet` pour son rembourrage et pour sa hauteur. */
-.o-assist { height: min(680px, calc(88vh - 56px - var(--o-safe-bottom, 0px))); }
-html.loggia-tactile .o-assist { height: min(680px, calc(94vh - 2 * var(--o-navh, 60px) - 56px)); }
+.o-assist { height: min(760px, calc(88vh - 56px - var(--o-safe-bottom, 0px))); }
+html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh, 60px) - 56px)); }
 .o-assist-mic { transition: transform .12s ease, background-color .2s ease, opacity .2s ease; }
 .o-assist-mic:active:not(:disabled) { transform: scale(.94); }
 .o-assist-chips { scrollbar-width: none; }

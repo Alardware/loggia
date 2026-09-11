@@ -62,26 +62,41 @@ test('les couleurs sortent prémultipliées, comme le navigateur les attend', ()
     'laisser `premultipliedAlpha` à son défaut : le préciser ici, c’est le mettre à faux');
 });
 
-test('l’orbe ne remplit pas son cadre', () => {
-  /* C'etait la vraie cause du carre, signale cinq fois.
+test('l’orbe occupe son cadre, et s’y éteint en cercle', () => {
+  /* Deux temps, et le second défait une part du premier.
    *
-   * Dans la page d'origine l'orbe remplissait son cadre, et c'etait sans
-   * consequence : le cadre etait l'ecran. Ici il fait deux cents pixels, et
-   * l'orbe VARIE — elle respire, elle pulse, elle s'etale quand elle repond.
-   * A chaque battement elle atteignait le bord du canevas et s'y coupait net.
-   * Aucun reglage de couleur ne pouvait retirer ce trait : il fallait lui
-   * laisser de la place.
+   * Le 09/09/2026, pour ne plus toucher le bord, la caméra avait reculé d'un
+   * tiers : l'orbe ne se coupait plus, mais elle paraissait petite, ramassée
+   * au milieu d'un grand vide (5,81 contre 4,3 à l'origine).
    *
-   * Mesure du 09/09/2026, alpha maximum par anneau, dans l'etat le plus
-   * etale — quand elle repond :
-   *
-   *      avant (cadre 200)   0,75 -> 128     bord -> 17
-   *      apres (cadre 230)   0,70 ->  83     0,80 -> 8     bord -> 0
-   *
-   * La camera recule d'un tiers, et les appelants agrandissent le cadre
-   * d'autant : l'orbe garde sa taille a l'ecran, elle a seulement de l'air. */
-  assert.match(SRC, /camera\.position\.set\(0, \.34, 5\.81\);/);
-  assert.doesNotMatch(SRC, /camera\.position\.set\(0, \.25, 4\.3\);/);
+   * Le 11/09/2026 elle revient près — la distance de la maquette Sentinel
+   * Mobile, demandée à la vue des deux orbes côte à côte : « l'autre est plus
+   * grosse, s'estompe sur les bords ». C'est un FONDU qui protège désormais
+   * le bord : la lumière décroît en cercle et vaut zéro sur le cercle inscrit
+   * dans le cadre, donc sur tout le pourtour. */
+  assert.ok(SRC.includes('camera.position.set(0, .25, 4.2);'), 'la caméra a bougé');
+  assert.ok(SRC.includes('vec2 e = (vUv - 0.5) * 2.0 * vec2(max(uAspect, 1.0), max(1.0 / uAspect, 1.0));'));
+  assert.ok(SRC.includes('c *= 1.0 - smoothstep(0.6, 1.0, length(e));'),
+    'sans fondu, l’orbe rapprochée se couperait de nouveau au bord du cadre');
+  // Le rapport du cadre suit le cadre : sans lui, un canevas plus large que
+  // haut aurait un fondu ovale, et la lumière toucherait le haut et le bas.
+  assert.ok(SRC.includes('compMat.uniforms.uAspect.value = w / h;'));
+});
+
+test('au repos elle tourne lentement, à la même allure sur tout écran', () => {
+  /* La rotation avançait d'un pas PAR IMAGE : deux fois plus vite sur un
+   * écran à 120 Hz qu'à 60. Elle avance maintenant par seconde. Et le repos
+   * tourne plus lentement que les autres régimes — un tour en trois quarts
+   * de minute. */
+  assert.ok(SRC.includes('if (this.autoRotate) this.theta -= this.autoRotateSpeed * 0.72 * dt;'));
+  assert.ok(SRC.includes('controls.update(dt);'), 'la boucle ne passe plus le temps écoulé');
+  assert.ok(SRC.includes("controls.autoRotateSpeed = (S.mode === 'repos' ? .08 : .2) + M.spin*1.2;"));
+});
+
+test('dans la popup, l’orbe remplit sa zone', () => {
+  // Un carré taillé sur le plus petit côté la laissait petite dans une zone
+  // plus large que haute.
+  assert.ok(SRC.includes("? { width: '100%', height: '100%', display: 'block', position: 'relative' }"));
 });
 
 test('la lumière s’éteint avant le bord du cadre', () => {
@@ -201,6 +216,6 @@ test('une teinte se pilote, et se rend', () => {
   assert.ok(SRC.includes('setTeinte(nom) { S.teinte = Object.prototype.hasOwnProperty.call(TEINTES, nom) ? nom : null; },'));
   assert.ok(SRC.includes('const P = (S.teinte && TEINTES[S.teinte]) || PAL[S.pal]'),
     'la boucle ne fond plus vers la teinte demandée');
-  assert.ok(SRC.includes("teinte = 'base' }) {"), 'le composant ne prend plus de teinte');
+  assert.ok(SRC.includes("teinte = 'base', remplir = false }) {"), 'le composant ne prend plus de teinte');
   assert.ok(SRC.includes('useEffect(() => { if (orbeRef.current) orbeRef.current.setTeinte(teinte); }, [teinte]);'));
 });
