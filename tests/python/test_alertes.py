@@ -189,3 +189,14 @@ def test_sans_telephone_rien_ne_part_et_le_journal_le_dit(creer):
     lancer(a._envoyer(FUMEE, "fumee", "Fumée détectée"))
     assert a._hass.services.appels == []
     assert lancer(a._regles.journal())[0]["detail"].startswith("personne a qui parler")
+
+
+def test_juste_apres_un_redemarrage_l_alerte_part_quand_meme(creer, module, monkeypatch):
+    """`monotonic()` compte depuis le demarrage de la machine. Comparer a 0.0
+    faisait passer une premiere alerte pour une rafale pendant les cinq
+    minutes suivant un reboot — et la fumee detectee a ce moment-la etait
+    jetee. Trouve parce que la machine d'integration demarre a chaque fois."""
+    monkeypatch.setattr(module.time, "monotonic", lambda: 12.0)
+    a = creer()
+    lancer(a._envoyer(FUMEE, "fumee", "Fumée détectée"))
+    assert len(a._hass.services.appels) == 1, "l'alerte d'apres reboot a ete prise pour une rafale"

@@ -109,9 +109,15 @@ class LoggiaAlertes:
                 minutes = max(1, int(cfg.get("cooldown_min", 5)))
             except (TypeError, ValueError):
                 minutes = 5
+            # « Jamais alerte » est None, pas 0.0. `monotonic()` compte depuis le
+            # demarrage de la machine : juste apres un redemarrage de la box,
+            # il vaut quelques dizaines de secondes, et 0.0 passait alors pour
+            # une alerte toute recente — la premiere fumee detectee dans les
+            # cinq minutes suivant un reboot etait jetee, sans un mot. Vu sur
+            # la machine d'integration, fraichement demarree.
             maintenant = time.monotonic()
-            precedent = self._dernier.get(etat.entity_id, 0.0)
-            if maintenant - precedent < minutes * 60:
+            precedent = self._dernier.get(etat.entity_id)
+            if precedent is not None and maintenant - precedent < minutes * 60:
                 return
             self._dernier[etat.entity_id] = maintenant
         nom = etat.attributes.get("friendly_name") or etat.entity_id
