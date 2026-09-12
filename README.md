@@ -261,6 +261,9 @@ Le frontend est du React + Vite, compilé avec `base: './'` — le dossier
 `custom_components/loggia/frontend/` est donc servable sous n'importe quel
 préfixe d'URL.
 
+Le moteur de règles a son vocabulaire et ses décisions : `docs/GLOSSAIRE.md`
+et `docs/decisions/` — une décision par fichier, avec son contexte.
+
 ## Soutenir
 
 Loggia est développé sur mon temps libre, pour ma maison d'abord — et partagé
