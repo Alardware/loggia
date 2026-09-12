@@ -7,7 +7,7 @@
 import {
   useMemo
 } from 'react';
-import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
+import { cvName, RegleEntete, usePli , useEtatServeur, Bascule } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
 // Le bit TRANSITION de Home Assistant : une lampe qui ne l'a pas ne sait pas
@@ -73,6 +73,7 @@ export function NuitReglages({ hass, cardSt }) {
   const epargnees = c.sauf || [];
 
   const titre = { fontSize: 15, fontWeight: 700 };
+  const simu = cfg.simulation || {};
   const label = { fontSize: 12, fontWeight: 700 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
   const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
@@ -86,6 +87,13 @@ export function NuitReglages({ hass, cardSt }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* La simulation se dit EN HAUT, pas seulement dans son réglage : sinon
+        * on cherche pourquoi rien ne bouge. */}
+      {simu.actif && (
+        <div role="status" style={{ ...cardSt, border: 'var(--o-bw,1px) solid var(--o-warn2)', fontSize: 12.5, fontWeight: 700, color: 'var(--o-warn2)' }}>
+          {tr('Simulation : rien ne bouge, tout est noté.')}
+        </div>
+      )}
       {/* ── La veilleuse ── */}
       <div style={cardSt}>
         <RegleEntete nom={tr('Veilleuse')}
@@ -194,13 +202,30 @@ export function NuitReglages({ hass, cardSt }) {
         )}
       </div>
 
+      {/* ── Observer sans agir ── */}
+      {/* Un MODE, pas une règle : il ne commande rien et n'a rien à replier. */}
+      <div style={cardSt}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={titre}>{tr('Observer sans agir')}</div>
+            <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{tr('Les règles notent ce qu’elles auraient fait, sans toucher aux lumières.')}</div>
+          </div>
+          <Bascule nom={tr('Observer sans agir')} on={!!simu.actif} cb={() => enregistrer({ simulation: { actif: !simu.actif } })} />
+        </div>
+      </div>
+
       {etat.journal && etat.journal.length > 0 && (
         <div style={cardSt}>
           <div style={titre}>{tr('Dernières extinctions')}</div>
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
             {etat.journal.slice(0, 8).map((j, i) => (
               <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
-                <span>{j.quoi === 'veilleuse' ? tr('veilleuse') : tr('extinction du soir')} · <span style={{ color: 'var(--o-text3)' }}>{(j.entites || []).length}</span></span>
+                {/* Les champs du journal COMMUN : ce qui a été fait, par quelle
+                  * règle, pourquoi — et ce qui a manqué. */}
+                <span style={{ minWidth: 0 }}>
+                  {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
+                  {j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
+                </span>
                 <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString()}</span>
               </div>
             ))}

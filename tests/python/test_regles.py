@@ -467,3 +467,89 @@ def test_en_simulation_le_telephone_ne_sonne_pas(socle):
     assert lancer(r.prevenir("veilles", "co2", "CO2", simuler=True)) is True
     assert r.hass.services.appels == []
     assert lancer(r.journal())[0]["simule"] is True
+
+# ── L'echelle de la maison ──────────────────────────────────────────────────
+
+def test_le_journal_garde_cinq_cents_lignes(module):
+    """Sept modules et les notifications dedans : deux cents lignes tenaient
+    une journee chargee, et le probleme de la veille avait deja disparu."""
+    assert module.MAX_JOURNAL == 500
+
+
+def test_l_echelle_a_quatre_paliers_dans_cet_ordre(module):
+    assert (module.niveau("surete") > module.niveau("presence")
+            > module.niveau("nuit") > module.niveau("confort"))
+
+
+def test_un_palier_ne_mord_jamais_sur_le_suivant(module):
+    """Quel que soit le zele d'un module : le rang le plus haut du confort
+    reste sous le rang zero de la nuit."""
+    assert module.niveau("confort", 19) < module.niveau("nuit")
+    assert module.niveau("confort", 99) == module.niveau("confort", 19)
+    assert module.niveau("nuit", -5) == module.niveau("nuit")
+
+
+def test_un_palier_inconnu_est_une_erreur(module):
+    with pytest.raises(ValueError):
+        module.niveau("bricolage")
+
+
+def test_un_module_plus_fort_l_emporte_sur_un_autre_module(socle, module):
+    """LE cas de l'echelle : deux modules visent la meme lampe. Le depart
+    (presence) l'eteint et la tient ; la veilleuse (nuit) ne la rallume pas."""
+    r = socle()
+    lancer(r.agir("presence", "depart", "light", "turn_off", ["light.a"],
+                  priorite=module.niveau("presence"), tenir=True))
+    partis = lancer(r.agir("nuit", "veilleuse", "light", "turn_on", ["light.a"],
+                           priorite=module.niveau("nuit", 5)))
+    assert partis == []
+    assert "1 tenu par depart" in lancer(r.journal())[0]["detail"]
+
+
+# ── La main declaree ────────────────────────────────────────────────────────
+
+def test_un_bouton_est_une_main(socle):
+    """Un interrupteur sans fil passe par Loggia, sans contexte d'utilisateur :
+    le socle ne le verrait pas. Le module le declare, et l'entite est gelee."""
+    r = socle()
+    lancer(r.geler("interrupteurs", "Salon", ["light.a"], quoi="bouton", motif="on_press"))
+    assert r.gele("light.a")
+    ligne = lancer(r.journal())[0]
+    assert (ligne["module"], ligne["regle"], ligne["quoi"], ligne["motif"]) == ("interrupteurs", "Salon", "bouton", "on_press")
+    assert ligne["cibles"] == ["light.a"]
+    # Et une regle ne passe plus dessus.
+    assert lancer(r.agir("nuit", "coucher", "light", "turn_off", ["light.a"], priorite=60)) == []
+
+
+def test_un_bouton_reprend_ce_qu_une_regle_tenait(socle):
+    r = socle()
+    lancer(r.agir("presence", "depart", "light", "turn_off", ["light.a"], priorite=80, tenir=True))
+    lancer(r.geler("interrupteurs", "Salon", ["light.a"], quoi="bouton"))
+    assert not r.tient("presence", "depart", "light.a")
+
+
+def test_les_gels_se_lisent(socle):
+    r = socle()
+    r.suivre("volets", ["cover.a"])
+    r._sur_changement(FauxEvenement("cover.a", contexte(user_id="u1")))
+    gels = r.gels()
+    assert list(gels) == ["cover.a"]
+    assert 0 < gels["cover.a"] <= r.duree_gel
+    r.degeler("cover.a")
+    assert r.gels() == {}
+
+
+def test_le_composant_transmet_le_socle_aux_quatre_modules_migres():
+    from conftest import COMPOSANT
+
+    texte = (COMPOSANT / "__init__.py").read_text(encoding="utf-8")
+    for nom, classe in (("fenetres", "LoggiaFenetres"), ("presence", "LoggiaPresence"),
+                        ("nuit", "LoggiaNuit"), ("interrupteurs", "LoggiaInterrupteurs")):
+        assert 'data["%s"] = %s(hass, data["store"], data.get("regles"))' % (nom, classe) in texte, nom
+        assert 'if not data.get("%s") and data.get("store") and data.get("regles"):' % nom in texte, nom
+
+def test_un_gel_expire_ne_se_lit_plus(socle):
+    """L'ecran ne doit pas montrer une main qui n'y est plus."""
+    r = socle()
+    r._gel["cover.a"] = time.time() - 1
+    assert r.gels() == {}

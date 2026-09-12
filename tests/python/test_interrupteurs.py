@@ -27,7 +27,7 @@ class FauxServices:
     def __init__(self):
         self.appels = []
 
-    async def async_call(self, domaine, service, data, blocking=False):
+    async def async_call(self, domaine, service, data, blocking=False, context=None):
         self.appels.append((domaine, service, data))
 
 
@@ -92,6 +92,10 @@ def creer(module, store_module):
         ecouteur.store = magasin
         ecouteur.journal = []
         ecouteur.vus = {}
+        # Le socle : un appui est une main, et le module le lui declare.
+        regles_module = charger("regles")
+        ecouteur.regles = regles_module.Regles(ecouteur.hass, magasin)
+        ecouteur.regles._depot = FauxStore(None)
         ecouteur._dernier = {}
         ecouteur._defait = []
         ecouteur.sources = {'mqtt_present': True, 'z2m': True, 'zha': True, 'deconz': True}
@@ -311,3 +315,53 @@ def test_l_etat_montre_l_affecte_et_le_vu(creer):
     # une liste vide ne distinguait pas « personne n'appuie » de « rien n'est
     # branche » (retour 03/09).
     assert etat["sources"] == {"mqtt_present": True, "z2m": True, "zha": True, "deconz": True}
+
+# ── L'appui est une main ────────────────────────────────────────────────────
+
+def test_un_appui_est_une_main(creer):
+    """L'appel de service part sans contexte d'utilisateur : pour le socle,
+    ce serait une automatisation, et une regle pourrait eteindre dans la
+    minute la lampe qu'on vient d'allumer au bouton. Le module le declare."""
+    ecouteur = creer(AFFECTATION)
+    ecouteur._sur_mqtt(FauxMessage(
+        "zigbee2mqtt/Interrupteur Exemple", {"action": "on_press_release"}
+    ))
+    ecouteur.hass.vider()
+    assert ecouteur.regles.gele("light.exemple"), "la lampe allumee au bouton n'est pas gelee"
+    ligne = asyncio.run(ecouteur.regles.journal())[0]
+    assert (ligne["module"], ligne["quoi"], ligne["cibles"]) == ("interrupteurs", "bouton", ["light.exemple"])
+    assert ligne["regle"] == "Interrupteur Exemple"
+    assert ligne["motif"] == "on_press_release → light.turn_on"
+
+
+def test_un_appui_reprend_ce_qu_une_regle_tenait(creer):
+    ecouteur = creer(AFFECTATION)
+    asyncio.run(ecouteur.regles.agir("presence", "depart", "light", "turn_off", ["light.exemple"],
+                                     priorite=80, tenir=True))
+    ecouteur._sur_mqtt(FauxMessage(
+        "zigbee2mqtt/Interrupteur Exemple", {"action": "on_press_release"}
+    ))
+    ecouteur.hass.vider()
+    assert not ecouteur.regles.tient("presence", "depart", "light.exemple")
+
+
+def test_un_service_sans_entite_ne_gele_rien_mais_se_note(creer):
+    ecouteur = creer({
+        "z2m/Exemple": {"source": "z2m", "nom": "Exemple", "actions": {
+            "on_press": [{"service": "script.soiree"}],
+        }},
+    })
+    ecouteur._sur_mqtt(FauxMessage("zigbee2mqtt/Exemple", {"action": "on_press"}))
+    ecouteur.hass.vider()
+    assert ecouteur.regles.gels() == {}
+    ligne = asyncio.run(ecouteur.regles.journal())[0]
+    assert ligne["quoi"] == "bouton"
+    assert ligne["n"] == 0
+
+
+def test_les_entites_d_un_appel(module):
+    assert module._entites_de({"entity_id": "light.a"}) == ["light.a"]
+    assert module._entites_de({"entity_id": ["light.a", "light.b"]}) == ["light.a", "light.b"]
+    assert module._entites_de({"entity_id": ["light.a", 3]}) == ["light.a"]
+    assert module._entites_de({}) == []
+    assert module._entites_de(None) == []

@@ -134,11 +134,11 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
     # Interrupteurs sans fil : Zigbee2MQTT, ZHA, deCONZ. Meme regime encore —
     # les abonnements vivent jusqu'a l'arret du process, et une installation
     # sans interrupteur ne doit pas s'en trouver genee.
-    if not data.get("interrupteurs") and data.get("store"):
+    if not data.get("interrupteurs") and data.get("store") and data.get("regles"):
         try:
             from .interrupteurs import LoggiaInterrupteurs
 
-            data["interrupteurs"] = LoggiaInterrupteurs(hass, data["store"])
+            data["interrupteurs"] = LoggiaInterrupteurs(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : interrupteurs sans fil indisponibles")
 
@@ -154,29 +154,29 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             _LOGGER.exception("Loggia : regles de volets indisponibles")
 
     # Fenetre ouverte, chauffage coupe. Meme regime que les regles ci-dessus.
-    if not data.get("fenetres") and data.get("store"):
+    if not data.get("fenetres") and data.get("store") and data.get("regles"):
         try:
             from .fenetres import LoggiaFenetres
 
-            data["fenetres"] = LoggiaFenetres(hass, data["store"])
+            data["fenetres"] = LoggiaFenetres(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : regle des fenetres indisponible")
 
     # Depart et retour : la maison se met en veille quand elle se vide.
-    if not data.get("presence") and data.get("store"):
+    if not data.get("presence") and data.get("store") and data.get("regles"):
         try:
             from .presence import LoggiaPresence
 
-            data["presence"] = LoggiaPresence(hass, data["store"])
+            data["presence"] = LoggiaPresence(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : regle de presence indisponible")
 
     # La nuit : veilleuse a minuterie, et extinction des lampes oubliees.
-    if not data.get("nuit") and data.get("store"):
+    if not data.get("nuit") and data.get("store") and data.get("regles"):
         try:
             from .nuit import LoggiaNuit
 
-            data["nuit"] = LoggiaNuit(hass, data["store"])
+            data["nuit"] = LoggiaNuit(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : regles de nuit indisponibles")
 

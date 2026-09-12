@@ -1,6 +1,6 @@
 # ADR 0014 — Une seule échelle de priorités pour toute la maison
 
-**Statut** : décidé le 2026-09-12, à faire.
+**Statut** : appliqué (v3.11.0) — `regles.ECHELLE`, `niveau()`.
 
 ## Contexte
 

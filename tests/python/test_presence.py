@@ -38,7 +38,7 @@ class FauxServices:
     def __init__(self):
         self.appels = []
 
-    async def async_call(self, domaine, service, data, blocking=False):
+    async def async_call(self, domaine, service, data, blocking=False, context=None):
         self.appels.append((domaine, service, dict(data)))
 
 
@@ -64,7 +64,12 @@ def module():
 
 
 @pytest.fixture
-def creer(module, store_module):
+def regles_module():
+    return charger("regles")
+
+
+@pytest.fixture
+def creer(module, store_module, regles_module):
     faits = []
 
     def fabrique(config=None, etats=None):
@@ -79,9 +84,11 @@ def creer(module, store_module):
         p.store = magasin
         p.cfg = lancer(p.async_config())
         p.eteintes = {}
+        p.consignes = {}
         p.dehors = False
-        p.journal = []
         p._minuteur = None
+        p.regles = regles_module.Regles(p.hass, magasin)
+        p.regles._depot = FauxStore(None)
         p._defait = []
         faits.append(p)
         return p
@@ -270,3 +277,99 @@ def test_la_liste_des_personnes_se_remplace(creer):
     p = creer(cfg())
     lancer(p.async_enregistrer({"personnes": ["person.a", "person.b"]}))
     assert p.cfg["personnes"] == ["person.a", "person.b"]
+
+# ── Sur le socle ────────────────────────────────────────────────────────────
+
+def test_le_retour_remet_les_consignes_d_avant_le_depart(creer):
+    """Un faux depart baisse a 16 ; le retour remet 21,5 — la consigne
+    d'AVANT, telle quelle, pas un « confort » fixe qui ecraserait un reglage."""
+    c = cfg(depart={"lumieres": False, "chauffage": {"actif": True, "consigne": 16, "confort": 20}},
+            retour={"lumieres": False, "chauffage": True})
+    p = creer(c, {**DEHORS, "climate.salon": FauxEtat("heat", {"temperature": 21.5})})
+    lancer(p._async_depart())
+    assert p.consignes == {"climate.salon": 21.5}
+    lancer(p._async_retour())
+    assert p.hass.services.appels[-1] == (
+        "climate", "set_temperature", {"entity_id": ["climate.salon"], "temperature": 21.5})
+    assert p.consignes == {}
+
+
+def test_sans_consigne_retenue_le_retour_n_invente_rien(creer):
+    """Apres un redemarrage, Loggia ne sait plus ce qu'il a baisse : il ne
+    remet rien plutot que de poser un chiffre sorti d'un reglage."""
+    c = cfg(depart={"lumieres": False, "chauffage": {"actif": True, "consigne": 16, "confort": 20}},
+            retour={"lumieres": False, "chauffage": True})
+    p = creer(c, {**DEHORS, "climate.salon": FauxEtat("heat")})
+    lancer(p._async_depart())
+    avant = len(p.hass.services.appels)
+    lancer(p._async_retour())
+    assert len(p.hass.services.appels) == avant
+
+
+def test_le_depart_tient_les_lumieres_contre_la_nuit(creer):
+    """Maison vide, la veilleuse — palier nuit, plus faible — ne rallume pas."""
+    p = creer(cfg(), {**DEHORS, **MAISON})
+    lancer(p._async_depart())
+    regles = charger("regles")
+    partis = lancer(p.regles.agir("nuit", "veilleuse", "light", "turn_on", ["light.salon"],
+                                  priorite=regles.niveau("nuit", 5)))
+    assert partis == []
+
+
+def test_le_retour_rend_tout_ce_que_le_depart_tenait(creer):
+    c = cfg(retour={"lumieres": True, "seulement_la_nuit": False, "chauffage": False})
+    p = creer(c, {**DEHORS, "light.salon": FauxEtat("on")})
+    lancer(p._async_depart())
+    assert p.regles.tenues("presence") == {"light.salon": "depart"}
+    p.hass.states.table["light.salon"] = FauxEtat("off")
+    lancer(p._async_retour())
+    assert p.regles.tenues("presence") == {}
+
+
+def test_une_lampe_sous_la_main_n_est_ni_eteinte_ni_notee(creer):
+    from homeassistant.core import Context
+
+    p = creer(cfg(), {**DEHORS, **MAISON})
+    lancer(p._async_reabonner())
+
+    class Ev:
+        data = {"entity_id": "light.salon"}
+        context = Context(user_id="u1")
+
+    p.regles._sur_changement(Ev())
+    lancer(p._async_depart())
+    assert p.hass.services.appels == []
+    assert p.eteintes == {}, "une lampe qu'on n'a pas eteinte serait rallumee au retour"
+
+
+def test_les_lumieres_et_les_chauffages_sont_declares_au_socle(creer):
+    p = creer(cfg(), {**DEHORS, **MAISON, "climate.salon": FauxEtat("heat")})
+    lancer(p._async_reabonner())
+    declares = p.regles._pilotees.get("presence", set())
+    assert {"light.salon", "light.cuisine", "climate.salon"} <= declares
+
+
+def test_en_simulation_le_depart_n_eteint_rien(creer):
+    p = creer(cfg(simulation={"actif": True}), {**DEHORS, **MAISON})
+    lancer(p._async_depart())
+    assert p.hass.services.appels == []
+    assert lancer(p.regles.journal())[0]["simule"] is True
+
+
+def test_l_etat_montre_le_journal_commun(creer):
+    p = creer(cfg(), {**DEHORS, **MAISON})
+    lancer(p._async_depart())
+    etat = lancer(p.async_etat())
+    assert etat["journal"][0]["module"] == "presence"
+    assert etat["journal"][0]["motif"] == "maison vide"
+
+def test_le_retour_rend_aussi_ce_qu_il_ne_rallume_pas(creer):
+    """« Rallumer les lumieres » est coupe : le retour ne les touche pas. Il
+    doit quand meme les RENDRE — sinon la maison rentree, la veilleuse et
+    l'eclairage doux resteraient tenus a l'ecart pendant douze heures."""
+    c = cfg(retour={"lumieres": False, "chauffage": False})
+    p = creer(c, {**DEHORS, "light.salon": FauxEtat("on")})
+    lancer(p._async_depart())
+    assert p.regles.tenues("presence") == {"light.salon": "depart"}
+    lancer(p._async_retour())
+    assert p.regles.tenues("presence") == {}, "le retour n'a pas rendu ce qu'il ne rallumait pas"

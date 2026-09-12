@@ -31,10 +31,11 @@ Trois precautions, chacune pour un cas qui arrive :
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
+
+from .regles import niveau
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -47,7 +48,14 @@ CLE = "loggia_fenetres"
 # ni couper le chauffage ni le rendre.
 MUETS = {"unavailable", "unknown", "none", ""}
 
-DEFAUT: dict[str, Any] = {"actif": False, "delai": 3, "reprise": 0, "pieces": {}}
+DEFAUT: dict[str, Any] = {"actif": False, "delai": 3, "reprise": 0, "pieces": {},
+                          # Observer sans agir : la regle note ce qu'elle aurait fait.
+                          "simulation": False}
+
+# Chauffer dehors n'est jamais voulu : la coupure est une question de SURETE,
+# et tient le chauffage tant que la fenetre est ouverte. Le retour de
+# presence, plus faible, attend qu'elle se referme pour remettre sa consigne.
+PRIORITE = niveau("surete", 5)
 
 
 def ouvrants_ouverts(etats: dict, ouvrants) -> list:
@@ -94,14 +102,16 @@ def rend_pour(haid: str, avant: str):
 class LoggiaFenetres:
     """Coupe le chauffage d'une piece dont un ouvrant reste ouvert."""
 
-    def __init__(self, hass: HomeAssistant, store: "LoggiaStore") -> None:
+    def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
         self.store = store
+        # Le socle commun : journal, geste manuel, priorites, simulation.
+        # Toute commande passe par lui — voir `regles.py`.
+        self.regles = regles
         self.cfg: dict[str, Any] = {}
         # Ce qu'on a coupe, et ce qu'il faisait avant : {piece: {entite: etat}}.
         # En memoire seule — voir l'en-tete.
         self.coupes: dict[str, dict[str, str]] = {}
-        self.journal: list[dict[str, Any]] = []
         self._minuteurs: dict[str, Any] = {}
         self._defait: list[Any] = []
         hass.async_create_task(self._async_demarrer())
@@ -118,12 +128,17 @@ class LoggiaFenetres:
             except Exception:  # noqa: BLE001
                 _LOGGER.debug("Loggia fenetres : abonnement deja retire")
         self._defait.clear()
-        if not self.cfg.get("actif"):
-            return
         suivis = []
-        for piece in (self.cfg.get("pieces") or {}).values():
-            if isinstance(piece, dict) and piece.get("actif"):
-                suivis.extend(piece.get("ouvrants") or [])
+        pilotes = []
+        if self.cfg.get("actif"):
+            for piece in (self.cfg.get("pieces") or {}).values():
+                if isinstance(piece, dict) and piece.get("actif"):
+                    suivis.extend(piece.get("ouvrants") or [])
+                    pilotes.extend(piece.get("chauffages") or [])
+        # Ce que la regle PILOTE — les chauffages — est declare au socle : une
+        # main posee dessus les gele. Declare meme vide, pour cesser d'ecouter
+        # ce qu'on ne pilote plus.
+        self.regles.suivre("fenetres", pilotes)
         if not suivis:
             return
         from homeassistant.helpers.event import async_track_state_change_event
@@ -190,6 +205,7 @@ class LoggiaFenetres:
         if not ouvrants_ouverts(etats, piece.get("ouvrants")):
             return
         avant: dict[str, str] = {}
+        groupes: dict[tuple, list] = {}
         for haid in piece.get("chauffages") or []:
             st = etats.get(haid)
             valeur = str(getattr(st, "state", "")).lower() if st else ""
@@ -197,17 +213,27 @@ class LoggiaFenetres:
                 continue   # deja eteint, ou muet : rien a couper ni a rendre
             avant[haid] = valeur
             domaine, service, data = eteint_pour(haid)
-            await self._async_service(domaine, service, haid, data)
+            groupes.setdefault((domaine, service, tuple(sorted((data or {}).items()))), []).append(haid)
+        for (domaine, service, data), haids in groupes.items():
+            # La coupure TIENT le chauffage : tant que la fenetre est ouverte,
+            # une regle plus faible — le retour de presence — ne le rallume pas.
+            partis = await self._async_service(domaine, service, haids, dict(data),
+                                               regle="fenetre", quoi="couper",
+                                               motif=nom, tenir=True)
+            # Ne retenir que ce qui est vraiment parti : un radiateur sous la
+            # main de quelqu'un n'a pas ete coupe, et n'est pas a rendre.
+            for haid in haids:
+                if haid not in partis:
+                    avant.pop(haid, None)
         if avant:
             self.coupes[nom] = avant
-            self._noter("couper", nom, list(avant))
 
     async def _async_rendre(self, nom: str) -> None:
         avant = self.coupes.pop(nom, None)
         if not avant:
             return
         etats = self._etats()
-        rendus = []
+        groupes: dict[tuple, list] = {}
         for haid, valeur in avant.items():
             st = etats.get(haid)
             actuel = str(getattr(st, "state", "")).lower() if st else ""
@@ -215,11 +241,15 @@ class LoggiaFenetres:
             # temps, son geste l'emporte sur notre restauration.
             if actuel not in ("off", "unavailable", "unknown"):
                 continue
+            # Et seulement ce qu'on TIENT encore : une main, ou plus fort, a pu
+            # le prendre depuis — le rendre les contredirait.
+            if not self.regles.tient("fenetres", "fenetre", haid):
+                continue
             domaine, service, data = rend_pour(haid, valeur)
-            await self._async_service(domaine, service, haid, data)
-            rendus.append(haid)
-        if rendus:
-            self._noter("rendre", nom, rendus)
+            groupes.setdefault((domaine, service, tuple(sorted((data or {}).items()))), []).append(haid)
+        for (domaine, service, data), haids in groupes.items():
+            await self._async_service(domaine, service, haids, dict(data),
+                                      regle="fenetre", quoi="rendre", motif=nom)
 
     # ── Outils ─────────────────────────────────────────────────────────────
     def _etats(self) -> dict:
@@ -233,18 +263,25 @@ class LoggiaFenetres:
                     table[haid] = self.hass.states.get(haid)
         return table
 
-    async def _async_service(self, domaine: str, service: str, haid: str, data: dict) -> None:
-        charge = {"entity_id": haid}
-        charge.update(data or {})
-        try:
-            await self.hass.services.async_call(domaine, service, charge, blocking=False)
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia fenetres : %s.%s a echoue sur %s", domaine, service, haid)
+    async def _async_service(self, domaine: str, service: str, cibles: list, data: dict, *,
+                             regle: str = "", quoi: str = "", motif: str = "",
+                             tenir: bool = False) -> list:
+        """Commande par le socle : il ecarte ce qu'une main tient, et note."""
+        return await self.regles.agir("fenetres", regle, domaine, service, cibles, data or None,
+                                      quoi=quoi or service, motif=motif,
+                                      priorite=PRIORITE, tenir=tenir, simuler=self._simule())
 
-    def _noter(self, quoi: str, piece: str, entites: list) -> None:
-        self.journal.insert(0, {"quoi": quoi, "piece": piece,
-                                "entites": list(entites), "ts": time.time()})
-        del self.journal[30:]
+    def _simule(self) -> bool:
+        """Observer sans agir : la regle note, rien ne bouge."""
+        return bool(self.cfg.get("simulation"))
+
+    def _repartir_de_zero(self) -> None:
+        """Du simule au reel, ou l'inverse : la regle repart de ce que la
+        maison EST, pas de ce qu'elle a imagine avoir coupe."""
+        for nom in list(self._minuteurs):
+            self._desarmer(nom)
+        self.coupes.clear()
+        self.regles.relacher("fenetres")
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     async def async_config(self) -> dict[str, Any]:
@@ -264,11 +301,12 @@ class LoggiaFenetres:
             "config": self.cfg or await self.async_config(),
             "coupes": {n: sorted(v) for n, v in self.coupes.items()},
             "en_attente": sorted(self._minuteurs),
-            "journal": list(self.journal),
+            "journal": await self.regles.journal(limite=40, module="fenetres"),
         }
 
     async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
         cfg = await self.async_config()
+        simulait = bool(cfg.get("simulation"))
         for k, v in (patch or {}).items():
             if k == "pieces" and isinstance(v, dict):
                 for nom, piece in v.items():
@@ -280,6 +318,8 @@ class LoggiaFenetres:
                 cfg[k] = v
         await self.store.async_set_shared(CLE, cfg)
         self.cfg = cfg
+        if bool(cfg.get("simulation")) != simulait:
+            self._repartir_de_zero()
         await self._async_reabonner()
         return cfg
 

@@ -97,12 +97,37 @@ def _poser_doublures() -> None:
 _poser_doublures()
 
 
+PAQUET = "loggia_test"
+
+
 def charger(nom: str):
-    """Charge un module du composant, isole de tout paquet installe."""
+    """Charge un module du composant, sous un paquet synthetique.
+
+    Le paquet n'a pas d'`__init__` : le vrai, celui du composant, tire la
+    configuration de Home Assistant et n'a rien a faire dans un test. Mais il
+    a un `__path__`, et c'est ce qui permet a un module d'ecrire
+    `from .regles import niveau` — l'echelle des priorites vit dans le socle,
+    et chaque module y prend son niveau.
+
+    Un module charge une fois est rendu tel quel ensuite : `regles` doit etre
+    LE MEME objet pour le test qui le charge et pour le module qui l'importe.
+    """
+    if PAQUET not in sys.modules:
+        paquet = types.ModuleType(PAQUET)
+        paquet.__path__ = [str(COMPOSANT)]
+        sys.modules[PAQUET] = paquet
+    complet = f"{PAQUET}.{nom}"
+    if complet in sys.modules:
+        return sys.modules[complet]
     chemin = COMPOSANT / f"{nom}.py"
-    spec = importlib.util.spec_from_file_location(f"loggia_{nom}", chemin)
+    spec = importlib.util.spec_from_file_location(complet, chemin)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[complet] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        del sys.modules[complet]
+        raise
     return module
 
 

@@ -60,9 +60,11 @@ _LOGGER = logging.getLogger(__name__)
 CLE_JOURNAL = "loggia_journal"
 VERSION_JOURNAL = 1
 
-# Deux cents lignes : de quoi remonter plusieurs jours de manoeuvres sans que
-# le fichier ne devienne un poids.
-MAX_JOURNAL = 200
+# Cinq cents lignes : plusieurs jours d'une maison active — sept modules et
+# les notifications dedans —, pour un fichier qui reste leger. On garde par
+# le nombre, pas par la date : la taille reste bornee quelle que soit la
+# maison.
+MAX_JOURNAL = 500
 
 # L'ecriture est differee : une soiree de volets, ce sont quelques dizaines
 # d'entrees en deux minutes, et autant d'ecritures disque pour rien.
@@ -74,6 +76,34 @@ GEL_DEFAUT = 30 * 60
 # Combien de temps une tenue survit si la regle qui l'a prise oublie de la
 # rendre. Un filet, pas un reglage : les regles rendent leurs tenues.
 TENUE_MAX = 12 * 3600
+
+# L'echelle de la maison : quatre paliers, du plus fort au plus faible. Avant
+# elle, les priorites ne valaient qu'a l'interieur d'un module, et deux
+# modules visant la meme lampe — la nuit eteint, l'eclairage doux allume, le
+# depart eteint tout — se battaient sans arbitre.
+#
+#   surete    le danger, le vent fort, la fenetre ouverte qui coupe le
+#             chauffage : ce qu'on ne discute pas ;
+#   presence  le depart, le retour, l'invite ;
+#   nuit      la fermeture du soir, l'extinction, la veilleuse ;
+#   confort   la protection solaire, l'ouverture du matin, l'eclairage doux.
+#
+# Une regle prend son niveau dans son palier — `niveau("nuit", 5)` — et ne se
+# compare aux autres que par ce nombre. Au-dessus de tous : une main.
+ECHELLE = {"surete": 100, "presence": 80, "nuit": 60, "confort": 40}
+
+
+def niveau(palier: str, rang: int = 0) -> int:
+    """Le niveau d'une regle : son palier, plus son rang dans le palier.
+
+    Le rang va de 0 a 19 : un palier ne mord jamais sur le suivant, quel que
+    soit le zele d'un module. Un palier inconnu est une erreur, pas un defaut
+    silencieux — une regle qui ne sait pas ou se placer se place en confort,
+    et le dit.
+    """
+    if palier not in ECHELLE:
+        raise ValueError("palier inconnu : %r" % (palier,))
+    return ECHELLE[palier] + max(0, min(19, int(rang)))
 
 # La configuration des alertes — le telephone choisi, et les heures calmes —
 # vit sous cette cle, ecrite par Parametres > Alertes.
@@ -267,6 +297,27 @@ class Regles:
     def degeler(self, haid: str) -> None:
         """Rendre la main aux regles avant l'heure — un bouton, un depart."""
         self._gel.pop(haid, None)
+
+    async def geler(self, module: str, regle: str, cibles, *,
+                    quoi: str = "main", motif: str = "") -> list:
+        """Une main qui ne passe pas par Home Assistant.
+
+        Un interrupteur sans fil passe par Loggia, qui appelle le service sans
+        contexte d'utilisateur : pour l'ecoute des changements d'etat, c'est
+        une automatisation. Or c'est un humain qui a appuye. Le module le
+        declare donc ici, entite par entite : gel, tenue reprise, et une
+        ligne au journal qui dit « bouton ».
+        """
+        haids = [h for h in cibles if isinstance(h, str)]
+        for h in haids:
+            self._gel[h] = time.time() + self.duree_gel
+            self._tenues.pop(h, None)
+        await self.noter(module, regle, quoi, cibles=haids, motif=motif)
+        return haids
+
+    def gels(self) -> dict:
+        """Ce qu'une main retient en ce moment : {entity_id: secondes restantes}."""
+        return {h: self.gel_restant(h) for h in list(self._gel) if self.gele(h)}
 
     # ── Les priorites ──────────────────────────────────────────────────────
     def _tenue(self, haid: str):

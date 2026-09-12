@@ -1,6 +1,6 @@
 # ADR 0013 — Tout migrer sur le socle avant d'ajouter une règle
 
-**Statut** : décidé le 2026-09-12.
+**Statut** : appliqué (v3.11.0) — les sept modules sont sur le socle.
 
 ## Contexte
 

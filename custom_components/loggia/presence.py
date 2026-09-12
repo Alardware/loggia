@@ -31,10 +31,11 @@ Trois precautions
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
+
+from .regles import niveau
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -57,10 +58,17 @@ DEFAUT: dict[str, Any] = {
                "alarme": {"actif": False, "entite": "", "mode": "away"}},
     "retour": {"lumieres": False, "seulement_la_nuit": True,
                "chauffage": True, "desarmer": False},
+    # Observer sans agir : la regle note ce qu'elle aurait fait.
+    "simulation": {"actif": False},
 }
 
 MODES_ALARME = {"away": "alarm_arm_away", "home": "alarm_arm_home",
                 "night": "alarm_arm_night", "vacation": "alarm_arm_vacation"}
+
+# Le palier « presence » de l'echelle : au-dessus de la nuit et du confort,
+# sous la surete. Le depart TIENT ce qu'il eteint et ce qu'il baisse, jusqu'au
+# retour : la veilleuse ou l'eclairage doux ne rallument pas une maison vide.
+PRIORITE = niveau("presence")
 
 
 def tous_absents(etats: dict, personnes) -> bool:
@@ -99,15 +107,21 @@ def fait_nuit(etat_soleil) -> bool:
 class LoggiaPresence:
     """Met la maison en veille quand elle se vide, et la reveille au retour."""
 
-    def __init__(self, hass: HomeAssistant, store: "LoggiaStore") -> None:
+    def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
         self.store = store
+        # Le socle commun : journal, geste manuel, priorites, simulation.
+        self.regles = regles
         self.cfg: dict[str, Any] = {}
         # Ce qu'on a eteint en partant : {entite: etat d'avant}. En memoire
         # seule — apres un redemarrage, Loggia ne pretend pas savoir.
         self.eteintes: dict[str, str] = {}
+        # Les consignes de chauffage d'AVANT le depart : {entite: temperature}.
+        # Le retour les remet telles quelles — pas a un defaut. Memes regles
+        # que `eteintes` : en memoire, et apres un redemarrage on ne remet rien
+        # plutot que d'inventer.
+        self.consignes: dict[str, float] = {}
         self.dehors = False
-        self.journal: list[dict[str, Any]] = []
         self._minuteur = None
         self._defait: list[Any] = []
         hass.async_create_task(self._async_demarrer())
@@ -123,6 +137,7 @@ class LoggiaPresence:
             except Exception:  # noqa: BLE001
                 _LOGGER.debug("Loggia presence : abonnement deja retire")
         self._defait.clear()
+        self._declarer()
         if not self.cfg.get("actif"):
             return
         suivis = list(self.cfg.get("personnes") or [])
@@ -139,9 +154,26 @@ class LoggiaPresence:
     def _sur_personne(self, _event) -> None:
         self.hass.async_create_task(self._async_evaluer())
 
+    def _declarer(self) -> None:
+        """Declare au socle ce que le depart pilote : les lumieres, les
+        chauffages, l'alarme. Rappele a chaque evaluation — les entites
+        peuvent ne pas exister au demarrage."""
+        pilotes = []
+        if self.cfg.get("actif"):
+            try:
+                pilotes += list(self.hass.states.async_entity_ids("light"))
+            except Exception:  # noqa: BLE001
+                pass
+            pilotes += self._climats()
+            entite = ((self.cfg.get("depart") or {}).get("alarme") or {}).get("entite")
+            if entite:
+                pilotes.append(entite)
+        self.regles.suivre("presence", pilotes)
+
     async def _async_evaluer(self) -> None:
         if not self.cfg.get("actif"):
             return
+        self._declarer()
         vide = tous_absents(self._etats(), self.cfg.get("personnes"))
         if vide and not self.dehors:
             await self._async_armer_depart()
@@ -192,14 +224,16 @@ class LoggiaPresence:
             return
         self.dehors = True
         d = self.cfg.get("depart") or {}
-        fait = []
 
         if d.get("lumieres"):
             allumees = self._allumees()
             if allumees:
-                self.eteintes = {haid: "on" for haid in allumees}
-                await self._async_service("light", "turn_off", allumees)
-                fait.append("%d lumieres" % len(allumees))
+                # Ne retenir que ce qui est vraiment parti : une lampe sous la
+                # main de quelqu'un n'a pas ete eteinte, et n'est pas a rallumer.
+                partis = await self._async_service("light", "turn_off", allumees,
+                                                   regle="depart", quoi="eteindre",
+                                                   motif="maison vide", tenir=True)
+                self.eteintes = {haid: "on" for haid in partis}
 
         chauffage = d.get("chauffage") or {}
         if chauffage.get("actif"):
@@ -209,18 +243,25 @@ class LoggiaPresence:
                     consigne = float(chauffage.get("consigne", 17))
                 except (TypeError, ValueError):
                     consigne = 17.0
-                await self._async_service("climate", "set_temperature", cibles,
-                                          {"temperature": consigne})
-                fait.append("chauffage a %g" % consigne)
+                # Les consignes d'AVANT, pour les remettre telles quelles.
+                avant: dict[str, float] = {}
+                for haid in cibles:
+                    st = self.hass.states.get(haid)
+                    t = ((getattr(st, "attributes", None) or {}).get("temperature")
+                         if st is not None else None)
+                    if isinstance(t, (int, float)) and not isinstance(t, bool):
+                        avant[haid] = float(t)
+                partis = await self._async_service("climate", "set_temperature", cibles,
+                                                   {"temperature": consigne},
+                                                   regle="depart", quoi="baisser",
+                                                   motif="maison vide", tenir=True)
+                self.consignes = {haid: avant[haid] for haid in partis if haid in avant}
 
         alarme = d.get("alarme") or {}
         if alarme.get("actif") and alarme.get("entite"):
             service = MODES_ALARME.get(str(alarme.get("mode") or "away"), "alarm_arm_away")
-            await self._async_service("alarm_control_panel", service, [alarme["entite"]])
-            fait.append("alarme armee")
-
-        if fait:
-            self._noter("depart", fait)
+            await self._async_service("alarm_control_panel", service, [alarme["entite"]],
+                                      regle="depart", quoi="armer", motif="maison vide")
 
     def _allumees(self) -> list:
         """Les lumieres allumees en ce moment."""
@@ -240,7 +281,6 @@ class LoggiaPresence:
     # ── Le retour ──────────────────────────────────────────────────────────
     async def _async_retour(self) -> None:
         r = self.cfg.get("retour") or {}
-        fait = []
 
         if r.get("lumieres") and self.eteintes:
             # On ne rallume pas en plein jour : rentrer a quinze heures ne doit
@@ -249,35 +289,38 @@ class LoggiaPresence:
                 self.eteintes = {}
             else:
                 etats = self._etats(list(self.eteintes))
-                # On ne rend que ce qu'on a pris : une lampe rallumee entre
-                # temps par quelqu'un d'autre n'est pas notre affaire.
+                # On ne rend que ce qu'on a pris — et qu'on tient encore : une
+                # lampe rallumee entre temps par quelqu'un d'autre, ou prise par
+                # une regle plus forte, n'est pas notre affaire.
                 a_rendre = [h for h in sorted(self.eteintes)
-                            if str(getattr(etats.get(h), "state", "")).lower() == "off"]
+                            if str(getattr(etats.get(h), "state", "")).lower() == "off"
+                            and self.regles.tient("presence", "depart", h)]
                 if a_rendre:
-                    await self._async_service("light", "turn_on", a_rendre)
-                    fait.append("%d lumieres" % len(a_rendre))
+                    await self._async_service("light", "turn_on", a_rendre,
+                                              regle="retour", quoi="rallumer", motif="retour")
                 self.eteintes = {}
 
-        if r.get("chauffage"):
-            cibles = self._climats()
-            confort = ((self.cfg.get("depart") or {}).get("chauffage") or {}).get("confort")
-            if cibles and confort not in (None, ""):
-                try:
-                    valeur = float(confort)
-                except (TypeError, ValueError):
-                    valeur = None
-                if valeur is not None:
-                    await self._async_service("climate", "set_temperature", cibles,
-                                              {"temperature": valeur})
-                    fait.append("chauffage a %g" % valeur)
+        if r.get("chauffage") and self.consignes:
+            # Les consignes d'AVANT le depart, telles quelles — pas un defaut,
+            # qui ecraserait un reglage fait a la main. Groupees par valeur :
+            # un appel par temperature, pas un par radiateur.
+            par_valeur: dict[float, list] = {}
+            for haid, t in self.consignes.items():
+                if self.regles.tient("presence", "depart", haid):
+                    par_valeur.setdefault(t, []).append(haid)
+            for t, haids in sorted(par_valeur.items()):
+                await self._async_service("climate", "set_temperature", sorted(haids),
+                                          {"temperature": t},
+                                          regle="retour", quoi="remettre", motif="retour")
+            self.consignes = {}
 
         alarme = (self.cfg.get("depart") or {}).get("alarme") or {}
         if r.get("desarmer") and alarme.get("entite"):
-            await self._async_service("alarm_control_panel", "alarm_disarm", [alarme["entite"]])
-            fait.append("alarme desarmee")
+            await self._async_service("alarm_control_panel", "alarm_disarm", [alarme["entite"]],
+                                      regle="retour", quoi="desarmer", motif="retour")
 
-        if fait:
-            self._noter("retour", fait)
+        # Tout ce que le depart tenait est rendu — meme ce qu'on n'a pas remis.
+        self.regles.relacher("presence")
 
     # ── Outils ─────────────────────────────────────────────────────────────
     def _etats(self, ids=None) -> dict:
@@ -285,18 +328,27 @@ class LoggiaPresence:
             ids = list(self.cfg.get("personnes") or [])
         return {haid: self.hass.states.get(haid) for haid in ids}
 
-    async def _async_service(self, domaine: str, service: str, cibles: list, extra=None) -> None:
-        data = {"entity_id": cibles}
-        if extra:
-            data.update(extra)
-        try:
-            await self.hass.services.async_call(domaine, service, data, blocking=False)
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia presence : %s.%s a echoue", domaine, service)
+    async def _async_service(self, domaine: str, service: str, cibles: list, extra=None, *,
+                             regle: str = "", quoi: str = "", motif: str = "",
+                             tenir: bool = False) -> list:
+        """Commande par le socle : il ecarte ce qu'une main tient, et note."""
+        return await self.regles.agir("presence", regle, domaine, service, cibles, extra,
+                                      quoi=quoi or service, motif=motif,
+                                      priorite=PRIORITE, tenir=tenir, simuler=self._simule())
 
-    def _noter(self, quoi: str, detail: list) -> None:
-        self.journal.insert(0, {"quoi": quoi, "detail": list(detail), "ts": time.time()})
-        del self.journal[30:]
+    def _simule(self) -> bool:
+        """Observer sans agir : la regle note, rien ne bouge."""
+        return bool((self.cfg.get("simulation") or {}).get("actif"))
+
+    def _repartir_de_zero(self) -> None:
+        """Du simule au reel, ou l'inverse : la regle repart de ce que la
+        maison EST. Un depart simule laissait `dehors` vrai, et le vrai
+        depart suivant n'aurait rien eteint."""
+        self._desarmer()
+        self.eteintes = {}
+        self.consignes = {}
+        self.dehors = False
+        self.regles.relacher("presence")
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     async def async_config(self) -> dict[str, Any]:
@@ -329,11 +381,13 @@ class LoggiaPresence:
             "dehors": self.dehors,
             "en_attente": self._minuteur is not None,
             "eteintes": sorted(self.eteintes),
-            "journal": list(self.journal),
+            "consignes": dict(self.consignes),
+            "journal": await self.regles.journal(limite=40, module="presence"),
         }
 
     async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
         cfg = await self.async_config()
+        simulait = bool((cfg.get("simulation") or {}).get("actif"))
         for k, v in (patch or {}).items():
             if k not in cfg:
                 continue
@@ -347,6 +401,8 @@ class LoggiaPresence:
                 cfg[k] = v
         await self.store.async_set_shared(CLE, cfg)
         self.cfg = cfg
+        if bool((cfg.get("simulation") or {}).get("actif")) != simulait:
+            self._repartir_de_zero()
         await self._async_reabonner()
         return cfg
 

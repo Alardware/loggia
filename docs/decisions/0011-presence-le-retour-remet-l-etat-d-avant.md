@@ -1,7 +1,7 @@
 # ADR 0011 — Au retour, on remet ce qu'il y avait avant le départ
 
-**Statut** : décidé le 2026-09-12 ; `presence.py` retient déjà ce qu'il a
-éteint, la décision l'étend aux consignes de chauffage (§5, §10).
+**Statut** : appliqué (v3.11.0). `presence.py` retenait déjà ce qu'il avait
+éteint ; il retient maintenant aussi les consignes de chauffage (§5, §10).
 
 ## Contexte
 

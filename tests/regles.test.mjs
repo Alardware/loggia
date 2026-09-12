@@ -251,3 +251,27 @@ test('le journal des veilles lit les champs communs', () => {
   assert.ok(vei.includes("{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}"));
   assert.ok(vei.includes('{j.simule && <span'), 'une ligne simulée se lirait comme un vrai signalement');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Les quatre modules migrés sur le socle (12/09/2026).
+//
+// Chaque onglet lit le journal commun et sait observer sans agir. Présence ne
+// promet plus de « confort » : le retour remet les consignes d'avant (ADR 0011).
+// ─────────────────────────────────────────────────────────────────────────────
+
+for (const v of ['fenetres', 'presence', 'nuit']) {
+  test(`${v} : le journal commun, et observer sans agir`, () => {
+    const src = readFileSync(join(RACINE, 'src', 'views', v + '.jsx'), 'utf8');
+    assert.ok(src.includes("{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}"),
+      `${v}.jsx : le journal lit encore des champs qui n’existent plus`);
+    assert.ok(src.includes('{j.simule && <span'), `${v}.jsx : une ligne simulée se lirait comme une vraie manœuvre`);
+    assert.ok(src.includes("{tr('Observer sans agir')}"), `${v}.jsx : plus d’interrupteur de simulation`);
+    assert.ok(src.includes("{tr('Simulation : rien ne bouge, tout est noté.')}"), `${v}.jsx : plus de bandeau de simulation`);
+  });
+}
+
+test('présence ne promet plus de consigne de confort', () => {
+  const src = readFileSync(join(RACINE, 'src', 'views', 'presence.jsx'), 'utf8');
+  assert.ok(!src.includes("chauffage: { confort:"), 'le réglage « confort » est revenu : il écraserait un réglage fait à la main');
+  assert.ok(src.includes("tr('Aux consignes d’avant le départ, telles quelles.')"));
+});

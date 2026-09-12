@@ -23,10 +23,11 @@ pas de fondu du tout.
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
+
+from .regles import niveau
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -42,7 +43,13 @@ LIGHT_TRANSITION = 32
 DEFAUT: dict[str, Any] = {
     "veilleuse": {"actif": False, "lampes": [], "duree": 30, "fondu": 5, "depuis": "19:00"},
     "coucher": {"actif": False, "heure": "23:30", "sauf": [], "jours": [0, 1, 2, 3, 4, 5, 6]},
+    # Observer sans agir : les regles notent ce qu'elles auraient fait.
+    "simulation": {"actif": False},
 }
+
+# Le palier « nuit » de l'echelle. La veilleuse un cran au-dessus de
+# l'extinction : sa minuterie est un choix fait pour CETTE lampe.
+PRIORITES = {"veilleuse": niveau("nuit", 5), "coucher": niveau("nuit")}
 
 
 def lire_heure(texte, defaut=(0, 0)):
@@ -85,13 +92,14 @@ def a_eteindre(etats: dict, sauf) -> list:
 class LoggiaNuit:
     """Eteint la veilleuse apres son delai, et les lampes oubliees a l'heure dite."""
 
-    def __init__(self, hass: HomeAssistant, store: "LoggiaStore") -> None:
+    def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
         self.store = store
+        # Le socle commun : journal, geste manuel, priorites, simulation.
+        self.regles = regles
         self.cfg: dict[str, Any] = {}
         # Une minuterie par lampe : deux veilleuses ne partagent pas la leur.
         self._minuteurs: dict[str, Any] = {}
-        self.journal: list[dict[str, Any]] = []
         self._defait: list[Any] = []
         self._defait_heure: list[Any] = []
         hass.async_create_task(self._async_demarrer())
@@ -108,6 +116,7 @@ class LoggiaNuit:
                 except Exception:  # noqa: BLE001
                     _LOGGER.debug("Loggia nuit : abonnement deja retire")
             source.clear()
+        self._declarer()
 
         v = self.cfg.get("veilleuse") or {}
         if v.get("actif") and v.get("lampes"):
@@ -127,6 +136,21 @@ class LoggiaNuit:
                 async_track_time_change(self.hass, self._au_coucher, hour=h, minute=m, second=0)
             )
             _LOGGER.info("Loggia nuit : extinction a %02d:%02d", h, m)
+
+    def _declarer(self) -> None:
+        """Declare au socle ce que la nuit pilote : les veilleuses, et toutes
+        les lampes que l'extinction peut toucher. Rappele au coucher — les
+        lampes peuvent ne pas exister au demarrage."""
+        pilotes = []
+        v = self.cfg.get("veilleuse") or {}
+        if v.get("actif"):
+            pilotes += list(v.get("lampes") or [])
+        if (self.cfg.get("coucher") or {}).get("actif"):
+            try:
+                pilotes += list(self.hass.states.async_entity_ids("light"))
+            except Exception:  # noqa: BLE001
+                pass
+        self.regles.suivre("nuit", pilotes)
 
     # ── La veilleuse ───────────────────────────────────────────────────────
     @callback
@@ -191,7 +215,7 @@ class LoggiaNuit:
         if st is None or str(getattr(st, "state", "")).lower() != "on":
             return
         v = self.cfg.get("veilleuse") or {}
-        data: dict[str, Any] = {"entity_id": haid}
+        data: dict[str, Any] = {}
         try:
             fondu = max(0, int(v.get("fondu", 0)))
         except (TypeError, ValueError):
@@ -199,8 +223,18 @@ class LoggiaNuit:
         # On ne demande une transition qu'a une lampe qui sait la faire.
         if fondu and self._sait_fondre(haid):
             data["transition"] = fondu * 60
-        await self._async_service("light", "turn_off", data)
-        self._noter("veilleuse", [haid])
+        try:
+            duree = max(0, int(v.get("duree", 30)))
+        except (TypeError, ValueError):
+            duree = 30
+        # La veilleuse eteint ce qu'une MAIN a allume : c'est sa definition
+        # meme, et le reglage vaut pour CETTE lampe. Le gel de cette main ne la
+        # retient donc pas — sans quoi une veilleuse de trente minutes ne
+        # s'eteindrait jamais, le gel durant trente minutes lui aussi.
+        self.regles.degeler(haid)
+        await self._async_service("light", "turn_off", [haid], data,
+                                  regle="veilleuse", quoi="eteindre",
+                                  motif="%d min" % duree, priorite=PRIORITES["veilleuse"])
 
     # ── Les lampes oubliees ────────────────────────────────────────────────
     @callback
@@ -221,22 +255,31 @@ class LoggiaNuit:
         except Exception:  # noqa: BLE001
             return
         etats = {i: self.hass.states.get(i) for i in ids}
+        self._declarer()
         cibles = a_eteindre(etats, c.get("sauf"))
         if not cibles:
             return
-        await self._async_service("light", "turn_off", {"entity_id": cibles})
-        self._noter("coucher", cibles)
+        await self._async_service("light", "turn_off", cibles, None,
+                                  regle="coucher", quoi="eteindre",
+                                  motif=str(c.get("heure") or ""), priorite=PRIORITES["coucher"])
 
     # ── Outils ─────────────────────────────────────────────────────────────
-    async def _async_service(self, domaine: str, service: str, data: dict) -> None:
-        try:
-            await self.hass.services.async_call(domaine, service, data, blocking=False)
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia nuit : %s.%s a echoue", domaine, service)
+    async def _async_service(self, domaine: str, service: str, cibles: list, data=None, *,
+                             regle: str = "", quoi: str = "", motif: str = "",
+                             priorite: int = 0) -> list:
+        """Commande par le socle : il ecarte ce qu'une main tient, et note."""
+        return await self.regles.agir("nuit", regle, domaine, service, cibles, data or None,
+                                      quoi=quoi or service, motif=motif,
+                                      priorite=priorite, simuler=self._simule())
 
-    def _noter(self, quoi: str, entites: list) -> None:
-        self.journal.insert(0, {"quoi": quoi, "entites": list(entites), "ts": time.time()})
-        del self.journal[30:]
+    def _simule(self) -> bool:
+        """Observer sans agir : les regles notent, rien ne bouge."""
+        return bool((self.cfg.get("simulation") or {}).get("actif"))
+
+    def _repartir_de_zero(self) -> None:
+        for haid in list(self._minuteurs):
+            self._desarmer(haid)
+        self.regles.relacher("nuit")
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     async def async_config(self) -> dict[str, Any]:
@@ -255,16 +298,19 @@ class LoggiaNuit:
         return {
             "config": self.cfg or await self.async_config(),
             "en_cours": sorted(self._minuteurs),
-            "journal": list(self.journal),
+            "journal": await self.regles.journal(limite=40, module="nuit"),
         }
 
     async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
         cfg = await self.async_config()
+        simulait = bool((cfg.get("simulation") or {}).get("actif"))
         for section, valeurs in (patch or {}).items():
             if section in cfg and isinstance(valeurs, dict):
                 cfg[section].update(valeurs)
         await self.store.async_set_shared(CLE, cfg)
         self.cfg = cfg
+        if bool((cfg.get("simulation") or {}).get("actif")) != simulait:
+            self._repartir_de_zero()
         # L'heure du coucher fait partie du rendez-vous : la changer oblige a
         # le reposer, sinon l'ancienne resterait armee jusqu'au redemarrage.
         await self._async_reabonner()

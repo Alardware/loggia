@@ -42,7 +42,10 @@ unique par installation, créé avant les modules et passé à chacun.
 **Main** (geste manuel) — Une action humaine sur une entité : interface,
 application, voix. Home Assistant la distingue d'une automatisation par le
 `user_id` de son contexte. Une main l'emporte sur toute règle. Un appui sur
-un interrupteur sans fil est une main, même s'il passe par Loggia (ADR 0015).
+un interrupteur sans fil est une main, même s'il passe par Loggia : le module
+la déclare au socle (`regles.geler`, ADR 0015). Une exception, et une seule :
+la veilleuse éteint ce qu'une main a allumé, c'est sa définition — le gel de
+cette main ne la retient pas.
 
 ## Ce qu'une règle fait
 
@@ -100,8 +103,8 @@ en vrai. Basculer remet l'état des règles à zéro.
 ## Ce qui se voit
 
 **Journal** — Une liste persistante, commune à tous les modules, dans son
-propre magasin (`loggia_journal`), deux cents lignes — cinq cents dès la
-migration des modules (ADR 0018) —, écrite en différé. La plus récente en
+propre magasin (`loggia_journal`), cinq cents lignes (ADR 0018), écrite en
+différé. La plus récente en
 premier. C'est le seul outil de débogage d'un non-technicien.
 
 **Ligne** — `{ts, module, regle, quoi, cibles, n, motif, detail, simule}`.

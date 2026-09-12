@@ -1,6 +1,6 @@
 # ADR 0018 — Le journal garde cinq cents lignes
 
-**Statut** : décidé le 2026-09-12, à faire (avec la migration des modules).
+**Statut** : appliqué (v3.11.0).
 
 ## Contexte
 

@@ -76,12 +76,27 @@ def _cle_appareil(source: str, identifiant: str) -> str:
     return f"{source}/{identifiant}"
 
 
+def _entites_de(data) -> list:
+    """Les entites visees par un appel de service : `entity_id`, seul ou en liste."""
+    if not isinstance(data, dict):
+        return []
+    ids = data.get("entity_id")
+    if isinstance(ids, str):
+        return [ids]
+    if isinstance(ids, list):
+        return [i for i in ids if isinstance(i, str)]
+    return []
+
+
 class LoggiaInterrupteurs:
     """Ecoute les interrupteurs sans fil et execute leurs affectations."""
 
-    def __init__(self, hass: HomeAssistant, store: "LoggiaStore") -> None:
+    def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
         self.store = store
+        # Le socle des regles. Un appui est une MAIN : ce qu'il commande est
+        # gele, comme si on avait touche l'interrupteur mural — voir `_async_executer`.
+        self.regles = regles
         # Ce qu'on a vu passer, du plus recent au plus ancien. En memoire seule.
         self.journal: list[dict[str, Any]] = []
         # Les appareils rencontres depuis le demarrage : cle -> fiche.
@@ -211,6 +226,7 @@ class LoggiaInterrupteurs:
         gestes = (appareil.get("actions") or {}).get(action)
         if not isinstance(gestes, list):
             return
+        nom = str(appareil.get("nom") or cle.split("/", 1)[-1])
         for geste in gestes:
             if not isinstance(geste, dict):
                 continue
@@ -235,6 +251,14 @@ class LoggiaInterrupteurs:
                 _LOGGER.exception(
                     "Loggia : %s a echoue pour %s / %s", service, cle, action
                 )
+                continue
+            # C'est un humain qui a appuye. L'appel part sans contexte
+            # d'utilisateur — le socle ne le verrait pas —, alors on le lui
+            # dit : ce que le bouton a commande est gele, comme apres un geste
+            # sur l'interrupteur mural.
+            if self.regles is not None:
+                await self.regles.geler("interrupteurs", nom, _entites_de(data),
+                                        quoi="bouton", motif="%s → %s" % (action, service))
 
     # ── Ce que l'interface lit et ecrit ───────────────────────────────────
     async def async_affectations(self) -> dict[str, Any]:

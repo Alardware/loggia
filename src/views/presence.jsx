@@ -105,6 +105,7 @@ export function PresenceReglages({ hass, cardSt }) {
   const suivies = cfg.personnes || [];
 
   const titre = { fontSize: 15, fontWeight: 700 };
+  const simu = cfg.simulation || {};
   const label = { fontSize: 12, fontWeight: 700 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
   const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
@@ -114,6 +115,13 @@ export function PresenceReglages({ hass, cardSt }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* La simulation se dit EN HAUT, pas seulement dans son réglage : sinon
+        * on cherche pourquoi rien ne bouge. */}
+      {simu.actif && (
+        <div role="status" style={{ ...cardSt, border: 'var(--o-bw,1px) solid var(--o-warn2)', fontSize: 12.5, fontWeight: 700, color: 'var(--o-warn2)' }}>
+          {tr('Simulation : rien ne bouge, tout est noté.')}
+        </div>
+      )}
       <div style={cardSt}>
         <RegleEntete nom={tr('Départ et retour')}
           desc={tr('Quand la dernière personne s’en va, la maison se met en veille. Elle se réveille au retour.')}
@@ -163,18 +171,13 @@ export function PresenceReglages({ hass, cardSt }) {
           <div style={{ marginTop: 8 }}>
             <Rangee nom={tr('Éteindre les lumières')} desc={tr('Celles qui étaient déjà éteintes ne se rallumeront pas au retour.')}
               on={!!dep.lumieres} cb={() => enregistrer({ depart: { lumieres: !dep.lumieres } })} />
-            <Rangee nom={tr('Baisser le chauffage')} desc={chauf.actif ? tr('Consigne d’absence, puis retour au confort.') : ''}
+            <Rangee nom={tr('Baisser le chauffage')} desc={chauf.actif ? tr('Consigne d’absence ; au retour, les consignes d’avant sont remises.') : ''}
               on={!!chauf.actif} cb={() => enregistrer({ depart: { chauffage: { actif: !chauf.actif } } })} />
             {chauf.actif && (
               <div style={{ ...ligne, marginTop: 4, paddingBottom: 8 }}>
                 <span style={{ ...label, minWidth: 88 }}>{tr('Absence')}</span>
                 <input aria-label={tr('Température en absence, en °C')} type="number" value={chauf.consigne != null ? chauf.consigne : 17} min={5} max={25} step={0.5}
                   onChange={e => enregistrer({ depart: { chauffage: { consigne: Number(e.target.value) || 17 } } })}
-                  style={{ ...champ, width: 74 }} />
-                <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>°C</span>
-                <span style={{ ...label, minWidth: 56, marginLeft: 8 }}>{tr('Confort')}</span>
-                <input aria-label={tr('Température de confort, en °C')} type="number" value={chauf.confort != null ? chauf.confort : 20} min={10} max={28} step={0.5}
-                  onChange={e => enregistrer({ depart: { chauffage: { confort: Number(e.target.value) || 20 } } })}
                   style={{ ...champ, width: 74 }} />
                 <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>°C</span>
               </div>
@@ -208,7 +211,7 @@ export function PresenceReglages({ hass, cardSt }) {
               <Rangee nom={tr('Seulement s’il fait nuit')} desc={tr('Rentrer à quinze heures ne doit pas rallumer le salon.')}
                 on={ret.seulement_la_nuit !== false} cb={() => enregistrer({ retour: { seulement_la_nuit: ret.seulement_la_nuit === false } })} />
             )}
-            <Rangee nom={tr('Remettre le chauffage')} desc={tr('À la consigne de confort réglée plus haut.')}
+            <Rangee nom={tr('Remettre le chauffage')} desc={tr('Aux consignes d’avant le départ, telles quelles.')}
               on={!!ret.chauffage} cb={() => enregistrer({ retour: { chauffage: !ret.chauffage } })} />
           </div>
           {/* Le désarmement à part, avec son avertissement : cette case ne
@@ -229,13 +232,30 @@ export function PresenceReglages({ hass, cardSt }) {
         </div>
       )}
 
+      {/* ── Observer sans agir ── */}
+      {/* Un MODE, pas une règle : il ne commande rien et n'a rien à replier. */}
+      <div style={cardSt}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={titre}>{tr('Observer sans agir')}</div>
+            <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{tr('La règle note ce qu’elle aurait fait, sans toucher à la maison.')}</div>
+          </div>
+          <Bascule nom={tr('Observer sans agir')} on={!!simu.actif} cb={() => enregistrer({ simulation: { actif: !simu.actif } })} />
+        </div>
+      </div>
+
       {etat.journal && etat.journal.length > 0 && (
         <div style={cardSt}>
           <div style={titre}>{tr('Derniers passages')}</div>
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
             {etat.journal.slice(0, 8).map((j, i) => (
               <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
-                <span>{j.quoi === 'depart' ? tr('départ') : tr('retour')} · <span style={{ color: 'var(--o-text3)' }}>{(j.detail || []).join(', ')}</span></span>
+                {/* Les champs du journal COMMUN : ce qui a été fait, par quelle
+                  * règle, pourquoi — et ce qui a manqué. */}
+                <span style={{ minWidth: 0 }}>
+                  {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
+                  {j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
+                </span>
                 <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString()}</span>
               </div>
             ))}

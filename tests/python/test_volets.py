@@ -1070,3 +1070,11 @@ def test_l_etat_dit_qui_l_emporte(creer):
     etat = lancer(v.async_etat())
     assert etat["priorites"] == ["vent", "coucher", "soleil", "lever"]
     assert etat["tenues"] == {}
+
+def test_le_vent_est_une_question_de_surete(module):
+    """Sur l'echelle de la maison, le vent est au palier surete : au-dessus
+    de la presence et de la nuit, pas seulement des autres regles de volets."""
+    regles = charger("regles")
+    assert module.PRIORITES["vent"] >= regles.ECHELLE["surete"]
+    for autre in ("coucher", "soleil", "lever"):
+        assert module.PRIORITES[autre] < regles.ECHELLE["surete"]

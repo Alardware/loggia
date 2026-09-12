@@ -39,7 +39,7 @@ class FauxServices:
     def __init__(self):
         self.appels = []
 
-    async def async_call(self, domaine, service, data, blocking=False):
+    async def async_call(self, domaine, service, data, blocking=False, context=None):
         self.appels.append((domaine, service, dict(data)))
 
 
@@ -65,7 +65,12 @@ def module():
 
 
 @pytest.fixture
-def creer(module, store_module):
+def regles_module():
+    return charger("regles")
+
+
+@pytest.fixture
+def creer(module, store_module, regles_module):
     faits = []
 
     def fabrique(config=None, etats=None):
@@ -80,8 +85,9 @@ def creer(module, store_module):
         n.store = magasin
         n.cfg = lancer(n.async_config())
         n._minuteurs = {}
-        n.journal = []
         n._defait = []
+        n.regles = regles_module.Regles(n.hass, magasin)
+        n.regles._depot = FauxStore(None)
         n._defait_heure = []
         faits.append(n)
         return n
@@ -161,7 +167,7 @@ def test_la_veilleuse_s_eteint_en_fondu(creer):
     n = creer(cfg_veilleuse(), AVEC_FONDU)
     lancer(n._async_eteindre_veilleuse("light.veilleuse"))
     assert n.hass.services.appels == [
-        ("light", "turn_off", {"entity_id": "light.veilleuse", "transition": 300})
+        ("light", "turn_off", {"entity_id": ["light.veilleuse"], "transition": 300})
     ]
 
 
@@ -171,7 +177,7 @@ def test_une_lampe_qui_ne_sait_pas_fondre_s_eteint_franchement(creer):
     n = creer(cfg_veilleuse(), SANS_FONDU)
     lancer(n._async_eteindre_veilleuse("light.veilleuse"))
     assert n.hass.services.appels == [
-        ("light", "turn_off", {"entity_id": "light.veilleuse"})
+        ("light", "turn_off", {"entity_id": ["light.veilleuse"]})
     ]
 
 
@@ -253,3 +259,69 @@ def test_un_patch_partiel_garde_le_reste(creer):
     assert n.cfg["veilleuse"]["duree"] == 45
     assert n.cfg["veilleuse"]["lampes"] == ["light.veilleuse"]
     assert n.cfg["veilleuse"]["fondu"] == 5
+
+# ── Sur le socle ────────────────────────────────────────────────────────────
+
+def test_la_veilleuse_eteint_ce_qu_une_main_a_allume(creer):
+    """C'est sa definition : on l'allume au coucher, elle s'eteint seule. Le
+    gel de cette main ne la retient pas — sinon une veilleuse de trente
+    minutes ne s'eteindrait jamais, le gel durant trente minutes lui aussi."""
+    from homeassistant.core import Context
+
+    n = creer(cfg_veilleuse(), AVEC_FONDU)
+    lancer(n._async_reabonner())
+
+    class Ev:
+        data = {"entity_id": "light.veilleuse"}
+        context = Context(user_id="u1")
+
+    n.regles._sur_changement(Ev())
+    assert n.regles.gele("light.veilleuse")
+    lancer(n._async_eteindre_veilleuse("light.veilleuse"))
+    assert [a[1] for a in n.hass.services.appels] == ["turn_off"]
+
+
+def test_le_coucher_respecte_une_main(creer):
+    """L'extinction du soir, elle, cede : une lampe touchee a la main dans la
+    demi-heure reste allumee, et le journal le dit."""
+    from homeassistant.core import Context
+
+    n = creer(cfg_coucher(), LAMPES)
+    lancer(n._async_reabonner())
+
+    class Ev:
+        data = {"entity_id": "light.salon"}
+        context = Context(user_id="u1")
+
+    n.regles._sur_changement(Ev())
+    lancer(n._async_coucher())
+    assert n.hass.services.appels[0][2]["entity_id"] == ["light.veilleuse"]
+    assert "1 sous la main" in lancer(n.regles.journal())[0]["detail"]
+
+
+def test_les_niveaux_sont_dans_le_palier_nuit(module):
+    regles = charger("regles")
+    for niveau in module.PRIORITES.values():
+        assert regles.ECHELLE["nuit"] <= niveau < regles.ECHELLE["presence"]
+    assert module.PRIORITES["veilleuse"] > module.PRIORITES["coucher"]
+
+
+def test_les_lampes_sont_declarees_au_socle(creer):
+    n = creer({**cfg_veilleuse(), **cfg_coucher()}, {**AVEC_FONDU, "light.salon": FauxEtat("on")})
+    lancer(n._async_reabonner())
+    assert {"light.veilleuse", "light.salon"} <= n.regles._pilotees.get("nuit", set())
+
+
+def test_en_simulation_le_coucher_n_eteint_rien(creer):
+    n = creer({**cfg_coucher(), "simulation": {"actif": True}}, LAMPES)
+    lancer(n._async_coucher())
+    assert n.hass.services.appels == []
+    assert lancer(n.regles.journal())[0]["simule"] is True
+
+
+def test_l_etat_montre_le_journal_commun(creer):
+    n = creer(cfg_coucher(), LAMPES)
+    lancer(n._async_coucher())
+    etat = lancer(n.async_etat())
+    assert etat["journal"][0]["module"] == "nuit"
+    assert etat["journal"][0]["motif"] == "23:30"

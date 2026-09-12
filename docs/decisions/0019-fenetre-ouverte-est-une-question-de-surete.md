@@ -1,6 +1,6 @@
 # ADR 0019 — « Fenêtre ouverte coupe le chauffage » se place en sûreté
 
-**Statut** : décidé le 2026-09-12, à faire (migration de `fenetres`).
+**Statut** : appliqué (v3.11.0) — `fenetres.PRIORITE = niveau("surete", 5)`.
 
 ## Contexte
 

@@ -1,6 +1,6 @@
 # ADR 0015 — Un appui sur un interrupteur sans fil est une main
 
-**Statut** : décidé le 2026-09-12, à faire (migration d'`interrupteurs`).
+**Statut** : appliqué (v3.11.0) — `regles.geler()`.
 
 ## Contexte
 

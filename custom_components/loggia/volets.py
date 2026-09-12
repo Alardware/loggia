@@ -45,6 +45,8 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
+from .regles import niveau
+
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
 
@@ -62,17 +64,21 @@ COVER_SET_POSITION = 4
 HYSTERESE_DEG = 8.0
 
 # Qui l'emporte quand deux regles visent le meme volet — declare ici, une fois,
-# plutot qu'enfoui dans l'ordre des appels. Du plus fort au plus faible :
+# plutot qu'enfoui dans l'ordre des appels, et pris dans l'ECHELLE de la
+# maison (`regles.ECHELLE`) pour valoir aussi face aux autres modules. Du plus
+# fort au plus faible :
 #
-#   vent     on remonte quoi qu'il arrive : un volet baisse dans une rafale se
-#            plie ;
-#   coucher  la nuit ferme, meme un volet que le soleil tenait — sans quoi la
-#            protection, en rendant le volet, le rouvrait a la nuit tombee ;
-#   soleil   le soleil protege, et le matin n'ouvre pas dans sa face ;
-#   lever    le reste du temps, le planning ouvre.
+#   vent     surete : on remonte quoi qu'il arrive — un volet baisse dans une
+#            rafale se plie ;
+#   coucher  nuit : la nuit ferme, meme un volet que le soleil tenait — sans
+#            quoi la protection, en rendant le volet, le rouvrait a la nuit
+#            tombee ;
+#   soleil   confort : le soleil protege, et le matin n'ouvre pas dans sa face ;
+#   lever    confort : le reste du temps, le planning ouvre.
 #
 # Au-dessus de toutes : une main. Le geste manuel gele — voir `regles.py`.
-PRIORITES = {"vent": 100, "coucher": 60, "soleil": 50, "lever": 30}
+PRIORITES = {"vent": niveau("surete", 10), "coucher": niveau("nuit"),
+             "soleil": niveau("confort", 5), "lever": niveau("confort")}
 
 DEFAUT: dict[str, Any] = {
     "planning": {"actif": False, "mode": "auto", "ouverture": {"decalage": 0},
