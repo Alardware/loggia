@@ -553,3 +553,49 @@ def test_un_gel_expire_ne_se_lit_plus(socle):
     r = socle()
     r._gel["cover.a"] = time.time() - 1
     assert r.gels() == {}
+
+# ── L'onglet Journal ────────────────────────────────────────────────────────
+
+def test_les_tenues_de_toute_la_maison_se_lisent(socle):
+    """L'ecran dit qui tient quoi, module compris — et une tenue echue n'y est pas."""
+    r = socle()
+    lancer(r.agir("volets", "soleil", "cover", "set_cover_position", ["cover.a"],
+                  {"position": 30}, priorite=45, tenir=True))
+    lancer(r.agir("presence", "depart", "light", "turn_off", ["light.a"], priorite=80, tenir=True))
+    assert r.tenues_toutes() == {"cover.a": {"module": "volets", "regle": "soleil"},
+                                 "light.a": {"module": "presence", "regle": "depart"}}
+    r._tenues["light.a"]["fin"] = time.time() - 1
+    assert list(r.tenues_toutes()) == ["cover.a"]
+
+
+def test_le_journal_a_ses_deux_commandes():
+    """`websocket_api.py` ne se charge pas hors de Home Assistant (voluptuous,
+    websocket) : on lit son texte, comme pour le cablage du composant."""
+    from conftest import COMPOSANT
+
+    texte = (COMPOSANT / "websocket_api.py").read_text(encoding="utf-8")
+    assert 'WS_REG_ETAT = "loggia/regles/etat"' in texte
+    assert 'WS_REG_DEGELER = "loggia/regles/degeler"' in texte
+    assert "websocket_api.async_register_command(hass, handle_reg_etat)" in texte
+    assert "websocket_api.async_register_command(hass, handle_reg_degeler)" in texte
+    # Rendre la main est un geste d'administrateur : c'est defaire ce que
+    # quelqu'un a fait a la main.
+    i = texte.index("async def handle_reg_degeler")
+    assert "@websocket_api.require_admin" in texte[i - 300:i], "n'importe quel compte pourrait rendre la main"
+    # Et il se voit au journal.
+    assert 'await regles.noter("regles", "main", "rendre la main"' in texte
+    # L'etat rend tout ce que la section « en ce moment » montre.
+    for cle in ('"journal":', '"gels":', '"tenues":', '"attentes":', '"calme":'):
+        assert cle in texte, cle
+    init = (COMPOSANT / "__init__.py").read_text(encoding="utf-8")
+    assert 'acces_regles=lambda: hass.data.get(DOMAIN, {}).get("regles")' in init
+
+
+def test_les_alertes_n_ont_plus_de_journal_a_part():
+    """ADR 0009 : un seul journal. Le doublon `loggia_alertes_journal` faisait
+    une liste de plus a lire, et une de plus a oublier de vider."""
+    from conftest import COMPOSANT
+
+    texte = (COMPOSANT / "alertes.py").read_text(encoding="utf-8")
+    assert "loggia_alertes_journal" not in texte
+    assert "_journaliser" not in texte

@@ -103,7 +103,8 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                               lambda: hass.data.get(DOMAIN, {}).get("fenetres"),
                               lambda: hass.data.get(DOMAIN, {}).get("presence"),
                               lambda: hass.data.get(DOMAIN, {}).get("nuit"),
-                              lambda: hass.data.get(DOMAIN, {}).get("veilles"))
+                              lambda: hass.data.get(DOMAIN, {}).get("veilles"),
+                              acces_regles=lambda: hass.data.get(DOMAIN, {}).get("regles"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")

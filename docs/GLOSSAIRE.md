@@ -105,7 +105,9 @@ en vrai. Basculer remet l'état des règles à zéro.
 **Journal** — Une liste persistante, commune à tous les modules, dans son
 propre magasin (`loggia_journal`), cinq cents lignes (ADR 0018), écrite en
 différé. La plus récente en
-premier. C'est le seul outil de débogage d'un non-technicien.
+premier. C'est le seul outil de débogage d'un non-technicien. Se lit dans
+Règles › Journal, toutes les règles mêlées, filtré par module et par
+simulé / réel (ADR 0009, 0020) ; chaque onglet garde en plus ses propres lignes.
 
 **Ligne** — `{ts, module, regle, quoi, cibles, n, motif, detail, simule}`.
 `quoi` est le verbe (ouvrir, fermer, protéger, ventiler, prévenir, alerter) ;
@@ -118,6 +120,16 @@ s'est fermé sans savoir pourquoi.
 **Détail** — Ce qui a manqué ou ce qui a été dit : « 1 sous la main de
 quelqu'un », « 1 tenu par vent », « 2 en attente », « critique · Fumée
 détectée : cuisine ».
+
+**En ce moment** — La tête de l'onglet Journal : ce qui retient les règles à
+l'instant — les gels (avec le temps qui reste), les tenues (quelle règle, de
+quel module), les ordres en attente. Quand rien ne bouge, c'est là qu'on
+regarde, pas dans les lignes (`loggia/regles/etat`).
+
+**Rendre la main** — Lever un gel avant l'heure, depuis l'onglet Journal
+(`loggia/regles/degeler`). Un geste d'administrateur — c'est défaire ce que
+quelqu'un a fait à la main — et il laisse sa ligne au journal comme les
+autres (`regles · main · rendre la main`).
 
 ## Le téléphone
 

@@ -31,7 +31,6 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Event, HomeAssistant, callback
-from homeassistant.util import dt as dt_util
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -126,22 +125,3 @@ class LoggiaAlertes:
             critique=categorie in DANGER, motif=etat.entity_id)
         if parti:
             _LOGGER.info("Loggia : alerte %s envoyée pour %s", categorie, etat.entity_id)
-            await self._journaliser(categorie, etat.entity_id, nom, message)
-
-    async def _journaliser(self, categorie: str, entity_id: str, nom: str, message: str) -> None:
-        """Les vingt derniers envois, gardes avec la configuration commune —
-        l'ecran Parametres -> Alertes les montre sans commande supplementaire."""
-        try:
-            journal = await self._store.async_get_shared("loggia_alertes_journal", [])
-            if not isinstance(journal, list):
-                journal = []
-            journal.insert(0, {
-                "quand": dt_util.utcnow().isoformat(timespec="seconds"),
-                "categorie": categorie,
-                "entite": entity_id,
-                "nom": nom,
-                "message": message,
-            })
-            await self._store.async_set_shared("loggia_alertes_journal", journal[:20])
-        except Exception:  # noqa: BLE001 — le journal est un confort, jamais un blocage
-            _LOGGER.exception("Loggia : journal des alertes indisponible")

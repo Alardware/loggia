@@ -12,6 +12,8 @@ Commandes :
   loggia/config/delete  -> efface la configuration de l'utilisateur
   loggia/config/stats   -> chiffres de diagnostic (admin uniquement)
   loggia/discovery      -> ce que Home Assistant sait de l'installation
+  loggia/regles/etat    -> le journal de la maison, et ce qui retient en ce moment
+  loggia/regles/degeler -> rendre la main aux regles sur une entite (admin)
 
 `loggia/discovery` est ouverte a tout compte authentifie, a dessein. Les
 commandes equivalentes de Home Assistant — `config/area_registry/list` et ses
@@ -54,6 +56,8 @@ WS_NUI_ETAT = "loggia/nuit/etat"
 WS_NUI_CONFIG = "loggia/nuit/config"
 WS_VEI_ETAT = "loggia/veilles/etat"
 WS_VEI_CONFIG = "loggia/veilles/config"
+WS_REG_ETAT = "loggia/regles/etat"
+WS_REG_DEGELER = "loggia/regles/degeler"
 
 
 def _user_info(connection: websocket_api.ActiveConnection) -> dict[str, Any]:
@@ -87,7 +91,7 @@ def _payload_too_big(patch: dict[str, Any]) -> str | None:
 def async_register(hass: HomeAssistant, store: LoggiaStore,
                    acces_interrupteurs=None, acces_volets=None, acces_fenetres=None,
                    acces_presence=None, acces_nuit=None,
-                   acces_veilles=None) -> None:
+                   acces_veilles=None, acces_regles=None) -> None:
     """Declare les commandes aupres du serveur WebSocket.
 
     `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
@@ -367,6 +371,57 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             return
         connection.send_result(msg["id"], {"config": config})
 
+    # ── Le socle : le journal de la maison, et ce qui retient en ce moment ──
+    #
+    # Toutes les regles melees, dans l'ordre du temps — le seul outil de
+    # debogage d'un non-technicien. Et le PRESENT : quand rien ne bouge, la
+    # question n'est pas ce qui s'est passe mais ce qui retient — une main,
+    # une tenue, un ordre en attente.
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_REG_ETAT,
+        vol.Optional("limite", default=200): vol.All(int, vol.Range(min=1, max=500)),
+        vol.Optional("module"): str,
+    })
+    @websocket_api.async_response
+    async def handle_reg_etat(hass, connection, msg):
+        regles = acces_regles() if acces_regles else None
+        if regles is None:
+            connection.send_error(msg["id"], "not_available", "socle des regles indisponible")
+            return
+        # Les ordres en attente vivent chez les volets : le seul module qui en a.
+        volets = acces_volets() if acces_volets else None
+        attentes = getattr(volets, "attente", None) if volets is not None else None
+        connection.send_result(msg["id"], {
+            "journal": await regles.journal(limite=msg.get("limite", 200), module=msg.get("module")),
+            "gels": regles.gels(),
+            "tenues": regles.tenues_toutes(),
+            "attentes": {h: dict(o) for h, o in attentes.items()} if isinstance(attentes, dict) else {},
+            "calme": await regles.calme(),
+        })
+
+    # Rendre la main aux regles avant l'heure. C'est defaire ce que quelqu'un
+    # a fait a la main : un geste d'administrateur, et il se voit au journal
+    # comme les autres.
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_REG_DEGELER, vol.Required("entity_id"): str}
+    )
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_reg_degeler(hass, connection, msg):
+        regles = acces_regles() if acces_regles else None
+        if regles is None:
+            connection.send_error(msg["id"], "not_available", "socle des regles indisponible")
+            return
+        haid = msg["entity_id"]
+        etait = regles.gele(haid)
+        regles.degeler(haid)
+        await regles.noter("regles", "main", "rendre la main", cibles=[haid],
+                           motif="depuis le journal")
+        connection.send_result(msg["id"], {"entity_id": haid, "etait_gele": etait,
+                                           "gels": regles.gels()})
+
+    websocket_api.async_register_command(hass, handle_reg_etat)
+    websocket_api.async_register_command(hass, handle_reg_degeler)
     websocket_api.async_register_command(hass, handle_vei_etat)
     websocket_api.async_register_command(hass, handle_vei_config)
     websocket_api.async_register_command(hass, handle_nui_etat)

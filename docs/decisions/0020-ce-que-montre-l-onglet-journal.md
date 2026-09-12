@@ -1,6 +1,6 @@
 # ADR 0020 — Ce que montre l'onglet Journal
 
-**Statut** : décidé le 2026-09-12, à faire. Précise l'ADR 0009.
+**Statut** : appliqué (v3.12.0). Précise l'ADR 0009.
 
 ## Contexte
 

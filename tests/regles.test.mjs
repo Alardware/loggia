@@ -275,3 +275,54 @@ test('présence ne promet plus de consigne de confort', () => {
   assert.ok(!src.includes("chauffage: { confort:"), 'le réglage « confort » est revenu : il écraserait un réglage fait à la main');
   assert.ok(src.includes("tr('Aux consignes d’avant le départ, telles quelles.')"));
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// L'onglet Journal (ADR 0009, 0020).
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('l’onglet Journal existe, et lit le socle', () => {
+  const par = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
+  assert.ok(par.includes("['journal', tr('Journal')]"), 'plus d’onglet Journal dans Règles');
+  assert.ok(par.includes("ongletRegle === 'journal' ? <JournalReglages"), 'l’onglet Journal ne rend rien');
+  const vue = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
+  assert.ok(vue.includes("useEtatServeur(hass, 'loggia/regles/etat'"), 'la vue ne lit pas le journal commun');
+});
+
+test('le journal montre le présent avant le passé', () => {
+  const vue = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
+  const present = vue.indexOf("{tr('En ce moment')}");
+  const passe = vue.indexOf("{tr('Toutes les règles, la plus récente en premier.')}");
+  assert.ok(present > 0 && passe > present, 'la section « en ce moment » doit venir en tête');
+  for (const morceau of ['Object.keys(gels)', 'Object.keys(tenues)', 'Object.keys(attentes)']) {
+    assert.ok(vue.includes(morceau), 'le présent ne montre plus : ' + morceau);
+  }
+});
+
+test('rendre la main est un geste d’administrateur, et passe par le serveur', () => {
+  const vue = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
+  assert.ok(vue.includes("h.callWS({ type: 'loggia/regles/degeler', entity_id: id })"));
+  assert.ok(vue.includes('const admin = !!(hass && hass.user && hass.user.is_admin);'));
+  assert.ok(vue.includes('{admin && ('), 'le bouton s’afficherait à un compte qui ne peut que le voir échouer');
+});
+
+test('le journal se filtre par module et par simulé / réel, rien d’autre', () => {
+  const vue = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
+  assert.ok(vue.includes("(!module || j.module === module) && (simulees || !j.simule)"));
+  assert.equal((vue.match(/useState\(/g) || []).length, 2, 'un filtre de plus : la vue devait rester à deux');
+});
+
+test('les derniers envois des alertes ne vivent plus qu’au journal', () => {
+  const par = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
+  assert.ok(!par.includes("tr('DERNIERS ENVOIS')"), 'la liste doublon est revenue (ADR 0009)');
+  assert.ok(!par.includes('loggia_alertes_journal'));
+});
+
+test('la démo répond au journal, avec les champs communs partout', () => {
+  const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
+  assert.ok(demo.includes("msg.type === 'loggia/regles/etat'"));
+  assert.ok(demo.includes("msg.type === 'loggia/regles/degeler'"));
+  // Plus aucun journal de démo aux anciens champs : les onglets ne les lisent plus.
+  for (const ancien of ["{ quoi: 'rendre', piece:", "quoi: 'co2', entite:", "quoi: 'veilleuse', entites:", "quoi: 'depart', detail: ["]) {
+    assert.ok(!demo.includes(ancien), 'journal de démo aux anciens champs : ' + ancien);
+  }
+});

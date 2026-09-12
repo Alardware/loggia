@@ -30,6 +30,7 @@ import { FenetresReglages } from './fenetres.jsx';
 import { PresenceReglages } from './presence.jsx';
 import { NuitReglages } from './nuit.jsx';
 import { VeillesReglages } from './veilles.jsx';
+import { JournalReglages } from './journal.jsx';
 import { weatherEntity } from '../wxutil.jsx';
 import { tr, choixLangue, languesDisponibles } from '../i18n.js';
 
@@ -228,7 +229,6 @@ function AlertesTele({ hass, cardSt }) {
   const [cfg, setCfg] = useState(null);
   const [services, setServices] = useState([]);
   const [msg, setMsg] = useState('');
-  const [journal, setJournal] = useState([]);
   const connecte = !!h;
   useEffect(() => {
     if (!h) { setCfg(ALERTES_DEF()); return; }
@@ -236,8 +236,6 @@ function AlertesTele({ hass, cardSt }) {
       const c = (r && r.config && r.config.loggia_alertes) || {};
       const d = ALERTES_DEF();
       setCfg({ ...d, ...c, categories: { ...d.categories, ...(c.categories || {}) }, calme: { ...d.calme, ...(c.calme || {}) } });
-      const j = r && r.config && r.config.loggia_alertes_journal;
-      if (Array.isArray(j)) setJournal(j);
     }).catch(() => setCfg(ALERTES_DEF()));
     // La liste des cibles possibles : les services notify de l'installation.
     h.callWS({ type: 'get_services' }).then(r => {
@@ -320,23 +318,8 @@ function AlertesTele({ hass, cardSt }) {
         <button onClick={test} style={{ padding: '9px 16px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Envoyer un test')}</button>
       </div>
       {msg && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)', marginTop: 4 }}>{msg}</div>}
-      {journal.length > 0 && (<>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 4px' }}>{tr('DERNIERS ENVOIS')}</div>
-        {journal.slice(0, 8).map((j, i) => {
-          let rel = '';
-          try { const m = (Date.now() - new Date(j.quand).getTime()) / 60000; rel = m < 1 ? tr("à l'instant") : m < 60 ? 'il y a ' + Math.round(m) + ' min' : m < 1440 ? 'il y a ' + Math.round(m / 60) + ' h' : 'il y a ' + Math.round(m / 1440) + ' j'; } catch { /* date illisible */ }
-          return (
-            <div key={(j.quand || '') + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-              <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: 'var(--o-bad)' }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{j.message} : {j.nom}</div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{j.entite}</div>
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0 }}>{rel}</span>
-            </div>
-          );
-        })}
-      </>)}
+      {/* Les derniers envois se lisent dans Règles › Journal, avec tout le
+        * reste : une liste à part ici en faisait un doublon (ADR 0009). */}
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 12 }}>{tr("Les catégories se reconnaissent à la classe des capteurs (device_class) — rien à désigner à la main. Anti-rafale : 5 min par capteur, sauf l'alarme.")}</div>
     </div>
   );
@@ -1728,7 +1711,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       {tab === 'inter' && aD('inter') && <InterrupteursSection hass={hass} cardSt={cardSt} />}
       {tab === 'regles' && aD('regles') && (<>
         <div className="o-bar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-          {[['volets', tr('Volets')], ['fenetres', tr('Chauffage')], ['presence', tr('Départ et retour')], ['nuit', tr('La nuit')], ['veilles', tr('Veilles')]].map(([id, nom]) => (
+          {[['volets', tr('Volets')], ['fenetres', tr('Chauffage')], ['presence', tr('Départ et retour')], ['nuit', tr('La nuit')], ['veilles', tr('Veilles')], ['journal', tr('Journal')]].map(([id, nom]) => (
             <button key={id} onClick={() => setOngletRegle(id)} style={tabStyle(ongletRegle === id)}>{nom}</button>
           ))}
         </div>
@@ -1736,7 +1719,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           : ongletRegle === 'fenetres' ? <FenetresReglages hass={hass} cardSt={cardSt} />
             : ongletRegle === 'presence' ? <PresenceReglages hass={hass} cardSt={cardSt} />
               : ongletRegle === 'nuit' ? <NuitReglages hass={hass} cardSt={cardSt} />
-                : <VeillesReglages hass={hass} cardSt={cardSt} />}
+                : ongletRegle === 'journal' ? <JournalReglages hass={hass} cardSt={cardSt} />
+                  : <VeillesReglages hass={hass} cardSt={cardSt} />}
       </>)}
       {tab === 'maj' && aD('maj') && (<>
         <SecBar>

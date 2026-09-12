@@ -292,8 +292,8 @@ function voletsDemo(states) {
     abaisses: VOL_CFG.soleil.actif ? ['cover.salon'] : [],
     a_l_abri: false,
     journal: [
-      { quoi: 'proteger', regle: 'soleil', n: 1, detail: 'cover.salon', ts: Date.now() / 1000 - 900 },
-      { quoi: 'ouvrir', regle: 'planning', n: 6, detail: '', ts: Date.now() / 1000 - 27000 },
+      { module: 'volets', regle: 'soleil', quoi: 'proteger', cibles: ['cover.salon'], n: 1, motif: 'soleil à 225°', detail: '', simule: false, ts: Date.now() / 1000 - 900 },
+      { module: 'volets', regle: 'planning', quoi: 'ouvrir', cibles: ['cover.salon', 'cover.cuisine', 'cover.chambre'], n: 3, motif: 'lever +15 min', detail: '', simule: false, ts: Date.now() / 1000 - 27000 },
     ],
   };
 }
@@ -317,7 +317,7 @@ function fenetresDemo() {
     config: FEN_CFG,
     coupes: {},
     en_attente: [],
-    journal: [{ quoi: 'rendre', piece: 'Chambre', entites: ['switch.radiateur_chambre'], ts: Date.now() / 1000 - 5400 }],
+    journal: [{ module: 'fenetres', regle: 'fenetre', quoi: 'rendre', cibles: ['switch.radiateur_chambre'], n: 1, motif: 'Chambre', detail: '', simule: false, ts: Date.now() / 1000 - 5400 }],
   };
 }
 
@@ -387,8 +387,8 @@ function presenceDemo() {
     en_attente: false,
     eteintes: [],
     journal: [
-      { quoi: 'retour', detail: ['2 lumieres', 'chauffage a 20'], ts: Date.now() / 1000 - 7200 },
-      { quoi: 'depart', detail: ['3 lumieres', 'chauffage a 17', 'alarme armee'], ts: Date.now() / 1000 - 34000 },
+      { module: 'presence', regle: 'retour', quoi: 'rallumer', cibles: ['light.salon', 'light.cuisine'], n: 2, motif: 'retour', detail: '', simule: false, ts: Date.now() / 1000 - 7200 },
+      { module: 'presence', regle: 'depart', quoi: 'eteindre', cibles: ['light.salon', 'light.cuisine', 'light.bureau'], n: 3, motif: 'maison vide', detail: '', simule: false, ts: Date.now() / 1000 - 34000 },
     ],
   };
 }
@@ -419,8 +419,8 @@ function nuitDemo() {
     config: NUI_CFG,
     en_cours: [],
     journal: [
-      { quoi: 'veilleuse', entites: ['light.chambre'], ts: Date.now() / 1000 - 50000 },
-      { quoi: 'coucher', entites: ['light.salon', 'light.cuisine'], ts: Date.now() / 1000 - 54000 },
+      { module: 'nuit', regle: 'veilleuse', quoi: 'eteindre', cibles: ['light.chambre'], n: 1, motif: '30 min', detail: '', simule: false, ts: Date.now() / 1000 - 50000 },
+      { module: 'nuit', regle: 'coucher', quoi: 'eteindre', cibles: ['light.salon', 'light.cuisine'], n: 2, motif: '23:30', detail: '1 sous la main de quelqu’un', simule: false, ts: Date.now() / 1000 - 54000 },
     ],
   };
 }
@@ -440,6 +440,28 @@ const VEI_CFG = {
   creuses: { actif: false, entite: '', valeur: '', prises: [] },
 };
 
+/* Le journal de la maison : les lignes de chaque module, melees dans l'ordre
+ * du temps, plus ce que le socle retient en ce moment. La demo montre une
+ * main posee sur une lampe (le gel), un volet tenu par la protection
+ * solaire, et une ligne simulee — de quoi voir chaque filtre agir. */
+const GELS_DEMO = { 'light.salon': 1260 };
+function reglesDemo(states) {
+  const lignes = [
+    { module: 'interrupteurs', regle: 'Variateur Salon', quoi: 'bouton', cibles: ['light.salon'], n: 1, motif: 'on_press_release → light.turn_on', detail: '', simule: false, ts: Date.now() / 1000 - 540 },
+    { module: 'volets', regle: 'planning', quoi: 'fermer', cibles: ['cover.chambre'], n: 1, motif: 'coucher -20 min', detail: '', simule: true, ts: Date.now() / 1000 - 3600 },
+    ...voletsDemo(states).journal, ...fenetresDemo().journal, ...presenceDemo().journal,
+    ...nuitDemo().journal, ...veillesDemo(states).journal,
+  ];
+  lignes.sort((a, b) => b.ts - a.ts);
+  return {
+    journal: lignes,
+    gels: { ...GELS_DEMO },
+    tenues: VOL_CFG.soleil.actif ? { 'cover.volet_salon': { module: 'volets', regle: 'soleil' } } : {},
+    attentes: {},
+    calme: false,
+  };
+}
+
 function veillesDemo(states) {
   const classe = (c) => Object.keys(states)
     .filter(id => (id.startsWith('sensor.') || id.startsWith('binary_sensor.'))
@@ -450,7 +472,7 @@ function veillesDemo(states) {
     capteurs_batterie: classe('battery'),
     notification: true,
     signales: [],
-    journal: [{ quoi: 'co2', entite: 'sensor.chambre_co2', valeur: 1310, ts: Date.now() / 1000 - 9000 }],
+    journal: [{ module: 'veilles', regle: 'co2', quoi: 'prevenir', cibles: [], n: 1, motif: '1310 ppm', detail: 'CO2 chambre : 1310 ppm, il faut aérer', simule: false, ts: Date.now() / 1000 - 9000 }],
   };
 }
 
@@ -659,6 +681,12 @@ export function installerDemo() {
         return Promise.resolve({ config: nuitPatch(msg.patch) });
       }
       if (msg && msg.type === 'loggia/veilles/etat') return Promise.resolve(veillesDemo(states));
+      if (msg && msg.type === 'loggia/regles/etat') return Promise.resolve(reglesDemo(states));
+      if (msg && msg.type === 'loggia/regles/degeler') {
+        const etait = msg.entity_id in GELS_DEMO;
+        delete GELS_DEMO[msg.entity_id];
+        return Promise.resolve({ entity_id: msg.entity_id, etait_gele: etait, gels: { ...GELS_DEMO } });
+      }
       if (msg && msg.type === 'loggia/veilles/config') {
         return Promise.resolve({ config: veillesPatch(msg.patch) });
       }

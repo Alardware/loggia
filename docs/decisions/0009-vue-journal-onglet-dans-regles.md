@@ -1,6 +1,6 @@
 # ADR 0009 — La vue Journal est un onglet de Règles
 
-**Statut** : décidé le 2026-09-12, à faire.
+**Statut** : appliqué (v3.12.0) — `loggia/regles/etat`, `src/views/journal.jsx`.
 
 ## Contexte
 

@@ -13,7 +13,7 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0006](0006-consommables-par-designation.md) | Les consommables se désignent, ils ne se devinent pas au nom | à faire |
 | [0007](0007-un-seul-mecanisme-ordre-non-abouti.md) | Un seul mécanisme « ordre non abouti » | à faire |
 | [0008](0008-prechauffage-duree-fixe-d-abord.md) | Le préchauffage commence par une durée fixe | à faire |
-| [0009](0009-vue-journal-onglet-dans-regles.md) | La vue Journal est un onglet de Règles | à faire |
+| [0009](0009-vue-journal-onglet-dans-regles.md) | La vue Journal est un onglet de Règles | appliqué (v3.12.0) |
 | [0010](0010-volet-bloque-capteur-indisponible.md) | Volet bloqué : un capteur muet n'est pas un ouvrant ouvert | à faire |
 | [0011](0011-presence-le-retour-remet-l-etat-d-avant.md) | Au retour, on remet ce qu'il y avait avant le départ | appliqué (v3.11.0) |
 | [0012](0012-eclairage-nocturne-la-main-l-emporte.md) | Éclairage nocturne : la main l'emporte sur la minuterie | à faire |
@@ -24,4 +24,4 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0017](0017-heures-creuses-restent-dans-veilles.md) | Les heures creuses restent dans Veilles jusqu'à l'onglet Énergie | décidé |
 | [0018](0018-journal-cinq-cents-lignes.md) | Le journal garde cinq cents lignes | appliqué (v3.11.0) |
 | [0019](0019-fenetre-ouverte-est-une-question-de-surete.md) | « Fenêtre ouverte coupe le chauffage » se place en sûreté | appliqué (v3.11.0) |
-| [0020](0020-ce-que-montre-l-onglet-journal.md) | Ce que montre l'onglet Journal | à faire |
+| [0020](0020-ce-que-montre-l-onglet-journal.md) | Ce que montre l'onglet Journal | appliqué (v3.12.0) |

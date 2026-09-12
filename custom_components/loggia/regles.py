@@ -342,6 +342,12 @@ class Regles:
         return {h: t["regle"] for h, t in list(self._tenues.items())
                 if t["module"] == module and self._tenue(h) is not None}
 
+    def tenues_toutes(self) -> dict:
+        """Ce que tient chaque regle de la maison, pour l'ecran :
+        {entity_id: {"module", "regle"}}. Les tenues echues n'y sont pas."""
+        return {h: {"module": t["module"], "regle": t["regle"]}
+                for h, t in list(self._tenues.items()) if self._tenue(h) is not None}
+
     def relacher(self, module: str, regle: str | None = None, cibles=None) -> None:
         """Rend ce qu'une regle tenait — tout le module si `regle` est None."""
         for haid, t in list(self._tenues.items()):
