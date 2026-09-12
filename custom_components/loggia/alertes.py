@@ -17,17 +17,24 @@ Forme de la configuration :
 
 Les categories sont reconnues par device_class, jamais par identifiant : le
 composant reste installable chez n'importe qui.
+
+L'envoi passe par le socle des regles (`regles.prevenir`), et c'est la que se
+joue ce qui compte : le danger — fumee, gaz, monoxyde, fuite, alarme — part en
+CRITIQUE, par-dessus le mode silencieux du telephone et les heures calmes.
+L'ouverture pendant que l'alarme est armee, elle, attend son heure comme les
+autres.
 """
 from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 
-from .store import LoggiaStore
+if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
+    from .store import LoggiaStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,15 +49,20 @@ BINAIRES: dict[str, tuple[str, str]] = {
     "safety": ("fumee", "Alerte de sûreté"),
 }
 PORTES = ("door", "window", "garage_door", "opening")
+# Ce qui reveille — le seul canal qui contourne les heures calmes.
+DANGER = ("fumee", "gaz", "co", "fuite", "alarme")
 ARMEE = ("armed_away", "armed_home", "armed_night", "armed_vacation")
 
 
 class LoggiaAlertes:
     """Ecoute les etats et pousse les alertes de surete configurees."""
 
-    def __init__(self, hass: HomeAssistant, store: LoggiaStore) -> None:
+    def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles) -> None:
         self._hass = hass
         self._store = store
+        # Le socle : c'est lui qui parle au telephone, et qui sait quand se
+        # taire et quand ne pas se taire.
+        self._regles = regles
         # Anti-rafale : un capteur qui bat (fuite au bord du seuil) ne doit pas
         # mitrailler le telephone. L'alarme declenchee passe toujours.
         self._dernier: dict[str, float] = {}
@@ -89,9 +101,6 @@ class LoggiaAlertes:
         cfg = await self._store.async_get_shared(CLE_CONFIG)
         if not isinstance(cfg, dict) or not cfg.get("actif"):
             return
-        service = str(cfg.get("service") or "").strip()
-        if not service or not self._hass.services.has_service("notify", service):
-            return
         cats = cfg.get("categories") or {}
         if not cats.get(categorie):
             return
@@ -106,17 +115,12 @@ class LoggiaAlertes:
                 return
             self._dernier[etat.entity_id] = maintenant
         nom = etat.attributes.get("friendly_name") or etat.entity_id
-        try:
-            await self._hass.services.async_call(
-                "notify",
-                service,
-                {"title": "Loggia — sûreté", "message": f"{message} : {nom}"},
-                blocking=False,
-            )
+        parti = await self._regles.prevenir(
+            "alertes", categorie, f"{message} : {nom}", titre="Loggia — sûreté",
+            critique=categorie in DANGER, motif=etat.entity_id)
+        if parti:
             _LOGGER.info("Loggia : alerte %s envoyée pour %s", categorie, etat.entity_id)
             await self._journaliser(categorie, etat.entity_id, nom, message)
-        except Exception:  # noqa: BLE001 — une alerte qui echoue ne doit rien casser d'autre
-            _LOGGER.exception("Loggia : échec d'envoi de l'alerte %s", categorie)
 
     async def _journaliser(self, categorie: str, entity_id: str, nom: str, message: str) -> None:
         """Les vingt derniers envois, gardes avec la configuration commune —

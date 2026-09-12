@@ -27,8 +27,12 @@ def lancer(coro):
 
 
 class FauxServices:
-    def __init__(self):
+    def __init__(self, existants=("mobile",)):
         self.appels = []
+        self.existants = set(existants)
+
+    def has_service(self, domaine, service):
+        return service in self.existants
 
     async def async_call(self, domaine, service, data, blocking=False, context=None):
         self.appels.append((domaine, service, dict(data), context))
@@ -62,13 +66,25 @@ def module():
     return charger("regles")
 
 
+class FauxMagasin:
+    """La partie commune du magasin : `loggia_alertes`, et rien d'autre."""
+
+    def __init__(self, alertes=None):
+        self.alertes = alertes
+
+    async def async_get_shared(self, cle, defaut=None):
+        return self.alertes if cle == "loggia_alertes" else defaut
+
+
 @pytest.fixture
 def socle(module):
     faits = []
 
-    def fabrique(depart=None):
-        r = module.Regles(FauxHass(), None)
+    def fabrique(depart=None, alertes=None, quand=None):
+        r = module.Regles(FauxHass(), FauxMagasin(alertes))
         r._depot = FauxStore(depart)
+        if quand is not None:
+            r._maintenant = lambda: quand
         faits.append(r)
         return r
 
@@ -339,3 +355,115 @@ def test_une_ligne_reelle_n_est_pas_simulee(socle):
     r = socle()
     lancer(r.agir("volets", "planning", "cover", "close_cover", ["cover.a"]))
     assert lancer(r.journal())[0]["simule"] is False
+
+
+# ── Les heures calmes ───────────────────────────────────────────────────────
+
+def test_la_plage_traverse_minuit(module):
+    from datetime import datetime
+
+    plage = {"actif": True, "debut": "22:00", "fin": "07:00"}
+    assert module.Regles.dans_la_plage(plage, datetime(2026, 9, 12, 23, 30))
+    assert module.Regles.dans_la_plage(plage, datetime(2026, 9, 12, 3, 0))
+    assert module.Regles.dans_la_plage(plage, datetime(2026, 9, 12, 22, 0))
+    assert not module.Regles.dans_la_plage(plage, datetime(2026, 9, 12, 7, 0))
+    assert not module.Regles.dans_la_plage(plage, datetime(2026, 9, 12, 12, 0))
+
+
+def test_la_plage_dans_la_journee(module):
+    from datetime import datetime
+
+    plage = {"actif": True, "debut": "13:00", "fin": "15:00"}
+    assert module.Regles.dans_la_plage(plage, datetime(2026, 9, 12, 14, 0))
+    assert not module.Regles.dans_la_plage(plage, datetime(2026, 9, 12, 23, 0))
+
+
+def test_une_plage_inactive_ou_illisible_ne_calme_rien(module):
+    from datetime import datetime
+
+    minuit = datetime(2026, 9, 12, 0, 0)
+    assert not module.Regles.dans_la_plage(None, minuit)
+    assert not module.Regles.dans_la_plage({"actif": False, "debut": "22:00", "fin": "07:00"}, minuit)
+    assert not module.Regles.dans_la_plage({"actif": True, "debut": "tard", "fin": "07:00"}, minuit)
+    assert not module.Regles.dans_la_plage({"actif": True, "debut": "22:00", "fin": "22:00"}, minuit)
+    assert not module.Regles.dans_la_plage({"actif": True, "debut": "25:00", "fin": "07:00"}, minuit)
+
+
+# ── Le telephone ────────────────────────────────────────────────────────────
+
+def alertes(calme=False):
+    return {"service": "mobile", "calme": {"actif": calme, "debut": "22:00", "fin": "07:00"}}
+
+
+def nuit():
+    from datetime import datetime
+
+    return datetime(2026, 9, 12, 2, 30)
+
+
+def jour():
+    from datetime import datetime
+
+    return datetime(2026, 9, 12, 14, 0)
+
+
+def test_prevenir_passe_par_le_telephone_choisi(socle):
+    r = socle(alertes=alertes(), quand=jour())
+    assert lancer(r.prevenir("veilles", "co2", "CO2 : 1450 ppm", motif="1450 ppm")) is True
+    assert r.hass.services.appels == [("notify", "mobile", {"title": "Loggia", "message": "CO2 : 1450 ppm"}, None)]
+    ligne = lancer(r.journal())[0]
+    assert (ligne["module"], ligne["regle"], ligne["quoi"], ligne["n"]) == ("veilles", "co2", "prevenir", 1)
+    assert ligne["motif"] == "1450 ppm"
+    assert "CO2 : 1450 ppm" in ligne["detail"]
+
+
+def test_pendant_les_heures_calmes_rien_ne_sonne(socle):
+    """La notification part — on la lira au reveil — mais ne sonne pas, et le
+    journal le dit : quand rien n'a sonne cette nuit, on sait si c'etait voulu."""
+    r = socle(alertes=alertes(calme=True), quand=nuit())
+    assert lancer(r.prevenir("veilles", "batterie", "pile a 9 %")) is True
+    charge = r.hass.services.appels[0][2]
+    assert charge["data"] == {"importance": "low", "push": {"sound": "none"}}
+    assert lancer(r.journal())[0]["detail"].startswith("silencieuse, heures calmes")
+
+
+def test_le_danger_reveille_meme_la_nuit(socle):
+    """Le SEUL canal qui contourne les heures calmes — et le mode silencieux du
+    telephone avec."""
+    r = socle(alertes=alertes(calme=True), quand=nuit())
+    assert lancer(r.prevenir("alertes", "fumee", "Fumee : cuisine", critique=True)) is True
+    data = r.hass.services.appels[0][2]["data"]
+    assert data["channel"] == "alarm_stream", "Android : sans le canal des alarmes, Ne pas deranger l'avale"
+    assert data["push"]["sound"]["critical"] == 1, "iOS : sans le son critique, le mode silencieux l'avale"
+    ligne = lancer(r.journal())[0]
+    assert ligne["quoi"] == "alerter"
+    assert ligne["detail"].startswith("critique")
+
+
+def test_hors_des_heures_calmes_la_notification_est_ordinaire(socle):
+    r = socle(alertes=alertes(calme=True), quand=jour())
+    lancer(r.prevenir("veilles", "co2", "CO2"))
+    assert "data" not in r.hass.services.appels[0][2]
+
+
+def test_personne_a_qui_parler(socle):
+    """Sans telephone choisi, rien ne part — et le journal le dit, plutot que
+    de laisser croire que la regle s'est tue."""
+    r = socle(alertes={}, quand=jour())
+    assert lancer(r.prevenir("veilles", "co2", "CO2")) is False
+    assert r.hass.services.appels == []
+    assert lancer(r.journal())[0]["detail"].startswith("personne a qui parler")
+
+
+def test_un_telephone_disparu_ne_plante_pas(socle):
+    r = socle(alertes={"service": "telephone_vendu"}, quand=jour())
+    assert lancer(r.prevenir("veilles", "co2", "CO2")) is False
+    assert r.hass.services.appels == []
+    assert "introuvable" in lancer(r.journal())[0]["detail"]
+
+
+def test_en_simulation_le_telephone_ne_sonne_pas(socle):
+    r = socle(alertes=alertes(), quand=jour())
+    assert lancer(r.prevenir("veilles", "co2", "CO2", simuler=True)) is True
+    assert r.hass.services.appels == []
+    assert lancer(r.journal())[0]["simule"] is True

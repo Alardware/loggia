@@ -223,7 +223,13 @@ export function VeillesReglages({ hass, cardSt }) {
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
             {etat.journal.slice(0, 8).map((j, i) => (
               <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
-                <span>{nomDe(j.entite)} <span style={{ color: 'var(--o-text3)' }}>{j.valeur != null ? '· ' + Math.round(j.valeur) : ''}</span></span>
+                {/* Les champs du journal COMMUN : ce qui a été fait, par quelle
+                  * règle, pourquoi — et ce qui a été dit au téléphone, avec son
+                  * régime (critique, silencieuse). */}
+                <span style={{ minWidth: 0 }}>
+                  {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
+                  {j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
+                </span>
                 <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString()}</span>
               </div>
             ))}

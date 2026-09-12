@@ -218,3 +218,36 @@ test('le journal dit pourquoi, et qui l’emporte', () => {
   assert.ok(src.includes("{j.motif ? ' · ' + j.motif : ''}"), 'le motif ne s’affiche plus');
   assert.ok(src.includes("etat.priorites.map(nomPriorite).join(' › ')"), 'l’ordre de priorité ne s’affiche plus');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Les heures calmes, et le journal commun dans les veilles (12/09/2026).
+//
+// Le socle (regles.py) sait se taire ; encore faut-il pouvoir le lui dire.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('les heures calmes se règlent à côté du téléphone', () => {
+  const par = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
+  // Depuis le défaut, qui vit juste au-dessus de la carte, jusqu'à la section
+  // suivante : la carte entière, et rien d'autre.
+  const debut = par.indexOf('const ALERTES_DEF');
+  assert.notEqual(debut, -1, 'la carte des alertes a disparu');
+  const carte = par.slice(debut, par.indexOf('/* ════════════ VUES PERSONNALISÉES', debut));
+  assert.ok(carte.includes("calme: { actif: false, debut: '22:00', fin: '07:00' }"), 'plus de défaut pour les heures calmes');
+  assert.ok(carte.includes('save({ calme: { ...cfg.calme, actif: !cfg.calme.actif } })'), 'plus d’interrupteur');
+  // Deux heures, saisies comme des heures : le clavier du téléphone s'ouvre
+  // sur un sélecteur d'heure, pas sur des lettres.
+  assert.equal((carte.match(/type="time"/g) || []).length, 2, 'il faut un début ET une fin');
+  assert.ok(carte.includes('debut: e.target.value') && carte.includes('fin: e.target.value'));
+  // Et le rechargement garde la plage : sans cette fusion, rouvrir la page
+  // remettait 22:00–07:00 quoi qu'on ait réglé.
+  assert.ok(carte.includes('calme: { ...d.calme, ...(c.calme || {}) }'), 'la plage réglée ne survit pas au rechargement');
+});
+
+test('le journal des veilles lit les champs communs', () => {
+  const vei = readFileSync(join(RACINE, 'src', 'views', 'veilles.jsx'), 'utf8');
+  // Les veilles écrivent dans le journal du socle : `quoi`, `regle`, `motif`,
+  // `detail` — plus `entite` ni `valeur`, qui n'existent plus.
+  assert.ok(!vei.includes('nomDe(j.entite)'), 'le journal lit encore un champ qui n’existe plus');
+  assert.ok(vei.includes("{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}"));
+  assert.ok(vei.includes('{j.simule && <span'), 'une ligne simulée se lirait comme un vrai signalement');
+});

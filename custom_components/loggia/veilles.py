@@ -29,7 +29,6 @@ sonnerait toute la journee.
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
@@ -114,14 +113,16 @@ def en_dessous(valeur, seuil, deja_signale: bool) -> bool:
 class LoggiaVeilles:
     """Surveille l'air, les piles et le tarif, et le dit une seule fois."""
 
-    def __init__(self, hass: HomeAssistant, store: "LoggiaStore") -> None:
+    def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
         self.store = store
+        # Le socle commun : journal, geste manuel, et le telephone — voir
+        # `regles.py`. Tout ce qui sort d'ici passe par lui.
+        self.regles = regles
         self.cfg: dict[str, Any] = {}
         # Ce qui a deja ete signale, pour ne pas le redire.
         self.signales: set = set()
         self.creuses_en_cours = False
-        self.journal: list[dict[str, Any]] = []
         self._defait: list[Any] = []
         hass.async_create_task(self._async_demarrer())
 
@@ -151,6 +152,9 @@ class LoggiaVeilles:
             self._defait.append(
                 async_track_state_change_event(self.hass, sorted(set(suivis)), self._sur_etat)
             )
+        # Ce que ces veilles PILOTENT — la ventilation, les prises — est declare
+        # au socle : une main posee dessus les gele.
+        self.regles.suivre("veilles", list(co2.get("ventilation") or []) + list(creuses.get("prises") or []))
 
         # Les piles ne se surveillent pas a l'evenement : elles changent
         # lentement, et une entite qui tombe a 14 % ne merite pas qu'on ecoute
@@ -200,12 +204,14 @@ class LoggiaVeilles:
             if au_dessus(valeur, c.get("seuil", 1200), deja):
                 if not deja:
                     self.signales.add(cle)
+                    motif = "%d ppm" % int(valeur)
                     await self._async_prevenir(
-                        "%s : %d ppm, il faut aerer" % (self._nom(haid, etats), int(valeur)))
+                        "co2", "%s : %d ppm, il faut aerer" % (self._nom(haid, etats), int(valeur)),
+                        motif=motif)
                     ventilation = c.get("ventilation") or []
                     if ventilation:
-                        await self._async_service("homeassistant", "turn_on", ventilation)
-                    self._noter("co2", haid, valeur)
+                        await self._async_service("homeassistant", "turn_on", ventilation,
+                                                  regle="co2", quoi="ventiler", motif=motif)
             elif deja:
                 self.signales.discard(cle)
 
@@ -223,8 +229,8 @@ class LoggiaVeilles:
                 if not deja:
                     self.signales.add(cle)
                     await self._async_prevenir(
-                        "%s : pile a %d %%" % (self._nom(haid, etats), int(valeur)))
-                    self._noter("batterie", haid, valeur)
+                        "batterie", "%s : pile a %d %%" % (self._nom(haid, etats), int(valeur)),
+                        motif="%d %%" % int(valeur))
             elif deja:
                 # Pile changee : on redevient capable de prevenir.
                 self.signales.discard(cle)
@@ -244,11 +250,13 @@ class LoggiaVeilles:
         dedans = valeur == attendu
         if dedans and not self.creuses_en_cours:
             self.creuses_en_cours = True
-            await self._async_prevenir("Heures creuses : c'est le moment de lancer les machines")
+            await self._async_prevenir(
+                "creuses", "Heures creuses : c'est le moment de lancer les machines",
+                motif=attendu)
             prises = c.get("prises") or []
             if prises:
-                await self._async_service("homeassistant", "turn_on", prises)
-            self._noter("creuses", c["entite"], None)
+                await self._async_service("homeassistant", "turn_on", prises,
+                                          regle="creuses", quoi="allumer", motif=attendu)
         elif not dedans:
             self.creuses_en_cours = False
 
@@ -258,33 +266,16 @@ class LoggiaVeilles:
         attrs = getattr(st, "attributes", None) or {}
         return str(attrs.get("friendly_name") or haid)
 
-    async def _async_prevenir(self, message: str) -> None:
-        """Passe par le service notify deja choisi dans Parametres > Alertes."""
-        cfg = await self.store.async_get_shared(CLE_ALERTES, None)
-        service = str((cfg or {}).get("service") or "").strip()
-        if not service:
-            _LOGGER.debug("Loggia veilles : aucun service de notification choisi")
-            return
-        try:
-            if not self.hass.services.has_service("notify", service):
-                _LOGGER.warning("Loggia veilles : notify.%s n'existe pas", service)
-                return
-            await self.hass.services.async_call(
-                "notify", service, {"title": "Loggia", "message": message}, blocking=False)
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia veilles : notification impossible")
+    async def _async_prevenir(self, regle: str, message: str, motif: str = "") -> bool:
+        """Par le socle : le telephone choisi dans Parametres > Alertes, et les
+        heures calmes — ces veilles ne reveillent personne, elles attendent."""
+        return await self.regles.prevenir("veilles", regle, message, motif=motif)
 
-    async def _async_service(self, domaine: str, service: str, cibles: list) -> None:
-        try:
-            await self.hass.services.async_call(
-                domaine, service, {"entity_id": cibles}, blocking=False)
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia veilles : %s.%s a echoue", domaine, service)
-
-    def _noter(self, quoi: str, entite: str, valeur) -> None:
-        self.journal.insert(0, {"quoi": quoi, "entite": entite, "valeur": valeur,
-                                "ts": time.time()})
-        del self.journal[30:]
+    async def _async_service(self, domaine: str, service: str, cibles: list, *,
+                             regle: str = "", quoi: str = "", motif: str = "") -> list:
+        """Commande par le socle : il ecarte ce qu'une main tient, et note."""
+        return await self.regles.agir("veilles", regle, domaine, service, cibles,
+                                      quoi=quoi or service, motif=motif)
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     async def async_config(self) -> dict[str, Any]:
@@ -310,7 +301,7 @@ class LoggiaVeilles:
             # Sans service de notification, ces veilles n'ont personne a qui parler.
             "notification": bool(str((alertes or {}).get("service") or "").strip()),
             "signales": sorted(self.signales),
-            "journal": list(self.journal),
+            "journal": await self.regles.journal(limite=40, module="veilles"),
         }
 
     async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:

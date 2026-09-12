@@ -219,7 +219,10 @@ const PAR_HELPS = () => [
  * L'écoute vit dans le COMPOSANT serveur (alertes.py) : le dashboard peut être
  * fermé, l'alerte part quand même. Ici on ne fait que régler et tester. La
  * configuration s'écrit dans la partie commune du store (clé loggia_alertes). */
-const ALERTES_DEF = () => ({ actif: false, service: '', categories: { fumee: true, gaz: true, co: true, fuite: true, alarme: true, portes: false }, cooldown_min: 5 });
+const ALERTES_DEF = () => ({ actif: false, service: '', categories: { fumee: true, gaz: true, co: true, fuite: true, alarme: true, portes: false }, cooldown_min: 5,
+  // Les heures calmes : entre ces heures, rien ne sonne. Le socle des règles
+  // les lit (regles.py) ; seul le danger passe quand même.
+  calme: { actif: false, debut: '22:00', fin: '07:00' } });
 function AlertesTele({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const [cfg, setCfg] = useState(null);
@@ -232,7 +235,7 @@ function AlertesTele({ hass, cardSt }) {
     h.callWS({ type: 'loggia/config/get' }).then(r => {
       const c = (r && r.config && r.config.loggia_alertes) || {};
       const d = ALERTES_DEF();
-      setCfg({ ...d, ...c, categories: { ...d.categories, ...(c.categories || {}) } });
+      setCfg({ ...d, ...c, categories: { ...d.categories, ...(c.categories || {}) }, calme: { ...d.calme, ...(c.calme || {}) } });
       const j = r && r.config && r.config.loggia_alertes_journal;
       if (Array.isArray(j)) setJournal(j);
     }).catch(() => setCfg(ALERTES_DEF()));
@@ -290,6 +293,22 @@ function AlertesTele({ hass, cardSt }) {
         {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
         <datalist id="loggia-notify-svcs">{services.map(s => <option key={s} value={s} />)}</datalist>
       </div>
+      {/* Entre ces heures, les notifications arrivent en silence — on les lit
+        * au réveil. Une seule chose passe quand même, et par-dessus le mode
+        * silencieux du téléphone : le danger. Fumée, gaz, CO, fuite, alarme. */}
+      <div className="o-optrow" style={ligne}>
+        {lbl(tr('Heures calmes'), tr('Rien ne sonne entre ces heures ; seul le danger passe.'))}
+        <Tgl on={!!cfg.calme.actif} cb={() => save({ calme: { ...cfg.calme, actif: !cfg.calme.actif } })} label={tr('Heures calmes')} />
+      </div>
+      {cfg.calme.actif && (
+        <div className="o-optrow" style={ligne}>
+          {lbl(tr('De … à'), tr('La plage peut traverser minuit.'))}
+          <input aria-label={tr('Début des heures calmes')} type="time" value={cfg.calme.debut || ''} onChange={e => save({ calme: { ...cfg.calme, debut: e.target.value } })}
+            style={{ ...cvInp, width: 'auto', padding: '9px 12px', fontSize: 13 }} />
+          <input aria-label={tr('Fin des heures calmes')} type="time" value={cfg.calme.fin || ''} onChange={e => save({ calme: { ...cfg.calme, fin: e.target.value } })}
+            style={{ ...cvInp, width: 'auto', padding: '9px 12px', fontSize: 13 }} />
+        </div>
+      )}
       {CATS.map(([k, t, d]) => (
         <div key={k} className="o-optrow" style={ligne}>
           {lbl(t, d)}

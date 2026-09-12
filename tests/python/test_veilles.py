@@ -42,7 +42,7 @@ class FauxServices:
     def has_service(self, domaine, service):
         return service in self.existants
 
-    async def async_call(self, domaine, service, data, blocking=False):
+    async def async_call(self, domaine, service, data, blocking=False, context=None):
         self.appels.append((domaine, service, dict(data)))
 
 
@@ -68,13 +68,20 @@ def module():
 
 
 @pytest.fixture
-def creer(module, store_module):
+def regles_module():
+    return charger("regles")
+
+
+@pytest.fixture
+def creer(module, store_module, regles_module):
     faits = []
 
-    def fabrique(config=None, etats=None, notify='mobile', services=None):
+    def fabrique(config=None, etats=None, notify='mobile', services=None, calme=None):
         partage = {"loggia_veilles": config or {}}
         if notify:
             partage["loggia_alertes"] = {"service": notify}
+            if calme:
+                partage["loggia_alertes"]["calme"] = calme
         magasin = store_module.LoggiaStore.__new__(store_module.LoggiaStore)
         magasin._store = FauxStore({"users": {}, "shared": partage, "migrated": True})
         magasin._ancien = FauxStore(None)
@@ -87,8 +94,11 @@ def creer(module, store_module):
         v.cfg = lancer(v.async_config())
         v.signales = set()
         v.creuses_en_cours = False
-        v.journal = []
         v._defait = []
+        # Le socle commun, un vrai : c'est lui qui parle au telephone et qui
+        # tient le journal, et ces tests doivent voir ce que verra la maison.
+        v.regles = regles_module.Regles(v.hass, magasin)
+        v.regles._depot = FauxStore(None)
         faits.append(v)
         return v
 
@@ -297,3 +307,68 @@ def test_l_etat_propose_ce_que_la_decouverte_trouve(creer):
 def test_l_etat_dit_quand_personne_n_ecoute(creer):
     v = creer({}, {}, notify=None)
     assert lancer(v.async_etat())['notification'] is False
+
+
+# ── Sur le socle ────────────────────────────────────────────────────────────
+
+def test_les_veilles_attendent_leur_heure(creer):
+    """Une pile a plat a trois heures du matin ne reveille personne : la
+    notification part silencieuse, et le journal le dit."""
+    from datetime import datetime
+
+    v = creer({'co2': {'actif': True, 'seuil': 1200}}, AIR_MAUVAIS,
+              calme={'actif': True, 'debut': '22:00', 'fin': '07:00'})
+    v.regles._maintenant = lambda: datetime(2026, 9, 12, 3, 0)
+    lancer(v._async_co2())
+    appel = v.hass.services.appels[0]
+    assert appel[0] == 'notify'
+    assert appel[2]['data'] == {'importance': 'low', 'push': {'sound': 'none'}}
+    assert lancer(v.regles.journal())[0]['detail'].startswith('silencieuse')
+
+
+def test_le_journal_commun_dit_ce_que_la_veille_a_dit_et_pourquoi(creer):
+    v = creer({'co2': {'actif': True, 'seuil': 1200, 'ventilation': ['switch.vmc']}}, AIR_MAUVAIS)
+    lancer(v._async_co2())
+    lignes = lancer(v.regles.journal(module='veilles'))
+    assert [l['quoi'] for l in lignes] == ['ventiler', 'prevenir']
+    assert lignes[0]['motif'] == '1450 ppm'
+    assert lignes[0]['cibles'] == ['switch.vmc']
+    assert 'CO2 chambre' in lignes[1]['detail']
+
+
+def test_l_etat_montre_le_journal_commun(creer):
+    v = creer({'co2': {'actif': True, 'seuil': 1200}}, AIR_MAUVAIS)
+    lancer(v._async_co2())
+    etat = lancer(v.async_etat())
+    assert etat['journal'][0]['module'] == 'veilles'
+
+
+def test_une_main_sur_la_ventilation_la_garde(creer):
+    """La VMC coupee a la main reste coupee : le socle gele ce qu'on touche."""
+    from homeassistant.core import Context
+
+    v = creer({'co2': {'actif': True, 'seuil': 1200, 'ventilation': ['switch.vmc']}}, AIR_MAUVAIS)
+    # C'est la PRODUCTION qui declare au socle ce qu'elle pilote — pas le test.
+    # Et on verifie la declaration elle-meme : le socle gele tout ce que
+    # Home Assistant lui rapporte, et HA ne rapporte que ce qui est declare.
+    lancer(v._async_reabonner())
+    assert 'switch.vmc' in v.regles._pilotees.get('veilles', set()), 'la ventilation n est pas declaree au socle : une main dessus passerait inapercue'
+
+    class Ev:
+        data = {'entity_id': 'switch.vmc'}
+        context = Context(user_id='u1')
+
+    v.regles._sur_changement(Ev())
+    lancer(v._async_co2())
+    assert ('homeassistant', 'turn_on', {'entity_id': ['switch.vmc']}) not in v.hass.services.appels
+
+
+def test_le_composant_transmet_le_socle_aux_veilles_et_aux_alertes():
+    from conftest import COMPOSANT
+
+    texte = (COMPOSANT / '__init__.py').read_text(encoding='utf-8')
+    assert 'data["veilles"] = LoggiaVeilles(hass, data["store"], data.get("regles"))' in texte
+    assert 'data["alertes"] = LoggiaAlertes(hass, data["store"], data["regles"])' in texte
+    # Et ni l'un ni l'autre ne naissent sans lui.
+    assert 'if not data.get("veilles") and data.get("store") and data.get("regles"):' in texte
+    assert 'if not data.get("alertes") and data.get("store") and data.get("regles"):' in texte

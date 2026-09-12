@@ -123,11 +123,11 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
     # Alertes de surete poussees sur telephone. Meme regime que le WebSocket :
     # le listener vit jusqu'a l'arret du process, on ne l'enregistre qu'une fois,
     # et son absence ne doit pas empecher le reste de fonctionner.
-    if not data.get("alertes") and data.get("store"):
+    if not data.get("alertes") and data.get("store") and data.get("regles"):
         try:
             from .alertes import LoggiaAlertes
 
-            data["alertes"] = LoggiaAlertes(hass, data["store"])
+            data["alertes"] = LoggiaAlertes(hass, data["store"], data["regles"])
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : alertes de sûreté indisponibles")
 
@@ -182,11 +182,11 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
 
     # Trois veilles : l'air, les piles, le tarif. Elles parlent par le service
     # de notification deja choisi dans Alertes.
-    if not data.get("veilles") and data.get("store"):
+    if not data.get("veilles") and data.get("store") and data.get("regles"):
         try:
             from .veilles import LoggiaVeilles
 
-            data["veilles"] = LoggiaVeilles(hass, data["store"])
+            data["veilles"] = LoggiaVeilles(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : veilles indisponibles")
 

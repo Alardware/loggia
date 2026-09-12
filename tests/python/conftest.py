@@ -81,6 +81,7 @@ def _poser_doublures() -> None:
     # pas seulement une entree de `sys.modules` : il faut relier les deux.
     import datetime as _dt
     sys.modules["homeassistant.util.dt"].now = _dt.datetime.now
+    sys.modules["homeassistant.util.dt"].utcnow = lambda: _dt.datetime.now(_dt.timezone.utc)
     # Ces helpers renvoient normalement une fonction de desabonnement : la
     # doublure en rend une qui ne fait rien, pour que le code de production
     # puisse la stocker et l'appeler comme d'habitude.

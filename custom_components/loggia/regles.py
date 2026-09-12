@@ -15,7 +15,18 @@ memes defauts s'y repetaient :
 
 Ce fichier tient ces choses une fois pour toutes. Une regle qui passe par
 `agir()` herite du journal, du respect du geste manuel, des priorites
-declarees et du mode simulation — sans une ligne de plus.
+declarees et du mode simulation — sans une ligne de plus. `prevenir()` fait de
+meme pour ce qui se dit au telephone : un seul canal, deux regimes.
+
+── Les heures calmes, et le seul canal qui les contourne ───────────────────
+
+Entre deux heures — la nuit, en general — rien ne doit sonner. Une regle qui
+reveille la maison pour une pile a plat se fait debrancher dans la semaine.
+Les notifications partent quand meme, silencieuses : on les lira au reveil.
+
+Une seule chose passe par-dessus, et par-dessus le mode silencieux du
+telephone avec : le DANGER. Fumee, gaz, monoxyde, fuite, alarme. Tout le reste
+attend.
 
 ── Ce que « geste manuel » veut dire, exactement ────────────────────────────
 
@@ -31,6 +42,7 @@ d'abandon de ce genre de systeme, et il ne se corrige pas regle par regle.
 """
 from __future__ import annotations
 
+import copy
 import logging
 import time
 from typing import Any
@@ -62,6 +74,23 @@ GEL_DEFAUT = 30 * 60
 # Combien de temps une tenue survit si la regle qui l'a prise oublie de la
 # rendre. Un filet, pas un reglage : les regles rendent leurs tenues.
 TENUE_MAX = 12 * 3600
+
+# La configuration des alertes — le telephone choisi, et les heures calmes —
+# vit sous cette cle, ecrite par Parametres > Alertes.
+CLE_ALERTES = "loggia_alertes"
+
+# Ce qui fait sonner une notification par-dessus le mode silencieux du
+# telephone. Android et iOS lisent chacun leurs cles et ignorent les autres :
+# on envoie les deux. Android : le canal « alarm_stream » sonne sur le flux
+# des alarmes, que « Ne pas deranger » ne coupe pas. iOS : le son critique,
+# que l'app compagnon est autorisee a emettre.
+CRITIQUE: dict[str, Any] = {
+    "ttl": 0, "priority": "high", "channel": "alarm_stream", "importance": "high",
+    "push": {"sound": {"name": "default", "critical": 1, "volume": 1.0},
+             "interruption-level": "critical"},
+}
+# Et ce qui la rend silencieuse : elle arrive, elle ne sonne pas.
+SILENCIEUSE: dict[str, Any] = {"importance": "low", "push": {"sound": "none"}}
 
 
 class Regles:
@@ -270,6 +299,105 @@ class Regles:
             if cibles is not None and haid not in cibles:
                 continue
             del self._tenues[haid]
+
+    # ── Le telephone ───────────────────────────────────────────────────────
+    async def _alertes(self) -> dict:
+        try:
+            cfg = await self.store.async_get_shared(CLE_ALERTES, None)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia regles : configuration des alertes illisible")
+            return {}
+        return cfg if isinstance(cfg, dict) else {}
+
+    def _maintenant(self):
+        from homeassistant.util import dt as dt_util
+
+        return dt_util.now()
+
+    @staticmethod
+    def _minutes(hhmm):
+        """« 22:30 » -> 1350. None si ce n'est pas une heure."""
+        try:
+            h, m = str(hhmm).strip().split(":")[:2]
+            h, m = int(h), int(m)
+        except (TypeError, ValueError, AttributeError):
+            return None
+        if not (0 <= h < 24 and 0 <= m < 60):
+            return None
+        return h * 60 + m
+
+    @staticmethod
+    def dans_la_plage(plage, quand) -> bool:
+        """`quand` tombe-t-il dans les heures calmes `plage` ?
+
+        La plage traverse minuit le plus souvent — 22 h a 7 h — et c'est le
+        cas qui se rate : « entre 22 et 7 » ne se teste pas avec un simple
+        encadrement.
+        """
+        if not isinstance(plage, dict) or not plage.get("actif"):
+            return False
+        debut = Regles._minutes(plage.get("debut", "22:00"))
+        fin = Regles._minutes(plage.get("fin", "07:00"))
+        if debut is None or fin is None or debut == fin:
+            return False
+        t = quand.hour * 60 + quand.minute
+        if debut < fin:
+            return debut <= t < fin
+        return t >= debut or t < fin
+
+    async def calme(self) -> bool:
+        """Est-on dans les heures calmes ? Pour qui veut se taire — une voix
+        sur une enceinte, une lumiere qui clignote."""
+        return self.dans_la_plage((await self._alertes()).get("calme"), self._maintenant())
+
+    async def prevenir(self, module: str, regle: str, message: str, *,
+                       titre: str = "Loggia", critique: bool = False,
+                       motif: str = "", simuler: bool = False) -> bool:
+        """Previent quelqu'un, par le telephone choisi dans Parametres > Alertes.
+
+        Deux regimes, et rien entre les deux :
+
+          * CRITIQUE — fumee, gaz, monoxyde, fuite, alarme. Passe toujours, et
+            par-dessus le mode silencieux du telephone. C'est le SEUL canal
+            qui contourne les heures calmes ;
+          * tout le reste. Pendant les heures calmes, la notification part
+            quand meme — on la lira au reveil — mais ne sonne pas.
+
+        Chaque envoi laisse une ligne au journal, avec son regime : quand rien
+        n'a sonne cette nuit, on sait si c'etait voulu. Rend vrai si quelque
+        chose est parti.
+        """
+        await self._charger()
+        cfg = await self._alertes()
+        service = str(cfg.get("service") or "").strip()
+        quoi = "alerter" if critique else "prevenir"
+        if not service:
+            await self.noter(module, regle, quoi, n=0, motif=motif,
+                             detail="personne a qui parler · " + message)
+            return False
+        if not self.hass.services.has_service("notify", service):
+            await self.noter(module, regle, quoi, n=0, motif=motif,
+                             detail="notify.%s introuvable · %s" % (service, message))
+            return False
+        charge: dict[str, Any] = {"title": titre, "message": message}
+        regime = ""
+        if critique:
+            charge["data"] = copy.deepcopy(CRITIQUE)
+            regime = "critique · "
+        elif self.dans_la_plage(cfg.get("calme"), self._maintenant()):
+            charge["data"] = copy.deepcopy(SILENCIEUSE)
+            regime = "silencieuse, heures calmes · "
+        if not simuler:
+            try:
+                await self.hass.services.async_call("notify", service, charge, blocking=False)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Loggia regles : notify.%s a echoue", service)
+                await self.noter(module, regle, quoi, n=0, motif=motif,
+                                 detail="envoi impossible · " + message)
+                return False
+        await self.noter(module, regle, quoi, n=1, motif=motif,
+                         detail=regime + message, simule=simuler)
+        return True
 
     # ── L'entonnoir ────────────────────────────────────────────────────────
     async def agir(self, module: str, regle: str, domaine: str, service: str,
