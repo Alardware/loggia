@@ -1,6 +1,6 @@
 /* Volets : régler ce que Loggia fait tout seul.
  *
- * Trois règles, chacune débrayable, tenues par le composant serveur — pas par
+ * Quatre règles, chacune débrayable, tenues par le composant serveur — pas par
  * cette page. Elles continuent donc de tourner dashboard fermé, ce qui est
  * bien le moins pour un volet qui doit descendre au coucher du soleil.
  *
@@ -84,12 +84,13 @@ export function VoletsReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const { etat, setEtat, err, setErr, vivant } =
     useEtatServeur(hass, 'loggia/volets/etat', 5000, tr('Réglages indisponibles.'));
-  const [picker, setPicker] = useState(null);   // { section, champ, domaines }
+  const [picker, setPicker] = useState(null);   // { section, champ, domaines } — ou { domaines, poser }
   /* Un pli par regle — avec les autres etats : un hook ne peut pas vivre
    * apres un retour conditionnel. */
   const [pliPlan, plierPlan] = usePli('volets:planning');
   const [pliSol, plierSol] = usePli('volets:soleil');
   const [pliVent, plierVent] = usePli('volets:vent');
+  const [pliBaies, plierBaies] = usePli('volets:baies');
 
 
   const cfg = (etat && etat.config) || null;
@@ -130,6 +131,7 @@ export function VoletsReglages({ hass, cardSt }) {
   const plan = cfg.planning || {};
   const sol = cfg.soleil || {};
   const vent = cfg.vent || {};
+  const baies = cfg.baies || {};
   const simu = cfg.simulation || {};
   const titre = { fontSize: 15, fontWeight: 700 };
   const label = { fontSize: 12, fontWeight: 700, marginBottom: 6 };
@@ -392,6 +394,43 @@ export function VoletsReglages({ hass, cardSt }) {
         )}
       </div>
 
+      {/* ── Volet bloqué ── */}
+      {/* On ne ferme pas sur une porte ouverte : quelqu'un est peut-être
+        * dehors. La fermeture attend que la baie se referme, jamais au-delà
+        * du matin. Un capteur muet ne retient rien (ADR 0010). */}
+      <div style={cardSt}>
+        <RegleEntete nom={tr('Volet bloqué')}
+          desc={tr('Ne pas fermer un volet tant que la porte ou la fenêtre devant lui est ouverte : la fermeture attend qu’elle se referme.')}
+          on={baies.actif} cb={() => enregistrer({ baies: { actif: !baies.actif } })} plie={pliBaies} onPlier={plierBaies} zone="volets-baies" />
+        {baies.actif && !pliBaies && (
+          <div id="volets-baies">
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8, marginBottom: 4 }}>
+              {tr('Un volet sans porte ni fenêtre désignée ferme comme avant. Un capteur muet ne retient rien : le volet ferme, et le journal le dit.')}
+            </div>
+            {covers.length === 0 && (
+              <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun volet trouvé dans Home Assistant.')}</div>
+            )}
+            {covers.map(c => {
+              const capteur = (baies.volets || {})[c.id] || '';
+              const nomCapteur = capteur && hass && hass.states && hass.states[capteur] ? cvName(hass.states[capteur], capteur) : capteur;
+              const retirer = () => { const v = { ...(baies.volets || {}) }; delete v[c.id]; enregistrer({ baies: { volets: v } }); };
+              return (
+                <div key={c.id} style={{ padding: '10px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 7 }}>{c.nom}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                    <button onClick={() => setPicker({ domaines: ['binary_sensor'], poser: (id) => enregistrer({ baies: { volets: { ...(baies.volets || {}), [c.id]: id } } }) })}
+                      style={{ ...champ, cursor: 'pointer', color: capteur ? 'var(--o-text1)' : 'var(--o-text3)' }}>
+                      {capteur ? nomCapteur : tr('Choisir la porte ou la fenêtre…')}
+                    </button>
+                    {capteur && <button onClick={retirer} style={puce(false)}>{tr('aucune')}</button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* ── Observer sans agir ── */}
       {/* Un MODE, pas une règle : il ne commande rien et n'a rien à replier.
         * D'où la bascule seule, et non l'en-tête des règles — dont chacun
@@ -443,7 +482,7 @@ export function VoletsReglages({ hass, cardSt }) {
             * clic — la regle vise les champs focalises au CHARGEMENT d'une page,
             * ce qui n'est pas le cas. */}
             <EntPicker hass={hass} autoFocus domaines={picker.domaines}
-            onPick={(id) => { enregistrer({ [picker.section]: { [picker.champ]: id } }); setPicker(null); }} />
+            onPick={(id) => { if (picker.poser) picker.poser(id); else enregistrer({ [picker.section]: { [picker.champ]: id } }); setPicker(null); }} />
         </BottomSheet>
       )}
     </div>

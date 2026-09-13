@@ -126,7 +126,7 @@ export function JournalReglages({ hass, cardSt }) {
               <div key={'attente-' + id} style={ligne}>
                 <span style={{ minWidth: 0 }}>
                   <span style={etiquette}>{nom(id)}</span>
-                  <span style={{ color: 'var(--o-text3)' }}>{tr('en attente')} · {attentes[id].sens}{attentes[id].expire ? ' · ' + tr('jusqu’à') + ' ' + quand(attentes[id].expire) : ''}</span>
+                  <span style={{ color: 'var(--o-text3)' }}>{tr('en attente')} · {attentes[id].sens}{attentes[id].motif ? ' · ' + attentes[id].motif : ''}{attentes[id].expire ? ' · ' + tr('jusqu’à') + ' ' + quand(attentes[id].expire) : ''}</span>
                 </span>
               </div>
             ))}

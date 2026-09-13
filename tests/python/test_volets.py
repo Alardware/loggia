@@ -1078,3 +1078,147 @@ def test_le_vent_est_une_question_de_surete(module):
     assert module.PRIORITES["vent"] >= regles.ECHELLE["surete"]
     for autre in ("coucher", "soleil", "lever"):
         assert module.PRIORITES[autre] < regles.ECHELLE["surete"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Volet bloque (§1, ADR 0010) : on ne ferme pas sur une baie ouverte.
+#
+# Une porte-fenetre ouverte, quelqu'un sur la terrasse, et le coucher du
+# soleil qui ferme le volet dessus. La regle retient la fermeture tant que la
+# baie est ouverte et la rejoue quand elle se referme — jamais au-dela du
+# matin. Un capteur muet ne vaut ni ouvert ni ferme : on ferme, et on le dit.
+# ─────────────────────────────────────────────────────────────────────────────
+
+BAIE = {"binary_sensor.baie": FauxEtat("on", {"device_class": "window"})}
+CFG_BAIE = {"planning": {"actif": True, "mode": "auto"},
+            "baies": {"actif": True, "volets": {"cover.salon": "binary_sensor.baie"}}}
+
+
+def test_la_fermeture_attend_que_la_baie_se_referme(creer):
+    v = creer(CFG_BAIE, {**VOLET, **BAIE})
+    lancer(v._async_planifie("fermer"))
+    assert v.hass.services.appels == [], "on a ferme un volet sur une baie ouverte"
+    assert v.attente["cover.salon"]["sens"] == "fermer"
+    assert v.attente["cover.salon"]["motif"] == "baie ouverte"
+    ligne = lancer(v.regles.journal())[0]
+    assert ligne["n"] == 0
+    assert "baie ouverte" in ligne["detail"]
+
+
+def test_la_baie_refermee_ferme_le_volet(creer):
+    v = creer(CFG_BAIE, {**VOLET, **BAIE})
+    lancer(v._async_planifie("fermer"))
+    v.hass.states.table["binary_sensor.baie"] = FauxEtat("off", {})
+    lancer(v._async_rattraper())
+    assert [a[1] for a in v.hass.services.appels] == ["close_cover"]
+    assert v.attente == {}
+    ligne = lancer(v.regles.journal())[0]
+    assert ligne["regle"] == "rattrapage"
+    assert ligne["motif"] == "baie refermee"
+
+
+def test_une_baie_encore_ouverte_retient_l_ordre(creer):
+    v = creer(CFG_BAIE, {**VOLET, **BAIE})
+    lancer(v._async_planifie("fermer"))
+    # Quelque chose a bouge — pas la baie, toujours ouverte.
+    lancer(v._async_rattraper())
+    assert v.hass.services.appels == []
+    assert "cover.salon" in v.attente
+
+
+def test_un_capteur_muet_ne_bloque_pas_et_se_dit(creer):
+    """ADR 0010 : dans le doute, on ferme — et le journal nomme le capteur."""
+    v = creer(CFG_BAIE, {**VOLET, "binary_sensor.baie": FauxEtat("unavailable")})
+    lancer(v._async_planifie("fermer"))
+    assert [a[1] for a in v.hass.services.appels] == ["close_cover"]
+    assert v.attente == {}
+    assert any("capteur indisponible : binary_sensor.baie" in l["detail"]
+               for l in lancer(v.regles.journal()))
+
+
+def test_un_capteur_devenu_muet_libere_l_ordre(creer):
+    """La baie etait ouverte au coucher ; la pile du capteur lache dans la
+    nuit. Muet n'est pas ouvert : l'ordre part, et dit pourquoi."""
+    v = creer(CFG_BAIE, {**VOLET, **BAIE})
+    lancer(v._async_planifie("fermer"))
+    v.hass.states.table["binary_sensor.baie"] = FauxEtat("unavailable")
+    lancer(v._async_rattraper())
+    assert [a[1] for a in v.hass.services.appels] == ["close_cover"]
+    assert lancer(v.regles.journal())[0]["motif"] == "capteur indisponible"
+
+
+def test_la_regle_debrayee_ne_retient_rien(creer):
+    cfg = {"planning": {"actif": True, "mode": "auto"},
+           "baies": {"actif": False, "volets": {"cover.salon": "binary_sensor.baie"}}}
+    v = creer(cfg, {**VOLET, **BAIE})
+    lancer(v._async_planifie("fermer"))
+    assert [a[1] for a in v.hass.services.appels] == ["close_cover"]
+    assert v.attente == {}
+
+
+def test_l_ouverture_du_matin_ignore_la_baie(creer):
+    """La regle retient les FERMETURES : ouvrir sur une baie ouverte ne bloque
+    personne dehors."""
+    v = creer(CFG_BAIE, {**VOLET, **BAIE})
+    lancer(v._async_planifie("ouvrir"))
+    assert [a[1] for a in v.hass.services.appels] == ["open_cover"]
+    assert v.attente == {}
+
+
+def test_le_volet_revenu_attend_encore_sa_baie(creer):
+    """Un ordre retenu par la baie ne repart pas parce que le volet a bouge."""
+    v = creer(CFG_BAIE, {**VOLET, **BAIE})
+    lancer(v._async_planifie("fermer"))
+    v.hass.states.table["cover.salon"] = FauxEtat("open", {"supported_features": 15, "current_position": 60})
+    lancer(v._async_rattraper())
+    assert v.hass.services.appels == []
+    assert v.attente["cover.salon"]["motif"] == "baie ouverte"
+
+
+def test_le_soleil_ne_baisse_pas_sur_une_baie_ouverte(creer):
+    v = creer({**cfg_soleil(), "baies": CFG_BAIE["baies"]}, {**SOLEIL_HAUT, **CHAUD, **VOLET, **BAIE})
+    lancer(v._async_evaluer())
+    assert v.hass.services.appels == []
+    assert v.abaisses == {}
+    # La baie se referme : au prochain passage du soleil, la protection baisse.
+    v.hass.states.table["binary_sensor.baie"] = FauxEtat("off", {})
+    lancer(v._async_evaluer())
+    assert [a[1] for a in v.hass.services.appels] == ["set_cover_position"]
+    assert "cover.salon" in v.abaisses
+
+
+def test_le_soleil_baisse_sur_un_capteur_muet_et_le_dit(creer):
+    v = creer({**cfg_soleil(), "baies": CFG_BAIE["baies"]},
+              {**SOLEIL_HAUT, **CHAUD, **VOLET, "binary_sensor.baie": FauxEtat("unavailable")})
+    lancer(v._async_evaluer())
+    assert [a[1] for a in v.hass.services.appels] == ["set_cover_position"]
+    assert "capteur de baie indisponible" in lancer(v.regles.journal())[0]["motif"]
+
+
+def test_l_attente_ecoute_aussi_la_baie(creer, monkeypatch):
+    """Sans l'ecoute du capteur, la baie refermee ne rejouerait rien avant que
+    le volet lui-meme ne bouge — peut-etre jamais de la soiree."""
+    import sys as _sys
+    suivis = []
+    monkeypatch.setattr(_sys.modules["homeassistant.helpers.event"], "async_track_state_change_event",
+                        lambda hass, ids, cb: suivis.append(list(ids)) or (lambda: None))
+    v = creer(CFG_BAIE, {**VOLET, **BAIE})
+    lancer(v._async_planifie("fermer"))
+    assert suivis[-1] == ["binary_sensor.baie", "cover.salon"]
+
+
+def test_la_baie_se_lit_en_pur(module):
+    etats = FauxEtats({"binary_sensor.a": FauxEtat("on"), "binary_sensor.b": FauxEtat("off"),
+                       "cover.porte": FauxEtat("open"), "binary_sensor.m": FauxEtat("unavailable")})
+    assert module.etat_baie(etats, "binary_sensor.a") == "ouverte"
+    assert module.etat_baie(etats, "binary_sensor.b") == "fermee"
+    assert module.etat_baie(etats, "cover.porte") == "ouverte"
+    assert module.etat_baie(etats, "binary_sensor.m") == "muette"
+    assert module.etat_baie(etats, "binary_sensor.absent") == "muette"
+    assert module.etat_baie(etats, "") == "aucune"
+    assert module.etat_baie(etats, None) == "aucune"
+
+
+def test_la_section_baies_a_ses_defauts(creer):
+    v = creer({"planning": {"actif": True}}, VOLET)
+    assert v.cfg["baies"] == {"actif": False, "volets": {}}

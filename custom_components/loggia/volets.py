@@ -9,7 +9,7 @@ travail. Loggia n'etait qu'une telecommande posee sur le montage de quelqu'un
 d'autre. Installer Loggia ne suffisait pas : il fallait encore ecrire
 l'automatisation.
 
-Ce module la porte. Trois regles, chacune debrayable :
+Ce module la porte. Quatre regles, chacune debrayable :
 
   planning   ouvrir au lever, fermer au coucher, avec un decalage en minutes
              de part et d'autre et le choix des jours.
@@ -23,6 +23,11 @@ Ce module la porte. Trois regles, chacune debrayable :
              rafale est un volet plie, et cette regle PRIME sur les deux
              autres — sans quoi la protection solaire le rabaisserait dans la
              minute.
+  baie       ne pas fermer un volet tant que la porte ou la fenetre devant
+             lui est ouverte : la fermeture attend que la baie se referme,
+             et tombe au matin si elle ne s'est pas refermee. Un capteur
+             muet ne vaut ni ouvert ni ferme : on ferme, et le journal le
+             dit (ADR 0010).
 
 Ce que ce module n'est pas
 ──────────────────────────
@@ -86,6 +91,8 @@ DEFAUT: dict[str, Any] = {
     "soleil": {"actif": False, "position": 30, "elevation_min": 15, "temp_min": 25,
                "temp_entite": "", "volets": {}},
     "vent": {"actif": False, "entite": "", "seuil": 50},
+    # Volet bloque : la porte ou la fenetre devant chaque volet (ADR 0010).
+    "baies": {"actif": False, "volets": {}},
     # Observer sans agir : les regles notent ce qu'elles auraient fait.
     "simulation": {"actif": False},
 }
@@ -295,8 +302,24 @@ def jour_actif(jours, quand) -> bool:
     return quand.weekday() in jours
 
 
+def etat_baie(etats, capteur) -> str:
+    """Ce que dit la baie devant un volet.
+
+    `ouverte`, `fermee`, ou `muette` quand le capteur ne repond pas — et
+    `aucune` si rien n'est designe. Un capteur d'ouverture dit `on` quand la
+    baie est ouverte ; une porte pilotee (`cover`) dit `open`. Muette n'est
+    ni l'un ni l'autre : c'est a la regle de decider, et de le dire.
+    """
+    if not capteur:
+        return "aucune"
+    st = etats.get(capteur)
+    if st is None or st.state in ("unavailable", "unknown"):
+        return "muette"
+    return "ouverte" if st.state in ("on", "open") else "fermee"
+
+
 class LoggiaVolets:
-    """Tient les regles de volets : planning, soleil, mise a l'abri."""
+    """Tient les regles de volets : planning, soleil, mise a l'abri, volet bloque."""
 
     def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
@@ -440,6 +463,14 @@ class LoggiaVolets:
         # mangeait donc la regle en silence, chaque fois.
         joignables = [h for h in cibles if self._joignable(h)]
         absents = [h for h in cibles if h not in joignables]
+        # Volet bloque (§1) : on ne ferme pas sur une baie ouverte — quelqu'un
+        # est peut-etre dehors. L'ordre attend qu'elle se referme, jamais
+        # au-dela du matin. Un capteur muet ne retient rien : on ferme, et on
+        # le dit (ADR 0010). L'ouverture, elle, ne bloque personne.
+        retenus, muets = [], []
+        if sens == "fermer":
+            retenus, muets = self._baies_ouvertes(joignables)
+            joignables = [h for h in joignables if h not in retenus]
         motif = "lever" if sens == "ouvrir" else "coucher"
         if decalage:
             motif += " %+d min" % int(decalage)
@@ -451,6 +482,8 @@ class LoggiaVolets:
                 priorite=PRIORITES["lever" if sens == "ouvrir" else "coucher"])
         if absents:
             self._mettre_en_attente(absents, sens)
+        if retenus:
+            self._mettre_en_attente(retenus, sens, motif="baie ouverte")
         # Ce que le planning a pris, la protection ne le rendra pas. Le reste —
         # ce que le soleil tient encore, et que le matin n'a donc pas ouvert —
         # elle le garde.
@@ -458,9 +491,16 @@ class LoggiaVolets:
             self.abaisses.pop(h, None)
         # Une ligne de plus SEULEMENT si quelque chose manque : `agir` a deja
         # note ce qui est parti. Deux lignes pour un meme ordre se liraient mal.
-        if absents or not joignables:
+        manque = []
+        if absents:
+            manque.append("%d en attente" % len(absents))
+        if retenus:
+            manque.append("%d devant une baie ouverte" % len(retenus))
+        if muets:
+            manque.append("capteur indisponible : %s" % ", ".join(muets))
+        if manque or not joignables:
             await self._noter(sens, "planning", len(partis), motif=motif,
-                              detail=("%d en attente" % len(absents)) if absents else "")
+                              detail=" · ".join(manque))
 
     # ── Le soleil et le vent ───────────────────────────────────────────────
     @callback
@@ -557,6 +597,11 @@ class LoggiaVolets:
             frappe = au_soleil(azimut, elevation, orientation, ouverture, elev_min,
                                marge=HYSTERESE_DEG if deja else 0.0)
             if frappe and not deja:
+                # Volet bloque (§1) : pas de protection sur une baie ouverte.
+                # Rien a rejouer : le soleil repasse a la prochaine minute.
+                baie = etat_baie(self.hass.states, self._baie_de(haid))
+                if baie == "ouverte":
+                    continue
                 avant = self._position_actuelle(haid)
                 # Une protection qui OUVRE n'en est pas une.
                 #
@@ -576,7 +621,8 @@ class LoggiaVolets:
                     continue
                 partis = await self._async_position(haid, position, regle="soleil",
                                                     quoi="proteger",
-                                                    motif="soleil a %s°" % round(azimut),
+                                                    motif="soleil a %s°" % round(azimut)
+                                                    + (" · capteur de baie indisponible" if baie == "muette" else ""),
                                                     priorite=PRIORITES["soleil"], tenir=True)
                 # Ne retenir que ce qui est vraiment parti. Un volet sous la
                 # main de quelqu'un, ou tenu par plus fort, n'a pas ete baisse :
@@ -626,6 +672,26 @@ class LoggiaVolets:
             return []
 
     # ── Les ordres qui attendent leur volet ────────────────────────────────
+    def _baie_de(self, haid: str):
+        """Le capteur de la porte ou de la fenetre devant ce volet, s'il y en a un."""
+        b = self.cfg.get("baies") or {}
+        if not b.get("actif"):
+            return None
+        capteur = (b.get("volets") or {}).get(haid)
+        return capteur if isinstance(capteur, str) and capteur else None
+
+    def _baies_ouvertes(self, covers: list) -> tuple[list, list]:
+        """Parmi ces volets, ceux dont la baie est ouverte — et les capteurs muets."""
+        retenus, muets = [], []
+        for haid in covers:
+            capteur = self._baie_de(haid)
+            quoi = etat_baie(self.hass.states, capteur)
+            if quoi == "ouverte":
+                retenus.append(haid)
+            elif quoi == "muette":
+                muets.append(capteur)
+        return retenus, muets
+
     def _joignable(self, haid: str) -> bool:
         """Le volet repond-il ? Une entite absente ou indisponible n'obeit pas."""
         st = self.hass.states.get(haid)
@@ -649,10 +715,10 @@ class LoggiaVolets:
             # decrochage, trop court pour agir a contretemps.
             return time.time() + 12 * 3600
 
-    def _mettre_en_attente(self, cibles: list, sens: str) -> None:
+    def _mettre_en_attente(self, cibles: list, sens: str, motif: str = "volet injoignable") -> None:
         expire = self._expiration(sens)
         for haid in cibles:
-            self.attente[haid] = {"sens": sens, "expire": expire}
+            self.attente[haid] = {"sens": sens, "expire": expire, "motif": motif}
         self._suivre_attente()
 
     def _suivre_attente(self) -> None:
@@ -667,8 +733,15 @@ class LoggiaVolets:
             return
         from homeassistant.helpers.event import async_track_state_change_event
 
+        # Les volets attendus, et la baie de chacun : c'est elle qui se
+        # referme, et le volet, lui, ne bougera peut-etre pas de la soiree.
+        suivis = set(self.attente)
+        for haid in self.attente:
+            capteur = self._baie_de(haid)
+            if capteur:
+                suivis.add(capteur)
         self._defait_attente = async_track_state_change_event(
-            self.hass, list(self.attente), self._sur_retour)
+            self.hass, sorted(suivis), self._sur_retour)
 
     @callback
     def _sur_retour(self, _event) -> None:
@@ -685,11 +758,20 @@ class LoggiaVolets:
                 continue
             if not self._joignable(haid):
                 continue
+            # Une baie encore ouverte retient toujours la fermeture ; muette,
+            # elle ne retient plus rien (ADR 0010).
+            baie = etat_baie(self.hass.states, self._baie_de(haid)) if ordre.get("sens") == "fermer" else "aucune"
+            if baie == "ouverte":
+                continue
+            if ordre.get("motif") == "baie ouverte":
+                pourquoi = "capteur indisponible" if baie == "muette" else "baie refermee"
+            else:
+                pourquoi = "volet revenu"
             del self.attente[haid]
             await self._async_service(
                 "open_cover" if ordre.get("sens") == "ouvrir" else "close_cover", [haid],
                 regle="rattrapage", quoi=ordre.get("sens", "?"),
-                motif="volet revenu",
+                motif=pourquoi,
                 # Le rattrapage rejoue un ordre du planning : il en a le rang.
                 priorite=PRIORITES["lever" if ordre.get("sens") == "ouvrir" else "coucher"])
         self._suivre_attente()

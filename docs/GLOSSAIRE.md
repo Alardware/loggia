@@ -92,9 +92,17 @@ palier (ADR 0014). La coupure du chauffage fenêtre ouverte est en sûreté
 (ADR 0019).
 
 **Attente** (ordre en attente) — Un ordre que le volet n'a pas pu recevoir
-parce qu'il était injoignable. Gardé jusqu'à son retour, ou jusqu'à
-l'événement solaire opposé — après quoi il est *périmé*. Le *rattrapage* est
-le rejeu de cet ordre au retour de l'entité.
+parce qu'il était injoignable, ou une fermeture qu'on ne fait pas sur une
+baie ouverte. Gardé jusqu'à ce que le volet revienne ou que la baie se
+referme, ou jusqu'à l'événement solaire opposé — après quoi il est *périmé*.
+Le *rattrapage* est le rejeu de cet ordre ; le journal dit pourquoi il
+attendait (`volet injoignable`, `baie ouverte`).
+
+**Baie** — La porte ou la fenêtre devant un volet, désignée une fois par
+volet (Règles › Volets › Volet bloqué, `loggia_volets.baies`). Ouverte, elle
+retient toute fermeture : le coucher attend, le soleil ne baisse pas —
+quelqu'un est peut-être dehors. Un capteur muet ne vaut ni ouvert ni fermé :
+on ferme, et le journal dit « capteur indisponible » (ADR 0010).
 
 **Simulation** (observer sans agir) — Un mode par module : rien ne part, le
 journal note ce qui *serait* parti, marqué `simule`. Les tenues bougent comme

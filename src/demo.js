@@ -281,6 +281,7 @@ const VOL_CFG = {
     volets: { 'cover.salon': { orientation: 225, ouverture: 90 } },
   },
   vent: { actif: false, entite: '', seuil: 50 },
+  baies: { actif: true, volets: { 'cover.volet_salon': 'binary_sensor.fenetre_salon' } },
 };
 
 function voletsDemo(states) {
@@ -457,7 +458,7 @@ function reglesDemo(states) {
     journal: lignes,
     gels: { ...GELS_DEMO },
     tenues: VOL_CFG.soleil.actif ? { 'cover.volet_salon': { module: 'volets', regle: 'soleil' } } : {},
-    attentes: {},
+    attentes: { 'cover.volet_chambre': { sens: 'fermer', motif: 'baie ouverte', expire: Date.now() / 1000 + 36000 } },
     calme: false,
   };
 }

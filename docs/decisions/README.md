@@ -14,7 +14,7 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0007](0007-un-seul-mecanisme-ordre-non-abouti.md) | Un seul mécanisme « ordre non abouti » | à faire |
 | [0008](0008-prechauffage-duree-fixe-d-abord.md) | Le préchauffage commence par une durée fixe | à faire |
 | [0009](0009-vue-journal-onglet-dans-regles.md) | La vue Journal est un onglet de Règles | appliqué (v3.12.0) |
-| [0010](0010-volet-bloque-capteur-indisponible.md) | Volet bloqué : un capteur muet n'est pas un ouvrant ouvert | à faire |
+| [0010](0010-volet-bloque-capteur-indisponible.md) | Volet bloqué : un capteur muet n'est pas un ouvrant ouvert | appliqué (v3.13.0) |
 | [0011](0011-presence-le-retour-remet-l-etat-d-avant.md) | Au retour, on remet ce qu'il y avait avant le départ | appliqué (v3.11.0) |
 | [0012](0012-eclairage-nocturne-la-main-l-emporte.md) | Éclairage nocturne : la main l'emporte sur la minuterie | à faire |
 | [0013](0013-tout-migrer-avant-d-ajouter.md) | Tout migrer sur le socle avant d'ajouter une règle | appliqué (v3.11.0) |

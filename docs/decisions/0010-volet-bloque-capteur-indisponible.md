@@ -1,6 +1,6 @@
 # ADR 0010 — Volet bloqué : un capteur muet n'est pas un ouvrant ouvert
 
-**Statut** : décidé le 2026-09-12, à faire (§1).
+**Statut** : appliqué (v3.13.0) — `volets.etat_baie`, section « Volet bloqué » de Règles › Volets.
 
 ## Contexte
 

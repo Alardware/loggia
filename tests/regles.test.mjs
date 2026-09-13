@@ -326,3 +326,29 @@ test('la démo répond au journal, avec les champs communs partout', () => {
     assert.ok(!demo.includes(ancien), 'journal de démo aux anciens champs : ' + ancien);
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Volet bloqué (§1, ADR 0010) : on ne ferme pas sur une baie ouverte (13/09/2026).
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('la porte ou la fenêtre devant chaque volet se désigne dans Règles › Volets', () => {
+  assert.ok(src.includes('enregistrer({ baies: { actif: !baies.actif } })'), 'plus d’interrupteur « Volet bloqué »');
+  assert.ok(src.includes("usePli('volets:baies')"), 'la règle ne se replie pas comme les autres');
+  // Un capteur par volet, choisi parmi les capteurs d'ouverture — jamais
+  // deviné d'un nom — et écrit dans la section « baies » du serveur.
+  assert.ok(src.includes("setPicker({ domaines: ['binary_sensor'], poser: (id) => enregistrer({ baies: { volets: { ...(baies.volets || {}), [c.id]: id } } }) })"),
+    'le choix du capteur n’écrit plus dans la section « baies »');
+  assert.ok(src.includes('if (picker.poser) picker.poser(id); else enregistrer('), 'le sélecteur ne sait plus poser ailleurs que dans un champ de section');
+});
+
+test('le journal dit pourquoi un ordre attend', () => {
+  const vue = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
+  assert.ok(vue.includes("{attentes[id].motif ? ' · ' + attentes[id].motif : ''}"),
+    '« en attente · fermer » sans dire si c’est le volet ou la baie');
+});
+
+test('la démo a une baie désignée et un ordre qui l’attend', () => {
+  const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
+  assert.ok(demo.includes("baies: { actif: true, volets: { 'cover.volet_salon': 'binary_sensor.fenetre_salon' } }"), 'la démo ne montre pas la règle');
+  assert.ok(demo.includes("motif: 'baie ouverte'"), 'la démo ne montre pas d’ordre retenu par une baie');
+});
