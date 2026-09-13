@@ -80,6 +80,7 @@ function etatsInitiaux() {
     'lawn_mower.tondeuse': s('mowing', { friendly_name: 'Tondeuse', battery_level: 64,
       supported_features: 7 }),
     'binary_sensor.porte_entree': s('off', { friendly_name: "Porte d'entrée", device_class: 'door' }),
+    'binary_sensor.mouvement_entree': s('off', { friendly_name: 'Mouvement entrée', device_class: 'motion' }),
     'sensor.pile_porte_entree': s(9, { friendly_name: 'Pile porte entrée', device_class: 'battery', unit_of_measurement: '%' }),
     'person.demo': s('home', { friendly_name: 'Démo' }),
     'person.sam': s('not_home', { friendly_name: 'Sam' }),
@@ -348,7 +349,7 @@ function indexDemo(states) {
     chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'cover.chambre',
               'binary_sensor.fenetre_chambre', 'switch.radiateur_chambre'],
     bureau: ['light.bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite'],
-    entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree'],
+    entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.mouvement_entree'],
     sdb: ['light.sdb', 'sensor.sdb_temperature'],
   };
   const entities = [];
@@ -417,13 +418,17 @@ function presencePatch(patch) {
 const NUI_CFG = {
   veilleuse: { actif: true, lampes: ['light.chambre'], duree: 30, fondu: 5, depuis: '19:00' },
   coucher: { actif: true, heure: '23:30', sauf: ['light.chambre'], jours: [0, 1, 2, 3, 4, 5, 6] },
+  eclairage: { actif: true, luminosite: 10, duree: 3, pieces: { 'Entrée': { actif: true, capteurs: ['binary_sensor.mouvement_entree'], lampes: ['light.entree'] } } },
 };
 
 function nuitDemo() {
   return {
     config: NUI_CFG,
     en_cours: [],
+    eclairees: {},
     journal: [
+      { module: 'nuit', regle: 'eclairage', quoi: 'allumer', cibles: ['light.entree'], n: 1, motif: 'mouvement : Entrée', detail: '', simule: false, ts: Date.now() / 1000 - 30000 },
+      { module: 'nuit', regle: 'eclairage', quoi: 'eteindre', cibles: ['light.entree'], n: 1, motif: '3 min sans mouvement', detail: '', simule: false, ts: Date.now() / 1000 - 29700 },
       { module: 'nuit', regle: 'veilleuse', quoi: 'eteindre', cibles: ['light.chambre'], n: 1, motif: '30 min', detail: '', simule: false, ts: Date.now() / 1000 - 50000 },
       { module: 'nuit', regle: 'coucher', quoi: 'eteindre', cibles: ['light.salon', 'light.cuisine'], n: 2, motif: '23:30', detail: '1 sous la main de quelqu’un', simule: false, ts: Date.now() / 1000 - 54000 },
     ],
@@ -432,7 +437,16 @@ function nuitDemo() {
 
 function nuitPatch(patch) {
   Object.keys(patch || {}).forEach(k => {
-    if (NUI_CFG[k]) Object.assign(NUI_CFG[k], patch[k]);
+    if (!NUI_CFG[k]) return;
+    // Les pièces de l'éclairage nocturne arrivent une à la fois, comme sur le serveur.
+    if (k === 'eclairage' && patch[k] && patch[k].pieces) {
+      const pieces = { ...(NUI_CFG.eclairage.pieces || {}) };
+      Object.keys(patch[k].pieces).forEach(nom => {
+        if (patch[k].pieces[nom] === null) delete pieces[nom];
+        else pieces[nom] = { ...(pieces[nom] || {}), ...patch[k].pieces[nom] };
+      });
+      Object.assign(NUI_CFG[k], patch[k], { pieces });
+    } else Object.assign(NUI_CFG[k], patch[k]);
   });
   return NUI_CFG;
 }

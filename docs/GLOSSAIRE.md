@@ -32,8 +32,9 @@ socle, et c'est ainsi qu'elle hérite de tout le reste sans une ligne de plus.
 l'écran, et déclare au socle les entités qu'il pilote.
 
 **Règle** — Un comportement nommé, dans un module, débrayable seul : le
-planning des volets, la protection solaire, la veilleuse, le CO2. C'est le
-nom qui apparaît dans le journal (`regle`) et dans les priorités.
+planning des volets, la protection solaire, la veilleuse, l'éclairage
+nocturne, le CO2. C'est le nom qui apparaît dans le journal (`regle`) et
+dans les priorités.
 
 **Socle** — `regles.py`. Ce que toutes les règles partagent : le journal, le
 respect du geste manuel, les priorités, la simulation, le téléphone. Un objet

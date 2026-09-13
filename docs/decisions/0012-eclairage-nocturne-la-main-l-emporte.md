@@ -1,6 +1,6 @@
 # ADR 0012 — Éclairage nocturne : la main l'emporte sur la minuterie
 
-**Statut** : décidé le 2026-09-12, à faire (§14).
+**Statut** : appliqué (v3.15.0) — règle `eclairage` de `nuit.py`, carte « Éclairage nocturne » de Règles › La nuit.
 
 ## Contexte
 

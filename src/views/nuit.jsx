@@ -7,6 +7,7 @@
 import {
   useMemo
 } from 'react';
+import { LOGGIA_INDEX } from '../state.js';
 import { cvName, RegleEntete, usePli , useEtatServeur, Bascule } from '../ui.jsx';
 import { tr } from '../i18n.js';
 
@@ -16,6 +17,10 @@ const LIGHT_TRANSITION = 32;
 
 const JOURS_NUIT = () => [tr('lun'), tr('mar'), tr('mer'), tr('jeu'), tr('ven'), tr('sam'), tr('dim')];
 
+/* Ce qui compte comme capteur de mouvement : Home Assistant le dit dans la
+ * `device_class`, jamais le nom de l'entité. */
+const CLASSES_MOUVEMENT = ['motion', 'occupancy', 'presence'];
+
 export function NuitReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const { etat, setEtat, err, setErr, vivant } =
@@ -24,6 +29,7 @@ export function NuitReglages({ hass, cardSt }) {
    * un retour conditionnel. */
   const [pliVeilleuse, plierVeilleuse] = usePli('nuit:veilleuse');
   const [pliCoucher, plierCoucher] = usePli('nuit:coucher');
+  const [pliEclairage, plierEclairage] = usePli('nuit:eclairage');
 
 
   const cfg = (etat && etat.config) || null;
@@ -34,6 +40,18 @@ export function NuitReglages({ hass, cardSt }) {
       if (!e) return e;
       const n = { ...e.config };
       for (const k of Object.keys(patch)) n[k] = { ...(n[k] || {}), ...patch[k] };
+      // Les pièces de l'éclairage nocturne arrivent une à la fois : on fusionne
+      // au lieu de remplacer, sinon les autres disparaîtraient le temps de
+      // l'aller-retour.
+      if (patch.eclairage && patch.eclairage.pieces) {
+        const avant = (e.config.eclairage || {}).pieces || {};
+        const pieces = { ...avant };
+        for (const nom of Object.keys(patch.eclairage.pieces)) {
+          if (patch.eclairage.pieces[nom] === null) delete pieces[nom];
+          else pieces[nom] = { ...(avant[nom] || {}), ...patch.eclairage.pieces[nom] };
+        }
+        n.eclairage = { ...n.eclairage, pieces };
+      }
       return { ...e, config: n };
     });
     try {
@@ -55,6 +73,18 @@ export function NuitReglages({ hass, cardSt }) {
       })
       .sort((a, b) => a.nom.localeCompare(b.nom));
   }, [hass]);
+  /* Les pièces candidates à l'éclairage nocturne : une zone Home Assistant
+   * avec au moins un capteur de mouvement et une lampe. Rien à saisir. */
+  const piecesMouvement = useMemo(() => {
+    const S = (hass && hass.states) || {};
+    const zones = (LOGGIA_INDEX && LOGGIA_INDEX.areaList) || [];
+    return zones.map(z => ({
+      nom: z.name,
+      capteurs: (z.entities || []).filter(id => id.indexOf('binary_sensor.') === 0
+        && CLASSES_MOUVEMENT.indexOf(((S[id] && S[id].attributes) || {}).device_class) >= 0),
+      lampes: (z.entities || []).filter(id => id.indexOf('light.') === 0 && S[id]),
+    })).filter(z => z.capteurs.length > 0 && z.lampes.length > 0);
+  }, [hass]);
 
   if (!cfg) {
     return (
@@ -71,6 +101,7 @@ export function NuitReglages({ hass, cardSt }) {
   const c = cfg.coucher || {};
   const mesLampes = v.lampes || [];
   const epargnees = c.sauf || [];
+  const ecl = cfg.eclairage || {};
 
   const titre = { fontSize: 15, fontWeight: 700 };
   const simu = cfg.simulation || {};
@@ -194,6 +225,60 @@ export function NuitReglages({ hass, cardSt }) {
                     <button key={l.id}
                       onClick={() => enregistrer({ coucher: { sauf: on ? epargnees.filter(x => x !== l.id) : [...epargnees, l.id] } })}
                       style={puce(on)}>{l.nom}</button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── L'éclairage nocturne (§14) ── */}
+      {/* Un mouvement la nuit allume la pièce à faible intensité ; sans
+        * mouvement, elle s'éteint seule. Une lampe montée à la main reste
+        * allumée : la main l'emporte, la règle lâche (ADR 0012). */}
+      <div style={cardSt}>
+        <RegleEntete nom={tr('Éclairage nocturne')}
+          desc={tr('La nuit, un mouvement dans une pièce allume ses lampes à faible intensité ; sans mouvement, elles s’éteignent seules.')}
+          on={ecl.actif} cb={() => enregistrer({ eclairage: { actif: !ecl.actif } })} plie={pliEclairage} onPlier={plierEclairage} zone="nuit-eclairage" />
+        {etat.eclairees && Object.keys(etat.eclairees).length > 0 && (
+          <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--o-warn2)' }}>
+            {tr('Allumé par la règle : {p}', { p: Object.keys(etat.eclairees).join(', ') })}
+          </div>
+        )}
+        {ecl.actif && !pliEclairage && (
+          <div id="nuit-eclairage">
+            <div style={ligne}>
+              <span style={{ ...label, minWidth: 78 }}>{tr('Intensité')}</span>
+              <input aria-label={tr('Intensité de l’éclairage nocturne, en pourcentage')} type="number" value={ecl.luminosite != null ? ecl.luminosite : 10} min={1} max={100}
+                onChange={e => enregistrer({ eclairage: { luminosite: Math.max(1, Math.min(100, Number(e.target.value) || 10)) } })}
+                style={{ ...champ, width: 74 }} />
+              <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>%</span>
+            </div>
+            <div style={ligne}>
+              <span style={{ ...label, minWidth: 78 }}>{tr('S’éteint après')}</span>
+              <input aria-label={tr('Extinction après le dernier mouvement, en minutes')} type="number" value={ecl.duree != null ? ecl.duree : 3} min={0} max={60}
+                onChange={e => enregistrer({ eclairage: { duree: Math.max(0, Math.min(60, Number(e.target.value) || 0)) } })}
+                style={{ ...champ, width: 74 }} />
+              <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min sans mouvement')}</span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
+              {tr('Une lampe déjà allumée n’est pas touchée. Une lampe montée à la main reste allumée : la règle lâche.')}
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <div style={{ ...label, marginBottom: 7 }}>{tr('Quelles pièces')}</div>
+              {piecesMouvement.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
+                  {tr('Aucune pièce avec un capteur de mouvement et une lampe. Range-les dans une zone Home Assistant : la règle s’appuie dessus.')}
+                </div>
+              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {piecesMouvement.map(p => {
+                  const reg = (ecl.pieces || {})[p.nom] || null;
+                  const on = !!(reg && reg.actif);
+                  return (
+                    <button key={p.nom} onClick={() => enregistrer({ eclairage: { pieces: { [p.nom]: on ? { actif: false } : { actif: true, capteurs: p.capteurs, lampes: p.lampes } } } })}
+                      style={puce(on)}>{p.nom}</button>
                   );
                 })}
               </div>

@@ -369,3 +369,22 @@ test('la présence écoute les indices, et l’écran le dit', () => {
   assert.ok(demo.includes('indices: { actif: true, mains: true }'), 'la démo ne montre pas la règle');
   assert.ok(demo.includes("quoi: 'reporter'"), 'la démo ne montre pas de décompte reporté');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// L'éclairage nocturne (§14, ADR 0012) — 13/09/2026.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('l’éclairage nocturne se règle pièce par pièce, depuis les zones', () => {
+  const vue = readFileSync(join(RACINE, 'src', 'views', 'nuit.jsx'), 'utf8');
+  assert.ok(vue.includes("enregistrer({ eclairage: { actif: !ecl.actif } })"), 'plus d’interrupteur « Éclairage nocturne »');
+  assert.ok(vue.includes("usePli('nuit:eclairage')"), 'la règle ne se replie pas comme les autres');
+  // Les pièces viennent des zones, les capteurs de leur device_class — jamais d'un nom.
+  assert.ok(vue.includes("const CLASSES_MOUVEMENT = ['motion', 'occupancy', 'presence'];"));
+  assert.ok(vue.includes('LOGGIA_INDEX.areaList'), 'les pièces ne viennent plus des zones Home Assistant');
+  // Activer une pièce la remplit ; une pièce à la fois, fusionnée localement.
+  assert.ok(vue.includes("{ actif: true, capteurs: p.capteurs, lampes: p.lampes }"));
+  assert.ok(vue.includes('if (patch.eclairage && patch.eclairage.pieces) {'), 'les autres pièces disparaîtraient le temps de l’aller-retour');
+  const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
+  assert.ok(demo.includes("device_class: 'motion'"), 'la démo n’a pas de capteur de mouvement');
+  assert.ok(demo.includes("motif: 'mouvement : Entrée'"), 'la démo ne montre pas la règle');
+});

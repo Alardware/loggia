@@ -2,7 +2,7 @@
 
 Pourquoi ce module existe
 ─────────────────────────
-Deux besoins de fin de journee, que chaque installation reecrit a la main.
+Trois besoins de fin de journee, que chaque installation reecrit a la main.
 
   La veilleuse d'une chambre d'enfant. On l'allume au coucher, elle doit
   s'eteindre une demi-heure plus tard — et si possible en fondu, parce qu'une
@@ -10,6 +10,12 @@ Deux besoins de fin de journee, que chaque installation reecrit a la main.
 
   Les lampes oubliees. A une heure donnee, ce qui traine encore allume
   s'eteint, sauf ce qu'on a mis de cote.
+
+  L'eclairage nocturne (§14). La nuit, un mouvement dans une piece allume
+  ses lampes a faible intensite ; sans mouvement pendant quelques minutes,
+  elles s'eteignent seules. Une lampe deja allumee n'est pas touchee, et
+  une lampe montee a la main reste allumee : la main l'emporte, la regle
+  lache (ADR 0012).
 
 Ce que ce module refuse de faire
 ────────────────────────────────
@@ -35,6 +41,7 @@ if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors pa
 _LOGGER = logging.getLogger(__name__)
 
 CLE = "loggia_nuit"
+SOLEIL = "sun.sun"
 
 # Le bit TRANSITION de LightEntityFeature : une lampe qui ne l'a pas ne sait
 # pas s'eteindre en fondu, et le lui demander ne ferait rien de bon.
@@ -43,13 +50,19 @@ LIGHT_TRANSITION = 32
 DEFAUT: dict[str, Any] = {
     "veilleuse": {"actif": False, "lampes": [], "duree": 30, "fondu": 5, "depuis": "19:00"},
     "coucher": {"actif": False, "heure": "23:30", "sauf": [], "jours": [0, 1, 2, 3, 4, 5, 6]},
+    # L'eclairage nocturne : par piece, {nom: {actif, capteurs, lampes}} —
+    # l'ecran remplit les listes depuis les zones de Home Assistant.
+    "eclairage": {"actif": False, "luminosite": 10, "duree": 3, "pieces": {}},
     # Observer sans agir : les regles notent ce qu'elles auraient fait.
     "simulation": {"actif": False},
 }
 
 # Le palier « nuit » de l'echelle. La veilleuse un cran au-dessus de
 # l'extinction : sa minuterie est un choix fait pour CETTE lampe.
-PRIORITES = {"veilleuse": niveau("nuit", 5), "coucher": niveau("nuit")}
+# L'eclairage nocturne est un CONFORT (ADR 0014) : une maison vide, que le
+# depart tient, ne s'allume pas sur le passage d'un chat.
+PRIORITES = {"veilleuse": niveau("nuit", 5), "coucher": niveau("nuit"),
+             "eclairage": niveau("confort", 5)}
 
 
 def lire_heure(texte, defaut=(0, 0)):
@@ -89,8 +102,41 @@ def a_eteindre(etats: dict, sauf) -> list:
                   and str(getattr(st, "state", "")).lower() == "on")
 
 
+def fait_nuit(etat_soleil) -> bool:
+    """Le soleil est-il couche ? Sans `sun.sun`, on suppose qu'il fait jour :
+    se tromper vers le jour n'omet qu'un eclairage, se tromper vers la nuit
+    allumerait le couloir en plein apres-midi."""
+    if etat_soleil is None:
+        return False
+    return str(getattr(etat_soleil, "state", "")).lower() == "below_horizon"
+
+
+def capteurs_par_piece(reglage_eclairage) -> dict:
+    """{capteur: nom de piece}, pour les pieces actives — ce que la regle ecoute."""
+    sortie: dict[str, str] = {}
+    for nom, piece in ((reglage_eclairage or {}).get("pieces") or {}).items():
+        if not isinstance(piece, dict) or not piece.get("actif"):
+            continue
+        for capteur in piece.get("capteurs") or []:
+            if isinstance(capteur, str) and capteur:
+                sortie[capteur] = nom
+    return sortie
+
+
+def a_allumer(etats: dict, lampes) -> list:
+    """Les lampes ETEINTES parmi celles de la piece.
+
+    Une lampe deja allumee avant le mouvement n'est pas a nous : on n'y touche
+    pas, ni maintenant ni a la fin du decompte (ADR 0012). Une lampe muette
+    non plus.
+    """
+    return sorted(haid for haid in (lampes or [])
+                  if str(getattr((etats or {}).get(haid), "state", "")).lower() == "off")
+
+
 class LoggiaNuit:
-    """Eteint la veilleuse apres son delai, et les lampes oubliees a l'heure dite."""
+    """Eteint la veilleuse apres son delai, les lampes oubliees a l'heure dite,
+    et eclaire le passage la nuit."""
 
     def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
@@ -100,6 +146,10 @@ class LoggiaNuit:
         self.cfg: dict[str, Any] = {}
         # Une minuterie par lampe : deux veilleuses ne partagent pas la leur.
         self._minuteurs: dict[str, Any] = {}
+        # L'eclairage nocturne : une minuterie par piece, et ce que la regle y
+        # a allume — elle n'eteint que cela.
+        self._minuteurs_pieces: dict[str, Any] = {}
+        self.allumees: dict[str, list] = {}
         self._defait: list[Any] = []
         self._defait_heure: list[Any] = []
         hass.async_create_task(self._async_demarrer())
@@ -127,6 +177,16 @@ class LoggiaNuit:
             )
             _LOGGER.info("Loggia nuit : %d veilleuses suivies", len(set(v["lampes"])))
 
+        e = self.cfg.get("eclairage") or {}
+        capteurs = capteurs_par_piece(e) if e.get("actif") else {}
+        if capteurs:
+            from homeassistant.helpers.event import async_track_state_change_event
+
+            self._defait.append(
+                async_track_state_change_event(self.hass, sorted(capteurs), self._sur_mouvement)
+            )
+            _LOGGER.info("Loggia nuit : eclairage nocturne dans %d piece(s)", len(set(capteurs.values())))
+
         c = self.cfg.get("coucher") or {}
         if c.get("actif"):
             from homeassistant.helpers.event import async_track_time_change
@@ -145,6 +205,11 @@ class LoggiaNuit:
         v = self.cfg.get("veilleuse") or {}
         if v.get("actif"):
             pilotes += list(v.get("lampes") or [])
+        e = self.cfg.get("eclairage") or {}
+        if e.get("actif"):
+            for piece in (e.get("pieces") or {}).values():
+                if isinstance(piece, dict) and piece.get("actif"):
+                    pilotes += list(piece.get("lampes") or [])
         if (self.cfg.get("coucher") or {}).get("actif"):
             try:
                 pilotes += list(self.hass.states.async_entity_ids("light"))
@@ -236,6 +301,103 @@ class LoggiaNuit:
                                   regle="veilleuse", quoi="eteindre",
                                   motif="%d min" % duree, priorite=PRIORITES["veilleuse"])
 
+    # ── L'eclairage nocturne ───────────────────────────────────────────────
+    @callback
+    def _sur_mouvement(self, event) -> None:
+        d = getattr(event, "data", None) or {}
+        piece = capteurs_par_piece(self.cfg.get("eclairage")).get(d.get("entity_id") or "")
+        if not piece:
+            return
+        neuf = str(getattr(d.get("new_state"), "state", "")).lower()
+        ancien = str(getattr(d.get("old_state"), "state", "")).lower()
+        if neuf == "on" and ancien != "on":
+            self.hass.async_create_task(self._async_allumer(piece))
+        elif neuf == "off" and ancien == "on":
+            # Plus de mouvement : le decompte commence — pour ce qu'on a allume.
+            self._armer_extinction(piece)
+
+    async def _async_allumer(self, piece: str) -> None:
+        e = self.cfg.get("eclairage") or {}
+        if not e.get("actif"):
+            return
+        # Quelqu'un bouge : ce qu'on a allume reste allume.
+        self._desarmer_piece(piece)
+        if not fait_nuit(self.hass.states.get(SOLEIL)):
+            return
+        reglage = (e.get("pieces") or {}).get(piece) or {}
+        lampes = list(reglage.get("lampes") or [])
+        etats = {h: self.hass.states.get(h) for h in lampes}
+        # Une lampe deja allumee n'est pas a nous. Une lampe sous la main de
+        # quelqu'un, ou tenue par plus fort — le depart, maison vide —, non
+        # plus : et on ne le note pas a chaque passage devant le capteur.
+        tenues = self.regles.tenues_toutes()
+        cibles = [h for h in a_allumer(etats, lampes)
+                  if not self.regles.gele(h) and h not in tenues]
+        if not cibles:
+            return
+        try:
+            luminosite = max(1, min(100, int(e.get("luminosite", 10))))
+        except (TypeError, ValueError):
+            luminosite = 10
+        partis = await self._async_service("light", "turn_on", cibles,
+                                           {"brightness_pct": luminosite},
+                                           regle="eclairage", quoi="allumer",
+                                           motif="mouvement : %s" % piece,
+                                           priorite=PRIORITES["eclairage"])
+        if partis:
+            self.allumees[piece] = sorted(set(self.allumees.get(piece, [])) | set(partis))
+
+    def _armer_extinction(self, piece: str) -> None:
+        if not self.allumees.get(piece):
+            return
+        self._desarmer_piece(piece)
+        e = self.cfg.get("eclairage") or {}
+        try:
+            duree = max(0, int(e.get("duree", 3))) * 60
+        except (TypeError, ValueError):
+            duree = 180
+        if duree == 0:
+            self.hass.async_create_task(self._async_eteindre_piece(piece))
+            return
+        from homeassistant.helpers.event import async_call_later
+
+        @callback
+        def echu(_now):
+            self._minuteurs_pieces.pop(piece, None)
+            self.hass.async_create_task(self._async_eteindre_piece(piece))
+
+        self._minuteurs_pieces[piece] = async_call_later(self.hass, duree, echu)
+
+    def _desarmer_piece(self, piece: str) -> None:
+        annule = self._minuteurs_pieces.pop(piece, None)
+        if annule:
+            try:
+                annule()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia nuit : minuteur de piece deja passe")
+
+    async def _async_eteindre_piece(self, piece: str) -> None:
+        """Eteint ce que la regle a allume dans la piece — et rien d'autre.
+
+        Une lampe montee a la main entre temps est gelee : le socle l'ecarte,
+        le journal le dit, et la regle LACHE — elle ne reviendra pas a la fin
+        du gel. Monter la lumiere, c'est dire « je reste » (ADR 0012).
+        """
+        allumees = self.allumees.pop(piece, [])
+        etats = {h: self.hass.states.get(h) for h in allumees}
+        cibles = [h for h in allumees if str(getattr(etats.get(h), "state", "")).lower() == "on"]
+        if not cibles:
+            return
+        e = self.cfg.get("eclairage") or {}
+        try:
+            duree = max(0, int(e.get("duree", 3)))
+        except (TypeError, ValueError):
+            duree = 3
+        await self._async_service("light", "turn_off", cibles, None,
+                                  regle="eclairage", quoi="eteindre",
+                                  motif="%d min sans mouvement" % duree,
+                                  priorite=PRIORITES["eclairage"])
+
     # ── Les lampes oubliees ────────────────────────────────────────────────
     @callback
     def _au_coucher(self, *_) -> None:
@@ -279,6 +441,9 @@ class LoggiaNuit:
     def _repartir_de_zero(self) -> None:
         for haid in list(self._minuteurs):
             self._desarmer(haid)
+        for piece in list(self._minuteurs_pieces):
+            self._desarmer_piece(piece)
+        self.allumees.clear()
         self.regles.relacher("nuit")
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
@@ -288,6 +453,7 @@ class LoggiaNuit:
         cfg["veilleuse"]["lampes"] = []
         cfg["coucher"]["sauf"] = []
         cfg["coucher"]["jours"] = [0, 1, 2, 3, 4, 5, 6]
+        cfg["eclairage"]["pieces"] = {}
         if isinstance(brut, dict):
             for section, valeurs in brut.items():
                 if section in cfg and isinstance(valeurs, dict):
@@ -298,6 +464,8 @@ class LoggiaNuit:
         return {
             "config": self.cfg or await self.async_config(),
             "en_cours": sorted(self._minuteurs),
+            # Ce que l'eclairage nocturne a allume, piece par piece.
+            "eclairees": {p: list(l) for p, l in self.allumees.items()},
             "journal": await self.regles.journal(limite=40, module="nuit"),
         }
 
@@ -305,8 +473,19 @@ class LoggiaNuit:
         cfg = await self.async_config()
         simulait = bool((cfg.get("simulation") or {}).get("actif"))
         for section, valeurs in (patch or {}).items():
-            if section in cfg and isinstance(valeurs, dict):
-                cfg[section].update(valeurs)
+            if section not in cfg or not isinstance(valeurs, dict):
+                continue
+            if section == "eclairage" and isinstance(valeurs.get("pieces"), dict):
+                # Piece par piece, comme l'ecran les envoie : une a la fois,
+                # `None` pour la retirer.
+                pieces = dict(cfg["eclairage"].get("pieces") or {})
+                for nom, piece in valeurs["pieces"].items():
+                    if piece is None:
+                        pieces.pop(nom, None)
+                    elif isinstance(piece, dict):
+                        pieces[nom] = {**pieces.get(nom, {}), **piece}
+                valeurs = {**valeurs, "pieces": pieces}
+            cfg[section].update(valeurs)
         await self.store.async_set_shared(CLE, cfg)
         self.cfg = cfg
         if bool((cfg.get("simulation") or {}).get("actif")) != simulait:
@@ -320,6 +499,8 @@ class LoggiaNuit:
     def async_arreter(self) -> None:
         for haid in list(self._minuteurs):
             self._desarmer(haid)
+        for piece in list(self._minuteurs_pieces):
+            self._desarmer_piece(piece)
         for source in (self._defait, self._defait_heure):
             for defaire in source:
                 try:
