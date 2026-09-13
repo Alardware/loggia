@@ -388,3 +388,18 @@ test('l’éclairage nocturne se règle pièce par pièce, depuis les zones', ()
   assert.ok(demo.includes("device_class: 'motion'"), 'la démo n’a pas de capteur de mouvement');
   assert.ok(demo.includes("motif: 'mouvement : Entrée'"), 'la démo ne montre pas la règle');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sur un danger, la maison réagit (§18, ADR 0022) — 13/09/2026.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('sur un danger, la maison réagit — et cela se règle à côté du téléphone', () => {
+  const par = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
+  assert.ok(par.includes("actions: { actif: true, lumieres: true, volets: true, vanne: { actif: true, entite: '' } }"), 'plus de défaut pour les actions');
+  assert.ok(par.includes("save({ actions: { ...cfg.actions, actif: !cfg.actions.actif } })"), 'plus d’interrupteur général');
+  for (const k of ['lumieres', 'volets']) assert.ok(par.includes(`['${k}',`), `plus d’interrupteur pour ${k}`);
+  assert.ok(par.includes("vanne: { ...cfg.actions.vanne, actif: !cfg.actions.vanne.actif }"), 'plus d’interrupteur pour la vanne');
+  assert.ok(par.includes('list="loggia-vannes"'), 'la vanne ne se désigne plus');
+  // Une configuration écrite avant les actions garde ses défauts.
+  assert.ok(par.includes("actions: { ...d.actions, ...(c.actions || {}), vanne: { ...d.actions.vanne, ...((c.actions || {}).vanne || {}) } }"));
+});

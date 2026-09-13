@@ -164,6 +164,12 @@ Rien n'est différé : on la lit au réveil.
 **Silencieuse** — Une notification qui n'a pas sonné à cause des heures
 calmes. Le journal le dit.
 
+**Mise en sûreté** — Ce que la maison fait d'elle-même sur un danger, en
+plus du téléphone : lumières à 100 % (fumée, monoxyde, alarme — pas le gaz),
+volets remontés (fumée, monoxyde, gaz), vanne d'eau coupée (fuite). En tête
+de l'échelle, tenu tant que le danger dure, puis rendu à l'état d'avant —
+sauf la vanne, qui se rouvre à la main (ADR 0022).
+
 ## Les quatre critères d'une règle
 
 Ce qui rend une règle utilisable chez quelqu'un d'autre.

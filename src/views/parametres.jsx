@@ -223,7 +223,9 @@ const PAR_HELPS = () => [
 const ALERTES_DEF = () => ({ actif: false, service: '', categories: { fumee: true, gaz: true, co: true, fuite: true, alarme: true, portes: false }, cooldown_min: 5,
   // Les heures calmes : entre ces heures, rien ne sonne. Le socle des règles
   // les lit (regles.py) ; seul le danger passe quand même.
-  calme: { actif: false, debut: '22:00', fin: '07:00' } });
+  calme: { actif: false, debut: '22:00', fin: '07:00' },
+  // La moitié « action » de §18 : sur un danger, la maison réagit (ADR 0022).
+  actions: { actif: true, lumieres: true, volets: true, vanne: { actif: true, entite: '' } } });
 function AlertesTele({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const [cfg, setCfg] = useState(null);
@@ -235,7 +237,8 @@ function AlertesTele({ hass, cardSt }) {
     h.callWS({ type: 'loggia/config/get' }).then(r => {
       const c = (r && r.config && r.config.loggia_alertes) || {};
       const d = ALERTES_DEF();
-      setCfg({ ...d, ...c, categories: { ...d.categories, ...(c.categories || {}) }, calme: { ...d.calme, ...(c.calme || {}) } });
+      setCfg({ ...d, ...c, categories: { ...d.categories, ...(c.categories || {}) }, calme: { ...d.calme, ...(c.calme || {}) },
+        actions: { ...d.actions, ...(c.actions || {}), vanne: { ...d.actions.vanne, ...((c.actions || {}).vanne || {}) } } });
     }).catch(() => setCfg(ALERTES_DEF()));
     // La liste des cibles possibles : les services notify de l'installation.
     h.callWS({ type: 'get_services' }).then(r => {
@@ -271,6 +274,12 @@ function AlertesTele({ hass, cardSt }) {
     ['fuite', tr("Fuite d'eau"), tr("Détecteurs d'humidité et de fuite")],
     ['alarme', tr('Alarme déclenchée'), tr('Toujours envoyée, sans délai anti-rafale')],
     ['portes', tr("Ouverture pendant que l'alarme est armée"), tr('Portes, fenêtres et garage')],
+  ];
+  // Les vannes possibles : une `valve`, ou une prise commandée sur l'arrivée d'eau.
+  const vannes = Object.keys((hass && hass.states) || {}).filter(id => id.indexOf('valve.') === 0 || id.indexOf('switch.') === 0).sort();
+  const ACTIONS = [
+    ['lumieres', tr('Lumières à 100 %'), tr('Fumée, monoxyde, alarme — pas le gaz : un relais qui claque est une étincelle')],
+    ['volets', tr('Volets remontés'), tr('Fumée, monoxyde, gaz — les issues, et l’accès des secours')],
   ];
   return (
     <div className="o-parcard" style={cardSt}>
@@ -313,6 +322,35 @@ function AlertesTele({ hass, cardSt }) {
           <Tgl on={!!cfg.categories[k]} cb={() => save({ categories: { ...cfg.categories, [k]: !cfg.categories[k] } })} label={t} />
         </div>
       ))}
+      {/* La moitié « action » de §18 : sur un danger, la maison réagit
+        * d'elle-même — en tête de l'échelle, tenu tant que le danger dure,
+        * puis rendu à l'état d'avant. La vanne, elle, reste coupée : une
+        * fuite s'inspecte avant de rouvrir (ADR 0022). */}
+      <div className="o-optrow" style={{ ...ligne, marginTop: 6 }}>
+        {lbl(tr('La maison réagit'), tr('Sur un danger, sans attendre personne — puis tout revient comme avant, sauf la vanne.'))}
+        <Tgl on={!!cfg.actions.actif} cb={() => save({ actions: { ...cfg.actions, actif: !cfg.actions.actif } })} label={tr('La maison réagit')} />
+      </div>
+      {cfg.actions.actif && ACTIONS.map(([k, t, d]) => (
+        <div key={k} className="o-optrow" style={ligne}>
+          {lbl(t, d)}
+          <Tgl on={!!cfg.actions[k]} cb={() => save({ actions: { ...cfg.actions, [k]: !cfg.actions[k] } })} label={t} />
+        </div>
+      ))}
+      {cfg.actions.actif && (
+        <div className="o-optrow" style={ligne}>
+          {lbl(tr('Vanne d’eau coupée'), tr('Sur une fuite. Reste coupée jusqu’à ce qu’on la rouvre à la main.'))}
+          <Tgl on={!!cfg.actions.vanne.actif} cb={() => save({ actions: { ...cfg.actions, vanne: { ...cfg.actions.vanne, actif: !cfg.actions.vanne.actif } } })} label={tr('Vanne d’eau coupée')} />
+        </div>
+      )}
+      {cfg.actions.actif && cfg.actions.vanne.actif && (
+        <div className="o-optrow" style={ligne}>
+          {lbl(tr('Quelle vanne'), tr('Vide : la première vanne d’eau que Home Assistant connaît. Une prise commandée vaut aussi.'))}
+          <input aria-label={tr('Entité de la vanne d’eau')} list="loggia-vannes" value={cfg.actions.vanne.entite || ''} onChange={e => save({ actions: { ...cfg.actions, vanne: { ...cfg.actions.vanne, entite: e.target.value.trim() } } })} placeholder="valve.… / switch.…"
+            style={{ ...cvInp, maxWidth: 260, padding: '9px 12px', fontSize: 13 }} />
+          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
+          <datalist id="loggia-vannes">{vannes.map(s => <option key={s} value={s} />)}</datalist>
+        </div>
+      )}
       <div style={{ ...ligne, borderBottom: 'none' }}>
         {lbl(tr('Essai'), tr('Envoie une notification de test au téléphone choisi'))}
         <button onClick={test} style={{ padding: '9px 16px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Envoyer un test')}</button>
