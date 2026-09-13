@@ -599,3 +599,50 @@ def test_les_alertes_n_ont_plus_de_journal_a_part():
     texte = (COMPOSANT / "alertes.py").read_text(encoding="utf-8")
     assert "loggia_alertes_journal" not in texte
     assert "_journaliser" not in texte
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Le socle previent qui veut savoir qu'une main s'est posee (§10, ADR 0021).
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_une_main_previent_qui_ecoute(socle):
+    from homeassistant.core import Context
+    r = socle()
+    vues = []
+    retirer = r.ecouter_mains(vues.append)
+
+    class Ev:
+        data = {"entity_id": "light.salon"}
+        context = Context(user_id="u1")
+
+    r._sur_changement(Ev())
+    assert vues == ["light.salon"]
+    assert r.derniere_main > 0
+    retirer()
+    r._sur_changement(Ev())
+    assert vues == ["light.salon"], "une ecoute retiree previent encore"
+
+
+def test_un_bouton_previent_aussi(socle):
+    import asyncio as _asyncio
+    r = socle()
+    vues = []
+    r.ecouter_mains(vues.append)
+    _asyncio.run(r.geler("interrupteurs", "bouton", ["light.a", "light.b"]))
+    assert vues == ["light.a", "light.b"]
+
+
+def test_un_abonne_qui_echoue_n_empeche_pas_le_gel(socle):
+    from homeassistant.core import Context
+    r = socle()
+
+    def casse(_haid):
+        raise RuntimeError("boum")
+    r.ecouter_mains(casse)
+
+    class Ev:
+        data = {"entity_id": "light.salon"}
+        context = Context(user_id="u1")
+
+    r._sur_changement(Ev())
+    assert r.gele("light.salon")

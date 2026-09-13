@@ -146,6 +146,10 @@ class Regles:
         # Une regle qui TIENT une entite la protege des regles plus faibles
         # jusqu'a ce qu'elle la rende — voir `agir`.
         self._tenues: dict[str, dict[str, Any]] = {}
+        # Qui veut savoir qu'une main s'est posee : la presence, pour qui un
+        # geste pendant le decompte de depart dit que quelqu'un est la (§10).
+        self._sur_main: list = []
+        self.derniere_main: float = 0.0
         self._ecriture = None
         self._depot = None
 
@@ -278,6 +282,7 @@ class Regles:
         # rendrait l'entite derriere elle a la fin du gel — la protection
         # solaire rouvrant un volet qu'on venait de baisser a la main.
         self._tenues.pop(haid, None)
+        self._prevenir_main(haid)
 
     def gele(self, haid: str) -> bool:
         """Cette entite est-elle sous la main de quelqu'un ?"""
@@ -312,8 +317,30 @@ class Regles:
         for h in haids:
             self._gel[h] = time.time() + self.duree_gel
             self._tenues.pop(h, None)
+            self._prevenir_main(h)
         await self.noter(module, regle, quoi, cibles=haids, motif=motif)
         return haids
+
+    def ecouter_mains(self, rappel):
+        """Prevenir `rappel(entity_id)` a chaque main posee sur une entite
+        suivie — par Home Assistant ou declaree par un module (`geler`).
+        Rend la fonction qui retire l'ecoute."""
+        self._sur_main.append(rappel)
+
+        def retirer():
+            try:
+                self._sur_main.remove(rappel)
+            except ValueError:
+                pass
+        return retirer
+
+    def _prevenir_main(self, haid: str) -> None:
+        self.derniere_main = time.time()
+        for rappel in list(self._sur_main):
+            try:
+                rappel(haid)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Loggia regles : un abonne aux mains a echoue")
 
     def gels(self) -> dict:
         """Ce qu'une main retient en ce moment : {entity_id: secondes restantes}."""

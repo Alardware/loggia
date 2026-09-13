@@ -87,6 +87,9 @@ def creer(module, store_module, regles_module):
         p.consignes = {}
         p.dehors = False
         p._minuteur = None
+        # Les indices (§10) : le vrai constructeur les pose, la fabrique aussi.
+        p.dernier_indice = None
+        p._indice_note = False
         p.regles = regles_module.Regles(p.hass, magasin)
         p.regles._depot = FauxStore(None)
         p._defait = []
@@ -373,3 +376,191 @@ def test_le_retour_rend_aussi_ce_qu_il_ne_rallume_pas(creer):
     assert p.regles.tenues("presence") == {"light.salon": "depart"}
     lancer(p._async_retour())
     assert p.regles.tenues("presence") == {}, "le retour n'a pas rendu ce qu'il ne rallumait pas"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Un seul indice suffit (§10, ADR 0021).
+#
+# Le telephone dit qui est parti, pas qui est reste. Pendant le decompte, un
+# mouvement, une porte ou une main disent que quelqu'un est la : le decompte
+# repart de zero, et le journal le dit UNE fois. Hors decompte, rien.
+# ─────────────────────────────────────────────────────────────────────────────
+
+INDICES = {"binary_sensor.couloir": FauxEtat("off", {"device_class": "motion", "friendly_name": "Couloir"}),
+           "binary_sensor.fumee": FauxEtat("off", {"device_class": "smoke"})}
+
+
+class Ev:
+    def __init__(self, haid, etat, avant="off"):
+        self.data = {"entity_id": haid, "new_state": FauxEtat(etat), "old_state": FauxEtat(avant)}
+        self.context = None
+
+
+def armer(monkeypatch):
+    """Compte les decomptes armes ; chaque minuteur rendu sait s'annuler."""
+    import sys as _sys
+    armes = []
+
+    def faux(hass, delai, rappel):
+        # Le socle programme l'ecriture du journal par le meme helper (20 s) :
+        # on ne compte que les decomptes de depart, jamais moins d'une minute.
+        if delai >= 60:
+            armes.append(delai)
+        return lambda: None
+    monkeypatch.setattr(_sys.modules["homeassistant.helpers.event"], "async_call_later", faux)
+    return armes
+
+
+def test_les_capteurs_d_indice_se_trouvent_par_device_class(creer):
+    p = creer(cfg(), {**DEHORS, **MAISON, **INDICES})
+    assert p._capteurs_indices() == ["binary_sensor.couloir"]
+
+
+def test_le_genre_d_un_indice(module):
+    assert module.genre_indice(FauxEtat("on", {"device_class": "motion"})) == "mouvement"
+    assert module.genre_indice(FauxEtat("on", {"device_class": "door"})) == "ouverture"
+    assert module.genre_indice(FauxEtat("on", {"device_class": "smoke"})) is None
+    assert module.genre_indice(FauxEtat("on", {})) is None
+    assert module.genre_indice(None) is None
+    assert module.indice_dit_oui(FauxEtat("on")) is True
+    assert module.indice_dit_oui(FauxEtat("off")) is False
+    assert module.indice_dit_oui(FauxEtat("unavailable")) is False
+    assert module.indice_dit_oui(None) is False
+
+
+def test_un_mouvement_pendant_le_decompte_le_fait_repartir(creer, monkeypatch):
+    armes = armer(monkeypatch)
+    p = creer(cfg(delai_depart=5), {**DEHORS, **MAISON, **INDICES})
+    lancer(p._async_evaluer())
+    assert armes == [300]
+    p._sur_indice(Ev("binary_sensor.couloir", "on"))
+    lancer(p.hass.taches.pop())
+    assert armes == [300, 300], "le decompte doit repartir de zero"
+    assert p.hass.services.appels == []
+    ligne = lancer(p.regles.journal())[0]
+    assert ligne["quoi"] == "reporter"
+    assert ligne["regle"] == "depart"
+    assert ligne["motif"] == "mouvement : Couloir"
+    assert p.dernier_indice["nom"] == "Couloir"
+    assert p.dernier_indice["genre"] == "mouvement"
+
+
+def test_un_second_indice_ne_fait_pas_une_seconde_ligne(creer, monkeypatch):
+    armes = armer(monkeypatch)
+    p = creer(cfg(delai_depart=5), {**DEHORS, **MAISON, **INDICES})
+    lancer(p._async_evaluer())
+    for _ in range(3):
+        p._sur_indice(Ev("binary_sensor.couloir", "on"))
+        lancer(p.hass.taches.pop())
+    assert len(armes) == 4, "chaque indice relance le decompte"
+    assert [l["quoi"] for l in lancer(p.regles.journal())] == ["reporter"]
+
+
+def test_un_indice_sans_decompte_ne_fait_rien(creer, monkeypatch):
+    armes = armer(monkeypatch)
+    p = creer(cfg(delai_depart=5), {"person.a": FauxEtat("home"), **MAISON, **INDICES})
+    p._sur_indice(Ev("binary_sensor.couloir", "on"))
+    assert p.hass.taches == []
+    assert armes == []
+    # Mais on retient quand meme le dernier, pour l'ecran.
+    assert p.dernier_indice["entite"] == "binary_sensor.couloir"
+
+
+def test_un_indice_maison_en_veille_ne_la_reveille_pas(creer, monkeypatch):
+    """Un chat devant le capteur ne rallume pas le salon : seul un retour le fait."""
+    armer(monkeypatch)
+    p = creer(cfg(), {**DEHORS, **MAISON, **INDICES})
+    lancer(p._async_depart())
+    assert p.dehors is True
+    p._sur_indice(Ev("binary_sensor.couloir", "on"))
+    assert p.hass.taches == []
+    assert p.dehors is True
+
+
+def test_un_capteur_qui_retombe_ou_se_tait_n_est_pas_un_indice(creer, monkeypatch):
+    armes = armer(monkeypatch)
+    p = creer(cfg(delai_depart=5), {**DEHORS, **MAISON, **INDICES})
+    lancer(p._async_evaluer())
+    p._sur_indice(Ev("binary_sensor.couloir", "off", avant="on"))
+    p._sur_indice(Ev("binary_sensor.couloir", "unavailable"))
+    # `on` qui reste `on` : un attribut qui bouge, pas un passage.
+    p._sur_indice(Ev("binary_sensor.couloir", "on", avant="on"))
+    assert p.hass.taches == []
+    assert armes == [300]
+
+
+def test_une_main_pendant_le_decompte_compte_aussi(creer, monkeypatch):
+    from homeassistant.core import Context
+    armes = armer(monkeypatch)
+    p = creer(cfg(delai_depart=5), {**DEHORS, **MAISON, **INDICES})
+    lancer(p._async_reabonner())
+    lancer(p._async_evaluer())
+
+    class E:
+        data = {"entity_id": "light.salon"}
+        context = Context(user_id="u1")
+
+    p.regles._sur_changement(E())
+    lancer(p.hass.taches.pop())
+    assert armes == [300, 300]
+    assert lancer(p.regles.journal())[0]["motif"] == "main : light.salon"
+
+
+def test_les_mains_peuvent_ne_pas_compter(creer, monkeypatch):
+    from homeassistant.core import Context
+    armes = armer(monkeypatch)
+    p = creer(cfg(delai_depart=5, indices={"actif": True, "mains": False}), {**DEHORS, **MAISON, **INDICES})
+    lancer(p._async_reabonner())
+    lancer(p._async_evaluer())
+
+    class E:
+        data = {"entity_id": "light.salon"}
+        context = Context(user_id="u1")
+
+    p.regles._sur_changement(E())
+    assert p.hass.taches == []
+    assert armes == [300]
+
+
+def test_les_indices_debrayes_ne_sont_pas_ecoutes(creer, monkeypatch):
+    import sys as _sys
+    ecoutes = []
+    monkeypatch.setattr(_sys.modules["homeassistant.helpers.event"], "async_track_state_change_event",
+                        lambda hass, ids, cb: ecoutes.append(sorted(ids)) or (lambda: None))
+    p = creer(cfg(), {**DEHORS, **MAISON, **INDICES})
+    lancer(p._async_reabonner())
+    # Le socle pose aussi son ecoute (les lampes) par le meme helper.
+    assert ["person.a"] in ecoutes
+    assert ["binary_sensor.couloir"] in ecoutes
+    ecoutes.clear()
+    p.cfg["indices"] = {"actif": False, "mains": True}
+    lancer(p._async_reabonner())
+    assert ["person.a"] in ecoutes
+    assert ["binary_sensor.couloir"] not in ecoutes
+
+
+def test_un_nouveau_decompte_a_droit_a_sa_ligne(creer, monkeypatch):
+    """Depart reporte, depart fait, retour, nouveau depart : le journal parle a nouveau."""
+    armer(monkeypatch)
+    c = cfg(delai_depart=5, retour={"lumieres": False, "chauffage": False, "desarmer": False})
+    p = creer(c, {**DEHORS, **MAISON, **INDICES})
+    lancer(p._async_evaluer())
+    p._sur_indice(Ev("binary_sensor.couloir", "on"))
+    lancer(p.hass.taches.pop())
+    lancer(p._async_depart())
+    assert p.dehors is True
+    p.hass.states.table["person.a"] = FauxEtat("home")
+    lancer(p._async_evaluer())
+    assert p.dehors is False
+    p.hass.states.table["person.a"] = FauxEtat("not_home")
+    lancer(p._async_evaluer())
+    p._sur_indice(Ev("binary_sensor.couloir", "on"))
+    lancer(p.hass.taches.pop())
+    assert [l["quoi"] for l in lancer(p.regles.journal()) if l["quoi"] == "reporter"] == ["reporter", "reporter"]
+
+
+def test_l_etat_montre_les_indices(creer):
+    p = creer(cfg(), {**DEHORS, **MAISON, **INDICES})
+    etat = lancer(p.async_etat())
+    assert etat["indices"] == {"capteurs": ["binary_sensor.couloir"], "dernier": None}
+    assert p.cfg["indices"] == {"actif": True, "mains": True}

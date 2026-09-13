@@ -86,6 +86,14 @@ export function PresenceReglages({ hass, cardSt }) {
       .map(id => ({ id, nom: cvName(hass.states[id], id) }))
       .sort((a, b) => a.nom.localeCompare(b.nom));
   }, [hass]);
+  /* Les capteurs qui trahissent une présence : par device_class, jamais par
+   * nom — le miroir de `presence.INDICES` côté serveur. */
+  const capteurs = useMemo(() => {
+    if (!hass || !hass.states) return [];
+    const classes = ['motion', 'occupancy', 'presence', 'door', 'window', 'opening', 'garage_door'];
+    return Object.keys(hass.states).filter(id => id.indexOf('binary_sensor.') === 0
+      && classes.indexOf(String((hass.states[id].attributes || {}).device_class || '').toLowerCase()) >= 0);
+  }, [hass]);
 
   if (!cfg) {
     return (
@@ -103,6 +111,7 @@ export function PresenceReglages({ hass, cardSt }) {
   const chauf = dep.chauffage || {};
   const alarme = dep.alarme || {};
   const suivies = cfg.personnes || [];
+  const ind = cfg.indices || {};
 
   const titre = { fontSize: 15, fontWeight: 700 };
   const simu = cfg.simulation || {};
@@ -126,7 +135,7 @@ export function PresenceReglages({ hass, cardSt }) {
         <RegleEntete nom={tr('Départ et retour')}
           desc={tr('Quand la dernière personne s’en va, la maison se met en veille. Elle se réveille au retour.')}
           on={!!cfg.actif} cb={() => enregistrer({ actif: !cfg.actif })}
-          plie={pliPres} onPlier={plierPres} zone="presence-pres-1 presence-pres-2 presence-pres-3" />
+          plie={pliPres} onPlier={plierPres} zone="presence-pres-1 presence-pres-2 presence-pres-3 presence-pres-4" />
         {etat.dehors && (
           <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{tr('Maison en veille en ce moment.')}</div>
         )}
@@ -227,6 +236,31 @@ export function PresenceReglages({ hass, cardSt }) {
                 </span>
                 <Bascule nom={tr('Désarmer l’alarme au retour')} on={!!ret.desarmer} cb={() => enregistrer({ retour: { desarmer: !ret.desarmer } })} />
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Un seul indice suffit (§10) ── */}
+      {/* Le téléphone dit qui est parti ; il ne dit pas qui est resté. Un
+        * mouvement, une porte, une lampe touchée pendant le décompte : quelqu'un
+        * est là, le décompte repart de zéro. */}
+      {cfg.actif && !pliPres && (
+        <div id="presence-pres-4" style={cardSt}>
+          <div style={titre}>{tr('Un seul indice suffit')}</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>
+            {tr('Pendant le décompte, un mouvement, une porte qui s’ouvre ou une lampe touchée à la main veut dire que quelqu’un est là : le décompte repart de zéro.')}
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <Rangee nom={tr('Mouvements et ouvertures')}
+              desc={capteurs.length === 0 ? tr('Aucun capteur de mouvement ni d’ouverture trouvé.') : (capteurs.length > 1 ? tr('{n} capteurs trouvés dans Home Assistant', { n: capteurs.length }) : tr('{n} capteur trouvé dans Home Assistant', { n: 1 }))}
+              on={ind.actif !== false} cb={() => enregistrer({ indices: { actif: ind.actif === false } })} />
+            <Rangee nom={tr('Gestes manuels')} desc={tr('Une lampe ou un volet touché à la main compte aussi.')}
+              on={ind.mains !== false} cb={() => enregistrer({ indices: { mains: ind.mains === false } })} />
+          </div>
+          {etat.indices && etat.indices.dernier && (
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
+              {tr('Dernier indice')} : {etat.indices.dernier.genre} · {etat.indices.dernier.nom} · {new Date(etat.indices.dernier.ts * 1000).toLocaleTimeString()}
             </div>
           )}
         </div>

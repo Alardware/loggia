@@ -25,3 +25,4 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0018](0018-journal-cinq-cents-lignes.md) | Le journal garde cinq cents lignes | appliqué (v3.11.0) |
 | [0019](0019-fenetre-ouverte-est-une-question-de-surete.md) | « Fenêtre ouverte coupe le chauffage » se place en sûreté | appliqué (v3.11.0) |
 | [0020](0020-ce-que-montre-l-onglet-journal.md) | Ce que montre l'onglet Journal | appliqué (v3.12.0) |
+| [0021](0021-un-seul-indice-reporte-le-depart.md) | Un seul indice de présence reporte le départ | appliqué (v3.14.0) |

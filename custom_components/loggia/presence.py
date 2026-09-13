@@ -15,8 +15,8 @@ vider la maison), puis on eteint les lumieres, on baisse le chauffage et on
 arme l'alarme — chacun de ces trois gestes etant debrayable. Quelqu'un rentre :
 on rend ce qu'on a pris.
 
-Trois precautions
-─────────────────
+Quatre precautions
+──────────────────
   On ne rend que ce qu'on a pris. Les lumieres eteintes par la regle sont
   notees ; celles qui l'etaient deja ne se rallument pas au retour.
 
@@ -27,10 +27,17 @@ Trois precautions
   personne ne l'ouvre. Armer une alarme parce que la maison se vide est sans
   risque ; la desarmer parce qu'un telephone approche en est un, et ce choix
   doit etre fait en connaissance de cause.
+
+  Un seul indice suffit (§10). Le telephone dit qui est parti, pas qui est
+  reste. Pendant le decompte, un mouvement, une porte qui s'ouvre ou une
+  lampe touchee a la main disent que quelqu'un est la : le decompte repart
+  de zero, et le journal le dit une fois. Le depart n'est confirme qu'apres
+  N minutes sans le moindre indice.
 """
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
@@ -49,6 +56,12 @@ SOLEIL = "sun.sun"
 # une maison vide.
 MUETS = {"unavailable", "unknown", "none", ""}
 
+# Ce qui trahit une presence sans telephone : un mouvement, une porte ou une
+# fenetre qui s'ouvre. Par `device_class`, jamais par nom (critere 1).
+INDICES = {"motion": "mouvement", "occupancy": "mouvement", "presence": "mouvement",
+           "door": "ouverture", "window": "ouverture", "opening": "ouverture",
+           "garage_door": "ouverture"}
+
 DEFAUT: dict[str, Any] = {
     "actif": False,
     "delai_depart": 5,
@@ -58,6 +71,9 @@ DEFAUT: dict[str, Any] = {
                "alarme": {"actif": False, "entite": "", "mode": "away"}},
     "retour": {"lumieres": False, "seulement_la_nuit": True,
                "chauffage": True, "desarmer": False},
+    # Un seul indice suffit (§10) : les capteurs de mouvement et d'ouverture,
+    # et les mains. Actif d'emblee — c'est ce qui rend le depart fiable.
+    "indices": {"actif": True, "mains": True},
     # Observer sans agir : la regle note ce qu'elle aurait fait.
     "simulation": {"actif": False},
 }
@@ -104,6 +120,18 @@ def fait_nuit(etat_soleil) -> bool:
     return str(getattr(etat_soleil, "state", "")).lower() == "below_horizon"
 
 
+def genre_indice(etat) -> str | None:
+    """« mouvement », « ouverture » — ou None si ce capteur n'en est pas un."""
+    attrs = (getattr(etat, "attributes", None) or {}) if etat is not None else {}
+    return INDICES.get(str(attrs.get("device_class") or "").lower())
+
+
+def indice_dit_oui(etat) -> bool:
+    """Un capteur d'indice ne dit quelque chose que quand il est a `on` :
+    retomber, ou se taire, n'est pas un indice."""
+    return etat is not None and str(getattr(etat, "state", "")).lower() == "on"
+
+
 class LoggiaPresence:
     """Met la maison en veille quand elle se vide, et la reveille au retour."""
 
@@ -123,6 +151,10 @@ class LoggiaPresence:
         self.consignes: dict[str, float] = {}
         self.dehors = False
         self._minuteur = None
+        # Le dernier indice vu, pour l'ecran : {"entite", "nom", "genre", "ts"}.
+        self.dernier_indice: dict[str, Any] | None = None
+        # Une ligne de journal par decompte, pas une par mouvement.
+        self._indice_note = False
         self._defait: list[Any] = []
         hass.async_create_task(self._async_demarrer())
 
@@ -149,10 +181,59 @@ class LoggiaPresence:
             async_track_state_change_event(self.hass, suivis, self._sur_personne)
         )
         _LOGGER.info("Loggia presence : %d personnes suivies", len(suivis))
+        # Les indices (§10) : les capteurs de mouvement et d'ouverture, et les
+        # mains que le socle voit passer.
+        ind = self.cfg.get("indices") or {}
+        if ind.get("actif", True):
+            capteurs = self._capteurs_indices()
+            if capteurs:
+                self._defait.append(
+                    async_track_state_change_event(self.hass, capteurs, self._sur_indice)
+                )
+        if ind.get("mains", True):
+            self._defait.append(self.regles.ecouter_mains(self._sur_main))
 
     @callback
     def _sur_personne(self, _event) -> None:
         self.hass.async_create_task(self._async_evaluer())
+
+    @callback
+    def _sur_indice(self, event) -> None:
+        """Un capteur de mouvement ou d'ouverture vient de passer a `on`."""
+        data = getattr(event, "data", None) or {}
+        nouveau = data.get("new_state")
+        # Un passage, pas un etat : `on` qui reste `on` (un attribut qui bouge)
+        # n'est pas un nouvel indice.
+        if not indice_dit_oui(nouveau) or indice_dit_oui(data.get("old_state")):
+            return
+        haid = data.get("entity_id") or ""
+        self._indice(haid, genre_indice(nouveau) or "mouvement")
+
+    def _sur_main(self, haid: str) -> None:
+        """Le socle a vu une main se poser sur une entite pilotee."""
+        self._indice(haid, "main")
+
+    def _indice(self, haid: str, genre: str) -> None:
+        """Quelqu'un est la. Pendant le decompte, il repart de zero (§10).
+
+        Hors decompte, rien : la maison en veille ne se reveille que par un
+        retour — un chat devant le capteur ne rallume pas le salon.
+        """
+        self.dernier_indice = {"entite": haid, "nom": self._nom(haid), "genre": genre,
+                               "ts": time.time()}
+        if self._minuteur is None:
+            return
+        self._desarmer()
+        self.hass.async_create_task(self._async_reporter(haid, genre))
+
+    async def _async_reporter(self, haid: str, genre: str) -> None:
+        # Une ligne par decompte : un capteur qui voit passer quelqu'un toutes
+        # les trente secondes remplirait le journal pour rien.
+        if not self._indice_note:
+            self._indice_note = True
+            await self.regles.noter("presence", "depart", "reporter", n=0,
+                                    motif="%s : %s" % (genre, self._nom(haid)))
+        await self._async_armer_depart(relance=True)
 
     def _declarer(self) -> None:
         """Declare au socle ce que le depart pilote : les lumieres, les
@@ -183,7 +264,7 @@ class LoggiaPresence:
                 self.dehors = False
                 await self._async_retour()
 
-    async def _async_armer_depart(self) -> None:
+    async def _async_armer_depart(self, relance: bool = False) -> None:
         """Le delai avant de vider la maison.
 
         Un telephone qui accroche une autre antenne se declare absent quelques
@@ -192,6 +273,10 @@ class LoggiaPresence:
         """
         if self._minuteur is not None:
             return
+        # Un decompte neuf a droit a sa ligne « reporter » ; une relance apres
+        # un indice, non.
+        if not relance:
+            self._indice_note = False
         try:
             delai = max(0, int(self.cfg.get("delai_depart", 5))) * 60
         except (TypeError, ValueError):
@@ -272,6 +357,20 @@ class LoggiaPresence:
         return [i for i in sorted(ids)
                 if str(getattr(self.hass.states.get(i), "state", "")).lower() == "on"]
 
+    def _capteurs_indices(self) -> list:
+        """Les capteurs de mouvement et d'ouverture de la maison, par `device_class`."""
+        try:
+            ids = self.hass.states.async_entity_ids("binary_sensor")
+        except Exception:  # noqa: BLE001
+            return []
+        return [i for i in sorted(ids) if genre_indice(self.hass.states.get(i))]
+
+    def _nom(self, haid: str) -> str:
+        st = self.hass.states.get(haid)
+        nom = ((getattr(st, "attributes", None) or {}).get("friendly_name")
+               if st is not None else None)
+        return str(nom) if nom else haid
+
     def _climats(self) -> list:
         try:
             return sorted(self.hass.states.async_entity_ids("climate"))
@@ -348,6 +447,7 @@ class LoggiaPresence:
         self.eteintes = {}
         self.consignes = {}
         self.dehors = False
+        self._indice_note = False
         self.regles.relacher("presence")
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
@@ -382,6 +482,9 @@ class LoggiaPresence:
             "en_attente": self._minuteur is not None,
             "eteintes": sorted(self.eteintes),
             "consignes": dict(self.consignes),
+            # Les indices (§10) : ce que la maison sait voir, et le dernier vu.
+            "indices": {"capteurs": self._capteurs_indices(),
+                        "dernier": dict(self.dernier_indice) if self.dernier_indice else None},
             "journal": await self.regles.journal(limite=40, module="presence"),
         }
 

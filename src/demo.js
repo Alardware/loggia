@@ -379,6 +379,7 @@ const PRE_CFG = {
   depart: { lumieres: true, chauffage: { actif: true, consigne: 17, confort: 20 },
     alarme: { actif: true, entite: 'alarm_control_panel.maison', mode: 'away' } },
   retour: { lumieres: true, seulement_la_nuit: true, chauffage: true, desarmer: false },
+  indices: { actif: true, mains: true },
 };
 
 function presenceDemo() {
@@ -387,7 +388,10 @@ function presenceDemo() {
     dehors: false,
     en_attente: false,
     eteintes: [],
+    indices: { capteurs: ['binary_sensor.fenetre_chambre', 'binary_sensor.fenetre_salon', 'binary_sensor.porte_entree'],
+      dernier: { entite: 'binary_sensor.porte_entree', nom: "Porte d'entrée", genre: 'ouverture', ts: Date.now() / 1000 - 600 } },
     journal: [
+      { module: 'presence', regle: 'depart', quoi: 'reporter', cibles: [], n: 0, motif: "ouverture : Porte d'entrée", detail: '', simule: false, ts: Date.now() / 1000 - 600 },
       { module: 'presence', regle: 'retour', quoi: 'rallumer', cibles: ['light.salon', 'light.cuisine'], n: 2, motif: 'retour', detail: '', simule: false, ts: Date.now() / 1000 - 7200 },
       { module: 'presence', regle: 'depart', quoi: 'eteindre', cibles: ['light.salon', 'light.cuisine', 'light.bureau'], n: 3, motif: 'maison vide', detail: '', simule: false, ts: Date.now() / 1000 - 34000 },
     ],

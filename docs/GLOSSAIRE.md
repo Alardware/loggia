@@ -47,6 +47,12 @@ la déclare au socle (`regles.geler`, ADR 0015). Une exception, et une seule :
 la veilleuse éteint ce qu'une main a allumé, c'est sa définition — le gel de
 cette main ne la retient pas.
 
+**Indice** (de présence) — Ce qui trahit quelqu'un que le téléphone ne voit
+pas : un capteur de mouvement ou d'ouverture qui passe à `on`, une main.
+Pendant le décompte de départ, un seul indice le fait repartir de zéro (§10,
+ADR 0021) ; le journal le dit une fois par décompte. Hors décompte, un indice
+ne fait rien.
+
 ## Ce qu'une règle fait
 
 **Agir** — Commander une ou plusieurs entités par le socle

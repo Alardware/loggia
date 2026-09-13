@@ -352,3 +352,20 @@ test('la démo a une baie désignée et un ordre qui l’attend', () => {
   assert.ok(demo.includes("baies: { actif: true, volets: { 'cover.volet_salon': 'binary_sensor.fenetre_salon' } }"), 'la démo ne montre pas la règle');
   assert.ok(demo.includes("motif: 'baie ouverte'"), 'la démo ne montre pas d’ordre retenu par une baie');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Un seul indice suffit (§10, ADR 0021) — 13/09/2026.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('la présence écoute les indices, et l’écran le dit', () => {
+  const vue = readFileSync(join(RACINE, 'src', 'views', 'presence.jsx'), 'utf8');
+  assert.ok(vue.includes("enregistrer({ indices: { actif: ind.actif === false } })"), 'plus d’interrupteur pour les capteurs');
+  assert.ok(vue.includes("enregistrer({ indices: { mains: ind.mains === false } })"), 'plus d’interrupteur pour les gestes');
+  // La carte se replie avec la règle, comme les trois autres.
+  assert.ok(vue.includes('zone="presence-pres-1 presence-pres-2 presence-pres-3 presence-pres-4"'), 'la carte ne se replie pas avec la règle');
+  // Les capteurs se trouvent par device_class — le miroir du serveur — jamais par nom.
+  assert.ok(vue.includes("['motion', 'occupancy', 'presence', 'door', 'window', 'opening', 'garage_door']"), 'la liste des device_class a changé de forme');
+  const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
+  assert.ok(demo.includes('indices: { actif: true, mains: true }'), 'la démo ne montre pas la règle');
+  assert.ok(demo.includes("quoi: 'reporter'"), 'la démo ne montre pas de décompte reporté');
+});
