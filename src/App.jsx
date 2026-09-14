@@ -2794,7 +2794,8 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
   const volAff = ovVol != null ? ovVol : vol;
   const poserVol = (v) => { setOvVol(v); call('volume_set', { volume_level: v / 100 }, np.ctl); };
   const texte = mort ? tr('Indisponible') : np.title ? (np.title + (sub ? ' · ' + sub : '')) : (marche ? (np.playing ? tr('Lecture') : tr('En pause')) : tr('Éteint'));
-  const btn = { ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px', fontSize: 15, fontWeight: 800 };
+  // Des icones, pas des « » en texte : trop petits a l'ecran (retour user du 14/09).
+  const btn = { ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '7px 6px', lineHeight: 1 };
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : un lecteur EN LECTURE lave sa surface de rose, comme la
@@ -2817,9 +2818,9 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
         <div style={{ ...RM_SUB, color: marche && np.title ? RM_ROSE : 'var(--o-text3)' }}>{texte}</div>
         {vol != null && <RmJauge v={volAff} couleur={RM_ROSE} actif={!mort} label={tr('Volume') + ' ' + nom} onCommit={poserVol} />}
         <div style={{ display: 'flex', gap: 8, marginTop: vol != null ? 9 : 11 }}>
-          <button aria-label={tr('Piste précédente')} title={tr('Piste précédente')} onClick={(e) => { e.stopPropagation(); call('media_previous_track', null, np.ctl); }} className="o-rmbtn" style={btn}>«</button>
-          <button aria-label={np.playing ? tr('Mettre en pause') : tr('Lecture')} title={np.playing ? tr('Mettre en pause') : tr('Lecture')} onClick={(e) => { e.stopPropagation(); call('media_play_pause', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i={np.playing ? 'pause' : 'play'} size={13} /></button>
-          <button aria-label={tr('Piste suivante')} title={tr('Piste suivante')} onClick={(e) => { e.stopPropagation(); call('media_next_track', null, np.ctl); }} className="o-rmbtn" style={btn}>»</button>
+          <button aria-label={tr('Piste précédente')} title={tr('Piste précédente')} onClick={(e) => { e.stopPropagation(); call('media_previous_track', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i="angle-double-left" size={18} /></button>
+          <button aria-label={np.playing ? tr('Mettre en pause') : tr('Lecture')} title={np.playing ? tr('Mettre en pause') : tr('Lecture')} onClick={(e) => { e.stopPropagation(); call('media_play_pause', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i={np.playing ? 'pause' : 'play'} size={16} /></button>
+          <button aria-label={tr('Piste suivante')} title={tr('Piste suivante')} onClick={(e) => { e.stopPropagation(); call('media_next_track', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i="angle-double-right" size={18} /></button>
         </div>
       </div>
     </div>

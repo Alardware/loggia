@@ -434,3 +434,12 @@ test('la glissière des cartes a retrouvé sa hauteur d’avant, sans changer de
   assert.ok(jauge.includes('data-fill') && jauge.includes('data-knob'), 'le dessin reste : remplissage + curseur');
   assert.ok(!jauge.includes('border:'), 'et toujours sans bordure');
 });
+
+test('les boutons de la carte enceinte sont des icônes, pas des « » en texte', () => {
+  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const d = app.indexOf('function RoomMediaCard(');
+  const carte = app.slice(d, app.indexOf(String.fromCharCode(10) + 'function ', d + 1));
+  assert.ok(carte.includes('<Fi i="angle-double-left" size={18} />') && carte.includes('<Fi i="angle-double-right" size={18} />'), 'chevrons doubles de 18 px');
+  assert.ok(carte.includes("<Fi i={np.playing ? 'pause' : 'play'} size={16} />"), 'lecture / pause à 16 px');
+  assert.ok(!carte.includes('>«<') && !carte.includes('>»<'), 'plus de guillemets en guise de flèches');
+});
