@@ -417,3 +417,20 @@ test('la fiche volet n’a plus la grille de modes : la bascule suffit', () => {
   assert.ok(!app.includes('VOLET_ALLURE'), 'la table des allures aussi');
   assert.ok(!app.includes('o-volet-mode'), 'et la classe des boutons');
 });
+
+test('la pièce n’a plus de journal d’activité, la Sécurité garde le sien', () => {
+  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const rv = app.indexOf('function RoomView(');
+  const room = app.slice(rv, app.indexOf(String.fromCharCode(10) + 'function ', rv + 1));
+  assert.ok(!room.includes('<RoomActivityCard'), 'plus de journal sous les appareils de la pièce');
+  assert.ok(app.includes("<RoomActivityCard hass={hass} max={12} titre={tr('Journal de la sécurité')}"), 'la vue Sécurité garde son journal');
+});
+
+test('la glissière des cartes a retrouvé sa hauteur d’avant, sans changer de dessin', () => {
+  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const j = app.indexOf('function RmJauge(');
+  const jauge = app.slice(j, app.indexOf(String.fromCharCode(10) + '}', j));
+  assert.ok(jauge.includes('height: 24, borderRadius: 12, marginTop: marge'), '24 px de haut, comme avant la refonte');
+  assert.ok(jauge.includes('data-fill') && jauge.includes('data-knob'), 'le dessin reste : remplissage + curseur');
+  assert.ok(!jauge.includes('border:'), 'et toujours sans bordure');
+});

@@ -1767,10 +1767,12 @@ function RmJauge({ v, couleur, grade = null, actif = true, label = '', onCommit,
      * sans clavier, mais ce clic ne sert qu'a ne pas ouvrir la fiche. */
     /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
     <span {...kb} onClick={(e) => e.stopPropagation()} onPointerDown={glisse}
-      style={{ position: 'relative', display: 'block', height: 16, borderRadius: 8, marginTop: marge, background: 'var(--o-s1)', overflow: 'hidden', opacity: actif ? 1 : .4, cursor: actif ? 'ew-resize' : 'default', touchAction: 'none' }}>
-      <span data-fill style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: largeur(val), borderRadius: 8, background: grade || couleur, transition: 'width .3s' }} />
-      <span data-knob style={{ position: 'absolute', top: 3, bottom: 3, width: 3, borderRadius: 2, background: couleur, left: gauche(val), transition: 'left .3s' }} />
-      <span aria-hidden="true" style={{ position: 'absolute', right: 6, top: 6, width: 4, height: 4, borderRadius: '50%', background: 'var(--o-text3)', opacity: .6 }} />
+      /* 24 px de haut, comme la glissiere d'avant la refonte (retour user du
+       * 14/09 : « elargis un petit peu la barre ») — le dessin, lui, reste. */
+      style={{ position: 'relative', display: 'block', height: 24, borderRadius: 12, marginTop: marge, background: 'var(--o-s1)', overflow: 'hidden', opacity: actif ? 1 : .4, cursor: actif ? 'ew-resize' : 'default', touchAction: 'none' }}>
+      <span data-fill style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: largeur(val), borderRadius: 12, background: grade || couleur, transition: 'width .3s' }} />
+      <span data-knob style={{ position: 'absolute', top: 5, bottom: 5, width: 3, borderRadius: 2, background: couleur, left: gauche(val), transition: 'left .3s' }} />
+      <span aria-hidden="true" style={{ position: 'absolute', right: 6, top: 10, width: 4, height: 4, borderRadius: '50%', background: 'var(--o-text3)', opacity: .6 }} />
     </span>
   );
 }
@@ -4542,8 +4544,8 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
             </div>
           );
         })()}
-        {/* Journal de la pièce : sous les appareils, hors mode édition. */}
-        {!edit && <RoomActivityCard hass={hass} ids={ents.filter(k => k.indexOf('sect:') !== 0 && k.indexOf('zone:') !== 0)} />}
+        {/* Pas de journal sous les appareils : retire le 14/09 (retour user).
+          * Le journal vit dans la vue Securite, avec ses ouvrants et son alarme. */}
         {/* Les fiches des cartes (lumière, volet, climat…) : dc.card pose
           * l'état, dc.sheets MONTE la fiche — sans lui, taper une carte ne
           * faisait rien (« popup inactif », retour du 30/08). */}
