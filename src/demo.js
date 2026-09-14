@@ -54,6 +54,13 @@ function etatsInitiaux() {
      * bit — on en sort toujours. */
     'alarm_control_panel.maison': s('disarmed', { friendly_name: 'Alarme', supported_features: 39 }),
     'lock.porte_entree': s('locked', { friendly_name: 'Porte d’entrée' }),
+    // La camera de l'entree et ses reglages : cinq interrupteurs du meme appareil.
+    'camera.entree': s('idle', { friendly_name: 'Caméra entrée' }),
+    'switch.camera_entree_detection_mouvement': s('on', { friendly_name: 'Caméra entrée Détection de mouvement' }),
+    'switch.camera_entree_suivi': s('off', { friendly_name: 'Caméra entrée Suivi de mouvement' }),
+    'switch.camera_entree_pleurs': s('off', { friendly_name: 'Caméra entrée Détection des pleurs' }),
+    'switch.camera_entree_prive': s('off', { friendly_name: 'Caméra entrée Mode privé' }),
+    'switch.camera_entree_voyant': s('on', { friendly_name: 'Caméra entrée Voyant' }),
     'sensor.production_solaire': s(1840, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.reseau': s(-460, { friendly_name: 'Réseau', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.surplus': s(460, { friendly_name: 'Surplus', unit_of_measurement: 'W', device_class: 'power' }),
@@ -130,12 +137,12 @@ function configDemo() {
     // `loggia_cameras` est la cle que lit l'agregat — `loggia_entities.cameras`
     // sert ailleurs. Sans `haid`, la tuile prend son rendu de repli : degrade,
     // halo et badge « Direct », au lieu d'attendre un flux qui n'existe pas ici.
-    loggia_cameras: [{ name: 'Jardin', online: true }, { name: 'Entrée', online: true }],
+    loggia_cameras: [{ name: 'Jardin', online: true }, { name: 'Entrée', haid: 'camera.entree', online: true }],
     loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
     loggia_entities: {
       weather: ['weather.maison', 'sun.sun'],
       alarm: 'alarm_control_panel.maison',
-      cameras: [{ name: 'Jardin', online: true }, { name: 'Entrée', online: true }],
+      cameras: [{ name: 'Jardin', online: true }, { name: 'Entrée', haid: 'camera.entree', online: true }],
       people: [{ name: 'Camille', haid: 'person.camille' }, { name: 'Alex', haid: 'person.alex' }],
       energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
     },
@@ -351,15 +358,20 @@ function indexDemo(states) {
     chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'cover.chambre',
               'binary_sensor.fenetre_chambre', 'switch.radiateur_chambre'],
     bureau: ['light.bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite'],
-    entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree'],
+    entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree',
+             'camera.entree', 'switch.camera_entree_detection_mouvement', 'switch.camera_entree_suivi', 'switch.camera_entree_pleurs',
+             'switch.camera_entree_prive', 'switch.camera_entree_voyant'],
     sdb: ['light.sdb', 'sensor.sdb_temperature'],
   };
+  // La camera de l'entree et ses reglages forment UN appareil : c'est par lui
+  // que la fiche retrouve les interrupteurs d'une camera.
+  const APPAREIL_DE = (id) => /^(camera\.entree$|switch\.camera_entree_)/.test(id) ? 'cam_entree' : null;
   const entities = [];
   Object.keys(ZONE_DE).forEach(zone => {
     ZONE_DE[zone].forEach(id => {
       if (!states[id]) return;
       const at = states[id].attributes || {};
-      entities.push({ id, name: at.friendly_name || id, device: null, area: zone,
+      entities.push({ id, name: at.friendly_name || id, device: APPAREIL_DE(id), area: zone,
         platform: 'demo', category: null, device_class: at.device_class || null,
         unit: at.unit_of_measurement || null, hidden: false });
     });
@@ -367,7 +379,7 @@ function indexDemo(states) {
   return {
     version: 1,
     areas: ZONES.map(([id, name]) => ({ id, name, floor: null, icon: null })),
-    devices: [],
+    devices: [{ id: 'cam_entree', name: 'Caméra entrée', area: 'entree', manufacturer: 'Démo', model: 'Caméra', firmware: null, via: null, entry_type: null, integration: 'demo' }],
     entities,
     floors: [],
     services: {},

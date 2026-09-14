@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildIndex, capabilities, siblingsOf, pickSibling } from '../src/discovery.js';
+import { buildIndex, capabilities, siblingsOf, pickSibling, cameraModes } from '../src/discovery.js';
 import {
   emptyHome, simpleHome, inheritedArea, threeVacuums, hiddenDisabled,
   energyHome, systemHome, cameraHome, indexOf, capsOf,
@@ -192,4 +192,102 @@ test('systeme : les capteurs d’une machine tiennent sur un seul appareil', () 
   assert.ok(sib.includes('sensor.memory_use_percent'));
   assert.ok(sib.includes('binary_sensor.hote_en_ligne'));
   assert.equal(pickSibling(ix, fx.states, 'sensor.processor_use', { domain: 'binary_sensor', deviceClass: 'connectivity' }), 'binary_sensor.hote_en_ligne');
+});
+
+// ── Modes d'une camera ───────────────────────────────────────────────────────
+// Les reglages d'une camera sont les interrupteurs de son appareil. On les
+// reconnait a leur identifiant ou a leur nom, jamais a une liste ecrite ici.
+
+/** Une camera et ses entites, toutes sur le meme appareil ; renvoie ses modes. */
+function modesDe(ents, { hidden = [], disabled = [], appareil = 'Caméra entrée' } = {}) {
+  const states = {};
+  ents.forEach(([id, nom]) => { states[id] = { state: id.startsWith('switch.') ? 'on' : 'idle', attributes: { friendly_name: nom } }; });
+  const index = buildIndex({
+    areas: [{ area_id: 'entree', name: 'Entrée' }],
+    devices: [{ id: 'cam', name: appareil, area_id: 'entree' }],
+    entities: ents.map(([id]) => ({ entity_id: id, device_id: 'cam', hidden_by: hidden.includes(id) ? 'user' : null, disabled_by: disabled.includes(id) ? 'user' : null })),
+    states,
+  });
+  return cameraModes(index, states, ents[0][0]);
+}
+const TAPO = [
+  ['camera.entree', 'Caméra entrée'],
+  ['switch.camera_entree_privacy_mode', 'Caméra entrée Privacy mode'],
+  ['switch.camera_entree_baby_cry_detection', 'Caméra entrée Baby cry detection'],
+  ['switch.camera_entree_indicator_led', 'Caméra entrée Indicator LED'],
+  ['switch.camera_entree_motion_tracking', 'Caméra entrée Motion tracking'],
+  ['switch.camera_entree_motion_detection', 'Caméra entrée Motion detection'],
+  ['sensor.camera_entree_signal', 'Caméra entrée Signal'],
+];
+
+test('les modes d’une camera : reconnus, dans l’ordre des rangees, le reste apres', () => {
+  const modes = modesDe(TAPO);
+  assert.deepEqual(modes.map(m => m.cle), ['mouvement', 'suivi', 'pleurs', 'prive', null]);
+  assert.deepEqual(modes.map(m => m.id), [
+    'switch.camera_entree_motion_detection', 'switch.camera_entree_motion_tracking',
+    'switch.camera_entree_baby_cry_detection', 'switch.camera_entree_privacy_mode',
+    'switch.camera_entree_indicator_led',
+  ]);
+  assert.ok(!modes.some(m => m.id.startsWith('sensor.')), 'un capteur n’est pas une bascule');
+});
+
+test('un interrupteur inconnu garde son nom, sans celui de l’appareil', () => {
+  const led = modesDe(TAPO).find(m => m.cle === null);
+  assert.equal(led.nom, 'Indicator LED');
+});
+
+test('cache ou desactive : pas un reglage', () => {
+  const ids = modesDe(TAPO, { hidden: ['switch.camera_entree_privacy_mode'], disabled: ['switch.camera_entree_indicator_led'] }).map(m => m.id);
+  assert.ok(!ids.includes('switch.camera_entree_privacy_mode'), 'cache');
+  assert.ok(!ids.includes('switch.camera_entree_indicator_led'), 'desactive');
+  assert.equal(ids.length, 3);
+});
+
+test('les noms en francais, majuscules et accents compris, suffisent', () => {
+  const modes = modesDe([
+    ['camera.cam', 'Cam'], ['switch.cam_1', 'Cam Détection de MOUVEMENT'], ['switch.cam_2', 'Cam Mode privé'],
+    ['switch.cam_3', 'Cam Pleurs de bébé'], ['switch.cam_4', 'Cam Suivi du sujet'],
+  ], { appareil: 'Cam' });
+  assert.deepEqual(modes.map(m => [m.id, m.cle]), [
+    ['switch.cam_1', 'mouvement'], ['switch.cam_4', 'suivi'], ['switch.cam_3', 'pleurs'], ['switch.cam_2', 'prive'],
+  ]);
+});
+
+test('une cle n’est donnee qu’une fois : le second passe sous son nom', () => {
+  const modes = modesDe([
+    ['camera.c', 'C'], ['switch.c_motion_detection', 'C Motion detection'], ['switch.c_motion_notifications', 'C Motion notifications'],
+  ], { appareil: 'C' });
+  assert.deepEqual(modes.map(m => [m.cle, m.nom]), [['mouvement', 'Motion detection'], [null, 'Motion notifications']]);
+});
+
+test('« encryption » n’est pas un pleur, « lens mask » est un mode prive', () => {
+  const modes = modesDe([
+    ['camera.c', 'C'], ['switch.c_encryption', 'C Encryption'], ['switch.c_lens_mask', 'C Lens mask'],
+  ], { appareil: 'C' });
+  assert.deepEqual(modes.map(m => [m.id, m.cle]), [['switch.c_lens_mask', 'prive'], ['switch.c_encryption', null]]);
+});
+
+test('les inconnus se rangent par nom', () => {
+  const modes = modesDe([['camera.c', 'C'], ['switch.c_b', 'C Zeta'], ['switch.c_a', 'C Alpha']], { appareil: 'C' });
+  assert.deepEqual(modes.map(m => m.nom), ['Alpha', 'Zeta']);
+});
+
+test('une camera sans appareil, ou sans index, n’a pas de modes', () => {
+  const states = { 'camera.seule': { state: 'idle', attributes: {} }, 'switch.motion': { state: 'on', attributes: {} } };
+  const index = buildIndex({ entities: [{ entity_id: 'camera.seule' }, { entity_id: 'switch.motion' }], states });
+  assert.deepEqual(cameraModes(index, states, 'camera.seule'), []);
+  assert.deepEqual(cameraModes(null, states, 'camera.seule'), []);
+});
+
+test('l’interrupteur d’un autre appareil n’est pas un mode de cette camera', () => {
+  const states = {
+    'camera.a': { state: 'idle', attributes: { friendly_name: 'A' } },
+    'switch.b_motion_detection': { state: 'on', attributes: { friendly_name: 'B Motion detection' } },
+  };
+  const index = buildIndex({
+    devices: [{ id: 'da', name: 'A' }, { id: 'db', name: 'B' }],
+    entities: [{ entity_id: 'camera.a', device_id: 'da' }, { entity_id: 'switch.b_motion_detection', device_id: 'db' }],
+    states,
+  });
+  assert.deepEqual(cameraModes(index, states, 'camera.a'), []);
 });

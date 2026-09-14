@@ -72,12 +72,14 @@ async function iceServers(conn, haid) {
 }
 
 // ── Lecteur caméra LIVE (porté de V1) : WebRTC → HLS natif → MJPEG signé → snapshot ──
-export function CamLive({ hass, haid, online = true }) {
+export function CamLive({ hass, haid, online = true, onMode = null }) {
   const vidRef = useRef(null);
   const imgRef = useRef(null);
   const [mode, setMode] = useState('loading'); // loading | video | mjpeg | snap | off
   const token = hass && hass.auth && hass.auth.data ? hass.auth.data.access_token : null;
   const conn = hass && hass.connection ? hass.connection : null;
+  // La fiche dit COMMENT elle voit la camera : elle suit le mode.
+  useEffect(() => { if (onMode) onMode(mode); }, [mode, onMode]);
   useEffect(() => {
     let cancelled = false, cleanupRtc = null;
     setMode('loading');

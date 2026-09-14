@@ -328,6 +328,48 @@ export function pickSibling(index, states, entityId, { domain, deviceClass, unit
   return principal || matches[0];
 }
 
+/**
+ * Les modes d'une camera : les interrupteurs de son appareil — detection de
+ * mouvement, suivi, pleurs, mode prive — reconnus a leur identifiant ou a leur
+ * nom, accents et casse ignores. Un interrupteur que l'on ne sait pas nommer
+ * garde `cle: null` et s'affiche sous son propre nom, le nom de l'appareil en
+ * moins. Une cle n'est attribuee qu'une fois : deux interrupteurs qui parlent
+ * de mouvement ne feraient pas deux rangees du meme titre.
+ *
+ * Les entites cachees ou desactivees ne sont pas des reglages. Les capteurs et
+ * les autres domaines de l'appareil non plus : une rangee est une bascule.
+ * Renvoie [] pour une camera sans appareil : rien a inventer.
+ */
+const CAMERA_MODES = [
+  // « motion tracking » parle de mouvement, mais c'est un suivi.
+  ['mouvement', /^(?!.*(track|suivi))(?=.*(motion|mouvement|movement))/],
+  ['suivi', /track|suivi/],
+  // « cry » en debut de mot seulement : « encryption » n'est pas un pleur.
+  ['pleurs', /baby|[_ .]cry|pleur|bebe/],
+  ['prive', /privacy|prive|private|lens_?mask|occult/],
+];
+const sansAccents = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+export function cameraModes(index, states, cameraId) {
+  const etats = states || {};
+  const pris = new Set();
+  const out = [];
+  siblingsOf(index, cameraId).forEach(id => {
+    if (domainOf(id) !== 'switch') return;
+    const m = index.entityMeta.get(id) || {};
+    if (m.hidden || m.disabled) return;
+    const a = (etats[id] && etats[id].attributes) || {};
+    let nom = a.friendly_name || m.name || id;
+    if (m.device && sansAccents(nom).indexOf(sansAccents(m.device) + ' ') === 0) nom = nom.slice(m.device.length + 1);
+    const texte = sansAccents(id + ' ' + nom);
+    const trouve = CAMERA_MODES.find(([cle, re]) => !pris.has(cle) && re.test(texte));
+    if (trouve) pris.add(trouve[0]);
+    out.push({ id, cle: trouve ? trouve[0] : null, nom });
+  });
+  const rang = (cle) => cle ? CAMERA_MODES.findIndex(([k]) => k === cle) : CAMERA_MODES.length;
+  return out.sort((x, y) => rang(x.cle) - rang(y.cle) || x.nom.localeCompare(y.nom));
+}
+
 /** Un capteur compte comme « énergie » d'après sa device_class, jamais son nom. */
 const ENERGY_CLASSES = new Set(['power', 'energy', 'current', 'voltage', 'gas', 'water']);
 

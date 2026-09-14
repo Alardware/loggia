@@ -14,7 +14,7 @@ const SystemeContent = lazy(() => import('./views/systeme.jsx'));
 // d'entites vient du meme morceau — il ne s'ouvre qu'en mode edition.
 const ParametresContent = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ParametresContent })));
 const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
-import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling } from './discovery.js';
+import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling, cameraModes } from './discovery.js';
 import { planAction as actionsPlan, availableActions as actionsAvailable, runPlan, actionCtx,
   datesEvenement, finApresDebut, champsDepuisEvenement, peut, commander, commanderService } from './actions.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
@@ -4258,7 +4258,7 @@ function SensorSheet({ id, hass, onClose }) {
   );
 }
 
-function useDomainCards(hass) {
+function useDomainCards(hass, { onNav = null } = {}) {
   const S = (hass && hass.states) || {};
   const [lightPop, setLightPop] = useState(null);
   const [climPop, setClimPop] = useState(null);
@@ -4323,7 +4323,7 @@ function useDomainCards(hass) {
       {sensPop && <SensorSheet id={sensPop} hass={hass} onClose={() => setSensPop(null)} />}
       {appPop && <FicheAppareil id={appPop} hass={hass} onClose={() => setAppPop(null)} />}
       {calPop && <FeuilleCalendrier hass={hass} onClose={() => setCalPop(null)} />}
-      {camPop && <CamSheet haid={camPop} nom={cvName(S[camPop], camPop)} hass={hass} onClose={() => setCamPop(null)} />}
+      {camPop && <CamSheet haid={camPop} nom={cvName(S[camPop], camPop)} hass={hass} onClose={() => setCamPop(null)} onNav={onNav} />}
       {prisePop && <RoomSwitchSheet id={prisePop} hass={hass} onClose={() => setPrisePop(null)} />}
       {lockPop && <RoomLockSheet id={lockPop} hass={hass} onClose={() => setLockPop(null)} />}
       {binPop && <RoomBinarySheet id={binPop} hass={hass} onClose={() => setBinPop(null)} />}
@@ -4374,7 +4374,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
     }
   });
   const [comfort, setComfort] = useState(false);
-  const dc = useDomainCards(hass);
+  const dc = useDomainCards(hass, { onNav });
   useEffect(() => { setComfort(false); dc.fermer(); }, [room]);
   // `loggia_roomhidden` n'est plus écrit — le retrait passe par l'agencement de
   // la pièce. On continue de le LIRE : une configuration antérieure garde ses
@@ -4613,15 +4613,64 @@ const CAMERAS = () => [
 
 // ── Snapshot proxy authentifié (repli) ──
 
-/* Popup caméra : le flux en grand, dans la feuille habituelle. */
-function CamSheet({ haid, nom, hass, onClose }) {
+/* Fiche camera (maquettes du 14/09) : le flux en grand, la ligne qui dit
+ * COMMENT on le voit, puis les modes de la camera — les interrupteurs de son
+ * appareil, reconnus par `cameraModes` — et, depuis une piece, le chemin vers
+ * la vue Securite, qui montre toutes les cameras cote a cote.
+ *
+ * On ne promet que ce que l'entite fait : pas de « enregistre 20 s » ni de
+ * « sans filmer » — la maquette inspire, l'interrupteur decide.
+ * Les libelles sont des FONCTIONS : dits au rendu, dans la langue du moment. */
+const CAM_MODES = () => ({
+  mouvement: [tr('Détection de mouvement'), tr('Prévient à chaque passage devant l’objectif.')],
+  suivi: [tr('Suivi de mouvement'), tr('La caméra tourne pour garder le sujet au centre.')],
+  pleurs: [tr('Mode baby care'), tr('Écoute les pleurs et prévient.')],
+  prive: [tr('Mode privé'), tr('Objectif occulté : plus aucune image ne sort.')],
+});
+const CAM_FLUX = () => ({
+  loading: tr('Connexion au flux…'), video: tr('Direct vidéo'), mjpeg: tr('Flux continu MJPEG'),
+  snap: tr('Instantanés rafraîchis toutes les 2 s'), off: tr('Pas de flux ici'),
+});
+function CamSheet({ haid, nom, hass, onClose, onNav = null }) {
+  const S = (hass && hass.states) || {};
+  const st = S[haid] || null;
+  const etat = st ? st.state : 'unavailable';
+  const online = !!st && etat !== 'unavailable' && etat !== 'unknown';
+  const etatTxt = !online ? tr('Indisponible') : (etat === 'streaming' || etat === 'recording' || etat === 'idle') ? tr('En direct') : String(etat);
+  const [flux, setFlux] = useState('loading');
+  const modes = cameraModes(LOGGIA_INDEX, S, haid);
+  const libelles = CAM_MODES();
+  const basculer = (id) => {
+    const on = !!S[id] && S[id].state === 'on';
+    commanderService(hass, id, 'switch', on ? 'turn_off' : 'turn_on', { entity_id: id });
+  };
+  const direct = online && flux !== 'off';
   return (
     <BottomSheet onClose={onClose}>
-      {() => (<>
-        <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 12 }}>{nom}</div>
+      {close => (<>
+        <FicheEntete titre={nom} sous={[zoneDe(haid), etatTxt].filter(Boolean).join(' · ')} close={close} id={haid} />
         <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', aspectRatio: '16/9', background: '#0b0f16' }}>
-          <CamLive hass={hass} haid={haid} online={true} />
+          <CamLive hass={hass} haid={haid} online={online} onMode={setFlux} />
+          {direct
+            ? <span style={{ position: 'absolute', top: 12, left: 12, display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 9, background: 'rgba(var(--o-bad-rgb),.18)', border: '1px solid rgba(var(--o-bad-rgb),.5)', color: 'var(--o-bad)', fontSize: 11, fontWeight: 800, letterSpacing: '.06em' }}>
+                <span className="o-livedot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-bad)' }} />{tr('EN DIRECT')}
+              </span>
+            : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text3)' }}><Fi i="video-camera" size={30} /></div>}
         </div>
+        <div style={{ marginTop: 8, textAlign: 'center', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{online ? (CAM_FLUX()[flux] || '') : tr('Caméra injoignable')}</div>
+        {(modes.length > 0 || onNav) && (
+          <div style={{ marginTop: 14 }}>
+            {modes.map((m, i) => {
+              const [titre, desc] = libelles[m.cle] || [m.nom, tr('Réglage de la caméra')];
+              const e = S[m.id];
+              const mort = !e || e.state === 'unavailable';
+              return <FicheRangee key={m.id} premiere={i === 0} titre={titre} desc={desc}
+                droite={mort ? <FicheValeur couleur="var(--o-text3)">{tr('Indisponible')}</FicheValeur> : <RmBascule on={e.state === 'on'} nom={titre} onToggle={() => basculer(m.id)} />} />;
+            })}
+            {onNav && <FicheRangee premiere={!modes.length} titre={tr('Toutes les caméras')} desc={tr('La vue Sécurité les montre côte à côte.')}
+              droite={<FicheBouton icone="shield-check" onClick={() => { close(); onNav('securite'); }}>{tr('Sécurité')}</FicheBouton>} />}
+          </div>
+        )}
       </>)}
     </BottomSheet>
   );

@@ -87,3 +87,29 @@ test('la vue Sécurité n’affiche que les caméras qui ont une entité', () =>
   assert.match(corps, /\.filter\(c => c && c\.haid\)/,
     'la vue Sécurité accepte des caméras sans entité : sa clé de liste redeviendra undefined');
 });
+
+test('la fiche camera : le flux, comment on le voit, les modes, la Securite', () => {
+  const debut = src.indexOf('function CamSheet(');
+  const fin = src.indexOf('function CameraTile(', debut);
+  assert.ok(debut > 0 && fin > debut, 'la fiche precede la tuile');
+  const fiche = src.slice(debut, fin);
+  assert.ok(fiche.includes('<FicheEntete '), 'le squelette commun des fiches');
+  assert.ok(fiche.includes('cameraModes(LOGGIA_INDEX, S, haid)'), 'les modes viennent du registre, pas d’une liste');
+  assert.ok(fiche.includes('onMode={setFlux}') && fiche.includes('CAM_FLUX()[flux]'), 'la ligne sous le flux suit le mode reel de CamLive');
+  assert.ok(fiche.includes("onNav('securite')"), 'le chemin vers la vue Securite');
+  assert.ok(!fiche.includes('borderRadius: 999'), 'pas de pilule : arrondi 9');
+  const d = src.indexOf('const CAM_MODES = () => ({');
+  const table = src.slice(d, src.indexOf('});', d));
+  ['mouvement', 'suivi', 'pleurs', 'prive'].forEach(cle => assert.ok(table.includes(cle + ': [tr('), 'titre et phrase pour ' + cle));
+  assert.ok(!table.includes('20 s') && !table.includes('sans filmer'), 'on ne promet que ce que l’entite fait');
+});
+
+test('depuis une piece, la fiche camera sait aller a la Securite', () => {
+  const rv = src.indexOf('function RoomView(');
+  const room = src.slice(rv, src.indexOf('\nfunction ', rv + 1));
+  assert.ok(room.includes('useDomainCards(hass, { onNav })'), 'RoomView passe onNav aux fiches');
+  assert.ok(src.includes('function useDomainCards(hass, { onNav = null } = {})'), 'les autres appels restent sans');
+  assert.ok(src.includes('onClose={() => setCamPop(null)} onNav={onNav} />'), 'la fiche recoit onNav');
+  const cam = readFileSync(join(RACINE, 'src', 'camera.jsx'), 'utf8');
+  assert.ok(cam.includes('onMode = null') && cam.includes('onMode(mode)'), 'CamLive dit son mode');
+});
