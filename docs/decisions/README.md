@@ -28,3 +28,4 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0021](0021-un-seul-indice-reporte-le-depart.md) | Un seul indice de présence reporte le départ | appliqué (v3.14.0) |
 | [0022](0022-sur-un-danger-la-maison-reagit.md) | Sur un danger, la maison réagit : lumières, volets, vanne | appliqué (v3.16.0) |
 | [0023](0023-une-seule-vue-objets.md) | Une seule vue Objets, filtrée, remplace Lumières, Climat et Médias | appliqué (v3.19.0) |
+| [0024](0024-le-mode-edition-partout.md) | Le mode édition : une carte d'édition, un bandeau, un glisser libre — partout | appliqué (v3.20.0) |

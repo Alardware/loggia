@@ -56,9 +56,11 @@ const VERIFIE = {
    * déplacement, et c'est ce que cette liste sert à prouver.
    * Puis à 33 (14/09/2026) : les vues Lumières, Climat, Médias et l'ancienne
    * Objets ont quitté `App.jsx`, leurs cinq omissions avec elles — celles-là
-   * ont disparu, pas déménagé : la vue Objets n'en a aucune. */
+   * ont disparu, pas déménagé : la vue Objets n'en a aucune.
+   * Puis à 32 : la fiche « Modifier l'entité » (mode édition, 14/09) n'a plus
+   * de champ ENTITÉ, ni le `useMemo` qui listait ses options. */
   'src/App.jsx': [
-    'S', 'S', 'S', 'S',
+    'S', 'S', 'S',
     'S and domaineOk', 'S and ids',
     'a and dashHass', 'ancre', 'api and plage', 'applyUser',
     'autoOn', 'choisis and tousCals', 'cle and hass', 'cv.name',

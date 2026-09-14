@@ -7,7 +7,10 @@
  * dashboard lui passe des objets deja lus, les tests aussi. */
 
 /** Les filtres, dans l'ordre des puces — « Tous » et « Favoris » a part. */
-export const OBJ_ORDRE = ['lumieres', 'volets', 'chauffage', 'prises', 'multimedia', 'capteurs', 'cameras', 'menager', 'jardin', 'plantes'];
+export const OBJ_ORDRE = ['lumieres', 'volets', 'chauffage', 'prises', 'multimedia', 'capteurs', 'cameras', 'presence', 'menager', 'jardin', 'plantes'];
+
+/** Les classes de capteur binaire qui disent une presence : un filtre a part (maquette du 14/09). */
+export const CLASSES_PRESENCE = ['motion', 'occupancy', 'presence'];
 
 /**
  * Les filtres d'un objet. Le premier est son filtre principal, tire du
@@ -16,14 +19,15 @@ export const OBJ_ORDRE = ['lumieres', 'volets', 'chauffage', 'prises', 'multimed
  * s'affiche que sous « Tous » — les serrures, sirenes et alarmes aussi : la
  * maquette n'a pas de puce « Securite » (retour user du 14/09).
  */
-export function filtresObjet({ domaine, type = 'entite', estLumiere = false, dehors = false, epingle = false }) {
+export function filtresObjet({ domaine, type = 'entite', estLumiere = false, dehors = false, epingle = false, classe = '' }) {
   const dom = type === 'zone' ? 'climate' : type === 'feeder' ? 'feeder' : type === 'plant' ? 'plant' : String(domaine || '');
   const principal = dom === 'light' || (dom === 'switch' && estLumiere) ? 'lumieres'
     : dom === 'cover' ? 'volets'
       : dom === 'climate' || dom === 'water_heater' ? 'chauffage'
         : dom === 'switch' || dom === 'input_boolean' ? 'prises'
           : dom === 'media_player' ? 'multimedia'
-            : dom === 'binary_sensor' || dom === 'sensor' ? 'capteurs'
+            : dom === 'binary_sensor' && CLASSES_PRESENCE.indexOf(String(classe || '')) >= 0 ? 'presence'
+              : dom === 'binary_sensor' || dom === 'sensor' ? 'capteurs'
               : dom === 'camera' ? 'cameras'
                 : dom === 'vacuum' || dom === 'fan' || dom === 'humidifier' || dom === 'valve' || dom === 'feeder' ? 'menager'
                   : dom === 'lawn_mower' ? 'jardin'
@@ -98,4 +102,38 @@ export function trierObjets(objets, ordrePieces = []) {
     rangPiece(a.piece) - rangPiece(b.piece)
     || rangFiltre(a) - rangFiltre(b)
     || String(a.nom || '').localeCompare(String(b.nom || '')));
+}
+
+/**
+ * Le domaine d'une carte en mode edition, tel que la fiche le nomme : ce que
+ * Home Assistant donne, sauf la prise declaree lumiere. Une cle qui n'est pas
+ * une entite (zone de chauffage, plante, distributeur, intertitre) a le sien.
+ */
+export function domaineEdition(cle, { estLumiere = false, classe = '' } = {}) {
+  const k = String(cle || '');
+  if (k.indexOf('zone:') === 0) return 'chauffage';
+  if (k.indexOf('plant:') === 0) return 'plante';
+  if (k === 'obj:feeder') return 'animaux';
+  if (k.indexOf('sect:') === 0) return 'titre';
+  const dom = k.indexOf('.') > 0 ? k.slice(0, k.indexOf('.')) : '';
+  if (dom === 'light' || (dom === 'switch' && estLumiere)) return 'lumiere';
+  if (dom === 'switch' || dom === 'input_boolean') return 'prise';
+  if (dom === 'cover') return 'volet';
+  if (dom === 'climate' || dom === 'water_heater') return 'chauffage';
+  if (dom === 'media_player') return 'multimedia';
+  if (dom === 'binary_sensor' && CLASSES_PRESENCE.indexOf(String(classe || '')) >= 0) return 'presence';
+  if (dom === 'binary_sensor' || dom === 'sensor') return 'capteur';
+  if (dom === 'camera') return 'camera';
+  if (dom === 'lock') return 'serrure';
+  if (dom === 'vacuum') return 'aspirateur';
+  if (dom === 'lawn_mower') return 'tondeuse';
+  return 'carte';
+}
+
+/** L'identifiant court d'une carte : l'objet de l'entite, sans son domaine ; la queue d'une cle sinon. */
+export function identifiantEdition(cle) {
+  const k = String(cle || '');
+  if (k.indexOf('.') > 0 && k.indexOf(':') < 0) return k.slice(k.indexOf('.') + 1);
+  const i = k.indexOf(':');
+  return i >= 0 ? k.slice(i + 1) : k;
 }

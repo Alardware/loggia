@@ -34,7 +34,7 @@ import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbo
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
-import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets } from './objets.js';
+import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition } from './objets.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 /* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
@@ -3238,7 +3238,9 @@ function useLayoutEditor(cfgKey, scope, derived) {
   const gridRef = useRef(null);
   const dragRef = useRef(null);
   const [dragId, setDragId] = useState(null);
-  const [dragOver, setDragOver] = useState(-1);
+  // L'ordre PENDANT le geste : les autres cartes se rangent en direct autour
+  // de la place visee ; la configuration n'est ecrite qu'a la depose.
+  const [ordreTemp, setOrdreTemp] = useState(null);
 
   const sig = derived.join('|');
   const layout = layoutOf(cfgKey, scope);
@@ -3332,45 +3334,39 @@ function useLayoutEditor(cfgKey, scope, derived) {
     write({ types: Object.keys(types).length ? types : null });
   };
 
-  // Les positions de la grille sont mesurees une fois : elle ne bouge pas
-  // pendant le geste, ces reperes restent donc justes sans remesurer.
-  /* AU DOIGT, saisir exige un APPUI LONG (~380 ms, vibration à la prise) :
-   * sans lui, chaque défilement déplaçait des cartes — « infaisable sur
-   * mobile ». Un doigt qui bouge avant l'échéance défile, c'est tout. */
+  /* Saisir : a la souris, tout de suite ; au doigt, apres un appui court
+   * (~200 ms, vibration a la prise) — un doigt qui bouge avant l'echeance
+   * defile la page, c'est tout. Une fois saisie, la carte SUIT le pointeur
+   * partout, dans tous les sens, tant qu'on la tient (retour user du 14/09 :
+   * « je dois pouvoir la bouger n'importe ou tant que je la tiens »), et les
+   * autres se rangent en direct autour de la place visee. */
   const saisir = (d) => {
     d.parti = true;
-    // La copie qui suivra le pointeur. On retire ses commandes : un fantome
-    // ne se clique pas, et un « × » flottant sous le curseur prete a confusion.
+    // La copie qui suit le pointeur. On retire ses commandes : un fantome ne
+    // se clique pas.
     d.fantome = d.hote.cloneNode(true);
     Array.prototype.slice.call(d.fantome.querySelectorAll('[data-drag-ui]')).forEach(n => n.remove());
     const r = d.hote.getBoundingClientRect();
     const st = d.fantome.style;
     st.position = 'fixed'; st.left = r.left + 'px'; st.top = r.top + 'px';
     st.width = r.width + 'px'; st.height = r.height + 'px'; st.margin = '0';
-    st.pointerEvents = 'none'; st.zIndex = '9999'; st.opacity = '.85';
-    st.transform = 'scale(1.02)'; st.transition = 'none';
-    st.boxShadow = '0 18px 44px rgba(0,0,0,.5)';
+    st.pointerEvents = 'none'; st.zIndex = '9999'; st.opacity = '.96';
+    st.transform = 'scale(1.04)'; st.transition = 'none'; st.outline = 'none';
+    st.boxShadow = '0 22px 48px rgba(0,0,0,.55)';
     d.doc.body.appendChild(d.fantome);
-    // Une fois saisi, la page ne défile plus sous la carte.
+    // Une fois saisie, la page ne defile plus sous la carte.
     d.bloque = (ev) => { try { ev.preventDefault(); } catch {} };
     try { d.doc.addEventListener('touchmove', d.bloque, { passive: false }); } catch {}
     setDragId(d.id);
-    setDragOver(ids.indexOf(d.id));
   };
   const dragStart = (id, e) => {
     const grid = gridRef.current;
-    const hote = e.currentTarget && e.currentTarget.parentNode;
+    // La carte elle-meme est la prise : on remonte jusqu'a sa case `data-id`.
+    const hote = e.currentTarget && (e.currentTarget.closest ? e.currentTarget.closest('[data-id]') : e.currentTarget.parentNode);
     if (!grid || !hote) return;
     const doc = hote.ownerDocument || document;
-    // On repere les cases par leur identifiant, pas par leur rang : des titres
-    // de section coupent la liste en plusieurs grilles, et le rang dans le DOM
-    // ne correspondrait plus au rang dans la liste.
-    const cases = Array.prototype.slice.call(grid.querySelectorAll('[data-id]')).map(el => {
-      const b = el.getBoundingClientRect();
-      return { id: el.getAttribute('data-id'), cx: b.left + b.width / 2, cy: b.top + b.height / 2 };
-    });
     const tactile = e.pointerType === 'touch';
-    const d = { id, cases, hote, doc, fantome: null, x0: e.clientX, y0: e.clientY, cible: ids.indexOf(id), parti: false, tactile, pret: !tactile };
+    const d = { id, grid, hote, doc, fantome: null, x0: e.clientX, y0: e.clientY, temp: ids.slice(), parti: false, tactile, pret: !tactile };
     dragRef.current = d;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     if (tactile) {
@@ -3380,7 +3376,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
         dd.pret = true;
         try { if (navigator.vibrate) navigator.vibrate(35); } catch {}
         saisir(dd);
-      }, 380);
+      }, 200);
     } else {
       e.preventDefault();
       e.stopPropagation();
@@ -3392,7 +3388,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
     if (!d) return;
     const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
     if (d.tactile && !d.pret) {
-      // Le doigt bouge avant l'échéance : c'est un défilement, pas une prise.
+      // Le doigt bouge avant l'echeance : c'est un defilement, pas une prise.
       if (Math.abs(dx) > 10 || Math.abs(dy) > 10) { clearTimeout(d.timer); dragRef.current = null; }
       return;
     }
@@ -3402,14 +3398,23 @@ function useLayoutEditor(cfgKey, scope, derived) {
       saisir(d);
     }
     // Ecriture directe du style : un rendu React a chaque mouvement saccaderait.
-    d.fantome.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(1.02)';
+    d.fantome.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(1.04)';
+    // La place visee : la case la plus proche du pointeur, mesuree A CHAQUE
+    // mouvement — les autres cartes viennent de se ranger, leurs reperes ont bouge.
     let proche = null, dist = Infinity;
-    d.cases.forEach(c => {
-      const dd = (e.clientX - c.cx) * (e.clientX - c.cx) + (e.clientY - c.cy) * (e.clientY - c.cy);
-      if (dd < dist) { dist = dd; proche = c.id; }
+    Array.prototype.slice.call(d.grid.querySelectorAll('[data-id]')).forEach(el => {
+      const b = el.getBoundingClientRect();
+      const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      const dd = (e.clientX - cx) * (e.clientX - cx) + (e.clientY - cy) * (e.clientY - cy);
+      if (dd < dist) { dist = dd; proche = el.getAttribute('data-id'); }
     });
-    const best = proche == null ? -1 : ids.indexOf(proche);
-    if (best >= 0 && best !== d.cible) { d.cible = best; setDragOver(best); }
+    if (proche == null || proche === d.id) return;
+    const i = d.temp.indexOf(d.id), j = d.temp.indexOf(proche);
+    if (i < 0 || j < 0 || i === j) return;
+    const l = d.temp.slice();
+    l.splice(j, 0, l.splice(i, 1)[0]);
+    d.temp = l;
+    setOrdreTemp(l);
   };
 
   /** Rend true si le geste etait un appui bref — donc un clic, non un deplacement. */
@@ -3417,22 +3422,22 @@ function useLayoutEditor(cfgKey, scope, derived) {
     const d = dragRef.current;
     dragRef.current = null;
     setDragId(null);
-    setDragOver(-1);
+    setOrdreTemp(null);
     if (!d) return false;
     clearTimeout(d.timer);
     try { if (d.bloque) d.doc.removeEventListener('touchmove', d.bloque); } catch {}
     if (!d.parti) return true;
     try { if (d.fantome) d.fantome.remove(); } catch {}
-    const from = ids.indexOf(d.id);
-    // Repose a sa place : rien a enregistrer, on ne salit pas la configuration.
-    if (from < 0 || d.cible < 0 || d.cible === from) return false;
-    const order = ids.slice();
-    order.splice(d.cible, 0, order.splice(from, 1)[0]);
-    write({ order });
+    // Reposee a sa place : rien a enregistrer, on ne salit pas la configuration.
+    if (d.temp.join('|') !== ids.join('|')) write({ order: d.temp });
     return false;
   };
 
-  return { ids, edits, layout, gridRef, dragId, dragOver, dragStart, dragMove, dragEnd, remove, toggle, move, rename, replace, reset, labelOf, estLarge, basculerLarge, typeOf, setType };
+  // Relire l'agencement apres une ecriture faite ailleurs (un deplacement de
+  // piece a piece, ecrit d'un bloc pour toutes les pieces).
+  const rafraichir = () => setRev(v => v + 1);
+
+  return { ids: ordreTemp || ids, edits, layout, gridRef, dragId, dragStart, dragMove, dragEnd, remove, toggle, move, rename, replace, reset, rafraichir, labelOf, estLarge, basculerLarge, typeOf, setType };
 }
 
 /**
@@ -3443,87 +3448,179 @@ function useLayoutEditor(cfgKey, scope, derived) {
  * changer reviendrait a changer de carte, ce que le retrait et l'ajout font
  * deja, plus clairement.
  */
-function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
+/* Les domaines d'une carte en mode edition (maquette du 14/09) : leur mot,
+ * leur glyphe, leur teinte. Dits au rendu, dans la langue du moment. */
+const DOMAINES_EDITION = () => [
+  { id: 'lumiere', label: tr('Lumière'), fi: 'bulb', rgb: '255,204,68' },
+  { id: 'volet', label: tr('Volet'), fi: 'blinds', rgb: 'var(--o-purple-rgb)' },
+  { id: 'chauffage', label: tr('Chauffage'), fi: 'flame', rgb: 'var(--o-bad-rgb)' },
+  { id: 'prise', label: tr('Prise'), prise: true, rgb: 'var(--o-accent-rgb)' },
+  { id: 'multimedia', label: tr('Multimédia'), fi: 'tv-music', rgb: '255,45,120' },
+  { id: 'capteur', label: tr('Capteur'), fi: 'sensor', rgb: '255,204,68' },
+  { id: 'camera', label: tr('Caméra'), fi: 'camera', rgb: 'var(--o-accent-rgb)' },
+  { id: 'serrure', label: tr('Serrure'), fi: 'lock', rgb: 'var(--o-ok-rgb)' },
+  { id: 'presence', label: tr('Présence'), fi: 'users', rgb: 'var(--o-accent-rgb)' },
+  { id: 'aspirateur', label: tr('Aspirateur'), ico: 'vacuum', rgb: 'var(--o-ok-rgb)' },
+  { id: 'tondeuse', label: tr('Tondeuse'), fi: 'tractor', rgb: 'var(--o-ok-rgb)' },
+  { id: 'plante', label: tr('Plante'), fi: 'seedling', rgb: 'var(--o-ok-rgb)' },
+  { id: 'animaux', label: tr('Animaux'), fi: 'paw', rgb: '255,204,68' },
+];
+const domaineInfo = (id) => DOMAINES_EDITION().find(x => x.id === id)
+  || (id === 'titre' ? { id, label: tr('Titre'), fi: 'apps', rgb: 'var(--o-accent-rgb)' } : { id, label: tr('Carte'), fi: 'apps', rgb: 'var(--o-accent-rgb)' });
+
+/* Les pieces de la maison : celles de la configuration, puis les zones Home
+ * Assistant qu'elle ne nomme pas. */
+function piecesDeLaMaison() {
+  const cfg = cfgVal('loggia_rooms', null);
+  const noms = Array.isArray(cfg) ? cfg.map(r => r && r.room).filter(Boolean) : [];
+  ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).forEach(z => { if (z && z.name && noms.indexOf(z.name) < 0) noms.push(z.name); });
+  return noms;
+}
+/* La piece qui montre une entite : celle dont la grille la porte (decouverte
+ * ou ajout), sinon sa zone Home Assistant. */
+function pieceDeLEntite(hass, id) {
+  const p = piecesDeLaMaison().find(x => roomEntitiesBrutes(hass, x).indexOf(id) >= 0 || (layoutOf(ROOM_LAYOUT_KEY, x).added || []).indexOf(id) >= 0);
+  if (p) return p;
+  return (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function') ? (LOGGIA_INDEX.areaNameOf(id) || null) : null;
+}
+/* Deplacer une entite dans une piece : elle entre dans la grille de celle-ci
+ * et sort de toutes les autres — en UNE ecriture, pour toutes les pieces :
+ * deux ecritures successives liraient le meme agencement perime. */
+function deplacerDansPiece(hass, id, vers) {
+  const all = { ...layoutsOf(ROOM_LAYOUT_KEY) };
+  const meme = (x, y) => (x || []).join('|') === (y || []).join('|');
+  let change = false;
+  piecesDeLaMaison().forEach(p => {
+    const L = { ...(all[p] || {}) };
+    const derive = roomEntitiesBrutes(hass, p).indexOf(id) >= 0;
+    const added = (L.added || []).filter(x => x !== id);
+    const removed = (L.removed || []).filter(x => x !== id);
+    if (p === vers) { if (!derive) added.push(id); } else if (derive) removed.push(id);
+    if (meme(added, L.added) && meme(removed, L.removed)) return;
+    if (added.length) L.added = added; else delete L.added;
+    if (removed.length) L.removed = removed; else delete L.removed;
+    if (Object.keys(L).length) all[p] = L; else delete all[p];
+    change = true;
+  });
+  if (change) cfgSet({ [ROOM_LAYOUT_KEY]: Object.keys(all).length ? all : null });
+}
+/* Une prise declaree lumiere prend la carte et le filtre des lampes : la
+ * liste `loggia_switchlights`, celle que Parametres ecrit. */
+function declarerLumiere(id, oui) {
+  const l = switchLights().filter(x => x !== id);
+  const n = oui ? [...l, id] : l;
+  cfgSet({ loggia_switchlights: n.length ? n : null });
+}
+
+/* « Modifier l'entite » (maquette du 14/09) : le nom, le domaine (celui que
+ * Home Assistant donne — seule une prise peut se declarer lumiere, ou
+ * l'inverse), la piece (deplacer l'entite d'une grille a l'autre),
+ * l'identifiant, l'epingle de l'accueil ; puis, en dessous, la carte du
+ * catalogue et la largeur — les reglages d'avant, toujours la. Pas d'« etat de
+ * depart » : Loggia n'invente pas ce que Home Assistant n'a pas encore dit. */
+function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   const [val, setVal] = useState(ed.labelOf(id) || '');
-  // Les aperçus rendent de vraies cartes : elles ont besoin des fiches du
-  // catalogue, même si on ne les ouvre pas depuis la feuille.
+  // Les apercus rendent de vraies cartes : elles ont besoin des fiches du
+  // catalogue, meme si on ne les ouvre pas depuis la feuille.
   const dcEdit = useDomainCards(hass);
   const estSection = id.indexOf('sect:') === 0;
   // Un poste de consommation s'appelle `dev:<entity_id>` : le prefixe cachait
-  // l'entite au test, et la fiche ne proposait alors que le nom.
+  // l'entite a la fiche.
   const prefixe = id.indexOf('dev:') === 0 ? 'dev:' : '';
   const brut = prefixe ? id.slice(prefixe.length) : id;
   const estEntite = brut.indexOf('.') > 0 && brut.indexOf(':') < 0;
   const S = (hass && hass.states) || {};
-  const [ent, setEnt] = useState(estEntite ? brut : '');
-  const dom = estEntite ? brut.slice(0, brut.indexOf('.')) : '';
-  const dlId = 'o-cardent-' + (dom || 'x');
-  const nomId = 'o-cardnom-' + (dom || 'x');
-  const entId = 'o-cardent-champ-' + (dom || 'x');
-  // Meme domaine seulement : un poste de puissance n'a rien a faire sur une
-  // lampe, et la liste complete est illisible.
-  const nbEntites = Object.keys(S).length;
-  const options = useMemo(
-    () => (estEntite ? Object.keys(S).filter(k => k.indexOf(dom + '.') === 0).sort() : []),
-    [dom, estEntite, nbEntites]);
-  const cible = estEntite && String(ent).trim() ? prefixe + String(ent).trim() : id;
-  const etat = S[cible.indexOf(':') >= 0 ? cible.slice(cible.indexOf(':') + 1) : cible];
+  const classe = (S[brut] && S[brut].attributes && S[brut].attributes.device_class) || '';
+  const domaine = domaineEdition(brut, { estLumiere: cvEstLumiere(brut), classe });
+  const estPrise = estEntite && brut.indexOf('switch.') === 0;
+  const [lumiere, setLumiere] = useState(estPrise && cvEstLumiere(brut));
+  const pieces = estEntite ? piecesDeLaMaison() : [];
+  const pieceActuelle = estEntite ? (piece || pieceDeLEntite(hass, brut)) : null;
+  const [choixPiece, setChoixPiece] = useState(pieceActuelle);
+  const [epingle, setEpingle] = useState(estEntite && lireEpingles().some(x => cvId(x) === brut));
+  const nomId = 'o-cardnom-' + (estEntite ? brut.slice(0, brut.indexOf('.')) : 'x');
+  const identId = 'o-cardident-' + (estEntite ? brut.slice(0, brut.indexOf('.')) : 'x');
 
-  const valider = (close) => { ed.replace(id, cible, val); close(); };
-  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 };
+  const valider = (close) => {
+    ed.rename(id, val);
+    if (estPrise && lumiere !== cvEstLumiere(brut)) declarerLumiere(brut, lumiere);
+    if (estEntite && choixPiece && choixPiece !== pieceActuelle) { deplacerDansPiece(hass, brut, choixPiece); if (ed.rafraichir) ed.rafraichir(); }
+    if (estEntite) {
+      const eps = lireEpingles();
+      const etait = eps.some(x => cvId(x) === brut);
+      if (etait !== epingle) { const suiv = epingle ? eps.concat(brut) : eps.filter(x => cvId(x) !== brut); cfgSet({ loggia_epingles: suiv.length ? suiv : null }); }
+    }
+    close();
+  };
+  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600, outline: 'none' };
   const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
+  const puce = (on, possible) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: possible ? 'pointer' : 'default', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.45)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)', opacity: (on || possible) ? 1 : .45 });
+  const domaineChoisi = estPrise ? (lumiere ? 'lumiere' : 'prise') : domaine;
 
   return (
     <BottomSheet onClose={onClose}>
       {close => (
         <div style={{ padding: '4px 2px 8px' }}>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>{estSection ? 'Intertitre' : nom}</div>
-          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 3 }}>
-            {estSection
-              ? 'Sépare les cartes en catégories. Il n’apparaît que s’il a des cartes en dessous.'
-              : 'Ce nom ne vaut que pour cette vue ; Home Assistant n’est pas modifié.'}
-          </div>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>{estSection ? tr('Modifier le titre') : tr('Modifier l’entité')}</div>
 
           <label htmlFor={nomId} style={etiquette}>{tr('NOM')}</label>
-          {/* `control-has-associated-label` ne suit pas `htmlFor` : elle cherche
-            * une etiquette AUTOUR du champ, ou un texte dedans. Celle de ce champ
-            * est juste au-dessus et le designe par son identifiant —
-            * `label-has-associated-control`, elle, le verifie. */}
+          {/* `control-has-associated-label` ne suit pas `htmlFor` : l'etiquette
+            * est juste au-dessus et designe le champ par son identifiant. */}
           {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
           <input id={nomId} value={val} onChange={(e) => setVal(e.target.value)} placeholder={origine || nom}
             onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} autoFocus />
           {!estSection && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>
-            Laisse vide pour revenir à « {origine || nom} ».
+            {tr('Vide : revient à « {n} ». Ce nom ne vaut que pour cette vue ; Home Assistant n’est pas modifié.', { n: origine || nom })}
           </div>}
 
           {estEntite && (
             <>
-              <label htmlFor={entId} style={etiquette}>{tr('ENTITÉ')}</label>
-              {/* Les entrees d'un <datalist> ne sont pas des controles a
-                * nommer : leur `value` EST ce que le navigateur affiche. Leur
-                * ajouter un texte visible changerait la liste deroulante. La
-                * regle lit ici l'<option> d'un <select>, ou le texte compte. */}
-              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
-              <datalist id={dlId}>{options.map(k => <option key={k} value={k} />)}</datalist>
-              {/* `control-has-associated-label` ne suit pas `htmlFor` : elle cherche
-                * une etiquette AUTOUR du champ, ou un texte dedans. Celle de ce champ
-                * est juste au-dessus et le designe par son identifiant —
-                * `label-has-associated-control`, elle, le verifie. */}
-              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
-              <input id={entId} value={ent} onChange={(e) => setEnt(e.target.value)} list={dlId} spellCheck={false}
-                placeholder={dom + '.…'} onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} />
-              <div style={{ fontSize: 12, fontWeight: 600, color: etat ? 'var(--o-text3)' : 'var(--o-warn2)', margin: '6px 2px 0' }}>
-                {etat ? 'État actuel : ' + etat.state : 'Home Assistant ne connaît pas cette entité.'}
+              <div style={etiquette}>{tr('DOMAINE')}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {DOMAINES_EDITION().map(dm => {
+                  const on = dm.id === domaineChoisi;
+                  const possible = estPrise && (dm.id === 'lumiere' || dm.id === 'prise');
+                  return (
+                    <button key={dm.id} aria-pressed={on} aria-disabled={!possible} onClick={() => { if (possible) setLumiere(dm.id === 'lumiere'); }} style={puce(on, possible)}>
+                      {dm.prise ? <PlugIcon size={12} /> : dm.ico ? <Ico name={dm.ico} size={13} /> : <Fi i={dm.fi} size={12} />}{dm.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>
+                {estPrise ? tr('Une prise peut se déclarer lumière : elle prend alors la carte et le filtre des lampes.') : tr('Le domaine vient de Home Assistant.')}
               </div>
             </>
+          )}
+
+          {estEntite && pieces.length > 0 && (
+            <>
+              <div style={etiquette}>{tr('PIÈCE')}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {pieces.map(p => { const on = p === choixPiece; return (
+                  <button key={p} aria-pressed={on} onClick={() => setChoixPiece(p)} style={puce(on, true)}><Fi i={estDehors(p) ? 'leaf' : 'home'} size={12} />{p}</button>
+                ); })}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('Changer de pièce la déplace d’une grille à l’autre ; Home Assistant n’est pas modifié.')}</div>
+            </>
+          )}
+
+          <label htmlFor={identId} style={etiquette}>{tr('IDENTIFIANT')}</label>
+          {/* En lecture seule, mais un vrai champ : il se selectionne et se copie. */}
+          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
+          <input id={identId} value={estEntite ? brut : id} readOnly spellCheck={false} onFocus={(e) => e.target.select()}
+            style={{ ...champ, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12.5, color: 'var(--o-text2)' }} />
+
+          {estEntite && (
+            <FicheRangee premiere titre={tr('Épinglée sur l’accueil')} desc={tr('Apparaît dans les favoris, en plus de sa pièce.')}
+              droite={<RmBascule on={epingle} nom={tr('Épinglée sur l’accueil')} onToggle={() => setEpingle(v => !v)} couleur="var(--o-accent)" />} />
           )}
 
           {(estEntite || id.indexOf('zone:') === 0) && ed.typeOf && (
             <>
               <div style={etiquette}>{tr('CARTE')}</div>
               {/* On MONTRE les cartes possibles, au vrai gabarit et avec les
-                * vraies valeurs — comme la feuille d'ajout de l'accueil et des
-                * vues personnalisées (retour 01/09 : « un aperçu des cartes
+                * vraies valeurs (retour 01/09 : « un apercu des cartes
                 * disponibles »). « Auto » garde le rendu habituel de la vue. */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: 10 }}>
                 {(() => {
@@ -3532,7 +3629,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
                   return (
                     <>
                       <button aria-pressed={choix == null} onClick={() => ed.setType(id, null)}
-                        style={{ minHeight: 88, borderRadius: 14, cursor: 'pointer', fontSize: 12, fontWeight: 800, border: '1px solid ' + (choix == null ? 'var(--o-accent)' : 'var(--o-bd2)'), background: choix == null ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: choix == null ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{tr('Auto')}</button>
+                        style={{ minHeight: 88, borderRadius: 14, cursor: 'pointer', fontSize: 12, fontWeight: 800, border: '1px solid ' + (choix == null ? 'var(--o-accent)' : 'var(--o-bd2)'), background: choix == null ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: 'var(--o-text1)' }}>{tr('Auto')}</button>
                       {estEntite && cvTypesPour(brut).map(t => (
                         <CarteApercu key={t} lbl={noms[t] || t} hass={hass} dc={dcEdit} actif={choix === t}
                           x={t === 'compacte' ? brut : { t, id: brut }} onClick={() => ed.setType(id, t)} />
@@ -3549,20 +3646,50 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose }) {
               <div style={etiquette}>{tr('LARGEUR')}</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 {[[false, tr('Simple')], [true, tr('Double')]].map(([lg, lbl2]) => { const on = ed.estLarge(id) === lg; return (
-                  <button key={lbl2} aria-pressed={on} onClick={() => { if (!on) ed.basculerLarge(id); }}
-                    style={{ flex: 1, padding: '10px 8px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{lbl2}</button>
+                  <button key={lbl2} aria-pressed={on} onClick={() => { if (!on) ed.basculerLarge(id); }} style={{ ...puce(on, true), flex: 1, justifyContent: 'center' }}>{lbl2}</button>
                 ); })}
               </div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('Double : la carte prend deux emplacements côte à côte.')}</div>
             </>
           )}
-          <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
-            <button onClick={() => valider(close)} style={{ flex: 1, minWidth: 130, padding: '11px 0', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f' }}>{tr('Enregistrer')}</button>
-            <button onClick={() => { ed.remove(id); close(); }} style={{ padding: '11px 16px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.14)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: 'var(--o-bad)' }}>{tr('Retirer')}</button>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center' }}>
+            <button onClick={() => { ed.remove(id); close(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>
+            <span style={{ flex: 1 }} />
+            <button onClick={close} style={{ padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>{tr('Annuler')}</button>
+            <button onClick={() => valider(close)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f' }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
           </div>
         </div>
       )}
     </BottomSheet>
+  );
+}
+
+/* Le bandeau du mode edition (maquette du 14/09), le meme partout ou l'on
+ * range des cartes : le mot d'ordre, « Ajouter une entite », « Toutes les
+ * entites » (retour a la liste automatique : tout revient, l'ordre et les
+ * noms aussi) et « Terminer ». */
+function BandeauEdition({ ed, onAjouter, toutes = null, ajouterLabel = null }) {
+  const ctx = useContext(HeaderCtx) || {};
+  const btn = (accent) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', flexShrink: 0, background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)', border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
+  const peutTout = !!toutes || ed.edits > 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
+      <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une entité.')}</span>
+      {onAjouter && <button onClick={onAjouter} style={btn(true)}><Fi i="plus" size={12} />{ajouterLabel || tr('Ajouter une entité')}</button>}
+      <button onClick={toutes || (() => ed.reset())} disabled={!peutTout} title={tr('Rétablit la liste automatique : tout revient, l’ordre et les noms aussi.')} style={{ ...btn(false), opacity: peutTout ? 1 : .5 }}><Fi i="apps" size={12} />{tr('Toutes les entités')}</button>
+      {ctx.onToggleEdit && <button onClick={ctx.onToggleEdit} style={btn(false)}><Fi i="cross-small" size={12} />{tr('Terminer')}</button>}
+    </div>
+  );
+}
+
+/* La case pointillee « Ajouter une entite », en fin de grille (maquette). */
+function CarteAjout({ onClick, label = null }) {
+  return (
+    <button onClick={onClick} style={{ ...RM_CARD, border: '1px dashed var(--o-bd1)', background: 'transparent', boxShadow: 'none', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', color: 'var(--o-text3)', fontSize: 13, fontWeight: 700 }}>
+      <Fi i="plus" size={18} /><span>{label || tr('Ajouter une entité')}</span>
+    </button>
   );
 }
 
@@ -3594,40 +3721,64 @@ function BoutonCarteLibre({ ed, hass, style }) {
   </>);
 }
 
-/** `plat` : un intertitre ne fait que ~35 px de haut — un « × » debordant de
- *  9 px y mord sur l'element du dessus. On le rentre alors dans le cadre. */
-function EditableCard({ ed, id, nom, onEdit, plat = false, children }) {
+/* La carte en mode edition (maquette du 14/09) : la meme place et la meme
+ * teinte que la carte vivante, mais rien qui se pilote — l'icone, un crayon,
+ * le nom, « Domaine · identifiant », Modifier et Supprimer. On la SAISIT
+ * n'importe ou : elle suit le pointeur tant qu'on la tient. `plat` : un
+ * intertitre, qui garde son dessin et prend juste ses deux boutons. */
+function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, ...reste }) {
   const saisie = ed.dragId === id;
-  const visee = !!ed.dragId && ed.dragOver === ed.ids.indexOf(id) && !saisie;
+  const S = (hass && hass.states) || {};
+  const brut = id.indexOf('dev:') === 0 ? id.slice(4) : id;
+  const classe = (S[brut] && S[brut].attributes && S[brut].attributes.device_class) || '';
+  const info = domaineInfo(domaineEdition(brut, { estLumiere: cvEstLumiere(brut), classe }));
+  const prise = {
+    onPointerDown: (e) => ed.dragStart(id, e),
+    onPointerMove: ed.dragMove,
+    onPointerUp: () => { const clic = ed.dragEnd(); if (clic && onEdit) onEdit(id); },
+    onPointerCancel: ed.dragEnd,
+    onKeyDown: (e) => {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); ed.move(id, -1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); ed.move(id, 1); }
+      else if ((e.key === 'Enter' || e.key === ' ') && onEdit) { e.preventDefault(); onEdit(id); }
+    },
+  };
+  // Les boutons ne saisissent pas : leur appui ne remonte pas a la carte.
+  const stop = (e) => e.stopPropagation();
+  const bouton = (rouge) => ({ flex: 1, padding: '9px 6px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: rouge ? 'var(--o-bad)' : 'var(--o-text1)' });
+  const petit = { flex: 'none', width: 32, height: 32, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
+  if (plat) {
+    return (
+      /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
+      <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)}
+        style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 'var(--o-radius,18px)', outline: '1px dashed rgba(var(--o-accent-rgb),.45)', outlineOffset: 3, opacity: saisie ? .25 : 1, cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>{reste.children}</div>
+        <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} title={tr('Modifier')} aria-label={tr('Modifier') + ' ' + (nom || id)} style={{ ...bouton(false), ...petit }}><Fi i="pencil" size={12} /></button>
+        <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.remove(id)} title={tr('Supprimer')} aria-label={tr('Supprimer') + ' ' + (nom || id)} style={{ ...bouton(true), ...petit, marginRight: 8 }}><Fi i="cross-small" size={12} /></button>
+      </div>
+    );
+  }
   return (
-    <div data-id={id} className={[(ed.estLarge && ed.estLarge(id)) ? 'o-cvw2' : '', (ed.typeOf && (ed.typeOf(id) === 'compacte' || ed.typeOf(id) === 'horloge')) ? 'o-cvrow1' : ''].join(' ').trim() || undefined} style={{
-      position: 'relative', borderRadius: 'var(--o-radius,18px)',
-      outline: visee ? '2px dashed var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.45)',
-      outlineOffset: 3,
-      opacity: saisie ? .3 : 1,
-      transition: REDUCE_MOTION ? 'none' : 'opacity .16s, outline-color .16s',
-    }}>
-      {children}
-      <div
-        data-drag-ui="1" role="button" tabIndex={0}
-        onPointerDown={(e) => ed.dragStart(id, e)}
-        onPointerMove={ed.dragMove}
-        onPointerUp={() => { const clic = ed.dragEnd(); if (clic && onEdit) onEdit(id); }}
-        onPointerCancel={ed.dragEnd}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowLeft') { e.preventDefault(); ed.move(id, -1); }
-          else if (e.key === 'ArrowRight') { e.preventDefault(); ed.move(id, 1); }
-          else if ((e.key === 'Enter' || e.key === ' ') && onEdit) { e.preventDefault(); onEdit(id); }
-        }}
-        title={tr('Cliquer pour modifier · glisser pour déplacer (flèches ← →)')}
-        aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)}
-        style={{ position: 'absolute', inset: 0, zIndex: 2, borderRadius: 'var(--o-radius,18px)', touchAction: 'pan-y', cursor: saisie ? 'grabbing' : 'grab' }} />
-      <button data-drag-ui="1" onClick={() => ed.remove(id)} title={tr('Retirer')} aria-label={tr('Retirer') + ' ' + (nom || id)}
-        style={{ position: 'absolute', ...(plat ? { top: '50%', right: 7, transform: 'translateY(-50%)' } : { top: -9, right: -9 }), zIndex: 3, width: 26, height: 26, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-bad)', color: '#fff', fontSize: 15, fontWeight: 800, lineHeight: 1, boxShadow: '0 3px 10px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>×</button>
-      {!plat && ed.basculerLarge && (
-        <button data-drag-ui="1" onClick={() => ed.basculerLarge(id)} title={ed.estLarge(id) ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={ed.estLarge(id)}
-          style={{ position: 'absolute', bottom: -9, right: -9, zIndex: 3, width: 26, height: 26, borderRadius: 10, border: 'none', cursor: 'pointer', background: ed.estLarge(id) ? 'var(--o-accent-fond)' : 'var(--o-surfA)', color: ed.estLarge(id) ? '#fff' : 'var(--o-text1)', boxShadow: '0 3px 10px rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i="arrows-h" size={11} /></button>
-      )}
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
+    <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)}
+      className={(ed.estLarge && ed.estLarge(id)) ? 'o-cvw2' : undefined}
+      title={tr('Attrape pour déplacer · clique pour modifier (flèches ← →)')}
+      style={{ ...RM_CARD, border: 'none', position: 'relative', cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none', opacity: saisie ? .25 : 1,
+        background: 'linear-gradient(180deg,transparent 28%,rgba(' + info.rgb + ',.14)), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
+        outline: '1px dashed rgba(var(--o-accent-rgb),.35)', outlineOffset: 3 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={RM_ICO('rgba(' + info.rgb + ',.16)', 'rgb(' + info.rgb + ')')}>{info.prise ? <PlugIcon size={17} /> : info.ico ? <Ico name={info.ico} size={17} /> : <Fi i={info.fi} size={17} />}</span>
+        <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} title={tr('Modifier')} aria-label={tr('Modifier') + ' ' + (nom || id)}
+          style={{ width: 30, height: 30, borderRadius: 10, border: 'none', background: 'transparent', color: 'var(--o-text3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="pencil" size={14} /></button>
+      </div>
+      <div style={{ marginTop: 14 }}>
+        <div style={RM_NAME}>{nom || id}</div>
+        <div style={{ ...RM_SUB, color: 'rgb(' + info.rgb + ')' }}>{info.label + ' · ' + identifiantEdition(brut)}</div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} style={bouton(false)}>{tr('Modifier')}</button>
+        <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.remove(id)} style={bouton(true)}>{tr('Supprimer')}</button>
+      </div>
     </div>
   );
 }
@@ -3652,7 +3803,7 @@ const ROOM_ADD_DOMAINS = ['light', 'switch', 'cover', 'climate', 'media_player',
  * `domaines` restreint ce qu'on peut ajouter : proposer un radiateur dans la
  * vue Lumieres n'aurait pas de sens.
  */
-function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, domaines = ROOM_ADD_DOMAINS, entete = null }) {
+function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, domaines = ROOM_ADD_DOMAINS, entete = null, pied = null, listerTout = false }) {
   const [q, setQ] = useState('');
   const S = (hass && hass.states) || {};
   const nom = (id) => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id;
@@ -3702,7 +3853,16 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
               </div>
             </>
           )}
-          {!terme && !zoneIds.length && (
+          {/* Sans piece (la vue Objets, les volets) : toute la maison, d'emblee. */}
+          {!terme && !zoneIds.length && listerTout && (
+            <>
+              <div style={titre}>{tr('TOUTE LA MAISON')} ({tous.length})</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {tous.slice(0, 200).map(id => <Ligne key={id} id={id} on={present.indexOf(id) >= 0} nom={nom} onToggle={onToggle} />)}
+              </div>
+            </>
+          )}
+          {!terme && !zoneIds.length && !listerTout && (
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', margin: '14px 2px 0', lineHeight: 1.5 }}>
               Aucune zone Home Assistant ne porte ce nom. Utilise la recherche ci-dessus — ou range tes appareils dans une zone, ils apparaîtront ici d'eux-mêmes.
             </div>
@@ -3716,6 +3876,7 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
             </>
           )}
 
+          {pied && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>{pied}</div>}
           <button onClick={close} style={{ marginTop: 18, width: '100%', padding: '11px 0', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f' }}>{tr('Terminé')}</button>
         </div>
       )}
@@ -4496,40 +4657,24 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                   : (zone && ed.typeOf(id) === 'compacte' && estClimate(zone)) ? <CvCard id={zone.haid} hass={hass} label={lbl || zone.name} onOpen={dc.ouvrir} dense />
                     : dc.card(id, lbl, zone);
                 if (!edit) return <Anim key={id} i={ents.indexOf(id)} className={[(ed.estLarge(id) ? 'o-cvw2' : ''), (ed.typeOf(id) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{card}</Anim>;
-                return <EditableCard key={id} ed={ed} id={id} nom={nomDe(id)} onEdit={setCardEdit}>{card}</EditableCard>;
+                return <EditableCard key={id} ed={ed} id={id} nom={nomDe(id)} onEdit={setCardEdit} hass={hass}>{card}</EditableCard>;
               })}
+              {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} />}
                 </div>
               </div>)
             ))}
             </div>
           : <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun appareil détecté pour cette pièce.')}<br /><span style={{ fontSize: 12 }}>Loggia regroupe les entités dont le nom contient « {room} ».</span></div>}
-        {edit && (() => {
-          const btn = (accent) => ({ padding: '7px 12px', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0,
-            background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
-            border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
-          return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
-              <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>
-                Mode édition : clique une carte pour la modifier, glisse-la pour la déplacer.
-                {ed.edits ? ' Cette pièce est personnalisée.' : ' Cette pièce suit la détection automatique.'}
-              </span>
-              <button onClick={() => setAddSheet(true)} style={btn(true)}>{tr('Ajouter un appareil')}</button>
-              <button onClick={addSection} style={btn(false)}>{tr('Ajouter un titre')}</button>
-              <BoutonCarteLibre ed={ed} hass={hass} style={btn(false)} />
-              {ed.edits > 0 && <button onClick={ed.reset} style={btn(false)}>{tr("Rétablir l'automatique")}</button>}
-              {hidden.length > 0 && <button onClick={unhideAll} style={btn(false)}>{tr('Tout réafficher')}</button>}
-            </div>
-          );
-        })()}
+        {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} toutes={() => { ed.reset(); unhideAll(); }} />}
         {/* Pas de journal sous les appareils : retire le 14/09 (retour user).
           * Le journal vit dans la vue Securite, avec ses ouvrants et son alarme. */}
         {/* Les fiches des cartes (lumière, volet, climat…) : dc.card pose
           * l'état, dc.sheets MONTE la fiche — sans lui, taper une carte ne
           * faisait rien (« popup inactif », retour du 30/08). */}
         {dc.sheets}
-        {addSheet && <RoomAddSheet room={room} hass={hass} present={ents} onToggle={ed.toggle} onClose={() => setAddSheet(false)} />}
-        {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
+        {addSheet && <RoomAddSheet room={room} hass={hass} present={ents} onToggle={ed.toggle} onClose={() => setAddSheet(false)}
+          pied={<><button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button><BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} /></>} />}
+        {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} piece={room} onClose={() => setCardEdit(null)} />}
         {comfort && piece && <RoomComfortModal piece={piece} hass={hass} onClose={() => setComfort(false)} />}
       </div>
     </main>
@@ -4786,6 +4931,7 @@ const OBJ_FILTRES = () => [
   { id: 'multimedia', label: tr('Multimédia'), fi: 'tv-music' },
   { id: 'capteurs', label: tr('Capteurs'), fi: 'sensor' },
   { id: 'cameras', label: tr('Caméras'), fi: 'camera' },
+  { id: 'presence', label: tr('Présence'), fi: 'users' },
   { id: 'menager', label: tr('Ménager'), ico: 'dishwasher' },
   { id: 'jardin', label: tr('Jardin'), fi: 'leaf' },
   { id: 'plantes', label: tr('Plantes'), fi: 'seedling' },
@@ -4793,6 +4939,8 @@ const OBJ_FILTRES = () => [
 // Les domaines qui font une carte, et leur rang dans un meme appareil : la
 // commande avant le capteur — une prise mesurante est une carte, pas deux.
 const OBJ_DOMAINES = ['light', 'cover', 'climate', 'water_heater', 'media_player', 'vacuum', 'lawn_mower', 'lock', 'camera', 'switch', 'fan', 'humidifier', 'valve', 'siren', 'binary_sensor', 'sensor'];
+// L'agencement de la vue : ordre, retraits, ajouts, noms — la meme cle qu'avant la refonte.
+const OBJ_LAYOUT_KEY = 'loggia_objlayout';
 
 /* La prochaine ration du distributeur, d'apres ses repas programmes. */
 function prochaineRation(S) {
@@ -4806,7 +4954,7 @@ function prochaineRation(S) {
  * et lecteurs configures, puis tout le registre — une carte par appareil, sans
  * les entites cachees, desactivees ou de configuration —, le distributeur et
  * les plantes de la configuration. Les memes regles que la Vue Piece. */
-function objetsDeLaMaison(hass) {
+function objetsDeLaMaison(hass, ajoutes = []) {
   const S = (hass && hass.states) || {};
   const meta = (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id)) || {};
   const pieceDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function') ? (LOGGIA_INDEX.areaNameOf(id) || null) : null;
@@ -4824,7 +4972,7 @@ function objetsDeLaMaison(hass) {
     out.push({
       cle, id: o.id || null, type, zone: o.zone || null, domaine, piece,
       nom: o.nom || (st && st.attributes && st.attributes.friendly_name) || o.id || cle,
-      filtres: filtresObjet({ domaine, type, estLumiere: !!o.estLumiere, dehors: !!piece && estDehors(piece), epingle: !!(o.id && epingles.has(o.id)) }),
+      filtres: filtresObjet({ domaine, type, estLumiere: !!o.estLumiere, dehors: !!piece && estDehors(piece), epingle: !!(o.id && epingles.has(o.id)), classe: (st && st.attributes && st.attributes.device_class) || '' }),
       actif: type === 'entite' ? objetActif({ domaine, etat, attributs: (st && st.attributes) || {} }) : !!o.actif,
       absent: type === 'entite' ? (!st || etat === 'unavailable' || etat === 'unknown') : false,
     });
@@ -4862,23 +5010,38 @@ function objetsDeLaMaison(hass) {
   const croq = croqHaids();
   if (croq.reservoir || croq.portionWeight) entree('obj:feeder', { type: 'feeder', domaine: 'feeder', nom: tr('Distributeur'), actif: !!prochaineRation(S) });
   plantsCfg().forEach(p => entree('plant:' + p.base, { type: 'plant', domaine: 'plant', nom: p.name || p.base, piece: plantPiece(S, p.base, p.room) || null }));
+  // 6) ce que l'editeur a ajoute a la main : une entite hors des regles ci-dessus.
+  (ajoutes || []).forEach(id => { if (S[id]) entree(id, { id, estLumiere: id.indexOf('switch.') === 0 && cvEstLumiere(id) }); });
   return out;
 }
 
-function ObjetsView({ hass, onNav, filtre = null }) {
+function ObjetsView({ hass, onNav, filtre = null, edit = false }) {
   const S = (hass && hass.states) || {};
   // Le filtre choisi survit a un aller-retour ; une route (Lumieres, Climat,
   // Medias) l'impose a l'arrivee.
   const [choix, setChoix] = useState(() => { if (filtre) return filtre; try { return window.sessionStorage.getItem('loggia-objets-filtre') || 'tous'; } catch { return 'tous'; } });
   useEffect(() => { if (filtre) setChoix(filtre); }, [filtre]);
   useEffect(() => { try { window.sessionStorage.setItem('loggia-objets-filtre', choix); } catch { /* stockage indisponible */ } }, [choix]);
-  const objets = objetsDeLaMaison(hass);
+  // L'agencement : ce que la maison propose, moins les retraits, plus les
+  // ajouts, dans l'ordre choisi — le meme editeur que les pieces.
+  const ajoutes = layoutOf(OBJ_LAYOUT_KEY, 'objets').added || [];
+  const tousObjets = objetsDeLaMaison(hass, ajoutes);
   const ordrePieces = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).map(z => z.name);
+  // L'ordre propose est deja piece par piece : c'est de LA que part un
+  // deplacement — sinon la grille sautait a la premiere prise (bug vecu).
+  const derived = trierObjets(tousObjets.filter(o => ajoutes.indexOf(o.cle) < 0), ordrePieces).map(o => o.cle);
+  const ed = useLayoutEditor(OBJ_LAYOUT_KEY, 'objets', derived);
+  const parCle = new Map(tousObjets.map(o => [o.cle, o]));
+  const objets = ed.ids.map(cle => parCle.get(cle)).filter(Boolean);
   const puces = pucesObjets(objets);
   const filtres = OBJ_FILTRES().filter(f => puces.some(p => p.id === f.id));
   const actuel = filtres.some(f => f.id === choix) ? choix : 'tous';
-  const visibles = trierObjets(objets.filter(o => actuel === 'tous' || o.filtres.indexOf(actuel) >= 0), ordrePieces);
+  // L'ordre est celui de l'editeur : le propose (piece par piece), ou celui choisi a la main.
+  const visibles = objets.filter(o => actuel === 'tous' || o.filtres.indexOf(actuel) >= 0);
   const stats = statsObjets(objets);
+  const [addSheet, setAddSheet] = useState(false);
+  const [cardEdit, setCardEdit] = useState(null);
+  const nomDe = (o) => ed.labelOf(o.cle) || o.nom;
   const scenes = Object.keys(S).filter(k => k.indexOf('scene.') === 0).length;
   const dc = useDomainCards(hass, { onNav });
   const [sheet, setSheet] = useState(null);
@@ -4903,10 +5066,10 @@ function ObjetsView({ hass, onNav, filtre = null }) {
   const plantVerdict = (hum) => hum == null ? { t: '—', c: 'var(--o-text3)' } : hum < 15 ? { t: tr('Sol sec · à arroser'), c: 'var(--o-warn2)' } : hum > 60 ? { t: tr('Sol très humide'), c: 'var(--o-cold)' } : { t: tr('Humidité correcte'), c: 'var(--o-ok)' };
   const fmtV = (v, u) => v == null ? '—' : Math.round(v) + u;
   const carte = (o) => {
-    if (o.type === 'zone') return dc.card(null, o.nom, o.zone);
-    if (o.type === 'feeder') return <RoomFeederCard nom={o.nom} pct={croqPct} prochaine={ration ? (tr('Prochaine ration') + ' ' + ration.time) : tr('Programme terminé')} onFeed={feed} onOpen={() => setSheet({ type: 'croq' })} />;
-    if (o.type === 'plant') { const pl = plante(o.cle.slice(6)); if (!pl) return null; const v = plantVerdict(pl.hum); return <RoomPlantCard nom={pl.name} sub={pl.room} hum={pl.hum} verdict={v.t} verdictCol={v.c} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setSheet({ type: 'plant', pl })} />; }
-    return dc.card(o.id);
+    if (o.type === 'zone') return dc.card(null, nomDe(o), o.zone);
+    if (o.type === 'feeder') return <RoomFeederCard nom={nomDe(o)} pct={croqPct} prochaine={ration ? (tr('Prochaine ration') + ' ' + ration.time) : tr('Programme terminé')} onFeed={feed} onOpen={() => setSheet({ type: 'croq' })} />;
+    if (o.type === 'plant') { const pl = plante(o.cle.slice(6)); if (!pl) return null; const v = plantVerdict(pl.hum); return <RoomPlantCard nom={nomDe(o)} sub={pl.room} hum={pl.hum} verdict={v.t} verdictCol={v.c} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setSheet({ type: 'plant', pl })} />; }
+    return dc.card(o.id, ed.labelOf(o.cle) || null);
   };
   const titreFiltre = (OBJ_FILTRES().find(f => f.id === actuel) || {}).label || tr('Tous');
   const tuile = { padding: '18px 20px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' };
@@ -4914,6 +5077,7 @@ function ObjetsView({ hass, onNav, filtre = null }) {
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} />}
         <div>
           <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Objets')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('{n} appareils répartis dans {p} pièces · {a} actifs', { n: stats.appareils, p: stats.pieces, a: stats.actifs })}</div>
@@ -4939,13 +5103,19 @@ function ObjetsView({ hass, onNav, filtre = null }) {
           <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{titreFiltre}</div>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{visibles.length > 1 ? tr('{n} appareils', { n: visibles.length }) : tr('{n} appareil', { n: visibles.length })}</span>
         </div>
-        {visibles.length
-          ? <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16 }}>
-              {visibles.map(o => <div key={o.cle}>{carte(o)}</div>)}
+        {(visibles.length || edit)
+          ? <div ref={ed.gridRef} className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16 }}>
+              {visibles.map(o => (edit
+                ? <EditableCard key={o.cle} ed={ed} id={o.cle} nom={nomDe(o)} onEdit={setCardEdit} hass={hass} />
+                : <div key={o.cle}>{carte(o)}</div>))}
+              {edit && <CarteAjout onClick={() => setAddSheet(true)} />}
             </div>
           : <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Rien dans ce filtre.')}</div>}
         {/* dc.card sans dc.sheets = fiches muettes (piege vecu). */}
         {dc.sheets}
+        {addSheet && <RoomAddSheet hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter une entité')} listerTout
+          domaines={[...OBJ_DOMAINES, 'input_boolean', 'number', 'select']} onClose={() => setAddSheet(false)} />}
+        {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={(parCle.get(cardEdit) && nomDe(parCle.get(cardEdit))) || cardEdit} origine={(parCle.get(cardEdit) || {}).nom || cardEdit} hass={hass} onClose={() => setCardEdit(null)} />}
         {sheet && sheet.type === 'croq' && (croqFicheId
           ? <FicheAppareil id={croqFicheId} hass={hass} onClose={() => setSheet(null)} />
           : <ObjSheet title={tr('Distributeur de croquettes')} accent="#f59e0b"
@@ -7123,16 +7293,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
         ))}
       </ViewBar>}
 
-      {edit && (
-        <ViewEditBar onEnt={onEnt}
-          texte={tr('Mode édition : clique une carte pour la modifier, glisse-la pour la déplacer.')
-            + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
-          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{tr('Ajouter un volet')}</button>
-          <button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>
-          <BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} />
-          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{tr("Rétablir l'automatique")}</button>}
-        </ViewEditBar>
-      )}
+      {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} ajouterLabel={tr('Ajouter un volet')} />}
       {!embarque && (edit || ed.ids.length > 0) && (
         <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Volet par volet')}</div>
       )}
@@ -7156,8 +7317,9 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
                 {bloc.cartes.map(k => {
                   const carte = ed.typeOf(k) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k));
                   if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={[(ed.estLarge(k) ? 'o-cvw2' : ''), (ed.typeOf(k) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{carte}</Anim>;
-                  return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
+                  return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass}>{carte}</EditableCard>;
                 })}
+                {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} label={tr('Ajouter un volet')} />}
               </div>
             </div>
           );
@@ -7165,7 +7327,8 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
       </div>
       {dc.sheets}
       {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
-      {addSheet && <RoomAddSheet hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter un volet')}
+      {addSheet && <RoomAddSheet hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter un volet')} listerTout
+        pied={<><button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button><BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} /></>}
         domaines={['cover']} onClose={() => setAddSheet(false)} />}
     </div>
   );
@@ -12167,7 +12330,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}
