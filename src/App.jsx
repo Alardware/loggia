@@ -27,13 +27,14 @@ import { isViewAvailable, viewReason } from './views.js';
 import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, ViewEditBar, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
-  Gauge, BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur
+  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur
 } from './ui.jsx';
 import { WX_BG, WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook } from './historique.jsx';
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
+import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets } from './objets.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 /* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
@@ -53,7 +54,7 @@ import {
 // L'accueil de premiere installation ne sert qu'une fois : son code n'a pas a
 // peser dans le bundle de chaque ouverture.
 const Onboarding = lazy(() => import('./Onboarding.jsx'));
-import { VACUUM_STATE_FR, fmtDuration, fmtArea } from './resolve.js';
+import { VACUUM_STATE_FR } from './resolve.js';
 import energyHomeImg from './assets/energy/home.webp';
 import energySolarImg from './assets/energy/solar.webp';
 import energyEvImg from './assets/energy/ev-car-home.webp';
@@ -396,31 +397,6 @@ function useFlash() {
   return [ref, flash];
 }
 // <ActionBtn onClick style>label</ActionBtn> : ripple au clic + « ✓ » 900 ms qui remplace le label (commande envoyée)
-function ActionBtn({ onClick, style, children, doneLabel = '✓ Envoyé' }) {
-  const [done, setDone] = useState(false);
-  const ref = useRef(null), tRef = useRef(0);
-  useEffect(() => () => clearTimeout(tRef.current), []);
-  const handle = (e) => {
-    e.stopPropagation();
-    const el = ref.current;
-    if (el && !REDUCE_MOTION) {
-      const r = el.getBoundingClientRect();
-      const rip = document.createElement('span');
-      rip.className = 'o-ripple';
-      const sz = Math.max(r.width, r.height) * 1.6;
-      rip.style.cssText = `width:${sz}px;height:${sz}px;left:${(e.clientX || r.left + r.width / 2) - r.left - sz / 2}px;top:${(e.clientY || r.top + r.height / 2) - r.top - sz / 2}px`;
-      el.appendChild(rip); setTimeout(() => { try { el.removeChild(rip); } catch {} }, 650);
-    }
-    if (onClick) onClick(e);
-    setDone(true); clearTimeout(tRef.current); tRef.current = setTimeout(() => setDone(false), 900);
-  };
-  return (
-    <button ref={ref} onClick={handle} className="o-actbtn" style={{ position: 'relative', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', ...style }}>
-      <span style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'bottom', transition: 'opacity .18s, transform .18s', opacity: done ? 0 : 1, transform: done ? 'translateY(-6px)' : 'none' }}>{children}</span>
-      {done && <span className="o-actbtn-done" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-ok)', fontWeight: 800 }}>{doneLabel}</span>}
-    </button>
-  );
-}
 // <Shiny on>texte</Shiny> : sweep lumineux discret (background-clip:text) sur un badge ACTIF uniquement.
 function Shiny({ on = true, children, style }) {
   if (!on || REDUCE_MOTION) return <span style={style}>{children}</span>;
@@ -4793,331 +4769,190 @@ function ObjSheet({ title, img, accent = 'var(--o-accent)', rows = [], actions =
     </BottomSheet>
   );
 }
-function ObjCard({ icon, iconBg, name, sub, status, statusColor, barLabel, barPct, barColor, barText, barLiquid, toggleOn, onToggle, actionLabel, onAction, onOpen, art, idx = 0, iconActive = false, extra = null }) {
-  const tilt = useTilt(4);
-  return (
-    <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-stag o-hov ' + (tilt.className || '')} role="button" tabIndex={0} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', overflow: 'hidden', borderRadius: 18, padding: '12px 14px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', cursor: 'pointer', display: 'flex', flexDirection: 'column', ...stag(idx) }}>
-      {/* filigrane appareil — ancré au bord droit (jamais en %, cf. plantes) */}
-      {art && <div aria-hidden="true" style={{ position: 'absolute', right: 8, bottom: -6, width: 104, height: 104, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.3, pointerEvents: 'none' }} />}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{''}<span style={{ display: 'inline-flex', animation: iconActive && !REDUCE_MOTION ? 'm-wiggle 2s ease-in-out infinite' : 'none' }}>{icon}</span></div>
-        {onToggle && (
-          <span role="switch" aria-checked={!!toggleOn} aria-label={'Alimentation ' + name} tabIndex={0}
-            onClick={e => { e.stopPropagation(); onToggle(); }}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onToggle(); } }}
-            style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, background: toggleOn ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (toggleOn ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
-            <span style={{ display: 'block', position: 'relative', top: 2, left: toggleOn ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: toggleOn ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
-          </span>
-        )}
-      </div>
-      <div style={{ position: 'relative', fontSize: 14, fontWeight: 800 }}>{name}</div>
-      <div style={{ position: 'relative', fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
-      <div style={{ position: 'relative', fontSize: 12, color: statusColor || 'var(--o-text2)', fontWeight: 700, marginTop: 5, minHeight: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><FlipText live text={String(status == null ? '' : status)} /></div>
-      {barPct != null && (
-        <div style={{ position: 'relative', marginTop: 7 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 5 }}><span>{barLabel}</span><span style={{ color: 'var(--o-text1)' }}>{barText}</span></div>
-          <Gauge pct={barPct} color={barColor || 'var(--o-ok)'} liquid={!!barLiquid} />
-        </div>
-      )}
-      {extra && <div style={{ position: 'relative' }}>{extra}</div>}
-      <div style={{ position: 'relative', marginTop: 'auto' }}>
-        {actionLabel && (
-          <ActionBtn onClick={() => { if (onAction) onAction(); }} style={{ marginTop: 9, width: '100%', padding: '8px 10px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: 'var(--o-s2)', color: 'var(--o-text1)' }}>{actionLabel}</ActionBtn>
-        )}
-      </div>
-    </div>
-  );
+/* ════════════ VUE OBJETS — tous les appareils, aux cartes de la piece (maquette du 14/09) ════════════ */
+/* Une seule vue pour tout ce qui se pilote : les cartes de la Vue Piece, une
+ * grille, des filtres. Elle remplace les vues Lumieres, Climat et Medias —
+ * leurs routes menent ici, filtre pose — et l'ancienne vue Objets a
+ * agencement libre (sections, renommage, cartes libres : parties avec elle).
+ * Ce qui range un appareil sous ses filtres, l'ordre de la grille et les
+ * chiffres de tete vivent dans objets.js, sans React. */
+const OBJ_FILTRES = () => [
+  { id: 'tous', label: tr('Tous'), fi: 'apps' },
+  { id: 'favoris', label: tr('Favoris'), fi: 'star' },
+  { id: 'lumieres', label: tr('Lumières'), fi: 'bulb' },
+  { id: 'volets', label: tr('Volets'), fi: 'blinds' },
+  { id: 'chauffage', label: tr('Chauffage'), fi: 'flame' },
+  { id: 'prises', label: tr('Prises'), prise: true },
+  { id: 'multimedia', label: tr('Multimédia'), fi: 'tv-music' },
+  { id: 'capteurs', label: tr('Capteurs'), fi: 'sensor' },
+  { id: 'cameras', label: tr('Caméras'), fi: 'camera' },
+  { id: 'securite', label: tr('Sécurité'), fi: 'lock' },
+  { id: 'menager', label: tr('Ménager'), ico: 'dishwasher' },
+  { id: 'jardin', label: tr('Jardin'), fi: 'leaf' },
+  { id: 'plantes', label: tr('Plantes'), fi: 'seedling' },
+];
+// Les domaines qui font une carte, et leur rang dans un meme appareil : la
+// commande avant le capteur — une prise mesurante est une carte, pas deux.
+const OBJ_DOMAINES = ['light', 'cover', 'climate', 'water_heater', 'media_player', 'vacuum', 'lawn_mower', 'lock', 'camera', 'switch', 'fan', 'humidifier', 'valve', 'siren', 'binary_sensor', 'sensor'];
+
+/* La prochaine ration du distributeur, d'apres ses repas programmes. */
+function prochaineRation(S) {
+  const d = new Date(); const nowMin = d.getHours() * 60 + d.getMinutes();
+  const mealMin = (t) => { const p = String(t || '').split(':'); return (+p[0]) * 60 + (+p[1] || 0); };
+  return croqMeals().filter(m => !S[m.auto] || S[m.auto].state === 'on').filter(m => mealMin(m.time) > nowMin).sort((a, b) => mealMin(a.time) - mealMin(b.time))[0] || null;
 }
-const OBJ_LAYOUT_KEY = 'loggia_objlayout';
 
-function ObjetsView({ hass, onNav, edit = false }) {
-  const S = (hass && hass.states) || null;
-  const num = (id, d = null) => { const e = S && S[id]; if (!e) return d; const n = parseFloat(e.state); return isNaN(n) ? d : n; };
-  const stTxt = (id) => { const e = S && S[id]; return (e && e.state != null && e.state !== 'unknown' && e.state !== 'unavailable') ? e.state : null; };
-  const isOn = (id) => { const e = S && S[id]; return !!(e && e.state === 'on'); };
-  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const [sheet, setSheet] = useState(null);
-  const batCol = (b) => b == null ? 'var(--o-text3)' : b > 40 ? 'var(--o-ok)' : b > 15 ? '#ffb347' : '#f87171';
-
-  // Aspirateur : identifiants pris dans la configuration utilisateur, jamais
-  // dans le code : elles viennent de la configuration ou de la découverte.
-  const { resolved: objRes } = useLoggia();
-  const objVac = useEntities('vacuum', null) || {};
-  // Le script maison s'il est configuré (il fait souvent plus que le service),
-  // sinon le service standard du domaine `vacuum`, disponible partout.
-  const objVacRun = (key, svc) => {
-    const sc = (loggiaEnt('vacuumScripts', null) || {})[key];
-    if (sc && S && S[sc]) call('script', 'turn_on', { entity_id: sc });
-    else if (objVacMain) call('vacuum', svc, { entity_id: objVacMain });
+/* Tout ce que la maison pilote, une entree par carte : les zones de chauffage
+ * (le fil pilote n'a pas d'entite unique), les lumieres decouvertes, les volets
+ * et lecteurs configures, puis tout le registre — une carte par appareil, sans
+ * les entites cachees, desactivees ou de configuration —, le distributeur et
+ * les plantes de la configuration. Les memes regles que la Vue Piece. */
+function objetsDeLaMaison(hass) {
+  const S = (hass && hass.states) || {};
+  const meta = (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id)) || {};
+  const pieceDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function') ? (LOGGIA_INDEX.areaNameOf(id) || null) : null;
+  const epingles = new Set(lireEpingles().map(x => cvId(x)));
+  const out = [];
+  const pris = new Set();
+  const entree = (cle, o) => {
+    if (pris.has(cle)) return;
+    pris.add(cle);
+    const type = o.type || 'entite';
+    const st = o.id ? S[o.id] : null;
+    const etat = st ? st.state : null;
+    const piece = o.piece || (o.id ? pieceDe(o.id) : null);
+    const domaine = o.domaine || (o.id ? cvDomain(o.id) : null);
+    out.push({
+      cle, id: o.id || null, type, zone: o.zone || null, domaine, piece,
+      nom: o.nom || (st && st.attributes && st.attributes.friendly_name) || o.id || cle,
+      filtres: filtresObjet({ domaine, type, estLumiere: !!o.estLumiere, dehors: !!piece && estDehors(piece), epingle: !!(o.id && epingles.has(o.id)) }),
+      actif: type === 'entite' ? objetActif({ domaine, etat, attributs: (st && st.attributes) || {} }) : !!o.actif,
+      absent: type === 'entite' ? (!st || etat === 'unavailable' || etat === 'unknown') : false,
+    });
   };
-  const rvac = (objRes && objRes.vacuum && objRes.vacuum.available) ? objRes.vacuum : null;
-  const vacRaw = rvac ? rvac.state : null;
-  // L'entité `vacuum` elle-même : celle que la résolution a retenue, sinon la
-  // première trouvée. C'est elle qui reçoit les services standard.
-  const objVacMain = (rvac && rvac.main) || (S ? (Object.keys(S).find(id => id.indexOf('vacuum.') === 0) || null) : null);
-  const vacCleaning = vacRaw ? vacRaw === 'cleaning' : isOn(objVac.cleaning);
-  const vacEtat = stTxt(objVac.etat) || (vacRaw && tr(VACUUM_STATE_FR[vacRaw])) || (S ? tr('Inactif') : tr('Sur base'));
-  const vacBatRaw = (rvac && rvac.batteryLevel != null) ? rvac.batteryLevel : num(objVac.battery || (rvac && rvac.battery));
-  const vacBat = S ? vacBatRaw : 62;
-  const vacSurf = stTxt(objVac.surface) || fmtArea(stTxt(rvac && rvac.area_cleaned)) || '—';
-  const vacDuree = stTxt(objVac.duree) || fmtDuration(stTxt(rvac && rvac.duration)) || '—';
-  const vacMaint = stTxt(objVac.maintenance) || 'OK';
-  const lubaId = mowerId(S);
-  const lubaSt = (lubaId && S && S[lubaId] && S[lubaId].state) || 'docked';
-  const lubaBat = S ? num(mowerSensor(S, 'battery')) : 88;
-  const lubaProg = num(mowerSensor(S, 'progress'), 0) || 0;
-  const lubaMow = lubaSt === 'mowing';
-  const lubaTxt = lubaMow ? ('Tonte · ' + Math.round(lubaProg) + '%') : lubaSt === 'returning' ? tr('Retour base') : lubaSt === 'paused' ? tr('En pause') : lubaSt === 'error' ? tr('Erreur') : 'Station de charge';
-  const croqPct = S ? Math.max(0, Math.min(100, Math.round((num(croqHaids().reservoir, 0) || 0) / croqMax(S) * 100))) : 74;
-  const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
-  const mealMin = (t) => { const p = t.split(':'); return (+p[0]) * 60 + (+p[1]); };
-  const nextMeal = croqMeals().filter(m => !S || !S[m.auto] || S[m.auto].state === 'on').filter(m => mealMin(m.time) > nowMin).sort((a, b) => mealMin(a.time) - mealMin(b.time))[0];
-  const plants = plantsCfg().map(p => ({
-    // `base` sert de cle : sans lui, toutes les plantes en partagent une seule.
-    base: p.base, name: p.name || p.base, img: p.img || null, room: plantPiece(S, p.base, p.room),
-    hum: S ? num(plantCapteur(S, p.base, 'moisture')) : (p.img === 'dracaena' ? 12 : 41),
-    cond: S ? num(plantCapteur(S, p.base, 'conductivity', 'µS/cm')) : 500,
-    lux: S ? num(plantCapteur(S, p.base, 'illuminance', 'lx')) : 1000,
-    temp: S ? num(plantCapteur(S, p.base, 'temperature')) : 22,
-    bat: S ? num(plantCapteur(S, p.base, 'battery', '%')) : 80,
-  }));
-  const plantsDry = plants.filter(p => p.hum != null && p.hum < 15).length;
-  const medias = medPlayers().map(p => ({ p, np: mpRead(S || {}, p.haid) }));
-
-  // Ce que la vue propose, dans son ordre naturel. Une carte native n'y entre
-  // que si son appareil existe.
-  const derived = [
-    ...(objVacMain ? ['obj:vacuum'] : []),
-    ...(lubaId ? ['obj:mower'] : []),
-    ...((croqHaids().reservoir || croqHaids().portionWeight) ? ['obj:feeder'] : []),
-    ...medias.map(({ p }) => 'media:' + p.haid),
-    // Les plantes gardent leur intertitre : c'est ce qui les distingue du reste.
-    ...(plants.length ? ['sect:plantes', ...plants.map(pl => 'plant:' + pl.base)] : []),
-  ];
-  const ed = useLayoutEditor(OBJ_LAYOUT_KEY, 'objets', derived);
-  const dc = useDomainCards(hass); // cartes typées du catalogue sur les ajouts libres
-  const [objAdd, setObjAdd] = useState(false);
-  // Carte dont la fiche est ouverte, ou null.
-  const [cardEdit, setCardEdit] = useState(null);
-  // Libelle affiche d'un element : le nom choisi, sinon celui de la carte.
-  const plantDe = (k) => plants.find(pl => 'plant:' + pl.base === k) || null;
-  const nomDe = (k) => ed.labelOf(k) || (
-    k === 'obj:vacuum' ? 'Aspirateur robot'
-      : k === 'obj:mower' ? 'Robot tondeuse'
-        : k === 'obj:feeder' ? 'Distributeur'
-          : k === 'sect:plantes' ? 'Capteurs de plantes'
-            : k.indexOf('sect:') === 0 ? 'Section'
-              : k.indexOf('media:') === 0 ? ((medias.find(m => 'media:' + m.p.haid === k) || { p: {} }).p.name || k.slice(6))
-                : k.indexOf('plant:') === 0 ? ((plantDe(k) || {}).name || k.slice(6))
-                  : ((S && S[k] && S[k].attributes && S[k].attributes.friendly_name) || k));
-  // Ajouter un intertitre : il se pose en fin de liste, puis se renomme et se
-  // deplace comme n'importe quelle carte.
-  const addSection = () => ed.toggle('sect:' + Date.now().toString(36));
-  // Nom d'origine, sans le renommage : ce a quoi un champ vide ramene.
-  const origineDe = (k) => k === 'obj:vacuum' ? 'Aspirateur robot'
-    : k === 'obj:mower' ? 'Robot tondeuse'
-      : k === 'obj:feeder' ? 'Distributeur'
-        : k === 'sect:plantes' ? 'Capteurs de plantes'
-          : k.indexOf('sect:') === 0 ? 'Section'
-            : k.indexOf('media:') === 0 ? ((medias.find(m => 'media:' + m.p.haid === k) || { p: {} }).p.name || k.slice(6))
-              : k.indexOf('plant:') === 0 ? ((plantDe(k) || {}).name || k.slice(6))
-                : ((S && S[k] && S[k].attributes && S[k].attributes.friendly_name) || k);
-
-  // Decoupage de la liste : un intertitre ouvre un bloc, les cartes s'y
-  // accumulent jusqu'au suivant. Le premier bloc n'a pas de titre.
-  const blocs = [];
-  ed.ids.forEach(k => {
-    if (k.indexOf('sect:') === 0) blocs.push({ titre: k, cartes: [] });
-    else {
-      if (!blocs.length) blocs.push({ titre: null, cartes: [] });
-      blocs[blocs.length - 1].cartes.push(k);
-    }
+  // 1) chauffage : les zones, poele ou fil pilote — leurs entites de service sont prises.
+  climateZones(S).forEach(z => {
+    if (estClimate(z) && z.haid && S[z.haid]) entree(z.haid, { id: z.haid, domaine: 'climate', piece: z.room || null });
+    else if (S[z.haid] || S[z.tempCible]) entree('zone:' + z.id, { type: 'zone', zone: z, domaine: 'climate', nom: z.name || z.room || z.id, piece: z.room || null, actif: !!(S[z.haid] && S[z.haid].state === 'on') });
+    ['haid', 'tempCible', 'modeEnt', 'autoEnt'].forEach(k => { if (typeof z[k] === 'string') pris.add(z[k]); });
   });
-  // Bandeau + carte de synthèse repliables (patron Atrium, 21/08)
-  const actifs = (vacCleaning ? 1 : 0) + (lubaMow ? 1 : 0) + (nextMeal ? 1 : 0) + medias.filter(x => x.np.on).length;
-  const plantVerdict = (hum) => hum == null ? { t: '—', c: 'var(--o-text3)' } : hum < 15 ? { t: 'Sol sec · à arroser', c: 'var(--o-warn2)' } : hum > 60 ? { t: 'Sol très humide', c: 'var(--o-cold)' } : { t: 'Humidité correcte', c: 'var(--o-ok)' };
-  const fmtV = (v, u) => v == null ? '—' : Math.round(v) + u;
+  // 2) lumieres decouvertes : leur piece vient de la configuration des pieces.
+  try { discoverLights(hass).forEach(l => { if (l && l.id && S[l.id]) entree(l.id, { id: l.id, nom: l.name, piece: l.room || null, estLumiere: true }); }); } catch { /* decouverte pas prete */ }
+  // 3) volets et lecteurs configures : leur nom vient de la configuration.
+  voletCovers(S).forEach(c => { if (c && c.haid && S[c.haid]) entree(c.haid, { id: c.haid, nom: c.name }); });
+  medPlayers().forEach(p => { if (p && p.haid && S[p.haid]) entree(p.haid, { id: p.haid, nom: p.name }); });
+  // 4) le reste du registre, une carte par appareil — un appareil deja
+  //    represente (sa lumiere, son volet, son lecteur) ne revient pas.
+  const parAppareil = new Set();
+  out.forEach(o => { const a = o.id ? meta(o.id).deviceId : null; if (a) parAppareil.add(a); });
+  const candidats = [];
+  Object.keys(S).forEach(id => {
+    if (pris.has(id)) return;
+    const d = cvDomain(id); const rang = OBJ_DOMAINES.indexOf(d); if (rang < 0) return;
+    const m = meta(id); if (m.hidden || m.disabled || m.category) return;
+    const dc = (S[id].attributes || {}).device_class || '';
+    if (d === 'binary_sensor' && ROOM_BIN_CLASSES.indexOf(dc) < 0) return;
+    if (d === 'sensor' && ROOM_SENSOR_CLASSES.indexOf(dc) < 0) return;
+    candidats.push({ id, rang, appareil: m.deviceId || null });
+  });
+  candidats.sort((x, y) => x.rang - y.rang || x.id.localeCompare(y.id)).forEach(c => {
+    if (c.appareil) { if (parAppareil.has(c.appareil)) return; parAppareil.add(c.appareil); }
+    entree(c.id, { id: c.id, estLumiere: c.id.indexOf('switch.') === 0 && cvEstLumiere(c.id) });
+  });
+  // 5) le distributeur et les plantes : la configuration les nomme.
+  const croq = croqHaids();
+  if (croq.reservoir || croq.portionWeight) entree('obj:feeder', { type: 'feeder', domaine: 'feeder', nom: tr('Distributeur'), actif: !!prochaineRation(S) });
+  plantsCfg().forEach(p => entree('plant:' + p.base, { type: 'plant', domaine: 'plant', nom: p.name || p.base, piece: plantPiece(S, p.base, p.room) || null }));
+  return out;
+}
 
+function ObjetsView({ hass, onNav, filtre = null }) {
+  const S = (hass && hass.states) || {};
+  // Le filtre choisi survit a un aller-retour ; une route (Lumieres, Climat,
+  // Medias) l'impose a l'arrivee.
+  const [choix, setChoix] = useState(() => { if (filtre) return filtre; try { return window.sessionStorage.getItem('loggia-objets-filtre') || 'tous'; } catch { return 'tous'; } });
+  useEffect(() => { if (filtre) setChoix(filtre); }, [filtre]);
+  useEffect(() => { try { window.sessionStorage.setItem('loggia-objets-filtre', choix); } catch { /* stockage indisponible */ } }, [choix]);
+  const objets = objetsDeLaMaison(hass);
+  const ordrePieces = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).map(z => z.name);
+  const puces = pucesObjets(objets);
+  const filtres = OBJ_FILTRES().filter(f => puces.some(p => p.id === f.id));
+  const actuel = filtres.some(f => f.id === choix) ? choix : 'tous';
+  const visibles = trierObjets(objets.filter(o => actuel === 'tous' || o.filtres.indexOf(actuel) >= 0), ordrePieces);
+  const stats = statsObjets(objets);
+  const scenes = Object.keys(S).filter(k => k.indexOf('scene.') === 0).length;
+  const dc = useDomainCards(hass, { onNav });
+  const [sheet, setSheet] = useState(null);
+  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
+  const num = (id, d = null) => { const e = id && S[id]; if (!e) return d; const n = parseFloat(e.state); return isNaN(n) ? d : n; };
+  const batCol = (b) => b == null ? 'var(--o-text3)' : b > 40 ? 'var(--o-ok)' : b > 15 ? '#ffb347' : '#f87171';
+  // Le distributeur : reservoir, prochaine ration, et le « distribuer » de
+  // l'APPAREIL (un select `feed` dont START lance une ration) — le script
+  // maison ne reste qu'en repli.
+  const croq = croqHaids();
+  const croqPct = Math.max(0, Math.min(100, Math.round((num(croq.reservoir, 0) || 0) / croqMax(S) * 100)));
+  const ration = prochaineRation(S);
+  const feed = (() => {
+    const fid = Object.keys(S).find(x => x.indexOf('select.') === 0 && /feed$/.test(x) && S[x].attributes && Array.isArray(S[x].attributes.options) && S[x].attributes.options.some(o => /^(start|feed)$/i.test(o)));
+    if (fid) return () => call('select', 'select_option', { entity_id: fid, option: S[fid].attributes.options.find(o => /^(start|feed)$/i.test(o)) });
+    const sc = feederScript(hass, loggiaEnt('feeder', null));
+    return sc ? () => call('script', 'turn_on', { entity_id: sc }) : null;
+  })();
+  const croqFicheId = (loggiaEnt('feeder', null) || {}).haid || Object.keys(S).find(id => id.indexOf('number.') === 0 && /serving_size$/.test(id)) || null;
+  // Les plantes : leurs capteurs, reconnus a leur classe, et leur verdict.
+  const plante = (base) => { const p = plantsCfg().find(x => x.base === base); if (!p) return null; return { base, name: p.name || p.base, img: p.img || null, room: plantPiece(S, p.base, p.room), hum: num(plantCapteur(S, p.base, 'moisture')), cond: num(plantCapteur(S, p.base, 'conductivity', 'µS/cm')), lux: num(plantCapteur(S, p.base, 'illuminance', 'lx')), temp: num(plantCapteur(S, p.base, 'temperature')), bat: num(plantCapteur(S, p.base, 'battery', '%')) }; };
+  const plantVerdict = (hum) => hum == null ? { t: '—', c: 'var(--o-text3)' } : hum < 15 ? { t: tr('Sol sec · à arroser'), c: 'var(--o-warn2)' } : hum > 60 ? { t: tr('Sol très humide'), c: 'var(--o-cold)' } : { t: tr('Humidité correcte'), c: 'var(--o-ok)' };
+  const fmtV = (v, u) => v == null ? '—' : Math.round(v) + u;
+  const carte = (o) => {
+    if (o.type === 'zone') return dc.card(null, o.nom, o.zone);
+    if (o.type === 'feeder') return <RoomFeederCard nom={o.nom} pct={croqPct} prochaine={ration ? (tr('Prochaine ration') + ' ' + ration.time) : tr('Programme terminé')} onFeed={feed} onOpen={() => setSheet({ type: 'croq' })} />;
+    if (o.type === 'plant') { const pl = plante(o.cle.slice(6)); if (!pl) return null; const v = plantVerdict(pl.hum); return <RoomPlantCard nom={pl.name} sub={pl.room} hum={pl.hum} verdict={v.t} verdictCol={v.c} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setSheet({ type: 'plant', pl })} />; }
+    return dc.card(o.id);
+  };
+  const titreFiltre = (OBJ_FILTRES().find(f => f.id === actuel) || {}).label || tr('Tous');
+  const tuile = { padding: '18px 20px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' };
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
-      <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Objets connectés')}</h1>
-          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>Aspirateur, tondeuse, lave-vaisselle, distributeur, plantes</div>
-          </div>
-          <span style={{ flex: 1 }} />
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: actifs ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s2)', color: actifs ? 'var(--o-ok)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: actifs ? 'var(--o-ok)' : 'var(--o-text3)' }} />{actifs ? tr('{n} EN ACTIVITÉ', { n: actifs }) : tr('RIEN EN COURS')}</span>
+      <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div>
+          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Objets')}</h1>
+          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('{n} appareils répartis dans {p} pièces · {a} actifs', { n: stats.appareils, p: stats.pieces, a: stats.actifs })}</div>
         </div>
-
-        {/* réglages rapides : robots */}
-        <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Aspirateur</span>
-            <button onClick={() => { if (rvac) call('vacuum', vacCleaning ? 'return_to_base' : 'start', { entity_id: rvac.main }); }} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: vacCleaning ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: vacCleaning ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{vacCleaning ? 'Renvoyer à la base' : 'Nettoyer'}</button>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Tondeuse</span>
-            <button onClick={() => call('lawn_mower', lubaMow ? 'dock' : 'start_mowing', { entity_id: lubaId })} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: lubaMow ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: lubaMow ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lubaMow ? 'Rentrer' : 'Tondre'}</button>
-          </div>
-          <span style={{ flex: 1 }} />
-        </div>
-
-        <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('État des appareils')}</div>
-
-        <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {blocs.map((bloc, bi) => (
-          // Hors édition, un intertitre sans carte ne s'affiche pas.
-          (!edit && bloc.titre && !bloc.cartes.length) ? null : (
-          <div key={bloc.titre || 'b' + bi} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {bloc.titre && (edit
-              ? <EditableCard plat ed={ed} id={bloc.titre} nom={nomDe(bloc.titre)} onEdit={setCardEdit}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
-                    <Fi i={bloc.titre === 'sect:plantes' ? 'seedling' : 'apps'} size={16} color="var(--o-ok)" />{nomDe(bloc.titre)}
-                  </div>
-                </EditableCard>
-              : <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
-                    <Fi i={bloc.titre === 'sect:plantes' ? 'seedling' : 'apps'} size={16} color="var(--o-ok)" />{nomDe(bloc.titre)}
-                  </div>
-                  {bloc.titre === 'sect:plantes' && plantsDry > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-warn2)' }}>{plantsDry} sous le seuil d'humidité</span>}
-                </div>)}
-            <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16 }}>
-          {bloc.cartes.map((k) => {
-            const i = ed.ids.indexOf(k);
-            // Le sous-titre vient de l'entité : chacun voit le nom de SON
-            // appareil, pas celui d'une installation particulière.
-            const nomHA = (id) => (id && S && S[id] && S[id].attributes && S[id].attributes.friendly_name) || '';
-            const med = k.indexOf('media:') === 0 ? medias.find(m => 'media:' + m.p.haid === k) : null;
-            let carte;
-            if (k === 'obj:vacuum') {
-              // Le gabarit maison, comme partout — l'ancienne ObjCard reste le
-              // filet des installations sans entité résolue.
-              carte = objVacMain
-                ? <RoomMachineCard id={objVacMain} hass={hass} label={nomDe(k)} onOpen={() => setSheet({ type: 'vac' })}
-                    extra={<Epingles pourId={objVacMain} hass={hass} avecAncre />} />
-                : <ObjCard idx={i} icon={<Ico name="vacuum" size={19} color="var(--o-ok)" />} iconBg="rgba(52,211,153,.16)"
-                    name={nomDe(k)} iconActive={vacCleaning} sub={nomHA(objVacMain)} status={vacEtat} statusColor={vacCleaning ? 'var(--o-accent-soft)' : 'var(--o-text2)'}
-                    barLabel="Batterie" barPct={vacBat} barColor={batCol(vacBat)} barText={vacBat != null ? Math.round(vacBat) + '%' : '—'}
-                    actionLabel={vacCleaning ? tr('Renvoyer au dock') : tr('Démarrer le nettoyage')}
-                    onAction={() => objVacRun(vacCleaning ? 'retour_base' : 'nettoyer_tout', vacCleaning ? 'return_to_base' : 'start')}
-                    onOpen={() => setSheet({ type: 'vac' })} />;
-            } else if (k === 'obj:mower') {
-              carte = lubaId
-                ? <RoomMachineCard id={lubaId} hass={hass} label={nomDe(k)} onOpen={() => setSheet({ type: 'luba' })}
-                    extra={<Epingles pourId={lubaId} hass={hass} avecAncre />} />
-                : <ObjCard idx={i} icon={<Ico name="mower" size={19} color="#a3e635" />} iconBg="rgba(163,230,53,.14)"
-                    name={nomDe(k)} iconActive={lubaMow} sub={nomHA(lubaId)} status={lubaTxt} statusColor={lubaMow ? 'var(--o-ok)' : 'var(--o-text2)'}
-                    barLabel="Batterie" barPct={lubaBat} barColor={batCol(lubaBat)} barText={lubaBat != null ? Math.round(lubaBat) + '%' : '—'}
-                    actionLabel={lubaMow ? 'Renvoyer à la base' : 'Lancer la tonte'}
-                    onAction={() => call('lawn_mower', lubaMow ? 'dock' : 'start_mowing', { entity_id: lubaId })}
-                    onOpen={() => setSheet({ type: 'luba' })} />;
-            } else if (k === 'obj:feeder') {
-              /* Le « distribuer » vient de l'APPAREIL : un feeder Zigbee
-               * standard expose un select `feed` dont l'option START lance une
-               * distribution de serving_size portions — celles que le stepper
-               * règle. Le script maison, qui force sa propre valeur, ne reste
-               * qu'en repli pour les distributeurs sans ce select. */
-              const ff = (() => {
-                const fid = Object.keys(S).find(x => x.indexOf('select.') === 0 && /feed$/.test(x)
-                  && S[x].attributes && Array.isArray(S[x].attributes.options)
-                  && S[x].attributes.options.some(o => /^(start|feed)$/i.test(o)));
-                return fid ? { id: fid, opt: S[fid].attributes.options.find(o => /^(start|feed)$/i.test(o)) } : null;
-              })();
-              const sc = ff ? null : feederScript(hass, loggiaEnt('feeder', null));
-              const fidEp = (loggiaEnt('feeder', null) || {}).haid || (S ? Object.keys(S).find(x => x.indexOf('number.') === 0 && /serving_size$/.test(x)) : null);
-              carte = <RoomFeederCard nom={nomDe(k)} pct={croqPct}
-                prochaine={nextMeal ? (tr('Prochaine ration') + ' ' + nextMeal.time) : 'Programme terminé'}
-                onFeed={(ff || sc) ? () => { if (ff) call('select', 'select_option', { entity_id: ff.id, option: ff.opt }); else if (sc) call('script', 'turn_on', { entity_id: sc }); } : null}
-                onOpen={() => setSheet({ type: 'croq' })}
-                extra={fidEp ? <Epingles pourId={fidEp} hass={hass} avecAncre /> : null} />;
-            } else if (med) {
-              const { p, np } = med;
-              carte = <ObjCard idx={i}
-                icon={<Fi i={/echo|speaker|enceinte/i.test(p.id + p.haid) ? 'speaker' : 'screen'} size={17} color={p.c} />} iconBg={hx(p.c, 0.15)}
-                art={/echo|speaker|enceinte/i.test(p.id + p.haid) ? DEVICE_ART.echo : /apple|atv|tv/i.test(p.id + p.haid) ? DEVICE_ART.appletv : null}
-                name={nomDe(k)} sub={p.haid.replace('media_player.', '')}
-                status={np.playing ? (np.title || tr('Lecture en cours')) : np.on ? tr('En veille') : tr('Éteint')}
-                statusColor={np.playing ? 'var(--o-accent-soft)' : 'var(--o-text3)'}
-                toggleOn={!!np.on} onToggle={() => call('media_player', np.on ? 'turn_off' : 'turn_on', { entity_id: p.haid })}
-                actionLabel={np.playing ? 'Pause' : null}
-                onAction={() => commander(hass, np.ctl || p.haid, 'pause')}
-                onOpen={() => setSheet({ type: 'media', id: p.haid })} />;
-            } else if (k.indexOf('plant:') === 0) {
-              const pl = plantDe(k);
-              const v = pl ? plantVerdict(pl.hum) : null;
-              carte = pl ? <RoomPlantCard nom={nomDe(k)} sub={pl.room} hum={pl.hum} verdict={v.t} verdictCol={v.c}
-                lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img}
-                onOpen={() => setSheet({ type: 'plant', pl })} /> : null;
-            } else {
-              // Ajout libre : la carte du catalogue si un type est choisi,
-              // sinon la générique — même personnalisation que les vues custom.
-              carte = ed.typeOf(k)
-                ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} />
-                : <CvCard id={k} hass={hass} label={ed.labelOf(k)} onOpen={dc.ouvrir} />;
-            }
-            if (!edit) return <div key={k} className={ed.estLarge(k) ? 'o-cvw2' : undefined}>{carte}</div>;
-            return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
-          })}
+        <div className="grid-objstats" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
+          {[[stats.appareils, tr('appareils reliés'), 'var(--o-text)'], [scenes, tr('scènes'), 'var(--o-purple)'], [stats.absentes, tr('entités absentes'), stats.absentes ? 'var(--o-bad)' : 'var(--o-text)']].map(([v, l, c], i) => (
+            <div key={i} style={tuile}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: c, lineHeight: 1 }}>{v}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6 }}>{l}</div>
             </div>
-          </div>)
-        ))}
+          ))}
         </div>
-        {edit && (() => {
-          const btn = (accent) => ({ padding: '7px 12px', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0,
-            background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
-            border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
-          return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
-              <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>
-                Mode édition : clique une carte pour la modifier, glisse-la pour la déplacer.
-                {ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.'}
-              </span>
-              <button onClick={() => setObjAdd(true)} style={btn(true)}>{tr('Ajouter un appareil')}</button>
-              <button onClick={addSection} style={btn(false)}>{tr('Ajouter un titre')}</button>
-              <BoutonCarteLibre ed={ed} hass={hass} style={btn(false)} />
-              {ed.edits > 0 && <button onClick={ed.reset} style={btn(false)}>{tr("Rétablir l'automatique")}</button>}
+        {/* Les filtres : des puces a l'arrondi 9 (pas de pilules), seulement celles qui ont quelque chose a montrer. */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {filtres.map(f => { const on = f.id === actuel; return (
+            <button key={f.id} onClick={() => setChoix(f.id)} aria-pressed={on} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.45)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
+              {f.prise ? <PlugIcon size={13} /> : f.ico ? <Ico name={f.ico} size={14} /> : <Fi i={f.fi} size={13} />}{f.label}
+            </button>); })}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{titreFiltre}</div>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{visibles.length > 1 ? tr('{n} appareils', { n: visibles.length }) : tr('{n} appareil', { n: visibles.length })}</span>
+        </div>
+        {visibles.length
+          ? <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16 }}>
+              {visibles.map(o => <div key={o.cle}>{carte(o)}</div>)}
             </div>
-          );
-        })()}
-        {objAdd && <RoomAddSheet room={tr('Objets')} hass={hass} present={ed.ids} onToggle={ed.toggle} onClose={() => setObjAdd(false)} />}
-        {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
-        {/* dc.card/dc.ouvrir sans dc.sheets = fiches muettes (piège vécu). */}
+          : <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Rien dans ce filtre.')}</div>}
+        {/* dc.card sans dc.sheets = fiches muettes (piege vecu). */}
         {dc.sheets}
-
-        {sheet && sheet.type === 'media' && <RoomMediaSheet id={sheet.id} hass={hass} onClose={() => setSheet(null)} />}
-        {/* Les machines ouvrent la FICHE APPAREIL UNIVERSELLE quand l'entité HA
-            existe — commandes, réglages, diagnostics, tout ce que l'appareil
-            expose. L'ancienne fiche maison reste le filet sans entité. */}
-        {sheet && sheet.type === 'vac' && (objVacMain
-          ? <FicheAppareil id={objVacMain} hass={hass} onClose={() => setSheet(null)} />
-          : <ObjSheet title="Aspirateur robot" accent="var(--o-ok)"
-              rows={[[tr('État'), vacEtat], ['Batterie', vacBat != null ? Math.round(vacBat) + ' %' : '—', batCol(vacBat)], ['Surface nettoyée', vacSurf], ['Durée', vacDuree], ['Entretien', vacMaint]]}
-              actions={[{ label: vacCleaning ? tr('Renvoyer au dock') : 'Démarrer', primary: true, run: () => objVacRun(vacCleaning ? 'retour_base' : 'nettoyer_tout', vacCleaning ? 'return_to_base' : 'start') }]}
+        {sheet && sheet.type === 'croq' && (croqFicheId
+          ? <FicheAppareil id={croqFicheId} hass={hass} onClose={() => setSheet(null)} />
+          : <ObjSheet title={tr('Distributeur de croquettes')} accent="#f59e0b"
+              rows={[[tr('Réservoir'), croqPct + ' %', croqPct < 25 ? '#f87171' : 'var(--o-text)'], [tr('Prochaine ration'), ration ? (ration.time + ' · ' + ration.g + ' g') : '—'], [tr('Distribué aujourd’hui'), (num(croq.distribuees, 0) || 0) + ' g']]}
+              actions={feed ? [{ label: tr('Distribuer 1 ration'), primary: true, run: feed }] : []}
               onClose={() => setSheet(null)} />)}
-        {sheet && sheet.type === 'luba' && (lubaId
-          ? <FicheAppareil id={lubaId} hass={hass} onClose={() => setSheet(null)} />
-          : <ObjSheet title="Robot tondeuse" accent="#a3e635"
-              rows={[[tr('État'), lubaTxt], ['Batterie', lubaBat != null ? Math.round(lubaBat) + ' %' : '—', batCol(lubaBat)], ['Progression', Math.round(lubaProg) + ' %'], ['Charge', isOn(mowerSensor(S, 'charging')) ? 'En charge' : '—']]}
-              actions={[]}
-              onClose={() => setSheet(null)} />)}
-        {sheet && sheet.type === 'croq' && (() => {
-          /* L'entité du distributeur : celle que la configuration désigne, sinon
-           * le suffixe STANDARD des feeders Zigbee (`serving_size`) — un motif
-           * de la classe d'appareil, pas un identifiant d'une installation. */
-          const croqFicheId = (loggiaEnt('feeder', null) || {}).haid
-            || (S ? Object.keys(S).find(id => id.indexOf('number.') === 0 && /serving_size$/.test(id)) : null);
-          return croqFicheId
-            ? <FicheAppareil id={croqFicheId} hass={hass} onClose={() => setSheet(null)} />
-            : <ObjSheet title={tr('Distributeur de croquettes')} accent="#f59e0b"
-                rows={[[tr('Réservoir'), croqPct + ' %', croqPct < 25 ? '#f87171' : 'var(--o-text)'], ['Prochaine ration', nextMeal ? (nextMeal.time + ' · ' + nextMeal.g + ' g') : '—'], ['Distribué aujourd\'hui', (num(croqHaids().distribuees, 0) || 0) + ' g']]}
-                actions={((loggiaEnt('feeder', null) || {}).script) ? [{ label: 'Distribuer 1 ration', primary: true, run: () => call('script', 'turn_on', { entity_id: (loggiaEnt('feeder', null) || {}).script }) }] : []}
-                onClose={() => setSheet(null)} />;
-        })()}
         {sheet && sheet.type === 'plant' && (() => { const pl = sheet.pl; const v = plantVerdict(pl.hum); return <ObjSheet title={pl.name} img={pl.img && PLANT_ART[pl.img]} accent="var(--o-ok)"
-          rows={[['Humidité du sol', pl.hum != null ? Math.round(pl.hum) + ' %' : '—', v.c], ['Verdict', v.t, v.c], ['Éclairement', fmtV(pl.lux, ' lx')], ['Conductivité (engrais)', fmtV(pl.cond, ' µS/cm')], [tr('Température'), pl.temp != null ? pl.temp.toFixed(1) + ' °C' : '—'], ['Pile capteur', pl.bat != null ? Math.round(pl.bat) + ' %' : '—', batCol(pl.bat)]]}
+          rows={[[tr('Humidité du sol'), pl.hum != null ? Math.round(pl.hum) + ' %' : '—', v.c], [tr('Verdict'), v.t, v.c], [tr('Éclairement'), fmtV(pl.lux, ' lx')], [tr('Conductivité (engrais)'), fmtV(pl.cond, ' µS/cm')], [tr('Température'), pl.temp != null ? pl.temp.toFixed(1) + ' °C' : '—'], [tr('Pile capteur'), pl.bat != null ? Math.round(pl.bat) + ' %' : '—', batCol(pl.bat)]]}
           onClose={() => setSheet(null)} />; })()}
       </div>
     </main>
@@ -6594,20 +6429,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
 // Formateur puissance UNIQUE (harmonisation 20/08) : virgule FR, kW à 2 décimales, « — » si valeur absente
 const fmtWatts = (w) => w == null || isNaN(w) ? '—' : Math.abs(w) >= 1000 ? (w / 1000).toFixed(2).replace('.', ',') + ' kW' : Math.round(w) + ' W';
 const hx = (hex, a) => { if (HX_TOKENS[hex]) return `rgba(var(${HX_TOKENS[hex]}),${a})`; if (typeof hex !== 'string' || hex[0] !== '#') return `rgba(140,152,180,${a})`; const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
-const INITIAL_LIGHTS = [
-  { id: 1, room: 'Séjour', name: 'Plafonnier Séjour', on: false, bri: 0 },
-  { id: 2, room: 'Séjour', name: 'Lampadaire', on: false, bri: 0 },
-  { id: 3, room: 'Séjour', name: 'Ampoule Séjour 1', on: true, bri: 100 },
-  { id: 4, room: 'Séjour', name: 'Ampoule Séjour 2', on: true, bri: 100 },
-  { id: 5, room: 'Séjour', name: 'Ampoule Séjour 3', on: true, bri: 100 },
-  { id: 6, room: 'Séjour', name: 'Salon RGB', on: true, bri: 100, rgb: true, color: '#ff6b6b' },
-  { id: 7, room: 'Cuisine', name: 'Plafonnier Cuisine', on: false, bri: 0 },
-  { id: 8, room: 'Chambre', name: 'Chevet Gauche', on: false, bri: 0 },
-  { id: 9, room: 'Chambre', name: 'Chevet Droit', on: false, bri: 0 },
-  { id: 10, room: 'Bureau', name: 'Lampe Bureau', on: true, bri: 60 },
-  { id: 11, room: 'Salle de bain', name: 'Miroir LED', on: false, bri: 0 },
-  { id: 12, room: 'Extérieur', name: 'Façade Jardin', on: false, bri: 0 },
-];
 
 // ── Acces des fonctions pures a la decouverte et a la configuration ──
 // App les alimente a chaque rendu ; avant la premiere reponse elles valent
@@ -6660,21 +6481,6 @@ function discoverLights(hass, index) {
   });
   return [...lights, ...switches];
 }
-// Pièces mises en avant quand elles existent ; toutes les autres zones trouvées
-// viennent ensuite, par ordre alphabétique, « Autres » fermant la marche.
-const LIGHT_ROOM_ORDER = ['Séjour', 'Cuisine', 'Chambre', 'Chambre enfant', 'Bureau', 'Salle de bain', 'Extérieur', 'Autres'];
-function lightRooms(lights) {
-  const present = [];
-  lights.forEach(l => { if (l.room && present.indexOf(l.room) < 0) present.push(l.room); });
-  // Comparaison insensible à la casse : « Salle de Bain » côté Home Assistant
-  // doit retrouver sa place dans l'ordre voulu, pas passer pour une inconnue.
-  const last = LIGHT_ROOM_ORDER.length - 1; // « Autres »
-  const rank = (r) => LIGHT_ROOM_ORDER.findIndex(k => k.toLowerCase() === String(r).toLowerCase());
-  const known = present.filter(r => rank(r) >= 0 && rank(r) < last).sort((a, b) => rank(a) - rank(b));
-  const rest = present.filter(r => rank(r) < 0).sort((a, b) => a.localeCompare(b, 'fr'));
-  const autres = present.filter(r => rank(r) === last);
-  return [...known, ...rest, ...autres];
-}
 // Type de luminaire d'après le nom/id → icône différenciée.
 function lightType(l) {
   const s = ((l.name || '') + ' ' + (l.id || '')).toLowerCase();
@@ -6707,240 +6513,8 @@ const LIGHT_PALETTE = ['#ffce73', '#ff8a4c', '#f472b6', 'var(--o-purple)', 'var(
 const WHITE_TEMPS = () => [['Bougie', 2200, '#ffb46b'], ['Chaud', 2700, '#ffd9a0'], ['Neutre', 4000, '#fff1dd'], [tr('Froid'), 6500, '#eaf2ff']];
 const relTime = (iso) => { if (!iso) return ''; const d = (Date.now() - new Date(iso).getTime()) / 1000; if (d < 60) return "À l'instant"; if (d < 3600) return 'Il y a ' + Math.floor(d / 60) + ' min'; if (d < 86400) return 'Il y a ' + Math.floor(d / 3600) + ' h'; return 'Il y a ' + Math.floor(d / 86400) + ' j'; };
 
-function LumieresContent({ hass, edit = false, onEnt }) {
-  // `null` = aucune piece choisie, donc toutes. Un libelle traduit ne peut pas
-  // tenir ce role : il change avec la langue.
-  const [filter, setFilter] = useState(null);
-  const [lights, setLights] = useState(() => hass ? discoverLights(hass) : INITIAL_LIGHTS);
-  // useMemo : le scan de hass.states ne doit PAS tourner à chaque render local (drags à 60-120 Hz) — seulement quand hass change (tick 2s).
-  const sig = useMemo(() => hass ? Object.keys(hass.states).filter(e => e.indexOf('light.') === 0).map(e => { const s = hass.states[e]; return e + s.state + ((s.attributes && s.attributes.brightness) || '') + ((s.attributes && s.attributes.rgb_color) || ''); }).join('|') + '|' + switchLights().map(id => { const s = hass.states[id]; return id + (s ? s.state : '-'); }).join(',') : '', [hass]);
-  // Fenêtre optimiste : les ids « en attente » gardent leur état local ~3s, le temps que HA confirme
-  // (sinon le premier poll partiel pendant un « Tout allumer » re-bascule les lumières pas encore confirmées).
-  const pendingRef = useRef({});
-  const markPending = (ids, on) => { const until = Date.now() + 3000; ids.forEach(id => { pendingRef.current[id] = { on, until }; }); };
-  useEffect(() => {
-    if (!hass) return;
-    if (dragRef.current) return; // pas de resync pendant un drag (le doigt fait foi)
-    const now = Date.now(); const pend = pendingRef.current;
-    setLights(discoverLights(hass).map(l => {
-      const p = pend[l.id]; if (!p) return l;
-      if (l.on === p.on || p.until < now) { delete pend[l.id]; return l; }
-      return { ...l, on: p.on, bri: p.on ? (l.bri || 100) : l.bri };
-    }));
-  }, [sig]);
-  const setBri = (id, v) => setLights(ls => ls.map(l => l.id === id ? { ...l, bri: v, on: true } : l));
-  // homeassistant.turn_on/off gère light ET switch (interrupteurs traités comme lumières).
-  const callHa = (svc, data) => commanderService(hass, (data || {}).entity_id, 'homeassistant', svc, data || {});
-  const toggle = (l) => { markPending([l.id], !l.on); setLights(ls => ls.map(x => x.id === l.id ? { ...x, on: !x.on, bri: !x.on ? (x.bri || 100) : x.bri } : x)); callHa(l.on ? 'turn_off' : 'turn_on', { entity_id: l.id }); };
-  const setAll = (on) => { const ids = lights.map(x => x.id); markPending(ids, on); setLights(ls => ls.map(x => ({ ...x, on, bri: on ? (x.bri || 100) : x.bri }))); if (ids.length) callHa(on ? 'turn_on' : 'turn_off', { entity_id: ids }); };
-  const pick = (id, c) => { setLights(ls => ls.map(l => l.id === id ? { ...l, color: c, on: true } : l)); const n = parseInt(c.slice(1), 16); commander(hass, id, 'set_color', [(n >> 16) & 255, (n >> 8) & 255, n & 255]); };
-  const [popupId, setPopupId] = useState(null);
-  const [popMode, setPopMode] = useState('color');
-  const [popClosing, setPopClosing] = useState(false);
-  // La fermeture attend la fin de l'anim (o-sheetOut) avant le démontage ; timeout filet si l'anim ne fire pas.
-  const closePop = () => { setPopClosing(true); setTimeout(() => { setPopupId(null); setPopClosing(false); }, 420); };
-  // Slider vertical (design popup) : haut = 100%, bas = 1%.
-  // Pointer capture sur l'élément + peinture DOM directe pendant le drag (zéro re-render par frame),
-  // commit HA + setState UNIQUEMENT au relâcher — même mécanique que la réf. iOS. pointercancel = abandon.
-  const dragRef = useRef(false);
-  const dragVert = (id, e) => {
-    e.preventDefault();
-    const el = e.currentTarget;
-    const fill = el.querySelector('[data-fill]');
-    const handle = el.querySelector('[data-handle]');
-    const big = document.getElementById('o-bri-big');
-    const r = el.getBoundingClientRect();
-    const calc = y => Math.max(1, Math.min(100, Math.round((1 - (y - r.top) / r.height) * 100)));
-    let v = calc(e.clientY);
-    dragRef.current = true;
-    if (fill) fill.style.transition = 'none';
-    if (handle) handle.style.transition = 'none';
-    const paint = () => {
-      if (fill) { fill.style.height = v + '%'; fill.style.opacity = '1'; }
-      if (handle) { handle.style.bottom = `calc(${v}% - 26px)`; handle.style.opacity = '1'; }
-      if (big) big.textContent = String(v);
-    };
-    paint();
-    try { el.setPointerCapture(e.pointerId); } catch {}
-    el.onpointermove = ev => { v = calc(ev.clientY); paint(); };
-    const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (handle) handle.style.transition = ''; dragRef.current = false; };
-    el.onpointerup = () => { end(); setBri(id, v); commander(hass, id, 'set_brightness', v); };
-    el.onpointercancel = () => { end(); setLights(ls => ls.map(x => ({ ...x }))); }; // abandon → re-render resynchronise le visuel
-  };
-  const setWhite = (id, k) => { setLights(ls => ls.map(l => l.id === id ? { ...l, color: null, on: true } : l)); commander(hass, id, 'set_color_temp', k); };
-  const onCount = lights.filter(l => l.on).length;
-  const presentRooms = lightRooms(lights);
-  // Agencement : la decouverte propose un intertitre par piece, suivi de ses
-  // luminaires. Tout se renomme, se deplace, se retire ensuite.
-  const presentRoomsSig = presentRooms.join('|');
-  const derived = useMemo(() => {
-    const out = [];
-    presentRooms.forEach(r => {
-      const ls = lights.filter(l => l.room === r);
-      if (!ls.length) return;
-      out.push('sect:' + r);
-      ls.forEach(l => out.push(l.id));
-    });
-    return out;
-  }, [sig, presentRoomsSig]);
-  const ed = useLayoutEditor('loggia_lightlayout', 'lumieres', derived);
-  const dc = useDomainCards(hass);
-  const [cardEdit, setCardEdit] = useState(null);
-  const [addSheet, setAddSheet] = useState(false);
-  const origineDe = (k) => {
-    if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
-    const st = hass && hass.states && hass.states[k];
-    return (st && st.attributes && st.attributes.friendly_name) || k;
-  };
-  const nomDe = (k) => ed.labelOf(k) || origineDe(k);
-  const addSection = () => ed.toggle('sect:' + Date.now().toString(36));
-  // Piece d'origine, pour le filtre. Une carte ajoutee a la main n'en a pas :
-  // elle reste visible, on ne cache pas ce que l'utilisateur a voulu.
-  const pieceDe = (id) => (lights.find(l => l.id === id) || {}).room || null;
-  const visible = (k) => edit || filter == null || pieceDe(k) == null || pieceDe(k) === filter;
-  const blocs = [];
-  ed.ids.forEach(k => {
-    if (k.indexOf('sect:') === 0) blocs.push({ titre: k, cartes: [] });
-    else {
-      if (!blocs.length) blocs.push({ titre: null, cartes: [] });
-      blocs[blocs.length - 1].cartes.push(k);
-    }
-  });
-
-  return (
-    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <ViewHead titre={tr('Lumières')}
-        sous={tr('{n} sur {t} allumées', { n: onCount, t: lights.length }) + ' · ' + (presentRooms.length > 1 ? tr('{n} pièces', { n: presentRooms.length }) : tr('{n} pièce', { n: presentRooms.length }))
-          + (lights.filter(l => l.rgb).length ? ' · ' + lights.filter(l => l.rgb).length + ' luminaires RGB' : '')}
-        badge={onCount ? (onCount > 1 ? tr('{n} allumées', { n: onCount }) : tr('{n} allumée', { n: onCount })) : tr('tout éteint')}
-        rgb={onCount ? '255,206,115' : '140,152,180'} />
-
-      <ViewBar>
-        <BarGroup label={tr('Lumières')} sous={lights.length + ' luminaires'}>
-          <button onClick={() => setAll(false)} style={barBtn(false)}>{tr('Tout éteindre')}</button>
-          <button onClick={() => setAll(true)} style={barBtn(false)}>{tr('Tout allumer')}</button>
-        </BarGroup>
-        {presentRooms.length > 1 && (
-          <BarGroup label={tr('Pièce')}>
-            {[null, ...presentRooms].map(n => (
-              <button key={n == null ? '*' : n} onClick={() => setFilter(n)} style={barBtn(n === filter)}>{n == null ? tr('Toutes') : n}</button>
-            ))}
-          </BarGroup>
-        )}
-      </ViewBar>
-
-      {edit && (
-        <ViewEditBar onEnt={onEnt}
-          texte={tr('Mode édition : clique une lumière pour la modifier, glisse-la pour la déplacer.')
-            + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
-          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{tr('Ajouter une lumière')}</button>
-          <button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>
-          <BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} />
-          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{tr("Rétablir l'automatique")}</button>}
-        </ViewEditBar>
-      )}
-
-      <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {blocs.map((bloc, bi) => {
-          const cartes = bloc.cartes.filter(visible);
-          // Hors édition, une section vide ne s'affiche pas : un titre seul
-          // n'apprend rien, et le filtre en laisse souvent derrière lui.
-          if (!edit && !cartes.length) return null;
-          const allumees = cartes.filter(k => { const l = lights.find(x => x.id === k); return l && l.on; }).length;
-          return (
-            <div key={bloc.titre || 'b' + bi} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {bloc.titre && (edit
-                ? <EditableCard plat ed={ed} id={bloc.titre} nom={nomDe(bloc.titre)} onEdit={setCardEdit}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '9px 12px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(nomDe(bloc.titre)).toUpperCase()}</span>
-                      <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
-                    </div>
-                  </EditableCard>
-                : <div style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '4px 0 0' }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(nomDe(bloc.titre)).toUpperCase()}</span>
-                    <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{allumees}/{cartes.length}</span>
-                  </div>)}
-              <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 16 }}>
-                {cartes.map(k => {
-                  const carte = ed.typeOf(k) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={[(ed.estLarge(k) ? 'o-cvw2' : ''), (ed.typeOf(k) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{carte}</Anim>;
-                  return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {dc.sheets}
-      {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
-      {addSheet && <RoomAddSheet hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter une lumière')}
-        domaines={['light', 'switch']} onClose={() => setAddSheet(false)} />}
-      {popupId != null && (() => {
-        const pl = lights.find(x => x.id === popupId);
-        if (!pl) return null;
-        const acc = (pl.rgb && pl.color) ? pl.color : '#ffce73';
-        const briBig = pl.on ? pl.bri : 0;
-        const segBase = { width: 42, height: 42, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', overflow: 'hidden', transition: 'box-shadow .2s' };
-        return (
-          <div role="presentation" onClick={closePop} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.32)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', animation: popClosing ? 'o-fadeOut .3s ease forwards' : 'o-fadeIn .25s ease' }}>
-            <div role="presentation" onClick={e => e.stopPropagation()}
-              onAnimationEnd={(e) => { if (popClosing && e.target === e.currentTarget) { setPopupId(null); setPopClosing(false); } }}
-              style={{ position: 'fixed', left: '50%', bottom: 0, transform: 'translate(-50%,0)', width: 'min(480px,100%)', maxHeight: '88vh', overflowY: 'auto', background: 'var(--o-surfA)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', borderLeft: 'var(--o-bw,1px) solid var(--o-bd1)', borderRight: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: '26px 26px 0 0', padding: '10px 22px calc(24px + var(--o-safe-bottom,0px))', boxShadow: '0 -10px 50px rgba(0,0,0,.35)', animation: popClosing ? 'o-sheetOut .3s cubic-bezier(.32,.72,.25,1) forwards' : 'o-sheetIn .46s cubic-bezier(.22,1.28,.36,1)' }}>
-              {/* poignée */}
-              <div style={{ width: 38, height: 5, borderRadius: 4, background: 'var(--o-bd1)', margin: '4px auto 14px' }} />
-              {/* header : croix + nom + toggle */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <button aria-label={tr('Fermer')} onClick={closePop} style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-                <span style={{ flex: 1, fontSize: 19, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pl.name}</span>
-                <span role="switch" aria-checked={pl.on} tabIndex={0} aria-label={(pl.on ? 'Éteindre ' : 'Allumer ') + pl.name} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(pl); } }} onClick={() => toggle(pl)} style={{ width: 48, height: 27, borderRadius: 14, background: pl.on ? '#FF2D78' : 'rgba(150,162,184,.2)', position: 'relative', cursor: 'pointer', flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: pl.on ? 24 : 3, width: 21, height: 21, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span>
-              </div>
-              {/* grand % + horodatage */}
-              <div style={{ textAlign: 'center', margin: '18px 0 16px' }}>
-                <div style={{ fontSize: 34, fontWeight: 600, color: 'var(--o-text)', letterSpacing: '-.01em' }}><span id="o-bri-big">{briBig}</span> <span style={{ fontSize: 25, fontWeight: 500, opacity: .85 }}>%</span></div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{relTime(pl.lc) || (pl.on ? tr('Allumé') : tr('Éteint'))}</div>
-              </div>
-              {/* slider vertical type fader (peint en DOM direct pendant le drag) */}
-              {pl.dimmable !== false && (
-                <div onPointerDown={(e) => dragVert(pl.id, e)} {...kbSlider('Luminosité ' + pl.name, pl.bri || 0, (nv) => { setBri(pl.id, nv); commander(hass, pl.id, 'set_brightness', nv); })} style={{ position: 'relative', width: 148, height: 300, margin: '0 auto', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', cursor: 'grab', touchAction: 'none', background: 'var(--o-s1)' }}>
-                  <div data-fill style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: briBig + '%', background: `linear-gradient(0deg,${acc},${hx(acc, .78)})`, opacity: pl.on ? 1 : .3, transition: 'height .12s' }} />
-                  <div data-handle style={{ position: 'absolute', left: 0, right: 0, bottom: `calc(${briBig}% - 26px)`, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', opacity: pl.on ? 1 : 0, transition: 'bottom .12s,opacity .2s' }}><span style={{ width: 40, height: 4, borderRadius: 4, background: 'rgba(255,255,255,.95)' }} /></div>
-                </div>
-              )}
-              {/* segment de contrôle : power · luminosité · couleur · temp */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--o-s1)', borderRadius: 999, padding: 6, margin: '22px auto 0', width: 'max-content' }}>
-                <button aria-label={tr('Allumer ou éteindre')} onClick={() => toggle(pl)} style={{ ...segBase, background: 'transparent', color: 'var(--o-text1)' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 3v9M6.5 7a8 8 0 1 0 11 0" /></svg></button>
-                <button aria-label={tr('Luminosité')} style={{ ...segBase, background: 'var(--o-accent-fond)', color: '#fff', boxShadow: '0 4px 14px rgba(var(--o-accent-rgb),.5)', cursor: 'default' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3M4 4l2 2M18 18l2 2M18 6l2-2M4 20l2-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg></button>
-                {pl.rgb && <button aria-label={tr('Couleur')} onClick={() => setPopMode('color')} style={{ ...segBase, background: 'transparent', boxShadow: popMode === 'color' ? '0 0 0 2px var(--o-text)' : 'none' }}><span style={{ width: 22, height: 22, borderRadius: '50%', background: 'conic-gradient(from 0deg,#ff5f57,var(--o-gold),var(--o-ok),var(--o-accent),var(--o-purple),#ff5f57)' }} /></button>}
-                {pl.ct && <button aria-label={tr('Blanc')} onClick={() => setPopMode('white')} style={{ ...segBase, background: 'transparent', boxShadow: popMode === 'white' ? '0 0 0 2px var(--o-text)' : 'none' }}><span style={{ width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(90deg,#fff,#ffd27a)' }} /></button>}
-              </div>
-              {/* palette : 2 rangées de 4 (couleurs ou blancs) */}
-              {pl.on && popMode === 'color' && pl.rgb && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, maxWidth: 280, margin: '22px auto 0' }}>
-                  {LIGHT_PALETTE.map(c => { const sel = (pl.color || '').toLowerCase() === c.toLowerCase(); return <button key={c} aria-label={tr('Couleur') + ' ' + c} onClick={() => pick(pl.id, c)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: sel ? '3px solid #fff' : '3px solid transparent', boxShadow: sel ? `0 0 0 2px ${c}` : 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />; })}
-                </div>
-              )}
-              {pl.on && popMode === 'white' && pl.ct && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, maxWidth: 280, margin: '22px auto 0' }}>
-                  {WHITE_TEMPS().map(([n, k, c]) => <button key={k} aria-label={n + ' · ' + k + 'K'} title={n + ' · ' + k + 'K'} onClick={() => setWhite(pl.id, k)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-    </div>
-  );
-}
-
-function LumieresView({ hass, edit = false, onEnt }) {
-  return (
-    <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <Header />
-      <LumieresContent hass={hass} edit={edit} onEnt={onEnt} />
-    </main>
-  );
-}
+/* La vue Lumieres a disparu le 14/09/2026 : la vue Objets, filtre « Lumieres »,
+ * dessine les memes lampes aux cartes de la piece. La route `lumieres` y mene. */
 
 /* ════════════ VUE SCÈNES — bibliothèque de scènes colorées ════════════ */
 // Catalogue de scènes Hue, relevé sur une installation type. Chaque scène :
@@ -7395,159 +6969,9 @@ const readZone = (S, z) => {
   return out;
 };
 
-function ClimatContent({ hass, edit = false, onEnt }) {
-  const S = (hass && hass.states) || null;
-  const derived = climateZones(S).map(z => readZone(S, z));
-  const [thermos, setThermos] = useState(derived);
-  const [selZone, setSelZone] = useState('poele');
-  const sig = derived.map(t => `${t.id}:${t.mode}:${t.target}:${t.current}:${t.auto}`).join('|');
-  useEffect(() => { setThermos(derived); }, [sig]);
-  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const zoneOf = (id) => climateZones(S).find(z => z.id === id);
-  const upLocal = (id, patch) => setThermos(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t));
-  const commitTarget = (id, v) => { v = Math.max(5, Math.min(30, Math.round(v * 2) / 2)); upLocal(id, { target: v }); call('input_number', 'set_value', { entity_id: zoneOf(id).tempCible, value: v }); };
-  const inc = (id) => { const t = thermos.find(x => x.id === id); commitTarget(id, (t ? t.target : 18) + 0.5); };
-  const dec = (id) => { const t = thermos.find(x => x.id === id); commitTarget(id, (t ? t.target : 18) - 0.5); };
-  /* `m` est l'OPTION telle que Home Assistant la nomme : elle part sans
-   * traduction. Seul le poele, un vrai `climate`, garde ses modes standards. */
-  const setMode = (id, m) => { const z = zoneOf(id); upLocal(id, { mode: pilotFamille(m) || m, modeBrut: m }); if (estClimate(z)) commander(hass, z.haid, 'set_hvac_mode', m); else call('input_select', 'select_option', { entity_id: z.modeEnt, option: m }); };
-
-  // ── Zone sélectionnée → dial Nest ──
-  // Deux valeurs distinctes : `zone` dit s'il existe VRAIMENT une zone (elle
-  // commande l'affichage), `t` porte un repli neutre pour que les calculs qui
-  // suivent ne lisent jamais `undefined`. Sur une liste vide — la decouverte
-  // n'a pas encore repondu — la vue entiere plantait.
-  const zone = thermos.find(x => x.id === selZone) || thermos[0] || null;
-  const t = zone || { id: null, name: '—', mode: 'off', type: '', target: 19, current: null, auto: false };
-  // Agencement des zones : les zones configurees d'abord, puis les thermostats
-  // que Home Assistant expose et qu'aucune zone ne couvre deja.
-  const zonesHaids = climateZones(S).map(z => z.haid).filter(Boolean);
-  const zonesSig = zonesHaids.join('|');
-  const nbEntites = Object.keys(S).length;
-  const climDerived = useMemo(() => [
-    ...climateZones(S).map(z => 'zone:' + z.id),
-    ...Object.keys(S).filter(k => k.indexOf('climate.') === 0 && zonesHaids.indexOf(k) < 0).sort(),
-  ], [sig, zonesSig, nbEntites]);
-  const ed = useLayoutEditor('loggia_climlayout', 'climat', climDerived);
-  const dc = useDomainCards(hass);
-  const [cardEdit, setCardEdit] = useState(null);
-  const [addSheet, setAddSheet] = useState(false);
-  const zoneDe = (k) => k.indexOf('zone:') === 0 ? climateZones(S).find(z => z.id === k.slice(5)) : null;
-  const climOrigine = (k) => {
-    if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
-    const z = zoneDe(k);
-    if (z) return z.name || k.slice(5);
-    const st = S && S[k];
-    return (st && st.attributes && st.attributes.friendly_name) || k;
-  };
-  const climNom = (k) => ed.labelOf(k) || climOrigine(k);
-  const addSection = () => ed.toggle('sect:' + Date.now().toString(36));
-  const climBlocs = [];
-  ed.ids.forEach(k => {
-    if (k.indexOf('sect:') === 0) climBlocs.push({ titre: k, cartes: [] });
-    else {
-      if (!climBlocs.length) climBlocs.push({ titre: null, cartes: [] });
-      climBlocs[climBlocs.length - 1].cartes.push(k);
-    }
-  });
-
-  // 4 boutons de mode (confort/éco/hors-gel/off)
-  /* La barre de modes suit l'entite, pas une liste ecrite d'avance. Un poele
-   * est un vrai `climate` : ses modes restent ceux du domaine. */
-  const zoneSel = zoneOf(selZone);
-  const CL_OPTIONS = zoneModes(S, zoneSel);
-
-  return (
-    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {edit && <ViewEditBar onEnt={onEnt} texte={tr('Mode édition : clique une zone pour la modifier, glisse-la pour la déplacer.')} />}
-      <ViewHead titre={tr('Climat')}
-        sous={(thermos.length > 1 ? tr('{n} zones', { n: thermos.length }) : tr('{n} zone', { n: thermos.length })) + (zone ? ' · ' + t.name + (t.current != null ? ' à ' + String(t.current).replace('.', ',') + ' °C' : '') : '')}
-        badge={zone ? (t.mode === 'off' ? tr('à l’arrêt') : tr(t.mode)) : tr('aucune zone')}
-        rgb={zone && t.mode === 'confort' ? '255,138,76' : zone && t.mode === 'eco' ? '52,211,153' : '140,152,180'} />
-
-      {zone && (
-        <ViewBar>
-          <BarGroup label="Consigne" sous={t.name}>
-            <button onClick={() => dec(t.id)} style={barBtn(false)}>−</button>
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#ff8a4c', minWidth: 52, textAlign: 'center' }}>{String(t.target).replace('.', ',')} °C</span>
-            <button onClick={() => inc(t.id)} style={barBtn(false)}>+</button>
-          </BarGroup>
-          <BarGroup label={tr('Mode')}>
-            {CL_OPTIONS.map(opt => (
-              <button key={opt} onClick={() => setMode(t.id, opt)} style={barBtn(t.modeBrut === opt)}>{zoneModeLabel(zone, opt)}</button>
-            ))}
-          </BarGroup>
-          {thermos.length > 1 && (
-            <BarGroup label={tr('Zone')}>
-              {thermos.map(z => <button key={z.id} onClick={() => setSelZone(z.id)} style={barBtn(z.id === t.id)}>{z.name}</button>)}
-            </BarGroup>
-          )}
-        </ViewBar>
-      )}
-
-      {/* Les cartes de confort ci-dessus restent : le user y tient. Les zones
-          arrivent apres, ordonnables comme dans une piece. */}
-      {edit && (
-        <ViewEditBar
-          texte={ed.edits ? 'Ces zones sont personnalisées.' : 'Ces zones suivent la détection automatique.'}>
-          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{tr('Ajouter un thermostat')}</button>
-          <button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>
-          <BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} />
-          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{tr("Rétablir l'automatique")}</button>}
-        </ViewEditBar>
-      )}
-      {(edit || ed.ids.length > 0) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={16} color="#ff8a4c" />{tr('Thermostats')}</div>
-      )}
-      <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {climBlocs.map((bloc, bi) => {
-          if (!edit && bloc.titre && !bloc.cartes.length) return null;
-          return (
-            <div key={bloc.titre || 'b' + bi} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {bloc.titre && (edit
-                ? <EditableCard plat ed={ed} id={bloc.titre} nom={climNom(bloc.titre)} onEdit={setCardEdit}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '9px 12px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(climNom(bloc.titre)).toUpperCase()}</span>
-                      <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
-                    </div>
-                  </EditableCard>
-                : <div style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '4px 0 0' }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(climNom(bloc.titre)).toUpperCase()}</span>
-                    <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
-                  </div>)}
-              <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 16 }}>
-                {bloc.cartes.map(k => {
-                  const zk = zoneDe(k);
-                  const carte = (!zk && ed.typeOf(k)) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} />
-                    : (zk && ed.typeOf(k) === 'compacte' && estClimate(zk)) ? <CvCard id={zk.haid} hass={hass} label={ed.labelOf(k) || zk.name} onOpen={dc.ouvrir} dense />
-                      : dc.card(k, ed.labelOf(k), zk);
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={[(ed.estLarge(k) ? 'o-cvw2' : ''), (ed.typeOf(k) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{carte}</Anim>;
-                  return <EditableCard key={k} ed={ed} id={k} nom={climNom(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {dc.sheets}
-      {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={climNom(cardEdit)} origine={climOrigine(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
-      {addSheet && <RoomAddSheet hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter un thermostat')}
-        domaines={['climate']} onClose={() => setAddSheet(false)} />}
-    </div>
-  );
-}
-
-function ClimatView({ hass, edit = false, onEnt }) {
-  // L'Ouverture vit ICI depuis le 30/08 : une seule vue pour le confort de la
-  // maison — chauffage en haut, volets en dessous. La route `volets` survit.
-  return (
-    <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <Header />
-      <ClimatContent hass={hass} edit={edit} onEnt={onEnt} />
-      <VoletsContent hass={hass} edit={edit} onEnt={onEnt} embarque />
-    </main>
-  );
-}
+/* La vue Climat a disparu le 14/09/2026 : la vue Objets, filtre « Chauffage »,
+ * dessine thermostats et zones aux cartes de la piece. La route `climat` y
+ * mene ; la vue Volets, elle, reste. */
 
 /* ════════════ VUE VOLETS (reproduction fidèle de "Loggia Volets.dc.html") ════════════ */
 /* Les modes d'automatisme des volets sont LUS SUR L'ENTITE, comme ceux du
@@ -8611,186 +8035,9 @@ function extractNpAccent(url) {
 
 const medKeys = () => medPlayers().flatMap(p => [p.haid, p.ma]).filter(Boolean);
 
-function MediasContent({ hass, edit = false, onEnt }) {
-  // Une seule evaluation par rendu. Chaque appel relit la configuration et
-  // realloue ses tableaux ; il y en avait quinze, rejoues chaque seconde par le
-  // tick de progression tant qu'un media joue. Pas de useMemo : la valeur doit
-  // rester fraiche a chaque rendu, c'est la repetition qu'on supprime.
-  const lecteurs = medPlayers();
-  const S = (hass && hass.states) || null;
-  // media_position est un instantané HA : en lecture on l'extrapole avec media_position_updated_at.
-  const rd1 = (id) => { const e = S && S[id]; if (!e) return { state: 'off', on: false, ctl: id }; const a = e.attributes || {}; const playing = e.state === 'playing'; let pos = a.media_position; if (pos != null && playing && a.media_position_updated_at) { const dt = (Date.now() - Date.parse(a.media_position_updated_at)) / 1000; if (dt > 0) pos += dt; } if (pos != null && a.media_duration) pos = Math.min(pos, a.media_duration); return { state: e.state, on: e.state !== 'off' && e.state !== 'unavailable' && e.state != null && e.state !== 'standby', playing, title: a.media_title, artist: a.media_artist || a.media_album_artist, album: a.media_album_name, art: a.entity_picture_local || a.entity_picture, pos, dur: a.media_duration, vol: a.volume_level != null ? Math.round(a.volume_level * 100) : 0, hasVol: a.volume_level != null, muted: !!a.is_volume_muted, shuffle: !!a.shuffle, repeat: a.repeat || 'off', source: a.app_name || a.source, mtype: a.media_content_type, ctl: id }; };
-  // Fusion Music Assistant : si le compagnon MA a du contenu, il fournit métas + transport (ctl) ;
-  // le volume reste sur l'entité native (le vrai volume de l'enceinte).
-  const rd = (p) => {
-    // Aucun lecteur : on rend un etat neutre plutot que de lire `p.haid` sur
-    // `undefined`. La vue est atteignable avant que la decouverte reponde.
-    if (!p) return rd1(null);
-    const id = typeof p === 'string' ? p : p.haid;
-    const maId = typeof p === 'string' ? null : p.ma;
-    const nat = rd1(id);
-    if (!maId) return nat;
-    const ma = rd1(maId);
-    // Le compagnon MA ne gagne QUE s'il joue, ou s'il est en pause pendant que le natif ne joue rien —
-    // sinon une vieille musique MA en pause masquerait la TV en cours sur l'Apple TV.
-    const maActive = (ma.title || ma.art) && (ma.playing || (ma.state === 'paused' && !nat.playing));
-    if (!maActive) return nat;
-    return { ...nat, playing: ma.playing || nat.playing, on: true, title: ma.title || nat.title, artist: ma.artist || nat.artist, album: ma.album || nat.album, art: ma.art || nat.art, pos: ma.pos != null ? ma.pos : nat.pos, dur: ma.dur != null ? ma.dur : nat.dur, shuffle: ma.shuffle, repeat: ma.repeat, source: ma.source || nat.source || 'Music Assistant', ctl: maId };
-  };
-  // tick 1 s local pour faire avancer la progression pendant la lecture (vue montée uniquement)
-  const [, medTick] = useState(0);
-  // Agencement : les lecteurs configurés d'abord, puis ceux que Home Assistant
-  // expose et que la configuration ne nomme pas.
-  const nbEntites = Object.keys(S).length;
-  const derivedMed = useMemo(() => {
-    const dejaLa = lecteurs.map(p => p.haid).filter(Boolean);
-    return [...dejaLa, ...Object.keys(S).filter(k => k.indexOf('media_player.') === 0 && dejaLa.indexOf(k) < 0).sort()];
-  }, [nbEntites]);
-  const ed = useLayoutEditor('loggia_medlayout', 'medias', derivedMed);
-  const dc = useDomainCards(hass);
-  const [cardEdit, setCardEdit] = useState(null);
-  const [addSheet, setAddSheet] = useState(false);
-  const origineDe = (k) => {
-    if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
-    const p = lecteurs.find(x => x.haid === k);
-    if (p && p.name) return p.name;
-    const st = S && S[k];
-    return (st && st.attributes && st.attributes.friendly_name) || k;
-  };
-  const nomDe = (k) => ed.labelOf(k) || origineDe(k);
-  const addSection = () => ed.toggle('sect:' + Date.now().toString(36));
-  const blocs = [];
-  ed.ids.forEach(k => {
-    if (k.indexOf('sect:') === 0) blocs.push({ titre: k, cartes: [] });
-    else {
-      if (!blocs.length) blocs.push({ titre: null, cartes: [] });
-      blocs[blocs.length - 1].cartes.push(k);
-    }
-  });
-
-  const anyPlaying = lecteurs.some(p => [p.haid, p.ma].filter(Boolean).some(id => { const e = S && S[id]; return e && e.state === 'playing'; }));
-  useEffect(() => { if (!anyPlaying) return; const iv = setInterval(() => medTick(n => n + 1), 1000); return () => clearInterval(iv); }, [anyPlaying]);
-  const playingP = lecteurs.find(p => rd(p).playing);
-  const selId = playingP ? playingP.id : 'echo_salon';
-  const sel = lecteurs.find(p => p.id === selId) || lecteurs[0] || null;
-  const np = rd(sel);
-  /**
-   * Monter ou baisser le volume d'un cran.
-   *
-   * `volume_up` et `volume_set` sont deux bits distincts : huit lecteurs de
-   * l'installation d'essai acceptent un volume absolu sans accepter les crans.
-   * Plutot que de retirer les boutons, on calcule le pas nous-memes.
-   */
-  const volPas = (delta) => {
-    const id = sel && sel.haid;
-    if (peut(hass, id, delta > 0 ? 'volume_up' : 'volume_down')) {
-      commander(hass, id, delta > 0 ? 'volume_up' : 'volume_down');
-    } else {
-      commander(hass, id, 'set_volume', ((np.vol || 0) + delta) / 100);
-    }
-  };
-  // Seek sur la barre de progression (pointer capture + peinture DOM directe, commit media_seek au relâcher).
-  // seekOv = override optimiste le temps que HA confirme la nouvelle position.
-  const seekTimer = useRef(null);
-  useEffect(() => () => clearTimeout(seekTimer.current), []);
-  // Artwork en erreur : on mémorise l'URL fautive (state) au lieu de cacher l'<img> en dur —
-  // sinon display:none survivait aux changements de piste et l'image ne revenait jamais.
-  // Et comme l'URL proxy Apple TV peut rester IDENTIQUE avec un token redevenu valide,
-  // on retente automatiquement au bout de 8 s au lieu de bloquer l'URL pour toujours.
-  const [artErr, setArtErr] = useState(null);
-  useEffect(() => {
-    if (!artErr) return;
-    const t = setTimeout(() => setArtErr(null), 8000);
-    return () => clearTimeout(t);
-  }, [artErr]);
-
-  return (
-    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <ViewHead titre={tr('Médias')}
-        sous={(lecteurs.length > 1 ? tr('{n} lecteurs', { n: lecteurs.length }) : tr('{n} lecteur', { n: lecteurs.length }))
-          + (sel ? ' · ' + sel.name + ' ' + (np.playing ? tr('en lecture') : tr('au repos')) : '')}
-        badge={np.playing ? tr('en lecture') : tr('au repos')} rgb={np.playing ? '52,211,153' : '140,152,180'} />
-
-      <ViewBar>
-        <BarGroup label={tr('Lecture')} sous={sel ? sel.name : null}>
-          {peut(hass, sel && sel.haid, 'previous_track') && (
-            <button onClick={() => commander(hass, sel && sel.haid, 'previous_track')} style={barBtn(false)}>{tr('Précédent')}</button>)}
-          {peut(hass, sel && sel.haid, 'play_pause') && (
-            <button onClick={() => commander(hass, sel && sel.haid, 'play_pause')} style={barBtn(np.playing)}>{np.playing ? 'Pause' : tr('Lecture')}</button>)}
-          {peut(hass, sel && sel.haid, 'next_track') && (
-            <button onClick={() => commander(hass, sel && sel.haid, 'next_track')} style={barBtn(false)}>Suivant</button>)}
-        </BarGroup>
-        {(peut(hass, sel && sel.haid, 'volume_up') || peut(hass, sel && sel.haid, 'set_volume')) && (
-          <BarGroup label="Volume" sous={sel ? sel.name : null}>
-            <button onClick={() => volPas(-5)} style={barBtn(false)}>−</button>
-            <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--o-accent-soft)', minWidth: 44, textAlign: 'center' }}>{Math.round(np.vol)} %</span>
-            <button onClick={() => volPas(5)} style={barBtn(false)}>+</button>
-          </BarGroup>
-        )}
-        {sel && S[sel.haid] && S[sel.haid].attributes && S[sel.haid].attributes.shuffle != null && (
-          <BarGroup label={tr('Aléatoire')}>
-            <button onClick={() => commander(hass, sel.haid, 'set_shuffle', !S[sel.haid].attributes.shuffle)}
-              style={barBtn(!!S[sel.haid].attributes.shuffle)}>{S[sel.haid].attributes.shuffle ? 'Activé' : 'Désactivé'}</button>
-          </BarGroup>
-        )}
-      </ViewBar>
-
-      {edit && (
-        <ViewEditBar onEnt={onEnt}
-          texte={tr('Mode édition : clique un lecteur pour le modifier, glisse-le pour le déplacer.')
-            + (ed.edits ? ' Cette vue est personnalisée.' : ' Cette vue suit la détection automatique.')}>
-          <button onClick={() => setAddSheet(true)} style={editBtn(true)}>{tr('Ajouter un lecteur')}</button>
-          <button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>
-          <BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} />
-          {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{tr("Rétablir l'automatique")}</button>}
-        </ViewEditBar>
-      )}
-      {(edit || ed.ids.length > 0) && (
-        <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Lecteurs')}</div>
-      )}
-      <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {blocs.map((bloc, bi) => {
-          if (!edit && bloc.titre && !bloc.cartes.length) return null;
-          return (
-            <div key={bloc.titre || 'b' + bi} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {bloc.titre && (edit
-                ? <EditableCard plat ed={ed} id={bloc.titre} nom={nomDe(bloc.titre)} onEdit={setCardEdit}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '9px 12px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(nomDe(bloc.titre)).toUpperCase()}</span>
-                      <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
-                    </div>
-                  </EditableCard>
-                : <div style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '4px 0 0' }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(nomDe(bloc.titre)).toUpperCase()}</span>
-                    <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
-                  </div>)}
-              <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 16 }}>
-                {bloc.cartes.map(k => {
-                  const carte = ed.typeOf(k) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={[(ed.estLarge(k) ? 'o-cvw2' : ''), (ed.typeOf(k) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{carte}</Anim>;
-                  return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit}>{carte}</EditableCard>;
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {dc.sheets}
-      {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
-      {addSheet && <RoomAddSheet hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter un lecteur')}
-        domaines={['media_player']} onClose={() => setAddSheet(false)} />}
-    </div>
-  );
-}
-
-function MediasView({ hass, edit = false, onEnt }) {
-  return (
-    <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <Header />
-      <MediasContent hass={hass} edit={edit} onEnt={onEnt} />
-    </main>
-  );
-}
+/* La vue Medias a disparu le 14/09/2026 : la vue Objets, filtre « Multimedia »,
+ * dessine les lecteurs aux cartes de la piece, et leur fiche garde les
+ * commandes. La route `medias` y mene. */
 
 /* ════════════ VUE SÉCURITÉ (design fidèle "Loggia Sécurité.dc.html", câblé HA réel) ════════════ */
 const secBaseKeys = () => {
@@ -12919,7 +12166,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <LumieresView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ClimatView hass={hass} edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <MediasView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}

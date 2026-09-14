@@ -98,9 +98,10 @@ export function viewAvailability(ctx) {
 
   out.scenes = (has.scene || has.script) ? OK : no('aucune scène ni script dans Home Assistant');
 
-  // Objets est un regroupement : il suffit qu'un seul de ses appareils existe.
-  const objets = has.vacuum || has.lawn_mower || has.media_player || cfg('feeder') || cfg('plants');
-  out.objets = objets ? OK : no('aucun appareil à regrouper');
+  // Objets montre tout ce qui se pilote (14/09/2026) : un seul appareil suffit.
+  const objets = has.light || has.switch || has.cover || has.climate || has.water_heater || has.media_player
+    || has.vacuum || has.lawn_mower || has.camera || has.lock || has.fan || has.humidifier || cfg('feeder') || cfg('plants');
+  out.objets = objets ? OK : no('aucun appareil à piloter');
 
   out.lumieres = views.lumieres ? OK : no('aucune lumière (domaine light)');
   out.climat = views.climat ? OK : no('aucun thermostat ni chauffe-eau');

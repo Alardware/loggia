@@ -53,17 +53,20 @@ const VERIFIE = {
   /* Passé de 43 à 41 en retirant le code mort, puis à 38 : le journal
    * d'activité et la vue Système ont quitté `App.jsx`. Aucun manquement n'a
    * disparu ni apparu — les mêmes, rangés ailleurs. C'est ce qu'on attend d'un
-   * déplacement, et c'est ce que cette liste sert à prouver. */
+   * déplacement, et c'est ce que cette liste sert à prouver.
+   * Puis à 33 (14/09/2026) : les vues Lumières, Climat, Médias et l'ancienne
+   * Objets ont quitté `App.jsx`, leurs cinq omissions avec elles — celles-là
+   * ont disparu, pas déménagé : la vue Objets n'en a aucune. */
   'src/App.jsx': [
     'S', 'S', 'S', 'S',
-    'S and domaineOk', 'S and ids', 'S and lecteurs', 'S and zonesHaids',
+    'S and domaineOk', 'S and ids',
     'a and dashHass', 'ancre', 'api and plage', 'applyUser',
     'autoOn', 'choisis and tousCals', 'cle and hass', 'cv.name',
-    'dc', 'debutGrille and finGrille', 'derived', 'derived',
+    'dc', 'debutGrille and finGrille', 'derived',
     'derivedCovers', 'discovery', 'discovery', 'domaineOk',
-    'hass', 'hass', 'hass', 'hass',
+    'hass', 'hass', 'hass',
     'hass and live', 'hass, ids, and metrics', 'hidden', 'keys and noisyKeys',
-    'lights and presentRooms', 'loggiaRuntime.index', 'noms', 'seulement',
+    'loggiaRuntime.index', 'noms', 'seulement',
     'vuSig', 'vuesAutorisees',
   ],
   'src/historique.jsx': ['hass', 'ids'],

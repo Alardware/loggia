@@ -112,6 +112,12 @@ test('distributeur configure et vivant : la vue apparait', () => {
   ok(r, 'objets'); // le distributeur suffit a justifier le regroupement
 });
 
+test('des lumieres seules suffisent a ouvrir Objets : la vue montre tout ce qui se pilote', () => {
+  const r = viewAvailability(ctx({ has: { light: 3 }, views: { lumieres: true } }));
+  ok(r, 'objets');
+  ko(viewAvailability(ctx({ has: {}, views: {} })), 'objets');
+});
+
 test('un seul aspirateur suffit a ouvrir Objets', () => {
   const r = viewAvailability(ctx({ has: { vacuum: 1 }, views: { aspirateur: true } }));
   ok(r, 'objets');
