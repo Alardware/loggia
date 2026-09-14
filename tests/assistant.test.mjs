@@ -25,7 +25,7 @@
 //     écran de téléphone.
 //
 // Mesuré le 09/09/2026 dans le navigateur : appui court → conversation ;
-// maintien 380 ms → miniature de 96 px centrée sur le bouton, au-dessus dans
+// maintien 200 ms → miniature de 96 px centrée sur le bouton, au-dessus dans
 // la barre du bas, au-dessous dans l'en-tête ; relâchement → miniature partie
 // et AUCUNE conversation ; glissement de 60 px → aucune miniature.
 //
@@ -96,9 +96,9 @@ test('le clavier relâche le drapeau', () => {
 });
 
 test('le seuil et la vibration sont ceux du reste du dashboard', () => {
-  // 380 ms et 35 ms : les mêmes que la prise en main d'une section en mode
+  // 200 ms et 35 ms : les mêmes que la prise en main d'une section en mode
   // édition. Deux durées différentes pour le même geste se sentent.
-  assert.match(BOUTON, /\}, 380\);/);
+  assert.match(BOUTON, /\}, 200\);/);
   assert.match(BOUTON, /navigator\.vibrate\(35\)/);
 });
 

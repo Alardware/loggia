@@ -63,3 +63,32 @@ test('partout : pieces, volets et Objets ont le bandeau, la case d’ajout et la
   assert.ok(volets.includes("<BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} ajouterLabel={tr('Ajouter un volet')} />") && volets.includes('<CarteAjout onClick={() => setAddSheet(true)}'));
   assert.ok((src.match(/<ObjetsView hass=\{hass\} onNav=\{setView\}(?: filtre="[a-z]+")? edit=\{editMode && peutEditer\} \/>/g) || []).length === 4, 'Objets recoit l’edition sur ses quatre routes');
 });
+
+test('un seul type de carte, le standard : plus de CARTE dans la fiche, plus de type dans l’editeur', () => {
+  const f = bloc('function CardEditSheet(', NL + '}');
+  assert.ok(!f.includes("tr('CARTE')") && !f.includes('CarteApercu'), 'la partie CARTE a disparu');
+  assert.ok(f.includes("tr('LARGEUR')"), 'la largeur reste');
+  const h = bloc('function useLayoutEditor(', NL + '}');
+  assert.ok(!h.includes('typeOf') && !h.includes('setType'), 'plus de type de carte dans l’editeur');
+  assert.ok(!src.includes('function BoutonCarteLibre('), 'plus de carte libre');
+  const room = bloc('function RoomView(', NL + 'function ');
+  assert.ok(room.includes('const card = dc.card(id, lbl, zone);') && !room.includes('CvTyped'), 'la piece ne dessine que la carte standard');
+  const volets = bloc('function VoletsContent(', NL + 'function ');
+  assert.ok(volets.includes('const carte = dc.card(k, ed.labelOf(k));') && !volets.includes('CvTyped'), 'les volets aussi');
+});
+
+test('des couleurs dans la fiche : l’icone porte la teinte du domaine, la piece la sienne', () => {
+  const f = bloc('function CardEditSheet(', NL + '}');
+  assert.ok(f.includes('puce(on, possible, teinteRgb(dm.rgb))'), 'la puce du domaine se teinte');
+  assert.ok(f.includes("color={'rgb(' + dm.rgb + ')'}"), 'l’icone du domaine est coloree');
+  assert.ok(f.includes('habillagePiece(p, zone && zone.icon)') && f.includes('couleurDePiece(modeleDePiece(p))'), 'la piece prend son icone et sa couleur');
+});
+
+test('Accueil et Energie ont le meme bandeau, et la carte suit le doigt partout', () => {
+  const home = bloc('function Dashboard(', NL + 'function ');
+  assert.ok(home.includes('<BandeauEdition extra={<>'), 'l’Accueil a le bandeau');
+  assert.ok(home.includes('poserFantome(hote,'), 'les sections et les pieces suivent le doigt');
+  assert.ok(!src.includes('}, 380);'), 'plus d’appui long de 380 ms nulle part');
+  const en = bloc('function EnergieContent(', NL + 'function ');
+  assert.ok(en.includes("<BandeauEdition ed={ed} onAjouter={() => setEnAdd(true)} ajouterLabel={tr('Ajouter un poste')}") && en.includes("<CarteAjout onClick={() => setEnAdd(true)} label={tr('Ajouter un poste')} />"), 'l’Energie aussi');
+});

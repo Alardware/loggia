@@ -42,3 +42,17 @@ des cartes.**
 - Les anciennes clés d'agencement restent valables ; rien à migrer.
 - Perdu, assumé : le champ « Entité » de l'ancienne fiche (remplacer une
   carte par une autre entité : retirer puis ajouter fait la même chose).
+
+## Amendement (v3.21.0)
+
+- **Un seul type de carte, le standard.** La partie « CARTE » de la fiche
+  (Auto / Compacte / Standard / Journal / Chip) est retirée, avec le type par
+  entité de l'éditeur et la « carte libre ». La clé `types` des anciens
+  agencements reste sans effet. Retour user : « supprime la partie carte, un
+  seul type, les standard ».
+- **Des couleurs dans la fiche** : l'icône de chaque domaine porte sa teinte,
+  la puce choisie la reprend ; les pièces prennent l'icône et la couleur de
+  leur carte à l'Accueil.
+- **L'Accueil et l'Énergie** ont le même bandeau, la case d'ajout (Énergie),
+  et leurs sections, pièces et postes suivent le doigt comme les cartes de
+  grille — appui de 200 ms au doigt, partout.

@@ -1775,4 +1775,5 @@ export default {
   'Carte': 'Card',
   'Attrape pour déplacer · clique pour modifier (flèches ← →)': 'Grab to move · click to edit (arrow keys ← →)',
   'TOUTE LA MAISON': 'WHOLE HOME',
+  'Entités de la vue': 'Entities of this view',
 };

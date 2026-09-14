@@ -3247,7 +3247,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
   const ids = useMemo(() => applyLayout(layoutOf(cfgKey, scope), derived), [cfgKey, scope, sig, rev]);
   const edits = (layout.removed || []).length + (layout.added || []).length
     + ((layout.order || []).length ? 1 : 0) + Object.keys(layout.labels || {}).length
-    + (layout.larges || []).length + Object.keys(layout.types || {}).length;
+    + (layout.larges || []).length;
 
   const vide = (a) => (a && a.length) ? a : null;
   const write = (patch) => { setLayout(cfgKey, scope, patch); setRev(v => v + 1); };
@@ -3324,15 +3324,8 @@ function useLayoutEditor(cfgKey, scope, derived) {
     const l = layout.larges || [];
     write({ larges: vide(l.indexOf(id) >= 0 ? l.filter(x => x !== id) : [...l, id]) });
   };
-  /* TYPE de carte choisi pour une entité (catalogue des vues custom : jauge,
-   * graphique, grand chiffre…) — même personnalisation sur les vues intégrées.
-   * Absent = le rendu par défaut de la vue. */
-  const typeOf = (id) => (layout.types || {})[id] || null;
-  const setType = (id, t) => {
-    const types = { ...(layout.types || {}) };
-    if (t) types[id] = t; else delete types[id];
-    write({ types: Object.keys(types).length ? types : null });
-  };
+  // Plus de TYPE de carte par entite (14/09) : une seule carte, la standard.
+  // La cle `types` des anciens agencements reste, sans effet.
 
   /* Saisir : a la souris, tout de suite ; au doigt, apres un appui court
    * (~200 ms, vibration a la prise) — un doigt qui bouge avant l'echeance
@@ -3437,7 +3430,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
   // piece a piece, ecrit d'un bloc pour toutes les pieces).
   const rafraichir = () => setRev(v => v + 1);
 
-  return { ids: ordreTemp || ids, edits, layout, gridRef, dragId, dragStart, dragMove, dragEnd, remove, toggle, move, rename, replace, reset, rafraichir, labelOf, estLarge, basculerLarge, typeOf, setType };
+  return { ids: ordreTemp || ids, edits, layout, gridRef, dragId, dragStart, dragMove, dragEnd, remove, toggle, move, rename, replace, reset, rafraichir, labelOf, estLarge, basculerLarge };
 }
 
 /**
@@ -3520,9 +3513,6 @@ function declarerLumiere(id, oui) {
  * depart » : Loggia n'invente pas ce que Home Assistant n'a pas encore dit. */
 function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   const [val, setVal] = useState(ed.labelOf(id) || '');
-  // Les apercus rendent de vraies cartes : elles ont besoin des fiches du
-  // catalogue, meme si on ne les ouvre pas depuis la feuille.
-  const dcEdit = useDomainCards(hass);
   const estSection = id.indexOf('sect:') === 0;
   // Un poste de consommation s'appelle `dev:<entity_id>` : le prefixe cachait
   // l'entite a la fiche.
@@ -3554,7 +3544,11 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   };
   const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600, outline: 'none' };
   const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
-  const puce = (on, possible) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: possible ? 'pointer' : 'default', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.45)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)', opacity: (on || possible) ? 1 : .45 });
+  // Une puce coloree : l'icone porte la teinte du domaine ou de la piece, la
+  // puce choisie la reprend en fond et en bord (retour user du 14/09 :
+  // « manque de couleurs dans l'edition, les icones c'est plus sympa »).
+  const puce = (on, possible, t) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: possible ? 'pointer' : 'default', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? t.bord : 'var(--o-bd2)'), background: on ? t.fond : 'var(--o-s1)', color: on ? t.texte : 'var(--o-text1)', opacity: (on || possible) ? 1 : .45 });
+  const teinteRgb = (rgb) => ({ bord: 'rgba(' + rgb + ',.5)', fond: 'rgba(' + rgb + ',.14)', texte: 'rgb(' + rgb + ')' });
   const domaineChoisi = estPrise ? (lumiere ? 'lumiere' : 'prise') : domaine;
 
   return (
@@ -3581,8 +3575,8 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
                   const on = dm.id === domaineChoisi;
                   const possible = estPrise && (dm.id === 'lumiere' || dm.id === 'prise');
                   return (
-                    <button key={dm.id} aria-pressed={on} aria-disabled={!possible} onClick={() => { if (possible) setLumiere(dm.id === 'lumiere'); }} style={puce(on, possible)}>
-                      {dm.prise ? <PlugIcon size={12} /> : dm.ico ? <Ico name={dm.ico} size={13} /> : <Fi i={dm.fi} size={12} />}{dm.label}
+                    <button key={dm.id} aria-pressed={on} aria-disabled={!possible} onClick={() => { if (possible) setLumiere(dm.id === 'lumiere'); }} style={puce(on, possible, teinteRgb(dm.rgb))}>
+                      <span style={{ display: 'inline-flex', color: 'rgb(' + dm.rgb + ')' }}>{dm.prise ? <PlugIcon size={12} /> : dm.ico ? <Ico name={dm.ico} size={13} color={'rgb(' + dm.rgb + ')'} /> : <Fi i={dm.fi} size={12} color={'rgb(' + dm.rgb + ')'} />}</span>{dm.label}
                     </button>
                   );
                 })}
@@ -3597,9 +3591,18 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
             <>
               <div style={etiquette}>{tr('PIÈCE')}</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {pieces.map(p => { const on = p === choixPiece; return (
-                  <button key={p} aria-pressed={on} onClick={() => setChoixPiece(p)} style={puce(on, true)}><Fi i={estDehors(p) ? 'leaf' : 'home'} size={12} />{p}</button>
-                ); })}
+                {pieces.map(p => {
+                  const on = p === choixPiece;
+                  // L'icone et la couleur de la piece : celles de sa carte a l'Accueil.
+                  const zone = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).find(z => z && z.name === p);
+                  const hp = habillagePiece(p, zone && zone.icon);
+                  const couleur = couleurDePiece(modeleDePiece(p));
+                  return (
+                    <button key={p} aria-pressed={on} onClick={() => setChoixPiece(p)} style={puce(on, true, { bord: couleur, fond: hp.bg, texte: couleur })}>
+                      {cloneElement(hp.icon, { size: 13 })}{p}
+                    </button>
+                  );
+                })}
               </div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('Changer de pièce la déplace d’une grille à l’autre ; Home Assistant n’est pas modifié.')}</div>
             </>
@@ -3616,37 +3619,12 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
               droite={<RmBascule on={epingle} nom={tr('Épinglée sur l’accueil')} onToggle={() => setEpingle(v => !v)} couleur="var(--o-accent)" />} />
           )}
 
-          {(estEntite || id.indexOf('zone:') === 0) && ed.typeOf && (
-            <>
-              <div style={etiquette}>{tr('CARTE')}</div>
-              {/* On MONTRE les cartes possibles, au vrai gabarit et avec les
-                * vraies valeurs (retour 01/09 : « un apercu des cartes
-                * disponibles »). « Auto » garde le rendu habituel de la vue. */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: 10 }}>
-                {(() => {
-                  const noms = CV_TYPE_NOMS();
-                  const choix = ed.typeOf(id);
-                  return (
-                    <>
-                      <button aria-pressed={choix == null} onClick={() => ed.setType(id, null)}
-                        style={{ minHeight: 88, borderRadius: 14, cursor: 'pointer', fontSize: 12, fontWeight: 800, border: '1px solid ' + (choix == null ? 'var(--o-accent)' : 'var(--o-bd2)'), background: choix == null ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: 'var(--o-text1)' }}>{tr('Auto')}</button>
-                      {estEntite && cvTypesPour(brut).map(t => (
-                        <CarteApercu key={t} lbl={noms[t] || t} hass={hass} dc={dcEdit} actif={choix === t}
-                          x={t === 'compacte' ? brut : { t, id: brut }} onClick={() => ed.setType(id, t)} />
-                      ))}
-                    </>
-                  );
-                })()}
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '8px 2px 0' }}>{tr('« Auto » : le rendu habituel de cette vue.')}</div>
-            </>
-          )}
           {!estSection && ed.estLarge && (
             <>
               <div style={etiquette}>{tr('LARGEUR')}</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 {[[false, tr('Simple')], [true, tr('Double')]].map(([lg, lbl2]) => { const on = ed.estLarge(id) === lg; return (
-                  <button key={lbl2} aria-pressed={on} onClick={() => { if (!on) ed.basculerLarge(id); }} style={{ ...puce(on, true), flex: 1, justifyContent: 'center' }}>{lbl2}</button>
+                  <button key={lbl2} aria-pressed={on} onClick={() => { if (!on) ed.basculerLarge(id); }} style={{ ...puce(on, true, teinteRgb('var(--o-accent-rgb)')), flex: 1, justifyContent: 'center' }}>{lbl2}</button>
                 ); })}
               </div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('Double : la carte prend deux emplacements côte à côte.')}</div>
@@ -3669,16 +3647,18 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
  * range des cartes : le mot d'ordre, « Ajouter une entite », « Toutes les
  * entites » (retour a la liste automatique : tout revient, l'ordre et les
  * noms aussi) et « Terminer ». */
-function BandeauEdition({ ed, onAjouter, toutes = null, ajouterLabel = null }) {
+function BandeauEdition({ ed = null, onAjouter = null, toutes = null, ajouterLabel = null, extra = null }) {
   const ctx = useContext(HeaderCtx) || {};
   const btn = (accent) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', flexShrink: 0, background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)', border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
-  const peutTout = !!toutes || ed.edits > 0;
+  const peutTout = !!toutes || !!(ed && ed.edits > 0);
+  const montreTout = !!toutes || !!ed;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
       <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
       <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une entité.')}</span>
       {onAjouter && <button onClick={onAjouter} style={btn(true)}><Fi i="plus" size={12} />{ajouterLabel || tr('Ajouter une entité')}</button>}
-      <button onClick={toutes || (() => ed.reset())} disabled={!peutTout} title={tr('Rétablit la liste automatique : tout revient, l’ordre et les noms aussi.')} style={{ ...btn(false), opacity: peutTout ? 1 : .5 }}><Fi i="apps" size={12} />{tr('Toutes les entités')}</button>
+      {extra}
+      {montreTout && <button onClick={toutes || (() => ed.reset())} disabled={!peutTout} title={tr('Rétablit la liste automatique : tout revient, l’ordre et les noms aussi.')} style={{ ...btn(false), opacity: peutTout ? 1 : .5 }}><Fi i="apps" size={12} />{tr('Toutes les entités')}</button>}
       {ctx.onToggleEdit && <button onClick={ctx.onToggleEdit} style={btn(false)}><Fi i="cross-small" size={12} />{tr('Terminer')}</button>}
     </div>
   );
@@ -3701,26 +3681,6 @@ function CarteAjout({ onClick, label = null }) {
  * edition on range ses cartes, on ne pilote pas ses appareils : les deux gestes
  * ne doivent pas se disputer le meme pointeur.
  */
-/* « Ajouter une carte » dans une vue intégrée : la même feuille que l'accueil
- * et les vues personnalisées (par entité ou par carte, avec aperçus). La vue
- * accueille n'importe quelle carte du catalogue — son rendu passe déjà par
- * `CvTyped` dès qu'un type est posé. */
-function BoutonCarteLibre({ ed, hass, style }) {
-  const [ouvert, setOuvert] = useState(false);
-  const poser = (e) => {
-    const id = typeof e === 'string' ? e : e.id;
-    const t = typeof e === 'string' ? 'compacte' : e.t;
-    // Ajout FRANC : `toggle` retirerait une carte déjà présente.
-    if (ed.ids.indexOf(id) < 0) ed.toggle(id);
-    if (ed.setType) ed.setType(id, t);
-    setOuvert(false);
-  };
-  return (<>
-    <button onClick={() => setOuvert(true)} style={style}>{tr('Ajouter une carte')}</button>
-    {ouvert && <CarteAjoutSheet hass={hass} onClose={() => setOuvert(false)} onPose={poser} />}
-  </>);
-}
-
 /* La carte en mode edition (maquette du 14/09) : la meme place et la meme
  * teinte que la carte vivante, mais rien qui se pilote — l'icone, un crayon,
  * le nom, « Domaine · identifiant », Modifier et Supprimer. On la SAISIT
@@ -4650,13 +4610,8 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
               {bloc.cartes.map(id => {
                 const zone = id.indexOf('zone:') === 0 ? climateZones(S).find(z => z.id === id.slice(5)) : null;
                 const lbl = roomLabelOf(room, id);
-                // Type choisi dans la fiche d'édition : la carte du catalogue
-                // remplace le rendu par défaut de la vue. Une ZONE climat en
-                // compacte = la ligne de son thermostat (± inline).
-                const card = (!zone && ed.typeOf(id)) ? <CvTyped x={{ t: ed.typeOf(id), id }} hass={hass} dc={dc} />
-                  : (zone && ed.typeOf(id) === 'compacte' && estClimate(zone)) ? <CvCard id={zone.haid} hass={hass} label={lbl || zone.name} onOpen={dc.ouvrir} dense />
-                    : dc.card(id, lbl, zone);
-                if (!edit) return <Anim key={id} i={ents.indexOf(id)} className={[(ed.estLarge(id) ? 'o-cvw2' : ''), (ed.typeOf(id) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{card}</Anim>;
+                const card = dc.card(id, lbl, zone);
+                if (!edit) return <Anim key={id} i={ents.indexOf(id)} className={ed.estLarge(id) ? 'o-cvw2' : ''}>{card}</Anim>;
                 return <EditableCard key={id} ed={ed} id={id} nom={nomDe(id)} onEdit={setCardEdit} hass={hass}>{card}</EditableCard>;
               })}
               {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} />}
@@ -4673,7 +4628,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
           * faisait rien (« popup inactif », retour du 30/08). */}
         {dc.sheets}
         {addSheet && <RoomAddSheet room={room} hass={hass} present={ents} onToggle={ed.toggle} onClose={() => setAddSheet(false)}
-          pied={<><button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button><BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} /></>} />}
+          pied={<button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} piece={room} onClose={() => setCardEdit(null)} />}
         {comfort && piece && <RoomComfortModal piece={piece} hass={hass} onClose={() => setComfort(false)} />}
       </div>
@@ -5628,6 +5583,25 @@ const APPAREIL_ACTIF = {
   lawn_mower: (e) => e === 'mowing' || e === 'returning',
 };
 
+/* Le fantome d'un glisser : la copie qui suit le pointeur, partout, tant
+ * qu'on la tient — le meme dessin que celui des grilles (useLayoutEditor). */
+function poserFantome(el, x0, y0) {
+  const f = el.cloneNode(true);
+  Array.prototype.slice.call(f.querySelectorAll('[data-drag-ui]')).forEach(n => n.remove());
+  const r = el.getBoundingClientRect();
+  const st = f.style;
+  st.position = 'fixed'; st.left = r.left + 'px'; st.top = r.top + 'px';
+  st.width = r.width + 'px'; st.height = r.height + 'px'; st.margin = '0';
+  st.pointerEvents = 'none'; st.zIndex = '9999'; st.opacity = '.96';
+  st.transform = 'scale(1.02)'; st.transition = 'none'; st.outline = 'none';
+  st.boxShadow = '0 22px 48px rgba(0,0,0,.55)';
+  (el.ownerDocument || document).body.appendChild(f);
+  return {
+    suivre: (x, y) => { f.style.transform = 'translate(' + (x - x0) + 'px,' + (y - y0) + 'px) scale(1.02)'; },
+    lever: () => { try { f.remove(); } catch { /* deja parti */ } },
+  };
+}
+
 function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onOpenMeteo, onNav = null }) {
   const [override, setOverride] = useState(null);
   const agenda = useAgenda(accueil && accueil.hass);
@@ -5797,24 +5771,29 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     return [...sauve, ...base.filter(s => sauve.indexOf(s) < 0)];
   };
   const [secDrag, setSecDrag] = useState(null); // { zone, id, ordre }
-  // Au doigt : appui long (380 ms, vibration) avant de saisir une section.
+  // Au doigt : appui court (200 ms, vibration) avant de saisir une section ;
+  // puis la section SUIT le pointeur, comme une carte de grille.
   const secTimer = useRef(null);
   const secDebut = useRef(null);
+  const secFantome = useRef(null);
   const debutSec = (e, zone, id) => {
     if (!editMode) return;
     if (e.target.closest && e.target.closest('button, [role="switch"], input')) return;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    const hote = e.currentTarget;
     if (e.pointerType === 'touch') {
       secDebut.current = { x: e.clientX, y: e.clientY, zone, id };
       clearTimeout(secTimer.current);
       secTimer.current = setTimeout(() => {
         if (!secDebut.current) return;
         try { if (navigator.vibrate) navigator.vibrate(35); } catch {}
+        secFantome.current = poserFantome(hote, secDebut.current.x, secDebut.current.y);
         setSecDrag({ zone: secDebut.current.zone, id: secDebut.current.id, ordre: ordreDe(secDebut.current.zone) });
-      }, 380);
+      }, 200);
       return;
     }
     e.preventDefault();
+    secFantome.current = poserFantome(hote, e.clientX, e.clientY);
     setSecDrag({ zone, id, ordre: ordreDe(zone) });
   };
   const mouvSec = (e) => {
@@ -5825,6 +5804,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
       return;
     }
     if (!secDrag) return;
+    if (secFantome.current) secFantome.current.suivre(e.clientX, e.clientY);
     const sous = document.elementFromPoint(e.clientX, e.clientY);
     const cible = sous && sous.closest ? sous.closest('[data-sec]') : null;
     if (!cible) return;
@@ -5838,6 +5818,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   };
   const finSec = () => {
     clearTimeout(secTimer.current); secDebut.current = null;
+    if (secFantome.current) { secFantome.current.lever(); secFantome.current = null; }
     if (secDrag) saveGrille({ [secDrag.zone]: secDrag.ordre });
     setSecDrag(null);
   };
@@ -5849,23 +5830,27 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   const [pieceDrag, setPieceDrag] = useState(null); // { id, ordre }
   const pieceTimer = useRef(null);
   const pieceDebut = useRef(null);
+  const pieceFantome = useRef(null);
   const ordrePieces = (noms) => { const sauve = (grille.piecesOrdre || []).filter(n => noms.indexOf(n) >= 0); return [...sauve, ...noms.filter(n => sauve.indexOf(n) < 0)]; };
   const debutPiece = (e, id, noms) => {
     if (!editMode) return;
     if (e.target.closest && e.target.closest('button, [role="switch"], input')) return;
     e.stopPropagation();
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    const hote = e.currentTarget;
     if (e.pointerType === 'touch') {
       pieceDebut.current = { x: e.clientX, y: e.clientY, id, noms };
       clearTimeout(pieceTimer.current);
       pieceTimer.current = setTimeout(() => {
         if (!pieceDebut.current) return;
         try { if (navigator.vibrate) navigator.vibrate(35); } catch {}
+        pieceFantome.current = poserFantome(hote, pieceDebut.current.x, pieceDebut.current.y);
         setPieceDrag({ id: pieceDebut.current.id, ordre: ordrePieces(pieceDebut.current.noms) });
-      }, 380);
+      }, 200);
       return;
     }
     e.preventDefault();
+    pieceFantome.current = poserFantome(hote, e.clientX, e.clientY);
     setPieceDrag({ id, ordre: ordrePieces(noms) });
   };
   const mouvPiece = (e) => {
@@ -5876,6 +5861,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
       return;
     }
     if (!pieceDrag) return;
+    if (pieceFantome.current) pieceFantome.current.suivre(e.clientX, e.clientY);
     const sous = document.elementFromPoint(e.clientX, e.clientY);
     const cible = sous && sous.closest ? sous.closest('[data-piece]') : null;
     if (!cible) return;
@@ -5889,6 +5875,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   };
   const finPiece = () => {
     clearTimeout(pieceTimer.current); pieceDebut.current = null;
+    if (pieceFantome.current) { pieceFantome.current.lever(); pieceFantome.current = null; }
     if (pieceDrag) saveGrille({ piecesOrdre: pieceDrag.ordre });
     setPieceDrag(null);
   };
@@ -5908,7 +5895,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           /* En édition, le cadre est DANS le flux (padding) au lieu de flotter
            * autour : des boutons hors-boîte mordaient la section voisine et le
            * compteur de l'en-tête (retour 01/09). */
-          ...(editMode ? { border: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', padding: saisie ? '9px 11px' : '10px 12px', borderRadius: 18, cursor: 'grab', touchAction: 'pan-y' } : {}) }}>
+          ...(editMode ? { border: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', padding: saisie ? '9px 11px' : '10px 12px', borderRadius: 18, cursor: 'grab', touchAction: 'pan-y', opacity: saisie ? .35 : 1 } : {}) }}>
         {cache
           ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
               <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--o-text3)' }}>{ACC_NOMS()[id]} · {tr('masquée')}</span>
@@ -6257,8 +6244,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           <div className="o-wx3d-veil" />
         </div>)}
       <div className="loggia-content" style={{ position: 'relative', zIndex: 1, padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-        {editMode && onEnt && (
-          <ViewEditBar texte={tr("Mode édition : personnalise la bannière, et choisis les pièces, capteurs d’énergie, personnes et caméras.")} onEnt={onEnt}>
+        {editMode && (
+          <BandeauEdition extra={<>
             {/* Desactives plutot que masques : leur place ne bouge pas, et
               * l'on voit qu'il n'y a rien a annuler. */}
             <button onClick={annuler} disabled={!passe.length} aria-label={tr('Défaire')} title={tr('Défaire') + ' (Ctrl+Z)'}
@@ -6284,7 +6271,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               title={tr('Retrouver un agencement précédent')}>
               <Fi i="time-past" size={12} />{tr('Historique')}{histo.length ? ' · ' + histo.length : ''}
             </button>
-          </ViewEditBar>
+            {onEnt && <button onClick={onEnt} style={editBtn(false)}>{tr('Entités de la vue')}</button>}
+          </>} />
         )}
 
         {/* BANNER */}
@@ -6430,7 +6418,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
                       * chaque tuile qui monte aussi haut que sa colonne le
                       * permet — la grande du milieu vient donc combler le vide
                       * laisse par la puce au-dessus d'elle. */
-                    style={{ position: 'relative', minWidth: 0, opacity: saisie ? .55 : 1, transition: 'opacity .15s',
+                    style={{ position: 'relative', minWidth: 0, opacity: saisie ? .35 : 1, transition: 'opacity .15s',
                       ...((tactile && wide) ? { gridColumn: (i % 3) + 1 } : {}),
                       ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 2, borderRadius: 14, cursor: 'grab', touchAction: 'pan-y' } : {}) }}>
                     {/* Carte inerte en édition (comme partout) : le wrapper
@@ -7315,8 +7303,8 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
                   </div>)}
               <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 16 }}>
                 {bloc.cartes.map(k => {
-                  const carte = ed.typeOf(k) ? <CvTyped x={{ t: ed.typeOf(k), id: k }} hass={hass} dc={dc} /> : dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={[(ed.estLarge(k) ? 'o-cvw2' : ''), (ed.typeOf(k) === 'compacte' ? 'o-cvrow1' : '')].join(' ').trim()}>{carte}</Anim>;
+                  const carte = dc.card(k, ed.labelOf(k));
+                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass}>{carte}</EditableCard>;
                 })}
                 {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} label={tr('Ajouter un volet')} />}
@@ -7328,7 +7316,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
       {dc.sheets}
       {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
       {addSheet && <RoomAddSheet hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter un volet')} listerTout
-        pied={<><button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button><BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} /></>}
+        pied={<button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>}
         domaines={['cover']} onClose={() => setAddSheet(false)} />}
     </div>
   );
@@ -7930,15 +7918,8 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       {/* Bilan instantané : les chiffres du moment, en lignes denses */}
 
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Postes de consommation')}</div>
-        {edit && (
-          <ViewEditBar onEnt={onEnt} entLabel={tr('Entités du schéma')}
-            texte={tr('Mode édition : clique un poste pour le modifier, glisse-le pour le déplacer.')
-              + (ed.edits ? ' Ces postes sont personnalisés.' : ' Ces postes suivent la détection automatique.')}>
-            <button onClick={() => setEnAdd(true)} style={editBtn(true)}>{tr('Ajouter un poste')}</button>
-            <BoutonCarteLibre ed={ed} hass={hass} style={editBtn(false)} />
-            {ed.edits > 0 && <button onClick={ed.reset} style={editBtn(false)}>{tr("Rétablir l'automatique")}</button>}
-          </ViewEditBar>
-        )}
+        {edit && <BandeauEdition ed={ed} onAjouter={() => setEnAdd(true)} ajouterLabel={tr('Ajouter un poste')}
+          extra={onEnt ? <button onClick={onEnt} style={editBtn(false)}>{tr('Entités du schéma')}</button> : null} />}
         <div ref={ed.gridRef} className="grid-edevices" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12 }}>
           {ed.ids.map((k) => { const d = posteDe(k); const di = ed.ids.indexOf(k); const w = Math.round(num(d.power)); const kwh = avail(d.kwh) ? num(d.kwh) : null; const on = w > 5;
             const carte = (
@@ -7953,10 +7934,11 @@ function EnergieContent({ hass, edit = false, onEnt }) {
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{kwh != null ? kwh.toFixed(2).replace('.', ',') + ' kWh jour' : '—'}</div>
             </div>);
             if (!edit) return <Anim key={k} i={di} base={160} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
-            return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit}>{carte}</EditableCard>;
+            return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit} hass={hass}>{carte}</EditableCard>;
           })}
+          {edit && <CarteAjout onClick={() => setEnAdd(true)} label={tr('Ajouter un poste')} />}
         </div>
-        {enAdd && <RoomAddSheet room="Postes de consommation" hass={hass} present={ed.ids.map(k => k.indexOf('dev:') === 0 ? k.slice(4) : k)} onToggle={(id) => ed.toggle('dev:' + id)} onClose={() => setEnAdd(false)} />}
+        {enAdd && <RoomAddSheet hass={hass} entete={tr('Ajouter un poste')} domaines={['sensor']} listerTout present={ed.ids.map(k => k.indexOf('dev:') === 0 ? k.slice(4) : k)} onToggle={(id) => ed.toggle('dev:' + id)} onClose={() => setEnAdd(false)} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={posteDe(cardEdit).name} origine={posteOrigine(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
 
     </div>
@@ -10734,7 +10716,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   const [dragCle, setDragCle] = useState(null);
   const [ordreDrag, setOrdreDrag] = useState(null);
   const grilleRef = useRef(null);
-  /* Au doigt : APPUI LONG (380 ms, vibration) avant de saisir — sinon le
+  /* Au doigt : APPUI LONG (200 ms, vibration) avant de saisir — sinon le
    * défilement déplaçait les cartes. Un doigt qui bouge avant l'échéance
    * défile normalement. */
   const dragTimer = useRef(null);
@@ -10751,7 +10733,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
         try { if (navigator.vibrate) navigator.vibrate(35); } catch {}
         setDragCle(dragDebut.current.cle);
         setOrdreDrag([...cv.ents]);
-      }, 380);
+      }, 200);
       return;
     }
     e.preventDefault();
@@ -11228,7 +11210,7 @@ function PinModal({ expected, onClose, onSuccess }) {
  * Appui LONG  : l'orbe parait en miniature au-dessus du bouton et la voix
  *               s'active — le geste du bouton d'accueil d'autrefois.
  *
- * Le seuil et la vibration sont ceux du reste du dashboard : 380 ms, 35 ms de
+ * Le seuil et la vibration sont ceux du reste du dashboard : 200 ms, 35 ms de
  * retour tactile, dix pixels de tolerance. Au-dela on defile, on ne maintient
  * pas — sans cette tolerance, tout debut de defilement appellerait la voix.
  *
@@ -11308,7 +11290,7 @@ function BoutonAssistant({ onAssistant, onDictee = null, hass = null, sens = 'ha
       if (!depart.current) return;
       long.current = true;
       demarrerVoix();
-    }, 380);
+    }, 200);
   };
   const bouge = (e) => {
     if (!depart.current || long.current) return;
