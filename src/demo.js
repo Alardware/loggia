@@ -345,11 +345,11 @@ function indexDemo(states) {
   const ZONE_DE = {
     salon: ['light.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'cover.salon',
             'binary_sensor.fenetre_salon', 'switch.radiateur_salon', 'media_player.enceinte_salon'],
-    cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine'],
+    cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine', 'binary_sensor.detecteur_fumee'],
     chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'cover.chambre',
               'binary_sensor.fenetre_chambre', 'switch.radiateur_chambre'],
     bureau: ['light.bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite'],
-    entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.mouvement_entree'],
+    entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree'],
     sdb: ['light.sdb', 'sensor.sdb_temperature'],
   };
   const entities = [];

@@ -1675,8 +1675,41 @@ function roomEntitiesBrutes(hass, roomName) {
   voletCovers(hass.states).filter(c => rmNorm(c.name).indexOf(target) >= 0 && hass.states[c.haid]).forEach(c => out.push(c.haid));
   // 4) médias (lecteurs configurés dont le nom porte la pièce)
   medPlayers().filter(p => rmNorm(p.name).indexOf(target) >= 0 && hass.states[p.haid]).forEach(p => out.push(p.haid));
+  // 5) le reste de la piece, depuis sa ZONE Home Assistant (maquettes du
+  //    14/09) : prises, serrures, cameras, ventilateurs, capteurs d'ouverture,
+  //    de mouvement, de surete, d'air — une carte par APPAREIL. Pas les
+  //    temperatures ni les humidites : l'en-tete de la piece les porte deja.
+  //    Ce que les zones de chauffage pilotent n'y revient pas en double, et
+  //    l'editeur d'agencement retire ce qu'on ne veut pas voir.
+  try {
+    const zone = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).find(z => rmNorm(z.name) === target);
+    const pris = new Set(out);
+    climateZones(hass.states).forEach(z => ['haid', 'tempCible', 'modeEnt', 'autoEnt'].forEach(k => { if (typeof z[k] === 'string') pris.add(z[k]); }));
+    const meta = (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id)) || {};
+    const candidats = [];
+    (zone ? zone.entities : []).forEach(id => {
+      const st = hass.states[id]; if (!st || pris.has(id)) return;
+      const m = meta(id); if (m.hidden || m.disabled || m.category) return;
+      const d = id.split('.')[0]; const dc = (st.attributes || {}).device_class || '';
+      const rang = ROOM_ZONE_DOMAINES.indexOf(d); if (rang < 0) return;
+      if (d === 'switch' && cvEstLumiere(id)) return;
+      if (d === 'binary_sensor' && ROOM_BIN_CLASSES.indexOf(dc) < 0) return;
+      if (d === 'sensor' && ROOM_SENSOR_CLASSES.indexOf(dc) < 0) return;
+      candidats.push({ id, rang, appareil: m.deviceId || null });
+    });
+    const parAppareil = new Set();
+    candidats.sort((x, y) => x.rang - y.rang || x.id.localeCompare(y.id)).forEach(c => {
+      if (c.appareil) { if (parAppareil.has(c.appareil)) return; parAppareil.add(c.appareil); }
+      out.push(c.id);
+    });
+  } catch {}
   return out.filter((id, i) => out.indexOf(id) === i && hidden.indexOf(id) < 0);
 }
+// Ce que la zone d'une piece apporte a sa grille, par ordre de preference dans
+// un meme appareil : la commande avant le capteur.
+const ROOM_ZONE_DOMAINES = ['lock', 'camera', 'switch', 'fan', 'humidifier', 'valve', 'vacuum', 'lawn_mower', 'binary_sensor', 'sensor'];
+const ROOM_BIN_CLASSES = ['smoke', 'gas', 'carbon_monoxide', 'moisture', 'safety', 'motion', 'occupancy', 'presence', 'door', 'window', 'garage_door', 'opening', 'vibration', 'tamper'];
+const ROOM_SENSOR_CLASSES = ['carbon_dioxide', 'pm25', 'pm10', 'aqi', 'illuminance', 'pressure', 'volatile_organic_compounds'];
 
 
 /* Cartes de la vue Pièce — style Loggia, format de la maquette : tuiles de même hauteur,
@@ -1687,6 +1720,159 @@ const RM_ICO = (bg, col) => ({ width: 38, height: 38, borderRadius: 14, flexShri
 const RM_BTN = { flex: 1, padding: '9px 6px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
 const RM_NAME = { fontSize: 14, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
 const RM_SUB = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+
+/* ── Les pieces d'une carte au gabarit ──────────────────────────────────────
+ *
+ * Bascule et glissiere vivaient en copie dans chaque carte. Les maquettes du
+ * 14/09 les dessinent partout pareil : une bascule rose en haut a droite, une
+ * glissiere fine dont le remplissage EST la valeur, un curseur court juste
+ * apres, un point au bout du rail. Une seule ecriture, donc. */
+const RM_ROSE = '#FF2D78';
+function RmBascule({ on, nom, onToggle, couleur = RM_ROSE }) {
+  return (
+    <span role="switch" aria-checked={!!on} tabIndex={0} aria-label={(on ? tr('Éteindre') : tr('Allumer')) + ' ' + nom}
+      onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(e); } }}
+      onClick={(e) => { e.stopPropagation(); onToggle(e); }}
+      style={{ width: 46, height: 26, borderRadius: 14, background: on ? couleur : 'rgba(150,162,184,.2)', position: 'relative', cursor: 'pointer', flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}>
+      <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
+    </span>
+  );
+}
+
+/* La place du curseur et du point, hors remplissage : a 100 % le remplissage
+ * s'arrete avant eux, comme sur la maquette. */
+const RM_JAUGE_RESERVE = 26;
+function RmJauge({ v, couleur, grade = null, actif = true, label = '', onCommit, marge = 8 }) {
+  const val = Math.max(0, Math.min(100, Math.round(v || 0)));
+  const largeur = (x) => `calc((100% - ${RM_JAUGE_RESERVE}px) * ${x / 100})`;
+  const gauche = (x) => `calc((100% - ${RM_JAUGE_RESERVE}px) * ${x / 100} + 6px)`;
+  // Peinture DOM directe pendant le geste, commit au relacher — le rendu React
+  // ne suit pas un doigt a 60 images par seconde.
+  const glisse = (e) => {
+    if (!actif) return;
+    e.stopPropagation(); e.preventDefault();
+    const el = e.currentTarget, fill = el.querySelector('[data-fill]'), kn = el.querySelector('[data-knob]'), r = el.getBoundingClientRect();
+    const calc = (x) => Math.max(0, Math.min(100, Math.round((x - r.left) / Math.max(1, r.width - RM_JAUGE_RESERVE) * 100)));
+    let n = calc(e.clientX);
+    const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = largeur(n); } if (kn) { kn.style.transition = 'none'; kn.style.left = gauche(n); } };
+    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch {}
+    el.onpointermove = (ev) => { n = calc(ev.clientX); paint(); };
+    const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (kn) kn.style.transition = ''; };
+    el.onpointerup = () => { end(); onCommit(n); };
+    el.onpointercancel = () => { end(); if (fill) fill.style.width = largeur(val); if (kn) kn.style.left = gauche(val); };
+  };
+  const kb = actif ? kbSlider(label, val, onCommit) : {};
+  return (
+    /* Inactive, la jauge n'est qu'un dessin : la regle voit alors un clic
+     * sans clavier, mais ce clic ne sert qu'a ne pas ouvrir la fiche. */
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
+    <span {...kb} onClick={(e) => e.stopPropagation()} onPointerDown={glisse}
+      style={{ position: 'relative', display: 'block', height: 16, borderRadius: 8, marginTop: marge, background: 'var(--o-s1)', overflow: 'hidden', opacity: actif ? 1 : .4, cursor: actif ? 'ew-resize' : 'default', touchAction: 'none' }}>
+      <span data-fill style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: largeur(val), borderRadius: 8, background: grade || couleur, transition: 'width .3s' }} />
+      <span data-knob style={{ position: 'absolute', top: 3, bottom: 3, width: 3, borderRadius: 2, background: couleur, left: gauche(val), transition: 'left .3s' }} />
+      <span aria-hidden="true" style={{ position: 'absolute', right: 6, top: 6, width: 4, height: 4, borderRadius: '50%', background: 'var(--o-text3)', opacity: .6 }} />
+    </span>
+  );
+}
+
+/* Ce qu'un capteur binaire dit, selon sa `device_class` — en mots, pas en
+ * « on / off ». Le troisieme champ : ce qui est un DANGER quand c'est vrai. */
+const BIN_ETATS = () => ({
+  smoke: [tr('Fumée détectée'), tr('Aucune fumée'), true], gas: [tr('Gaz détecté'), tr('Pas de gaz'), true],
+  carbon_monoxide: [tr('Monoxyde détecté'), tr('Pas de monoxyde'), true], moisture: [tr('Fuite détectée'), tr('Aucune fuite'), true],
+  safety: [tr('Danger'), tr('Tout va bien'), true], problem: [tr('Problème'), tr('Tout va bien'), true],
+  motion: [tr('Mouvement'), tr('Aucun mouvement'), false], occupancy: [tr('Occupé'), tr('Libre'), false], presence: [tr('Présent'), tr('Absent'), false],
+  door: [tr('Ouverte'), tr('Fermée'), false], window: [tr('Ouverte'), tr('Fermée'), false], garage_door: [tr('Ouverte'), tr('Fermée'), false], opening: [tr('Ouvert'), tr('Fermé'), false],
+  lock: [tr('Déverrouillé'), tr('Verrouillé'), false], connectivity: [tr('Connecté'), tr('Déconnecté'), false], battery: [tr('Pile faible'), tr('Pile en forme'), true],
+  plug: [tr('Branché'), tr('Débranché'), false], power: [tr('Sous tension'), tr('Hors tension'), false], vibration: [tr('Vibration'), tr('Calme'), false], sound: [tr('Bruit'), tr('Silence'), false],
+  light: [tr('Lumière'), tr('Sombre'), false], cold: [tr('Froid'), tr('Normal'), false], heat: [tr('Chaud'), tr('Normal'), true], tamper: [tr('Sabotage'), tr('Intact'), true],
+});
+
+/* Les autres appareils d'une piece — prise, capteur, serrure, camera,
+ * ventilateur… — au GABARIT MAISON, comme les lampes et les volets : icone en
+ * haut a gauche, bascule ou repere en haut a droite, nom SOUS l'icone, etat
+ * ensuite. La rangee horizontale de `CvCard` reste aux autres vues. */
+const ROOM_GENERIQUES = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren', 'valve', 'lock', 'camera', 'binary_sensor', 'sensor'];
+function RoomGenericCard({ id, hass, onOpen, label = null }) {
+  const S = (hass && hass.states) || {};
+  const st = S[id] || null;
+  const a = (st && st.attributes) || {};
+  const dom = cvDomain(id);
+  const s = st ? st.state : null;
+  const mort = !st || s === 'unavailable' || s === 'unknown';
+  const nom = label || cvName(st, id);
+  const ico = cvIcoEntite(dom, id, st, nom);
+  const call = (d, svc, data) => commanderService(hass, id, d, svc, { entity_id: id, ...(data || {}) });
+  const togglable = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren', 'valve'].indexOf(dom) >= 0;
+  const on = !mort && (dom === 'valve' ? s === 'open' : dom === 'lock' ? s === 'locked' : s === 'on');
+  const [ov, setOv] = useState(null);
+  useEffect(() => { setOv(null); }, [s]);
+  const actif = ov != null ? ov : on;
+  const basculer = () => {
+    const nv = !actif; setOv(nv);
+    if (dom === 'lock') call('lock', nv ? 'lock' : 'unlock');
+    else if (dom === 'valve') call('valve', nv ? 'open_valve' : 'close_valve');
+    else call('homeassistant', nv ? 'turn_on' : 'turn_off');
+  };
+  // La puissance vit dans un capteur SŒUR (une prise mesurante), jamais dans
+  // l'attribut de la prise.
+  const puissance = (() => {
+    if (dom !== 'switch' && dom !== 'input_boolean') return null;
+    const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: 'power' });
+    const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN;
+    return isNaN(n) ? null : n;
+  })();
+  const fmtW = (w) => w >= 1000 ? (Math.round(w / 100) / 10).toFixed(1).replace('.', ',') + ' kW' : Math.round(w) + ' W';
+  const fmtN = (n) => (Math.round(n * 10) / 10).toString().replace('.', ',');
+  const etatsBin = BIN_ETATS()[a.device_class] || null;
+  const danger = dom === 'binary_sensor' && !!(etatsBin && etatsBin[2]) && s === 'on';
+  let sub, couleur = 'var(--o-text3)', teinte = 'accent';
+  if (mort) sub = tr('Indisponible');
+  else if (dom === 'lock') { sub = s === 'locked' ? tr('Verrouillée') : s === 'unlocked' ? tr('Déverrouillée') : s === 'locking' ? tr('Verrouillage…') : s === 'unlocking' ? tr('Déverrouillage…') : s === 'jammed' ? tr('Bloquée') : String(s); teinte = 'ok'; couleur = actif ? 'var(--o-ok)' : 'var(--o-warn2)'; }
+  else if (dom === 'camera') { sub = (s === 'streaming' || s === 'recording' || s === 'idle') ? tr('En direct') : String(s); couleur = 'var(--o-accent-soft)'; }
+  else if (dom === 'binary_sensor') { sub = etatsBin ? (s === 'on' ? etatsBin[0] : etatsBin[1]) : (s === 'on' ? tr('Détecté') : 'RAS'); couleur = danger ? 'var(--o-bad)' : 'var(--o-warn)'; teinte = danger ? 'bad' : 'or'; }
+  else if (dom === 'sensor') {
+    const n = parseFloat(s);
+    const parts = [isNaN(n) ? String(s) : fmtN(n) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '')];
+    // Une station a plusieurs mesures : ses sœurs les plus parlantes suivent.
+    for (const dc of ['temperature', 'humidity', 'carbon_dioxide']) {
+      if (a.device_class === dc || parts.length >= 3) continue;
+      const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: dc });
+      const v = sid && S[sid] ? parseFloat(S[sid].state) : NaN;
+      if (!isNaN(v)) parts.push(fmtN(v) + ' ' + ((S[sid].attributes || {}).unit_of_measurement || ''));
+    }
+    sub = parts.join(' · '); couleur = 'var(--o-warn)'; teinte = 'or';
+  }
+  else if (dom === 'fan') { sub = actif ? (a.percentage != null ? tr('Vitesse {n} %', { n: Math.round(a.percentage) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
+  else if (dom === 'humidifier') { sub = actif ? (a.current_humidity != null ? tr('Humidité {n} %', { n: Math.round(a.current_humidity) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
+  else if (dom === 'valve') { sub = actif ? tr('Ouverte') : tr('Fermée'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
+  else { sub = (actif ? tr('Allumée') : tr('Éteinte')) + (puissance != null ? ' · ' + fmtW(puissance) : ''); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
+  const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('#FFCC44', .16), 'var(--o-warn)', 'rgba(255,204,68,'] };
+  const [icoFond, icoTexte, lavisBase] = TEINTES[teinte];
+  const allume = !mort && (danger || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera'));
+  const ouvrable = !!onOpen && !mort;
+  return (
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? tr('Ouvrir') + ' ' + nom : undefined}
+      onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined} onClick={ouvrable ? () => onOpen(id) : undefined}
+      style={{ ...RM_CARD, cursor: ouvrable ? 'pointer' : 'default',
+        ...(allume && LAVIS ? { background: `linear-gradient(180deg,transparent 28%,${lavisBase}${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
+        border: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)')}>{ico ? <Fi i={ico} size={17} /> : <PlugIcon size={17} />}</span>
+        {(togglable || dom === 'lock') && !mort
+          ? <RmBascule on={actif} nom={nom} onToggle={basculer} />
+          : <span aria-hidden="true" style={{ color: 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i={dom === 'camera' ? 'video-camera' : 'square'} size={dom === 'camera' ? 15 : 12} /></span>}
+      </div>
+      <div style={{ marginTop: 14 }}>
+        <div style={RM_NAME}>{nom}</div>
+        <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>
+        {dom === 'camera' && !mort && (
+          <button onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(id); }} className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%' }}>{tr('Voir le flux')}</button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
@@ -1702,17 +1888,16 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const on = ov != null ? ov : realOn;
   const bri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : 100;
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
-  // Une prise n'est pas une lumière : pas d'or ni d'ampoule pour un switch hors interrupteurs-lumières.
-  const prise = isSwitch && !cvEstLumiere(id);
   const mort = !st || st.state === 'unavailable';
-  const accent = prise ? 'var(--o-accent)' : (rgb && color) ? color : '#FFCC44';
+  const accent = (rgb && color) ? color : '#FFCC44';
   const ltype = lightType({ id, name: (a.friendly_name || id), rgb, ct });
-  const adjustable = !isSwitch && dimmable;
+  const adjustable = !isSwitch && dimmable && !mort;
+  const nom = label || a.friendly_name || id;
   const [flashRef, flash] = useFlash();
   // Filet : si HA n'a pas confirmé sous 6 s (commande rejetée), retour à l'état réel au lieu de rester désynchronisé
   const ovRevertRef = useRef(0);
   useEffect(() => () => clearTimeout(ovRevertRef.current), []);
-  const toggle = (e) => { e.stopPropagation(); flash(accent); setOv(!on); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); commander(hass, id, on ? 'turn_off' : 'turn_on'); };
+  const toggle = () => { flash(accent); setOv(!on); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); commander(hass, id, on ? 'turn_off' : 'turn_on'); };
   // Luminosité optimiste : fenêtre fixe 4 s (l'écho Zigbee rejoue l'ancienne valeur).
   const [ovBri, setOvBri] = useState(null);
   const ovBriRef = useRef(0);
@@ -1724,22 +1909,9 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
     else commander(hass, id, 'turn_off');
   };
   const briAff = ovBri != null ? ovBri : (on ? bri : 0);
-  // Glissière épaisse : peinture DOM directe pendant le geste, commit au relâcher.
-  const glisse = (e) => {
-    if (!adjustable) return;
-    e.stopPropagation(); e.preventDefault();
-    const el = e.currentTarget, fill = el.querySelector('[data-fill]'), r = el.getBoundingClientRect();
-    const calc = (x) => Math.max(0, Math.min(100, Math.round((x - r.left) / r.width * 100)));
-    let v = calc(e.clientX);
-    const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = v + '%'; } };
-    paint(); try { el.setPointerCapture(e.pointerId); } catch {}
-    el.onpointermove = (ev) => { v = calc(ev.clientX); paint(); };
-    const end = () => { el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; };
-    el.onpointerup = () => { end(); poseBri(v); };
-    el.onpointercancel = () => { end(); if (fill) fill.style.width = briAff + '%'; };
-  };
-  const grade = prise ? 'var(--o-accent)' : (rgb && color) ? color : null; // null = dégradé doré
-  const PRESETS = [[tr('Nuit'), 25], [tr('Doux'), 60], [tr('Plein'), 100]];
+  const grade = (rgb && color) ? color : 'linear-gradient(90deg,#ffce73,#f59e0b)';
+  // Une entité qui n'existe plus le dit en clair : « Éteint » ferait chercher l'interrupteur.
+  const sub = mort ? tr('Entité absente · vérifie l’appairage') : on ? (adjustable ? tr('{n} % de luminosité', { n: briAff }) : tr('Allumé')) : tr('Éteint');
   return (
     <button ref={flashRef} className={'o-light-card o-rmcard o-cvdense' + (mort ? ' o-panne' : '')} onClick={() => { if (adjustable && onOpen) onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed }); else if (onFiche) onFiche(id); }}
       style={{ ...RM_CARD, alignItems: 'stretch', textAlign: 'left', width: '100%', cursor: (adjustable || onFiche) ? 'pointer' : 'default', overflow: 'hidden',
@@ -1750,39 +1922,16 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
         border: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         {/* Sans halo (retour 31/08) : il noyait le carré de l'icône en rond. */}
-        <span style={RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accent : 'var(--o-text3)')}>{prise ? <PlugIcon size={19} /> : <LightIcon type={ltype} size={19} />}</span>
-        <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + (label || a.friendly_name || id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }} onClick={toggle} style={{ width: 46, height: 26, borderRadius: 14, background: on ? '#FF2D78' : 'rgba(150,162,184,.2)', position: 'relative', cursor: 'pointer', flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span>
+        <span style={RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accent : 'var(--o-text3)')}><LightIcon type={ltype} size={19} /></span>
+        {!mort && <RmBascule on={on} nom={nom} onToggle={toggle} />}
       </div>
       <div>
-        <div style={RM_NAME}>{label || a.friendly_name || id}</div>
-        <div style={{ ...RM_SUB, color: on ? (prise ? 'var(--o-accent-soft)' : 'var(--o-warn)') : 'var(--o-text3)' }}>{on ? (adjustable ? tr('{n} % de luminosité', { n: briAff }) : tr('Allumé')) : tr('Éteint')}</div>
-        {/* Glissière épaisse + préréglages, le même bas de carte pour toutes
-          * les lumières — GRISÉ quand la lampe ne se règle pas. */}
-        {!prise && <>
-          {/* Ce curseur EST accessible quand la lampe se regle : role `slider`,
-            * `aria-valuenow`, tabulation et fleches. Les deux regles ci-dessous ne
-            * visent que l'autre cas — une lampe qui ne se regle pas, ou il ne reste
-            * qu'un affichage et un `onPointerDown` sans effet. Les satisfaire
-            * demanderait de scinder le composant en deux pour un gain nul. */}
-          {/* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
-          <span onPointerDown={glisse} role={adjustable ? 'slider' : undefined} aria-label={adjustable ? tr('Luminosité') + ' ' + (label || a.friendly_name || id) : undefined}
-            aria-valuenow={adjustable ? briAff : undefined} aria-valuemin={0} aria-valuemax={100} tabIndex={adjustable ? 0 : -1}
-            onKeyDown={adjustable ? (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); poseBri(Math.max(0, Math.min(100, briAff + (e.key === 'ArrowRight' ? 5 : -5)))); } } : undefined}
-            style={{ display: 'block', height: 24, borderRadius: 14, marginTop: 8, overflow: 'hidden', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', opacity: adjustable ? 1 : .35, cursor: adjustable ? 'ew-resize' : 'default', touchAction: 'none' }}>
-            <span data-fill style={{ display: 'block', height: '100%', width: (adjustable ? briAff : (on ? 100 : 0)) + '%', borderRadius: 14, background: grade ? grade : 'linear-gradient(90deg,#ffce73,#f59e0b)', transition: 'width .3s' }} />
-          </span>
-          {/* eslint-enable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
-          <span className="o-lightpresets" style={{ display: 'flex', gap: 8, marginTop: 7 }}>
-            {PRESETS.map(([nom, pct]) => (
-              <span key={nom} role="button" tabIndex={adjustable ? 0 : -1} aria-disabled={!adjustable} aria-label={nom + ' ' + pct + '%'}
-                onClick={adjustable ? (e) => { e.stopPropagation(); poseBri(pct); } : (e) => e.stopPropagation()}
-                onKeyDown={adjustable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); poseBri(pct); } } : undefined}
-                style={{ flex: 1, textAlign: 'center', padding: '6px 4px', borderRadius: 10, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', opacity: adjustable ? 1 : .35, cursor: adjustable ? 'pointer' : 'default' }}>
-                {nom} {pct}%
-              </span>
-            ))}
-          </span>
-        </>}
+        <div style={RM_NAME}>{nom}</div>
+        <div style={{ ...RM_SUB, color: on ? 'var(--o-warn)' : 'var(--o-text3)' }}>{sub}</div>
+        {/* La glissière, seule : les préréglages Nuit / Doux / Plein ont
+          * quitté la carte (maquettes du 14/09), la fiche les garde. Grisée
+          * quand la lampe ne se règle pas. */}
+        <RmJauge v={adjustable ? briAff : (on ? 100 : 0)} couleur={accent} grade={grade} actif={adjustable} label={tr('Luminosité') + ' ' + nom} onCommit={poseBri} />
       </div>
     </button>
   );
@@ -1963,20 +2112,14 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   useEffect(() => { setOv(null); }, [realPos]);
   const pos = ov != null ? ov : realPos;
   const mort = !st || st.state === 'unavailable';
-  const drag = (e) => {
-    e.preventDefault();
-    const el = e.currentTarget, fill = el.querySelector('[data-fill]'), kn = el.querySelector('[data-knob]'), r = el.getBoundingClientRect();
-    const calc = x => Math.max(0, Math.min(100, Math.round((x - r.left) / r.width * 100)));
-    let v = calc(e.clientX);
-    const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = v + '%'; } if (kn) { kn.style.transition = 'none'; kn.style.left = `calc(${v}% - 8px)`; } };
-    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch {}
-    el.onpointermove = ev => { v = calc(ev.clientX); paint(); };
-    const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (kn) kn.style.transition = ''; };
-    el.onpointerup = () => { end(); setOv(v); commander(hass, id, 'set_position', v); };
-    el.onpointercancel = () => { end(); if (fill) fill.style.width = pos + '%'; };
-  };
+  const nom = titre || a.friendly_name || id;
+  const mouvement = st && (st.state === 'opening' || st.state === 'closing') ? st.state : null;
+  // Le sous-titre dit l'état en mots (maquettes du 14/09) ; le pourcentage
+  // reste en haut à droite, la glissière montre la position.
+  const sub = mort ? tr('Indisponible') : mouvement === 'opening' ? tr('Ouverture…') : mouvement === 'closing' ? tr('Fermeture…') : pos === 0 ? tr('Fermé') : pos === 100 ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
+  const poser = (v) => { setOv(v); commander(hass, id, 'set_position', v); };
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + (titre || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : volet ouvert = lavis VIOLET, gradué par la position — le bleu accent restait trop proche des autres cartes.
       ...(pos > 0 && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-purple-rgb),${lav(.10 + pos * .0012)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
@@ -1987,26 +2130,18 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
         <span style={{ ...RM_ICO(pos > 0 ? 'rgba(var(--o-purple-rgb),.16)' : 'var(--o-s1)', pos > 0 ? 'var(--o-purple)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden' }}>
           {/* store qui descend dans le chip : hauteur = part fermée, suit la position en douceur */}
           <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: (100 - pos) + '%', background: 'linear-gradient(180deg,rgba(var(--o-purple-rgb),.34),rgba(var(--o-purple-rgb),.14))', transition: REDUCE_MOTION ? 'none' : 'height .7s cubic-bezier(.22,.61,.36,1)', pointerEvents: 'none' }} />
-          <Ico name="blinds" size={18} /></span>
-        <span style={{ fontSize: 15, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos}%</span>
+          <Ico name={(a.device_class === 'garage' || a.device_class === 'gate') ? 'garage' : 'blinds'} size={18} /></span>
+        <span style={{ fontSize: 15, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos} %</span>
       </div>
       <div style={{ marginTop: 14 }}>
-        {/* Pas de sous-titre : le pourcentage vit en haut à droite et la
-          * glissière montre la position — le titre respire sous l'icône,
-          * avec le même air que les cartes machines. */}
-        <div style={RM_NAME}>{titre || a.friendly_name || id}</div>
-        {/* Glissière épaisse, même dessin que la carte lumière : le remplissage
-          * violet EST la position — plus de bouton-curseur à attraper. */}
-        <div role="presentation" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => { e.stopPropagation(); drag(e); }} {...kbSlider('Position ' + (a.friendly_name || id), pos, (nv) => { setOv(nv); commander(hass, id, 'set_position', nv); })} style={{ margin: '8px 0 7px', cursor: 'ew-resize', touchAction: 'none' }}>
-          <div style={{ position: 'relative', height: 24, borderRadius: 14, overflow: 'hidden', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-            <div data-fill style={{ position: 'absolute', inset: '0 auto 0 0', width: pos + '%', background: 'linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))', borderRadius: 14, transition: 'width .25s' }} />
-          </div>
-        </div>
-        {/* Les mêmes trois gestes que la carte compacte : ouvrir, stop, fermer — le slider règle le reste. */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button aria-label={tr('Ouvrir')} title={tr('Ouvrir')} onClick={(e) => { e.stopPropagation(); setOv(100); commander(hass, id, 'open'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-up" size={14} /></button>
-          <button aria-label={tr('Stop')} title={tr('Stop')} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'stop'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="square" size={12} /></button>
-          <button aria-label={tr('Fermer')} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-down" size={14} /></button>
+        <div style={RM_NAME}>{nom}</div>
+        <div style={{ ...RM_SUB, color: pos > 0 && !mort ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}</div>
+        <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" actif={!mort} label={tr('Position') + ' ' + nom} onCommit={poser} />
+        {/* Les mêmes trois gestes que la carte compacte : ouvrir, stop, fermer — la glissière règle le reste. */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
+          <button aria-label={tr('Ouvrir')} title={tr('Ouvrir')} onClick={(e) => { e.stopPropagation(); setOv(100); commander(hass, id, 'open'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="angle-up" size={14} /></button>
+          <button aria-label={tr('Stop')} title={tr('Stop')} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'stop'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="square" size={12} /></button>
+          <button aria-label={tr('Fermer')} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="angle-down" size={14} /></button>
         </div>
       </div>
     </div>
@@ -2033,23 +2168,30 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const etatSt = st && st.state;
   useEffect(() => { setOv(null); }, [realTarget, etatSt]);
   const target = ov != null ? ov : realTarget;
-  const cur = a.current_temperature;
   const mode = st ? st.state : 'off';
   const off = mode === 'off';
-  const heating = a.hvac_action === 'heating';
   const mort = !st || st.state === 'unavailable';
+  const heating = a.hvac_action === 'heating';
+  const cooling = a.hvac_action === 'cooling';
   const all = a.hvac_modes || ['off', 'heat'];
-  // Retour au dessin d'origine (retour d'essai) : chip mode en haut-droit,
-  // consigne en grand à gauche, boutons − + larges — sans bordure seulement.
-  const MODE_FR = { off: tr('ARRÊT'), heat: tr('CONFORT'), cool: tr('FROID'), auto: 'AUTO', heat_cool: 'AUTO', dry: tr('SEC'), fan_only: tr('VENTIL') };
+  // Bascule optimiste, comme la lampe : arrêt ↔ le mode de marche de l'entité.
+  const [ovOn, setOvOn] = useState(null);
+  useEffect(() => { setOvOn(null); }, [etatSt]);
+  const marche = ovOn != null ? ovOn : !off;
+  const modeMarche = ['heat', 'auto', 'heat_cool', 'cool'].find(m => all.indexOf(m) >= 0) || all.find(m => m !== 'off') || 'heat';
+  const basculer = () => { const nv = !marche; setOvOn(nv); commander(hass, id, 'set_hvac_mode', nv ? modeMarche : 'off'); };
+  const nom = label || a.friendly_name || id;
   // Les bornes viennent de l'entite, pas d'une constante : la climatisation de
   // l'installation d'essai monte a 35, la ou le code plafonnait a 30. Le pas
   // aussi lui appartient. On affiche ce qui a ete envoye, pas ce qui a ete
   // demande — sinon la consigne affichee mentirait des qu'elle est bornee.
   const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
-  const nextMode = () => { const i = all.indexOf(mode); commander(hass, id, 'set_hvac_mode', all[(i + 1) % all.length]); };
+  // Nom SOUS l'icône, état en sous-titre (maquettes du 14/09) : « Chauffe ·
+  // consigne 19,0 °C ». Le gros chiffre vit dans la fiche.
+  const consigne = tr('consigne {t} °C', { t: Number(target).toFixed(1).replace('.', ',') });
+  const sub = mort ? tr('Indisponible') : !marche ? tr('Éteint') : heating ? tr('Chauffe') + ' · ' + consigne : cooling ? tr('Refroidit') + ' · ' + consigne : tr('Au repos') + ' · ' + consigne;
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + (label || a.friendly_name || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
       ...(heating && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-bad-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
@@ -2058,15 +2200,15 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
       border: 'none' }}>
       {/* Allumé = ROUGE (retour d'essai) : l'ambre warn2 rendait jaune. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(off ? 'var(--o-s1)' : 'rgba(var(--o-bad-rgb),.14)', off ? 'var(--o-text3)' : 'var(--o-bad)')}><Fi i="thermometer-half" size={17} /></span>
-        <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title={tr('Changer de mode')} style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'none', background: off ? 'var(--o-s1)' : 'rgba(var(--o-bad-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-bad)' }}>{tr(MODE_FR[mode]) || String(mode).toUpperCase()}</button>
+        <span style={RM_ICO(marche && !mort ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche && !mort ? 'var(--o-bad)' : 'var(--o-text3)')}><Fi i={heating ? 'flame' : 'thermometer-half'} size={17} /></span>
+        {!mort && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
       </div>
       <div style={{ marginTop: 14 }}>
-        <div className="o-rmbig" style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1.1 }}>{target}<span style={{ fontSize: 19 }}>°</span></div>
-        <div style={RM_SUB}>{label || a.friendly_name || id}{cur != null ? ' · ' + tr('actuel {n}°', { n: cur }) : ''}</div>
+        <div style={RM_NAME}>{nom}</div>
+        <div style={{ ...RM_SUB, color: (heating || cooling) && !mort ? 'var(--o-bad)' : 'var(--o-text3)' }}>{sub}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-          <button onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>−</button>
-          <button onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>+</button>
+          <button aria-label={tr('Baisser la consigne')} onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>−</button>
+          <button aria-label={tr('Monter la consigne')} onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>+</button>
         </div>
       </div>
     </div>
@@ -2139,29 +2281,41 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const setT = (d) => { const v = Math.max(5, Math.min(30, Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
   const options = zoneModes(S, zone);
-  const nextMode = () => {
-    if (!options.length) return;
-    const i = options.indexOf(z.modeBrut);
-    const suivant = options[(i + 1) % options.length];
-    if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', suivant);
-    else call('input_select', 'select_option', { entity_id: zone.modeEnt, option: suivant });
+  const poserMode = (m) => {
+    if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', m);
+    else call('input_select', 'select_option', { entity_id: zone.modeEnt, option: m });
   };
-  const label = String(zoneModeLabel(zone, z.modeBrut || options[0] || '')).toUpperCase();
+  // Bascule : arrêt ↔ confort (ou le premier mode qui n'est pas l'arrêt),
+  // optimiste comme partout. Les autres modes vivent dans la fiche.
+  const [ovOn, setOvOn] = useState(null);
+  useEffect(() => { setOvOn(null); }, [z.mode]);
+  const marche = ovOn != null ? ovOn : !off;
+  const modeArret = options.find(o => pilotFamille(o) === 'off') || 'off';
+  const modeMarche = options.find(o => pilotFamille(o) === 'confort') || options.find(o => pilotFamille(o) !== 'off') || null;
+  const basculer = () => { const nv = !marche; setOvOn(nv); const m = nv ? modeMarche : modeArret; if (m) poserMode(m); };
+  const nom = titre || zone.name;
+  const consigne = tr('consigne {t} °C', { t: Number(target).toFixed(1).replace('.', ',') });
+  const sub = !marche ? tr('Éteint') : heating ? tr('Chauffe') + ' · ' + consigne : tr('Au repos') + ' · ' + consigne;
   return (
-    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + (titre || zone.name)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(zone.id); } }} onClick={() => onOpen && onOpen(zone.id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
+    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(zone.id); } }} onClick={() => onOpen && onOpen(zone.id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+      ...(heating && marche && LAVIS ? {
+        background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-bad-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
+      } : null),
+      border: 'none' }}>
+      {/* Climat = ROUGE, comme le thermostat : l'ambre rendait jaune. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.16)', off ? 'var(--o-text3)' : heating ? 'var(--o-warn2)' : '#ff8a4c')}><Fi i="thermometer-half" size={17} /></span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {z.auto && <span style={{ padding: '4px 8px', borderRadius: 999, fontSize: 10, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>AUTO</span>}
-          <button onClick={(e) => { e.stopPropagation(); nextMode(); }} title={tr('Changer de mode')} style={{ padding: '5px 11px', borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', cursor: 'pointer', border: 'var(--o-bw,1px) solid ' + (off ? 'var(--o-bd2)' : 'rgba(var(--o-warn2-rgb),.3)'), background: off ? 'var(--o-s1)' : 'rgba(var(--o-warn2-rgb),.14)', color: off ? 'var(--o-text3)' : 'var(--o-warn2)' }}>{label}</button>
+        <span style={RM_ICO(marche ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche ? 'var(--o-bad)' : 'var(--o-text3)')}><Fi i={heating && marche ? 'flame' : 'thermometer-half'} size={17} /></span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {z.auto && <span style={{ padding: '4px 8px', borderRadius: 9, fontSize: 10, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>AUTO</span>}
+          {(modeMarche || off) && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
         </div>
       </div>
-      <div>
-        <div className="o-rmbig" style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1.1 }}>{target}<span style={{ fontSize: 19 }}>°</span></div>
-        <div style={RM_SUB}>{titre || zone.name}{z.current != null ? ' · ' + tr('actuel {n}°', { n: z.current }) : ''}</div>
+      <div style={{ marginTop: 14 }}>
+        <div style={RM_NAME}>{nom}</div>
+        <div style={{ ...RM_SUB, color: heating && marche ? 'var(--o-bad)' : 'var(--o-text3)' }}>{sub}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-          <button onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>−</button>
-          <button onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>+</button>
+          <button aria-label={tr('Baisser la consigne')} onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>−</button>
+          <button aria-label={tr('Monter la consigne')} onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>+</button>
         </div>
       </div>
     </div>
@@ -2620,39 +2774,46 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
   const call = (svc, data, ent) => commanderService(hass, ent || id, 'media_player', svc, { entity_id: ent || id, ...(data || {}) });
   const sub = [np.artist, np.album].filter(Boolean).join(' · ');
   const vol = np.hasVol ? np.vol : null;
-  // Filigrane appareil (comme la vue Objets) : Apple TV ou Echo selon le lecteur configuré
-  const mp = medPlayers().find(x => x.haid === id);
-  const artKey = (mp ? mp.id : '') + ' ' + id;
-  const art = /echo/i.test(artKey) ? DEVICE_ART.echo : /apple|atv|tv/i.test(artKey) ? DEVICE_ART.appletv : null;
   const mort = !S || !S[id] || S[id].state === 'unavailable';
+  const nom = label || a.friendly_name || id;
+  // Bascule d'alimentation en haut à droite (maquettes du 14/09) : lecture
+  // et pause vivent dans les boutons du bas, avec piste précédente / suivante.
+  const [ovOn, setOvOn] = useState(null);
+  useEffect(() => { setOvOn(null); }, [np.on]);
+  const marche = ovOn != null ? ovOn : !!np.on;
+  const basculer = () => { const nv = !marche; setOvOn(nv); call(nv ? 'turn_on' : 'turn_off'); };
+  const [ovVol, setOvVol] = useState(null);
+  useEffect(() => { setOvVol(null); }, [vol]);
+  const volAff = ovVol != null ? ovVol : vol;
+  const poserVol = (v) => { setOvVol(v); call('volume_set', { volume_level: v / 100 }, np.ctl); };
+  const texte = mort ? tr('Indisponible') : np.title ? (np.title + (sub ? ' · ' + sub : '')) : (marche ? (np.playing ? tr('Lecture') : tr('En pause')) : tr('Éteint'));
+  const btn = { ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px', fontSize: 15, fontWeight: 800 };
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + (label || (a && a.friendly_name) || id)} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, position: 'relative', overflow: 'hidden', cursor: onOpen ? 'pointer' : 'default',
-      // Teinte d'état : un lecteur EN LECTURE lave sa surface d'accent, comme la
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+      // Teinte d'état : un lecteur EN LECTURE lave sa surface de rose, comme la
       // lumière de son or — l'activité se voit avant de lire le titre.
       ...(np.playing && LAVIS ? {
-        background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-accent-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
-      } : null) }}>
-      {/* Pochette en fond : l'album occupe le flanc droit, fondu vers la
-        * surface côté texte — le filigrane appareil ne sert que sans pochette. */}
-      {np.art
-        ? <div aria-hidden="true" style={{ position: 'absolute', inset: 0, backgroundImage: `url("${np.art}")`, backgroundSize: 'cover', backgroundPosition: 'right center', opacity: 0.5, pointerEvents: 'none', WebkitMaskImage: 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,.45) 45%, #000 100%)', maskImage: 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,.45) 45%, #000 100%)' }} />
-        : art && <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 96, height: 96, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.13, pointerEvents: 'none' }} />}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(np.on ? 'rgba(167,139,250,.16)' : 'var(--o-s1)', np.on ? 'var(--o-purple)' : 'var(--o-text3)')}>
+        background: `linear-gradient(180deg,transparent 28%,${hx(RM_ROSE, lav(.14))}), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
+      } : null),
+      border: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={{ ...RM_ICO(marche ? hx(RM_ROSE, .18) : 'var(--o-s1)', marche ? RM_ROSE : 'var(--o-text3)'), overflow: 'hidden' }}>
           {/* `onError` n'est pas une interaction : c'est le repli quand la pochette
             * ne charge pas. La regle vise les clics poses sur un element inerte. */}
           {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-          {np.art ? <img src={np.art} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Fi i="tv-music" size={17} />}
+          {np.art ? <img src={np.art} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Fi i={a.device_class === 'tv' ? 'screen' : 'tv-music'} size={17} />}
         </span>
-        <button aria-label={np.playing ? tr('Mettre en pause') : tr('Lecture')} onClick={(e) => { e.stopPropagation(); call('media_play_pause', null, np.ctl); }} style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={np.playing ? 'pause' : 'play'} size={13} /></button>
+        {!mort && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
       </div>
-      <div style={{ position: 'relative' }}>
-        <div style={RM_NAME}>{label || a.friendly_name || id}</div>
-        <div style={RM_SUB}>{np.title ? (np.title + (sub ? ' · ' + sub : '')) : (np.on ? tr('En pause') : tr('Éteint'))}</div>
-        {vol != null && <>
-          <div style={{ height: 3, borderRadius: 4, background: 'var(--o-bd1)', marginTop: 10, overflow: 'hidden' }}><div style={{ height: '100%', width: vol + '%', background: 'var(--o-purple)', borderRadius: 4, transition: 'width .3s' }} /></div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 5 }}>Volume {vol}%</div>
-        </>}
+      <div>
+        <div style={RM_NAME}>{nom}</div>
+        <div style={{ ...RM_SUB, color: marche && np.title ? RM_ROSE : 'var(--o-text3)' }}>{texte}</div>
+        {vol != null && <RmJauge v={volAff} couleur={RM_ROSE} actif={!mort} label={tr('Volume') + ' ' + nom} onCommit={poserVol} />}
+        <div style={{ display: 'flex', gap: 8, marginTop: vol != null ? 9 : 11 }}>
+          <button aria-label={tr('Piste précédente')} title={tr('Piste précédente')} onClick={(e) => { e.stopPropagation(); call('media_previous_track', null, np.ctl); }} className="o-rmbtn" style={btn}>«</button>
+          <button aria-label={np.playing ? tr('Mettre en pause') : tr('Lecture')} title={np.playing ? tr('Mettre en pause') : tr('Lecture')} onClick={(e) => { e.stopPropagation(); call('media_play_pause', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i={np.playing ? 'pause' : 'play'} size={13} /></button>
+          <button aria-label={tr('Piste suivante')} title={tr('Piste suivante')} onClick={(e) => { e.stopPropagation(); call('media_next_track', null, np.ctl); }} className="o-rmbtn" style={btn}>»</button>
+        </div>
       </div>
     </div>
   );
@@ -3954,6 +4115,7 @@ function useDomainCards(hass) {
   const [sensPop, setSensPop] = useState(null);
   const [appPop, setAppPop] = useState(null);
   const [calPop, setCalPop] = useState(null);
+  const [camPop, setCamPop] = useState(null);
   // La fiche du domaine, depuis n'importe quelle carte — la compacte ouvre la
   // même popup que la riche. Tout ce qui n'a pas de fiche dédiée reçoit la
   // FICHE APPAREIL UNIVERSELLE : l'appareil entier, rendu par le registre.
@@ -3962,6 +4124,7 @@ function useDomainCards(hass) {
     // Le calendrier n'ouvre pas une fiche d'entite : un agenda n'a ni etat ni
     // commande, il a un mois.
     if (d === 'calendar') { setCalPop(id); return; }
+    if (d === 'camera') { setCamPop(id); return; }
     const st = S[id]; const a = (st && st.attributes) || {};
     if (d === 'light') {
       const modes = a.supported_color_modes || [];
@@ -3979,13 +4142,17 @@ function useDomainCards(hass) {
   };
   const card = (id, label = null, zone = null) => {
     const d = String(id).split('.')[0];
+    // Une prise qui n'est pas une lumiere n'est plus une carte lumiere : elle
+    // rejoint les autres appareils, au gabarit, avec sa puissance.
+    const lumiere = d === 'light' || (d === 'switch' && cvEstLumiere(id));
     return zone ? <RoomPilotCard zone={zone} hass={hass} onOpen={setPilotPop} titre={label} />
-      : (d === 'light' || d === 'switch') ? <RoomLightCard id={id} hass={hass} onOpen={setLightPop} label={label} onFiche={ouvrir} />
+      : lumiere ? <RoomLightCard id={id} hass={hass} onOpen={setLightPop} label={label} onFiche={ouvrir} />
         : d === 'cover' ? <RoomCoverCard id={id} hass={hass} onOpen={setCoverPop} titre={label} />
           : d === 'climate' ? <RoomClimateCard id={id} hass={hass} onOpen={setClimPop} label={label} />
             : d === 'media_player' ? <RoomMediaCard id={id} hass={hass} onOpen={setMediaPop} label={label} />
               : (d === 'vacuum' || d === 'lawn_mower') ? <RoomMachineCard id={id} hass={hass} onOpen={ouvrir} label={label} />
-                : <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} />;
+                : ROOM_GENERIQUES.indexOf(d) >= 0 ? <RoomGenericCard id={id} hass={hass} onOpen={ouvrir} label={label} />
+                  : <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} />;
   };
   const sheets = (
     <>
@@ -3997,9 +4164,10 @@ function useDomainCards(hass) {
       {sensPop && <SensorSheet id={sensPop} hass={hass} onClose={() => setSensPop(null)} />}
       {appPop && <FicheAppareil id={appPop} hass={hass} onClose={() => setAppPop(null)} />}
       {calPop && <FeuilleCalendrier hass={hass} onClose={() => setCalPop(null)} />}
+      {camPop && <CamSheet haid={camPop} nom={cvName(S[camPop], camPop)} hass={hass} onClose={() => setCamPop(null)} />}
     </>
   );
-  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); };
+  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); };
   return { card, sheets, fermer, ouvrir };
 }
 
