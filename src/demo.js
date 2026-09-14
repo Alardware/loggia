@@ -61,6 +61,19 @@ function etatsInitiaux() {
     'switch.camera_entree_pleurs': s('off', { friendly_name: 'Caméra entrée Détection des pleurs' }),
     'switch.camera_entree_prive': s('off', { friendly_name: 'Caméra entrée Mode privé' }),
     'switch.camera_entree_voyant': s('on', { friendly_name: 'Caméra entrée Voyant' }),
+    // Le distributeur de croquettes et une plante : ce que la vue Objets et
+    // leurs fiches ont a montrer.
+    'input_number.croquettes_reservoir': s(760, { friendly_name: 'Réservoir de croquettes', min: 0, max: 2000, step: 10, unit_of_measurement: 'g' }),
+    'number.distributeur_portion': s(45, { friendly_name: 'Portion du distributeur', min: 5, max: 100, step: 5, unit_of_measurement: 'g' }),
+    'sensor.croquettes_du_jour': s(90, { friendly_name: 'Croquettes distribuées aujourd’hui', unit_of_measurement: 'g' }),
+    'select.distributeur_feed': s('STOP', { friendly_name: 'Distribuer', options: ['STOP', 'START'] }),
+    'input_boolean.repas_matin': s('on', { friendly_name: 'Repas du matin' }),
+    'input_boolean.repas_soir': s('on', { friendly_name: 'Repas du soir' }),
+    'sensor.basilic_moisture': s(62, { friendly_name: 'Basilic humidité du sol', device_class: 'moisture', unit_of_measurement: '%' }),
+    'sensor.basilic_temperature': s(21.4, { friendly_name: 'Basilic température', device_class: 'temperature', unit_of_measurement: '°C' }),
+    'sensor.basilic_illuminance': s(1800, { friendly_name: 'Basilic lumière', device_class: 'illuminance', unit_of_measurement: 'lx' }),
+    'sensor.basilic_conductivity': s(640, { friendly_name: 'Basilic conductivité', unit_of_measurement: 'µS/cm' }),
+    'sensor.basilic_battery': s(81, { friendly_name: 'Basilic pile', device_class: 'battery', unit_of_measurement: '%' }),
     'sensor.production_solaire': s(1840, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.reseau': s(-460, { friendly_name: 'Réseau', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.surplus': s(460, { friendly_name: 'Surplus', unit_of_measurement: 'W', device_class: 'power' }),
@@ -154,6 +167,11 @@ function configDemo() {
       { name: 'Cinéma', sub: 'TV, volets', icon: 'film', haid: 'scene.cinema' },
       { name: 'Nuit', sub: 'Tout éteint, alarme', icon: 'moon', haid: 'scene.nuit' },
     ],
+    loggia_plants: [{ base: 'sensor.basilic', name: 'Basilic', room: 'Cuisine' }],
+    // Le distributeur a sa cle (alias `feeder` → `loggia_feeder`) : `loggia_entities`
+    // ne se lit qu'avec un serveur, que la demo n'a pas.
+    loggia_feeder: { haids: { reservoir: 'input_number.croquettes_reservoir', portionWeight: 'number.distributeur_portion', distribuees: 'sensor.croquettes_du_jour' },
+      meals: [{ time: '07:30', g: 45, auto: 'input_boolean.repas_matin' }, { time: '19:00', g: 45, auto: 'input_boolean.repas_soir' }] },
     loggia_onboarded: 1,
   };
 }
@@ -628,6 +646,8 @@ export function installerDemo() {
       if (service === 'turn_on') toucher(id, 'on');
       else if (service === 'turn_off') toucher(id, 'off');
       else if (service === 'toggle') toucher(id, states[id] && states[id].state === 'on' ? 'off' : 'on');
+    } else if (domaine === 'number' || domaine === 'input_number') {
+      if (service === 'set_value') toucher(id, data.value);
     } else if (domaine === 'cover') {
       if (service === 'open_cover') toucher(id, 'open', { current_position: 100 });
       else if (service === 'close_cover') toucher(id, 'closed', { current_position: 0 });

@@ -240,6 +240,9 @@ export const ENT_ALIAS = {
   switchLights: 'loggia_switchlights',
   energy: 'loggia_energyHaids',
   weather: 'loggia_weather',
+  // Le distributeur (14/09) : une cle a lui, comme les autres, sinon il
+  // n'existe que par `loggia_entities` — que la demo, sans serveur, n'a pas.
+  feeder: 'loggia_feeder',
 };
 
 export function loggiaEnt(domain, fallback = null) {

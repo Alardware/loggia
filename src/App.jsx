@@ -34,7 +34,7 @@ import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbo
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
-import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition } from './objets.js';
+import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 /* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
@@ -1980,7 +1980,7 @@ function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
 
 /* Distributeur de croquettes, même gabarit : patte en haut à gauche, RÉSERVOIR
  * en haut à droite, nom et prochaine ration sous l'icône, Distribuer en bas. */
-function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onOpen, extra = null, chip = false }) {
+function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onOpen, extra = null, chip = false }) {
   // Compacte 1×1 : gabarit CvCard dense — réservoir à droite, ration en mini.
   if (chip) {
     return (
@@ -2004,21 +2004,25 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onOpen, extra = null
       </div>
     );
   }
+  // Standard (maquettes du 14/09) : patte orange, RESERVOIR en repere, le bac
+  // et le dernier repas en sous-titre, Distribuer et Rempli au pied.
+  const orange = '#ff8a4c';
   return (
     <div className="o-rmcard" role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer' }}>
+      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', border: 'none',
+        ...(LAVIS ? { background: 'linear-gradient(180deg,transparent 28%,rgba(255,138,76,' + lav(.14) + ')), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))' } : null) }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO('rgba(255,206,115,.14)', '#ffce73')}><Fi i="paw" size={16} /></span>
-        {pct != null && <span style={{ fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: pct < 25 ? 'var(--o-bad)' : 'var(--o-text2)' }}>{pct}%</span>}
+        <span style={RM_ICO('rgba(255,138,76,.16)', orange)}><Fi i="paw" size={17} /></span>
+        {pct != null && <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: pct < 25 ? 'var(--o-bad)' : orange, marginTop: 4 }}>{pct} %</span>}
       </div>
-      <div>
+      <div style={{ marginTop: 14 }}>
         <div style={RM_NAME}>{nom}</div>
-        <div style={RM_SUB}>{sub || prochaine || '—'}</div>
-        {onFeed && (
+        <div style={{ ...RM_SUB, color: orange }}>{sub || prochaine || '—'}</div>
+        {(onFeed || onRempli) && (
           <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-            <button className="o-rmbtn" onClick={(e) => { e.stopPropagation(); onFeed(); }}
-              style={{ ...RM_BTN, background: 'var(--o-accent-fond)', border: '1px solid transparent', color: '#fff' }}>{tr('Distribuer une ration')}</button>
+            {onFeed && <button className="o-rmbtn" onClick={(e) => { e.stopPropagation(); onFeed(); }} style={RM_BTN}>{tr('Distribuer')}</button>}
+            {onRempli && <button className="o-rmbtn" onClick={(e) => { e.stopPropagation(); onRempli(); }} style={RM_BTN}>{tr('Rempli')}</button>}
           </div>
         )}
         {extra}
@@ -2029,7 +2033,7 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onOpen, extra = null
 
 /* Capteur de plante, même gabarit : pousse en haut à gauche, HUMIDITÉ en haut
  * à droite (à la couleur du verdict), nom et verdict sous l'icône. */
-function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, temp, img = null, onOpen, chip = false }) {
+function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, temp, img = null, onOpen, chip = false, rgb = 'var(--o-ok-rgb)' }) {
   // L'icône pousse du gabarit maison ; l'illustration de la plante vit en
   // FILIGRANE au fond de la carte, comme sur la vue Objets.
   const portrait = (taille) => (
@@ -2068,7 +2072,8 @@ function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, temp, im
   return (
     <div className="o-rmcard" role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', position: 'relative', overflow: 'hidden' }}>
+      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', position: 'relative', overflow: 'hidden', border: 'none',
+        ...(LAVIS ? { background: 'linear-gradient(180deg,transparent 28%,rgba(' + rgb + ',' + lav(.14) + ')), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))' } : null) }}>
       {filigrane}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         {portrait(34)}
@@ -4840,35 +4845,96 @@ const DEVICE_ART = {
   mower: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M24 172 L32 146 L40 172 Z' fill='%2334d399' opacity='0.7'/%3E%3Cpath d='M166 172 L174 144 L182 172 Z' fill='%2334d399' opacity='0.55'/%3E%3Crect x='36' y='74' width='128' height='62' rx='26' fill='%23232f42' stroke='%235a6b8f' stroke-width='6'/%3E%3Cellipse cx='86' cy='76' rx='46' ry='15' fill='%23324263' stroke='%23455878' stroke-width='3'/%3E%3Ccircle cx='64' cy='140' r='23' fill='%23101828' stroke='%235a6b8f' stroke-width='6'/%3E%3Ccircle cx='64' cy='140' r='9' fill='%232f3f5c'/%3E%3Ccircle cx='142' cy='146' r='16' fill='%23101828' stroke='%235a6b8f' stroke-width='5'/%3E%3Ccircle cx='142' cy='146' r='6' fill='%232f3f5c'/%3E%3Ccircle cx='148' cy='94' r='6' fill='%23a3e635'/%3E%3C/svg%3E",
   feeder: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='58' y='28' width='84' height='124' rx='19' fill='%23232f42' stroke='%235a6b8f' stroke-width='6'/%3E%3Crect x='72' y='44' width='56' height='58' rx='11' fill='%23101828' stroke='%23455878' stroke-width='3'/%3E%3Cg fill='%23ffce73'%3E%3Ccircle cx='84' cy='92' r='5.5'/%3E%3Ccircle cx='98' cy='88' r='5.5'/%3E%3Ccircle cx='113' cy='93' r='5.5'/%3E%3Ccircle cx='90' cy='79' r='5.5'/%3E%3Ccircle cx='106' cy='76' r='5.5'/%3E%3C/g%3E%3Ccircle cx='100' cy='124' r='8' fill='%232f3f5c' stroke='%235a6b8f' stroke-width='3.5'/%3E%3Cpath d='M124 150 q 34 0 34 16 q 0 12 -28 12 L 114 178 Z' fill='%232a3852' stroke='%235a6b8f' stroke-width='5'/%3E%3Cg fill='%23ffce73'%3E%3Ccircle cx='140' cy='163' r='4'/%3E%3Ccircle cx='150' cy='167' r='4'/%3E%3C/g%3E%3C/svg%3E",
 };
-function ObjSheet({ title, img, accent = 'var(--o-accent)', rows = [], actions = [], onClose }) {
+/* Les mots des verdicts d'une plante, et leur couleur — dits au rendu. */
+const MOTS_PLANTE = () => ({
+  hum: { sec: [tr('Sous le seuil : la plante a soif'), 'var(--o-warn2)'], ok: [tr('Humidité correcte'), 'var(--o-ok)'], humide: [tr('Sol très humide'), 'var(--o-cold)'] },
+  temp: { froid: [tr('Trop froid pour la plupart des plantes'), 'var(--o-cold)'], ok: [tr('Dans la plage tenable'), 'var(--o-ok)'], chaud: [tr('Trop chaud'), 'var(--o-warn2)'] },
+  lux: { faible: [tr('Sous le minimum : la plante s’étiole'), 'var(--o-warn2)'], ok: [tr('Lumière suffisante'), 'var(--o-ok)'], plein: [tr('Plein soleil'), 'var(--o-warn)'] },
+  cond: { peu: [tr('Peu d’engrais dans le pot'), 'var(--o-warn2)'], ok: [tr('Ce qui reste d’engrais dans le pot'), 'var(--o-ok)'], trop: [tr('Trop d’engrais'), 'var(--o-warn2)'] },
+  presse: { arroser: tr('à arroser'), lumiere: tr('lumière faible'), temperature: tr('température hors plage') },
+});
+/* Ce que la carte d'une plante dit sous son nom : ce qui presse, sinon le sol. */
+function verdictCartePlante(pl) {
+  const v = verdictsPlante(pl);
+  const M = MOTS_PLANTE();
+  const presse = v.presse.map(p => M.presse[p]).join(', ');
+  const texte = presse ? presse.charAt(0).toUpperCase() + presse.slice(1) : (v.hum ? M.hum[v.hum][0] : tr('Mesure absente'));
+  const couleur = v.presse.length ? 'var(--o-warn2)' : v.hum === 'humide' ? 'var(--o-cold)' : v.hum ? 'var(--o-ok)' : 'var(--o-text3)';
+  const rgb = v.presse.length ? '255,138,76' : v.hum === 'humide' ? '34,211,238' : 'var(--o-ok-rgb)';
+  return { texte, couleur, rgb };
+}
+
+/* Fiche d'une plante (maquettes du 14/09) : chaque mesure avec son mot, la
+ * pile du capteur. Pas de seuil d'alerte ni de rappel d'arrosage : rien ne
+ * les porte encore — la regle des consommables (§22) n'est pas ecrite, et on
+ * ne dessine pas une bascule qui ne ferait rien. */
+function FichePlante({ pl, onClose }) {
+  const v = verdictsPlante(pl);
+  const M = MOTS_PLANTE();
+  const mot = (cle) => (v[cle] && M[cle][v[cle]]) || [tr('Mesure absente'), 'var(--o-text3)'];
+  const presse = v.presse.map(p => M.presse[p]).join(', ');
+  const sous = [pl.room, pl.hum != null ? tr('Sol {n} %', { n: Math.round(pl.hum) }) : null, presse || null].filter(Boolean).join(' · ');
+  const fmt = (x, u, d = 0) => x == null ? '—' : (d ? Number(x).toFixed(d).replace('.', ',') : String(Math.round(x))) + u;
+  const ligne = (premiere, titre, cle, valeur) => { const [desc, couleur] = mot(cle); return <FicheRangee premiere={premiere} titre={titre} desc={desc} droite={<FicheValeur couleur={couleur}>{valeur}</FicheValeur>} />; };
+  const pile = pl.bat == null ? 'var(--o-text3)' : pl.bat > 40 ? 'var(--o-ok)' : pl.bat > 15 ? '#ffb347' : '#f87171';
   return (
     <BottomSheet onClose={onClose}>
-      {(close) => (
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-            {img && <img src={img} alt="" style={{ width: 46, height: 46, borderRadius: 14, objectFit: 'contain', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }} />}
-            <div style={{ fontSize: 15, fontWeight: 800 }}>{title}</div>
-          </div>
-          <div style={{ background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: 14, padding: '4px 14px', marginBottom: 14 }}>
-            {rows.map((r, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderBottom: i < rows.length - 1 ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none' }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{r[0]}</span>
-                <span style={{ fontSize: 13, fontWeight: 800, color: r[2] || 'var(--o-text)', textAlign: 'right' }}>{r[1]}</span>
-              </div>
-            ))}
-          </div>
-          {actions.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: actions.length > 1 ? '1fr 1fr' : '1fr', gap: 10 }}>
-              {actions.map((a, i) => (
-                <button key={i} onClick={() => { if (a.run) a.run(); close(); }} style={{ padding: '13px 10px', borderRadius: 14, border: a.primary ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontWeight: 800, fontSize: 13, background: a.primary ? accent : 'var(--o-s2)', color: a.primary ? '#fff' : 'var(--o-text1)' }}>{a.label}</button>
-              ))}
-            </div>
-          )}
+      {close => (<>
+        <FicheEntete titre={pl.name} sous={sous} close={close} />
+        <div style={{ marginTop: 4 }}>
+          {ligne(true, tr('Humidité du sol'), 'hum', fmt(pl.hum, ' %'))}
+          {ligne(false, tr('Température'), 'temp', fmt(pl.temp, ' °C', 1))}
+          {ligne(false, tr('Lumière reçue'), 'lux', fmt(pl.lux, ' lx'))}
+          {ligne(false, tr('Conductivité'), 'cond', fmt(pl.cond, ' µS/cm'))}
+          <FicheRangee titre={tr('Pile du capteur')} desc={tr('Ce qu’il reste dans le boîtier')} droite={<FicheValeur couleur={pile}>{fmt(pl.bat, ' %')}</FicheValeur>} />
         </div>
-      )}
+      </>)}
     </BottomSheet>
   );
 }
+
+/* Fiche du distributeur (maquettes du 14/09) : le bac et ses jours de
+ * reserve, le dernier repas, les repas du jour, la portion (le nombre que le
+ * distributeur expose), une ration hors programme, « bac rempli », et
+ * l'appareil entier. Pas de seuil d'alerte ni de rappel : la regle des
+ * consommables (§22) n'est pas ecrite — on ne dessine pas une bascule qui ne
+ * ferait rien. */
+function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, portion, feed, onRempli, ficheId, onClose }) {
+  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
+  const [ovPortion, setOvPortion] = useState(null);
+  const valeurPortion = portion ? portion.valeur : null;
+  useEffect(() => { setOvPortion(null); }, [valeurPortion]);
+  const pv = ovPortion != null ? ovPortion : valeurPortion;
+  const poserPortion = (v) => { if (!portion) return; const nv = Math.max(portion.min, Math.min(portion.max, v)); setOvPortion(nv); call('number', 'set_value', { entity_id: portion.id, value: nv }); };
+  const [appareil, setAppareil] = useState(false);
+  const sous = [tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
+  const orange = '#ff8a4c';
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (<>
+        <FicheEntete titre={nom} sous={sous} close={close} id={ficheId || null} />
+        <div style={{ marginTop: 4 }}>
+          <FicheRangee premiere titre={tr('Réservoir')} desc={jours == null ? tr('Ce qu’il reste dans le bac') : jours > 1 ? tr('Environ {n} jours de réserve', { n: jours }) : tr('Moins de deux jours de réserve')}
+            droite={<FicheValeur couleur={pct < 25 ? 'var(--o-bad)' : orange}>{pct} %</FicheValeur>} />
+          {dernier && <FicheRangee titre={tr('Dernier repas')} desc={tr('D’après le compteur du jour')} droite={<FicheValeur>{dernier}</FicheValeur>} />}
+          {ration && <FicheRangee titre={tr('Prochaine ration')} desc={tr('Programmée')} droite={<FicheValeur>{ration.time}</FicheValeur>} />}
+          <FicheRangee titre={tr('Repas par jour')} desc={repas.length ? tr('À {h}', { h: repas.map(m => m.time).join(', ') }) : tr('Aucun repas programmé')} droite={<FicheValeur>{repas.length}</FicheValeur>} />
+          {portion && <FicheRangee titre={tr('Taille de la portion')} desc={tr('Ce que la vis distribue à chaque repas.')}
+            droite={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FicheBouton title={tr('Moins')} onClick={() => poserPortion(pv - portion.pas)}>−</FicheBouton>
+              <FicheValeur couleur={orange}>{pv} g</FicheValeur>
+              <FicheBouton title={tr('Plus')} onClick={() => poserPortion(pv + portion.pas)}>+</FicheBouton>
+            </div>} />}
+          {feed && <FicheRangee titre={tr('Distribuer une portion')} desc={tr('Un repas en plus, hors programmation.')} droite={<FicheBouton icone="paw" onClick={feed}>{tr('Distribuer')}</FicheBouton>} />}
+          {onRempli && <FicheRangee titre={tr('Réservoir rempli')} desc={tr('Remet le niveau du bac à 100 %.')} droite={<FicheBouton icone="refresh" onClick={onRempli}>{tr('Rempli')}</FicheBouton>} />}
+          {ficheId && <FicheRangee titre={tr('L’appareil')} desc={tr('Tout ce que le distributeur expose.')} droite={<FicheBouton icone="apps" onClick={() => setAppareil(true)}>{tr('Ouvrir')}</FicheBouton>} />}
+        </div>
+        {appareil && <FicheAppareil id={ficheId} hass={hass} onClose={() => setAppareil(false)} />}
+      </>)}
+    </BottomSheet>
+  );
+}
+
 /* ════════════ VUE OBJETS — tous les appareils, aux cartes de la piece (maquette du 14/09) ════════════ */
 /* Une seule vue pour tout ce qui se pilote : les cartes de la Vue Piece, une
  * grille, des filtres. Elle remplace les vues Lumieres, Climat et Medias —
@@ -4947,9 +5013,12 @@ function objetsDeLaMaison(hass, ajoutes = []) {
   //    represente (sa lumiere, son volet, son lecteur) ne revient pas.
   const parAppareil = new Set();
   out.forEach(o => { const a = o.id ? meta(o.id).deviceId : null; if (a) parAppareil.add(a); });
+  // Les capteurs d'une plante sont a la plante : ils ne font pas une carte de plus.
+  const basesPlantes = plantsCfg().map(p => String(p.base));
+  const dUnePlante = (id) => basesPlantes.some(b => id === b || id.indexOf(b + '_') === 0);
   const candidats = [];
   Object.keys(S).forEach(id => {
-    if (pris.has(id)) return;
+    if (pris.has(id) || dUnePlante(id)) return;
     const d = cvDomain(id); const rang = OBJ_DOMAINES.indexOf(d); if (rang < 0) return;
     const m = meta(id); if (m.hidden || m.disabled || m.category) return;
     const dc = (S[id].attributes || {}).device_class || '';
@@ -5002,7 +5071,6 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false }) {
   const [sheet, setSheet] = useState(null);
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const num = (id, d = null) => { const e = id && S[id]; if (!e) return d; const n = parseFloat(e.state); return isNaN(n) ? d : n; };
-  const batCol = (b) => b == null ? 'var(--o-text3)' : b > 40 ? 'var(--o-ok)' : b > 15 ? '#ffb347' : '#f87171';
   // Le distributeur : reservoir, prochaine ration, et le « distribuer » de
   // l'APPAREIL (un select `feed` dont START lance une ration) — le script
   // maison ne reste qu'en repli.
@@ -5016,14 +5084,20 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false }) {
     return sc ? () => call('script', 'turn_on', { entity_id: sc }) : null;
   })();
   const croqFicheId = (loggiaEnt('feeder', null) || {}).haid || Object.keys(S).find(id => id.indexOf('number.') === 0 && /serving_size$/.test(id)) || null;
+  // Le bac en grammes, les repas du jour, les jours de reserve ; le dernier
+  // repas d'apres le compteur du jour ; la portion, un nombre de l'appareil.
+  const repas = croqMeals();
+  const jours = joursDeReserve(num(croq.reservoir, null), repas);
+  const dernier = (() => { const e = croq.distribuees && S[croq.distribuees]; return e && e.last_changed ? heureDe(e.last_changed) : null; })();
+  const portion = (() => { const id = croq.portionWeight; const e = id && S[id]; if (!e) return null; const a = e.attributes || {}; return { id, valeur: num(id, 0), min: Number(a.min) || 0, max: Number(a.max) || 100, pas: Number(a.step) || 1 }; })();
+  const onRempli = (croq.reservoir && String(croq.reservoir).indexOf('input_number.') === 0) ? () => call('input_number', 'set_value', { entity_id: croq.reservoir, value: croqMax(S) }) : null;
+  const sousDistributeur = [tr('Réservoir {p} %', { p: croqPct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
   // Les plantes : leurs capteurs, reconnus a leur classe, et leur verdict.
   const plante = (base) => { const p = plantsCfg().find(x => x.base === base); if (!p) return null; return { base, name: p.name || p.base, img: p.img || null, room: plantPiece(S, p.base, p.room), hum: num(plantCapteur(S, p.base, 'moisture')), cond: num(plantCapteur(S, p.base, 'conductivity', 'µS/cm')), lux: num(plantCapteur(S, p.base, 'illuminance', 'lx')), temp: num(plantCapteur(S, p.base, 'temperature')), bat: num(plantCapteur(S, p.base, 'battery', '%')) }; };
-  const plantVerdict = (hum) => hum == null ? { t: '—', c: 'var(--o-text3)' } : hum < 15 ? { t: tr('Sol sec · à arroser'), c: 'var(--o-warn2)' } : hum > 60 ? { t: tr('Sol très humide'), c: 'var(--o-cold)' } : { t: tr('Humidité correcte'), c: 'var(--o-ok)' };
-  const fmtV = (v, u) => v == null ? '—' : Math.round(v) + u;
   const carte = (o) => {
     if (o.type === 'zone') return dc.card(null, nomDe(o), o.zone);
-    if (o.type === 'feeder') return <RoomFeederCard nom={nomDe(o)} pct={croqPct} prochaine={ration ? (tr('Prochaine ration') + ' ' + ration.time) : tr('Programme terminé')} onFeed={feed} onOpen={() => setSheet({ type: 'croq' })} />;
-    if (o.type === 'plant') { const pl = plante(o.cle.slice(6)); if (!pl) return null; const v = plantVerdict(pl.hum); return <RoomPlantCard nom={nomDe(o)} sub={pl.room} hum={pl.hum} verdict={v.t} verdictCol={v.c} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setSheet({ type: 'plant', pl })} />; }
+    if (o.type === 'feeder') return <RoomFeederCard nom={nomDe(o)} pct={croqPct} sub={sousDistributeur} onFeed={feed} onRempli={onRempli} onOpen={() => setSheet({ type: 'croq' })} />;
+    if (o.type === 'plant') { const pl = plante(o.cle.slice(6)); if (!pl) return null; const v = verdictCartePlante(pl); return <RoomPlantCard nom={nomDe(o)} sub={pl.room} hum={pl.hum} verdict={v.texte} verdictCol={v.couleur} rgb={v.rgb} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setSheet({ type: 'plant', pl })} />; }
     return dc.card(o.id, ed.labelOf(o.cle) || null);
   };
   const titreFiltre = (OBJ_FILTRES().find(f => f.id === actuel) || {}).label || tr('Tous');
@@ -5071,15 +5145,9 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false }) {
         {addSheet && <RoomAddSheet hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter une entité')} listerTout
           domaines={[...OBJ_DOMAINES, 'input_boolean', 'number', 'select']} onClose={() => setAddSheet(false)} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={(parCle.get(cardEdit) && nomDe(parCle.get(cardEdit))) || cardEdit} origine={(parCle.get(cardEdit) || {}).nom || cardEdit} hass={hass} onClose={() => setCardEdit(null)} />}
-        {sheet && sheet.type === 'croq' && (croqFicheId
-          ? <FicheAppareil id={croqFicheId} hass={hass} onClose={() => setSheet(null)} />
-          : <ObjSheet title={tr('Distributeur de croquettes')} accent="#f59e0b"
-              rows={[[tr('Réservoir'), croqPct + ' %', croqPct < 25 ? '#f87171' : 'var(--o-text)'], [tr('Prochaine ration'), ration ? (ration.time + ' · ' + ration.g + ' g') : '—'], [tr('Distribué aujourd’hui'), (num(croq.distribuees, 0) || 0) + ' g']]}
-              actions={feed ? [{ label: tr('Distribuer 1 ration'), primary: true, run: feed }] : []}
-              onClose={() => setSheet(null)} />)}
-        {sheet && sheet.type === 'plant' && (() => { const pl = sheet.pl; const v = plantVerdict(pl.hum); return <ObjSheet title={pl.name} img={pl.img && PLANT_ART[pl.img]} accent="var(--o-ok)"
-          rows={[[tr('Humidité du sol'), pl.hum != null ? Math.round(pl.hum) + ' %' : '—', v.c], [tr('Verdict'), v.t, v.c], [tr('Éclairement'), fmtV(pl.lux, ' lx')], [tr('Conductivité (engrais)'), fmtV(pl.cond, ' µS/cm')], [tr('Température'), pl.temp != null ? pl.temp.toFixed(1) + ' °C' : '—'], [tr('Pile capteur'), pl.bat != null ? Math.round(pl.bat) + ' %' : '—', batCol(pl.bat)]]}
-          onClose={() => setSheet(null)} />; })()}
+        {sheet && sheet.type === 'croq' && <FicheDistributeur hass={hass} nom={tr('Distributeur de croquettes')} pct={croqPct} jours={jours} dernier={dernier} ration={ration} repas={repas} portion={portion}
+          feed={feed} onRempli={onRempli} ficheId={croqFicheId} onClose={() => setSheet(null)} />}
+        {sheet && sheet.type === 'plant' && <FichePlante pl={sheet.pl} onClose={() => setSheet(null)} />}
       </div>
     </main>
   );

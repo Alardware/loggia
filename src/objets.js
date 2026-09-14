@@ -137,3 +137,35 @@ export function identifiantEdition(cle) {
   const i = k.indexOf(':');
   return i >= 0 ? k.slice(i + 1) : k;
 }
+
+/**
+ * Les jours de reserve d'un distributeur : ce qu'il reste dans le bac, divise
+ * par ce que les repas du jour distribuent. Sans repas connu, on ne sait pas.
+ */
+export function joursDeReserve(grammes, repas) {
+  const parJour = (repas || []).reduce((s, m) => s + (Number(m && m.g) || 0), 0);
+  if (!(grammes > 0) || !(parJour > 0)) return null;
+  return Math.floor(grammes / parJour);
+}
+
+/**
+ * Ce qu'un capteur de plante dit, mesure par mesure — des reperes generaux,
+ * pas un avis de botaniste : le sol (sec / ok / humide), la temperature
+ * (froid / ok / chaud), la lumiere (faible / ok / plein), l'engrais (peu / ok
+ * / trop). `null` quand la mesure manque. `presse` liste ce qui presse.
+ */
+export function verdictsPlante({ hum = null, temp = null, lux = null, cond = null } = {}) {
+  const v = (x, bas, haut, mots) => (x == null || isNaN(x)) ? null : x < bas ? mots[0] : x > haut ? mots[2] : mots[1];
+  const out = {
+    hum: v(hum, 15, 70, ['sec', 'ok', 'humide']),
+    temp: v(temp, 10, 32, ['froid', 'ok', 'chaud']),
+    lux: v(lux, 500, 20000, ['faible', 'ok', 'plein']),
+    cond: v(cond, 350, 2000, ['peu', 'ok', 'trop']),
+  };
+  const presse = [];
+  if (out.hum === 'sec') presse.push('arroser');
+  if (out.lux === 'faible') presse.push('lumiere');
+  if (out.temp === 'froid' || out.temp === 'chaud') presse.push('temperature');
+  out.presse = presse;
+  return out;
+}

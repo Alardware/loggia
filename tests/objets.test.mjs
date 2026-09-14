@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, OBJ_ORDRE, domaineEdition, identifiantEdition } from '../src/objets.js';
+import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, OBJ_ORDRE, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from '../src/objets.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
@@ -154,4 +154,54 @@ test('l’identifiant d’edition : l’objet sans son domaine, la queue d’une
   assert.equal(identifiantEdition('zone:chambre'), 'chambre');
   assert.equal(identifiantEdition('plant:basilic'), 'basilic');
   assert.equal(identifiantEdition('sect:k1'), 'k1');
+});
+
+test('les jours de reserve : le bac divise par les repas du jour, sans repas on ne sait pas', () => {
+  assert.equal(joursDeReserve(760, [{ g: 45 }, { g: 45 }]), 8, '760 g pour 90 g par jour : 8 jours pleins');
+  assert.equal(joursDeReserve(89, [{ g: 45 }, { g: 45 }]), 0, 'moins d’un jour');
+  assert.equal(joursDeReserve(760, []), null, 'sans repas, pas de division par zero');
+  assert.equal(joursDeReserve(0, [{ g: 45 }]), null, 'bac vide : rien a compter');
+  assert.equal(joursDeReserve(300, [{ g: 'x' }, { g: 50 }]), 6, 'un repas sans poids ne compte pas');
+});
+
+test('les verdicts d’une plante : des reperes generaux, mesure par mesure', () => {
+  const v = verdictsPlante({ hum: 12, temp: 5, lux: 200, cond: 100 });
+  assert.deepEqual([v.hum, v.temp, v.lux, v.cond], ['sec', 'froid', 'faible', 'peu']);
+  assert.deepEqual(v.presse, ['arroser', 'lumiere', 'temperature'], 'ce qui presse, dans cet ordre');
+  const ok = verdictsPlante({ hum: 40, temp: 21.4, lux: 1800, cond: 640 });
+  assert.deepEqual([ok.hum, ok.temp, ok.lux, ok.cond, ok.presse], ['ok', 'ok', 'ok', 'ok', []]);
+  const trop = verdictsPlante({ hum: 75, temp: 35, lux: 30000, cond: 2500 });
+  assert.deepEqual([trop.hum, trop.temp, trop.lux, trop.cond], ['humide', 'chaud', 'plein', 'trop']);
+  assert.deepEqual(trop.presse, ['temperature'], 'un sol tres humide ne presse pas, la chaleur si');
+  const vide = verdictsPlante({});
+  assert.deepEqual([vide.hum, vide.temp, vide.lux, vide.cond, vide.presse], [null, null, null, null, []], 'sans mesure, pas de verdict');
+  assert.equal(verdictsPlante({ hum: 15 }).hum, 'ok', 'la borne est comprise');
+  assert.equal(verdictsPlante({ hum: 70 }).hum, 'ok', 'la borne haute aussi : 62 % est un sol correct, pas trempe');
+});
+
+test('la fiche du distributeur et la fiche de la plante : le squelette commun, et rien d’invente', () => {
+  const d = src.indexOf('function FicheDistributeur(');
+  const fd = src.slice(d, src.indexOf(String.fromCharCode(10) + '}', d));
+  assert.ok(fd.includes('<FicheEntete ') && fd.includes("<FicheRangee premiere titre={tr('Réservoir')}"), 'la fiche commune, le bac en premier');
+  ['Dernier repas', 'Repas par jour', 'Taille de la portion', 'Distribuer une portion', 'Réservoir rempli'].forEach(k => assert.ok(fd.includes("tr('" + k + "')"), k));
+  assert.ok(fd.includes("call('number', 'set_value', { entity_id: portion.id, value: nv })"), 'la portion est le nombre de l’appareil');
+  assert.ok(!fd.includes('Seuil d’alerte') && !fd.includes('Rappel de remplissage') && !fd.includes('repas est sauté'), 'pas de bascule sans regle derriere');
+  const p = src.indexOf('function FichePlante(');
+  const fp = src.slice(p, src.indexOf(String.fromCharCode(10) + '}', p));
+  assert.ok(fp.includes('verdictsPlante(pl)') && fp.includes("tr('Lumière reçue')") && fp.includes("tr('Pile du capteur')"), 'chaque mesure avec son mot');
+  assert.ok(!fp.includes('Seuil d’alerte') && !fp.includes('Rappel d’arrosage') && !fp.includes('Marquer comme arrosé'), 'pas d’arrosage invente');
+  assert.ok(!src.includes('function ObjSheet('), 'l’ancienne feuille generique a disparu');
+});
+
+test('les cartes du distributeur et de la plante : la maquette, au gabarit', () => {
+  const f = src.indexOf('function RoomFeederCard(');
+  const carte = src.slice(f, src.indexOf('function RoomPlantCard(', f));
+  assert.ok(carte.includes("{tr('Distribuer')}") && carte.includes("{tr('Rempli')}"), 'Distribuer et Rempli au pied');
+  assert.ok(carte.includes("RM_ICO('rgba(255,138,76,.16)', orange)"), 'la patte orange');
+  assert.ok(!carte.includes("style={{ ...RM_BTN, background: 'var(--o-accent-fond)'"), 'plus le bouton plein d’avant');
+  const v = src.indexOf('function ObjetsView(');
+  const vue = src.slice(v, src.indexOf(String.fromCharCode(10) + '}', v));
+  assert.ok(vue.includes('sub={sousDistributeur}') && vue.includes('onRempli={onRempli}'), 'le bac et le dernier repas en sous-titre, Rempli branche');
+  assert.ok(vue.includes('rgb={v.rgb}') && vue.includes('verdictCartePlante(pl)'), 'la plante prend la couleur de son verdict');
+  assert.ok(vue.includes("String(croq.reservoir).indexOf('input_number.') === 0"), 'Rempli n’existe que si le bac est un input_number');
 });
