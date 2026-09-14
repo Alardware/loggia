@@ -439,7 +439,7 @@ test('les boutons de la carte enceinte sont des icônes, pas des « » en texte'
   const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
   const d = app.indexOf('function RoomMediaCard(');
   const carte = app.slice(d, app.indexOf(String.fromCharCode(10) + 'function ', d + 1));
-  assert.ok(carte.includes('<Fi i="angle-double-left" size={18} />') && carte.includes('<Fi i="angle-double-right" size={18} />'), 'chevrons doubles de 18 px');
-  assert.ok(carte.includes("<Fi i={np.playing ? 'pause' : 'play'} size={16} />"), 'lecture / pause à 16 px');
+  assert.ok(carte.includes('<Fi i="angle-double-left" size={15} />') && carte.includes('<Fi i="angle-double-right" size={15} />'), 'chevrons doubles de 15 px — 18 était trop gros');
+  assert.ok(carte.includes("<Fi i={np.playing ? 'pause' : 'play'} size={14} />"), 'lecture / pause à 14 px');
   assert.ok(!carte.includes('>«<') && !carte.includes('>»<'), 'plus de guillemets en guise de flèches');
 });
