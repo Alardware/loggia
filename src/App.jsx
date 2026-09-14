@@ -2910,8 +2910,10 @@ function RangeeMinuteur({ hass, id }) {
   );
 }
 
-// Fiche volet (maquettes du 14/09) : position, trois puces, la regle du
-// planning branchee sur Regles › Volets, et le mode automatique historique.
+// Fiche volet (maquettes du 14/09) : position, trois puces, et la regle du
+// planning branchee sur Regles › Volets. L'ancienne grille « MODE AUTOMATIQUE »
+// (les options de l'input_select) disait la meme chose que la bascule, en trois
+// boutons : retiree le 14/09.
 function RoomCoverSheet({ id, hass, onClose }) {
   const S = (hass && hass.states) || null;
   const st = S ? S[id] : null;
@@ -2944,11 +2946,6 @@ function RoomCoverSheet({ id, hass, onClose }) {
         : { planning: { volets: { ...(plan.volets || {}), [id]: { exclu: true } } } };
     hass.callWS({ type: 'loggia/volets/config', patch }).catch(() => {});
   };
-  // Pas d'entite de mode : pas de mode. Supposer « Manuel » — un mot francais,
-  // compare plus loin par `schedActive` — declarait le planning inactif en
-  // permanence chez qui n'a pas cette entite.
-  const mode = (S && S[voletMode()] && S[voletMode()].state) || null;
-  const modes = voletModes(S);
   const chips = [{ id: 'ferme', nom: tr('Fermé') }, { id: 'mi', nom: tr('Mi-course') }, { id: 'ouvert', nom: tr('Ouvert') }];
   const chip = pos === 0 ? 'ferme' : pos === 100 ? 'ouvert' : pos === 50 ? 'mi' : null;
   return (
@@ -2968,24 +2965,6 @@ function RoomCoverSheet({ id, hass, onClose }) {
           <FicheRangee titre={tr('Stop')} desc={tr('Arrête le moteur là où il est')} droite={<FicheBouton icone="square" onClick={() => cov('stop_cover')}>{tr('Stop')}</FicheBouton>} />
           <RangeeDernier st={st} />
         </div>
-        {modes.length > 0 && (<>
-          <FicheLibelle>{tr('MODE AUTOMATIQUE')}</FicheLibelle>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: 8 }}>
-            {modes.map(m => {
-              const on = mode === m.id;
-              return (
-                <button key={m.id} className="o-volet-mode" onClick={() => call('input_select', 'select_option', { entity_id: voletMode(), option: m.id })} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 8, padding: '13px 8px', borderRadius: 14, cursor: 'pointer', textAlign: 'center', border: '1px solid ' + (on ? hx(m.color, .4) : 'var(--o-bd3)'), background: on ? hx(m.color, .13) : 'var(--o-s2)', color: on ? m.color : 'var(--o-text1)' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Ico name={m.icon} size={17} />
-                    {on && <Fi i="check" size={13} />}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.15 }}>{m.label}</span>
-                  <span style={{ fontSize: 11, opacity: .75, fontWeight: 600, lineHeight: 1.3 }}>{m.desc}</span>
-                </button>
-              );
-            })}
-          </div>
-        </>)}
       </>)}
     </BottomSheet>
   );
@@ -7515,25 +7494,15 @@ function ClimatView({ hass, edit = false, onEnt }) {
 /* Les modes d'automatisme des volets sont LUS SUR L'ENTITE, comme ceux du
  * chauffage. Ils etaient ecrits en dur — « Manuel », « Auto lever/coucher »,
  * « Fermeture nuit » — soit les options de l'`input_select` d'une installation.
- *
- * L'icone et la description restent devinees sur le nom : elles n'ont aucune
- * incidence sur la commande, qui renvoie l'option telle quelle. Un mode non
- * reconnu s'affiche avec une icone neutre et sans sous-titre. */
-const VOLET_ALLURE = [
-  { motif: /manuel|manual|hand/i, icon: 'hand', color: 'var(--o-text2)', desc: 'Pilotage à la main' },
-  { motif: /lever|coucher|soleil|sun|sonne/i, icon: 'sun', color: '#ffce73', desc: 'Suit lever / coucher' },
-  { motif: /nuit|night|nacht|noche/i, icon: 'moon', color: 'var(--o-purple)', desc: 'Fermeture au crépuscule' },
-];
-
+ * Ils ne servent plus qu'a la barre de la vue Volets, tels quels : la fiche
+ * d'un volet porte la bascule « Auto lever / coucher » de la regle, qui dit la
+ * meme chose sans grille de trois boutons. */
 function voletModes(S) {
   const id = voletMode();
   const st = S && id && S[id];
   const opts = st && st.attributes && st.attributes.options;
   if (!Array.isArray(opts)) return [];
-  return opts.filter(o => typeof o === 'string' && o).map(o => {
-    const a = VOLET_ALLURE.find(x => x.motif.test(o));
-    return { id: o, label: o, desc: a ? tr(a.desc) : '', icon: a ? a.icon : 'sliders', color: a ? a.color : 'var(--o-text2)' };
-  });
+  return opts.filter(o => typeof o === 'string' && o).map(o => ({ id: o, label: o }));
 }
 const voletKeys = () => [...voletCovers(null).map(c => c.haid), voletMode(), ...voletDays().map(d => d.haid)].filter(Boolean);
 // Volets pilotés : configuration de l'utilisateur, sinon tout le domaine `cover`
@@ -12830,7 +12799,7 @@ export default function App() {
   // Retour haptique léger au tap sur un élément interactif (Android ; iOS web n'expose pas vibrate → seul le rebond visuel s'affiche).
   // Vibre au pointerup si le doigt n'a presque pas bougé — poser le doigt pour scroller ne doit PAS vibrer.
   useEffect(() => {
-    const sel = 'button,.o-nav-item,.o-piece,.o-light-card,.o-scene-room,.o-volet-mode,[role="switch"],[role="button"]';
+    const sel = 'button,.o-nav-item,.o-piece,.o-light-card,.o-scene-room,[role="switch"],[role="button"]';
     let start = null;
     const onDown = (e) => { try { start = (e.target && e.target.closest && e.target.closest(sel)) ? { x: e.clientX, y: e.clientY } : null; } catch { start = null; } };
     const onUp = (e) => { try { if (start && navigator.vibrate && Math.abs(e.clientX - start.x) < 10 && Math.abs(e.clientY - start.y) < 10) navigator.vibrate(8); } catch {} start = null; };

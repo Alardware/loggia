@@ -19,7 +19,7 @@ body { overscroll-behavior: none; min-height: 100vh; min-height: 100dvh; }
 button { color: inherit; font-family: inherit; }
 
 /* Retour tactile : léger enfoncement au press + rebond (spring) au relâcher. transform = GPU. */
-button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .o-volet-mode, .grid-sec-tiles > div, .grid-sys-metrics > div, .grid-par-pal button, [role="switch"], [role="button"] {
+button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .grid-sec-tiles > div, .grid-sys-metrics > div, .grid-par-pal button, [role="switch"], [role="button"] {
   transition: transform .16s cubic-bezier(.34, 1.45, .56, 1);
   -webkit-tap-highlight-color: transparent;
   /* Le navigateur n'attend plus de savoir si le doigt allait faire un double-tap
@@ -31,12 +31,12 @@ button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .o-volet-mode, .gri
    * interface fermee a qui voit mal. */
   touch-action: manipulation;
 }
-button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-scene-room:active, .o-volet-mode:active, .grid-sec-tiles > div:active, .grid-sys-metrics > div:active, .grid-par-pal button:active, [role="switch"]:active, [role="button"]:active {
+button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-scene-room:active, .grid-sec-tiles > div:active, .grid-sys-metrics > div:active, .grid-par-pal button:active, [role="switch"]:active, [role="button"]:active {
   transform: scale(.955);
 }
 @media (prefers-reduced-motion: reduce) {
-  button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .o-volet-mode, .grid-sec-tiles > div, .grid-sys-metrics > div, .grid-par-pal button, [role="switch"], [role="button"] { transition: none; }
-  button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-scene-room:active, .o-volet-mode:active, .grid-sec-tiles > div:active, .grid-sys-metrics > div:active, .grid-par-pal button:active, [role="switch"]:active, [role="button"]:active { transform: none; }
+  button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .grid-sec-tiles > div, .grid-sys-metrics > div, .grid-par-pal button, [role="switch"], [role="button"] { transition: none; }
+  button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-scene-room:active, .grid-sec-tiles > div:active, .grid-sys-metrics > div:active, .grid-par-pal button:active, [role="switch"]:active, [role="button"]:active { transform: none; }
 }
 
 /* Cible tactile des interrupteurs : le visuel fait 46x26, la zone cliquable est étendue à ~44px de haut. */
@@ -471,10 +471,6 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .o-clim-graph { display: none !important; }
   .grid-gauges { grid-template-columns: 1fr 1fr !important; gap: 10px !important; margin-top: 14px !important; }
   .grid-gauges > div { background: var(--o-surfA) !important; border: var(--o-bw, 1px) solid var(--o-bd2) !important; box-shadow: var(--o-shadow, none) !important; }
-  .o-volet-modes { flex-direction: row !important; }
-  .o-volet-mode { flex: 1 !important; flex-direction: column !important; gap: 6px !important; padding: 12px 6px !important; text-align: center !important; }
-  .o-volet-mode-txt { flex: 0 1 auto !important; text-align: center !important; }
-  .o-volet-mode-desc { display: none !important; }
   .grid-etiles { gap: 10px !important; }
   .grid-edemain { gap: 8px !important; }
   .grid-edemain > div { padding: 12px 4px !important; }

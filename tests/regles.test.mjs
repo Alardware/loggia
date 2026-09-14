@@ -403,3 +403,17 @@ test('sur un danger, la maison réagit — et cela se règle à côté du télé
   // Une configuration écrite avant les actions garde ses défauts.
   assert.ok(par.includes("actions: { ...d.actions, ...(c.actions || {}), vanne: { ...d.actions.vanne, ...((c.actions || {}).vanne || {}) } }"));
 });
+
+test('la fiche volet n’a plus la grille de modes : la bascule suffit', () => {
+  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const debut = app.indexOf('function RoomCoverSheet(');
+  const fin = app.indexOf('function RoomClimateSheet(', debut);
+  assert.ok(debut > 0 && fin > debut, 'la fiche volet précède la fiche thermostat');
+  const fiche = app.slice(debut, fin);
+  assert.ok(fiche.includes("tr('Auto lever / coucher')"), 'la bascule du planning reste');
+  assert.ok(!fiche.includes('voletModes('), 'plus de lecture des modes de l’input_select');
+  assert.ok(!fiche.includes('select_option'), 'plus de commande de mode');
+  assert.ok(!app.includes("tr('MODE AUTOMATIQUE')"), 'le libellé a disparu');
+  assert.ok(!app.includes('VOLET_ALLURE'), 'la table des allures aussi');
+  assert.ok(!app.includes('o-volet-mode'), 'et la classe des boutons');
+});

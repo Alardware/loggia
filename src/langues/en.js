@@ -122,7 +122,6 @@ export default {
   'Mode volets': 'Blind mode',
   'Auto lever/coucher': 'Auto sunrise/sunset',
   'Auto soleil': 'Auto sun',
-  'Suit lever / coucher': 'Follows sunrise / sunset',
   '{n} ALLUMÉES': '{n} ON',
   '{n} ALLUMÉE': '{n} ON',
   'Consommation': 'Consumption',
@@ -482,7 +481,6 @@ export default {
   'Détecter automatiquement': 'Detect automatically',
   'Lancer sur': 'Play on',
   'Télécommande': 'Remote',
-  'Pilotage à la main': 'Manual control',
   'Volet par volet': 'Blind by blind',
   'Afficher / masquer le menu': 'Show / hide the menu',
   'Pivoter la carte d’un quart de tour': 'Rotate the card a quarter turn',
@@ -981,7 +979,6 @@ export default {
   'Ne suit ni le lever ni le coucher du soleil.': 'Follows neither sunrise nor sunset.',
   'Course mesurée par le moteur': 'Travel measured by the motor',
   'Arrête le moteur là où il est': 'Stops the motor where it is',
-  'MODE AUTOMATIQUE': 'AUTOMATIC MODE',
   'CONSIGNE': 'SETPOINT',
   'Mesurée {t} dans la pièce': 'Measured {t} in the room',
   'Coupe la zone sans toucher à la consigne': 'Cuts the zone without touching the setpoint',
@@ -1143,7 +1140,6 @@ export default {
     'Full HAOS Nova reboot · 2 to 3 min offline',
   'Arrêt complet · rallumage physique requis':
     'Full shutdown · physical power-on required',
-  'Fermeture au crépuscule': 'Close at dusk',
   "La scène s'applique au groupe de la pièce sélectionnée":
     'The scene applies to the group of the selected room',
   'La télécommande n’apparaît que pour les téléviseurs. Choisis-en un pour la retrouver.':
