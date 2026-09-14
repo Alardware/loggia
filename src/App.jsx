@@ -4927,10 +4927,12 @@ function ObjetsView({ hass, onNav, filtre = null }) {
             </div>
           ))}
         </div>
-        {/* Les filtres : des puces a l'arrondi 9 (pas de pilules), seulement celles qui ont quelque chose a montrer. */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {/* Les filtres : des puces a l'arrondi 9 (pas de pilules), seulement celles
+          * qui ont quelque chose a montrer — sur UNE ligne qui defile, la barre fine
+          * de .o-favrow (retour user du 14/09 : « mets-moi ca dans une scrollbar »). */}
+        <div className="o-favrow" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}>
           {filtres.map(f => { const on = f.id === actuel; return (
-            <button key={f.id} onClick={() => setChoix(f.id)} aria-pressed={on} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.45)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
+            <button key={f.id} onClick={() => setChoix(f.id)} aria-pressed={on} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.45)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
               {f.prise ? <PlugIcon size={13} /> : f.ico ? <Ico name={f.ico} size={14} /> : <Fi i={f.fi} size={13} />}{f.label}
             </button>); })}
         </div>

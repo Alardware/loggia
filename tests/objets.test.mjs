@@ -109,6 +109,8 @@ test('la vue Objets dessine les cartes de la piece, une par appareil, derriere d
   assert.ok(vue.includes('objetsDeLaMaison(hass)') && vue.includes('return dc.card(o.id);'), 'les cartes de la piece');
   assert.ok(vue.includes('dc.card(null, o.nom, o.zone)'), 'une zone fil pilote a sa carte');
   assert.ok(vue.includes('borderRadius: 9') && !vue.includes('borderRadius: 999'), 'des puces, pas des pilules');
+  assert.ok(vue.includes(`className="o-favrow" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}`), 'une seule ligne qui defile, pas de retour a la ligne');
+  assert.ok(vue.includes(`flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px'`), 'une puce ne se casse ni ne se tasse');
   assert.ok(vue.includes('{dc.sheets}'), 'les fiches montent');
   assert.ok(!vue.includes('useLayoutEditor('), 'plus d’agencement libre');
   const f = src.indexOf('const OBJ_FILTRES = () => [');
