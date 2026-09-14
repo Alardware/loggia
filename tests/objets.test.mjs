@@ -23,7 +23,7 @@ test('chaque domaine trouve son filtre ; une prise declaree lumiere est une lumi
   assert.deepEqual(f({ domaine: 'binary_sensor' }), ['capteurs']);
   assert.deepEqual(f({ domaine: 'sensor' }), ['capteurs']);
   assert.deepEqual(f({ domaine: 'camera' }), ['cameras']);
-  assert.deepEqual(f({ domaine: 'lock' }), ['securite']);
+  assert.deepEqual(f({ domaine: 'lock' }), [], 'une serrure ne vit que sous Tous : pas de puce Securite, la maquette n’en a pas');
   assert.deepEqual(f({ domaine: 'vacuum' }), ['menager']);
   assert.deepEqual(f({ domaine: 'feeder', type: 'feeder' }), ['menager']);
   assert.deepEqual(f({ domaine: 'lawn_mower' }), ['jardin']);
@@ -116,7 +116,7 @@ test('la vue Objets dessine les cartes de la piece, une par appareil, derriere d
   const f = src.indexOf('const OBJ_FILTRES = () => [');
   const filtres = src.slice(f, src.indexOf('];', f));
   const ids = [...filtres.matchAll(/id: '([a-z]+)'/g)].map(m => m[1]);
-  assert.deepEqual(ids, ['tous', 'favoris', 'lumieres', 'volets', 'chauffage', 'prises', 'multimedia', 'capteurs', 'cameras', 'securite', 'menager', 'jardin', 'plantes']);
+  assert.deepEqual(ids, ['tous', 'favoris', 'lumieres', 'volets', 'chauffage', 'prises', 'multimedia', 'capteurs', 'cameras', 'menager', 'jardin', 'plantes']);
   const m = src.indexOf('function objetsDeLaMaison(');
   const maison = src.slice(m, src.indexOf(String.fromCharCode(10) + '}', m));
   assert.ok(maison.includes('parAppareil') && maison.includes('ROOM_BIN_CLASSES') && maison.includes('ROOM_SENSOR_CLASSES'), 'les memes regles que la piece : une carte par appareil, capteurs choisis');

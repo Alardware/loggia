@@ -17,8 +17,10 @@ dessins différents.
 
 **Une seule vue Objets, aux cartes de la pièce, avec des filtres.** Tous,
 Favoris (les épingles), Lumières, Volets, Chauffage, Prises, Multimédia,
-Capteurs, Caméras, Sécurité, Ménager, Jardin, Plantes — seules les puces qui
-ont quelque chose à montrer s'affichent. En tête : le nombre d'appareils,
+Capteurs, Caméras, Ménager, Jardin, Plantes — seules les puces qui ont
+quelque chose à montrer s'affichent. Pas de puce « Sécurité » : la maquette
+n'en a pas ; serrures, sirènes et alarme ne vivent que sous « Tous »
+(v3.19.2). En tête : le nombre d'appareils,
 de pièces et d'actifs, les scènes, les entités absentes.
 
 Les appareils viennent des **mêmes sources que la Vue Pièce** : zones de

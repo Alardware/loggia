@@ -7,13 +7,14 @@
  * dashboard lui passe des objets deja lus, les tests aussi. */
 
 /** Les filtres, dans l'ordre des puces — « Tous » et « Favoris » a part. */
-export const OBJ_ORDRE = ['lumieres', 'volets', 'chauffage', 'prises', 'multimedia', 'capteurs', 'cameras', 'securite', 'menager', 'jardin', 'plantes'];
+export const OBJ_ORDRE = ['lumieres', 'volets', 'chauffage', 'prises', 'multimedia', 'capteurs', 'cameras', 'menager', 'jardin', 'plantes'];
 
 /**
  * Les filtres d'un objet. Le premier est son filtre principal, tire du
  * domaine ; « jardin » s'ajoute a ce qui vit dehors, « favoris » a ce qui est
  * epingle. Un domaine que l'on ne sait pas ranger n'a aucun filtre : il ne
- * s'affiche que sous « Tous ».
+ * s'affiche que sous « Tous » — les serrures, sirenes et alarmes aussi : la
+ * maquette n'a pas de puce « Securite » (retour user du 14/09).
  */
 export function filtresObjet({ domaine, type = 'entite', estLumiere = false, dehors = false, epingle = false }) {
   const dom = type === 'zone' ? 'climate' : type === 'feeder' ? 'feeder' : type === 'plant' ? 'plant' : String(domaine || '');
@@ -24,11 +25,10 @@ export function filtresObjet({ domaine, type = 'entite', estLumiere = false, deh
           : dom === 'media_player' ? 'multimedia'
             : dom === 'binary_sensor' || dom === 'sensor' ? 'capteurs'
               : dom === 'camera' ? 'cameras'
-                : dom === 'lock' || dom === 'siren' || dom === 'alarm_control_panel' ? 'securite'
-                  : dom === 'vacuum' || dom === 'fan' || dom === 'humidifier' || dom === 'valve' || dom === 'feeder' ? 'menager'
-                    : dom === 'lawn_mower' ? 'jardin'
-                      : dom === 'plant' ? 'plantes'
-                        : null;
+                : dom === 'vacuum' || dom === 'fan' || dom === 'humidifier' || dom === 'valve' || dom === 'feeder' ? 'menager'
+                  : dom === 'lawn_mower' ? 'jardin'
+                    : dom === 'plant' ? 'plantes'
+                      : null;
   const f = principal ? [principal] : [];
   if (dehors && principal !== 'jardin') f.push('jardin');
   if (epingle) f.push('favoris');

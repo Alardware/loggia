@@ -4786,7 +4786,6 @@ const OBJ_FILTRES = () => [
   { id: 'multimedia', label: tr('Multimédia'), fi: 'tv-music' },
   { id: 'capteurs', label: tr('Capteurs'), fi: 'sensor' },
   { id: 'cameras', label: tr('Caméras'), fi: 'camera' },
-  { id: 'securite', label: tr('Sécurité'), fi: 'lock' },
   { id: 'menager', label: tr('Ménager'), ico: 'dishwasher' },
   { id: 'jardin', label: tr('Jardin'), fi: 'leaf' },
   { id: 'plantes', label: tr('Plantes'), fi: 'seedling' },
