@@ -293,6 +293,8 @@ function voletsDemo(states) {
     soleil: { azimut: at.azimuth != null ? at.azimuth : 214, elevation: at.elevation != null ? at.elevation : 34 },
     abaisses: VOL_CFG.soleil.actif ? ['cover.salon'] : [],
     a_l_abri: false,
+    // Les prochains rendez-vous du planning : demain matin, ce soir.
+    prochains: { ouverture: { 15: new Date(new Date().setHours(31, 48, 0, 0)).toISOString() }, fermeture: { '-20': new Date(new Date().setHours(20, 24, 0, 0)).toISOString() } },
     journal: [
       { module: 'volets', regle: 'soleil', quoi: 'proteger', cibles: ['cover.salon'], n: 1, motif: 'soleil à 225°', detail: '', simule: false, ts: Date.now() / 1000 - 900 },
       { module: 'volets', regle: 'planning', quoi: 'ouvrir', cibles: ['cover.salon', 'cover.cuisine', 'cover.chambre'], n: 3, motif: 'lever +15 min', detail: '', simule: false, ts: Date.now() / 1000 - 27000 },

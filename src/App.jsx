@@ -27,7 +27,7 @@ import { isViewAvailable, viewReason } from './views.js';
 import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, ViewEditBar, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
-  Gauge, BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain
+  Gauge, BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur
 } from './ui.jsx';
 import { WX_BG, WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook } from './historique.jsx';
@@ -2155,10 +2155,9 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
 // contexte que le moteur attend, partout ou une vue a deja `hass` sous la main.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Thermostat compact (maquette) : badge de mode, grande consigne, actuel, − / +.
-// Bornes de REPLI seulement : une entite qui publie les siennes fait foi, et
-// c'est `planAction` qui les applique. Elles ne servent qu'a dessiner une jauge
-// avant meme d'avoir lu l'entite.
+// Thermostat (maquettes du 14/09) : nom sous l'icone, etat en sous-titre, − / +.
+// Bornes de REPLI du cadran du radiateur fil pilote : une entite qui publie
+// les siennes fait foi.
 const RM_TMIN = 5, RM_TMAX = 30;
 function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
@@ -2820,6 +2819,99 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
 }
 
 // Détail volet : visuel + rail + boutons, mode auto global, et programmation nocturne (chambre uniquement).
+/* ── Le squelette des fiches (maquettes du 14/09) ─────────────────────────
+ *
+ * Un titre en italique, une ligne d'etat dessous, la croix a droite ; puis
+ * une commande principale, des puces, et des RANGEES : un titre, une phrase
+ * qui dit ce que ca fait, et a droite la valeur, la bascule ou le bouton. */
+const FICHE_X = <svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>;
+function FicheEntete({ titre, sous, close, id = null, droite = null }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 24, fontWeight: 500, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
+        {sous ? <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sous}</div> : null}
+      </div>
+      {droite}
+      {id && <BoutonEpingle id={id} />}
+      <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{FICHE_X}</button>
+    </div>
+  );
+}
+const FicheLibelle = ({ children, droite = null }) => (
+  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '20px 0 8px' }}>
+    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{children}</span>
+    {droite}
+  </div>
+);
+function FicheRangee({ titre, desc, droite, premiere = false }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '13px 0', borderTop: premiere ? 'none' : 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700 }}>{titre}</div>
+        {desc ? <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{desc}</div> : null}
+      </div>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>{droite}</div>
+    </div>
+  );
+}
+const FicheValeur = ({ children, couleur = 'var(--o-text)' }) => (
+  <span style={{ fontSize: 14, fontWeight: 800, color: couleur, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{children}</span>
+);
+const FicheBouton = ({ children, onClick, icone = null, title = null }) => (
+  <button onClick={onClick} title={title || undefined} aria-label={title || undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>{icone && <Fi i={icone} size={12} />}{children}</button>
+);
+/* Des puces exclusives, arrondi 9 — pas de pilules. */
+function FichePuces({ options, valeur, onChoix, couleur = 'var(--o-accent)' }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {options.map(o => { const on = o.id === valeur; return (
+        <button key={o.id} onClick={() => onChoix(o.id)} aria-pressed={on} style={{ padding: '8px 14px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? hx(couleur, .45) : 'var(--o-bd2)'), background: on ? hx(couleur, .14) : 'var(--o-s1)', color: on ? couleur : 'var(--o-text1)' }}>{o.nom}</button>
+      ); })}
+    </div>
+  );
+}
+const heureDe = (iso) => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const h = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? h : d.toLocaleDateString([], { day: '2-digit', month: 'short' }) + ' ' + h;
+};
+/* La zone Home Assistant d'une entite, par son nom — celle de la grille. */
+const zoneDe = (id) => { const z = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).find(a => (a.entities || []).indexOf(id) >= 0); return z ? z.name : null; };
+const pileDe = (S, id) => { const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: 'battery' }); const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN; return isNaN(n) ? null : Math.round(n); };
+const RangeeDernier = ({ st }) => <FicheRangee titre={tr('Dernier changement')} desc={tr('Depuis le journal de Home Assistant')} droite={<FicheValeur couleur="var(--o-text2)">{heureDe(st && st.last_changed)}</FicheValeur>} />;
+const RangeePile = ({ n }) => (n == null ? null : <FicheRangee titre={tr('Pile')} desc={tr('Capteur sans fil')} droite={<FicheValeur couleur={n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-ok)'}>{n} %</FicheValeur>} />);
+
+/* ── Un minuteur d'extinction, tenu par cet ecran ────────────────────────────
+ * « Extinction dans 30 min ». Il vit tant que Loggia reste ouvert — pas dans
+ * Home Assistant : on le dit dans la rangee. */
+const MINUTEURS = new Map();
+function minuteurReste(id) { const m = MINUTEURS.get(id); if (!m || m.fin <= Date.now()) return null; return Math.max(1, Math.ceil((m.fin - Date.now()) / 60000)); }
+function minuteurAnnuler(id) { const m = MINUTEURS.get(id); if (m) { clearTimeout(m.timer); MINUTEURS.delete(id); } }
+function minuteurPoser(hass, id, minutes) {
+  const m = MINUTEURS.get(id);
+  const fin = (m && m.fin > Date.now() ? m.fin : Date.now()) + minutes * 60000;
+  if (m) clearTimeout(m.timer);
+  const timer = setTimeout(() => { MINUTEURS.delete(id); commanderService(hass, id, 'homeassistant', 'turn_off', { entity_id: id }); }, fin - Date.now());
+  MINUTEURS.set(id, { fin, timer });
+}
+function RangeeMinuteur({ hass, id }) {
+  const [, tic] = useState(0);
+  useEffect(() => { const iv = setInterval(() => tic(n => n + 1), 15000); return () => clearInterval(iv); }, []);
+  const reste = minuteurReste(id);
+  return (
+    <FicheRangee titre={tr('Minuteur')} desc={reste ? tr('Extinction dans {n} min — tant que Loggia reste ouvert.', { n: reste }) : tr('Aucun minuteur en cours')}
+      droite={<div style={{ display: 'flex', gap: 6 }}>
+        <FicheBouton icone="clock" onClick={() => { minuteurPoser(hass, id, 30); tic(n => n + 1); }}>+30 min</FicheBouton>
+        {reste ? <FicheBouton title={tr('Annuler le minuteur')} onClick={() => { minuteurAnnuler(id); tic(n => n + 1); }}><Fi i="cross-small" size={12} /></FicheBouton> : null}
+      </div>} />
+  );
+}
+
+// Fiche volet (maquettes du 14/09) : position, trois puces, la regle du
+// planning branchee sur Regles › Volets, et le mode automatique historique.
 function RoomCoverSheet({ id, hass, onClose }) {
   const S = (hass && hass.states) || null;
   const st = S ? S[id] : null;
@@ -2828,81 +2920,82 @@ function RoomCoverSheet({ id, hass, onClose }) {
   const [ov, setOv] = useState(null);
   useEffect(() => { setOv(null); }, [realPos]);
   const pos = ov != null ? ov : realPos;
-  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
+  const call = (d, s2, data) => commanderService(hass, (data || {}).entity_id, d, s2, data || {});
   const cov = (svc, data) => call('cover', svc, { entity_id: id, ...(data || {}) });
+  const poser = (v) => { setOv(v); cov('set_cover_position', { position: v }); };
+  const nom = a.friendly_name || id;
+  const zone = zoneDe(id);
+  const etatTxt = pos === 0 ? tr('Fermé') : pos === 100 ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
+  // La regle du planning (Regles › Volets) : ce volet suit-il le soleil ?
+  const { etat: volets } = useEtatServeur(hass, 'loggia/volets/etat', 15000, '');
+  const plan = volets && volets.config && volets.config.planning;
+  const reglage = plan && plan.volets && plan.volets[id];
+  const suit = !!(plan && plan.actif && !(reglage && reglage.exclu));
+  const prochaine = (sens) => {
+    const p = volets && volets.prochains && volets.prochains[sens];
+    if (!p) return null;
+    const k = Object.keys(p).sort((x, y) => Number(x) - Number(y))[0];
+    return k != null && !/^erreur/.test(String(p[k])) ? heureDe(p[k]) : null;
+  };
+  const basculerPlan = () => {
+    if (!hass || typeof hass.callWS !== 'function' || !plan) return;
+    const patch = !plan.actif ? { planning: { actif: true } }
+      : (reglage && reglage.exclu) ? { planning: { volets: Object.fromEntries(Object.entries(plan.volets || {}).filter(([k]) => k !== id)) } }
+        : { planning: { volets: { ...(plan.volets || {}), [id]: { exclu: true } } } };
+    hass.callWS({ type: 'loggia/volets/config', patch }).catch(() => {});
+  };
   // Pas d'entite de mode : pas de mode. Supposer « Manuel » — un mot francais,
   // compare plus loin par `schedActive` — declarait le planning inactif en
   // permanence chez qui n'a pas cette entite.
   const mode = (S && S[voletMode()] && S[voletMode()].state) || null;
-  const drag = (e) => {
-    e.preventDefault();
-    const el = e.currentTarget, fill = el.querySelector('[data-fill]'), r = el.getBoundingClientRect();
-    const calc = x => Math.max(0, Math.min(100, Math.round((x - r.left) / r.width * 100)));
-    let v = calc(e.clientX);
-    const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = v + '%'; } };
-    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch {}
-    el.onpointermove = ev => { v = calc(ev.clientX); paint(); };
-    const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; };
-    el.onpointerup = () => { end(); setOv(v); cov('set_cover_position', { position: v }); };
-    el.onpointercancel = () => { end(); if (fill) fill.style.width = pos + '%'; };
-  };
-  const bigBtn = (act, col) => ({ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 13, borderRadius: 14, cursor: 'pointer', fontWeight: 700, fontSize: 13, border: '1px solid ' + (act ? hx(col, .35) : 'var(--o-bd1)'), background: act ? hx(col, .14) : 'var(--o-s1)', color: act ? col : 'var(--o-text1)' });
+  const modes = voletModes(S);
+  const chips = [{ id: 'ferme', nom: tr('Fermé') }, { id: 'mi', nom: tr('Mi-course') }, { id: 'ouvert', nom: tr('Ouvert') }];
+  const chip = pos === 0 ? 'ferme' : pos === 100 ? 'ouvert' : pos === 50 ? 'mi' : null;
   return (
     <BottomSheet onClose={onClose}>
       {close => (<>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-          <span style={{ flex: 1, fontSize: 19, fontWeight: 700 }}>{a.friendly_name || id}</span>
-          <BoutonEpingle id={id} />
-          <span style={{ fontSize: 19, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-purple)' }}>{pos}%</span>
+        <FicheEntete titre={nom} sous={[zone, etatTxt].filter(Boolean).join(' · ')} close={close} id={id} />
+        <FicheLibelle droite={<span style={{ fontSize: 18, fontWeight: 800, color: pos ? 'var(--o-purple)' : 'var(--o-text3)' }}>{pos} %</span>}>{tr('POSITION')}</FicheLibelle>
+        <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" label={tr('Position') + ' ' + nom} onCommit={poser} marge={0} />
+        <div style={{ marginTop: 12 }}>
+          <FichePuces options={chips} valeur={chip} couleur="var(--o-purple)" onChoix={(c) => { if (c === 'ferme') { setOv(0); cov('close_cover'); } else if (c === 'ouvert') { setOv(100); cov('open_cover'); } else poser(50); }} />
         </div>
-        {/* visuel du volet + rail */}
-        <div style={{ display: 'flex', gap: 20, alignItems: 'center', margin: '18px 0 6px' }}>
-          <div style={{ position: 'relative', width: 76, height: 106, flexShrink: 0, borderRadius: 10, overflow: 'hidden', background: 'linear-gradient(180deg,#1c2740,#141b2c)', border: '1px solid rgba(255,255,255,.1)', boxShadow: 'inset 0 2px 8px rgba(0,0,0,.4)' }}>
-            <div style={{ position: 'absolute', inset: '0 0 auto 0', background: 'repeating-linear-gradient(180deg,rgba(130,150,190,.6) 0 5px,rgba(95,115,160,.85) 5px 8px)', borderRadius: '10px 10px 3px 3px', boxShadow: '0 3px 8px rgba(0,0,0,.3)', transition: 'height .35s', height: (100 - pos) + '%' }} />
+        <div style={{ marginTop: 14 }}>
+          {plan && <FicheRangee premiere titre={tr('Auto lever / coucher')}
+            desc={suit ? tr('Suit le soleil : ouverture à {a}, fermeture à {b}.', { a: prochaine('ouverture') || '—', b: prochaine('fermeture') || '—' }) : tr('Ne suit ni le lever ni le coucher du soleil.')}
+            droite={<RmBascule on={suit} nom={tr('Auto lever / coucher')} onToggle={basculerPlan} />} />}
+          <FicheRangee premiere={!plan} titre={tr('Position')} desc={tr('Course mesurée par le moteur')} droite={<FicheValeur couleur="var(--o-purple)">{a.current_position != null ? Math.round(a.current_position) + ' %' : etatTxt}</FicheValeur>} />
+          <FicheRangee titre={tr('Stop')} desc={tr('Arrête le moteur là où il est')} droite={<FicheBouton icone="square" onClick={() => cov('stop_cover')}>{tr('Stop')}</FicheBouton>} />
+          <RangeeDernier st={st} />
+        </div>
+        {modes.length > 0 && (<>
+          <FicheLibelle>{tr('MODE AUTOMATIQUE')}</FicheLibelle>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: 8 }}>
+            {modes.map(m => {
+              const on = mode === m.id;
+              return (
+                <button key={m.id} className="o-volet-mode" onClick={() => call('input_select', 'select_option', { entity_id: voletMode(), option: m.id })} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 8, padding: '13px 8px', borderRadius: 14, cursor: 'pointer', textAlign: 'center', border: '1px solid ' + (on ? hx(m.color, .4) : 'var(--o-bd3)'), background: on ? hx(m.color, .13) : 'var(--o-s2)', color: on ? m.color : 'var(--o-text1)' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Ico name={m.icon} size={17} />
+                    {on && <Fi i="check" size={13} />}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.15 }}>{m.label}</span>
+                  <span style={{ fontSize: 11, opacity: .75, fontWeight: 600, lineHeight: 1.3 }}>{m.desc}</span>
+                </button>
+              );
+            })}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{pos === 0 ? tr('Fermé') : pos === 100 ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos })}</div>
-            <div onPointerDown={drag} style={{ padding: '14px 0', cursor: 'pointer', touchAction: 'none' }}>
-              <div style={{ position: 'relative', height: 34, borderRadius: 10, background: 'var(--o-s1)', overflow: 'hidden' }}>
-                <div data-fill style={{ position: 'absolute', inset: '0 auto 0 0', width: pos + '%', background: 'linear-gradient(90deg,var(--o-purple),rgba(var(--o-purple-rgb),.6))', borderRadius: 10, transition: 'width .25s' }} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => { setOv(100); cov('open_cover'); }} style={bigBtn(pos === 100, 'var(--o-ok)')}><Fi i="angle-up" size={15} />{tr('Ouvrir')}</button>
-              <button onClick={() => cov('stop_cover')} style={bigBtn(false, 'var(--o-text1)')}><Fi i="square" size={12} />{tr('Stop')}</button>
-              <button onClick={() => { setOv(0); cov('close_cover'); }} style={bigBtn(pos === 0, 'var(--o-purple)')}><Fi i="angle-down" size={15} />{tr('Fermer')}</button>
-            </div>
-          </div>
-        </div>
-        {/* mode automatique (global aux volets) */}
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '16px 0 9px' }}>MODE AUTOMATIQUE</div>
-        {/* Trois colonnes : les trois modes tiennent d'un regard, sans faire
-            descendre le reste de la feuille sous la ligne de flottaison. */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: 8 }}>
-          {voletModes(S).map(m => {
-            const on = mode === m.id;
-            return (
-              <button key={m.id} className="o-volet-mode" onClick={() => call('input_select', 'select_option', { entity_id: voletMode(), option: m.id })} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 8, padding: '13px 8px', borderRadius: 14, cursor: 'pointer', textAlign: 'center', border: '1px solid ' + (on ? hx(m.color, .4) : 'var(--o-bd3)'), background: on ? hx(m.color, .13) : 'var(--o-s2)', color: on ? m.color : 'var(--o-text1)' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Ico name={m.icon} size={17} />
-                  {on && <Fi i="check" size={13} />}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.15 }}>{m.label}</span>
-                <span style={{ fontSize: 11, opacity: .75, fontWeight: 600, lineHeight: 1.3 }}>{m.desc}</span>
-              </button>
-            );
-          })}
-        </div>
-        {/* programmation nocturne — chambre uniquement */}
+        </>)}
       </>)}
     </BottomSheet>
   );
 }
 
-// Détail thermostat (maquette) : grand dial, consigne, actuel, état, − / +, modes.
+// Fiche thermostat (maquettes du 14/09) : le bloc consigne, les modes, les
+// rangees qui expliquent, et la journee de temperature.
 function RoomClimateSheet({ id, hass, onClose }) {
-  const st = hass && hass.states ? hass.states[id] : null;
+  const S = (hass && hass.states) || {};
+  const st = S[id] || null;
   const a = (st && st.attributes) || {};
   const realTarget = a.temperature != null ? a.temperature : 20;
   const [ov, setOv] = useState(null);
@@ -2913,117 +3006,198 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const mode = st ? st.state : 'off';
   const off = mode === 'off';
   const heating = a.hvac_action === 'heating';
-  const MODE_FR = { off: tr('Arrêt'), heat: tr('Confort'), cool: tr('Froid'), auto: 'Auto', heat_cool: 'Auto', dry: tr('Sec'), fan_only: tr('Ventil') };
+  const cooling = a.hvac_action === 'cooling';
   const all = a.hvac_modes || ['off', 'heat'];
-  // Les bornes viennent de l'entite, pas d'une constante : la climatisation de
-  // l'installation d'essai monte a 35, la ou le code plafonnait a 30. Le pas
-  // aussi lui appartient. On affiche ce qui a ete envoye, pas ce qui a ete
-  // demande — sinon la consigne affichee mentirait des qu'elle est bornee.
+  const [ovOn, setOvOn] = useState(null);
+  useEffect(() => { setOvOn(null); }, [etatSt]);
+  const marche = ovOn != null ? ovOn : !off;
+  const modeMarche = ['heat', 'auto', 'heat_cool', 'cool'].find(m => all.indexOf(m) >= 0) || all.find(m => m !== 'off') || 'heat';
+  const basculer = () => { const nv = !marche; setOvOn(nv); commander(hass, id, 'set_hvac_mode', nv ? modeMarche : 'off'); };
+  // Les bornes viennent de l'entite, pas d'une constante ; on affiche ce qui
+  // a ete envoye, pas ce qui a ete demande.
   const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
+  const fmt = (t) => Number(t).toFixed(1).replace('.', ',') + ' °C';
+  const nom = a.friendly_name || id;
+  const zone = zoneDe(id);
+  const etatTxt = !marche ? tr('Éteint') : heating ? tr('Chauffe') : cooling ? tr('Refroidit') : tr('Au repos');
+  const MODE_FR = { off: tr('Arrêt'), heat: tr('Chauffage'), cool: tr('Froid'), auto: 'Auto', heat_cool: 'Auto', dry: tr('Sec'), fan_only: tr('Ventil') };
+  const presets = Array.isArray(a.preset_modes) ? a.preset_modes.slice(0, 8) : [];
   const ptsTemp = useHistorique24(hass, id, 'current_temperature');
-  const pct = Math.max(0, Math.min(1, (target - RM_TMIN) / (RM_TMAX - RM_TMIN)));
-  const R = 54, ARC = 2 * Math.PI * R * 0.75; // arc 270°
-  const col = off ? 'var(--o-text3)' : 'var(--o-warn)';
+  // Les ouvrants de la piece : une fenetre ouverte, et le radiateur chauffe la rue.
+  const ouverts = zone
+    ? ((((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).find(z => z.name === zone) || { entities: [] }).entities || [])
+      .filter(e => e.indexOf('binary_sensor.') === 0 && S[e] && S[e].state === 'on' && ['window', 'door', 'garage_door', 'opening'].indexOf((S[e].attributes || {}).device_class) >= 0)
+      .map(e => cvName(S[e], e))
+    : [];
+  const rond = { width: 44, height: 44, borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 20, fontWeight: 700, cursor: 'pointer', flexShrink: 0 };
   return (
     <BottomSheet onClose={onClose}>
       {close => (<>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-          <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={13} color="#ff8a4c" />{(a.friendly_name || id).toUpperCase()}</span>
-          <BoutonEpingle id={id} />
-        </div>
-        <div style={{ position: 'relative', width: 230, height: 230, margin: '10px auto 0' }}>
-          <svg width="230" height="230" viewBox="0 0 130 130" style={{ position: 'absolute', inset: 0, transform: 'rotate(135deg)' }}>
-            <circle cx="65" cy="65" r={R} fill="none" stroke="var(--o-bd1)" strokeWidth="10" strokeLinecap="round" strokeDasharray={`${ARC} 999`} />
-            <circle cx="65" cy="65" r={R} fill="none" stroke={col} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${ARC * pct} 999`} style={{ transition: 'stroke-dasharray .35s' }} />
-          </svg>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1 }}>{target.toFixed(1)}<span style={{ fontSize: 25 }}>°</span></div>
-            {cur != null && <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 5 }}>actuel {cur}°</div>}
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', marginTop: 6, color: off ? 'var(--o-text3)' : heating ? 'var(--o-warn2)' : 'var(--o-warn)' }}>{off ? 'ÉTEINT' : heating ? 'CHAUFFE' : tr('AU REPOS')}</div>
+        <FicheEntete titre={nom} sous={[zone, etatTxt, tr('consigne {t} °C', { t: Number(target).toFixed(1).replace('.', ',') })].filter(Boolean).join(' · ')} close={close} id={id} />
+        <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, background: 'var(--o-s1)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('CONSIGNE')}</div>
+            <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', color: marche ? 'var(--o-warn)' : 'var(--o-text3)', lineHeight: 1.1, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{fmt(target)}</div>
+            {cur != null && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 3 }}>{tr('Mesurée {t} dans la pièce', { t: fmt(cur) })}</div>}
           </div>
+          <button aria-label={tr('Baisser la consigne')} onClick={() => setT(-0.5)} style={rond}>−</button>
+          <button aria-label={tr('Monter la consigne')} onClick={() => setT(0.5)} style={rond}>+</button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, margin: '10px 0 18px' }}>
-          <button onClick={() => setT(-0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer' }}>−</button>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', textAlign: 'center', lineHeight: 1.35 }}>{tr('± par')}<br />{tr('pas de 0,5°')}</span>
-          <button onClick={() => setT(0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer' }}>+</button>
+        <div style={{ marginTop: 12 }}>
+          {presets.length > 0
+            ? <FichePuces options={presets.map(p => ({ id: p, nom: p }))} valeur={a.preset_mode && a.preset_mode !== 'unknown' ? a.preset_mode : null} couleur="var(--o-bad)" onChoix={(p) => commander(hass, id, 'set_preset_mode', p)} />
+            : <FichePuces options={all.map(m => ({ id: m, nom: tr(MODE_FR[m]) || m }))} valeur={mode} couleur="var(--o-bad)" onChoix={(m) => commander(hass, id, 'set_hvac_mode', m)} />}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {all.map(m => { const on = mode === m; return (
-            <button key={m} onClick={() => commander(hass, id, 'set_hvac_mode', m)} style={{ flex: 1, padding: '12px 8px', borderRadius: 14, cursor: 'pointer', fontWeight: 700, fontSize: 13, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-text)' : 'var(--o-s1)', color: on ? 'var(--o-bg)' : 'var(--o-text1)' }}>{tr(MODE_FR[m]) || m}</button>
-          ); })}
+        <div style={{ marginTop: 14 }}>
+          <FicheRangee premiere titre={tr('Chauffe')} desc={tr('Coupe la zone sans toucher à la consigne')} droite={<RmBascule on={marche} nom={nom} onToggle={basculer} />} />
+          {cur != null && <FicheRangee titre={tr('Température mesurée')} desc={tr('Relevée par le thermostat')} droite={<FicheValeur>{fmt(cur)}</FicheValeur>} />}
+          {zone && <FicheRangee titre={tr('Fenêtre ouverte')} desc={ouverts.length ? ouverts.join(', ') : tr('Rien d’ouvert dans la pièce')} droite={<FicheValeur couleur={ouverts.length ? 'var(--o-bad)' : 'var(--o-ok)'}>{ouverts.length ? tr('oui') : tr('non')}</FicheValeur>} />}
+          <RangeeDernier st={st} />
         </div>
-        {/* Préréglage du thermostat : le sélecteur de la fiche native. */}
-        {Array.isArray(a.preset_modes) && a.preset_modes.length > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
-            <MenuDeroulant icone="settings-sliders" etiquette={tr('Préréglage')} valeur={a.preset_mode && a.preset_mode !== 'unknown' ? a.preset_mode : null}
-              options={a.preset_modes.slice(0, 10)} surChoix={(p) => commander(hass, id, 'set_preset_mode', p)} />
-          </div>
-        )}
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '18px 0 9px' }}>{tr('TEMPÉRATURE · 24 H')}</div>
+        <FicheLibelle>{tr('TEMPÉRATURE · 24 H')}</FicheLibelle>
         <Courbe24 points={ptsTemp} couleur="#ff8a4c" unite="°" />
       </>)}
     </BottomSheet>
   );
 }
 
-// Réglage d'une lumière depuis la vue Pièce : bottom sheet + fader vertical (peinture DOM, commit au relâcher).
+// Fiche lumiere (maquettes du 14/09) : la glissiere, Blancs / Couleurs, et
+// les rangees — allumee, minuteur, dernier changement.
 function RoomLightSheet({ light, hass, onClose }) {
   const st = hass && hass.states ? hass.states[light.id] : null;
   const a = (st && st.attributes) || {};
   const realOn = st ? st.state === 'on' : light.on;
   const realBri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : light.bri;
-  const [on, setOn] = useState(realOn);
-  const [bri, setBri] = useState(realBri);
-  const dragRef = useRef(false);
-  useEffect(() => { if (!dragRef.current) { setOn(realOn); setBri(realBri); } }, [realOn, realBri]);
+  const [ovOn, setOvOn] = useState(null);
+  useEffect(() => { setOvOn(null); }, [realOn]);
+  const [ovBri, setOvBri] = useState(null);
+  useEffect(() => { setOvBri(null); }, [realBri]);
+  const on = ovOn != null ? ovOn : realOn;
+  const bri = ovBri != null ? ovBri : realBri;
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : light.color;
   const acc = (light.rgb && color) ? color : '#ffce73';
-  const toggle = () => { const v = !on; setOn(v); commander(hass, light.id, v ? 'turn_on' : 'turn_off'); };
+  const toggle = () => { const v = !on; setOvOn(v); commander(hass, light.id, v ? 'turn_on' : 'turn_off'); };
+  const poser = (v) => { setOvBri(v); setOvOn(v > 0); if (v > 0) commander(hass, light.id, 'set_brightness', v); else commander(hass, light.id, 'turn_off'); };
+  const [onglet, setOnglet] = useState(light.ct ? 'blancs' : 'couleurs');
   const shown = on ? bri : 0;
-  const dragVert = (e) => {
-    e.preventDefault();
-    const el = e.currentTarget, fill = el.querySelector('[data-fill]'), handle = el.querySelector('[data-handle]'), big = document.getElementById('o-roombri');
-    const r = el.getBoundingClientRect();
-    const calc = y => Math.max(1, Math.min(100, Math.round((1 - (y - r.top) / r.height) * 100)));
-    let v = calc(e.clientY); dragRef.current = true;
-    if (fill) fill.style.transition = 'none'; if (handle) handle.style.transition = 'none';
-    const paint = () => { if (fill) { fill.style.height = v + '%'; fill.style.opacity = '1'; } if (handle) { handle.style.bottom = `calc(${v}% - 26px)`; handle.style.opacity = '1'; } if (big) big.textContent = String(v); };
-    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch {}
-    el.onpointermove = ev => { v = calc(ev.clientY); paint(); };
-    const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (handle) handle.style.transition = ''; dragRef.current = false; };
-    el.onpointerup = () => { end(); setBri(v); setOn(true); commander(hass, light.id, 'set_brightness', v); };
-    el.onpointercancel = () => { end(); setBri(realBri); };
-  };
+  const nom = light.name || light.id;
+  const teinteTxt = a.color_mode === 'color_temp' ? tr('blanc') : (light.rgb && color) ? tr('teinte personnalisée') : '';
+  const sous = [on ? tr('Allumée') : tr('Éteinte'), on ? shown + ' %' : null, on ? teinteTxt : null].filter(Boolean).join(' · ');
+  // La palette porte des variables CSS : on lit leur valeur avant de l'envoyer.
+  const hexDe = (c) => { if (c.indexOf('var(') === 0) { try { const v = getComputedStyle(document.documentElement).getPropertyValue(c.slice(4, -1)).trim(); if (v[0] === '#') return v; } catch { /* rien */ } return null; } return c; };
+  const poserCouleur = (c) => { const h = hexDe(c); if (!h) return; const n = parseInt(h.slice(1), 16); commander(hass, light.id, 'set_color', [(n >> 16) & 255, (n >> 8) & 255, n & 255]); };
+  const swatch = (bg, sel, onClick, label) => <button key={label} aria-label={label} title={label} onClick={onClick} style={{ height: 34, borderRadius: 10, cursor: 'pointer', background: bg, border: sel ? '2px solid #fff' : '2px solid transparent', boxShadow: sel ? `0 0 0 2px ${bg}` : 'inset 0 0 0 1px rgba(0,0,0,.18)', padding: 0 }} />;
+  const blancs = light.ct && (onglet === 'blancs' || !light.rgb);
   return (
     <BottomSheet onClose={onClose}>
       {close => (<>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-          <span style={{ flex: 1, fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{light.name}</span>
-          <BoutonEpingle id={light.id} />
-          <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + (light.name || light.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }} onClick={toggle} style={{ width: 48, height: 27, borderRadius: 14, background: on ? '#FF2D78' : 'rgba(150,162,184,.2)', position: 'relative', cursor: 'pointer', flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 24 : 3, width: 21, height: 21, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span>
+        <FicheEntete titre={nom} sous={sous} close={close} id={light.id} />
+        {light.dimmable !== false && (<>
+          <FicheLibelle droite={<span style={{ fontSize: 18, fontWeight: 800, color: on ? 'var(--o-warn)' : 'var(--o-text3)' }}>{shown} %</span>}>{tr('LUMINOSITÉ')}</FicheLibelle>
+          <RmJauge v={shown} couleur={acc} grade={(light.rgb && color) ? color : 'linear-gradient(90deg,#ffce73,#f59e0b)'} label={tr('Luminosité') + ' ' + nom} onCommit={poser} marge={0} />
+        </>)}
+        {(light.ct || light.rgb) && (
+          <div style={{ marginTop: 16 }}>
+            {light.ct && light.rgb && <FichePuces options={[{ id: 'blancs', nom: tr('Blancs') }, { id: 'couleurs', nom: tr('Couleurs') }]} valeur={onglet} onChoix={setOnglet} />}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginTop: 10 }}>
+              {blancs
+                ? WHITE_TEMPS().map(([n, k, c]) => swatch(c, a.color_mode === 'color_temp' && Math.abs((a.color_temp_kelvin || 0) - k) < 150, () => commander(hass, light.id, 'set_color_temp', k), n + ' · ' + k + ' K'))
+                : LIGHT_PALETTE.map(c => swatch(c, !!color && !!hexDe(c) && hexDe(c).toLowerCase() === String(color).toLowerCase(), () => poserCouleur(c), tr('Couleur') + ' ' + c))}
+            </div>
+          </div>
+        )}
+        <div style={{ marginTop: 14 }}>
+          <FicheRangee premiere titre={tr('Allumée')} desc={tr('Bascule immédiate, réconciliée au prochain état')} droite={<RmBascule on={on} nom={nom} onToggle={toggle} />} />
+          <RangeeMinuteur hass={hass} id={light.id} />
+          <RangeeDernier st={st} />
         </div>
-        <div style={{ textAlign: 'center', margin: '18px 0 16px' }}>
-          <div style={{ fontSize: 34, fontWeight: 600, letterSpacing: '-.01em' }}><span id="o-roombri">{shown}</span> <span style={{ fontSize: 25, fontWeight: 500, opacity: .85 }}>%</span></div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{relTime(st && st.last_changed) || (on ? tr('Allumé') : tr('Éteint'))}</div>
+      </>)}
+    </BottomSheet>
+  );
+}
+
+// Fiche prise (maquettes du 14/09) : alimentee, puissance, energie, minuteur.
+function RoomSwitchSheet({ id, hass, onClose }) {
+  const S = (hass && hass.states) || {};
+  const st = S[id] || null;
+  const a = (st && st.attributes) || {};
+  const realOn = !!st && st.state === 'on';
+  const [ov, setOv] = useState(null);
+  useEffect(() => { setOv(null); }, [realOn]);
+  const on = ov != null ? ov : realOn;
+  const basculer = () => { const nv = !on; setOv(nv); commanderService(hass, id, 'homeassistant', nv ? 'turn_on' : 'turn_off', { entity_id: id }); };
+  const nom = a.friendly_name || id;
+  const zone = zoneDe(id);
+  // Puissance et energie vivent dans des capteurs SŒURS de la prise.
+  const capteur = (dc) => { const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: dc }); const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN; return isNaN(n) ? null : { n, u: (S[sid].attributes || {}).unit_of_measurement || '' }; };
+  const puissance = capteur('power');
+  const energie = capteur('energy');
+  const fmt = (c) => (Math.round(c.n * 10) / 10).toString().replace('.', ',') + (c.u ? ' ' + c.u : '');
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (<>
+        <FicheEntete titre={nom} sous={[zone, on ? tr('Allumée') : tr('Éteinte'), puissance ? fmt(puissance) : null].filter(Boolean).join(' · ')} close={close} id={id} />
+        <div style={{ marginTop: 14 }}>
+          <FicheRangee premiere titre={tr('Alimentée')} desc={tr('Coupe la prise, pas l’appareil derrière')} droite={<RmBascule on={on} nom={nom} onToggle={basculer} />} />
+          {puissance && <FicheRangee titre={tr('Puissance instantanée')} desc={tr('Mesurée par la prise')} droite={<FicheValeur couleur="var(--o-accent-soft)">{fmt(puissance)}</FicheValeur>} />}
+          {energie && <FicheRangee titre={tr('Énergie')} desc={tr('Compteur de l’appareil')} droite={<FicheValeur>{fmt(energie)}</FicheValeur>} />}
+          <RangeeMinuteur hass={hass} id={id} />
+          <RangeeDernier st={st} />
         </div>
-        {light.dimmable !== false && (
-          <div onPointerDown={dragVert} {...kbSlider('Luminosité ' + light.name, shown, (nv) => { setBri(nv); setOn(true); commander(hass, light.id, 'set_brightness', nv); })} style={{ position: 'relative', width: 148, height: 300, margin: '0 auto', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', cursor: 'grab', touchAction: 'none', background: 'var(--o-s1)' }}>
-            <div data-fill style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: shown + '%', background: `linear-gradient(0deg,${acc},${hx(acc, .78)})`, opacity: on ? 1 : .3, transition: 'height .12s' }} />
-            <div data-handle style={{ position: 'absolute', left: 0, right: 0, bottom: `calc(${shown}% - 26px)`, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', opacity: on ? 1 : 0, transition: 'bottom .12s,opacity .2s' }}><span style={{ width: 40, height: 4, borderRadius: 4, background: 'rgba(255,255,255,.95)' }} /></div>
-          </div>
-        )}
-        {on && light.rgb && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, maxWidth: 280, margin: '22px auto 0' }}>
-            {LIGHT_PALETTE.map(c => { const sel = (color || '').toLowerCase() === c.toLowerCase(); return <button key={c} aria-label={tr('Couleur') + ' ' + c} onClick={() => { const n = parseInt(c.slice(1), 16); commander(hass, light.id, 'set_color', [(n >> 16) & 255, (n >> 8) & 255, n & 255]); }} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: sel ? '3px solid #fff' : '3px solid transparent', boxShadow: sel ? `0 0 0 2px ${c}` : 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />; })}
-          </div>
-        )}
-        {on && light.ct && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, maxWidth: 280, margin: '22px auto 0' }}>
-            {WHITE_TEMPS().map(([n, k, c]) => <button key={k} aria-label={n + ' · ' + k + 'K'} title={n + ' · ' + k + 'K'} onClick={() => commander(hass, light.id, 'set_color_temp', k)} style={{ width: 52, height: 52, borderRadius: '50%', cursor: 'pointer', background: c, justifySelf: 'center', padding: 0, border: '3px solid transparent', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', transition: 'all .15s' }} />)}
-          </div>
-        )}
+      </>)}
+    </BottomSheet>
+  );
+}
+
+// Fiche capteur binaire (maquettes du 14/09) : releve, piece, pile.
+function RoomBinarySheet({ id, hass, onClose }) {
+  const S = (hass && hass.states) || {};
+  const st = S[id] || null;
+  const a = (st && st.attributes) || {};
+  const nom = a.friendly_name || id;
+  const zone = zoneDe(id);
+  const e = BIN_ETATS()[a.device_class] || null;
+  const on = !!st && st.state === 'on';
+  const releve = !st || st.state === 'unavailable' ? tr('Indisponible') : e ? (on ? e[0] : e[1]) : (on ? tr('Détecté') : 'RAS');
+  const danger = on && !!(e && e[2]);
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (<>
+        <FicheEntete titre={nom} sous={[zone, releve].filter(Boolean).join(' · ')} close={close} id={id} />
+        <div style={{ marginTop: 14 }}>
+          <FicheRangee premiere titre={tr('Relevé')} desc={tr('Dernière valeur reçue')} droite={<FicheValeur couleur={danger ? 'var(--o-bad)' : 'var(--o-text)'}>{releve}</FicheValeur>} />
+          {zone && <FicheRangee titre={tr('Pièce')} desc={tr('Zone déclarée dans Home Assistant')} droite={<FicheValeur couleur="var(--o-text2)">{zone}</FicheValeur>} />}
+          <RangeePile n={pileDe(S, id)} />
+          <RangeeDernier st={st} />
+        </div>
+      </>)}
+    </BottomSheet>
+  );
+}
+
+// Fiche serrure (maquettes du 14/09) : verrouillee, pile, dernier changement.
+function RoomLockSheet({ id, hass, onClose }) {
+  const S = (hass && hass.states) || {};
+  const st = S[id] || null;
+  const a = (st && st.attributes) || {};
+  const s2 = st ? st.state : null;
+  const realLocked = s2 === 'locked';
+  const [ov, setOv] = useState(null);
+  useEffect(() => { setOv(null); }, [s2]);
+  const locked = ov != null ? ov : realLocked;
+  const basculer = () => { const nv = !locked; setOv(nv); commanderService(hass, id, 'lock', nv ? 'lock' : 'unlock', { entity_id: id }); };
+  const nom = a.friendly_name || id;
+  const zone = zoneDe(id);
+  const etat = s2 === 'locked' ? tr('Verrouillée') : s2 === 'unlocked' ? tr('Déverrouillée') : s2 === 'locking' ? tr('Verrouillage…') : s2 === 'unlocking' ? tr('Déverrouillage…') : s2 === 'jammed' ? tr('Bloquée') : tr('Indisponible');
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (<>
+        <FicheEntete titre={nom} sous={[zone, etat].filter(Boolean).join(' · ')} close={close} id={id} />
+        <div style={{ marginTop: 14 }}>
+          <FicheRangee premiere titre={tr('Verrouillée')} desc={tr('Le pêne bouge tout de suite ; l’état revient du moteur')} droite={<RmBascule on={locked} nom={nom} onToggle={basculer} />} />
+          <RangeePile n={pileDe(S, id)} />
+          <RangeeDernier st={st} />
+        </div>
       </>)}
     </BottomSheet>
   );
@@ -4116,6 +4290,9 @@ function useDomainCards(hass) {
   const [appPop, setAppPop] = useState(null);
   const [calPop, setCalPop] = useState(null);
   const [camPop, setCamPop] = useState(null);
+  const [prisePop, setPrisePop] = useState(null);
+  const [lockPop, setLockPop] = useState(null);
+  const [binPop, setBinPop] = useState(null);
   // La fiche du domaine, depuis n'importe quelle carte — la compacte ouvre la
   // même popup que la riche. Tout ce qui n'a pas de fiche dédiée reçoit la
   // FICHE APPAREIL UNIVERSELLE : l'appareil entier, rendu par le registre.
@@ -4138,6 +4315,9 @@ function useDomainCards(hass) {
     else if (d === 'cover') setCoverPop(id);
     else if (d === 'media_player') setMediaPop(id);
     else if (d === 'sensor') setSensPop(id);
+    else if (d === 'switch' && !cvEstLumiere(id)) setPrisePop(id);
+    else if (d === 'lock') setLockPop(id);
+    else if (d === 'binary_sensor') setBinPop(id);
     else setAppPop(id);
   };
   const card = (id, label = null, zone = null) => {
@@ -4165,9 +4345,12 @@ function useDomainCards(hass) {
       {appPop && <FicheAppareil id={appPop} hass={hass} onClose={() => setAppPop(null)} />}
       {calPop && <FeuilleCalendrier hass={hass} onClose={() => setCalPop(null)} />}
       {camPop && <CamSheet haid={camPop} nom={cvName(S[camPop], camPop)} hass={hass} onClose={() => setCamPop(null)} />}
+      {prisePop && <RoomSwitchSheet id={prisePop} hass={hass} onClose={() => setPrisePop(null)} />}
+      {lockPop && <RoomLockSheet id={lockPop} hass={hass} onClose={() => setLockPop(null)} />}
+      {binPop && <RoomBinarySheet id={binPop} hass={hass} onClose={() => setBinPop(null)} />}
     </>
   );
-  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); };
+  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); setPrisePop(null); setLockPop(null); setBinPop(null); };
   return { card, sheets, fermer, ouvrir };
 }
 
