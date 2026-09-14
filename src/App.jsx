@@ -1801,7 +1801,9 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const s = st ? st.state : null;
   const mort = !st || s === 'unavailable' || s === 'unknown';
   const nom = label || cvName(st, id);
-  const ico = cvIcoEntite(dom, id, st, nom);
+  // Le carre d'une camera montre un appareil photo ; le repere en haut a
+  // droite, la camera video — les deux glyphes de la maquette.
+  const ico = dom === 'camera' ? 'camera' : cvIcoEntite(dom, id, st, nom);
   const call = (d, svc, data) => commanderService(hass, id, d, svc, { entity_id: id, ...(data || {}) });
   const togglable = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren', 'valve'].indexOf(dom) >= 0;
   const on = !mort && (dom === 'valve' ? s === 'open' : dom === 'lock' ? s === 'locked' : s === 'on');
@@ -1826,9 +1828,9 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const fmtN = (n) => (Math.round(n * 10) / 10).toString().replace('.', ',');
   const etatsBin = BIN_ETATS()[a.device_class] || null;
   const danger = dom === 'binary_sensor' && !!(etatsBin && etatsBin[2]) && s === 'on';
-  // Une camera en direct n'est pas « allumee » — pas de lavis, elle l'est
-  // toujours — mais sa couleur se voit : icone et repere en bleu, comme le
-  // sous-titre (retour user du 14/09 : « pourquoi pas la couleur sur la carte »).
+  // Une camera en direct est ALLUMEE, au sens de la carte : lavis, icone et
+  // repere en bleu — la maquette entiere, pas seulement le sous-titre (retour
+  // user du 14/09, deux fois : « pourquoi pas la couleur sur la carte »).
   const direct = dom === 'camera' && !mort && (s === 'streaming' || s === 'recording' || s === 'idle');
   let sub, couleur = 'var(--o-text3)', teinte = 'accent';
   if (mort) sub = tr('Indisponible');
@@ -1853,8 +1855,7 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   else { sub = (actif ? tr('Allumée') : tr('Éteinte')) + (puissance != null ? ' · ' + fmtW(puissance) : ''); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('#FFCC44', .16), 'var(--o-warn)', 'rgba(255,204,68,'] };
   const [icoFond, icoTexte, lavisBase] = TEINTES[teinte];
-  const allume = !mort && (danger || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera'));
-  const teinteIco = allume || direct;
+  const allume = !mort && (danger || direct || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera'));
   const ouvrable = !!onOpen && !mort;
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? tr('Ouvrir') + ' ' + nom : undefined}
@@ -1863,7 +1864,7 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
         ...(allume && LAVIS ? { background: `linear-gradient(180deg,transparent 28%,${lavisBase}${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
         border: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(teinteIco ? icoFond : 'var(--o-s1)', teinteIco ? icoTexte : 'var(--o-text3)')}>{ico ? <Fi i={ico} size={17} /> : <PlugIcon size={17} />}</span>
+        <span style={RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)')}>{ico ? <Fi i={ico} size={17} /> : <PlugIcon size={17} />}</span>
         {(togglable || dom === 'lock') && !mort
           ? <RmBascule on={actif} nom={nom} onToggle={basculer} />
           : <span aria-hidden="true" style={{ color: direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i={dom === 'camera' ? 'video-camera' : 'square'} size={dom === 'camera' ? 15 : 12} /></span>}
@@ -4618,10 +4619,23 @@ const CAMERAS = () => [
 
 // ── Snapshot proxy authentifié (repli) ──
 
-/* Fiche camera (maquettes du 14/09) : le flux en grand, la ligne qui dit
- * COMMENT on le voit, puis les modes de la camera — les interrupteurs de son
- * appareil, reconnus par `cameraModes` — et, depuis une piece, le chemin vers
- * la vue Securite, qui montre toutes les cameras cote a cote.
+/* La tuile d'une camera, telle que l'Accueil la dessine : le nom, le badge
+ * LIVE, la teinte de repli de la liste, le point d'etat. La fiche reprend la
+ * meme tuile — le flux se voit partout de la meme facon (retour user du 14/09 :
+ * « reprends la meme chose que les cameras sur l'accueil »). */
+function tuileCamera(cam, i, hass) {
+  const teinte = CAMERAS()[i % CAMERAS().length];
+  return {
+    label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: teinte.grad, glow: teinte.glow,
+    sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: cam.online ? 'var(--o-ok)' : '#f87171' }} />{cam.online ? tr('Direct') : tr('Hors ligne')}</>),
+    cle: cleCamera(cam, i), haid: cam.haid, online: cam.online, hass,
+  };
+}
+
+/* Fiche camera (maquettes du 14/09) : la tuile de l'Accueil en grand — meme
+ * fond, meme badge, meme flux —, puis les modes de la camera (les interrupteurs
+ * de son appareil, reconnus par `cameraModes`) et, depuis une piece, le chemin
+ * vers la vue Securite, qui montre toutes les cameras cote a cote.
  *
  * On ne promet que ce que l'entite fait : pas de « enregistre 20 s » ni de
  * « sans filmer » — la maquette inspire, l'interrupteur decide.
@@ -4632,37 +4646,24 @@ const CAM_MODES = () => ({
   pleurs: [tr('Mode baby care'), tr('Écoute les pleurs et prévient.')],
   prive: [tr('Mode privé'), tr('Objectif occulté : plus aucune image ne sort.')],
 });
-const CAM_FLUX = () => ({
-  loading: tr('Connexion au flux…'), video: tr('Direct vidéo'), mjpeg: tr('Flux continu MJPEG'),
-  snap: tr('Instantanés rafraîchis toutes les 2 s'), off: tr('Pas de flux ici'),
-});
 function CamSheet({ haid, nom, hass, onClose, onNav = null }) {
   const S = (hass && hass.states) || {};
   const st = S[haid] || null;
   const etat = st ? st.state : 'unavailable';
   const online = !!st && etat !== 'unavailable' && etat !== 'unknown';
   const etatTxt = !online ? tr('Indisponible') : (etat === 'streaming' || etat === 'recording' || etat === 'idle') ? tr('En direct') : String(etat);
-  const [flux, setFlux] = useState('loading');
   const modes = cameraModes(LOGGIA_INDEX, S, haid);
   const libelles = CAM_MODES();
   const basculer = (id) => {
     const on = !!S[id] && S[id].state === 'on';
     commanderService(hass, id, 'switch', on ? 'turn_off' : 'turn_on', { entity_id: id });
   };
-  const direct = online && flux !== 'off';
   return (
     <BottomSheet onClose={onClose}>
       {close => (<>
         <FicheEntete titre={nom} sous={[zoneDe(haid), etatTxt].filter(Boolean).join(' · ')} close={close} id={haid} />
-        <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', aspectRatio: '16/9', background: '#0b0f16' }}>
-          <CamLive hass={hass} haid={haid} online={online} onMode={setFlux} />
-          {direct
-            ? <span style={{ position: 'absolute', top: 12, left: 12, display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 9, background: 'rgba(var(--o-bad-rgb),.18)', border: '1px solid rgba(var(--o-bad-rgb),.5)', color: 'var(--o-bad)', fontSize: 11, fontWeight: 800, letterSpacing: '.06em' }}>
-                <span className="o-livedot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-bad)' }} />{tr('EN DIRECT')}
-              </span>
-            : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text3)' }}><Fi i="video-camera" size={30} /></div>}
-        </div>
-        <div style={{ marginTop: 8, textAlign: 'center', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{online ? (CAM_FLUX()[flux] || '') : tr('Caméra injoignable')}</div>
+        {/* La tuile de l'Accueil, sans son bouton d'agrandissement : on y est deja. */}
+        <CameraTile c={tuileCamera({ name: nom, haid, online }, 0, hass)} agrandir={false} />
         {(modes.length > 0 || onNav) && (
           <div style={{ marginTop: 14 }}>
             {modes.map((m, i) => {
@@ -4680,7 +4681,7 @@ function CamSheet({ haid, nom, hass, onClose, onNav = null }) {
     </BottomSheet>
   );
 }
-function CameraTile({ c }) {
+function CameraTile({ c, agrandir = true }) {
   const live = !!(c.haid && c.hass);
   const t = new Date(), hhmm = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
   // Un seul bouton : agrandir en popup — le flux est DÉJÀ en direct, le
@@ -4695,7 +4696,7 @@ function CameraTile({ c }) {
       <div style={{ position: 'absolute', top: 13, right: 14, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.85)', textShadow: '0 1px 4px rgba(0,0,0,.5)' }}>{hhmm}</div>
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '30px 16px 14px', background: 'linear-gradient(to top,rgba(0,0,0,.72),transparent)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div><div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>{c.label}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,.82)' }}>{c.sub}</div></div>
-        {live && (
+        {live && agrandir && (
           <button aria-label={tr('Agrandir')} onClick={() => setGrand(true)} style={ctrl}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></button>
         )}
       </div>
@@ -5997,7 +5998,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     return { txt: out, alerte };
   }, [a]);
   // HA absent → vitrine de demo ; HA present sans camera → aucune camera, pas d'exemple
-  const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => ({ label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: CAMERAS()[i % CAMERAS().length].grad, glow: CAMERAS()[i % CAMERAS().length].glow, sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: cam.online ? 'var(--o-ok)' : '#f87171' }} />{cam.online ? 'Direct' : 'Hors ligne'}</>), cle: cleCamera(cam, i), haid: cam.haid, online: cam.online, hass: a.hass })) : CAMERAS();
+  const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => tuileCamera(cam, i, a.hass)) : CAMERAS();
   const _dWallE = { label: tr('Aspirateur'), iconKey: 'vacuum', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
   const _dLuba = { label: tr('Tondeuse'), iconKey: 'mower', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
   const _dLv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase: tr('Éteint'), color: '#94a3b8', active: false, valueIcon: 'timer', valueText: '--:--', bar: null };

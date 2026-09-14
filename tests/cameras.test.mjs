@@ -95,7 +95,8 @@ test('la fiche camera : le flux, comment on le voit, les modes, la Securite', ()
   const fiche = src.slice(debut, fin);
   assert.ok(fiche.includes('<FicheEntete '), 'le squelette commun des fiches');
   assert.ok(fiche.includes('cameraModes(LOGGIA_INDEX, S, haid)'), 'les modes viennent du registre, pas d’une liste');
-  assert.ok(fiche.includes('onMode={setFlux}') && fiche.includes('CAM_FLUX()[flux]'), 'la ligne sous le flux suit le mode reel de CamLive');
+  assert.ok(fiche.includes('<CameraTile c={tuileCamera({ name: nom, haid, online }, 0, hass)} agrandir={false} />'), 'la tuile de l’Accueil, sans agrandissement');
+  assert.ok(!fiche.includes('<CamLive '), 'pas de second dessin du flux');
   assert.ok(fiche.includes("onNav('securite')"), 'le chemin vers la vue Securite');
   assert.ok(!fiche.includes('borderRadius: 999'), 'pas de pilule : arrondi 9');
   const d = src.indexOf('const CAM_MODES = () => ({');
@@ -110,16 +111,25 @@ test('depuis une piece, la fiche camera sait aller a la Securite', () => {
   assert.ok(room.includes('useDomainCards(hass, { onNav })'), 'RoomView passe onNav aux fiches');
   assert.ok(src.includes('function useDomainCards(hass, { onNav = null } = {})'), 'les autres appels restent sans');
   assert.ok(src.includes('onClose={() => setCamPop(null)} onNav={onNav} />'), 'la fiche recoit onNav');
-  const cam = readFileSync(join(RACINE, 'src', 'camera.jsx'), 'utf8');
-  assert.ok(cam.includes('onMode = null') && cam.includes('onMode(mode)'), 'CamLive dit son mode');
 });
 
-test('la carte camera porte sa couleur : icone et repere en bleu quand elle est en direct', () => {
+test('la carte camera porte sa couleur : lavis, icone et repere en bleu quand elle est en direct', () => {
   const d = src.indexOf('function RoomGenericCard(');
   const carte = src.slice(d, src.indexOf('\nfunction ', d + 1));
   assert.ok(carte.includes("const direct = dom === 'camera' && !mort && (s === 'streaming' || s === 'recording' || s === 'idle');"), 'l’etat « en direct » est nomme');
-  assert.ok(carte.includes('const teinteIco = allume || direct;'), 'l’icone se teinte aussi pour une camera en direct');
-  assert.ok(carte.includes("RM_ICO(teinteIco ? icoFond : 'var(--o-s1)', teinteIco ? icoTexte : 'var(--o-text3)')"), 'la teinte de l’icone suit teinteIco');
+  assert.ok(carte.includes("const allume = !mort && (danger || direct || (actif"), 'une camera en direct est allumee : lavis compris');
+  assert.ok(carte.includes("const ico = dom === 'camera' ? 'camera' : cvIcoEntite(dom, id, st, nom);"), 'appareil photo dans le carre, camera video en repere');
+  assert.ok(carte.includes("RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)')"), 'la teinte de l’icone suit allume');
   assert.ok(carte.includes("color: direct ? icoTexte : 'var(--o-text3)'"), 'le repere en haut a droite aussi');
-  assert.ok(carte.includes('(allume && LAVIS ?'), 'le lavis reste reserve a ce qui est allume');
+  assert.ok(carte.includes('(allume && LAVIS ?'), 'le lavis suit allume, donc la camera en direct');
+});
+
+test('l’Accueil et la fiche dessinent la meme tuile camera', () => {
+  assert.ok(src.includes('a.cams.map((cam, i) => tuileCamera(cam, i, a.hass))'), 'l’Accueil passe par tuileCamera');
+  const d = src.indexOf('function tuileCamera(');
+  const corps = src.slice(d, src.indexOf('\n}', d));
+  assert.ok(corps.includes('cle: cleCamera(cam, i)'), 'la cle de la tuile reste celle de cleCamera');
+  assert.ok(corps.includes("tr('Direct')") && corps.includes("tr('Hors ligne')"), 'le point d’etat parle la langue du moment');
+  assert.ok(src.includes('function CameraTile({ c, agrandir = true })'), 'la tuile sait se passer de son bouton');
+  assert.ok(src.includes('{live && agrandir && ('), 'le bouton d’agrandissement ne s’affiche que si on le demande');
 });
