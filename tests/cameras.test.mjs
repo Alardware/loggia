@@ -113,3 +113,13 @@ test('depuis une piece, la fiche camera sait aller a la Securite', () => {
   const cam = readFileSync(join(RACINE, 'src', 'camera.jsx'), 'utf8');
   assert.ok(cam.includes('onMode = null') && cam.includes('onMode(mode)'), 'CamLive dit son mode');
 });
+
+test('la carte camera porte sa couleur : icone et repere en bleu quand elle est en direct', () => {
+  const d = src.indexOf('function RoomGenericCard(');
+  const carte = src.slice(d, src.indexOf('\nfunction ', d + 1));
+  assert.ok(carte.includes("const direct = dom === 'camera' && !mort && (s === 'streaming' || s === 'recording' || s === 'idle');"), 'l’etat « en direct » est nomme');
+  assert.ok(carte.includes('const teinteIco = allume || direct;'), 'l’icone se teinte aussi pour une camera en direct');
+  assert.ok(carte.includes("RM_ICO(teinteIco ? icoFond : 'var(--o-s1)', teinteIco ? icoTexte : 'var(--o-text3)')"), 'la teinte de l’icone suit teinteIco');
+  assert.ok(carte.includes("color: direct ? icoTexte : 'var(--o-text3)'"), 'le repere en haut a droite aussi');
+  assert.ok(carte.includes('(allume && LAVIS ?'), 'le lavis reste reserve a ce qui est allume');
+});

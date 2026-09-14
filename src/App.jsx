@@ -1826,10 +1826,14 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const fmtN = (n) => (Math.round(n * 10) / 10).toString().replace('.', ',');
   const etatsBin = BIN_ETATS()[a.device_class] || null;
   const danger = dom === 'binary_sensor' && !!(etatsBin && etatsBin[2]) && s === 'on';
+  // Une camera en direct n'est pas « allumee » — pas de lavis, elle l'est
+  // toujours — mais sa couleur se voit : icone et repere en bleu, comme le
+  // sous-titre (retour user du 14/09 : « pourquoi pas la couleur sur la carte »).
+  const direct = dom === 'camera' && !mort && (s === 'streaming' || s === 'recording' || s === 'idle');
   let sub, couleur = 'var(--o-text3)', teinte = 'accent';
   if (mort) sub = tr('Indisponible');
   else if (dom === 'lock') { sub = s === 'locked' ? tr('Verrouillée') : s === 'unlocked' ? tr('Déverrouillée') : s === 'locking' ? tr('Verrouillage…') : s === 'unlocking' ? tr('Déverrouillage…') : s === 'jammed' ? tr('Bloquée') : String(s); teinte = 'ok'; couleur = actif ? 'var(--o-ok)' : 'var(--o-warn2)'; }
-  else if (dom === 'camera') { sub = (s === 'streaming' || s === 'recording' || s === 'idle') ? tr('En direct') : String(s); couleur = 'var(--o-accent-soft)'; }
+  else if (dom === 'camera') { sub = direct ? tr('En direct') : String(s); couleur = 'var(--o-accent-soft)'; }
   else if (dom === 'binary_sensor') { sub = etatsBin ? (s === 'on' ? etatsBin[0] : etatsBin[1]) : (s === 'on' ? tr('Détecté') : 'RAS'); couleur = danger ? 'var(--o-bad)' : 'var(--o-warn)'; teinte = danger ? 'bad' : 'or'; }
   else if (dom === 'sensor') {
     const n = parseFloat(s);
@@ -1850,6 +1854,7 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('#FFCC44', .16), 'var(--o-warn)', 'rgba(255,204,68,'] };
   const [icoFond, icoTexte, lavisBase] = TEINTES[teinte];
   const allume = !mort && (danger || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera'));
+  const teinteIco = allume || direct;
   const ouvrable = !!onOpen && !mort;
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? tr('Ouvrir') + ' ' + nom : undefined}
@@ -1858,10 +1863,10 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
         ...(allume && LAVIS ? { background: `linear-gradient(180deg,transparent 28%,${lavisBase}${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
         border: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)')}>{ico ? <Fi i={ico} size={17} /> : <PlugIcon size={17} />}</span>
+        <span style={RM_ICO(teinteIco ? icoFond : 'var(--o-s1)', teinteIco ? icoTexte : 'var(--o-text3)')}>{ico ? <Fi i={ico} size={17} /> : <PlugIcon size={17} />}</span>
         {(togglable || dom === 'lock') && !mort
           ? <RmBascule on={actif} nom={nom} onToggle={basculer} />
-          : <span aria-hidden="true" style={{ color: 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i={dom === 'camera' ? 'video-camera' : 'square'} size={dom === 'camera' ? 15 : 12} /></span>}
+          : <span aria-hidden="true" style={{ color: direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i={dom === 'camera' ? 'video-camera' : 'square'} size={dom === 'camera' ? 15 : 12} /></span>}
       </div>
       <div style={{ marginTop: 14 }}>
         <div style={RM_NAME}>{nom}</div>
