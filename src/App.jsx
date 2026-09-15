@@ -1795,6 +1795,20 @@ function IlluOuvrant({ type, ouvert }) {
   );
 }
 
+/* Le repere pile d'un capteur, en haut a droite (retour user du 15/09 :
+ * « c'est quoi ce petit carre partout ? pour les capteurs remplace-le par la
+ * batterie ») : l'icone au niveau et le pourcentage, rouge sous 20 %, ambre
+ * sous 50 %. Sans capteur de pile, rien du tout — plus de carre. */
+function PileRepere({ n }) {
+  const ico = n < 12 ? 'battery-empty' : n < 37 ? 'battery-quarter' : n < 62 ? 'battery-half' : n < 87 ? 'battery-three-quarters' : 'battery-full';
+  const col = n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-text3)';
+  return (
+    <span title={tr('Pile') + ' ' + n + ' %'} style={{ display: 'flex', alignItems: 'center', gap: 4, height: 26, fontSize: 11, fontWeight: 700, color: col, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+      <Fi i={ico} size={13} />{n} %
+    </span>
+  );
+}
+
 /* Les noms des mesures d'un capteur, par classe Home Assistant : ce que dit
  * le sous-titre quand aucune regle ne donne de verdict. */
 const MESURES_NOMS = () => ({ temperature: tr('Température'), humidity: tr('Humidité'), carbon_dioxide: tr('CO₂'), pm25: tr('Particules fines'), pm10: tr('Particules'), aqi: tr('Qualité d’air'), power: tr('Puissance'), energy: tr('Énergie'), voltage: tr('Tension'), current: tr('Courant'), illuminance: tr('Luminosité'), pressure: tr('Pression'), atmospheric_pressure: tr('Pression'), battery: tr('Pile'), signal_strength: tr('Signal'), volatile_organic_compounds: tr('COV'), moisture: tr('Humidité du sol'), wind_speed: tr('Vent'), precipitation: tr('Précipitations'), gas: tr('Gaz'), water: tr('Eau') });
@@ -1847,6 +1861,9 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   // pour les plantes » — pas de bouton, pas de duree).
   const ouvrant = dom === 'binary_sensor' && OUVRANT_DCS.indexOf(a.device_class) >= 0;
   const ouvert = ouvrant && !mort && s === 'on';
+  // La pile d'un capteur sans fil, lue dans son capteur soeur : le repere du
+  // coin haut droit quand la carte n'a ni interrupteur ni mesure a y mettre.
+  const pile = (dom === 'binary_sensor' || dom === 'sensor') && !mort ? pileDe(S, id) : null;
   // Une camera en direct est ALLUMEE, au sens de la carte : lavis, icone et
   // repere en bleu — la maquette entiere, pas seulement le sous-titre (retour
   // user du 14/09, deux fois : « pourquoi pas la couleur sur la carte »).
@@ -1903,7 +1920,9 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
           ? <RmBascule on={actif} nom={nom} onToggle={basculer} />
           : (dom === 'sensor' && mesure && !mort)
             ? <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 4, fontSize: 22, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: avis != null ? couleur : 'var(--o-text)' }}>{mesure.v}{mesure.u ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{mesure.u}</span> : null}</span>
-          : <span aria-hidden="true" style={{ color: direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i={dom === 'camera' ? 'video-camera' : 'square'} size={dom === 'camera' ? 15 : 12} /></span>}
+          : dom === 'camera'
+            ? <span aria-hidden="true" style={{ color: direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i="video-camera" size={15} /></span>
+            : pile != null ? <PileRepere n={pile} /> : null}
       </div>
       <div style={{ marginTop: 14, position: 'relative' }}>
         <div style={RM_NAME}>{nom}</div>

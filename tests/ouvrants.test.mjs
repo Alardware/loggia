@@ -18,7 +18,7 @@ test('la carte d’un ouvrant : celle d’avant, plus le filigrane qui suit l’
   assert.ok(c.includes("const ouvrant = dom === 'binary_sensor' && OUVRANT_DCS.indexOf(a.device_class) >= 0;"), 'porte, fenetre, garage, ouverture, portail');
   assert.ok(c.includes("{ouvrant && <IlluOuvrant type={a.device_class === 'window' ? 'fenetre' : 'porte'} ouvert={ouvert} />}"), 'l’illustration, fenetre ou porte, ouverte ou fermee');
   assert.ok(!c.includes("tr('Historique')") && !c.includes('depuis {d}') && !c.includes('useMinute') && !c.includes('reperOuvrant'), 'rien d’autre n’a bouge : ni bouton, ni duree, ni repere');
-  assert.ok(c.includes("'video-camera' : 'square'}") && c.includes("color: direct ? icoTexte : 'var(--o-text3)'"), 'le repere en haut a droite est celui d’avant');
+  assert.ok(c.includes('<Fi i="video-camera" size={15} />') && c.includes("color: direct ? icoTexte : 'var(--o-text3)'"), 'le repere de la camera est celui d’avant');
   assert.ok(c.includes('<div style={RM_NAME}>{nom}</div>'), 'le nom sans retrait : le filigrane est derriere, comme la plante');
   const i = bloc('function IlluOuvrant(', NL + '}');
   assert.ok(i.includes("position: 'absolute', right: 8, bottom: 8, height: 100") && i.includes("pointerEvents: 'none'"), 'en filigrane bas droite, comme la plante');
@@ -31,4 +31,14 @@ test('la fiche du capteur est restee celle d’avant', () => {
   const f = bloc('function RoomBinarySheet(', NL + '}');
   assert.ok(!f.includes('RoomActivityCard'), 'pas de journal ajoute');
   assert.ok(!src.includes('dureeDepuis'), 'plus de duree nulle part');
+});
+
+test('plus de petit carre : le coin haut droit d’un capteur montre sa pile, ou rien', () => {
+  const c = bloc('function RoomGenericCard(', NL + 'function ');
+  assert.ok(!c.includes("'square'"), 'le bouche-trou a disparu');
+  assert.ok(c.includes("const pile = (dom === 'binary_sensor' || dom === 'sensor') && !mort ? pileDe(S, id) : null;"), 'la pile vient du capteur soeur, pour les capteurs seulement');
+  assert.ok(c.includes(': pile != null ? <PileRepere n={pile} /> : null}'), 'la pile, sinon rien');
+  const p = bloc('function PileRepere(', NL + '}');
+  assert.ok(p.includes("n < 12 ? 'battery-empty' : n < 37 ? 'battery-quarter' : n < 62 ? 'battery-half' : n < 87 ? 'battery-three-quarters' : 'battery-full'"), 'l’icone suit le niveau');
+  assert.ok(p.includes("n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-text3)'"), 'rouge sous 20 %, ambre sous 50 %, comme la rangee Pile de la fiche');
 });
