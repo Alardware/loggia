@@ -4838,9 +4838,10 @@ function CameraTile({ c, agrandir = true }) {
       {live && <CamLive hass={c.hass} haid={c.haid} online={c.online} />}
       {!live && <div style={{ position: 'absolute', inset: 0, background: c.glow }} />}
       <div className="o-livebadge" style={{ position: 'absolute', top: 13, left: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 11px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: '#fff' }}><span className="o-livedot" style={{ width: 7, height: 7, borderRadius: '50%', background: '#f87171' }} />{c.tag}</div>
-      <div style={{ position: 'absolute', top: 13, right: 14, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.85)', textShadow: '0 1px 4px rgba(0,0,0,.5)' }}>{hhmm}</div>
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '30px 16px 14px', background: 'linear-gradient(to top,rgba(0,0,0,.72),transparent)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-        <div><div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>{c.label}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,.82)' }}>{c.sub}</div></div>
+      <div className="o-camheure" style={{ position: 'absolute', top: 13, right: 14, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.85)', textShadow: '0 1px 4px rgba(0,0,0,.5)' }}>{hhmm}</div>
+      {/* Les classes portent les règles du téléphone (deux tuiles par ligne). */}
+      <div className="o-campied" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '30px 16px 14px', background: 'linear-gradient(to top,rgba(0,0,0,.72),transparent)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        <div style={{ minWidth: 0 }}><div className="o-camnom" style={{ fontSize: 15, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.label}</div><div className="o-camsous" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,.82)' }}>{c.sub}</div></div>
         {live && agrandir && (
           <button aria-label={tr('Agrandir')} onClick={() => setGrand(true)} style={ctrl}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></button>
         )}
