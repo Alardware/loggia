@@ -1843,4 +1843,7 @@ export default {
   'Vide : toutes les lumières de la pièce. Une liste ne vaut que pour le bouton de la carte.': 'Empty: every light of the room. A list only applies to the card’s button.',
   'Carte compacte': 'Compact card',
   'Une rangée au lieu de deux : icône, nom, état et le contrôle.': 'One row instead of two: icon, name, state and the control.',
+  'Icônes précédentes': 'Previous icons',
+  'Icônes suivantes': 'Next icons',
+  'Page {n}': 'Page {n}',
 };

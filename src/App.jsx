@@ -5501,11 +5501,16 @@ const TEINTES_PIECE = [
   { id: 'bain', label: 'Bain', col: 'var(--o-piece-bain)', rgb: 'var(--o-piece-bain-rgb)' },
   { id: 'vert', label: 'Vert', col: 'var(--o-piece-vert)', rgb: 'var(--o-piece-vert-rgb)' },
 ];
-/* Les icones proposees a une piece (la grille de la maquette), toutes
- * rendables — dessin maison ou police regular, tests/icones.test.mjs le
- * verifie. « bath » n'existe pas dans la police : la baignoire est `hot-tub`,
- * comme le modele Salle de bain. */
-const ICONES_PIECE = ['couch', 'utensils', 'bed-alt', 'teddy-bear', 'briefcase', 'hot-tub', 'home', 'house-chimney', 'tree', 'paw'];
+/* Les icones proposees a une piece : trente, par pages de dix — deux lignes
+ * de cinq, retour user du 15/09 — toutes rendables, dessin maison ou police
+ * regular (tests/icones.test.mjs le verifie). « bath » n'existe pas dans la
+ * police : la baignoire est `hot-tub`, comme le modele Salle de bain. */
+const ICONES_PIECE = [
+  'couch', 'utensils', 'bed-alt', 'teddy-bear', 'briefcase', 'hot-tub', 'home', 'house-chimney', 'tree', 'paw',
+  'garage', 'car', 'door-open', 'computer', 'gamepad', 'book', 'coffee', 'baby-carriage', 'flower-tulip', 'leaf',
+  'sun', 'umbrella-beach', 'swimmer', 'gym', 'music-alt', 'film', 'hammer', 'box', 'bolt', 'flame',
+];
+const ICONES_PAR_PAGE = 10;
 
 /** Le modele de piece le plus proche d'un nom, ou null. */
 function modeleDePiece(nom) {
@@ -5673,6 +5678,9 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
   const [val, setVal] = useState(nom);
   const [icone, setIcone] = useState(actuel ? actuel.glyphe : 'home');
   const [teinte, setTeinte] = useState(actuel ? actuel.teinte : 'accent');
+  // La grille d'icones, par pages de dix : on ouvre sur celle de l'icone choisie.
+  const pages = Math.ceil(ICONES_PIECE.length / ICONES_PAR_PAGE);
+  const [page, setPage] = useState(Math.max(0, Math.floor(ICONES_PIECE.indexOf(icone) / ICONES_PAR_PAGE)));
   const [compacte, setCompacte] = useState(!!compacteInit);
   const [temp, setTemp] = useState(h.temp || '');
   const [hum, setHum] = useState(h.humidity || '');
@@ -5697,6 +5705,7 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
   const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
   const note = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' };
   const puce = (on, x) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + x.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + x.rgb + ',.14)' : 'var(--o-s1)', color: on ? x.col : 'var(--o-text1)' });
+  const pageur = (possible) => ({ width: 28, height: 28, padding: 0, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: possible ? 'pointer' : 'default', opacity: possible ? 1 : .35, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' });
   const entites = [['o-piece-temp', tr('Température'), temp, setTemp, 'temperature'], ['o-piece-hum', tr('Humidité'), hum, setHum, 'humidity'], ['o-piece-co2', tr('CO₂'), co2, setCo2, 'carbon_dioxide']];
 
   return (
@@ -5714,13 +5723,23 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
 
           <div style={etiquette}>{tr('ICÔNE')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-            {ICONES_PIECE.map(ic => { const on = ic === icone; return (
+            {ICONES_PIECE.slice(page * ICONES_PAR_PAGE, (page + 1) * ICONES_PAR_PAGE).map(ic => { const on = ic === icone; return (
               <button key={ic} aria-pressed={on} aria-label={ic} onClick={() => setIcone(ic)}
                 style={{ height: 46, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + t.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + t.rgb + ',.14)' : 'var(--o-s1)' }}>
                 <Ico name={ic} size={20} color={on ? t.col : 'var(--o-text1)'} />
               </button>
             ); })}
           </div>
+          {pages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
+              <button aria-label={tr('Icônes précédentes')} disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={pageur(page > 0)}><Fi i="angle-small-left" size={14} /></button>
+              {Array.from({ length: pages }, (_, i) => (
+                <button key={i} aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === page} onClick={() => setPage(i)}
+                  style={{ width: 8, height: 8, padding: 0, borderRadius: 4, border: 'none', cursor: 'pointer', background: i === page ? t.col : 'var(--o-bd2)' }} />
+              ))}
+              <button aria-label={tr('Icônes suivantes')} disabled={page === pages - 1} onClick={() => setPage(p => Math.min(pages - 1, p + 1))} style={pageur(page < pages - 1)}><Fi i="angle-small-right" size={14} /></button>
+            </div>
+          )}
 
           <div style={etiquette}>{tr('TEINTE')}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
