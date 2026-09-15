@@ -22,9 +22,11 @@ le rail s'empilait sous toutes les sections : un long puits.
   de la bannière (dock, éteindre, fermer la vanne), lave-vaisselle en cours,
   zones qui chauffent, volet entre deux ou en mouvement (stop). Huit lignes au
   plus ; le panneau reste quand rien ne tourne. La glissière du héros disparaît.
-- **Deux onglets sur mobile et tablette** : « Maison » et « En ce moment »,
-  tapables et glissables au doigt, un seul panneau dans le flux, onglet retenu
-  pour la session, glissement coupé en édition. Le PC garde ses deux colonnes.
+- **Deux pages sur mobile et tablette** : « Maison » et « En ce moment »,
+  glissées au doigt, deux points tapables pour repère — pas de barre
+  d'onglets (retour utilisateur, v3.24.1) — un seul panneau dans le flux,
+  page retenue pour la session, glissement coupé en édition. Le PC garde
+  ses deux colonnes.
 - **Migration** : `etats` → `moment` dans les ordres et masquages enregistrés,
   `securite` en tête d'un accueil déjà rangé, `heros` ignoré.
 

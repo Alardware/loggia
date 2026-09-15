@@ -48,15 +48,15 @@ test('En ce moment : une ligne par chose qui tourne, avec son geste, et rien d�
   assert.ok(l.includes('e.stopPropagation(); onAction();') && l.includes('<Fi i="angle-right" size={10} color="var(--o-text3)" />'), 'le geste a droite, sinon le chevron');
 });
 
-test('deux onglets sur mobile : tapables, glissables au doigt, retenus, coupes en edition', () => {
+test('deux pages sur mobile : glissees au doigt, deux points, retenues, coupees en edition', () => {
   const o = bloc('function OngletsAccueil(', NL + '}');
-  assert.ok(o.includes('role="tablist"') && o.includes('role="tab"') && o.includes('aria-selected={on}'), 'de vrais onglets');
+  assert.ok(!o.includes('role="tablist"') && o.includes('aria-label={lbl} aria-pressed={on}') && o.includes('width: on ? 18 : 6'), 'pas de barre d’onglets (retour user) : deux points, comme sous l’ancienne glissiere');
   assert.ok(o.includes("sessionStorage.getItem(ONGLET_CLE) === 'moment' ? 1 : 0") && src.includes("const ONGLET_CLE = 'loggia-accueil-onglet';"), 'retenu pour la session');
   assert.ok(o.includes("if (edit || e.pointerType === 'mouse') return;"), 'le geste ne vaut qu’au doigt, jamais en edition');
   assert.ok(o.includes('g.pris = Math.abs(ddx) > Math.abs(ddy) * 2;') && o.includes('if (g.dx < -40 && onglet === 0) va(1);') && o.includes('g.dx = (onglet === 0 && ddx > 0) || (onglet === 1 && ddx < 0) ? ddx / 4 : ddx;'), 'franchement horizontal, 40 px');
   assert.ok(o.includes('onPointerCancel={annule}') && o.includes('const annule = () => { geste.current = null; setDx(0); };'), 'un pointercancel ne change pas d’onglet');
   assert.ok(o.includes('{onglet === 0 ? maison : moment}'), 'un seul panneau dans le flux');
-  assert.ok(home.includes('if (!wide) return <OngletsAccueil maison={renduMain} moment={renduRail} nEnCours={nEnCours} edit={editMode} />;'), 'le mobile et la tablette passent par les onglets');
+  assert.ok(home.includes('if (!wide) return <OngletsAccueil maison={renduMain} moment={renduRail} edit={editMode} />;'), 'le mobile et la tablette passent par les deux pages');
   assert.ok(home.includes("gridTemplateColumns: wideXL ? '1fr 330px' : '1fr 276px'"), 'le PC garde ses deux colonnes');
 });
 

@@ -5868,16 +5868,16 @@ function LigneMoment({ icone, rgb, nom, sous, onOpen = null, action = null, acti
   );
 }
 
-/* Deux onglets sur mobile et tablette (retour user du 15/09) : « Maison »
+/* Deux pages sur mobile et tablette (retour user du 15/09) : « Maison »
  * (securite, favoris, scenes, pieces, cameras) et « En ce moment » (le rail
- * du PC). Onglets tapables ET glissement au doigt ; un seul panneau dans le
- * flux — deux panneaux cote a cote donneraient a la page la hauteur du plus
+ * du PC). Glissement au doigt, deux points pour repere ; un seul panneau dans
+ * le flux — deux panneaux cote a cote donneraient a la page la hauteur du plus
  * long. L'onglet est retenu pour la session. Le geste ne vaut qu'au doigt
  * (la souris a les onglets), s'efface en edition (le drag des sections tient
  * deja le pointeur), et un `pointercancel` — le navigateur a pris le geste
  * pour faire defiler une rangee — ne change pas d'onglet. */
 const ONGLET_CLE = 'loggia-accueil-onglet';
-function OngletsAccueil({ maison, moment, nEnCours = 0, edit = false }) {
+function OngletsAccueil({ maison, moment, edit = false }) {
   const [onglet, setOnglet] = useState(() => { try { return sessionStorage.getItem(ONGLET_CLE) === 'moment' ? 1 : 0; } catch { return 0; } });
   const [dx, setDx] = useState(0); // le decalage du panneau pendant le geste
   const geste = useRef(null);
@@ -5906,16 +5906,16 @@ function OngletsAccueil({ maison, moment, nEnCours = 0, edit = false }) {
     else setDx(0);
   };
   const annule = () => { geste.current = null; setDx(0); };
-  const onglets = [[tr('Maison'), null], [tr('En ce moment'), nEnCours]];
+  const onglets = [tr('Maison'), tr('En ce moment')];
   return (
     <div onPointerDown={debut} onPointerMove={mouv} onPointerUp={fin} onPointerCancel={annule} style={{ touchAction: 'pan-y' }}>
-      <div role="tablist" aria-label={tr('Accueil')} style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-        {onglets.map(([lbl, n], i) => { const on = onglet === i; return (
-          <button key={lbl} role="tab" aria-selected={on} onClick={() => va(i)}
-            style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 800, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.5)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
-            {lbl}
-            {n != null && n > 0 && <span aria-label={tr('{n} en cours', { n })} style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, background: 'var(--o-accent-fond)', color: '#06121f' }}>{n}</span>}
-          </button>
+      {/* Pas de barre d'onglets (retour user du 15/09 : « j'en veux pas de
+        * ca ») : deux points, comme sous l'ancienne glissiere — le doigt
+        * glisse, la souris tape le point. */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
+        {onglets.map((lbl, i) => { const on = onglet === i; return (
+          <button key={lbl} type="button" aria-label={lbl} aria-pressed={on} title={lbl} onClick={() => va(i)}
+            style={{ width: on ? 18 : 6, height: 6, borderRadius: 999, border: 'none', padding: 0, cursor: 'pointer', background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', transition: 'all .25s' }} />
         ); })}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, transform: dx ? 'translateX(' + dx + 'px)' : undefined, transition: dx ? 'none' : 'transform .2s' }}>
@@ -7045,7 +7045,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
           const renduRail = ordreDe('rail').map(id => secsRail[id] ? Sec('rail', id, secsRail[id]) : null).filter(Boolean);
           // Mobile et tablette : deux onglets, « Maison » et « En ce moment ».
-          if (!wide) return <OngletsAccueil maison={renduMain} moment={renduRail} nEnCours={nEnCours} edit={editMode} />;
+          if (!wide) return <OngletsAccueil maison={renduMain} moment={renduRail} edit={editMode} />;
           return (
             <div style={{ display: 'grid', gridTemplateColumns: wideXL ? '1fr 330px' : '1fr 276px', gap: wideXL ? 18 : 14 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
