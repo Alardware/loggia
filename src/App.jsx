@@ -5842,43 +5842,98 @@ function jourAgenda(e) {
   return { jour, heure };
 }
 
-/* Héros « En ce moment » : une seule carte → nue ; plusieurs → glissière à la
- * page (scroll-snap, défilement au doigt) et petits points sous la carte. Le
- * libellé de droite suit la carte visible. */
-function HeroSlider({ ids, dc }) {
-  const ref = useRef(null);
-  const [idx, setIdx] = useState(0);
-  const i2 = Math.max(0, Math.min(ids.length - 1, idx));
-  // Le clic pose l'index sans attendre l'événement scroll : la glissière le
-  // confirmera, mais les points répondent tout de suite.
-  const va = (i) => { setIdx(i); const el = ref.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' }); };
+/* Une ligne « En ce moment » (maquette du 15/09) : la tuile d'icone teintee,
+ * le nom, l'etat, et a droite le geste quand il existe (pause, dock, eteindre,
+ * stop) ; la ligne elle-meme ouvre la fiche. Meme air que les lignes denses
+ * du rail. Sans geste ni fiche, une ligne inerte. */
+function LigneMoment({ icone, rgb, nom, sous, onOpen = null, action = null, actionIcone = null, onAction = null }) {
+  const ouvre = onOpen ? () => onOpen() : null;
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <div style={sectionTitle}>{tr('En ce moment')}</div>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{String(ids[i2]).indexOf('media_player.') === 0 ? tr('Lecture en cours') : tr('Chauffage')}</span>
+    /* Role, tabulation, clic et touche tiennent tous a `ouvre` : ensemble ou
+     * pas du tout. La regle lit les attributs un par un. */
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
+    <div role={ouvre ? 'button' : undefined} tabIndex={ouvre ? 0 : undefined} onClick={ouvre || undefined}
+      onKeyDown={ouvre ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvre(); } } : undefined}
+      style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', cursor: ouvre ? 'pointer' : 'default' }}>
+      <span style={{ ...RM_ICO('rgba(' + rgb + ',.16)', 'rgb(' + rgb + ')'), width: 34, height: 34, borderRadius: 11 }}>{icone ? <Ico name={icone} size={15} /> : <PlugIcon size={15} />}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sous}</div>
       </div>
-      <div ref={ref} className="o-heroslider" onScroll={e => { const el = e.currentTarget; setIdx(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
-        style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none' }}>
-        {ids.map(id => <div key={id} className="o-hero" style={{ flex: '0 0 100%', minWidth: 0, height: 184, scrollSnapAlign: 'start' }}>{dc.card(id)}</div>)}
+      {action && onAction ? (
+        <button aria-label={action + ' · ' + nom} title={action} onClick={(e) => { e.stopPropagation(); onAction(); }}
+          style={{ width: 30, height: 30, borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={actionIcone || 'power'} size={13} /></button>
+      ) : ouvre ? <Fi i="angle-right" size={10} color="var(--o-text3)" /> : null}
+    </div>
+  );
+}
+
+/* Deux onglets sur mobile et tablette (retour user du 15/09) : « Maison »
+ * (securite, favoris, scenes, pieces, cameras) et « En ce moment » (le rail
+ * du PC). Onglets tapables ET glissement au doigt ; un seul panneau dans le
+ * flux — deux panneaux cote a cote donneraient a la page la hauteur du plus
+ * long. L'onglet est retenu pour la session. Le geste ne vaut qu'au doigt
+ * (la souris a les onglets), s'efface en edition (le drag des sections tient
+ * deja le pointeur), et un `pointercancel` — le navigateur a pris le geste
+ * pour faire defiler une rangee — ne change pas d'onglet. */
+const ONGLET_CLE = 'loggia-accueil-onglet';
+function OngletsAccueil({ maison, moment, nEnCours = 0, edit = false }) {
+  const [onglet, setOnglet] = useState(() => { try { return sessionStorage.getItem(ONGLET_CLE) === 'moment' ? 1 : 0; } catch { return 0; } });
+  const [dx, setDx] = useState(0); // le decalage du panneau pendant le geste
+  const geste = useRef(null);
+  const va = (i) => { setOnglet(i); setDx(0); try { sessionStorage.setItem(ONGLET_CLE, i ? 'moment' : 'maison'); } catch {} };
+  const debut = (e) => { if (edit || e.pointerType === 'mouse') return; geste.current = { x: e.clientX, y: e.clientY, pris: null }; };
+  const mouv = (e) => {
+    const g = geste.current; if (!g) return;
+    const ddx = e.clientX - g.x, ddy = e.clientY - g.y;
+    if (g.pris == null) {
+      if (Math.abs(ddx) < 12 && Math.abs(ddy) < 12) return;
+      // Un geste franchement horizontal, sinon c'est un defilement.
+      g.pris = Math.abs(ddx) > Math.abs(ddy) * 2;
+      if (!g.pris) { geste.current = null; return; }
+    }
+    // Au bord (pas de page avant la premiere, ni apres la seconde), le panneau resiste.
+    g.dx = (onglet === 0 && ddx > 0) || (onglet === 1 && ddx < 0) ? ddx / 4 : ddx;
+    setDx(g.dx);
+  };
+  // La depose lit le decalage dans la ref, pas dans l'etat : un `pointerup`
+  // qui suit le dernier `pointermove` avant le rendu verrait encore zero.
+  const fin = () => {
+    const g = geste.current; geste.current = null;
+    if (!g || !g.pris) { setDx(0); return; }
+    if (g.dx < -40 && onglet === 0) va(1);
+    else if (g.dx > 40 && onglet === 1) va(0);
+    else setDx(0);
+  };
+  const annule = () => { geste.current = null; setDx(0); };
+  const onglets = [[tr('Maison'), null], [tr('En ce moment'), nEnCours]];
+  return (
+    <div onPointerDown={debut} onPointerMove={mouv} onPointerUp={fin} onPointerCancel={annule} style={{ touchAction: 'pan-y' }}>
+      <div role="tablist" aria-label={tr('Accueil')} style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {onglets.map(([lbl, n], i) => { const on = onglet === i; return (
+          <button key={lbl} role="tab" aria-selected={on} onClick={() => va(i)}
+            style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 800, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.5)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
+            {lbl}
+            {n != null && n > 0 && <span aria-label={tr('{n} en cours', { n })} style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, background: 'var(--o-accent-fond)', color: '#06121f' }}>{n}</span>}
+          </button>
+        ); })}
       </div>
-      {ids.length > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 9 }}>
-          {ids.map((id, i) => (
-            <button key={id} type="button" aria-label={tr('Carte {n}', { n: i + 1 })} onClick={() => va(i)}
-              style={{ width: i === i2 ? 18 : 6, height: 6, borderRadius: 999, border: 'none', padding: 0, cursor: 'pointer', background: i === i2 ? 'var(--o-accent-fond)' : 'var(--o-bd1)', transition: 'all .25s' }} />
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, transform: dx ? 'translateX(' + dx + 'px)' : undefined, transition: dx ? 'none' : 'transform .2s' }}>
+        {onglet === 0 ? maison : moment}
+      </div>
     </div>
   );
 }
 
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
-const ACC_MAIN = ['favoris', 'heros', 'scenes', 'pieces', 'cameras'];
-const ACC_RAIL = ['etats', 'rappels', 'calendrier', 'agenda'];
-const ACC_NOMS = () => ({ favoris: tr('Favoris'), heros: tr('En ce moment'), scenes: tr('Scènes rapides'), pieces: tr('Pièces'), cameras: tr('Caméras'), etats: tr('En cours'), rappels: tr('Rappels'), calendrier: tr('Calendrier'), agenda: tr('Agenda') });
+const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];
+const ACC_RAIL = ['moment', 'rappels', 'calendrier', 'agenda'];
+const ACC_NOMS = () => ({ securite: tr('Sécurité'), favoris: tr('Favoris'), scenes: tr('Scènes rapides'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), calendrier: tr('Calendrier'), agenda: tr('Agenda') });
+/* Les identifiants d'un accueil enregistre avant le 15/09 : la glissiere du
+ * heros a disparu (son contenu vit dans « En ce moment »), « En cours » est
+ * devenu « En ce moment ». Un identifiant inconnu est simplement ignore. */
+const ACC_RENOMME = { etats: 'moment' };
 
 /* FAVORIS de l'accueil : les cartes que le foyer a choisies, posées ICI.
  *
@@ -6150,8 +6205,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   });
   const ordreDe = (zone) => {
     const base = zone === 'main' ? ACC_MAIN : ACC_RAIL;
-    const sauve = (grille[zone] || []).filter(s => base.indexOf(s) >= 0);
-    return [...sauve, ...base.filter(s => sauve.indexOf(s) < 0)];
+    const sauve = (grille[zone] || []).map(s => ACC_RENOMME[s] || s).filter(s => base.indexOf(s) >= 0);
+    const manquants = base.filter(s => sauve.indexOf(s) < 0);
+    // Un accueil enregistre avant la carte Securite la recoit en tete, pas en queue.
+    if (zone === 'main' && sauve.length && manquants.indexOf('securite') >= 0) return ['securite', ...sauve, ...manquants.filter(s => s !== 'securite')];
+    return [...sauve, ...manquants];
   };
   const [secDrag, setSecDrag] = useState(null); // { zone, id, ordre }
   // Au doigt : appui court (200 ms, vibration) avant de saisir une section ;
@@ -6206,7 +6264,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     setSecDrag(null);
   };
   const cacheSec = (id) => saveGrille({ caches: [...grille.caches, id] });
-  const montreSec = (id) => saveGrille({ caches: grille.caches.filter(x => x !== id) });
+  const montreSec = (id) => saveGrille({ caches: grille.caches.filter(x => (ACC_RENOMME[x] || x) !== id) });
   // Drag d'une CARTE pièce (dans la section) : même mécanique que les sections
   // — souris directe, appui long au doigt — mais l'ordre est le sien
   // (accL.piecesOrdre). stopPropagation : sinon la section se saisit avec.
@@ -6280,7 +6338,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   };
   /** Enveloppe d'une section : drag + masque en édition, rien sinon. */
   const Sec = (zone, id, contenu) => {
-    const cache = (grille.caches || []).indexOf(id) >= 0;
+    const cache = (grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0;
     if (cache && !editMode) return null;
     const saisie = secDrag && secDrag.id === id;
     return (
@@ -6396,12 +6454,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   }, [a]);
   // HA absent → vitrine de demo ; HA present sans camera → aucune camera, pas d'exemple
   const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => tuileCamera(cam, i, a.hass)) : CAMERAS();
-  const _dWallE = { label: tr('Aspirateur'), iconKey: 'vacuum', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
-  const _dLuba = { label: tr('Tondeuse'), iconKey: 'mower', phase: tr('Sur base'), color: 'var(--o-ok)', active: false, valueIcon: 'battery', valueText: '100%', bar: 100, barColor: 'var(--o-ok)' };
   const _dLv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase: tr('Éteint'), color: '#94a3b8', active: false, valueIcon: 'timer', valueText: '--:--', bar: null };
   const _dPb = { label: tr('Poubelles'), iconKey: 'trash', phase: tr('Dans {j}j', { j: 2 }), color: '#fbbf24', active: false, valueText: 'Mer. 16 Juin', dotsFilled: 12, dotsTotal: 14 };
   const M = (a && a.machines) || {};
-  const mWallE = M.wallE || (a ? null : _dWallE), mLuba = M.luba || (a ? null : _dLuba);
   const mLv = M.lv || (a ? null : _dLv), mPb = M.poubelles || (a ? null : _dPb);
   const metricDiv = { flexShrink: 0, width: 1, background: 'var(--o-bd2)', margin: '4px 4px' };
   // ── Layout PC (≥1180) : rail « En cours / Rappels » accolé à la zone Pièces+Caméras ──
@@ -6596,18 +6651,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   // refroidissent avant les autres). Aucun → la section n'existe pas du tout.
   // Plusieurs → glissière à la page, points sous la carte (HeroSlider).
   const dc = useDomainCards(dashHass);
-  const heroIds = useMemo(() => {
-    const S = dashHass && dashHass.states;
-    if (!S) return [];
-    try {
-      const joue = medPlayers().map(m => m.haid).filter(id => S[id] && mpRead(S, id).playing)
-        .sort((x, y) => String(S[y].last_changed || '').localeCompare(String(S[x].last_changed || '')));
-      const zs = climateZones(S).filter(z => estClimate(z) && z.haid && S[z.haid] && S[z.haid].state !== 'off' && S[z.haid].state !== 'unavailable');
-      const travaille = (z) => ['heating', 'cooling'].indexOf((S[z.haid].attributes || {}).hvac_action) >= 0 ? 0 : 1;
-      zs.sort((za, zb) => travaille(za) - travaille(zb));
-      return [...new Set([...joue, ...zs.map(z => z.haid)])].slice(0, 6);
-    } catch { return []; }
-  }, [dashHass]);
   const roomClimInfo = (name) => {
     const ex = roomExtras && roomExtras[rmNorm(name)];
     if (!ex || !ex.clim) return null;
@@ -6879,32 +6922,87 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             </div>
           ) : null;
           const OKRGB = '52,211,153', AMBRGB = '251,191,36';
-          const etatsRows = [];
-          /* L'ARMEMENT en tête du rail : c'est le geste du départ et du
-            * retour, il ne devrait pas demander d'ouvrir une vue. Les modes
-            * proposés sont ceux du panneau ; s'il réclame un code, on ouvre
-            * la vue Sécurité, qui sait le demander. */
-          if (alarmRailId) {
-            etatsRows.push(<RailArm key="armer" id={alarmRailId} hass={dashHass} />);
-          }
-          /* La serrure juste sous l'armement : c'est le meme geste de depart
-            * et de retour. Elle n'apparait que si l'installation en a une. */
+          /* SÉCURITÉ en tête de l'accueil (maquette du 15/09) : l'armement
+            * avec ses boutons d'aujourd'hui, la serrure, et les ouvrants — le
+            * geste du départ et du retour, en premier. Sans panneau, sans
+            * serrure et sans ouvrant, la carte n'existe pas. */
           const serrureId = serrureRailId(dashHass && dashHass.states);
-          if (serrureId) {
-            etatsRows.push(<RailSerrure key="serrure" id={serrureId} hass={dashHass} />);
-          }
-          /* Le rail ne redit pas la bannière (retour 01/09) : lumières,
-            * sécurité, qualité d'air et énergie y sont déjà chiffrées. Il
-            * garde ce qui RACONTE quelque chose — volets, robots, appareils. */
-          etatsRows.push(railRow('vol', tr('Mode volets'), tr('Auto lever/coucher'), (a && a.sunsetHM) ? a.sunsetHM : '21:42', 'var(--o-accent-soft)', 'climat'));
-          if (mWallE && (!a || hasEnt((loggiaEnt('vacuum', {}) || {}).etat))) etatsRows.push(railRow('we', mWallE.label, mWallE.phase, mWallE.valueText, mWallE.barColor || mWallE.color, 'objets'));
-          if (mLuba && (!a || hasEnt(mowerId(a && a.states)))) etatsRows.push(railRow('lu', mLuba.label, mLuba.phase, mLuba.valueText, mLuba.barColor || mLuba.color, 'objets'));
-          if (mLv && (!a || hasEnt(notifIds().dishwasher))) etatsRows.push(railRow('lv', mLv.label, mLv.phase, mLv.valueText, mLv.color, 'objets'));
-          const nActifs = [mWallE, mLuba, mLv].filter(m => m && m.active).length;
+          const alarmeEtat = (alarmRailId && dashHass && dashHass.states[alarmRailId]) ? String(dashHass.states[alarmRailId].state) : null;
+          const alarmeMots = { disarmed: tr('Désarmée'), armed_home: tr('Maison'), armed_away: tr('Absent'), armed_night: tr('Nuit'), armed_vacation: tr('Vacances'), triggered: tr('ALERTE'), arming: tr('Activation…'), pending: tr('Activation…') };
+          const alarmeCol = alarmeEtat === 'triggered' ? 'var(--o-bad)' : (alarmeEtat && alarmeEtat !== 'disarmed') ? 'var(--o-warn)' : 'var(--o-ok)';
+          const alarmeRgb = alarmeEtat === 'triggered' ? 'var(--o-bad-rgb)' : (alarmeEtat && alarmeEtat !== 'disarmed') ? 'var(--o-warn-rgb)' : 'var(--o-ok-rgb)';
+          const ouvrantsRow = ouvStat.total > 0 ? railRow('ouv',
+            ouvStat.ouverts > 1 ? tr('{n} ouvrants ouverts sur {m}', { n: ouvStat.ouverts, m: ouvStat.total }) : ouvStat.ouverts === 1 ? tr('{n} ouvrant ouvert sur {m}', { n: 1, m: ouvStat.total }) : tr('Tout est fermé'),
+            tr('Portes et fenêtres'), ouvStat.ouverts > 0 ? tr('Ouvrir') : '', ouvStat.ouverts > 0 ? 'var(--o-warn)' : 'var(--o-ok)', 'securite') : null;
+          const carteSecurite = (alarmRailId || serrureId || ouvrantsRow) ? (
+            <div style={{ background: 'var(--o-surfA)', borderRadius: 'var(--o-radius,18px)', padding: '13px 15px', boxShadow: 'var(--o-shadow)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={RM_ICO('rgba(' + alarmeRgb + ',.16)', alarmeCol)}><Fi i={(alarmeEtat && alarmeEtat !== 'disarmed') ? 'shield-check' : 'shield'} size={17} /></span>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {alarmRailId ? tr('Alarme') + ' · ' + (alarmeMots[alarmeEtat] || alarmeEtat || '—') : tr('Sécurité')}
+                </div>
+              </div>
+              {alarmRailId && <RailArm id={alarmRailId} hass={dashHass} />}
+              {serrureId && <RailSerrure id={serrureId} hass={dashHass} />}
+              {ouvrantsRow}
+            </div>
+          ) : null;
+          /* EN CE MOMENT (maquette du 15/09) : ce qui se passe, une ligne par
+            * chose et son geste — rien d'inventé : un lecteur en lecture, un
+            * appareil en marche (la règle de la bannière, APPAREIL_ACTIF), le
+            * lave-vaisselle en cours, les zones qui chauffent, un volet entre
+            * deux ou en mouvement. Huit lignes au plus, le reste est dans Objets. */
+          const S0 = (dashHass && dashHass.states) || {};
+          const commande = (id, dom, svc, data) => commanderService(dashHass, id, dom, svc, { entity_id: id, ...(data || {}) });
+          const momentRows = [];
+          try {
+            medPlayers().forEach(m => {
+              const id = m.haid; if (!S0[id]) return;
+              const np = mpRead(S0, id); if (!np.playing) return;
+              momentRows.push(<LigneMoment key={id} icone="music-alt" rgb="236,72,153" nom={m.name} sous={[np.title, np.artist].filter(Boolean).join(' · ') || tr('Lecture')}
+                onOpen={() => dc.ouvrir(id)} action={tr('Mettre en pause')} actionIcone="pause" onAction={() => commande(id, 'media_player', 'media_play_pause')} />);
+            });
+            const meta = (a && a.index && a.index.entityMeta) || null;
+            const lampes = new Set(switchLights());
+            const ETIQ = { vacuum: { cleaning: tr('Nettoyage'), returning: tr('Retour à la base') }, lawn_mower: { mowing: tr('Tonte'), returning: tr('Retour à la base') } };
+            Object.keys(S0).forEach(id => {
+              const e = S0[id]; if (!e) return;
+              const dom = id.slice(0, id.indexOf('.'));
+              const test = APPAREIL_ACTIF[dom]; if (!test || lampes.has(id) || !test(e.state)) return;
+              const mt = meta ? meta.get(id) : null; if (mt && (mt.category || mt.hidden)) return;
+              const nom = (e.attributes || {}).friendly_name || id;
+              const sous = (ETIQ[dom] && ETIQ[dom][e.state]) || (dom === 'valve' ? tr('Ouverte') : tr('En marche'));
+              const geste = dom === 'vacuum' ? [tr('Renvoyer au dock'), 'home', () => commande(id, 'vacuum', 'return_to_base')]
+                : dom === 'lawn_mower' ? [tr('Renvoyer au dock'), 'home', () => commande(id, 'lawn_mower', 'dock')]
+                  : dom === 'valve' ? [tr('Fermer la vanne'), 'power', () => commande(id, 'valve', 'close_valve')]
+                    : [tr('Éteindre'), 'power', () => commande(id, dom, 'turn_off')];
+              const icone = dom === 'vacuum' ? 'vacuum' : dom === 'lawn_mower' ? 'mower' : dom === 'fan' ? 'wind' : dom === 'humidifier' ? 'raindrops' : dom === 'valve' ? 'water' : null;
+              momentRows.push(<LigneMoment key={id} icone={icone} rgb="var(--o-accent-rgb)" nom={nom} sous={sous} onOpen={() => dc.ouvrir(id)} action={geste[0]} actionIcone={geste[1]} onAction={geste[2]} />);
+            });
+            if (mLv && mLv.active && (!a || hasEnt(notifIds().dishwasher))) momentRows.push(<LigneMoment key="lv" icone="dishwasher" rgb="var(--o-accent-rgb)" nom={mLv.label} sous={[mLv.phase, mLv.valueText].filter(Boolean).join(' · ')} onOpen={onNav ? () => onNav('objets') : null} />);
+            const chauffe = climateZones(S0).filter(z => estClimate(z) && z.haid && S0[z.haid] && ['heating', 'cooling'].indexOf((S0[z.haid].attributes || {}).hvac_action) >= 0);
+            if (chauffe.length) momentRows.push(<LigneMoment key="clim" icone="flame" rgb="var(--o-bad-rgb)" nom={chauffe.length > 1 ? tr('{n} zones chauffent', { n: chauffe.length }) : tr('{n} zone chauffe', { n: 1 })} sous={chauffe.map(z => z.name).join(' · ')} onOpen={onNav ? () => onNav('climat') : null} />);
+            voletCovers(S0).forEach(c => {
+              const e = S0[c.haid]; if (!e) return;
+              const pos = (e.attributes || {}).current_position;
+              const bouge = e.state === 'opening' || e.state === 'closing';
+              const entre = typeof pos === 'number' && pos > 0 && pos < 100;
+              if (!bouge && !entre) return;
+              momentRows.push(<LigneMoment key={c.haid} icone="blinds" rgb="167,139,250" nom={c.name || (e.attributes || {}).friendly_name || c.haid}
+                sous={bouge ? (e.state === 'opening' ? tr('Ouverture…') : tr('Fermeture…')) : tr('{p} % — ni ouvert ni fermé', { p: pos })}
+                onOpen={() => dc.ouvrir(c.haid)} action={bouge ? tr('Stop') : null} actionIcone="stop" onAction={bouge ? () => commande(c.haid, 'cover', 'stop_cover') : null} />);
+            });
+          } catch {}
+          const nEnCours = momentRows.length;
+          const momentVisibles = nEnCours > 8
+            ? [...momentRows.slice(0, 8), railRow('plus', tr('{n} autres', { n: nEnCours - 8 }), tr('Tout est dans Objets'), '', 'var(--o-text3)', 'objets')]
+            : momentRows;
           const rappelsRows = [];
           if (!a || (a.repasIn && a.repasLabel)) rappelsRows.push(railRow('rep', tr('Repas chat'), a ? a.repasLabel : 'Collation après-midi · 18g', a ? a.repasIn.replace('DANS ', '').toLowerCase() : '1h38', 'var(--o-warn)'));
           if (mPb) rappelsRows.push(railRow('pb', tr('Poubelles'), mPb.valueText, mPb.phase, mPb.color));
-          const railEtats = railPanel(tr('En cours'), tr('Volets, robots et appareils'), nActifs ? nActifs + ' ' + (nActifs > 1 ? tr('ACTIFS') : tr('ACTIF')) : tr('TOUT AU REPOS'), nActifs ? '79,140,255' : OKRGB, etatsRows);
+          const railMoment = railPanel(tr('En ce moment'), tr('Lecteurs, appareils, chauffage et volets'),
+            nEnCours ? (nEnCours > 1 ? tr('{n} EN COURS', { n: nEnCours }) : tr('1 EN COURS')) : tr('RIEN EN COURS'), nEnCours ? '79,140,255' : OKRGB,
+            nEnCours ? momentVisibles : [<div key="rien" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', padding: '6px 0 2px' }}>{tr('Rien ne tourne pour le moment.')}</div>]);
           const railRappels = railPanel(tr('Rappels'), tr('Repas du chat et ramassage'), null, AMBRGB, rappelsRows);
           // Agenda : les prochains evenements des calendriers HA. Pas de
           // calendrier, ou rien sous sept jours → pas de carte.
@@ -6926,7 +7024,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             // Les favoris s'éditent EUX-MÊMES (leurs cartes ont leur barre
             // d'outils) : la section reste donc vivante en mode édition.
             favoris: <FavorisAccueil hass={dashHass} edit={editMode} />,
-            heros: heroIds.length ? <HeroSlider ids={heroIds} dc={dc} /> : null,
+            securite: carteSecurite,
             scenes: <QuickScenes hass={dashHass} />,
             pieces: <>{piecesHeader}{piecesGrid}</>,
             cameras: cams.length > 0 ? <>{camsHeader}{camsGrid}</> : null,
@@ -6943,15 +7041,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
               <div style={{ height: 184 }} className="o-hero"><CvCalendrier id={calRailId} hass={dashHass} onOpen={dc.ouvrir} /></div>
             </div>
           ) : null;
-          const secsRail = { etats: railEtats, rappels: railRappels, calendrier: railCal, agenda: railAgenda };
+          const secsRail = { moment: railMoment, rappels: railRappels, calendrier: railCal, agenda: railAgenda };
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
           const renduRail = ordreDe('rail').map(id => secsRail[id] ? Sec('rail', id, secsRail[id]) : null).filter(Boolean);
-          if (!wide) return (
-            <>
-              {renduMain}
-              {renduRail}
-            </>
-          );
+          // Mobile et tablette : deux onglets, « Maison » et « En ce moment ».
+          if (!wide) return <OngletsAccueil maison={renduMain} moment={renduRail} nEnCours={nEnCours} edit={editMode} />;
           return (
             <div style={{ display: 'grid', gridTemplateColumns: wideXL ? '1fr 330px' : '1fr 276px', gap: wideXL ? 18 : 14 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
@@ -12304,6 +12398,8 @@ export default function App() {
   const lightKeys = [...Object.values(hueScripts()), ...dimmableLights(getHass()), ...switchLights(), 'switch.', ...cfgKeys('hue'), ...(cfg.lights || []).map(l => l.haid)].filter(Boolean);
   const accueilKeys = [...enKeys(), ...vacKeys, ...croqKeys(), ...plantKeys(), 'light.', ...switchLights(),
     ...mowerKeys(), notifIds().dishwasherStart,
+    // « En ce moment » (v3.24) : ce qui tourne, et ses gestes.
+    'media_player.', 'climate.', 'cover.', 'vacuum.', 'fan.', 'humidifier.', 'valve.',
     cfg.energy.consoNow, cfg.energy.solarOutput,
     ...(cfg.rooms || []).flatMap(r => [r.haid && r.haid.temp, r.haid && r.haid.humidity, r.haid && r.haid.co2]),
     ...lightKeys, ...bannerKeys(), ...(cfg.cams || []).map(c => c.haid)];
