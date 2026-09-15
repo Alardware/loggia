@@ -14,8 +14,8 @@ const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, d
 
 test('le bandeau : le mot d’ordre de la maquette et ses trois boutons', () => {
   const b = bloc('function BandeauEdition(', NL + '}');
-  assert.ok(b.includes("tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une entité.')"));
-  assert.ok(b.includes("tr('Ajouter une entité')") && b.includes("tr('Toutes les entités')") && b.includes("tr('Terminer')"));
+  assert.ok(b.includes("tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une carte.')"));
+  assert.ok(b.includes("tr('Ajouter une carte')") && b.includes("tr('Toutes les cartes')") && b.includes("tr('Terminer')"));
   assert.ok(b.includes('useContext(HeaderCtx)') && b.includes('ctx.onToggleEdit'), 'Terminer quitte l’edition par le contexte de l’en-tete');
   assert.ok(b.includes('ed.reset()'), 'Toutes les entites ramene la liste automatique');
 });
@@ -102,12 +102,12 @@ test('la taille : compacte (une rangee de 88 px) ou standard (deux), rangee dans
   assert.ok(h.includes('compacts: null') && h.includes('(layout.compacts || []).length'), 'Toutes les entites l’efface, et elle compte comme une retouche');
   assert.ok(h.includes('estLarge, basculerLarge, estCompact, basculerCompact }'), 'l’editeur la rend');
   const dc = bloc('function useDomainCards(', NL + '}');
-  assert.ok(dc.includes('const compact = (id, label = null) => <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense />;') && dc.includes('return { card, compact, sheets, fermer, ouvrir };'), 'la compacte est CvCard dense, qui ouvre la meme fiche');
+  assert.ok(dc.includes('const compact = (id, label = null) => card(id, label, null, true);') && dc.includes("if (chip) return <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense />;") && dc.includes('return { card, compact, nom, plante, distributeur, sheets, fermer, ouvrir };'), 'la compacte passe par la fabrique : CvCard dense pour une entite, la chip du distributeur ou de la plante sinon');
   const c = bloc('function EditableCard(', NL + '}');
   assert.ok(c.includes("compact ? 'o-cvrow1' : ''") && c.includes('if (compact) {') && c.includes("minHeight: 0, height: '100%'"), 'la carte d’edition compacte tient sur une rangee');
   assert.ok(c.includes("brut.indexOf('zone:') !== 0") && c.includes('taille && !!ed.basculerCompact'), 'pas de compacte pour une zone fil pilote, ni la ou la vue n’en offre pas');
   const obj = bloc('function ObjetsView(', NL + '}');
-  assert.equal((obj.match(/chip=\{compacte\}/g) || []).length, 2, 'distributeur et plantes prennent leur compacte');
+  assert.equal((bloc('function useDomainCards(', NL + '}').match(/chip=\{chip\}/g) || []).length, 2, 'distributeur et plantes prennent leur compacte, dans la fabrique commune');
   assert.ok(obj.includes('className="grid-objets grid-dense"') && obj.includes("(ed.estCompact(o.cle) ? 'o-cvrow1' : '')"), 'la grille d’Objets est dense, la compacte y prend une rangee');
   const en = bloc('function EnergieContent(', NL + 'function ');
   assert.ok(en.includes('taille={false}'), 'les postes d’Energie n’ont pas de compacte');

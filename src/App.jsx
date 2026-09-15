@@ -79,22 +79,6 @@ import { tr, trHA, preparerLangue, locale } from './i18n.js';
  * Voir `tests/composants.test.mjs`.
  */
 
-const Ligne = ({ id, on, nom, onToggle }) => {
-  return (
-    <div role="checkbox" aria-checked={on} tabIndex={0} onClick={() => onToggle(id)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(id); } }}
-      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 11px', borderRadius: 10, cursor: 'pointer', border: '1px solid ' + (on ? 'rgba(var(--o-accent-rgb),.4)' : 'var(--o-bd3)'), background: on ? 'rgba(var(--o-accent-rgb),.11)' : 'var(--o-s2)' }}>
-      <span style={{ width: 19, height: 19, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--o-accent-fond)' : 'transparent', border: on ? 'none' : '1.5px solid var(--o-bd1)' }}>
-        {on && <Fi i="check" size={10} color="#06121f" />}
-      </span>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom(id)}</div>
-        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{id}</div>
-      </div>
-    </div>
-  );
-};
-
 // Bloc du bandeau : libellé + contrôle, comme la vue Pièce
 const QuickBox = ({ label, children }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
@@ -3756,10 +3740,10 @@ function BandeauEdition({ ed = null, onAjouter = null, toutes = null, ajouterLab
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
       <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
-      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une entité.')}</span>
-      {onAjouter && <button onClick={onAjouter} style={btn(true)}><Fi i="plus" size={12} />{ajouterLabel || tr('Ajouter une entité')}</button>}
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une carte.')}</span>
+      {onAjouter && <button onClick={onAjouter} style={btn(true)}><Fi i="plus" size={12} />{ajouterLabel || tr('Ajouter une carte')}</button>}
       {extra}
-      {montreTout && <button onClick={toutes || (() => ed.reset())} disabled={!peutTout} title={tr('Rétablit la liste automatique : tout revient, l’ordre et les noms aussi.')} style={{ ...btn(false), opacity: peutTout ? 1 : .5 }}><Fi i="apps" size={12} />{tr('Toutes les entités')}</button>}
+      {montreTout && <button onClick={toutes || (() => ed.reset())} disabled={!peutTout} title={tr('Rétablit la liste automatique : tout revient, l’ordre et les noms aussi.')} style={{ ...btn(false), opacity: peutTout ? 1 : .5 }}><Fi i="apps" size={12} />{tr('Toutes les cartes')}</button>}
       {ctx.onToggleEdit && <button onClick={ctx.onToggleEdit} style={btn(false)}><Fi i="cross-small" size={12} />{tr('Terminer')}</button>}
     </div>
   );
@@ -3769,7 +3753,7 @@ function BandeauEdition({ ed = null, onAjouter = null, toutes = null, ajouterLab
 function CarteAjout({ onClick, label = null }) {
   return (
     <button onClick={onClick} style={{ ...RM_CARD, border: '1px dashed var(--o-bd1)', background: 'transparent', boxShadow: 'none', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', color: 'var(--o-text3)', fontSize: 13, fontWeight: 700 }}>
-      <Fi i="plus" size={18} /><span>{label || tr('Ajouter une entité')}</span>
+      <Fi i="plus" size={18} /><span>{label || tr('Ajouter une carte')}</span>
     </button>
   );
 }
@@ -3906,78 +3890,139 @@ const ROOM_ADD_DOMAINS = ['light', 'switch', 'cover', 'climate', 'media_player',
  * `domaines` restreint ce qu'on peut ajouter : proposer un radiateur dans la
  * vue Lumieres n'aurait pas de sens.
  */
-function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, domaines = ROOM_ADD_DOMAINS, entete = null, pied = null, listerTout = false }) {
+/* Une ligne du composeur : la tuile teintee, le nom, un sous-titre qui dit ce
+ * que c'est, et a droite « + » — ou la coche quand la carte est deja sur la
+ * vue (un tap la retire). La meme ligne pour une carte de Loggia et pour un
+ * appareil. */
+function LigneComposeur({ icone, rgb = 'var(--o-accent-rgb)', nom, sous, on, onToggle }) {
+  return (
+    <div role="checkbox" aria-checked={on} tabIndex={0} onClick={onToggle}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+      style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 10px', borderRadius: 12, cursor: 'pointer', border: '1px solid ' + (on ? 'rgba(' + rgb + ',.45)' : 'var(--o-bd3)'), background: on ? 'rgba(' + rgb + ',.10)' : 'var(--o-s2)' }}>
+      <span style={{ ...RM_ICO('rgba(' + rgb + ',.16)', 'rgb(' + rgb + ')'), width: 34, height: 34, borderRadius: 11 }}>{icone}</span>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sous}</div>
+      </div>
+      <span aria-hidden="true" style={{ width: 28, height: 28, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', color: on ? '#06121f' : 'var(--o-text1)' }}><Fi i={on ? 'check' : 'plus'} size={11} /></span>
+    </div>
+  );
+}
+
+/* « Ajouter une carte » (composeur du 15/09) — la meme feuille partout ou l'on
+ * range des cartes. Deux familles, dans cet ordre : les CARTES DE LOGGIA
+ * (distributeur, plantes, zones fil pilote — ce que Loggia compose a partir de
+ * plusieurs entites), puis les APPAREILS, groupes par piece, la piece courante
+ * ouverte, les autres repliees avec leur compte. La recherche cherche tout :
+ * nom de carte, nom d'appareil, piece, identifiant, cle interne. Rien ne
+ * choisit un dessin : un seul type, le standard, la taille au coin de la
+ * carte. `composites` : les vues qui ne veulent que des entites (Volets,
+ * Energie) coupent la premiere famille. */
+function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, piece = null, domaines = ROOM_ADD_DOMAINS, entete = null, pied = null, composites = true }) {
   const [q, setQ] = useState('');
+  const [filtre, setFiltre] = useState('tous');
+  const [ouverts, setOuverts] = useState(() => (piece ? { [rmNorm(piece)]: true } : {}));
   const S = (hass && hass.states) || {};
-  const nom = (id) => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id;
+  const nomEnt = (id) => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id;
   const domaineOk = (id) => domaines.indexOf(id.slice(0, id.indexOf('.'))) >= 0;
-
-  // Entites de la zone Home Assistant homonyme : le plus souvent, la reponse.
-  const domainesSig = domaines.join('|');
+  const pieceDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' && LOGGIA_INDEX.areaNameOf(id)) || null;
   const nbEntites = Object.keys(S).length;
-  const zoneIds = useMemo(() => {
-    const ix = LOGGIA_INDEX;
-    if (!ix || !ix.areaList) return [];
-    const cible = String(room).toLowerCase();
-    const a = ix.areaList.find(x => String(x.name).toLowerCase() === cible);
-    return (a && room) ? (a.entities || []).filter(domaineOk) : [];
-  }, [room, domainesSig]);
-
-  const tous = useMemo(() => Object.keys(S).filter(domaineOk).sort(), [nbEntites, domainesSig]);
-
+  const domainesSig = domaines.join('|');
+  // Les appareils : chaque entite avec ses filtres (le vocabulaire d'Objets) et sa piece.
+  const appareils = useMemo(() => Object.keys(S).filter(domaineOk).sort().map(id => {
+    const dom = id.slice(0, id.indexOf('.'));
+    const classe = ((S[id] && S[id].attributes) || {}).device_class || '';
+    return { id, nom: nomEnt(id), piece: pieceDe(id), filtres: filtresObjet({ domaine: dom, estLumiere: cvEstLumiere(id), classe }) };
+  }), [nbEntites, domainesSig]);
+  // Les cartes de Loggia disponibles chez toi : le distributeur (configure),
+  // chaque plante, chaque zone fil pilote (un thermostat est une entite, il
+  // vit chez les appareils). La piece courante d'abord.
+  const cartes = useMemo(() => {
+    if (!composites) return [];
+    const out = [];
+    const croq = croqHaids();
+    if (croq.reservoir || croq.portionWeight) out.push({ cle: 'obj:feeder', nom: tr('Distributeur de croquettes'), sous: dc ? dc.distributeur().sous : tr('Distributeur'), fi: 'paw', rgb: '255,138,76', piece: null });
+    plantsCfg().forEach(p => {
+      const pl = dc ? dc.plante(p.base) : null;
+      const v = pl ? verdictCartePlante(pl) : null;
+      out.push({ cle: 'plant:' + p.base, nom: p.name || p.base, sous: [pl && pl.room, v && v.texte].filter(Boolean).join(' · ') || tr('Plante'), fi: 'seedling', rgb: v ? v.rgb : 'var(--o-ok-rgb)', piece: pl ? pl.room : null });
+    });
+    climateZones(S).filter(z => !estClimate(z)).forEach(z => out.push({ cle: 'zone:' + z.id, nom: z.name || z.room || z.id, sous: tr('Zone de chauffage') + (z.room ? ' · ' + z.room : ''), fi: 'flame', rgb: 'var(--o-bad-rgb)', piece: z.room || null }));
+    if (piece) out.sort((a, b) => (rmNorm(b.piece || '') === rmNorm(piece) ? 1 : 0) - (rmNorm(a.piece || '') === rmNorm(piece) ? 1 : 0));
+    return out;
+  }, [composites, nbEntites, piece]);
+  const puces = OBJ_FILTRES().filter(f => f.id !== 'favoris' && (f.id === 'tous' || appareils.some(a => a.filtres.indexOf(f.id) >= 0)));
   const terme = q.trim().toLowerCase();
-  const trouves = terme
-    ? tous.filter(id => id.toLowerCase().indexOf(terme) >= 0 || String(nom(id)).toLowerCase().indexOf(terme) >= 0).slice(0, 60)
-    : [];
-
-
+  const cherche = (...champs) => champs.some(c => c && String(c).toLowerCase().indexOf(terme) >= 0);
+  const cartesVisibles = terme ? cartes.filter(c => cherche(c.nom, c.sous, c.cle, c.piece)) : cartes;
+  const appareilsVisibles = appareils.filter(a => (filtre === 'tous' || a.filtres.indexOf(filtre) >= 0) && (!terme || cherche(a.id, a.nom, a.piece)));
+  // Groupes par piece : la piece courante en tete, les autres par nom, les
+  // appareils sans piece en dernier.
+  const groupes = [];
+  if (!terme) {
+    const par = new Map();
+    appareilsVisibles.forEach(a => { const g = a.piece || ''; if (!par.has(g)) par.set(g, []); par.get(g).push(a); });
+    const cle = (g) => (piece && rmNorm(g) === rmNorm(piece)) ? '0' : g ? '1' + g.toLowerCase() : '2';
+    [...par.keys()].sort((a, b) => cle(a).localeCompare(cle(b), 'fr')).forEach(g => groupes.push({ nom: g, liste: par.get(g) }));
+  }
+  const iconeDe = (a) => {
+    const f = OBJ_FILTRES().find(x => x.id === (a.filtres[0] || ''));
+    return f ? (f.prise ? <PlugIcon size={15} /> : f.ico ? <Ico name={f.ico} size={15} /> : <Fi i={f.fi} size={15} />) : <Fi i="bolt" size={15} />;
+  };
+  const ligneAppareil = (a) => <LigneComposeur key={a.id} icone={iconeDe(a)} nom={a.nom} sous={[a.piece, a.id].filter(Boolean).join(' · ')} on={present.indexOf(a.id) >= 0} onToggle={() => onToggle(a.id)} />;
   const titre = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 8px' };
+  const puce = (on) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap', padding: '7px 11px', borderRadius: 9, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.5)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' });
+  const colonne = { display: 'flex', flexDirection: 'column', gap: 8 };
 
   return (
     <BottomSheet onClose={onClose}>
       {close => (
         <div style={{ padding: '4px 2px 8px' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
-            <div style={{ fontSize: 15, fontWeight: 800 }}>{entete || ('Ajouter à ' + room)}</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{present.length > 1 ? tr('{n} appareils', { n: present.length }) : tr('{n} appareil', { n: present.length })}</div>
+            <div style={{ fontSize: 15, fontWeight: 800 }}>{entete || tr('Ajouter une carte')}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{present.length > 1 ? tr('{n} cartes', { n: present.length }) : tr('{n} carte', { n: present.length })}</div>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 12 }}>
-            Coche pour ajouter, décoche pour retirer. Les modifications s'appliquent tout de suite.
-          </div>
+          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 12 }}>{tr('Coche pour ajouter, décoche pour retirer. Tout s’applique tout de suite.')}</div>
 
-          <input aria-label={tr('Rechercher une entité…')} value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Rechercher une entité…')}
+          <input aria-label={tr('Rechercher une carte, un appareil, une pièce…')} value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Rechercher une carte, un appareil, une pièce…')}
             style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
-
-          {!terme && zoneIds.length > 0 && (
-            <>
-              <div style={titre}>DANS LA ZONE « {String(room).toUpperCase()} » ({zoneIds.length})</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {zoneIds.map(id => <Ligne key={id} id={id} on={present.indexOf(id) >= 0} nom={nom} onToggle={onToggle} />)}
-              </div>
-            </>
-          )}
-          {/* Sans piece (la vue Objets, les volets) : toute la maison, d'emblee. */}
-          {!terme && !zoneIds.length && listerTout && (
-            <>
-              <div style={titre}>{tr('TOUTE LA MAISON')} ({tous.length})</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {tous.slice(0, 200).map(id => <Ligne key={id} id={id} on={present.indexOf(id) >= 0} nom={nom} onToggle={onToggle} />)}
-              </div>
-            </>
-          )}
-          {!terme && !zoneIds.length && !listerTout && (
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', margin: '14px 2px 0', lineHeight: 1.5 }}>
-              Aucune zone Home Assistant ne porte ce nom. Utilise la recherche ci-dessus — ou range tes appareils dans une zone, ils apparaîtront ici d'eux-mêmes.
+          {puces.length > 2 && (
+            <div className="o-favrow" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap', margin: '10px 0 0' }}>
+              {puces.map(f => (
+                <button key={f.id} onClick={() => setFiltre(f.id)} aria-pressed={filtre === f.id} style={puce(filtre === f.id)}>
+                  {f.prise ? <PlugIcon size={12} /> : f.ico ? <Ico name={f.ico} size={13} /> : <Fi i={f.fi} size={12} />}{f.label}
+                </button>
+              ))}
             </div>
           )}
-          {terme && (
+
+          {cartesVisibles.length > 0 && (
             <>
-              <div style={titre}>{trouves.length ? trouves.length + ' RÉSULTAT' + (trouves.length > 1 ? 'S' : '') : 'AUCUN RÉSULTAT'}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {trouves.map(id => <Ligne key={id} id={id} on={present.indexOf(id) >= 0} nom={nom} onToggle={onToggle} />)}
+              <div style={titre}>{tr('CARTES DE LOGGIA')} ({cartesVisibles.length})</div>
+              <div style={colonne}>
+                {cartesVisibles.map(c => <LigneComposeur key={c.cle} icone={<Fi i={c.fi} size={15} />} rgb={c.rgb} nom={c.nom} sous={c.sous} on={present.indexOf(c.cle) >= 0} onToggle={() => onToggle(c.cle)} />)}
               </div>
             </>
           )}
+
+          {terme ? (
+            <>
+              <div style={titre}>{appareilsVisibles.length ? (appareilsVisibles.length > 1 ? tr('{n} APPAREILS', { n: appareilsVisibles.length }) : tr('1 APPAREIL')) : (cartesVisibles.length ? tr('AUCUN APPAREIL') : tr('AUCUN RÉSULTAT'))}</div>
+              <div style={colonne}>{appareilsVisibles.slice(0, 80).map(ligneAppareil)}</div>
+            </>
+          ) : groupes.map(g => {
+            const ouvert = !!ouverts[rmNorm(g.nom)];
+            return (
+              <div key={g.nom || '-'}>
+                <button onClick={() => setOuverts(o => ({ ...o, [rmNorm(g.nom)]: !ouvert }))} aria-expanded={ouvert}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '12px 2px 6px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--o-text3)', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textAlign: 'left' }}>
+                  <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr('APPAREILS')} · {(g.nom || tr('SANS PIÈCE')).toUpperCase()} ({g.liste.length})</span>
+                  <Fi i={ouvert ? 'angle-small-down' : 'angle-small-right'} size={14} />
+                </button>
+                {ouvert && <div style={colonne}>{g.liste.slice(0, 200).map(ligneAppareil)}</div>}
+              </div>
+            );
+          })}
 
           {pied && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>{pied}</div>}
           <button onClick={close} style={{ marginTop: 18, width: '100%', padding: '11px 0', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f' }}>{tr('Terminé')}</button>
@@ -3985,6 +4030,16 @@ function RoomAddSheet({ room = null, hass, present = [], onToggle, onClose, doma
       )}
     </BottomSheet>
   );
+}
+
+/* Le nom d'une cle, quelle qu'elle soit : « Distributeur », le nom de la
+ * plante, celui de la zone fil pilote, sinon le nom de l'entite. */
+function nomDeCle(S, k) {
+  const s = String(k || '');
+  if (s === 'obj:feeder') return tr('Distributeur');
+  if (s.indexOf('plant:') === 0) { const p = plantsCfg().find(x => x.base === s.slice(6)); return (p && (p.name || p.base)) || s.slice(6); }
+  if (s.indexOf('zone:') === 0) { const z = climateZones(S || {}).find(x => x.id === s.slice(5)); return z ? (z.name || z.room || z.id) : s.slice(5); }
+  return cvName(S && S[s], s);
 }
 
 /**
@@ -4549,19 +4604,71 @@ function useDomainCards(hass, { onNav = null } = {}) {
     else if (d === 'binary_sensor') setBinPop(id);
     else setAppPop(id);
   };
-  const card = (id, label = null, zone = null) => {
-    const d = String(id).split('.')[0];
+  // ── Les cartes que Loggia compose lui-meme — distributeur, plantes, zones
+  // fil pilote — rendues ICI pour que toute vue puisse les poser (composeur
+  // du 15/09), avec leurs fiches. Objets ne fait plus que les demander. ──
+  const [feederPop, setFeederPop] = useState(false);
+  const [plantPop, setPlantPop] = useState(null);
+  const numDe = (id, d = null) => { const e = id && S[id]; if (!e) return d; const n = parseFloat(e.state); return isNaN(n) ? d : n; };
+  const appel = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
+  /* Le distributeur : reservoir, prochaine ration, et le « distribuer » de
+   * l'APPAREIL (un select `feed` dont START lance une ration) — le script
+   * maison ne reste qu'en repli. Le bac en grammes, les repas du jour, les
+   * jours de reserve ; le dernier repas d'apres le compteur du jour ; la
+   * portion, un nombre de l'appareil. */
+  const distributeur = () => {
+    const croq = croqHaids();
+    const pct = Math.max(0, Math.min(100, Math.round((numDe(croq.reservoir, 0) || 0) / croqMax(S) * 100)));
+    const ration = prochaineRation(S);
+    const feed = (() => {
+      const fid = Object.keys(S).find(x => x.indexOf('select.') === 0 && /feed$/.test(x) && S[x].attributes && Array.isArray(S[x].attributes.options) && S[x].attributes.options.some(o => /^(start|feed)$/i.test(o)));
+      if (fid) return () => appel('select', 'select_option', { entity_id: fid, option: S[fid].attributes.options.find(o => /^(start|feed)$/i.test(o)) });
+      const sc = feederScript(hass, loggiaEnt('feeder', null));
+      return sc ? () => appel('script', 'turn_on', { entity_id: sc }) : null;
+    })();
+    const ficheId = (loggiaEnt('feeder', null) || {}).haid || Object.keys(S).find(id => id.indexOf('number.') === 0 && /serving_size$/.test(id)) || null;
+    const repas = croqMeals();
+    const jours = joursDeReserve(numDe(croq.reservoir, null), repas);
+    const dernier = (() => { const e = croq.distribuees && S[croq.distribuees]; return e && e.last_changed ? heureDe(e.last_changed) : null; })();
+    const portion = (() => { const id = croq.portionWeight; const e = id && S[id]; if (!e) return null; const a = e.attributes || {}; return { id, valeur: numDe(id, 0), min: Number(a.min) || 0, max: Number(a.max) || 100, pas: Number(a.step) || 1 }; })();
+    const onRempli = (croq.reservoir && String(croq.reservoir).indexOf('input_number.') === 0) ? () => appel('input_number', 'set_value', { entity_id: croq.reservoir, value: croqMax(S) }) : null;
+    const sous = [tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
+    return { pct, ration, feed, ficheId, repas, jours, dernier, portion, onRempli, sous };
+  };
+  // Les plantes : leurs capteurs, reconnus a leur classe, et leur verdict.
+  const plante = (base) => { const p = plantsCfg().find(x => x.base === base); if (!p) return null; return { base, name: p.name || p.base, img: p.img || null, room: plantPiece(S, p.base, p.room), hum: numDe(plantCapteur(S, p.base, 'moisture')), cond: numDe(plantCapteur(S, p.base, 'conductivity', 'µS/cm')), lux: numDe(plantCapteur(S, p.base, 'illuminance', 'lx')), temp: numDe(plantCapteur(S, p.base, 'temperature')), bat: numDe(plantCapteur(S, p.base, 'battery', '%')) }; };
+  const nom = (k) => nomDeCle(S, k);
+  /* Toute cle rend sa carte : une entite, une zone (`zone:`), le distributeur
+   * (`obj:feeder`), une plante (`plant:`) — dans n'importe quelle vue.
+   * `chip` : la compacte, une rangee. */
+  const card = (id, label = null, zone = null, chip = false) => {
+    const k = String(id || '');
+    if (zone || k.indexOf('zone:') === 0) {
+      const z = zone || climateZones(S).find(x => x.id === k.slice(5));
+      return z ? <RoomPilotCard zone={z} hass={hass} onOpen={setPilotPop} titre={label} /> : null;
+    }
+    if (k === 'obj:feeder') {
+      const d = distributeur();
+      return <RoomFeederCard chip={chip} nom={label || tr('Distributeur')} pct={d.pct} sub={d.sous} onFeed={d.feed} onRempli={d.onRempli} onOpen={() => setFeederPop(true)} />;
+    }
+    if (k.indexOf('plant:') === 0) {
+      const pl = plante(k.slice(6));
+      if (!pl) return null;
+      const v = verdictCartePlante(pl);
+      return <RoomPlantCard chip={chip} nom={label || pl.name} sub={pl.room} hum={pl.hum} verdict={v.texte} verdictCol={v.couleur} rgb={v.rgb} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setPlantPop(pl)} />;
+    }
+    if (chip) return <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense />;
+    const d = k.split('.')[0];
     // Une prise qui n'est pas une lumiere n'est plus une carte lumiere : elle
     // rejoint les autres appareils, au gabarit, avec sa puissance.
     const lumiere = d === 'light' || (d === 'switch' && cvEstLumiere(id));
-    return zone ? <RoomPilotCard zone={zone} hass={hass} onOpen={setPilotPop} titre={label} />
-      : lumiere ? <RoomLightCard id={id} hass={hass} onOpen={setLightPop} label={label} onFiche={ouvrir} />
-        : d === 'cover' ? <RoomCoverCard id={id} hass={hass} onOpen={setCoverPop} titre={label} />
-          : d === 'climate' ? <RoomClimateCard id={id} hass={hass} onOpen={setClimPop} label={label} />
-            : d === 'media_player' ? <RoomMediaCard id={id} hass={hass} onOpen={setMediaPop} label={label} />
-              : (d === 'vacuum' || d === 'lawn_mower') ? <RoomMachineCard id={id} hass={hass} onOpen={ouvrir} label={label} />
-                : ROOM_GENERIQUES.indexOf(d) >= 0 ? <RoomGenericCard id={id} hass={hass} onOpen={ouvrir} label={label} />
-                  : <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} />;
+    return lumiere ? <RoomLightCard id={id} hass={hass} onOpen={setLightPop} label={label} onFiche={ouvrir} />
+      : d === 'cover' ? <RoomCoverCard id={id} hass={hass} onOpen={setCoverPop} titre={label} />
+        : d === 'climate' ? <RoomClimateCard id={id} hass={hass} onOpen={setClimPop} label={label} />
+          : d === 'media_player' ? <RoomMediaCard id={id} hass={hass} onOpen={setMediaPop} label={label} />
+            : (d === 'vacuum' || d === 'lawn_mower') ? <RoomMachineCard id={id} hass={hass} onOpen={ouvrir} label={label} />
+              : ROOM_GENERIQUES.indexOf(d) >= 0 ? <RoomGenericCard id={id} hass={hass} onOpen={ouvrir} label={label} />
+                : <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} />;
   };
   const sheets = (
     <>
@@ -4577,13 +4684,15 @@ function useDomainCards(hass, { onNav = null } = {}) {
       {prisePop && <RoomSwitchSheet id={prisePop} hass={hass} onClose={() => setPrisePop(null)} />}
       {lockPop && <RoomLockSheet id={lockPop} hass={hass} onClose={() => setLockPop(null)} />}
       {binPop && <RoomBinarySheet id={binPop} hass={hass} onClose={() => setBinPop(null)} />}
+      {feederPop && (() => { const d = distributeur(); return <FicheDistributeur hass={hass} nom={tr('Distributeur de croquettes')} pct={d.pct} jours={d.jours} dernier={d.dernier} ration={d.ration} repas={d.repas} portion={d.portion} feed={d.feed} onRempli={d.onRempli} ficheId={d.ficheId} onClose={() => setFeederPop(false)} />; })()}
+      {plantPop && <FichePlante pl={plantPop} onClose={() => setPlantPop(null)} />}
     </>
   );
-  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); setPrisePop(null); setLockPop(null); setBinPop(null); };
+  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); setPrisePop(null); setLockPop(null); setBinPop(null); setFeederPop(false); setPlantPop(null); };
   /* La COMPACTE d'une entite : une rangee — icone, nom, etat, le controle —
    * qui ouvre la meme fiche que la riche. Une zone fil pilote n'en a pas. */
-  const compact = (id, label = null) => <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense />;
-  return { card, compact, sheets, fermer, ouvrir };
+  const compact = (id, label = null) => card(id, label, null, true);
+  return { card, compact, nom, plante, distributeur, sheets, fermer, ouvrir };
 }
 
 /* ── Journal d'activite d'une piece ──────────────────────────────────────────
@@ -4613,7 +4722,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
 
   const S0 = (hass && hass.states) || {};
   const origineDe = (k) => k.indexOf('sect:') === 0 ? 'Section'
-    : k.indexOf('zone:') === 0 ? k.slice(5)
+    : (k.indexOf(':') > 0 && k.indexOf('.') < 0) ? nomDeCle(S0, k)
       : ((S0[k] && S0[k].attributes && S0[k].attributes.friendly_name) || k);
   const nomDe = (k) => ed.labelOf(k) || origineDe(k);
 
@@ -4774,7 +4883,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
           * l'état, dc.sheets MONTE la fiche — sans lui, taper une carte ne
           * faisait rien (« popup inactif », retour du 30/08). */}
         {dc.sheets}
-        {addSheet && <RoomAddSheet room={room} hass={hass} present={ents} onToggle={ed.toggle} onClose={() => setAddSheet(false)}
+        {addSheet && <ComposeurCartes piece={room} dc={dc} hass={hass} present={ents} onToggle={ed.toggle} onClose={() => setAddSheet(false)}
           pied={<button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} piece={room} onClose={() => setCardEdit(null)} />}
         {comfort && piece && <RoomComfortModal piece={piece} hass={hass} onClose={() => setComfort(false)} />}
@@ -5211,38 +5320,13 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false }) {
   const nomDe = (o) => ed.labelOf(o.cle) || o.nom;
   const scenes = Object.keys(S).filter(k => k.indexOf('scene.') === 0).length;
   const dc = useDomainCards(hass, { onNav });
-  const [sheet, setSheet] = useState(null);
-  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const num = (id, d = null) => { const e = id && S[id]; if (!e) return d; const n = parseFloat(e.state); return isNaN(n) ? d : n; };
-  // Le distributeur : reservoir, prochaine ration, et le « distribuer » de
-  // l'APPAREIL (un select `feed` dont START lance une ration) — le script
-  // maison ne reste qu'en repli.
-  const croq = croqHaids();
-  const croqPct = Math.max(0, Math.min(100, Math.round((num(croq.reservoir, 0) || 0) / croqMax(S) * 100)));
-  const ration = prochaineRation(S);
-  const feed = (() => {
-    const fid = Object.keys(S).find(x => x.indexOf('select.') === 0 && /feed$/.test(x) && S[x].attributes && Array.isArray(S[x].attributes.options) && S[x].attributes.options.some(o => /^(start|feed)$/i.test(o)));
-    if (fid) return () => call('select', 'select_option', { entity_id: fid, option: S[fid].attributes.options.find(o => /^(start|feed)$/i.test(o)) });
-    const sc = feederScript(hass, loggiaEnt('feeder', null));
-    return sc ? () => call('script', 'turn_on', { entity_id: sc }) : null;
-  })();
-  const croqFicheId = (loggiaEnt('feeder', null) || {}).haid || Object.keys(S).find(id => id.indexOf('number.') === 0 && /serving_size$/.test(id)) || null;
-  // Le bac en grammes, les repas du jour, les jours de reserve ; le dernier
-  // repas d'apres le compteur du jour ; la portion, un nombre de l'appareil.
-  const repas = croqMeals();
-  const jours = joursDeReserve(num(croq.reservoir, null), repas);
-  const dernier = (() => { const e = croq.distribuees && S[croq.distribuees]; return e && e.last_changed ? heureDe(e.last_changed) : null; })();
-  const portion = (() => { const id = croq.portionWeight; const e = id && S[id]; if (!e) return null; const a = e.attributes || {}; return { id, valeur: num(id, 0), min: Number(a.min) || 0, max: Number(a.max) || 100, pas: Number(a.step) || 1 }; })();
-  const onRempli = (croq.reservoir && String(croq.reservoir).indexOf('input_number.') === 0) ? () => call('input_number', 'set_value', { entity_id: croq.reservoir, value: croqMax(S) }) : null;
-  const sousDistributeur = [tr('Réservoir {p} %', { p: croqPct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
-  // Les plantes : leurs capteurs, reconnus a leur classe, et leur verdict.
-  const plante = (base) => { const p = plantsCfg().find(x => x.base === base); if (!p) return null; return { base, name: p.name || p.base, img: p.img || null, room: plantPiece(S, p.base, p.room), hum: num(plantCapteur(S, p.base, 'moisture')), cond: num(plantCapteur(S, p.base, 'conductivity', 'µS/cm')), lux: num(plantCapteur(S, p.base, 'illuminance', 'lx')), temp: num(plantCapteur(S, p.base, 'temperature')), bat: num(plantCapteur(S, p.base, 'battery', '%')) }; };
+  // Toute carte vient de la fabrique commune — entite, zone, distributeur,
+  // plante — la meme que dans les pieces (composeur du 15/09).
   const carte = (o) => {
     const compacte = ed.estCompact(o.cle);
     if (o.type === 'zone') return dc.card(null, nomDe(o), o.zone);
-    if (o.type === 'feeder') return <RoomFeederCard chip={compacte} nom={nomDe(o)} pct={croqPct} sub={sousDistributeur} onFeed={feed} onRempli={onRempli} onOpen={() => setSheet({ type: 'croq' })} />;
-    if (o.type === 'plant') { const pl = plante(o.cle.slice(6)); if (!pl) return null; const v = verdictCartePlante(pl); return <RoomPlantCard chip={compacte} nom={nomDe(o)} sub={pl.room} hum={pl.hum} verdict={v.texte} verdictCol={v.couleur} rgb={v.rgb} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setSheet({ type: 'plant', pl })} />; }
-    return compacte ? dc.compact(o.id, ed.labelOf(o.cle) || null) : dc.card(o.id, ed.labelOf(o.cle) || null);
+    const cle = (o.type === 'feeder' || o.type === 'plant') ? o.cle : o.id;
+    return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || null);
   };
   const titreFiltre = (OBJ_FILTRES().find(f => f.id === actuel) || {}).label || tr('Tous');
   const tuile = { padding: '18px 20px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' };
@@ -5286,12 +5370,9 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false }) {
           : <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Rien dans ce filtre.')}</div>}
         {/* dc.card sans dc.sheets = fiches muettes (piege vecu). */}
         {dc.sheets}
-        {addSheet && <RoomAddSheet hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter une entité')} listerTout
+        {addSheet && <ComposeurCartes dc={dc} hass={hass} present={ed.ids} onToggle={ed.toggle}
           domaines={[...OBJ_DOMAINES, 'input_boolean', 'number', 'select']} onClose={() => setAddSheet(false)} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={(parCle.get(cardEdit) && nomDe(parCle.get(cardEdit))) || cardEdit} origine={(parCle.get(cardEdit) || {}).nom || cardEdit} hass={hass} onClose={() => setCardEdit(null)} />}
-        {sheet && sheet.type === 'croq' && <FicheDistributeur hass={hass} nom={tr('Distributeur de croquettes')} pct={croqPct} jours={jours} dernier={dernier} ration={ration} repas={repas} portion={portion}
-          feed={feed} onRempli={onRempli} ficheId={croqFicheId} onClose={() => setSheet(null)} />}
-        {sheet && sheet.type === 'plant' && <FichePlante pl={sheet.pl} onClose={() => setSheet(null)} />}
       </div>
     </main>
   );
@@ -7897,7 +7978,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
       </div>
       {dc.sheets}
       {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
-      {addSheet && <RoomAddSheet hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter un volet')} listerTout
+      {addSheet && <ComposeurCartes hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter un volet')} composites={false}
         pied={<button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>}
         domaines={['cover']} onClose={() => setAddSheet(false)} />}
     </div>
@@ -8520,7 +8601,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           })}
           {edit && <CarteAjout onClick={() => setEnAdd(true)} label={tr('Ajouter un poste')} />}
         </div>
-        {enAdd && <RoomAddSheet hass={hass} entete={tr('Ajouter un poste')} domaines={['sensor']} listerTout present={ed.ids.map(k => k.indexOf('dev:') === 0 ? k.slice(4) : k)} onToggle={(id) => ed.toggle('dev:' + id)} onClose={() => setEnAdd(false)} />}
+        {enAdd && <ComposeurCartes hass={hass} entete={tr('Ajouter un poste')} domaines={['sensor']} composites={false} present={ed.ids.map(k => k.indexOf('dev:') === 0 ? k.slice(4) : k)} onToggle={(id) => ed.toggle('dev:' + id)} onClose={() => setEnAdd(false)} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={posteDe(cardEdit).name} origine={posteOrigine(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
 
     </div>
@@ -12510,6 +12591,10 @@ export default function App() {
   // Les cartes AGRÉGATS (présence, ouvrants, air, énergie) lisent la maison
   // entière : leurs sources entrent au poll par préfixe, sinon elles figent.
   const cvAggKeys = (x) => {
+    // Les cartes composees par Loggia, posees dans une piece ou en favori.
+    if (x === 'obj:feeder') return croqKeys();
+    if (typeof x === 'string' && x.indexOf('plant:') === 0) return plantKeys();
+    if (typeof x === 'string' && x.indexOf('zone:') === 0) return climateKeys();
     const t = x && x.t;
     if (t === 'presence') return ['person.'];
     if (t === 'ouvrants') return ['binary_sensor.'];
@@ -12523,7 +12608,7 @@ export default function App() {
   };
   // Les favoris suivent le même format que les vues : une entrée peut être
   // typée, voire un agrégat — `cvAggKeys` sait en tirer les clés à suivre.
-  const haKeys = [...GLOBAL_KEYS, ...lireEpingles().flatMap(cvAggKeys), ...(activeCv ? activeCv.ents.flatMap(cvAggKeys) : activeRoom ? roomKeys : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
+  const haKeys = [...GLOBAL_KEYS, ...lireEpingles().flatMap(cvAggKeys), ...(activeCv ? activeCv.ents.flatMap(cvAggKeys) : activeRoom ? [...roomKeys, ...(layoutOf(ROOM_LAYOUT_KEY, activeRoom).added || []).flatMap(cvAggKeys)] : (VIEW_HAKEYS[view] || [])), ...(view === 'accueil' ? qsKeys() : [])].filter(Boolean);
   // Capteurs de puissance au jitter continu : signature arrondie à 10 W → pas de re-render global à chaque tick.
   // Un capteur de puissance jitter en continu chez N'IMPORTE QUI : c'est sa
   // `device_class` qui le dit, pas son nom. Cette liste portait un identifiant

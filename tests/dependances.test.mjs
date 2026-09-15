@@ -61,11 +61,11 @@ const VERIFIE = {
    * de champ ENTITÉ, ni le `useMemo` qui listait ses options. */
   'src/App.jsx': [
     'S', 'S', 'S',
-    'S and domaineOk', 'S and ids',
+    'S and dc', 'S and ids', 'S, domaineOk, and nomEnt',
     'a and dashHass', 'ancre', 'api and plage', 'applyUser',
     'autoOn', 'choisis and tousCals', 'cle and hass', 'cv.name',
     'dc', 'debutGrille and finGrille', 'derived',
-    'derivedCovers', 'discovery', 'discovery', 'domaineOk',
+    'derivedCovers', 'discovery', 'discovery',
     'hass', 'hass', 'hass',
     'hass and live', 'hass, ids, and metrics', 'hidden', 'keys and noisyKeys',
     'loggiaRuntime.index', 'noms', 'seulement',
