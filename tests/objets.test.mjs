@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, OBJ_ORDRE, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from '../src/objets.js';
+import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, OBJ_ORDRE, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante, dureeDepuis } from '../src/objets.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
@@ -204,4 +204,17 @@ test('les cartes du distributeur et de la plante : la maquette, au gabarit', () 
   assert.ok(vue.includes('sub={sousDistributeur}') && vue.includes('onRempli={onRempli}'), 'le bac et le dernier repas en sous-titre, Rempli branche');
   assert.ok(vue.includes('rgb={v.rgb}') && vue.includes('verdictCartePlante(pl)'), 'la plante prend la couleur de son verdict');
   assert.ok(vue.includes("String(croq.reservoir).indexOf('input_number.') === 0"), 'Rempli n’existe que si le bac est un input_number');
+});
+
+test('la duree, dite court : minutes, puis heures et minutes, puis jours et heures — jamais negative', () => {
+  assert.equal(dureeDepuis(0), '0 min');
+  assert.equal(dureeDepuis(59 * 1000), '0 min');
+  assert.equal(dureeDepuis(12 * 60000), '12 min');
+  assert.equal(dureeDepuis((5 * 3600 + 2 * 60 + 40) * 1000), '5 h 02');
+  assert.equal(dureeDepuis(23 * 3600 * 1000 + 59 * 60000), '23 h 59');
+  assert.equal(dureeDepuis(30 * 3600 * 1000), '1 j 06 h');
+  assert.equal(dureeDepuis((2 * 24 + 3) * 3600 * 1000), '2 j 03 h');
+  assert.equal(dureeDepuis(-5 * 60000), '0 min');
+  assert.equal(dureeDepuis(NaN), '0 min');
+  assert.equal(dureeDepuis(90 * 60000, { min: 'min', h: 'hr', j: 'd' }), '1 hr 30');
 });

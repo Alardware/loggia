@@ -33,7 +33,7 @@ import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbo
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
-import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
+import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante, dureeDepuis } from './objets.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 /* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
@@ -1765,6 +1765,50 @@ const BIN_ETATS = () => ({
   light: [tr('Lumière'), tr('Sombre'), false], cold: [tr('Froid'), tr('Normal'), false], heat: [tr('Chaud'), tr('Normal'), true], tamper: [tr('Sabotage'), tr('Intact'), true],
 });
 
+/* Un rendu par minute, pour une duree qui se dit en minutes (« Ouverte
+ * depuis 12 min ») : rien a surveiller cote Home Assistant, l'horloge suffit. */
+function useMinute(actif) {
+  const [, tick] = useState(0);
+  useEffect(() => { if (!actif) return undefined; const iv = setInterval(() => tick(v => v + 1), 60000); return () => clearInterval(iv); }, [actif]);
+}
+
+/* L'illustration d'un ouvrant, en fond de sa carte (maquette du 15/09 — ce
+ * que l'utilisateur a aime : « l'illustration en arriere-plan qui m'indique
+ * visuellement si c'est ouvert ou ferme ») : une fenetre a deux battants ou
+ * une porte, fermee en gris, entrouverte en ambre avec le battant qui pivote.
+ * Trait fin, un voile leger sur le battant, rien d'opaque : le texte passe
+ * devant, et le dessin ne prend pas le tap. */
+function IlluOuvrant({ type, ouvert }) {
+  const style = { position: 'absolute', top: 46, right: 14, height: 62, width: 'auto', color: ouvert ? 'var(--o-warn)' : 'var(--o-text3)', opacity: ouvert ? .95 : .5, pointerEvents: 'none' };
+  const trait = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinejoin: 'round', strokeLinecap: 'round' };
+  if (type === 'fenetre') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 64 80" style={style} {...trait}>
+        <rect x="3" y="3" width="58" height="74" rx="3" />
+        <line x1="32" y1="3" x2="32" y2="77" />
+        {ouvert
+          ? <><polygon points="6,6 28,16 28,64 6,74" fill="rgba(255,204,68,.14)" /><circle cx="24" cy="40" r="1.8" fill="currentColor" /></>
+          : <><line x1="3" y1="40" x2="61" y2="40" /><circle cx="28" cy="40" r="1.8" fill="currentColor" /></>}
+      </svg>
+    );
+  }
+  return (
+    <svg aria-hidden="true" viewBox="0 0 64 84" style={style} {...trait}>
+      <rect x="10" y="3" width="44" height="78" rx="2" />
+      {ouvert
+        ? <><polygon points="14,8 50,2 50,82 14,76" fill="rgba(255,204,68,.14)" /><circle cx="44" cy="44" r="2" fill="currentColor" /></>
+        : <circle cx="46" cy="44" r="2" fill="currentColor" />}
+    </svg>
+  );
+}
+
+/* Les noms des mesures d'un capteur, par classe Home Assistant : ce que dit
+ * le sous-titre quand aucune regle ne donne de verdict. */
+const MESURES_NOMS = () => ({ temperature: tr('Température'), humidity: tr('Humidité'), carbon_dioxide: tr('CO₂'), pm25: tr('Particules fines'), pm10: tr('Particules'), aqi: tr('Qualité d’air'), power: tr('Puissance'), energy: tr('Énergie'), voltage: tr('Tension'), current: tr('Courant'), illuminance: tr('Luminosité'), pressure: tr('Pression'), atmospheric_pressure: tr('Pression'), battery: tr('Pile'), signal_strength: tr('Signal'), volatile_organic_compounds: tr('COV'), moisture: tr('Humidité du sol'), wind_speed: tr('Vent'), precipitation: tr('Précipitations'), gas: tr('Gaz'), water: tr('Eau') });
+/* Une puce de mesure soeur (temperature, humidite, CO2) au pied d'une carte
+ * capteur : arrondi 9, jamais une pilule. */
+const PUCE_MESURE = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 9, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', fontSize: 12, fontWeight: 700, color: 'var(--o-text1)', fontVariantNumeric: 'tabular-nums' };
+
 /* Les autres appareils d'une piece — prise, capteur, serrure, camera,
  * ventilateur… — au GABARIT MAISON, comme les lampes et les volets : icone en
  * haut a gauche, bascule ou repere en haut a droite, nom SOUS l'icone, etat
@@ -1805,26 +1849,49 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const fmtN = (n) => (Math.round(n * 10) / 10).toString().replace('.', ',');
   const etatsBin = BIN_ETATS()[a.device_class] || null;
   const danger = dom === 'binary_sensor' && !!(etatsBin && etatsBin[2]) && s === 'on';
+  // Un ouvrant (porte, fenetre, garage, portail) : l'illustration en fond,
+  // « Ouverte depuis … », le repere colore, le bouton Historique.
+  const ouvrant = dom === 'binary_sensor' && OUVRANT_DCS.indexOf(a.device_class) >= 0;
+  const ouvert = ouvrant && !mort && s === 'on';
+  useMinute(ouvrant && !mort);
+  const reperOuvrant = ouvrant ? (a.device_class === 'window' ? 'window-alt' : ouvert ? 'door-open' : 'door-closed') : null;
   // Une camera en direct est ALLUMEE, au sens de la carte : lavis, icone et
   // repere en bleu — la maquette entiere, pas seulement le sous-titre (retour
   // user du 14/09, deux fois : « pourquoi pas la couleur sur la carte »).
   const direct = dom === 'camera' && !mort && (s === 'streaming' || s === 'recording' || s === 'idle');
   let sub, couleur = 'var(--o-text3)', teinte = 'accent';
+  // Le capteur : sa mesure (en grand, en haut a droite), ses soeurs (en puces),
+  // et le palier d'air quand la regle existe (CO2).
+  let mesure = null, avis = null;
+  const soeurs = [];
   if (mort) sub = tr('Indisponible');
   else if (dom === 'lock') { sub = s === 'locked' ? tr('Verrouillée') : s === 'unlocked' ? tr('Déverrouillée') : s === 'locking' ? tr('Verrouillage…') : s === 'unlocking' ? tr('Déverrouillage…') : s === 'jammed' ? tr('Bloquée') : String(s); teinte = 'ok'; couleur = actif ? 'var(--o-ok)' : 'var(--o-warn2)'; }
   else if (dom === 'camera') { sub = direct ? tr('En direct') : String(s); couleur = 'var(--o-accent-soft)'; }
+  else if (ouvrant) {
+    const depuis = dureeDepuis(Date.now() - new Date(st.last_changed || 0).getTime(), { min: tr('min'), h: tr('h'), j: tr('j') });
+    sub = (etatsBin ? (ouvert ? etatsBin[0] : etatsBin[1]) : (ouvert ? tr('Ouvert') : tr('Fermé'))) + ' ' + tr('depuis {d}', { d: depuis });
+    couleur = ouvert ? 'var(--o-warn)' : 'var(--o-text3)'; teinte = 'or';
+  }
   else if (dom === 'binary_sensor') { sub = etatsBin ? (s === 'on' ? etatsBin[0] : etatsBin[1]) : (s === 'on' ? tr('Détecté') : 'RAS'); couleur = danger ? 'var(--o-bad)' : 'var(--o-warn)'; teinte = danger ? 'bad' : 'or'; }
   else if (dom === 'sensor') {
+    // La mesure en grand en haut a droite (le gabarit) ; le verdict d'air de
+    // la banniere pour le CO2, sinon le nom de la mesure ; les soeurs de la
+    // station (temperature, humidite, CO2) en puces au pied — retour user du
+    // 15/09 sur « 579 ppm · 25,7 °C · 50 % » : « pas tres parlant ».
     const n = parseFloat(s);
-    const parts = [isNaN(n) ? String(s) : fmtN(n) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '')];
-    // Une station a plusieurs mesures : ses sœurs les plus parlantes suivent.
+    const unite = a.unit_of_measurement || '';
+    mesure = isNaN(n) ? { v: String(s), u: '' } : { v: fmtN(n), u: unite };
     for (const dc of ['temperature', 'humidity', 'carbon_dioxide']) {
-      if (a.device_class === dc || parts.length >= 3) continue;
+      if (a.device_class === dc || soeurs.length >= 2) continue;
       const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: dc });
       const v = sid && S[sid] ? parseFloat(S[sid].state) : NaN;
-      if (!isNaN(v)) parts.push(fmtN(v) + ' ' + ((S[sid].attributes || {}).unit_of_measurement || ''));
+      if (!isNaN(v)) soeurs.push({ dc, texte: fmtN(v) + ' ' + ((S[sid].attributes || {}).unit_of_measurement || '') });
     }
-    sub = parts.join(' · '); couleur = 'var(--o-warn)'; teinte = 'or';
+    if (a.device_class === 'carbon_dioxide' && !isNaN(n)) {
+      avis = airPalier(n);
+      sub = tr('Qualité d’air') + ' · ' + airLabel(n);
+      couleur = ['var(--o-ok)', 'var(--o-warn)', 'var(--o-bad)'][avis]; teinte = ['ok', 'or', 'bad'][avis];
+    } else { sub = MESURES_NOMS()[a.device_class] || unite || tr('Mesure'); couleur = 'var(--o-text3)'; teinte = 'or'; }
   }
   else if (dom === 'fan') { sub = actif ? (a.percentage != null ? tr('Vitesse {n} %', { n: Math.round(a.percentage) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else if (dom === 'humidifier') { sub = actif ? (a.current_humidity != null ? tr('Humidité {n} %', { n: Math.round(a.current_humidity) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
@@ -1832,25 +1899,38 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   else { sub = (actif ? tr('Allumée') : tr('Éteinte')) + (puissance != null ? ' · ' + fmtW(puissance) : ''); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('#FFCC44', .16), 'var(--o-warn)', 'rgba(255,204,68,'] };
   const [icoFond, icoTexte, lavisBase] = TEINTES[teinte];
-  const allume = !mort && (danger || direct || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera'));
+  // Un ouvrant ouvert, ou un capteur qui a un verdict, est ALLUME au sens de
+  // la carte : lavis, icone et repere dans sa teinte — la maquette entiere.
+  const allume = !mort && (danger || direct || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera')) || ouvert || avis != null;
   const ouvrable = !!onOpen && !mort;
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? tr('Ouvrir') + ' ' + nom : undefined}
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined} onClick={ouvrable ? () => onOpen(id) : undefined}
-      style={{ ...RM_CARD, cursor: ouvrable ? 'pointer' : 'default',
+      style={{ ...RM_CARD, position: 'relative', cursor: ouvrable ? 'pointer' : 'default',
         ...(allume && LAVIS ? { background: `linear-gradient(180deg,transparent 28%,${lavisBase}${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
         border: 'none' }}>
+      {ouvrant && <IlluOuvrant type={a.device_class === 'window' ? 'fenetre' : 'porte'} ouvert={ouvert} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)')}>{ico ? <Fi i={ico} size={17} /> : <PlugIcon size={17} />}</span>
         {(togglable || dom === 'lock') && !mort
           ? <RmBascule on={actif} nom={nom} onToggle={basculer} />
-          : <span aria-hidden="true" style={{ color: direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i={dom === 'camera' ? 'video-camera' : 'square'} size={dom === 'camera' ? 15 : 12} /></span>}
+          : (dom === 'sensor' && mesure && !mort)
+            ? <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 4, fontSize: 22, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: avis != null ? couleur : 'var(--o-text)' }}>{mesure.v}{mesure.u ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{mesure.u}</span> : null}</span>
+          : <span aria-hidden="true" style={{ color: ouvrant ? (ouvert ? 'var(--o-warn)' : 'var(--o-ok)') : direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i={dom === 'camera' ? 'video-camera' : reperOuvrant || 'square'} size={dom === 'camera' ? 15 : 12} /></span>}
       </div>
-      <div style={{ marginTop: 14 }}>
-        <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>
+      <div style={{ marginTop: 14, position: 'relative' }}>
+        <div style={{ ...RM_NAME, paddingRight: ouvrant ? 64 : 0 }}>{nom}</div>
+        <div style={{ ...RM_SUB, color: couleur, paddingRight: ouvrant ? 64 : 0 }}>{sub}</div>
+        {soeurs.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            {soeurs.map(x => <span key={x.dc} style={PUCE_MESURE}><Fi i={x.dc === 'temperature' ? 'thermometer-half' : x.dc === 'humidity' ? 'raindrops' : 'smog'} size={11} />{x.texte}</span>)}
+          </div>
+        )}
         {dom === 'camera' && !mort && (
           <button onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(id); }} className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%' }}>{tr('Voir le flux')}</button>
+        )}
+        {ouvrant && !mort && (
+          <button onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(id); }} className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%' }}>{tr('Historique')}</button>
         )}
       </div>
     </div>
@@ -3139,6 +3219,9 @@ function RoomBinarySheet({ id, hass, onClose }) {
           <RangeePile n={pileDe(S, id)} />
           <RangeeDernier st={st} />
         </div>
+        {/* Le journal de ce capteur — le bouton « Historique » de sa carte :
+          * les changements des dernieres 24 h, tels que Home Assistant les tient. */}
+        <div style={{ marginTop: 14 }}><RoomActivityCard hass={hass} ids={[id]} titre={tr('Historique')} sous={tr('Les changements des dernières 24 h')} max={10} /></div>
       </>)}
     </BottomSheet>
   );
@@ -11497,7 +11580,10 @@ const matchHaUser = (haUser, list) => {
   }
   return -1;
 };
-function airLabel(co2) { return co2 == null || co2 < 800 ? tr('BON') : co2 < 1200 ? tr('MOYEN') : tr('ÉLEVÉ'); }
+/* Le palier de qualite d'air — un seul jeu de seuils pour la banniere et les
+ * cartes capteurs : 0 bon (< 800 ppm), 1 moyen (< 1200), 2 eleve. */
+function airPalier(co2) { return co2 == null || co2 < 800 ? 0 : co2 < 1200 ? 1 : 2; }
+function airLabel(co2) { return [tr('BON'), tr('MOYEN'), tr('ÉLEVÉ')][airPalier(co2)]; }
 function co2Style(co2) { return co2 < 600 ? { bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' } : co2 < 900 ? { bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' } : { bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' }; }
 // Dérive les données live de l'Accueil depuis hass + config. null si pas de hass (→ démo).
 // `resolved` vient de la resolution (App) : cette fonction n'a pas de hooks,
