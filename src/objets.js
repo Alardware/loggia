@@ -170,17 +170,3 @@ export function verdictsPlante({ hum = null, temp = null, lux = null, cond = nul
   return out;
 }
 
-/**
- * Une duree ecoulee, dite court — « 0 min », « 12 min », « 5 h 02 »,
- * « 2 j 03 h » — pour « Ouverte depuis … » sur la carte d'un ouvrant. `mots`
- * donne les unites, traduites par l'appelant. Jamais negatif : une horloge
- * en avance dit « 0 min », pas « -3 min ».
- */
-export function dureeDepuis(ms, mots = { min: 'min', h: 'h', j: 'j' }) {
-  const s = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
-  const pad = (n) => (n < 10 ? '0' : '') + n;
-  if (s < 3600) return Math.floor(s / 60) + ' ' + mots.min;
-  const h = Math.floor(s / 3600);
-  if (h < 24) return h + ' ' + mots.h + ' ' + pad(Math.floor((s % 3600) / 60));
-  return Math.floor(h / 24) + ' ' + mots.j + ' ' + pad(h % 24) + ' ' + mots.h;
-}

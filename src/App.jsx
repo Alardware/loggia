@@ -33,7 +33,7 @@ import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbo
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
-import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante, dureeDepuis } from './objets.js';
+import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 /* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
@@ -1765,21 +1765,14 @@ const BIN_ETATS = () => ({
   light: [tr('Lumière'), tr('Sombre'), false], cold: [tr('Froid'), tr('Normal'), false], heat: [tr('Chaud'), tr('Normal'), true], tamper: [tr('Sabotage'), tr('Intact'), true],
 });
 
-/* Un rendu par minute, pour une duree qui se dit en minutes (« Ouverte
- * depuis 12 min ») : rien a surveiller cote Home Assistant, l'horloge suffit. */
-function useMinute(actif) {
-  const [, tick] = useState(0);
-  useEffect(() => { if (!actif) return undefined; const iv = setInterval(() => tick(v => v + 1), 60000); return () => clearInterval(iv); }, [actif]);
-}
-
-/* L'illustration d'un ouvrant, en fond de sa carte (maquette du 15/09 — ce
- * que l'utilisateur a aime : « l'illustration en arriere-plan qui m'indique
- * visuellement si c'est ouvert ou ferme ») : une fenetre a deux battants ou
- * une porte, fermee en gris, entrouverte en ambre avec le battant qui pivote.
- * Trait fin, un voile leger sur le battant, rien d'opaque : le texte passe
- * devant, et le dessin ne prend pas le tap. */
+/* L'illustration d'un ouvrant, en filigrane de sa carte — posee comme celle
+ * des plantes, en bas a droite, derriere le texte (retour user du 15/09 :
+ * « l'illustration en arriere-plan qui m'indique visuellement si c'est ouvert
+ * ou ferme ») : une fenetre a deux battants ou une porte, grise fermee,
+ * ambre entrouverte avec le battant qui pivote. Trait fin, un voile leger sur
+ * le battant, rien d'opaque ; le dessin ne prend pas le tap. */
 function IlluOuvrant({ type, ouvert }) {
-  const style = { position: 'absolute', top: 46, right: 14, height: 62, width: 'auto', color: ouvert ? 'var(--o-warn)' : 'var(--o-text3)', opacity: ouvert ? .95 : .5, pointerEvents: 'none' };
+  const style = { position: 'absolute', right: 8, bottom: 8, height: 100, width: 'auto', color: ouvert ? 'var(--o-warn)' : 'var(--o-text3)', opacity: ouvert ? .6 : .28, pointerEvents: 'none' };
   const trait = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinejoin: 'round', strokeLinecap: 'round' };
   if (type === 'fenetre') {
     return (
@@ -1849,12 +1842,11 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const fmtN = (n) => (Math.round(n * 10) / 10).toString().replace('.', ',');
   const etatsBin = BIN_ETATS()[a.device_class] || null;
   const danger = dom === 'binary_sensor' && !!(etatsBin && etatsBin[2]) && s === 'on';
-  // Un ouvrant (porte, fenetre, garage, portail) : l'illustration en fond,
-  // « Ouverte depuis … », le repere colore, le bouton Historique.
+  // Un ouvrant (porte, fenetre, garage, portail) : la carte d'avant, plus son
+  // illustration en filigrane, qui suit l'etat (retour user du 15/09 : « comme
+  // pour les plantes » — pas de bouton, pas de duree).
   const ouvrant = dom === 'binary_sensor' && OUVRANT_DCS.indexOf(a.device_class) >= 0;
   const ouvert = ouvrant && !mort && s === 'on';
-  useMinute(ouvrant && !mort);
-  const reperOuvrant = ouvrant ? (a.device_class === 'window' ? 'window-alt' : ouvert ? 'door-open' : 'door-closed') : null;
   // Une camera en direct est ALLUMEE, au sens de la carte : lavis, icone et
   // repere en bleu — la maquette entiere, pas seulement le sous-titre (retour
   // user du 14/09, deux fois : « pourquoi pas la couleur sur la carte »).
@@ -1867,11 +1859,6 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   if (mort) sub = tr('Indisponible');
   else if (dom === 'lock') { sub = s === 'locked' ? tr('Verrouillée') : s === 'unlocked' ? tr('Déverrouillée') : s === 'locking' ? tr('Verrouillage…') : s === 'unlocking' ? tr('Déverrouillage…') : s === 'jammed' ? tr('Bloquée') : String(s); teinte = 'ok'; couleur = actif ? 'var(--o-ok)' : 'var(--o-warn2)'; }
   else if (dom === 'camera') { sub = direct ? tr('En direct') : String(s); couleur = 'var(--o-accent-soft)'; }
-  else if (ouvrant) {
-    const depuis = dureeDepuis(Date.now() - new Date(st.last_changed || 0).getTime(), { min: tr('min'), h: tr('h'), j: tr('j') });
-    sub = (etatsBin ? (ouvert ? etatsBin[0] : etatsBin[1]) : (ouvert ? tr('Ouvert') : tr('Fermé'))) + ' ' + tr('depuis {d}', { d: depuis });
-    couleur = ouvert ? 'var(--o-warn)' : 'var(--o-text3)'; teinte = 'or';
-  }
   else if (dom === 'binary_sensor') { sub = etatsBin ? (s === 'on' ? etatsBin[0] : etatsBin[1]) : (s === 'on' ? tr('Détecté') : 'RAS'); couleur = danger ? 'var(--o-bad)' : 'var(--o-warn)'; teinte = danger ? 'bad' : 'or'; }
   else if (dom === 'sensor') {
     // La mesure en grand en haut a droite (le gabarit) ; le verdict d'air de
@@ -1899,9 +1886,9 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   else { sub = (actif ? tr('Allumée') : tr('Éteinte')) + (puissance != null ? ' · ' + fmtW(puissance) : ''); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('#FFCC44', .16), 'var(--o-warn)', 'rgba(255,204,68,'] };
   const [icoFond, icoTexte, lavisBase] = TEINTES[teinte];
-  // Un ouvrant ouvert, ou un capteur qui a un verdict, est ALLUME au sens de
-  // la carte : lavis, icone et repere dans sa teinte — la maquette entiere.
-  const allume = !mort && (danger || direct || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera')) || ouvert || avis != null;
+  // Un capteur qui a un verdict est ALLUME au sens de la carte : lavis, icone
+  // et repere dans sa teinte.
+  const allume = !mort && (danger || direct || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera')) || avis != null;
   const ouvrable = !!onOpen && !mort;
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? tr('Ouvrir') + ' ' + nom : undefined}
@@ -1916,11 +1903,11 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
           ? <RmBascule on={actif} nom={nom} onToggle={basculer} />
           : (dom === 'sensor' && mesure && !mort)
             ? <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 4, fontSize: 22, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: avis != null ? couleur : 'var(--o-text)' }}>{mesure.v}{mesure.u ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{mesure.u}</span> : null}</span>
-          : <span aria-hidden="true" style={{ color: ouvrant ? (ouvert ? 'var(--o-warn)' : 'var(--o-ok)') : direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i={dom === 'camera' ? 'video-camera' : reperOuvrant || 'square'} size={dom === 'camera' ? 15 : 12} /></span>}
+          : <span aria-hidden="true" style={{ color: direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i={dom === 'camera' ? 'video-camera' : 'square'} size={dom === 'camera' ? 15 : 12} /></span>}
       </div>
       <div style={{ marginTop: 14, position: 'relative' }}>
-        <div style={{ ...RM_NAME, paddingRight: ouvrant ? 64 : 0 }}>{nom}</div>
-        <div style={{ ...RM_SUB, color: couleur, paddingRight: ouvrant ? 64 : 0 }}>{sub}</div>
+        <div style={RM_NAME}>{nom}</div>
+        <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>
         {soeurs.length > 0 && (
           <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
             {soeurs.map(x => <span key={x.dc} style={PUCE_MESURE}><Fi i={x.dc === 'temperature' ? 'thermometer-half' : x.dc === 'humidity' ? 'raindrops' : 'smog'} size={11} />{x.texte}</span>)}
@@ -1928,9 +1915,6 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
         )}
         {dom === 'camera' && !mort && (
           <button onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(id); }} className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%' }}>{tr('Voir le flux')}</button>
-        )}
-        {ouvrant && !mort && (
-          <button onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(id); }} className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%' }}>{tr('Historique')}</button>
         )}
       </div>
     </div>
@@ -3219,9 +3203,6 @@ function RoomBinarySheet({ id, hass, onClose }) {
           <RangeePile n={pileDe(S, id)} />
           <RangeeDernier st={st} />
         </div>
-        {/* Le journal de ce capteur — le bouton « Historique » de sa carte :
-          * les changements des dernieres 24 h, tels que Home Assistant les tient. */}
-        <div style={{ marginTop: 14 }}><RoomActivityCard hass={hass} ids={[id]} titre={tr('Historique')} sous={tr('Les changements des dernières 24 h')} max={10} /></div>
       </>)}
     </BottomSheet>
   );

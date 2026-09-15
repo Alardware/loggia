@@ -120,7 +120,7 @@ test('la carte camera porte sa couleur : lavis, icone et repere en bleu quand el
   assert.ok(carte.includes("const allume = !mort && (danger || direct || (actif"), 'une camera en direct est allumee : lavis compris');
   assert.ok(carte.includes("const ico = dom === 'camera' ? 'camera' : cvIcoEntite(dom, id, st, nom);"), 'appareil photo dans le carre, camera video en repere');
   assert.ok(carte.includes("RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)')"), 'la teinte de l’icone suit allume');
-  assert.ok(carte.includes(": direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26"), 'le repere en haut a droite aussi');
+  assert.ok(carte.includes("color: direct ? icoTexte : 'var(--o-text3)'"), 'le repere en haut a droite aussi');
   assert.ok(carte.includes('(allume && LAVIS ?'), 'le lavis suit allume, donc la camera en direct');
 });
 
