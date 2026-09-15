@@ -76,7 +76,6 @@ const VERIFIE = {
   /* `src/ciel3d.jsx` figurait ici avec « exposure and limitMag ». Le fichier a
    * disparu : un ciel étoilé de 284 lignes qu'aucun import n'atteignait. */
   'src/ui.jsx': ['cur'],
-  'src/views/meteo.jsx': ['hass'],
   'src/views/parametres.jsx': [
     'entTouched and readEnt', 'h', 'hass', 'hass',
     'hass', 'hass and updBusy', 'lat and ping',

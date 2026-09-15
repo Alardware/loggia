@@ -90,16 +90,6 @@ export function haWeatherLabel(cond) {
   return m[(cond || '').toLowerCase()] || null;
 }
 
-export const WX_BG = {
-  sun: 'linear-gradient(150deg, rgba(56,150,255,.42), rgba(130,205,255,.14) 55%, var(--o-surfB))',
-  partly: 'linear-gradient(150deg, rgba(86,150,210,.32), rgba(150,175,205,.12) 60%, var(--o-surfB))',
-  clouds: 'linear-gradient(150deg, rgba(140,160,190,.24), var(--o-surfB))',
-  wind: 'linear-gradient(150deg, rgba(150,170,195,.22), var(--o-surfB))',
-  rain: 'linear-gradient(150deg, rgba(70,105,150,.40), rgba(90,120,160,.12) 60%, var(--o-surfB))',
-  snow: 'linear-gradient(150deg, rgba(195,215,240,.36), var(--o-surfB))',
-  storm: 'linear-gradient(150deg, rgba(118,98,185,.38), rgba(70,60,110,.14) 60%, var(--o-surfB))',
-  night: 'linear-gradient(150deg, rgba(44,66,130,.42), rgba(20,30,60,.15) 60%, var(--o-surfB))',
-};
 /* Mini-scene animee de la vignette meteo (accueil) : la condition se VOIT —
  * pluie qui tombe, etoiles, halo de soleil, eclair — dans la vignette meme,
  * derriere le chiffre. Une poignee de spans en transform/opacity, rien

@@ -76,7 +76,6 @@ export const HIDDEN_VIEWS = () => [
    * l'appareil expose — la vue dédiée ne racontait rien de plus. Les routes
    * restent : un appareil qui a mémorisé cette vue l'affiche encore. */
   { label: tr('Médias'), vid: 'medias', icon: 'tv-music', c: 'var(--o-purple)' },
-  { label: tr('Météo'), vid: 'meteo', icon: 'cloud-sun', c: 'var(--o-cyan)' },
   // Bibliothèque de cartes (31/08/2026) : catalogue sur données fictives —
   // activable dans le menu comme les autres vues secondaires, sinon
   // accessible par la recherche et Paramètres → Vues.

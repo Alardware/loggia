@@ -29,10 +29,6 @@ la largeur. Dépliez le format qui est le vôtre :
 
 ![Une pièce — le salon : ses appareils, son volet, son historique de confort, en ordinateur](docs/captures/pc-piece.webp)
 
-**La météo** — la vigilance, les prochaines heures, sept jours animés
-
-![La météo — la vigilance, les prochaines heures, sept jours animés, en ordinateur](docs/captures/pc-meteo.webp)
-
 **L'énergie** — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance
 
 ![L'énergie — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance, en ordinateur](docs/captures/pc-energie.webp)
@@ -54,10 +50,6 @@ la largeur. Dépliez le format qui est le vôtre :
 
 ![Une pièce — le salon : ses appareils, son volet, son historique de confort, en tablette](docs/captures/tablette-piece.webp)
 
-**La météo** — la vigilance, les prochaines heures, sept jours animés
-
-![La météo — la vigilance, les prochaines heures, sept jours animés, en tablette](docs/captures/tablette-meteo.webp)
-
 **L'énergie** — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance
 
 ![L'énergie — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance, en tablette](docs/captures/tablette-energie.webp)
@@ -78,10 +70,6 @@ la largeur. Dépliez le format qui est le vôtre :
 **Une pièce** — le salon : ses appareils, son volet, son historique de confort
 
 ![Une pièce — le salon : ses appareils, son volet, son historique de confort, en téléphone](docs/captures/mobile-piece.webp)
-
-**La météo** — la vigilance, les prochaines heures, sept jours animés
-
-![La météo — la vigilance, les prochaines heures, sept jours animés, en téléphone](docs/captures/mobile-meteo.webp)
 
 **L'énergie** — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance
 

@@ -21,7 +21,7 @@ export const VIEW_ALWAYS = ['accueil', 'parametres'];
 /** Tous les identifiants de vue que le dashboard sait afficher. */
 export const VIEW_IDS = [
   'accueil', 'pieces', 'scenes', 'objets', 'energie', 'securite', 'systeme',
-  'lumieres', 'climat', 'volets', 'aspirateur', 'croquettes', 'medias', 'meteo', 'parametres',
+  'lumieres', 'climat', 'volets', 'aspirateur', 'croquettes', 'medias', 'parametres',
 ];
 
 const OK = { ok: true, reason: null };
@@ -109,11 +109,6 @@ export function viewAvailability(ctx) {
   out.aspirateur = views.aspirateur ? OK : no('aucun aspirateur (domaine vacuum)');
   out.medias = views.medias ? OK : no('aucun lecteur (domaine media_player)');
   out.securite = views.securite ? OK : no('aucune caméra ni panneau d’alarme');
-
-  // Météo : une entité `weather` suffit — toute installation Home Assistant en
-  // déclare une par défaut, mais on ne le suppose pas.
-  const wx = Object.keys(states).some(id => id.indexOf('weather.') === 0) || cfg('weather');
-  out.meteo = wx ? OK : no('aucune entité météo (domaine weather)');
 
   // Énergie : des capteurs de puissance ne suffisent pas, encore faut-il savoir
   // LESQUELS lire — d'où le tableau de bord Énergie natif, ou une configuration.

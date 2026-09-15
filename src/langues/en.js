@@ -1862,4 +1862,5 @@ export default {
   '{n} autres': '{n} more',
   'Tout est dans Objets': 'Everything is in Objects',
   '{n} en cours': '{n} running',
+  "Entité météo (fond de la bannière de l'Accueil, veille, conseils extérieur).": 'Weather entity (home banner backdrop, ambient screen, outdoor advice).',
 };

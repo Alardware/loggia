@@ -7,7 +7,6 @@ import { WX_PRESETS } from './wxpresets.js';
 const WeatherGL = lazy(() => import('./wx3d.jsx'));
 // Vue chargee a la demande : personne n'atterrit sur Meteo en ouvrant le
 // dashboard, son code n'a donc pas a etre analyse au demarrage.
-const MeteoContent = lazy(() => import('./views/meteo.jsx'));
 /* Systeme : on l'ouvre pour regarder l'etat des machines, pas au demarrage. */
 const SystemeContent = lazy(() => import('./views/systeme.jsx'));
 // Parametres : 1300 lignes ou l'on n'arrive que volontairement. Le formulaire
@@ -29,7 +28,7 @@ import {
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
   BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur
 } from './ui.jsx';
-import { WX_BG, WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
+import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook } from './historique.jsx';
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
@@ -227,7 +226,7 @@ const NAV = [
  * bas — l'ordre du menu changeait avec la langue. Un drapeau ne se traduit pas. */
 
 const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scènes': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Aspirateur': 'aspirateur', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Caméras': 'cameras', 'Système': 'systeme', 'Paramètres': 'parametres' };
-const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'aspirateur', 'croquettes', 'medias', 'meteo', 'objets', 'securite', 'systeme', 'parametres']);
+const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'aspirateur', 'croquettes', 'medias', 'objets', 'securite', 'systeme', 'parametres']);
 
 function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAutorisees = null, editMode = false, onToggleEdit = null }) {
   // Permissions par profil : `null` = tout (admins et profils sans restriction).
@@ -6041,7 +6040,7 @@ function poserFantome(el, x0, y0) {
   };
 }
 
-function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onOpenMeteo, onNav = null }) {
+function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onNav = null }) {
   const [override, setOverride] = useState(null);
   const agenda = useAgenda(accueil && accueil.hass);
   /* ── L'accueil se compose : ordre et visibilité des sections ───────────────
@@ -6422,7 +6421,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     out.live = r; // valeurs brutes + entity ids → popup confort
     return out;
   });
-  const extPiece = pieces.find(p => p.status && p.status.kind === 'ext'); // Extérieur → ouvert via la chip météo
   const avatars = (a && a.people) ? a.people.map(p => ({ img: p.img, title: `${p.name} · ${p.home ? tr('Présent') : 'Absent'}`, dim: !p.home })) : [{ grad: 'linear-gradient(135deg,#f472b6,var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,#ffb347,#f87171)' }];
   // ── Salutation contextuelle ──────────────────────────────────────────────
   // L'heure donne le bonjour ; la maison donne les faits — lumières allumées,
@@ -6729,10 +6727,27 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             ))}
           </div>
           )}
-          <div className="o-banner-row" style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'nowrap' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <div className="o-banner-row" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
               <span className="o-greet-hi" style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{salut}</span>
-              <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 34, fontWeight: 500, lineHeight: 1 }}>{userName}</span>
+              {/* Les avatars SUR la ligne du nom, a droite, sur tous les
+                * ecrans (retour user du 15/09 : « ils sont en dessous du
+                * texte au lieu d'etre alignes avec le nom »). La vignette
+                * meteo a disparu avec la vue Meteo : le fond de la banniere
+                * dit deja le temps, la piece Exterieur le detaille. */}
+              <div className="o-greet-ligne" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 34, fontWeight: 500, lineHeight: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userName}</span>
+                <div className="o-avatars" style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  {avatars.map((u, i) => {
+                    const present = !u.dim;
+                    return (
+                      <span key={i + (present ? '-p' : '-a')} className="o-avatarin" title={u.title} style={{ position: 'relative', width: 38, height: 38, flexShrink: 0, display: 'inline-block' }}>
+                        <span style={{ display: 'block', width: '100%', height: '100%', borderRadius: '50%', background: u.img ? `url(${u.img}) center/cover` : u.grad, boxShadow: present ? '0 0 0 2.5px var(--o-ok), 0 0 9px rgba(52,211,153,.5)' : '0 0 0 2px var(--o-bd1)', opacity: present ? 1 : 0.45 }} />
+                        <span style={{ position: 'absolute', right: -1, bottom: -1, width: 12, height: 12, borderRadius: '50%', background: present ? 'var(--o-ok)' : 'var(--o-text3)', border: '2.5px solid var(--o-bg2)', boxShadow: present ? '0 0 6px rgba(52,211,153,.7)' : 'none' }} />
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
               {/* Le resume est un ITEM a lui seul, pas un noeud texte nu.
                 * Nu, il devenait un item flex anonyme : trop long, il basculait
                 * en entier sous la pastille au lieu de s'enrouler a cote
@@ -6740,28 +6755,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
                 * ligne. La pastille s'aligne donc sur la PREMIERE ligne, et le
                 * texte garde sa colonne. */}
               <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}><span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: faits.alerte ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: faits.alerte ? '0 0 8px var(--o-bad)' : '0 0 8px var(--o-ok)', animation: 'pulse 2.4s infinite' }} /><span style={{ flex: 1, minWidth: 0 }}>{faits.txt.join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span></span>
-            </div>
-            <div className="o-banner-wx" style={{ display: 'flex', flexDirection: 'column-reverse', alignItems: 'flex-end', gap: 10, flexShrink: 0 }}>
-              {/* La vue Météo dit tout ce que cette vignette resume : elle est
-                  la destination naturelle. La pièce « Extérieur » reste le
-                  repli quand la vue est masquée ou absente. */}
-              <div onClick={() => { if (onOpenMeteo) onOpenMeteo(); else if (extPiece) setRoomPop(extPiece.name); }} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (onOpenMeteo) onOpenMeteo(); else if (extPiece) setRoomPop(extPiece.name); } }} title={onOpenMeteo ? 'Ouvrir la vue Météo' : 'Voir la météo extérieure'} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', borderRadius: 14, background: WX_BG[wx] || WX_BG.clouds, border: 'none', transition: 'background .6s ease', cursor: 'pointer' }}>
-                <WxMini wx={wx} on={wxFx} />
-                <WeatherIco wx={wx} size={42} />
-                <div style={{ position: 'relative', lineHeight: 1.1 }}><div style={{ fontSize: 19, fontWeight: 800 }}>{weatherTemp != null ? Math.round(weatherTemp) : 18}°<span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>C</span></div><div style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>{weatherLabel || 'Nuageux'}</div></div>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {avatars.map((u, i) => {
-                  const present = !u.dim;
-                  return (
-                    <span key={i + (present ? '-p' : '-a')} className="o-avatarin" title={u.title} style={{ position: 'relative', width: 38, height: 38, flexShrink: 0, display: 'inline-block' }}>
-                      <span style={{ display: 'block', width: '100%', height: '100%', borderRadius: '50%', background: u.img ? `url(${u.img}) center/cover` : u.grad, boxShadow: present ? '0 0 0 2.5px var(--o-ok), 0 0 9px rgba(52,211,153,.5)' : '0 0 0 2px var(--o-bd1)', opacity: present ? 1 : 0.45 }} />
-                      <span style={{ position: 'absolute', right: -1, bottom: -1, width: 12, height: 12, borderRadius: '50%', background: present ? 'var(--o-ok)' : 'var(--o-text3)', border: '2.5px solid var(--o-bg2)', boxShadow: present ? '0 0 6px rgba(52,211,153,.7)' : 'none' }} />
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
           </div>
           {(() => {
             /* Une metrique a zero ne dit rien : « 0 / 4 ouvrants ouverts »
@@ -8890,18 +8883,6 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
       <RoomActivityCard hass={hass} max={12} titre={tr('Journal de la sécurité')} sous={tr('Ouvrants, mouvements et alarme — 24 h, en direct')}
         ids={[...ouvrantsDe(S).map(o => o.id), ...(alarmId ? [alarmId] : []), ...camList.map(c => c.haid).filter(Boolean), ...people.map(p => p.haid).filter(Boolean)]} />
     </div>
-  );
-}
-
-function MeteoView({ hass, edit = false, onEnt, wxFx = true }) {
-  return (
-    // `position: relative` : le ciel de la vue s'y ancre, comme sur l'accueil.
-    <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-      <Header />
-      <Suspense fallback={<div className="loggia-content" style={{ padding: '26px 28px 56px' }} />}>
-        <MeteoContent hass={hass} edit={edit} onEnt={onEnt} wxFx={wxFx} />
-      </Suspense>
-    </main>
   );
 }
 
@@ -12806,7 +12787,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}

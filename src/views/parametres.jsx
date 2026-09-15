@@ -837,7 +837,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
       {has('weather') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Météo')}</div>
-          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Entité météo (vue Météo, bannière de l'Accueil, conseils extérieur).")}</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Entité météo (fond de la bannière de l'Accueil, veille, conseils extérieur).")}</div>
           <input aria-label={tr('Entité météo')} value={ent.weather} onChange={e => setEnt(o => ({ ...o, weather: e.target.value }))} placeholder="weather.…" list="o-dl-weather" spellCheck={false} style={entInp} />
         </div>
       )}
