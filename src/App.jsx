@@ -3193,7 +3193,7 @@ function RoomNav({ room, onNav, hass }) {
       || (ix && ix.areaOf && r.haid ? zones.find(z => z.id === [r.haid.temp, r.haid.humidity]
           .filter(Boolean).map(ix.areaOf).find(Boolean)) : null);
     const p = habillagePiece(r.room, zone && zone.icon);
-    return { name: r.room, temp: isNaN(v) ? null : v, icon: p.icon, col: couleurDePiece(modeleDePiece(r.room)) };
+    return { name: r.room, temp: isNaN(v) ? null : v, icon: p.icon, col: p.col };
   });
   useEffect(() => {
     const w = wrapRef.current; if (!w) return;
@@ -3252,7 +3252,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
   const ids = useMemo(() => applyLayout(layoutOf(cfgKey, scope), derived), [cfgKey, scope, sig, rev]);
   const edits = (layout.removed || []).length + (layout.added || []).length
     + ((layout.order || []).length ? 1 : 0) + Object.keys(layout.labels || {}).length
-    + (layout.larges || []).length;
+    + (layout.larges || []).length + (layout.compacts || []).length;
 
   const vide = (a) => (a && a.length) ? a : null;
   const write = (patch) => { setLayout(cfgKey, scope, patch); setRev(v => v + 1); };
@@ -3320,7 +3320,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
   };
   const rename = (id, nom) => replace(id, id, nom);
 
-  const reset = () => write({ removed: null, added: null, order: null, labels: null, larges: null, types: null });
+  const reset = () => write({ removed: null, added: null, order: null, labels: null, larges: null, compacts: null, types: null });
   const labelOf = (id) => labelIn(layout, id);
   /* Largeur d'une carte : double = deux emplacements côte à côte, sur toutes
    * les vues à grille. Rangée dans le layout, comme l'ordre et les libellés. */
@@ -3328,6 +3328,15 @@ function useLayoutEditor(cfgKey, scope, derived) {
   const basculerLarge = (id) => {
     const l = layout.larges || [];
     write({ larges: vide(l.indexOf(id) >= 0 ? l.filter(x => x !== id) : [...l, id]) });
+  };
+  /* Taille d'une carte : compacte = une rangee de 88 px (icone, nom, etat, le
+   * controle), standard = deux. C'est ce que bascule le bouton de coin de la
+   * carte d'edition (retour user du 15/09 : « le bouton passe la carte en
+   * compact »). Rangee dans l'agencement, comme la largeur. */
+  const estCompact = (id) => (layout.compacts || []).indexOf(id) >= 0;
+  const basculerCompact = (id) => {
+    const l = layout.compacts || [];
+    write({ compacts: vide(l.indexOf(id) >= 0 ? l.filter(x => x !== id) : [...l, id]) });
   };
   // Plus de TYPE de carte par entite (14/09) : une seule carte, la standard.
   // La cle `types` des anciens agencements reste, sans effet.
@@ -3435,7 +3444,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
   // piece a piece, ecrit d'un bloc pour toutes les pieces).
   const rafraichir = () => setRev(v => v + 1);
 
-  return { ids: ordreTemp || ids, edits, layout, gridRef, dragId, dragStart, dragMove, dragEnd, remove, toggle, move, rename, replace, reset, rafraichir, labelOf, estLarge, basculerLarge };
+  return { ids: ordreTemp || ids, edits, layout, gridRef, dragId, dragStart, dragMove, dragEnd, remove, toggle, move, rename, replace, reset, rafraichir, labelOf, estLarge, basculerLarge, estCompact, basculerCompact };
 }
 
 /**
@@ -3601,7 +3610,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
                   // L'icone et la couleur de la piece : celles de sa carte a l'Accueil.
                   const zone = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).find(z => z && z.name === p);
                   const hp = habillagePiece(p, zone && zone.icon);
-                  const couleur = couleurDePiece(modeleDePiece(p));
+                  const couleur = hp.col;
                   return (
                     <button key={p} aria-pressed={on} onClick={() => setChoixPiece(p)} style={puce(on, true, { bord: couleur, fond: hp.bg, texte: couleur })}>
                       {cloneElement(hp.icon, { size: 13 })}{p}
@@ -3622,6 +3631,11 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
           {estEntite && (
             <FicheRangee premiere titre={tr('Épinglée sur l’accueil')} desc={tr('Apparaît dans les favoris, en plus de sa pièce.')}
               droite={<RmBascule on={epingle} nom={tr('Épinglée sur l’accueil')} onToggle={() => setEpingle(v => !v)} couleur="var(--o-accent)" />} />
+          )}
+
+          {!estSection && ed.estCompact && prefixe !== 'dev:' && brut.indexOf('zone:') !== 0 && (
+            <FicheRangee titre={tr('Carte compacte')} desc={tr('Une rangée au lieu de deux : icône, nom, état et le contrôle.')}
+              droite={<RmBascule on={ed.estCompact(id)} nom={tr('Carte compacte')} onToggle={() => ed.basculerCompact(id)} couleur="var(--o-accent)" />} />
           )}
 
           {!estSection && ed.estLarge && (
@@ -3686,12 +3700,23 @@ function CarteAjout({ onClick, label = null }) {
  * edition on range ses cartes, on ne pilote pas ses appareils : les deux gestes
  * ne doivent pas se disputer le meme pointeur.
  */
+/* Les boutons des cartes d'edition, les memes pour une entite et une piece :
+ * Modifier / Supprimer en bas, le petit format des intertitres et des cartes
+ * compactes, et le bouton de coin — la largeur d'une entite, la taille d'une
+ * piece — en accent, comme la maquette du 15/09. */
+const boutonEdition = (rouge) => ({ flex: 1, padding: '9px 6px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: rouge ? 'var(--o-bad)' : 'var(--o-text1)' });
+const BOUTON_PETIT = { flex: 'none', width: 32, height: 32, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
+const BOUTON_COIN = { width: 30, height: 30, borderRadius: 10, border: 'none', background: 'rgba(var(--o-accent-rgb),.16)', color: 'var(--o-accent-soft)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 };
+
 /* La carte en mode edition (maquette du 14/09) : la meme place et la meme
- * teinte que la carte vivante, mais rien qui se pilote — l'icone, un crayon,
- * le nom, « Domaine · identifiant », Modifier et Supprimer. On la SAISIT
+ * teinte que la carte vivante, mais rien qui se pilote — l'icone, le bouton
+ * de TAILLE en coin (compacte ↔ standard ; le crayon faisait doublon avec
+ * Modifier, retour user du 15/09), le nom, « Domaine · identifiant »,
+ * Modifier et Supprimer. Compacte, elle tient sur une rangee de 88 px, comme
+ * la carte vivante qu'elle remplace. On la SAISIT
  * n'importe ou : elle suit le pointeur tant qu'on la tient. `plat` : un
  * intertitre, qui garde son dessin et prend juste ses deux boutons. */
-function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, ...reste }) {
+function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille = true, ...reste }) {
   const saisie = ed.dragId === id;
   const S = (hass && hass.states) || {};
   const brut = id.indexOf('dev:') === 0 ? id.slice(4) : id;
@@ -3710,8 +3735,12 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, ...reste
   };
   // Les boutons ne saisissent pas : leur appui ne remonte pas a la carte.
   const stop = (e) => e.stopPropagation();
-  const bouton = (rouge) => ({ flex: 1, padding: '9px 6px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: rouge ? 'var(--o-bad)' : 'var(--o-text1)' });
-  const petit = { flex: 'none', width: 32, height: 32, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
+  const bouton = boutonEdition, petit = BOUTON_PETIT;
+  const large = !!(ed.estLarge && ed.estLarge(id));
+  // La taille : compacte (une rangee) ou standard (deux). Une zone fil pilote
+  // n'a pas de compacte ; une vue peut ne pas en offrir (`taille`).
+  const compact = !!(ed.estCompact && ed.estCompact(id));
+  const peutCompacter = taille && !!ed.basculerCompact && brut.indexOf('zone:') !== 0 && brut.indexOf('sect:') !== 0;
   if (plat) {
     return (
       /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
@@ -3723,22 +3752,49 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, ...reste
       </div>
     );
   }
+  const classes = [large ? 'o-cvw2' : '', compact ? 'o-cvrow1' : ''].filter(Boolean).join(' ') || undefined;
+  const lavis = 'linear-gradient(180deg,transparent 28%,rgba(' + info.rgb + ',.14)), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
+  const icone = (px) => (info.prise ? <PlugIcon size={px} /> : info.ico ? <Ico name={info.ico} size={px} /> : <Fi i={info.fi} size={px} />);
+  const sousTitre = info.label + ' · ' + identifiantEdition(brut);
+  const titre = tr('Attrape pour déplacer · clique pour modifier (flèches ← →)');
+  const racine = { ...RM_CARD, border: 'none', position: 'relative', cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none', opacity: saisie ? .25 : 1,
+    background: lavis, outline: '1px dashed rgba(var(--o-accent-rgb),.35)', outlineOffset: 3 };
+  const coin = peutCompacter ? (
+    <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.basculerCompact(id)} aria-pressed={compact}
+      title={compact ? tr('Deux rangées') : tr('Une rangée')} aria-label={(compact ? tr('Deux rangées') : tr('Une rangée')) + ' · ' + (nom || id)}
+      style={BOUTON_COIN}><Fi i="resize" size={13} /></button>
+  ) : null;
+  if (compact) {
+    const serre = { padding: '4px 6px', fontSize: 11.5 };
+    return (
+      /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
+      <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)} className={classes} title={titre}
+        style={{ ...racine, minHeight: 0, height: '100%', boxSizing: 'border-box', gap: 6, padding: '8px 10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ ...RM_ICO('rgba(' + info.rgb + ',.16)', 'rgb(' + info.rgb + ')'), width: 32, height: 32, borderRadius: 11 }}>{icone(15)}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={RM_NAME}>{nom || id}</div>
+            <div style={{ ...RM_SUB, marginTop: 0, color: 'rgb(' + info.rgb + ')' }}>{sousTitre}</div>
+          </div>
+          {coin}
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} style={{ ...bouton(false), ...serre }}>{tr('Modifier')}</button>
+          <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.remove(id)} style={{ ...bouton(true), ...serre }}>{tr('Supprimer')}</button>
+        </div>
+      </div>
+    );
+  }
   return (
     /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
-    <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)}
-      className={(ed.estLarge && ed.estLarge(id)) ? 'o-cvw2' : undefined}
-      title={tr('Attrape pour déplacer · clique pour modifier (flèches ← →)')}
-      style={{ ...RM_CARD, border: 'none', position: 'relative', cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none', opacity: saisie ? .25 : 1,
-        background: 'linear-gradient(180deg,transparent 28%,rgba(' + info.rgb + ',.14)), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
-        outline: '1px dashed rgba(var(--o-accent-rgb),.35)', outlineOffset: 3 }}>
+    <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)} className={classes} title={titre} style={racine}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO('rgba(' + info.rgb + ',.16)', 'rgb(' + info.rgb + ')')}>{info.prise ? <PlugIcon size={17} /> : info.ico ? <Ico name={info.ico} size={17} /> : <Fi i={info.fi} size={17} />}</span>
-        <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} title={tr('Modifier')} aria-label={tr('Modifier') + ' ' + (nom || id)}
-          style={{ width: 30, height: 30, borderRadius: 10, border: 'none', background: 'transparent', color: 'var(--o-text3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="pencil" size={14} /></button>
+        <span style={RM_ICO('rgba(' + info.rgb + ',.16)', 'rgb(' + info.rgb + ')')}>{icone(17)}</span>
+        {coin}
       </div>
       <div style={{ marginTop: 14 }}>
         <div style={RM_NAME}>{nom || id}</div>
-        <div style={{ ...RM_SUB, color: 'rgb(' + info.rgb + ')' }}>{info.label + ' · ' + identifiantEdition(brut)}</div>
+        <div style={{ ...RM_SUB, color: 'rgb(' + info.rgb + ')' }}>{sousTitre}</div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} style={bouton(false)}>{tr('Modifier')}</button>
@@ -4442,7 +4498,10 @@ function useDomainCards(hass, { onNav = null } = {}) {
     </>
   );
   const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); setPrisePop(null); setLockPop(null); setBinPop(null); };
-  return { card, sheets, fermer, ouvrir };
+  /* La COMPACTE d'une entite : une rangee — icone, nom, etat, le controle —
+   * qui ouvre la meme fiche que la riche. Une zone fil pilote n'en a pas. */
+  const compact = (id, label = null) => <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense />;
+  return { card, compact, sheets, fermer, ouvrir };
 }
 
 /* ── Journal d'activite d'une piece ──────────────────────────────────────────
@@ -4615,8 +4674,9 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
               {bloc.cartes.map(id => {
                 const zone = id.indexOf('zone:') === 0 ? climateZones(S).find(z => z.id === id.slice(5)) : null;
                 const lbl = roomLabelOf(room, id);
-                const card = dc.card(id, lbl, zone);
-                if (!edit) return <Anim key={id} i={ents.indexOf(id)} className={ed.estLarge(id) ? 'o-cvw2' : ''}>{card}</Anim>;
+                const compacte = !zone && ed.estCompact(id);
+                const card = compacte ? dc.compact(id, lbl) : dc.card(id, lbl, zone);
+                if (!edit) return <Anim key={id} i={ents.indexOf(id)} className={(ed.estLarge(id) ? 'o-cvw2 ' : '') + (compacte ? 'o-cvrow1' : '')}>{card}</Anim>;
                 return <EditableCard key={id} ed={ed} id={id} nom={nomDe(id)} onEdit={setCardEdit} hass={hass}>{card}</EditableCard>;
               })}
               {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} />}
@@ -5095,10 +5155,11 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false }) {
   // Les plantes : leurs capteurs, reconnus a leur classe, et leur verdict.
   const plante = (base) => { const p = plantsCfg().find(x => x.base === base); if (!p) return null; return { base, name: p.name || p.base, img: p.img || null, room: plantPiece(S, p.base, p.room), hum: num(plantCapteur(S, p.base, 'moisture')), cond: num(plantCapteur(S, p.base, 'conductivity', 'µS/cm')), lux: num(plantCapteur(S, p.base, 'illuminance', 'lx')), temp: num(plantCapteur(S, p.base, 'temperature')), bat: num(plantCapteur(S, p.base, 'battery', '%')) }; };
   const carte = (o) => {
+    const compacte = ed.estCompact(o.cle);
     if (o.type === 'zone') return dc.card(null, nomDe(o), o.zone);
-    if (o.type === 'feeder') return <RoomFeederCard nom={nomDe(o)} pct={croqPct} sub={sousDistributeur} onFeed={feed} onRempli={onRempli} onOpen={() => setSheet({ type: 'croq' })} />;
-    if (o.type === 'plant') { const pl = plante(o.cle.slice(6)); if (!pl) return null; const v = verdictCartePlante(pl); return <RoomPlantCard nom={nomDe(o)} sub={pl.room} hum={pl.hum} verdict={v.texte} verdictCol={v.couleur} rgb={v.rgb} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setSheet({ type: 'plant', pl })} />; }
-    return dc.card(o.id, ed.labelOf(o.cle) || null);
+    if (o.type === 'feeder') return <RoomFeederCard chip={compacte} nom={nomDe(o)} pct={croqPct} sub={sousDistributeur} onFeed={feed} onRempli={onRempli} onOpen={() => setSheet({ type: 'croq' })} />;
+    if (o.type === 'plant') { const pl = plante(o.cle.slice(6)); if (!pl) return null; const v = verdictCartePlante(pl); return <RoomPlantCard chip={compacte} nom={nomDe(o)} sub={pl.room} hum={pl.hum} verdict={v.texte} verdictCol={v.couleur} rgb={v.rgb} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setSheet({ type: 'plant', pl })} />; }
+    return compacte ? dc.compact(o.id, ed.labelOf(o.cle) || null) : dc.card(o.id, ed.labelOf(o.cle) || null);
   };
   const titreFiltre = (OBJ_FILTRES().find(f => f.id === actuel) || {}).label || tr('Tous');
   const tuile = { padding: '18px 20px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' };
@@ -5133,10 +5194,10 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false }) {
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{visibles.length > 1 ? tr('{n} appareils', { n: visibles.length }) : tr('{n} appareil', { n: visibles.length })}</span>
         </div>
         {(visibles.length || edit)
-          ? <div ref={ed.gridRef} className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16 }}>
+          ? <div ref={ed.gridRef} className="grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16 }}>
               {visibles.map(o => (edit
                 ? <EditableCard key={o.cle} ed={ed} id={o.cle} nom={nomDe(o)} onEdit={setCardEdit} hass={hass} />
-                : <div key={o.cle}>{carte(o)}</div>))}
+                : <div key={o.cle} className={((ed.estLarge(o.cle) ? 'o-cvw2 ' : '') + (ed.estCompact(o.cle) ? 'o-cvrow1' : '')) || undefined}>{carte(o)}</div>))}
               {edit && <CarteAjout onClick={() => setAddSheet(true)} />}
             </div>
           : <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Rien dans ce filtre.')}</div>}
@@ -5429,6 +5490,23 @@ const PARENTE = [
   [/exter|extér|jardin|terrasse|balcon|outdoor/, 'Extérieur'],
 ];
 
+/* Les teintes qu'une piece peut choisir (fiche « Ajouter une piece », maquette
+ * du 15/09) : les memes jetons que les modeles, rien d'autre — une couleur
+ * libre ne suivrait aucun theme. */
+const TEINTES_PIECE = [
+  { id: 'accent', label: 'Accent', col: 'var(--o-accent)', rgb: 'var(--o-accent-rgb)' },
+  { id: 'ambre', label: 'Ambre', col: 'var(--o-piece-ambre)', rgb: 'var(--o-piece-ambre-rgb)' },
+  { id: 'tendre', label: 'Tendre', col: 'var(--o-piece-tendre)', rgb: 'var(--o-piece-tendre-rgb)' },
+  { id: 'chambre', label: 'Chambre', col: 'var(--o-piece-chambre)', rgb: 'var(--o-piece-chambre-rgb)' },
+  { id: 'bain', label: 'Bain', col: 'var(--o-piece-bain)', rgb: 'var(--o-piece-bain-rgb)' },
+  { id: 'vert', label: 'Vert', col: 'var(--o-piece-vert)', rgb: 'var(--o-piece-vert-rgb)' },
+];
+/* Les icones proposees a une piece (la grille de la maquette), toutes
+ * rendables — dessin maison ou police regular, tests/icones.test.mjs le
+ * verifie. « bath » n'existe pas dans la police : la baignoire est `hot-tub`,
+ * comme le modele Salle de bain. */
+const ICONES_PIECE = ['couch', 'utensils', 'bed-alt', 'teddy-bear', 'briefcase', 'hot-tub', 'home', 'house-chimney', 'tree', 'paw'];
+
 /** Le modele de piece le plus proche d'un nom, ou null. */
 function modeleDePiece(nom) {
   const exact = PIECES.find(x => x.name === nom);
@@ -5448,23 +5526,241 @@ function couleurDePiece(modele) {
     || (modele && modele.tc) || 'var(--o-accent)';
 }
 
+/* Ce que la configuration dit d'une piece en plus de ses capteurs : l'icone
+ * (un nom de la police) et la teinte (un identifiant de `TEINTES_PIECE`). Lu
+ * dans `loggia_rooms` tel quel — `normRooms` garde ces champs, Parametres
+ * les conserve a l'enregistrement. */
+function personnalisationPiece(nom) {
+  const raw = cfgVal('loggia_rooms', null);
+  const r = Array.isArray(raw) ? raw.find(x => x && x.room === nom) : null;
+  return {
+    icon: (r && typeof r.icon === 'string' && r.icon) || null,
+    teinte: (r && TEINTES_PIECE.some(t => t.id === r.teinte)) ? r.teinte : null,
+  };
+}
+/* La teinte d'une piece : celle qu'elle a choisie, sinon celle de son modele
+ * (lue sur l'icone, PAS sur `tc` — voir `couleurDePiece`), sinon l'accent. */
+function teinteDePiece(nom, modele) {
+  const perso = personnalisationPiece(nom);
+  const choisie = perso.teinte && TEINTES_PIECE.find(t => t.id === perso.teinte);
+  if (choisie) return { ...choisie, choisie: true };
+  const col = couleurDePiece(modele);
+  return { ...(TEINTES_PIECE.find(t => t.col === col) || TEINTES_PIECE[0]), choisie: false };
+}
+
+/* L'habillage d'une piece : nom, lavis, icone, couleur. L'icone choisie dans
+ * la fiche prime, puis celle de la zone Home Assistant (`mdi`), puis le
+ * modele, puis une maison. Une teinte choisie s'applique EN ENTIER — lavis,
+ * icone et releve (`tc`) — jamais reduite a l'icone ; sans choix, le modele
+ * garde exactement ses couleurs d'avant. */
 function habillagePiece(nom, mdi) {
   const modele = modeleDePiece(nom);
-  const glyphe = uiconDeMdi(mdi);
-  if (glyphe) {
-    return {
-      ...(modele || { box: 44, rad: 13, status: { kind: 'repos' } }),
-      name: nom,
-      bg: (modele && modele.bg) || 'rgba(var(--o-accent-rgb),.16)',
-      icon: <Ico name={glyphe} color={couleurDePiece(modele)} size={22} />,
-    };
-  }
-  if (modele) return { ...modele, name: nom };
+  const perso = personnalisationPiece(nom);
+  const teinte = teinteDePiece(nom, modele);
+  const glyphe = perso.icon || uiconDeMdi(mdi) || (modele && modele.icon && modele.icon.props && modele.icon.props.name) || 'home';
+  const base = modele || { box: 44, rad: 13, status: { kind: 'repos' } };
+  const propre = teinte.choisie || !modele;
   return {
-    name: nom, bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13,
-    icon: <Ico name="home" color="var(--o-accent)" size={22} />,
-    status: { kind: 'repos' },
+    ...base,
+    name: nom,
+    bg: propre ? 'rgba(' + teinte.rgb + ',.16)' : modele.bg,
+    tc: propre ? teinte.col : modele.tc,
+    icon: <Ico name={glyphe} color={teinte.col} size={22} />,
+    col: teinte.col,
+    rgb: teinte.rgb,
+    glyphe,
+    teinte: teinte.id,
   };
+}
+
+/* Ecrire une piece dans `loggia_rooms` : la liste normalisee, la ligne de la
+ * piece remplacee ou ajoutee (nom, icone, teinte, capteurs sous `haid`), en
+ * UNE ecriture. Renommer emporte la grille de la piece (`loggia_roomlayout`)
+ * avec elle — la taille et l'ordre de l'accueil suivent chez l'appelant. */
+function enregistrerPiece(avant, piece) {
+  const liste = normRooms(cfgVal('loggia_rooms', null)).map(r => ({ ...r }));
+  const i = avant ? liste.findIndex(r => r.room === avant) : -1;
+  const entree = { ...(i >= 0 ? liste[i] : {}), ...piece };
+  if (!entree.icon) delete entree.icon;
+  if (!entree.teinte) delete entree.teinte;
+  if (i >= 0) liste[i] = entree; else liste.push(entree);
+  const maj = { loggia_rooms: liste };
+  if (avant && avant !== piece.room) {
+    const all = { ...layoutsOf(ROOM_LAYOUT_KEY) };
+    if (all[avant]) { all[piece.room] = all[avant]; delete all[avant]; maj[ROOM_LAYOUT_KEY] = all; }
+  }
+  cfgSet(maj);
+}
+/* Retirer une piece : sa ligne de `loggia_rooms` et sa grille, en une ecriture. */
+function supprimerPiece(nom) {
+  const maj = { loggia_rooms: normRooms(cfgVal('loggia_rooms', null)).filter(r => r.room !== nom) };
+  const all = { ...layoutsOf(ROOM_LAYOUT_KEY) };
+  if (all[nom]) { delete all[nom]; maj[ROOM_LAYOUT_KEY] = Object.keys(all).length ? all : null; }
+  cfgSet(maj);
+}
+
+/* La carte d'une piece en mode edition (retour user du 15/09 : « les cartes
+ * pieces, je n'ai pas Modifier / Supprimer ») : le meme dessin que la carte
+ * d'une entite — l'icone et le lavis de la piece, le bouton de taille en coin
+ * (une rangee ↔ deux), le nom, « Piece · n capteurs », Modifier et Supprimer.
+ * Compacte, elle tient sur une rangee de 88 px : l'icone, le nom et la taille
+ * sur une ligne, Modifier et Supprimer serres sur la suivante.
+ * Supprimer ecrit la configuration : il demande un second appui. Le glisser
+ * reste a l'enveloppe (`debutPiece` ignore les boutons). */
+function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille }) {
+  const [confirme, setConfirme] = useState(false);
+  useEffect(() => { if (!confirme) return undefined; const t = setTimeout(() => setConfirme(false), 4000); return () => clearTimeout(t); }, [confirme]);
+  const live = p.live || {};
+  const n = [live.tempId, live.humId, live.co2Id].filter(Boolean).length;
+  const sous = tr('Pièce') + ' · ' + (n === 0 ? tr('Aucun capteur') : n === 1 ? tr('{n} capteur', { n }) : tr('{n} capteurs', { n }));
+  const supprimer = () => { if (confirme) { setConfirme(false); onSupprimer(); } else setConfirme(true); };
+  const rouge = confirme ? { background: 'rgba(var(--o-bad-rgb),.16)', borderColor: 'var(--o-bad)' } : {};
+  const icone = <span style={RM_ICO('rgba(' + p.rgb + ',.16)', p.col)}>{cloneElement(p.icon, { size: 17 })}</span>;
+  const taille = (
+    <button onClick={onTaille} aria-pressed={!compacte} title={compacte ? tr('Deux rangées') : tr('Une rangée')}
+      aria-label={(compacte ? tr('Deux rangées') : tr('Une rangée')) + ' · ' + p.name} style={BOUTON_COIN}><Fi i="resize" size={13} /></button>
+  );
+  const lavis = 'linear-gradient(180deg,transparent 28%,rgba(' + p.rgb + ',.14)), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
+  if (compacte) {
+    const serre = { padding: '4px 6px', fontSize: 11.5 };
+    return (
+      <div style={{ ...RM_CARD, minHeight: 0, height: '100%', boxSizing: 'border-box', gap: 6, padding: '8px 10px', background: lavis }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ ...RM_ICO('rgba(' + p.rgb + ',.16)', p.col), width: 32, height: 32, borderRadius: 11 }}>{cloneElement(p.icon, { size: 15 })}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={RM_NAME}>{p.name}</div>
+            <div style={{ ...RM_SUB, color: p.col, marginTop: 0 }}>{sous}</div>
+          </div>
+          {taille}
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={onModifier} style={{ ...boutonEdition(false), ...serre }}>{tr('Modifier')}</button>
+          <button onClick={supprimer} style={{ ...boutonEdition(true), ...serre, ...rouge }}>{confirme ? tr('Confirmer ?') : tr('Supprimer')}</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ ...RM_CARD, height: '100%', boxSizing: 'border-box', background: lavis }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        {icone}
+        {taille}
+      </div>
+      <div style={{ marginTop: 14 }}>
+        <div style={RM_NAME}>{p.name}</div>
+        <div style={{ ...RM_SUB, color: p.col }}>{sous}</div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button onClick={onModifier} style={boutonEdition(false)}>{tr('Modifier')}</button>
+        <button onClick={supprimer} style={{ ...boutonEdition(true), ...rouge }}>{confirme ? tr('Confirmer ?') : tr('Supprimer')}</button>
+      </div>
+    </div>
+  );
+}
+
+/* « Ajouter une piece » / « Modifier la piece » (maquette du 15/09) : le nom,
+ * l'icone (grille), la teinte (puces), « Tuile compacte », puis les entites
+ * de la carte — temperature, humidite, CO2, lumieres, les memes champs que
+ * Parametres › Entites — « si besoin » (retour user du 15/09). Enregistrer
+ * passe par `enregistrerPiece` ; la taille et l'ordre de l'accueil sont a
+ * l'appelant, qui tient la grille. */
+function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregistrer, onSupprimer, onClose }) {
+  const existante = !!nom;
+  const pieces = normRooms(cfgVal('loggia_rooms', null));
+  const cfg = existante ? (pieces.find(r => r.room === nom) || null) : null;
+  const h = (cfg && cfg.haid) || {};
+  const actuel = existante ? habillagePiece(nom, null) : null;
+  const [val, setVal] = useState(nom);
+  const [icone, setIcone] = useState(actuel ? actuel.glyphe : 'home');
+  const [teinte, setTeinte] = useState(actuel ? actuel.teinte : 'accent');
+  const [compacte, setCompacte] = useState(!!compacteInit);
+  const [temp, setTemp] = useState(h.temp || '');
+  const [hum, setHum] = useState(h.humidity || '');
+  const [co2, setCo2] = useState(h.co2 || '');
+  const [lumieres, setLumieres] = useState(Array.isArray(h.lights) ? h.lights.join(', ') : '');
+  const S = (hass && hass.states) || {};
+  const capteurs = (classe) => Object.keys(S).filter(id => id.indexOf('sensor.') === 0 && S[id] && S[id].attributes && S[id].attributes.device_class === classe).sort();
+  const propre = val.trim();
+  const doublon = !!propre && propre !== nom && pieces.some(r => r.room === propre);
+  const valide = !!propre && !doublon;
+  const valider = (close) => {
+    if (!valide) return;
+    onEnregistrer(existante ? nom : null, {
+      room: propre, icon: icone, teinte,
+      haid: { temp: temp.trim() || null, humidity: hum.trim() || null, co2: co2.trim() || null, lights: lumieres.split(',').map(s => s.trim()).filter(Boolean) },
+    }, compacte);
+    close();
+  };
+  const t = TEINTES_PIECE.find(x => x.id === teinte) || TEINTES_PIECE[0];
+  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600, outline: 'none' };
+  const mono = { ...champ, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12.5 };
+  const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
+  const note = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' };
+  const puce = (on, x) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + x.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + x.rgb + ',.14)' : 'var(--o-s1)', color: on ? x.col : 'var(--o-text1)' });
+  const entites = [['o-piece-temp', tr('Température'), temp, setTemp, 'temperature'], ['o-piece-hum', tr('Humidité'), hum, setHum, 'humidity'], ['o-piece-co2', tr('CO₂'), co2, setCo2, 'carbon_dioxide']];
+
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (
+        <div style={{ padding: '4px 2px 8px' }}>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>{existante ? tr('Modifier la pièce') : tr('Ajouter une pièce')}</div>
+          <div style={{ ...note, marginTop: 4 }}>{tr('La pièce apparaîtra sur l’accueil et dans le sélecteur de pièces.')}</div>
+
+          <label htmlFor="o-piece-nom" style={etiquette}>{tr('NOM')}</label>
+          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
+          <input id="o-piece-nom" value={val} onChange={(e) => setVal(e.target.value)} placeholder={tr('Salon, Cuisine, Chambre…')}
+            onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} autoFocus />
+          {doublon && <div style={{ ...note, color: 'var(--o-bad)' }}>{tr('Une pièce porte déjà ce nom.')}</div>}
+
+          <div style={etiquette}>{tr('ICÔNE')}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+            {ICONES_PIECE.map(ic => { const on = ic === icone; return (
+              <button key={ic} aria-pressed={on} aria-label={ic} onClick={() => setIcone(ic)}
+                style={{ height: 46, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + t.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + t.rgb + ',.14)' : 'var(--o-s1)' }}>
+                <Ico name={ic} size={20} color={on ? t.col : 'var(--o-text1)'} />
+              </button>
+            ); })}
+          </div>
+
+          <div style={etiquette}>{tr('TEINTE')}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {TEINTES_PIECE.map(x => { const on = x.id === teinte; return (
+              <button key={x.id} aria-pressed={on} onClick={() => setTeinte(x.id)} style={puce(on, x)}>
+                <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 5, background: x.col, display: 'inline-block' }} />{tr(x.label)}
+              </button>
+            ); })}
+          </div>
+
+          <div style={{ marginTop: 8 }}>
+            <FicheRangee premiere titre={tr('Tuile compacte')} desc={tr('Une rangée sur l’accueil au lieu de deux.')}
+              droite={<RmBascule on={compacte} nom={tr('Tuile compacte')} onToggle={() => setCompacte(v => !v)} couleur={t.col} />} />
+          </div>
+
+          <div style={{ ...etiquette, marginTop: 4 }}>{tr('ENTITÉS')}</div>
+          <div style={{ ...note, margin: '0 2px 8px' }}>{tr('Les capteurs de la carte. Vide : ceux de la zone Home Assistant du même nom.')}</div>
+          {entites.map(([id, lbl, v, set, classe]) => (
+            <div key={id} style={{ marginBottom: 8 }}>
+              <label htmlFor={id} style={{ ...etiquette, margin: '0 2px 5px', letterSpacing: 0, fontSize: 12 }}>{lbl}</label>
+              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
+              <input id={id} list={id + '-liste'} value={v} onChange={(e) => set(e.target.value)} placeholder="sensor.…" spellCheck={false} style={mono} />
+              <datalist id={id + '-liste'}>{capteurs(classe).map(x => <option key={x} value={x} />)}</datalist>
+            </div>
+          ))}
+          <label htmlFor="o-piece-lum" style={{ ...etiquette, margin: '0 2px 5px', letterSpacing: 0, fontSize: 12 }}>{tr('Lumières')}</label>
+          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
+          <input id="o-piece-lum" value={lumieres} onChange={(e) => setLumieres(e.target.value)} placeholder="light.…, light.…" spellCheck={false} style={mono} />
+          <div style={note}>{tr('Vide : toutes les lumières de la pièce. Une liste ne vaut que pour le bouton de la carte.')}</div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center' }}>
+            {existante && <button onClick={() => { onSupprimer(nom); close(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>}
+            <span style={{ flex: 1 }} />
+            <button onClick={close} style={{ padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>{tr('Annuler')}</button>
+            <button onClick={() => valider(close)} disabled={!valide} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f', opacity: valide ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
+          </div>
+        </div>
+      )}
+    </BottomSheet>
+  );
 }
 
 /* ── Agenda de l'accueil ──────────────────────────────────────────────────────
@@ -5947,6 +6243,22 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     if (pieceDrag) saveGrille({ piecesOrdre: pieceDrag.ordre });
     setPieceDrag(null);
   };
+  /* La fiche d'une piece ecrit la configuration (`enregistrerPiece`) ; la
+   * taille et l'ordre vivent dans la grille de l'accueil, ici. Renommer les
+   * emporte ; retirer les efface. Une piece ajoutee prend la taille choisie
+   * et se range en dernier (`ordrePieces` complete l'ordre sauve). */
+  const enregistrerPieceIci = (avant, piece, compacte) => {
+    enregistrerPiece(avant, piece);
+    const tailles = { ...(grille.tailles || {}) };
+    if (avant && avant !== piece.room) delete tailles[avant];
+    tailles[piece.room] = compacte ? 'c' : 's';
+    saveGrille({ tailles, piecesOrdre: (grille.piecesOrdre || []).map(n => n === avant ? piece.room : n) });
+  };
+  const retirerPiece = (nom) => {
+    supprimerPiece(nom);
+    const { [nom]: _retiree, ...tailles } = grille.tailles || {};
+    saveGrille({ tailles, piecesOrdre: (grille.piecesOrdre || []).filter(n => n !== nom) });
+  };
   /** Enveloppe d'une section : drag + masque en édition, rien sinon. */
   const Sec = (zone, id, contenu) => {
     const cache = (grille.caches || []).indexOf(id) >= 0;
@@ -5987,6 +6299,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     );
   };
   const [roomPop, setRoomPop] = useState(null);
+  const [pieceSheet, setPieceSheet] = useState(null); // { nom: '' (ajout) | 'Nom', compacte } ou null
   const wx = (editMode && override) ? override : (weatherMode || 'clouds'); // suit l'entité météo, sauf override en mode édition
   // Fond GLSL : état HA brut prioritaire ; les overrides du mode édition sont mappés vers un preset proche
   const WX3D_FROM_MODE = { sun: 'sunny', partly: 'partlycloudy', clouds: 'cloudy', wind: 'windy', rain: 'rainy', snow: 'snowy', storm: 'lightning-rainy', night: 'clear-night' };
@@ -6489,26 +6802,21 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
                     style={{ position: 'relative', minWidth: 0, opacity: saisie ? .35 : 1, transition: 'opacity .15s',
                       ...((tactile && wide) ? { gridColumn: (i % 3) + 1 } : {}),
                       ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 2, borderRadius: 14, cursor: 'grab', touchAction: 'pan-y' } : {}) }}>
-                    {/* Carte inerte en édition (comme partout) : le wrapper
-                      * garde le drag, le bouton taille reste tapable. */}
-                    <div style={editMode ? { pointerEvents: 'none', height: '100%' } : { height: '100%' }}>
-                      <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} onOpen={editMode ? null : () => onOpenRoom && onOpenRoom(p.name)} />
-                    </div>
-                    {/* Barre d'outils de la carte, en haut à droite sur fond
-                      * opaque : le bouton de taille recouvrait l'interrupteur
-                      * dans le coin bas-droit (retour 01/09). */}
-                    {editMode && (
-                      <EditBarre>
-                        <button aria-label={tr('Taille de la carte') + ' · ' + p.name} title={tr('Taille de la carte')}
-                          onClick={(e) => { e.stopPropagation(); saveGrille({ tailles: { ...(grille.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } }); }}
-                          style={{ ...EDIT_BTN, background: 'rgba(var(--o-accent-rgb),.16)', color: 'var(--o-accent-soft)' }}>
-                          <Fi i="resize" size={12} />
-                        </button>
-                      </EditBarre>
+                    {/* En édition, la carte d'édition — le même dessin que
+                      * partout (retour user du 15/09) : taille en coin,
+                      * Modifier, Supprimer. Sinon la tuile vivante. */}
+                    {editMode ? (
+                      <CartePieceEdition p={p} compacte={t === 'c'} onModifier={() => setPieceSheet({ nom: p.name, compacte: t === 'c' })} onSupprimer={() => retirerPiece(p.name)}
+                        onTaille={() => saveGrille({ tailles: { ...(grille.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } })} />
+                    ) : (
+                      <div style={{ height: '100%' }}>
+                        <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />
+                      </div>
                     )}
                   </div>
                 );
               })}
+              {editMode && <CarteAjout onClick={() => setPieceSheet({ nom: '', compacte: false })} label={tr('Ajouter une pièce')} />}
             </div>
           );
           const camsGrid = (
@@ -6649,6 +6957,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
       {/* Fiches des cartes du catalogue (héros « En ce moment »). */}
       {dc.sheets}
       {histoOuvert && <FeuilleHistorique entrees={histo} onRestaurer={restaurer} onOublier={oublierHisto} onClose={() => setHistoOuvert(false)} />}
+      {pieceSheet && <FichePiece key={pieceSheet.nom} nom={pieceSheet.nom} compacte={pieceSheet.compacte} hass={dashHass} onEnregistrer={enregistrerPieceIci} onSupprimer={retirerPiece} onClose={() => setPieceSheet(null)} />}
     </main>
   );
 }
@@ -7371,8 +7680,9 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
                   </div>)}
               <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 16 }}>
                 {bloc.cartes.map(k => {
-                  const carte = dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
+                  const compacte = ed.estCompact(k);
+                  const carte = compacte ? dc.compact(k, ed.labelOf(k)) : dc.card(k, ed.labelOf(k));
+                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={(ed.estLarge(k) ? 'o-cvw2 ' : '') + (compacte ? 'o-cvrow1' : '')}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass}>{carte}</EditableCard>;
                 })}
                 {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} label={tr('Ajouter un volet')} />}
@@ -8002,7 +8312,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{kwh != null ? kwh.toFixed(2).replace('.', ',') + ' kWh jour' : '—'}</div>
             </div>);
             if (!edit) return <Anim key={k} i={di} base={160} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
-            return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit} hass={hass}>{carte}</EditableCard>;
+            return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit} hass={hass} taille={false}>{carte}</EditableCard>;
           })}
           {edit && <CarteAjout onClick={() => setEnAdd(true)} label={tr('Ajouter un poste')} />}
         </div>
@@ -12380,7 +12690,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const base = PIECES.find(p => p.name === activeRoom) || { name: activeRoom, bg: 'rgba(var(--o-accent-rgb),.16)', icon: <Fi i="home" color="var(--o-accent)" size={22} /> }; const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'meteo' ? <MeteoView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} wxFx={wxFx} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onOpenMeteo={() => setView('meteo')} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}

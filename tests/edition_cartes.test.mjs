@@ -20,11 +20,14 @@ test('le bandeau : le mot d’ordre de la maquette et ses trois boutons', () => 
   assert.ok(b.includes('ed.reset()'), 'Toutes les entites ramene la liste automatique');
 });
 
-test('la carte d’edition : icone, crayon, « Domaine · identifiant », Modifier et Supprimer — et on la saisit n’importe ou', () => {
+test('la carte d’edition : icone, bouton de taille en coin, « Domaine · identifiant », Modifier et Supprimer — et on la saisit n’importe ou', () => {
   const c = bloc('function EditableCard(', NL + '}');
   assert.ok(c.includes("{tr('Modifier')}") && c.includes("{tr('Supprimer')}"), 'les deux boutons');
   assert.ok(c.includes("info.label + ' · ' + identifiantEdition(brut)"), 'le sous-titre de la maquette');
-  assert.ok(c.includes('<Fi i="pencil" size={14} />'), 'le crayon en haut a droite');
+  assert.ok(c.includes('<Fi i="resize" size={13} />') && c.includes('onClick={() => ed.basculerCompact(id)}'), 'le bouton de taille en haut a droite : compacte ↔ standard (retour user du 15/09)');
+  assert.ok(!c.includes('ed.basculerLarge('), 'le coin ne touche pas a la largeur');
+  assert.ok(!c.includes('<Fi i="pencil" size={14} />'), 'plus de crayon en coin : Modifier suffit');
+  assert.ok(c.includes('const bouton = boutonEdition, petit = BOUTON_PETIT;') && c.includes('style={BOUTON_COIN}'), 'les boutons sont ceux de toutes les cartes d’edition');
   assert.ok(c.includes('<div data-id={id} role="button" tabIndex={0} {...prise}'), 'la carte entiere est la prise');
   assert.ok(!c.includes("position: 'absolute', inset: 0, zIndex: 2"), 'plus de voile de saisie');
   assert.ok(c.includes('onPointerDown={stop}'), 'les boutons ne saisissent pas');
@@ -72,16 +75,16 @@ test('un seul type de carte, le standard : plus de CARTE dans la fiche, plus de 
   assert.ok(!h.includes('typeOf') && !h.includes('setType'), 'plus de type de carte dans l’editeur');
   assert.ok(!src.includes('function BoutonCarteLibre('), 'plus de carte libre');
   const room = bloc('function RoomView(', NL + 'function ');
-  assert.ok(room.includes('const card = dc.card(id, lbl, zone);') && !room.includes('CvTyped'), 'la piece ne dessine que la carte standard');
+  assert.ok(room.includes('const card = compacte ? dc.compact(id, lbl) : dc.card(id, lbl, zone);') && !room.includes('CvTyped'), 'la piece ne dessine que la carte standard, en une ou deux rangees');
   const volets = bloc('function VoletsContent(', NL + 'function ');
-  assert.ok(volets.includes('const carte = dc.card(k, ed.labelOf(k));') && !volets.includes('CvTyped'), 'les volets aussi');
+  assert.ok(volets.includes('const carte = compacte ? dc.compact(k, ed.labelOf(k)) : dc.card(k, ed.labelOf(k));') && !volets.includes('CvTyped'), 'les volets aussi');
 });
 
 test('des couleurs dans la fiche : l’icone porte la teinte du domaine, la piece la sienne', () => {
   const f = bloc('function CardEditSheet(', NL + '}');
   assert.ok(f.includes('puce(on, possible, teinteRgb(dm.rgb))'), 'la puce du domaine se teinte');
   assert.ok(f.includes("color={'rgb(' + dm.rgb + ')'}"), 'l’icone du domaine est coloree');
-  assert.ok(f.includes('habillagePiece(p, zone && zone.icon)') && f.includes('couleurDePiece(modeleDePiece(p))'), 'la piece prend son icone et sa couleur');
+  assert.ok(f.includes('habillagePiece(p, zone && zone.icon)') && f.includes('const couleur = hp.col;'), 'la piece prend son icone et sa couleur — celle de l’habillage, teinte choisie comprise');
 });
 
 test('Accueil et Energie ont le meme bandeau, et la carte suit le doigt partout', () => {
@@ -91,4 +94,25 @@ test('Accueil et Energie ont le meme bandeau, et la carte suit le doigt partout'
   assert.ok(!src.includes('}, 380);'), 'plus d’appui long de 380 ms nulle part');
   const en = bloc('function EnergieContent(', NL + 'function ');
   assert.ok(en.includes("<BandeauEdition ed={ed} onAjouter={() => setEnAdd(true)} ajouterLabel={tr('Ajouter un poste')}") && en.includes("<CarteAjout onClick={() => setEnAdd(true)} label={tr('Ajouter un poste')} />"), 'l’Energie aussi');
+});
+
+test('la taille : compacte (une rangee de 88 px) ou standard (deux), rangee dans l’agencement et rendue partout', () => {
+  const h = bloc('function useLayoutEditor(', NL + '}');
+  assert.ok(h.includes("const estCompact = (id) => (layout.compacts || []).indexOf(id) >= 0;") && h.includes('write({ compacts: vide('), 'compacts, a cote de larges');
+  assert.ok(h.includes('compacts: null') && h.includes('(layout.compacts || []).length'), 'Toutes les entites l’efface, et elle compte comme une retouche');
+  assert.ok(h.includes('estLarge, basculerLarge, estCompact, basculerCompact }'), 'l’editeur la rend');
+  const dc = bloc('function useDomainCards(', NL + '}');
+  assert.ok(dc.includes('const compact = (id, label = null) => <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense />;') && dc.includes('return { card, compact, sheets, fermer, ouvrir };'), 'la compacte est CvCard dense, qui ouvre la meme fiche');
+  const c = bloc('function EditableCard(', NL + '}');
+  assert.ok(c.includes("compact ? 'o-cvrow1' : ''") && c.includes('if (compact) {') && c.includes("minHeight: 0, height: '100%'"), 'la carte d’edition compacte tient sur une rangee');
+  assert.ok(c.includes("brut.indexOf('zone:') !== 0") && c.includes('taille && !!ed.basculerCompact'), 'pas de compacte pour une zone fil pilote, ni la ou la vue n’en offre pas');
+  const obj = bloc('function ObjetsView(', NL + '}');
+  assert.equal((obj.match(/chip=\{compacte\}/g) || []).length, 2, 'distributeur et plantes prennent leur compacte');
+  assert.ok(obj.includes('className="grid-objets grid-dense"') && obj.includes("(ed.estCompact(o.cle) ? 'o-cvrow1' : '')"), 'la grille d’Objets est dense, la compacte y prend une rangee');
+  const en = bloc('function EnergieContent(', NL + 'function ');
+  assert.ok(en.includes('taille={false}'), 'les postes d’Energie n’ont pas de compacte');
+  const f = bloc('function CardEditSheet(', NL + '}');
+  assert.ok(f.includes("tr('Carte compacte')") && f.includes('onToggle={() => ed.basculerCompact(id)}'), 'la fiche a la bascule aussi');
+  const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
+  assert.ok(css.includes('.grid-dense > .o-cvrow1 { grid-row: span 1; }') && css.includes('.grid-dense { grid-auto-flow: row dense; grid-auto-rows: 88px; }'), 'une rangee = 88 px');
 });

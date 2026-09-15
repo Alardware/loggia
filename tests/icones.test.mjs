@@ -65,6 +65,15 @@ test('chaque icône traduite depuis Home Assistant est rendable', () => {
   assert.deepEqual(absentes, [], 'ces icônes n’afficheraient rien :\n  ' + absentes.join('\n  '));
 });
 
+test('chaque icône proposée dans la fiche d’une pièce est rendable', () => {
+  const m = src.match(/const ICONES_PIECE = \[([^\]]+)\]/);
+  assert.ok(m, 'la liste ICONES_PIECE doit exister');
+  const noms = [...m[1].matchAll(/'([a-z0-9-]+)'/g)].map(x => x[1]);
+  assert.ok(noms.length >= 10, 'la grille de la maquette compte dix icônes');
+  const absentes = noms.filter(n => !rendable(n));
+  assert.deepEqual(absentes, [], 'ces icônes n’afficheraient rien dans la fiche :\n  ' + absentes.join('\n  '));
+});
+
 test('chaque icône de pièce est rendable', () => {
   // Les icônes par défaut des pièces, écrites en JSX dans la table `PIECES`.
   const noms = [...new Set([...bloc('PIECES').matchAll(/<Ico name="([a-z0-9-]+)"/g)].map(m => m[1]))];

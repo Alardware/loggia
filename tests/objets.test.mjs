@@ -108,7 +108,7 @@ test('les vues Lumieres, Climat et Medias sont remplacees : leurs routes menent 
 test('la vue Objets dessine les cartes de la piece, une par appareil, derriere des puces a l’arrondi 9', () => {
   const d = src.indexOf('function ObjetsView(');
   const vue = src.slice(d, src.indexOf(String.fromCharCode(10) + '}', d));
-  assert.ok(vue.includes('objetsDeLaMaison(hass, ajoutes)') && vue.includes('return dc.card(o.id, ed.labelOf(o.cle) || null);'), 'les cartes de la piece');
+  assert.ok(vue.includes('objetsDeLaMaison(hass, ajoutes)') && vue.includes('return compacte ? dc.compact(o.id, ed.labelOf(o.cle) || null) : dc.card(o.id, ed.labelOf(o.cle) || null);'), 'les cartes de la piece');
   assert.ok(vue.includes('dc.card(null, nomDe(o), o.zone)'), 'une zone fil pilote a sa carte');
   assert.ok(vue.includes('borderRadius: 9') && !vue.includes('borderRadius: 999'), 'des puces, pas des pilules');
   assert.ok(vue.includes(`className="o-favrow" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}`), 'une seule ligne qui defile, pas de retour a la ligne');

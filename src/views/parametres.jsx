@@ -721,7 +721,7 @@ function useEntConfig(hass) {
   const avecCle = (a) => a.map((r, i) => ({ ...r, _k: r._k || 'k' + i + '_' + Math.random().toString(36).slice(2, 6) }));
   // Lecture de la configuration courante, telle que le formulaire l'affiche.
   const readEnt = () => ({
-    rooms: avecCle(normRooms(cfgVal('loggia_rooms', null)).map(r => ({ room: r.room || '', temp: (r.haid && r.haid.temp) || '', humidity: (r.haid && r.haid.humidity) || '', co2: (r.haid && r.haid.co2) || '',
+    rooms: avecCle(normRooms(cfgVal('loggia_rooms', null)).map(r => ({ room: r.room || '', icon: r.icon || null, teinte: r.teinte || null, temp: (r.haid && r.haid.temp) || '', humidity: (r.haid && r.haid.humidity) || '', co2: (r.haid && r.haid.co2) || '',
       lights: Array.isArray(r.haid && r.haid.lights) ? r.haid.lights.join(', ') : ((r.haid && r.haid.lights) || '') }))),
     energy: { ...enHaids(), ...(cfgVal('loggia_energyHaids', null) || {}) },
     alarm: secAlarm() || '',
@@ -751,7 +751,9 @@ function useEntConfig(hass) {
   const saveEnt = () => {
     try {
       cfgSet({
-        loggia_rooms: ent.rooms.filter(r => r.room).map(r => ({ room: r.room, haid: { temp: r.temp || null, humidity: r.humidity || null, co2: r.co2 || null,
+        // L'icone et la teinte choisies dans la fiche de l'accueil (v3.23)
+        // ne se reglent pas ici, mais ne doivent pas s'y perdre.
+        loggia_rooms: ent.rooms.filter(r => r.room).map(r => ({ room: r.room, ...(r.icon ? { icon: r.icon } : {}), ...(r.teinte ? { teinte: r.teinte } : {}), haid: { temp: r.temp || null, humidity: r.humidity || null, co2: r.co2 || null,
           // Vide = toutes les lumieres de la piece. Une liste explicite ne
           // vaut que pour le bouton de la carte, pas pour le comptage.
           lights: String(r.lights || '').split(',').map(s => s.trim()).filter(Boolean) } })),

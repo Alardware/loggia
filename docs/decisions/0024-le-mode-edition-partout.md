@@ -56,3 +56,18 @@ des cartes.**
 - **L'Accueil et l'Énergie** ont le même bandeau, la case d'ajout (Énergie),
   et leurs sections, pièces et postes suivent le doigt comme les cartes de
   grille — appui de 200 ms au doigt, partout.
+
+## Amendement v3.23.0 (15/09/2026) — les pièces aussi
+
+- **Le coin de la carte porte la taille, pas un crayon.** Le crayon faisait
+  doublon avec Modifier ; le bouton ⤢ (accent) bascule compacte (une rangée
+  de 88 px) ↔ standard (deux), pour une entité comme pour une pièce. La
+  largeur (simple / double) reste dans la fiche.
+- **Les cartes pièces de l'Accueil ont le même dessin en édition** : icône et
+  lavis de la pièce, taille en coin, « Pièce · n capteurs », Modifier,
+  Supprimer (deux appuis : c'est la configuration qui s'écrit) — et une case
+  « Ajouter une pièce ».
+- **Une fiche pour la pièce** : nom, icône (dix, toutes rendables), teinte
+  (les six jetons des modèles, appliquée en entier : lavis, icône, relevé),
+  tuile compacte, et les entités de la carte « si besoin » — les mêmes champs
+  que Paramètres › Entités, qui conserve désormais l'icône et la teinte.
