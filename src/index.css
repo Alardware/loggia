@@ -400,17 +400,9 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .loggia-aside.is-open { transform: translateX(0); }
   .loggia-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 90; }
   .loggia-content { padding: 16px 14px 96px !important; }
-  .grid-rappels, .grid-scenes, .grid-covers, .grid-volcfg, .grid-ehero, .grid-ebilan, .grid-vac-top, .grid-vac-map, .grid-croq, .grid-speakers, .grid-par-pal, .grid-par-about { grid-template-columns: 1fr !important; }
-  /* Caméras : deux par ligne aussi sur téléphone (retour user du 15/09 : la
-     fiche agrandit de toute façon). La tuile se resserre — badge, heure, pied
-     et bouton plus petits — pour rester lisible à mi-largeur. */
-  .grid-cams, .grid-sec-cams { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
-  .grid-cams .o-livebadge, .grid-sec-cams .o-livebadge { top: 8px !important; left: 8px !important; padding: 3px 8px !important; font-size: 10px !important; gap: 5px !important; }
-  .grid-cams .o-camheure, .grid-sec-cams .o-camheure { top: 9px !important; right: 9px !important; font-size: 10px !important; }
-  .grid-cams .o-campied, .grid-sec-cams .o-campied { padding: 18px 10px 9px !important; }
-  .grid-cams .o-campied .o-camnom, .grid-sec-cams .o-campied .o-camnom { font-size: 13px !important; }
-  .grid-cams .o-campied .o-camsous, .grid-sec-cams .o-campied .o-camsous { font-size: 11px !important; }
-  .grid-cams .o-campied button, .grid-sec-cams .o-campied button { width: 28px !important; height: 28px !important; }
+  .grid-cams, .grid-rappels, .grid-scenes, .grid-covers, .grid-volcfg, .grid-ehero, .grid-ebilan, .grid-vac-top, .grid-vac-map, .grid-croq, .grid-speakers, .grid-sec-cams, .grid-par-pal, .grid-par-about { grid-template-columns: 1fr !important; }
+  /* Caméras : une par ligne sur téléphone. La grille de deux (v3.24.2) n'a pas
+     plu — retour user du 15/09 : « pas fan finalement ». */
   /* Barres d'actions : le bouton de réglages se réduit à son icône, le libellé
      mangeant une largeur précieuse sur un téléphone.
      Escamoté plutôt que `display: none` : le texte reste lu par les lecteurs

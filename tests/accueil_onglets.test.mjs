@@ -52,7 +52,9 @@ test('deux pages sur mobile : glissees au doigt, deux points, retenues, coupees 
   const o = bloc('function OngletsAccueil(', NL + '}');
   assert.ok(!o.includes('role="tablist"') && o.includes('aria-label={lbl} aria-pressed={on}') && o.includes('width: on ? 18 : 6'), 'pas de barre d’onglets (retour user) : deux points, comme sous l’ancienne glissiere');
   assert.ok(o.includes("sessionStorage.getItem(ONGLET_CLE) === 'moment' ? 1 : 0") && src.includes("const ONGLET_CLE = 'loggia-accueil-onglet';"), 'retenu pour la session');
-  assert.ok(o.includes("if (edit || e.pointerType === 'mouse') return;"), 'le geste ne vaut qu’au doigt, jamais en edition');
+  assert.ok(o.includes("if (edit || e.pointerType === 'mouse' || defileHorizontal(e.target, e.currentTarget)) return;"), 'le geste ne vaut qu’au doigt, jamais en edition, jamais depuis une rangee qui defile');
+  const h = bloc('function defileHorizontal(', NL + '}');
+  assert.ok(h.includes("(st.overflowX === 'auto' || st.overflowX === 'scroll') && n.scrollWidth > n.clientWidth + 1") && h.includes('n !== racine'), 'une rangee qui defile vraiment, jusqu’a la racine du glissement');
   assert.ok(o.includes('g.pris = Math.abs(ddx) > Math.abs(ddy) * 2;') && o.includes('if (g.dx < -40 && onglet === 0) va(1);') && o.includes('g.dx = (onglet === 0 && ddx > 0) || (onglet === 1 && ddx < 0) ? ddx / 4 : ddx;'), 'franchement horizontal, 40 px');
   assert.ok(o.includes('onPointerCancel={annule}') && o.includes('const annule = () => { geste.current = null; setDx(0); };'), 'un pointercancel ne change pas d’onglet');
   assert.ok(o.includes('{onglet === 0 ? maison : moment}'), 'un seul panneau dans le flux');

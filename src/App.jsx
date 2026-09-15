@@ -5876,13 +5876,27 @@ function LigneMoment({ icone, rgb, nom, sous, onOpen = null, action = null, acti
  * (la souris a les onglets), s'efface en edition (le drag des sections tient
  * deja le pointeur), et un `pointercancel` — le navigateur a pris le geste
  * pour faire defiler une rangee — ne change pas d'onglet. */
+/* Une rangee qui defile a l'horizontale — scenes rapides, chiffres de la
+ * banniere — garde son geste : la page ne se prend pas depuis elle (retour
+ * user du 15/09 : « je ne peux plus les slider, la seconde page prend le
+ * dessus »). On remonte du point touche jusqu'a la racine du glissement. */
+function defileHorizontal(el, racine) {
+  for (let n = el; n && n !== racine; n = n.parentElement) {
+    const st = window.getComputedStyle(n);
+    if ((st.overflowX === 'auto' || st.overflowX === 'scroll') && n.scrollWidth > n.clientWidth + 1) return true;
+  }
+  return false;
+}
 const ONGLET_CLE = 'loggia-accueil-onglet';
 function OngletsAccueil({ maison, moment, edit = false }) {
   const [onglet, setOnglet] = useState(() => { try { return sessionStorage.getItem(ONGLET_CLE) === 'moment' ? 1 : 0; } catch { return 0; } });
   const [dx, setDx] = useState(0); // le decalage du panneau pendant le geste
   const geste = useRef(null);
   const va = (i) => { setOnglet(i); setDx(0); try { sessionStorage.setItem(ONGLET_CLE, i ? 'moment' : 'maison'); } catch {} };
-  const debut = (e) => { if (edit || e.pointerType === 'mouse') return; geste.current = { x: e.clientX, y: e.clientY, pris: null }; };
+  const debut = (e) => {
+    if (edit || e.pointerType === 'mouse' || defileHorizontal(e.target, e.currentTarget)) return;
+    geste.current = { x: e.clientX, y: e.clientY, pris: null };
+  };
   const mouv = (e) => {
     const g = geste.current; if (!g) return;
     const ddx = e.clientX - g.x, ddy = e.clientY - g.y;
