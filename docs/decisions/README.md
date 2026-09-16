@@ -35,3 +35,4 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0028](0028-l-accueil-montre-ce-qui-merite-l-attention.md) | L'Accueil montre ce qui mérite l'attention : Sécurité en une seconde, « À surveiller » seulement quand il le faut | appliqué (v3.29.0, amendée v3.30.0) |
 | [0029](0029-les-cartes-pieces-disent-leur-etat.md) | Les cartes pièces disent leur état : problème, activité, calme | appliqué (v3.30.0) |
 | [0030](0030-le-haut-informe-le-milieu-controle.md) | Le haut informe, le milieu contrôle : hero plus bas, tuiles cliquables, une rangée de scénarios | appliqué (v3.31.0) |
+| [0031](0031-les-cameras-disent-leur-dernier-evenement.md) | Les caméras disent leur dernier événement : détecteurs résolus + journal, jamais last_changed | appliqué (v3.32.0) |

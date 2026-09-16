@@ -29,13 +29,14 @@ import {
   BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
-import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook } from './historique.jsx';
+import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
 import { comptesSecurite, tuilesSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
+import { evenementCamera, detecteursDe, reduireDerniers, depuis } from './evenement.js';
 import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS, ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, actionVide, scenarioVide, versEnregistrement } from './scenarios.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
@@ -5028,12 +5029,23 @@ const CAMERAS = () => [
  * LIVE, la teinte de repli de la liste, le point d'etat. La fiche reprend la
  * meme tuile — le flux se voit partout de la meme facon (retour user du 14/09 :
  * « reprends la meme chose que les cameras sur l'accueil »). */
+/* La sous-ligne d'une tuile camera (ADR 0031) : hors ligne ; la detection en
+ * cours (point ambre, rouge pour la sonnette) ; sinon le dernier evenement du
+ * journal et depuis quand ; sinon « Direct ». Le meme mot partout — l'Accueil,
+ * la vue Securite, la fiche. `ev` vient d'`evenementCamera`, ou vaut null. */
+const POINT_CAMERA = (fond) => ({ width: 7, height: 7, borderRadius: '50%', background: fond });
+function sousCamera(online, ev) {
+  if (!online) return <><span style={POINT_CAMERA('#f87171')} />{tr('Hors ligne')}</>;
+  if (!ev) return <><span style={POINT_CAMERA('var(--o-ok)')} />{tr('Direct')}</>;
+  if (ev.enCours) return <><span style={POINT_CAMERA(ev.genre === 'sonnette' ? '#f87171' : ev.genre === 'colis' ? 'var(--o-accent)' : '#ffb347')} />{ev.libelle}</>;
+  return <><Fi i={ev.icone} size={11} color="#ffce73" />{ev.libelle + ' · ' + depuis(ev.quand)}</>;
+}
 function tuileCamera(cam, i, hass) {
   const teinte = CAMERAS()[i % CAMERAS().length];
   return {
     label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: teinte.grad, glow: teinte.glow,
-    sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: cam.online ? 'var(--o-ok)' : '#f87171' }} />{cam.online ? tr('Direct') : tr('Hors ligne')}</>),
-    cle: cleCamera(cam, i), haid: cam.haid, online: cam.online, hass,
+    sub: sousCamera(cam.online, cam.evenement || null),
+    cle: cleCamera(cam, i), haid: cam.haid, online: cam.online, hass, evenement: cam.evenement || null,
   };
 }
 
@@ -5051,7 +5063,7 @@ const CAM_MODES = () => ({
   pleurs: [tr('Mode baby care'), tr('Écoute les pleurs et prévient.')],
   prive: [tr('Mode privé'), tr('Objectif occulté : plus aucune image ne sort.')],
 });
-function CamSheet({ haid, nom, hass, onClose, onNav = null }) {
+function CamSheet({ haid, nom, hass, onClose, onNav = null, evenement = null }) {
   const S = (hass && hass.states) || {};
   const st = S[haid] || null;
   const etat = st ? st.state : 'unavailable';
@@ -5068,7 +5080,7 @@ function CamSheet({ haid, nom, hass, onClose, onNav = null }) {
       {close => (<>
         <FicheEntete titre={nom} sous={[zoneDe(haid), etatTxt].filter(Boolean).join(' · ')} close={close} id={haid} />
         {/* La tuile de l'Accueil, sans son bouton d'agrandissement : on y est deja. */}
-        <CameraTile c={tuileCamera({ name: nom, haid, online }, 0, hass)} agrandir={false} />
+        <CameraTile c={tuileCamera({ name: nom, haid, online, evenement }, 0, hass)} agrandir={false} />
         {(modes.length > 0 || onNav) && (
           <div style={{ marginTop: 14 }}>
             {modes.map((m, i) => {
@@ -5106,7 +5118,7 @@ function CameraTile({ c, agrandir = true }) {
           <button aria-label={tr('Agrandir')} onClick={() => setGrand(true)} style={ctrl}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></button>
         )}
       </div>
-      {grand && <CamSheet haid={c.haid} nom={c.label} hass={c.hass} onClose={() => setGrand(false)} />}
+      {grand && <CamSheet haid={c.haid} nom={c.label} hass={c.hass} evenement={c.evenement} onClose={() => setGrand(false)} />}
     </div>
   );
 }
@@ -6735,8 +6747,18 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     }
     return { txt: out, alerte };
   }, [a]);
+  /* DERNIER EVENEMENT DES TUILES CAMERA (ADR 0031) : les detecteurs que la
+   * resolution connait par camera, et le journal de Home Assistant pour leur
+   * dernier declenchement — jamais `last_changed`, qui vaut « redemarrage »
+   * apres un restart. Sans detecteur ni journal : « Direct », rien d'invente. */
+  const camsResolues = (LOGGIA_RESOLVED && LOGGIA_RESOLVED.cameras && LOGGIA_RESOLVED.cameras.list) || [];
+  const derniersCams = useDerniersEvenements(a && a.hass, camsResolues.flatMap(c => detecteursDe(c).map(d => d.id)), reduireDerniers);
+  const evenementDe = (haid) => {
+    const rc = haid ? camsResolues.find(c => (c.haid || c.id) === haid) : null;
+    return rc ? evenementCamera(rc, (a && a.hass && a.hass.states) || {}, derniersCams) : null;
+  };
   // HA absent → vitrine de demo ; HA present sans camera → aucune camera, pas d'exemple
-  const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => tuileCamera(cam, i, a.hass)) : CAMERAS();
+  const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => tuileCamera({ ...cam, evenement: evenementDe(cam.haid) }, i, a.hass)) : CAMERAS();
   const _dLv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase: tr('Éteint'), color: '#94a3b8', active: false, valueIcon: 'timer', valueText: '--:--', bar: null };
   const _dPb = { label: tr('Poubelles'), iconKey: 'trash', phase: tr('Dans {j}j', { j: 2 }), color: '#fbbf24', active: false, valueText: 'Mer. 16 Juin', dotsFilled: 12, dotsTotal: 14 };
   const M = (a && a.machines) || {};
@@ -9284,6 +9306,8 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
     motion: c.motion, person: c.person, vehicle: c.vehicle, sonnette: c.sonnette, colis: c.colis,
     preset: c.preset,
   })).filter(c => c && c.haid);
+  // Le dernier declenchement de chaque detecteur, par le journal (ADR 0031).
+  const derniersCams = useDerniersEvenements(hass, camList.flatMap(c => detecteursDe(c).map(d => d.id)), reduireDerniers);
   // Même source que l'accueil : une personne ne peut pas exister ici et pas là.
   const secPeople = peopleList().filter(p => p && p.haid);
   // ── Alarme : état réel + optimiste ──
@@ -9328,20 +9352,16 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   const cams = camList.map((c, ci) => {
     const s = S[c.haid];
     const online = s ? (s.state !== 'unavailable' && s.state !== 'unknown') : false;
-    const person = isOn(c.person), vehicle = isOn(c.vehicle), motion = isOn(c.motion), sonnette = isOn(c.sonnette), colis = isOn(c.colis);
-    const active = person || vehicle || motion || sonnette || colis;
-    let subTxt = tr('RAS'), dot = 'var(--o-ok)';
-    if (sonnette) { subTxt = tr('Sonnette'); dot = '#f87171'; }
-    else if (person) { subTxt = tr('Personne détectée'); dot = '#ffb347'; }
-    else if (vehicle) { subTxt = tr('Véhicule présent'); dot = '#ffb347'; }
-    else if (colis) { subTxt = tr('Colis livré'); dot = 'var(--o-accent)'; }
-    else if (motion) { subTxt = tr('Mouvement'); dot = '#ffb347'; }
+    // La detection en cours, sinon le dernier declenchement du journal, sinon
+    // rien : la meme sous-ligne que la tuile de l'Accueil (ADR 0031).
+    const ev = evenementCamera(c, S, derniersCams);
+    const active = !!(ev && ev.enCours);
     const preset = CAMERAS()[(c.preset != null ? c.preset : ci) % CAMERAS().length];
     return {
-      haid: c.haid, hass, online, label: c.label || '', active,
+      haid: c.haid, hass, online, label: c.label || '', active, evenement: ev,
       tag: online ? 'LIVE · ' + String(c.label || '').toUpperCase() : tr('HORS LIGNE'),
       grad: preset.grad, glow: preset.glow,
-      sub: (<><span style={{ width: 7, height: 7, borderRadius: '50%', background: online ? dot : '#f87171' }} />{online ? subTxt : tr('Hors ligne')}</>),
+      sub: sousCamera(online, ev),
     };
   });
   const camOnline = cams.filter(c => c.online).length;
@@ -9461,7 +9481,7 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
       {/* Le journal de ce qui touche à la sécurité : ouvrants, mouvements,
         * alarme et caméras — la carte des pièces, restreinte à ces entités. */}
       <RoomActivityCard hass={hass} max={12} titre={tr('Journal de la sécurité')} sous={tr('Ouvrants, mouvements et alarme — 24 h, en direct')}
-        ids={[...ouvrantsDe(S).map(o => o.id), ...(alarmId ? [alarmId] : []), ...camList.map(c => c.haid).filter(Boolean), ...people.map(p => p.haid).filter(Boolean)]} />
+        ids={[...ouvrantsDe(S).map(o => o.id), ...(alarmId ? [alarmId] : []), ...camList.map(c => c.haid).filter(Boolean), ...camList.flatMap(c => detecteursDe(c).map(d => d.id)), ...people.map(p => p.haid).filter(Boolean)]} />
     </div>
   );
 }
@@ -12972,7 +12992,8 @@ export default function App() {
     'media_player.', 'climate.', 'cover.', 'vacuum.', 'fan.', 'humidifier.', 'valve.',
     cfg.energy.consoNow, cfg.energy.solarOutput,
     ...(cfg.rooms || []).flatMap(r => [r.haid && r.haid.temp, r.haid && r.haid.humidity, r.haid && r.haid.co2]),
-    ...lightKeys, ...bannerKeys(), ...(cfg.cams || []).map(c => c.haid)];
+    // Les detecteurs des cameras (ADR 0031) : « en cours » suit le direct.
+    ...lightKeys, ...bannerKeys(), ...(cfg.cams || []).map(c => c.haid), ...secKeys];
   const VIEW_HAKEYS = {
     accueil: accueilKeys, lumieres: lightKeys, scenes: lightKeys,
     climat: [...climateKeys(), 'climate.', ...cfgKeys('climate'), ...voletKeys(), 'cover.', ...cfgKeys('covers')],

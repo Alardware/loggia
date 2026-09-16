@@ -61,6 +61,9 @@ function etatsInitiaux() {
     'switch.camera_entree_pleurs': s('off', { friendly_name: 'Caméra entrée Détection des pleurs' }),
     'switch.camera_entree_prive': s('off', { friendly_name: 'Caméra entrée Mode privé' }),
     'switch.camera_entree_voyant': s('on', { friendly_name: 'Caméra entrée Voyant' }),
+    // Ses deux detecteurs : ce que la tuile raconte en dernier evenement (ADR 0031).
+    'binary_sensor.camera_entree_mouvement': s('off', { friendly_name: 'Caméra entrée Mouvement', device_class: 'motion' }),
+    'binary_sensor.camera_entree_personne': s('off', { friendly_name: 'Caméra entrée Personne' }),
     // Le distributeur de croquettes et une plante : ce que la vue Objets et
     // leurs fiches ont a montrer.
     'input_number.croquettes_reservoir': s(760, { friendly_name: 'Réservoir de croquettes', min: 0, max: 2000, step: 10, unit_of_measurement: 'g' }),
@@ -487,12 +490,12 @@ function indexDemo(states) {
     bureau: ['light.bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite'],
     entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree',
              'camera.entree', 'switch.camera_entree_detection_mouvement', 'switch.camera_entree_suivi', 'switch.camera_entree_pleurs',
-             'switch.camera_entree_prive', 'switch.camera_entree_voyant'],
+             'switch.camera_entree_prive', 'switch.camera_entree_voyant', 'binary_sensor.camera_entree_mouvement', 'binary_sensor.camera_entree_personne'],
     sdb: ['light.sdb', 'sensor.sdb_temperature'],
   };
   // La camera de l'entree et ses reglages forment UN appareil : c'est par lui
   // que la fiche retrouve les interrupteurs d'une camera.
-  const APPAREIL_DE = (id) => /^(camera\.entree$|switch\.camera_entree_)/.test(id) ? 'cam_entree' : null;
+  const APPAREIL_DE = (id) => /^(camera\.entree$|switch\.camera_entree_|binary_sensor\.camera_entree_)/.test(id) ? 'cam_entree' : null;
   const entities = [];
   Object.keys(ZONE_DE).forEach(zone => {
     ZONE_DE[zone].forEach(id => {
@@ -907,6 +910,22 @@ export function installerDemo() {
      * phrase d'un bloc montrerait autre chose que ce qui se passe vraiment. */
     connection: {
       subscribeMessage: (rappel, msg) => {
+        if (msg && msg.type === 'logbook/event_stream') {
+          /* Le journal de la demo : ce que les detecteurs de la camera de
+           * l'entree ont vu — un mouvement il y a trois minutes, quelqu'un il
+           * y a quarante et une. De quoi faire parler la tuile (ADR 0031). */
+          const ids = Array.isArray(msg.entity_ids) ? msg.entity_ids : null;
+          const ilYA = (min) => (Date.now() - min * 60000) / 1000;
+          const vus = [
+            { when: ilYA(3), entity_id: 'binary_sensor.camera_entree_mouvement', state: 'on', name: 'Caméra entrée Mouvement' },
+            { when: ilYA(2.5), entity_id: 'binary_sensor.camera_entree_mouvement', state: 'off', name: 'Caméra entrée Mouvement' },
+            { when: ilYA(41), entity_id: 'binary_sensor.camera_entree_personne', state: 'on', name: 'Caméra entrée Personne' },
+            { when: ilYA(40), entity_id: 'binary_sensor.camera_entree_personne', state: 'off', name: 'Caméra entrée Personne' },
+          ].filter(e => !ids || ids.indexOf(e.entity_id) >= 0);
+          let mort = false;
+          setTimeout(() => { if (!mort && vus.length) rappel({ events: vus }); }, 120);
+          return Promise.resolve(() => { mort = true; });
+        }
         if (!msg || msg.type !== 'demo/chat') return Promise.reject(new Error('démonstration : pas de composant serveur'));
         /* Trois sujets reconnus, pour que la demo montre aussi la teinte de
          * l'orbe : l'alerte en rouge, le chauffage en orange, ce qui est ferme

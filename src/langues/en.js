@@ -2002,4 +2002,8 @@ export default {
   'Voir les médias': 'See media',
   'Voir ce qui tourne': 'See what is running',
   'Tous les scénarios': 'All scenarios',
+  // Les cameras disent leur dernier evenement (v3.32.0)
+  'Quelqu’un': 'Someone',
+  'Véhicule': 'Vehicle',
+  'Colis': 'Parcel',
 };

@@ -36,6 +36,31 @@ export function useRoomLogbook(hass, ids) {
   return events;
 }
 
+/* Le DERNIER declenchement de chaque entite, d'apres le meme flux du journal :
+ * { id → instant (ms) }. La carte d'activite garde trente lignes ; ici on ne
+ * garde qu'un instant par entite — une camera bavarde ne fait pas oublier la
+ * derniere detection d'une camera calme (ADR 0031). `reduire(prev, events)`
+ * vient de l'appelant : ce module ne sait pas ce qu'est une detection. */
+export function useDerniersEvenements(hass, ids, reduire) {
+  const [derniers, setDerniers] = useState({});
+  const conn = hass && hass.connection;
+  const sig = (ids || []).filter(Boolean).join('|');
+  useEffect(() => {
+    setDerniers({});
+    if (!conn || !sig) return;
+    let unsub = null, mort = false;
+    const debut = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    conn.subscribeMessage((msg) => {
+      if (mort || !msg || !Array.isArray(msg.events) || !msg.events.length) return;
+      setDerniers(prev => reduire(prev, msg.events));
+    }, { type: 'logbook/event_stream', start_time: debut, entity_ids: sig.split('|') })
+      .then(u => { if (mort) { try { u(); } catch {} } else unsub = u; })
+      .catch(() => {}); // journal absent ou refuse : la tuile dit « Direct », c'est tout
+    return () => { mort = true; if (unsub) { try { unsub(); } catch {} } };
+  }, [conn, sig, reduire]);
+  return derniers;
+}
+
 /** L'etat d'un evenement du journal, dit en un mot. */
 export function etatJournal(id, st, S) {
   const dom = id.slice(0, id.indexOf('.'));

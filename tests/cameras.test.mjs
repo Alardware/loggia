@@ -95,7 +95,7 @@ test('la fiche camera : le flux, comment on le voit, les modes, la Securite', ()
   const fiche = src.slice(debut, fin);
   assert.ok(fiche.includes('<FicheEntete '), 'le squelette commun des fiches');
   assert.ok(fiche.includes('cameraModes(LOGGIA_INDEX, S, haid)'), 'les modes viennent du registre, pas d’une liste');
-  assert.ok(fiche.includes('<CameraTile c={tuileCamera({ name: nom, haid, online }, 0, hass)} agrandir={false} />'), 'la tuile de l’Accueil, sans agrandissement');
+  assert.ok(fiche.includes('<CameraTile c={tuileCamera({ name: nom, haid, online, evenement }, 0, hass)} agrandir={false} />'), 'la tuile de l’Accueil, sans agrandissement (et son dernier evenement, ADR 0031)');
   assert.ok(!fiche.includes('<CamLive '), 'pas de second dessin du flux');
   assert.ok(fiche.includes("onNav('securite')"), 'le chemin vers la vue Securite');
   assert.ok(!fiche.includes('borderRadius: 999'), 'pas de pilule : arrondi 9');
@@ -125,11 +125,15 @@ test('la carte camera porte sa couleur : lavis, icone et repere en bleu quand el
 });
 
 test('l’Accueil et la fiche dessinent la meme tuile camera', () => {
-  assert.ok(src.includes('a.cams.map((cam, i) => tuileCamera(cam, i, a.hass))'), 'l’Accueil passe par tuileCamera');
+  assert.ok(src.includes('a.cams.map((cam, i) => tuileCamera({ ...cam, evenement: evenementDe(cam.haid) }, i, a.hass))'), 'l’Accueil passe par tuileCamera, avec le dernier evenement de chaque camera');
   const d = src.indexOf('function tuileCamera(');
   const corps = src.slice(d, src.indexOf('\n}', d));
   assert.ok(corps.includes('cle: cleCamera(cam, i)'), 'la cle de la tuile reste celle de cleCamera');
-  assert.ok(corps.includes("tr('Direct')") && corps.includes("tr('Hors ligne')"), 'le point d’etat parle la langue du moment');
+  // Depuis l'ADR 0031, la sous-ligne (Direct, Hors ligne, en cours, dernier
+  // evenement) vit dans `sousCamera`, partagee avec la vue Securite.
+  const dS = src.indexOf('function sousCamera(');
+  const sous = src.slice(dS, src.indexOf(String.fromCharCode(10) + '}', dS));
+  assert.ok(dS >= 0 && sous.includes("tr('Direct')") && sous.includes("tr('Hors ligne')") && corps.includes('sub: sousCamera(cam.online, cam.evenement || null),'), 'le point d’etat parle la langue du moment');
   assert.ok(src.includes('function CameraTile({ c, agrandir = true })'), 'la tuile sait se passer de son bouton');
   assert.ok(src.includes('{live && agrandir && ('), 'le bouton d’agrandissement ne s’affiche que si on le demande');
 });
