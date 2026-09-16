@@ -15,14 +15,14 @@ const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, d
 const home = bloc('function Dashboard(', NL + 'function ');
 
 test('les sections : Securite en tete de la colonne, En ce moment en tete du rail, et les anciens noms migrent', () => {
-  // « A surveiller » (v3.29, ADR 0028) precede Securite : la carte n'existe que quand il y a des points.
-  assert.ok(src.includes("const ACC_MAIN = ['attention', 'securite', 'favoris', 'scenes', 'pieces', 'cameras'];"), 'la colonne principale');
-  assert.ok(src.includes("const ACC_RAIL = ['moment', 'rappels', 'calendrier', 'agenda'];"), 'le rail');
+  assert.ok(src.includes("const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];"), 'la colonne principale');
+  // « A surveiller » (ADR 0028) ouvre le rail depuis le 16/09 (retour user) : la carte n'existe que quand il y a des points.
+  assert.ok(src.includes("const ACC_RAIL = ['attention', 'moment', 'rappels', 'calendrier', 'agenda'];"), 'le rail');
   assert.ok(src.includes("const ACC_RENOMME = { etats: 'moment' };"), 'En cours devient En ce moment');
   assert.ok(!src.includes("'heros'") && !src.includes('function HeroSlider(') && !src.includes('heroIds'), 'la glissiere du heros a disparu');
   const o = bloc('  const ordreDe = (zone) => {', NL + '  };');
   assert.ok(o.includes('.map(s => ACC_RENOMME[s] || s)'), 'un ordre enregistre est traduit');
-  assert.ok(o.includes("const tete = ['attention', 'securite'].filter(s => manquants.indexOf(s) >= 0);") && o.includes("return [...tete, ...sauve, ...manquants.filter(s => tete.indexOf(s) < 0)];"), '« A surveiller » puis Securite passent en tete d’un accueil deja range');
+  assert.ok(o.includes("const tete = (zone === 'main' ? ['securite'] : ['attention']).filter(s => manquants.indexOf(s) >= 0);") && o.includes("return [...tete, ...sauve, ...manquants.filter(s => tete.indexOf(s) < 0)];"), 'Securite en tete de la colonne, « A surveiller » en tete du rail, sur un accueil deja range');
   assert.ok(home.includes('const cache = (grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0;'), 'un masquage enregistre suit le nouveau nom');
 });
 

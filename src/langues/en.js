@@ -1984,10 +1984,15 @@ export default {
   '{x} · fenêtre ouverte': '{x} · window open',
   'Intégration muette': 'Silent integration',
   'Passerelle hors service': 'Gateway down',
-  '{n} appareils hors ligne': '{n} devices offline',
-  '{n} appareil hors ligne': '{n} device offline',
-  '{n} entités tombées ensemble': '{n} entities dropped together',
   '{n} point à surveiller': '{n} point to watch',
   '{n} points à surveiller': '{n} points to watch',
   '{x} · {n} entités': '{x} · {n} entities',
+  // Cartes pièces parlantes (v3.30.0)
+  '{n} fenêtres ouvertes': '{n} windows open',
+  'Porte ouverte': 'Door open',
+  '{n} portes ouvertes': '{n} doors open',
+  '{n} lumières': '{n} lights',
+  '{n} lumière': '{n} light',
+  'TV': 'TV',
+  'Rafraîchit': 'Cooling',
 };

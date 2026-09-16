@@ -269,11 +269,8 @@ test('8. la santé : des incidents, pas des symptômes ; les résidus sont du br
   assert.deepEqual(pts.map(p => [p.cle, p.niveau, p.icone, p.titre, p.sous, p.vue, p.haid]), [
     ['sante:integration:zha', 'alerte', 'exclamation', 'Intégration muette', 'zha · 12 entités', 'systeme', null],
     ['sante:passerelle:d1', 'alerte', 'exclamation', 'Passerelle hors service', 'Pont Hue', 'systeme', null],
-    ['sante:simultane:2026-09-16T10:00:00.000Z', 'info', 'exclamation', '109 entités tombées ensemble', '80 automation, 29 sensor', 'systeme', null],
-    ['sante:appareils', 'info', 'exclamation', '3 appareils hors ligne', 'Prise salon · Lampe', 'systeme', null],
-  ]);
-  const un = pointsAttention({ sante: { incidents: [{ kind: 'appareils', count: 1, devices: [{ id: 'x' }] }] } });
-  assert.deepEqual([un[0].titre, un[0].sous], ['1 appareil hors ligne', 'x']);
+  ], 'appareils tombés et chute simultanée ne sont plus des points (16/09, « prend de la place pour rien »)');
+  assert.deepEqual(pointsAttention({ sante: { incidents: [{ kind: 'appareils', count: 1, devices: [{ id: 'x' }] }] } }), []);
   assert.equal(pointsAttention({ sante: { incidents: [{ kind: 'integration', scope: 'mqtt', entities: ['a', 'b'] }] } })[0].sous, 'mqtt · 2 entités', 'sans count, les entités');
   assert.deepEqual(pointsAttention({ sante: { incidents: 'non' } }), []);
 });
@@ -302,7 +299,7 @@ test('l’ordre : danger, alerte, info — puis le titre ; les clés sont unique
   assert.deepEqual(pts.map(p => [p.niveau, p.titre]), [
     ['danger', 'Alarme déclenchée'], ['danger', 'Fumée détectée'],
     ['alerte', 'Caméra hors ligne'], ['alerte', 'CO₂ élevé'], ['alerte', 'Fuite détectée'], ['alerte', 'Intégration muette'],
-    ['info', '2 appareils hors ligne'], ['info', 'Chauffage coupé'], ['info', 'Pile faible'],
+    ['info', 'Chauffage coupé'], ['info', 'Pile faible'],
   ]);
   assert.equal(new Set(pts.map(p => p.cle)).size, pts.length, 'clés uniques');
   for (const p of pts) {
@@ -311,7 +308,7 @@ test('l’ordre : danger, alerte, info — puis le titre ; les clés sont unique
     assert.deepEqual(Object.keys(p), ['cle', 'niveau', 'icone', 'titre', 'sous', 'vue', 'haid']);
   }
   assert.equal(niveauMax(pts), 'danger');
-  assert.equal(resumeAttention(pts), '9 points à surveiller');
+  assert.equal(resumeAttention(pts), '8 points à surveiller');
 });
 
 test('toutes les icônes du module existent dans la police regular', () => {
@@ -319,7 +316,7 @@ test('toutes les icônes du module existent dans la police regular', () => {
   assert.equal(iconePoint({ cle: 'surete:smoke:binary_sensor.x' }), 'fire-smoke');
   assert.equal(iconePoint({ cle: 'surete:inconnue:binary_sensor.x' }), 'shield-exclamation');
   assert.equal(iconePoint({ cle: 'fenetre:Salon' }), 'flame');
-  assert.equal(iconePoint({ cle: 'sante:appareils' }), 'exclamation');
+  assert.equal(iconePoint({ cle: 'sante:integration:zha' }), 'exclamation');
   assert.equal(iconePoint({ cle: 'alarme:alarm_control_panel.x' }), 'bell-ring');
   assert.equal(iconePoint(null), 'exclamation');
 });

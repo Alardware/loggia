@@ -53,3 +53,9 @@ agencements existants avec `securite`). Le module pur `src/attention.js`
 porte les comptes et les règles ; App.jsx ne fait que lire. Non fait : un
 centre d'attention côté serveur (poussé, historisé) — le front agrège ce
 qu'il voit et ce que deux commandes lui disent toutes les trente secondes.
+
+Amendée le 16/09/2026 (v3.30.0, ADR 0029), sur deux retours de l'utilisateur :
+la carte « À surveiller » vit dans le rail, avec En ce moment et Rappels (sur
+téléphone, la seconde page ; la bannière garde le compte des points) ; les
+points « n appareils hors ligne » et « entités tombées ensemble » du
+diagnostic sont retirés — « prend de la place pour rien ».

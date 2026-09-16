@@ -167,14 +167,6 @@ export function iconePoint(point) {
   return ICONES_ATTENTION[genre] || ICONES_ATTENTION.sante;
 }
 
-/** Les domaines d'une chute simultanée, les plus touchés d'abord :
- * « 80 automation, 29 sensor » (même lecture que `healthText`). */
-function resumeDomaines(domains) {
-  if (!estObjet(domains)) return '';
-  return Object.keys(domains).map(d => [d, Number(domains[d]) || 0])
-    .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([d, n]) => n + ' ' + d).join(', ');
-}
-
 /* Un incident dit son compte ; à défaut, ses entités ou ses appareils. */
 function compteIncident(i) {
   const n = Number(i.count);
@@ -300,10 +292,14 @@ export function pointsAttention(ctx) {
   });
 
   /* 8. La santé de l'installation (`health.js`) : des incidents, pas des
-   * symptômes. Les `residus` — des entrées de registre sans définition — sont
-   * du bruit, pas une panne : on ne les remonte pas. */
+   * symptômes. Seuls comptent une intégration entière qui ne répond plus et
+   * une passerelle hors service. Les `residus` (entrées de registre sans
+   * définition) sont du bruit ; « appareils hors ligne » et « chute
+   * simultanée » ont été retirés le 16/09 à la demande de l'utilisateur —
+   * « prend de la place pour rien » : un appareil à piles ou une imprimante
+   * qui dort n'est pas une panne, et une pile faible, la veille le dit. */
   const incidents = (estObjet(c.sante) && Array.isArray(c.sante.incidents)) ? c.sante.incidents : [];
-  incidents.forEach((i, k) => {
+  incidents.forEach((i) => {
     if (!estObjet(i)) return;
     const n = compteIncident(i);
     const scope = i.scope != null ? String(i.scope) : '';
@@ -311,11 +307,6 @@ export function pointsAttention(ctx) {
       ajouter('sante:integration:' + scope, 'alerte', tr('Intégration muette'), tr('{x} · {n} entités', { x: scope, n }), 'systeme', null);
     } else if (i.kind === 'passerelle') {
       ajouter('sante:passerelle:' + (i.deviceId || scope), 'alerte', tr('Passerelle hors service'), scope, 'systeme', null);
-    } else if (i.kind === 'appareils') {
-      const noms = (Array.isArray(i.devices) ? i.devices : []).map(d => estObjet(d) && (d.name || d.id)).filter(Boolean).slice(0, 2).map(String);
-      ajouter('sante:appareils', 'info', n > 1 ? tr('{n} appareils hors ligne', { n }) : tr('{n} appareil hors ligne', { n }), noms.join(' · '), 'systeme', null);
-    } else if (i.kind === 'simultane') {
-      ajouter('sante:simultane:' + (i.at || k), 'info', tr('{n} entités tombées ensemble', { n }), resumeDomaines(i.domains), 'systeme', null);
     }
   });
 

@@ -32,4 +32,5 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0025](0025-l-accueil-securite-en-tete-en-ce-moment-sur-le-cote.md) | L'Accueil : Sécurité en tête, En ce moment sur le côté, deux pages sur mobile | appliqué (v3.24.0) |
 | [0026](0026-un-seul-composeur-de-cartes.md) | Un seul composeur de cartes, une fabrique pour toute clé | appliqué (v3.27.0) |
 | [0027](0027-les-scenarios-de-loggia.md) | Les scénarios : composés par Loggia, lancés par le serveur — une main, pas une règle | appliqué (v3.28.0) |
-| [0028](0028-l-accueil-montre-ce-qui-merite-l-attention.md) | L'Accueil montre ce qui mérite l'attention : Sécurité en une seconde, « À surveiller » seulement quand il le faut | appliqué (v3.29.0) |
+| [0028](0028-l-accueil-montre-ce-qui-merite-l-attention.md) | L'Accueil montre ce qui mérite l'attention : Sécurité en une seconde, « À surveiller » seulement quand il le faut | appliqué (v3.29.0, amendée v3.30.0) |
+| [0029](0029-les-cartes-pieces-disent-leur-etat.md) | Les cartes pièces disent leur état : problème, activité, calme | appliqué (v3.30.0) |

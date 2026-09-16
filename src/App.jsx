@@ -35,6 +35,7 @@ import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
 import { comptesSecurite, tuilesSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
+import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
 import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS, ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, actionVide, scenarioVide, versEnregistrement } from './scenarios.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
@@ -1158,7 +1159,7 @@ const PIECES = [
 // Mini-pilule d'action des tuiles pièces — même gabarit 38×26 r9 que les
 // minis des cartes denses.
 const MINI_PIECE = { width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 };
-function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, mains = null, onToggleLights, covers = null, clim = null, idx = 0 }) {
+function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, mains = null, onToggleLights, covers = null, clim = null, idx = 0, ambiance = null }) {
   // Format compact (PC ≥1180) : compteur = luminaires non-« Ampoule » ; interrupteur = plafonnier(s) SEULS
   const tilt = useTilt(4);
   const [flashRef, flash] = useFlash();
@@ -1177,10 +1178,12 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
     // la pièce baigne la carte (son lavis en dégradé), icône NUE sans boîte,
     // température forte à droite, switch 44×25. Une rangée de 88 px.
     const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
+    // La ligne d'etat (ADR 0029) : un probleme, sinon l'activite, sinon le calme.
+    const amb = lights ? ambiancePiece({ lumieres: n, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
     const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
     const canToggle = !!(mains && mains.length && onToggleLights);
     const temp = p.live && p.live.temp != null ? (Math.round(p.live.temp * 10) / 10).toLocaleString('fr-FR') + '°' : null;
-    const etat = lights ? (n > 0 ? (n > 1 ? tr('{n} lampes allumées', { n }) : tr('{n} lampe allumée', { n })) : tr('Tout éteint')) : '—';
+    const etat = amb ? amb.texte : '—';
     return (
       <div className="o-piece o-piecechip" onClick={onOpen} role="button" tabIndex={0}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
@@ -1192,10 +1195,10 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>{cloneElement(p.icon, { size: 24 })}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: on ? 'var(--o-warn)' : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: amb ? amb.couleur : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {/* Chip étroite (mobile 2 col) : la température quitte la droite et
               * revient ici, le nom garde sa place — bascule par container query. */}
-            {temp && <span className="o-chip-temp-i"><span style={{ color: p.tc, fontWeight: 800 }}>{temp}</span> · </span>}{etat}
+            {temp && <span className="o-chip-temp-i"><span style={{ color: p.tc, fontWeight: 800 }}>{temp}</span> · </span>}{amb && amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}{etat}
           </div>
         </div>
         {temp && <span className="o-chip-temp-d" style={{ fontSize: 19, fontWeight: 800, color: p.tc, flexShrink: 0 }}>{temp}</span>}
@@ -1212,6 +1215,8 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
   }
   if (compact) {
     const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
+    // La ligne d'etat (ADR 0029) : un probleme, sinon l'activite, sinon le calme.
+    const amb = lights ? ambiancePiece({ lumieres: n, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
     const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
     const canToggle = !!(mains && mains.length && onToggleLights);
     return (
@@ -1239,7 +1244,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         </div>
         <div style={{ fontSize: 15, fontWeight: 800, marginTop: 12 }}>{p.name}</div>
         <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {lights ? <FlipText text={n > 0 ? (n > 1 ? tr('{n} lampes allumées', { n }) : tr('{n} lampe allumée', { n })) : tr('Tout éteint')} /> : <Skel w={92} h={12} />}
+          {amb ? <span style={{ color: amb.couleur }}>{amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}<FlipText text={amb.texte} /></span> : <Skel w={92} h={12} />}
           {p.live && p.live.hum != null ? <> · <Num v={p.live.hum} suffix="%" /></> : null}
         </div>
         {/* Pied : minis d'action (volets violet, clim ROUGE — des `button`, le
@@ -6157,7 +6162,8 @@ function OngletsAccueil({ maison, moment, edit = false }) {
 }
 
 /* « A SURVEILLER » (ADR 0028) : la carte qui n'existe que quand quelque
- * chose le merite. Une ligne par point, du plus grave au moins grave, chacune
+ * chose le merite — dans le rail, avec En ce moment et Rappels (choix de
+ * l'utilisateur, 16/09). Une ligne par point, du plus grave au moins grave, chacune
  * vers la vue qui permet d'agir ; six au plus, puis « n autres ». Le lavis
  * et l'icone prennent la couleur du pire point. */
 function CarteAttention({ points, onNav = null }) {
@@ -6186,8 +6192,8 @@ function CarteAttention({ points, onNav = null }) {
 
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
-const ACC_MAIN = ['attention', 'securite', 'favoris', 'scenes', 'pieces', 'cameras'];
-const ACC_RAIL = ['moment', 'rappels', 'calendrier', 'agenda'];
+const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];
+const ACC_RAIL = ['attention', 'moment', 'rappels', 'calendrier', 'agenda'];
 const ACC_NOMS = () => ({ attention: tr('À surveiller'), securite: tr('Sécurité'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), calendrier: tr('Calendrier'), agenda: tr('Agenda') });
 /* Les identifiants d'un accueil enregistre avant le 15/09 : la glissiere du
  * heros a disparu (son contenu vit dans « En ce moment »), « En cours » est
@@ -6466,10 +6472,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     const base = zone === 'main' ? ACC_MAIN : ACC_RAIL;
     const sauve = (grille[zone] || []).map(s => ACC_RENOMME[s] || s).filter(s => base.indexOf(s) >= 0);
     const manquants = base.filter(s => sauve.indexOf(s) < 0);
-    // Un accueil enregistre avant « A surveiller » (v3.29) ou avant la carte
-    // Securite (v3.24) les recoit en tete, dans cet ordre, pas en queue.
-    if (zone === 'main' && sauve.length) {
-      const tete = ['attention', 'securite'].filter(s => manquants.indexOf(s) >= 0);
+    // Une section nee apres l'enregistrement de l'accueil se place en tete
+    // quand c'est sa place : Securite (v3.24) dans la colonne, « A surveiller »
+    // dans le rail (v3.29, deplacee la le 16/09 a la demande de l'utilisateur).
+    if (sauve.length) {
+      const tete = (zone === 'main' ? ['securite'] : ['attention']).filter(s => manquants.indexOf(s) >= 0);
       if (tete.length) return [...tete, ...sauve, ...manquants.filter(s => tete.indexOf(s) < 0)];
     }
     return [...sauve, ...manquants];
@@ -6743,6 +6750,16 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     plantes: plantsCfg().map(p => p.base).filter(Boolean),
   });
   const couleurAcc = points.length ? couleurNiveau(niveauMax(points)).col : 'var(--o-ok)';
+  /* L'AMBIANCE de chaque piece (ADR 0029) : une passe sur les etats — lecteurs
+   * en lecture, chauffage qui chauffe, portes et fenetres ouvertes — rangee
+   * par zone, pour la ligne d'etat des cartes pieces. La piece se cherche par
+   * sa zone Home Assistant d'abord, par son nom sinon (comme ses lumieres). */
+  const ambiances = ambiancesParPiece(etatsAcc, (a && a.index && a.index.areaNameOf) || null, rmNorm);
+  const ambianceDe = (nom) => {
+    const r = a && a.rooms && a.rooms.find(x => (x.name || x.room) === nom);
+    const zone = r && r.area && a.index && a.index.areaById && a.index.areaById.get(r.area);
+    return (zone && zone.name && ambiances[rmNorm(zone.name)]) || ambiances[rmNorm(nom)] || null;
+  };
   // Le panneau d'alarme du rail : celui de la configuration d'abord.
   const alarmRailId = (() => {
     const S = (dashHass && dashHass.states) || null;
@@ -7148,7 +7165,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                         onTaille={() => saveGrille({ tailles: { ...(grille.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } })} />
                     ) : (
                       <div style={{ height: '100%' }}>
-                        <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />
+                        <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} ambiance={ambianceDe(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />
                       </div>
                     )}
                   </div>
@@ -7325,8 +7342,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             // Les favoris s'éditent EUX-MÊMES (leurs cartes ont leur barre
             // d'outils) : la section reste donc vivante en mode édition.
             favoris: <FavorisAccueil hass={dashHass} edit={editMode} />,
-            // « A surveiller » : rien quand tout va bien — pas meme en edition.
-            attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,
             securite: carteSecurite,
             scenes: <ScenariosAccueil hass={dashHass} edit={editMode} onNav={onNav} />,
             pieces: <>{piecesHeader}{piecesGrid}</>,
@@ -7344,7 +7359,13 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               <div style={{ height: 184 }} className="o-hero"><CvCalendrier id={calRailId} hass={dashHass} onOpen={dc.ouvrir} /></div>
             </div>
           ) : null;
-          const secsRail = { moment: railMoment, rappels: railRappels, calendrier: railCal, agenda: railAgenda };
+          // « A surveiller » en tete du rail — sur le cote avec En ce moment et
+          // Rappels (retour user du 16/09 ; seconde page sur telephone, la
+          // banniere garde le compte) ; rien quand tout va bien, pas meme en edition.
+          const secsRail = {
+            attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,
+            moment: railMoment, rappels: railRappels, calendrier: railCal, agenda: railAgenda,
+          };
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
           const renduRail = ordreDe('rail').map(id => secsRail[id] ? Sec('rail', id, secsRail[id]) : null).filter(Boolean);
           // Mobile et tablette : deux onglets, « Maison » et « En ce moment ».

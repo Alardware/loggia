@@ -104,7 +104,7 @@ function etatsInitiaux() {
     'sensor.pile_porte_entree': s(9, { friendly_name: 'Pile porte entrée', device_class: 'battery', unit_of_measurement: '%' }),
     'person.demo': s('home', { friendly_name: 'Démo' }),
     'person.sam': s('not_home', { friendly_name: 'Sam' }),
-    'binary_sensor.fenetre_chambre': s('off', { friendly_name: 'Fenêtre chambre', device_class: 'window' }),
+    'binary_sensor.fenetre_chambre': s('on', { friendly_name: 'Fenêtre chambre', device_class: 'window' }),  // ouverte : la carte Chambre le dit
     'binary_sensor.fenetre_salon': s('off', { friendly_name: 'Fenêtre salon', device_class: 'window' }),
     'switch.radiateur_chambre': s('on', { friendly_name: 'Radiateur chambre' }),
     'switch.radiateur_salon': s('on', { friendly_name: 'Radiateur salon' }),
@@ -479,7 +479,7 @@ function indexDemo(states) {
     ['bureau', 'Bureau'], ['entree', 'Entrée'], ['sdb', 'Salle de bain'],
   ];
   const ZONE_DE = {
-    salon: ['light.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'cover.salon',
+    salon: ['light.salon', 'media_player.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'cover.salon',
             'binary_sensor.fenetre_salon', 'switch.radiateur_salon', 'media_player.enceinte_salon'],
     cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine', 'binary_sensor.detecteur_fumee'],
     chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'cover.chambre',

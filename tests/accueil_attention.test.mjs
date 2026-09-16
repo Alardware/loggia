@@ -16,8 +16,11 @@ const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
 
-test('« A surveiller » est une section, la premiere, et n’existe que quand il y a des points — meme en edition', () => {
-  assert.ok(src.includes("const ACC_MAIN = ['attention', 'securite', 'favoris', 'scenes', 'pieces', 'cameras'];"), 'la section, en tete');
+test('« A surveiller » est une section du rail, la premiere, et n’existe que quand il y a des points — meme en edition', () => {
+  // Dans le rail, avec En ce moment et Rappels (retour user du 16/09) : sur
+  // telephone c'est la seconde page, la banniere garde le compte des points.
+  assert.ok(src.includes("const ACC_RAIL = ['attention', 'moment', 'rappels', 'calendrier', 'agenda'];"), 'la section, en tete du rail');
+  assert.ok(src.includes("const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];"), 'plus dans la colonne');
   assert.ok(src.includes("const ACC_NOMS = () => ({ attention: tr('À surveiller'), securite: tr('Sécurité'),"), 'son nom en edition');
   assert.ok(src.includes('attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,'), 'rien quand tout va bien');
   const c = bloc('function CarteAttention(', NL + '}');
