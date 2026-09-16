@@ -489,6 +489,9 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .o-hdr-lights { padding: 6px 10px !important; font-size: 11.5px !important; }
   .o-flux > div { width: auto !important; }
   .o-banner-row { gap: 8px !important; }
+  /* Les modes de l'alarme au telephone : l'icone seule (ADR 0035). */
+  .o-armchip-txt { display: none !important; }
+  .o-armchip { padding: 10px 4px !important; }
   .o-greet-name { font-size: 25px !important; }
 }
 

@@ -15,33 +15,30 @@ const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, d
 const home = bloc('function Dashboard(', NL + 'function ');
 
 test('les sections : Securite en tete de la colonne, En ce moment en tete du rail, et les anciens noms migrent', () => {
-  assert.ok(src.includes("const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];"), 'la colonne principale');
+  assert.ok(src.includes("const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];"), 'la colonne principale');
   // « A surveiller » (ADR 0028) ouvre le rail depuis le 16/09 (retour user) : la carte n'existe que quand il y a des points.
   assert.ok(src.includes("const ACC_RAIL = ['attention', 'moment', 'rappels', 'agenda'];"), 'le rail');
   assert.ok(src.includes("const ACC_RENOMME = { etats: 'moment' };"), 'En cours devient En ce moment');
   assert.ok(!src.includes("'heros'") && !src.includes('function HeroSlider(') && !src.includes('heroIds'), 'la glissiere du heros a disparu');
   const o = bloc('  const ordreDe = (zone) => {', NL + '  };');
   assert.ok(o.includes('.map(s => ACC_RENOMME[s] || s)'), 'un ordre enregistre est traduit');
-  assert.ok(o.includes("const tete = (zone === 'main' ? ['securite'] : ['attention']).filter(s => manquants.indexOf(s) >= 0);") && o.includes("return [...tete, ...sauve, ...manquants.filter(s => tete.indexOf(s) < 0)];"), 'Securite en tete de la colonne, « A surveiller » en tete du rail, sur un accueil deja range');
+  assert.ok(o.includes("const tete = (zone === 'main' ? [] : ['attention']).filter(s => manquants.indexOf(s) >= 0);") && o.includes("return [...tete, ...sauve, ...manquants.filter(s => tete.indexOf(s) < 0)];"), 'Securite en tete de la colonne, « A surveiller » en tete du rail, sur un accueil deja range');
   assert.ok(home.includes('const cache = (grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0;'), 'un masquage enregistre suit le nouveau nom');
 });
 
-test('la carte Securite : les boutons d’armement d’aujourd’hui, la serrure, les ouvrants — ou rien', () => {
-  assert.ok(home.includes('{alarmRailId && <RailArm id={alarmRailId} hass={dashHass} />}'), 'le systeme de boutons actuel (retour user : on le garde)');
-  assert.ok(home.includes('{serrureId && <RailSerrure id={serrureId} hass={dashHass} />}'), 'la serrure');
-  assert.ok(home.includes('const tuilesSec = tuilesSecurite(comptesSec);') && home.includes("onTuile={() => onNav && onNav('securite')}"), 'la ligne d’etat (portes, fenetres, mouvement, cameras), vers la vue Securite');
-  assert.ok(home.includes('const carteSecurite = (alarmRailId || serrureId || tuilesSec.length) ? ('), 'sans panneau, serrure ni capteur : pas de carte');
-  assert.ok(home.includes('securite: carteSecurite,'), 'une section comme les autres');
+test('plus de carte Securite sur l’Accueil : la banniere mene a la vue (ADR 0035)', () => {
+  assert.ok(!home.includes('<RailArm') && !home.includes('<RailSerrure') && !home.includes('carteSecurite'), 'la carte, ses boutons et la serrure ont disparu');
+  assert.ok(home.includes('key="al"') && home.includes("al: () => onNav && onNav('securite'),"), 'la tuile Alarme, d’un tap vers la vue');
   assert.ok(!home.includes('Désactivé') && !home.includes('Partiel'), 'pas le selecteur de la maquette');
 });
 
 test('En ce moment : une ligne par chose qui tourne, avec son geste, et rien d’invente', () => {
   assert.ok(home.includes('const np = mpRead(S0, id); if (!np.playing) return;') && home.includes("commande(id, 'media_player', 'media_play_pause')"), 'un lecteur en lecture, et sa pause');
-  assert.ok(home.includes('const test = APPAREIL_ACTIF[dom]; if (!test || lampes.has(id) || !test(e.state)) return;'), 'un appareil en marche : la regle de la banniere');
-  assert.ok(home.includes("commande(id, 'vacuum', 'return_to_base')") && home.includes("commande(id, 'lawn_mower', 'dock')") && home.includes("commande(id, dom, 'turn_off')"), 'dock et arret : les gestes qui existent');
-  assert.ok(home.includes('if (mLv && mLv.active && (!a || hasEnt(notifIds().dishwasher)))'), 'le lave-vaisselle seulement en cours');
+  assert.ok(home.includes("if (dom !== 'vacuum' && dom !== 'lawn_mower') return;") && home.includes('const test = APPAREIL_ACTIF[dom]; if (!test || !test(e.state)) return;'), 'un appareil en marche : la regle de la banniere');
+  assert.ok(home.includes("commande(id, 'vacuum', 'return_to_base')") && home.includes("commande(id, 'lawn_mower', 'dock')"), 'dock et arret : les gestes qui existent');
+  assert.ok(home.includes('if (mLv && mLv.active && (!a || aEnt(notifIds().dishwasher)))'), 'le lave-vaisselle seulement en cours');
   assert.ok(home.includes("['heating', 'cooling'].indexOf((S0[z.haid].attributes || {}).hvac_action) >= 0"), 'les zones qui chauffent vraiment');
-  assert.ok(home.includes("const entre = typeof pos === 'number' && pos > 0 && pos < 100;") && home.includes("commande(c.haid, 'cover', 'stop_cover')"), 'un volet entre deux ou en mouvement, et son stop');
+  assert.ok(home.includes('if (!bouge) return;') && home.includes("commande(c.haid, 'cover', 'stop_cover')"), 'un volet entre deux ou en mouvement, et son stop');
   assert.ok(home.includes('const nEnCours = momentRows.length;') && home.includes('nEnCours > 8'), 'compte reel, huit lignes au plus');
   assert.ok(home.includes("railPanel(tr('En ce moment'),") && home.includes("tr('RIEN EN COURS')") && home.includes('moment: railMoment,'), 'le panneau du rail, meme vide');
   assert.ok(!home.includes("tr('Mode volets')") && !home.includes("railRow('we'") && !home.includes("railRow('lu'"), 'plus de lignes de robots ni de mode volets dans le rail');

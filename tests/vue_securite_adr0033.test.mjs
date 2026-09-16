@@ -31,19 +31,22 @@ test('la rangee de tuiles est UN composant, partage par l’Accueil et la vue', 
   const t = bloc('function TuilesSecurite(', NL + '}');
   assert.ok(t.includes('if (!tuiles || !tuiles.length) return null;') && t.includes("onClick={() => onTuile && onTuile(t)}") && t.includes('className="sec-tuile"'), 'le composant, avec ses classes du telephone');
   const home = bloc('function Dashboard(', NL + '}');
-  assert.ok(home.includes("<TuilesSecurite tuiles={tuilesSec} onTuile={() => onNav && onNav('securite')} />") && home.includes('const sousSecurite = resumeSecurite(comptesSec);'), 'l’Accueil : vers la vue, la meme phrase');
-  assert.ok(!home.includes('ouvertsSec'), 'plus de compte local des ouverts : la fonction pure le fait');
+  // Depuis l'ADR 0035, l'Accueil n'a plus de carte Securite : la rangee ne vit
+  // que dans la vue, et la banniere mene a la vue par sa tuile Alarme.
+  assert.ok(!home.includes('<TuilesSecurite') && !home.includes('sousSecurite') && !home.includes('ouvertsSec'), 'l’Accueil ne dessine plus la rangee');
   const vue = bloc('function SecuriteContent(', NL + '}');
   assert.ok(vue.includes('<TuilesSecurite tuiles={tuilesSecVue} onTuile={(t) => defiler(t.cle)} />'), 'la vue : vers la section');
   assert.ok(vue.includes("const el = document.getElementById(cle === 'cameras' ? 'sec-cameras' : cle === 'mouvement' ? 'sec-journal' : 'sec-ouvrants');"), 'cameras, journal (le mouvement s’y lit), ouvrants');
   assert.ok(vue.includes('<div id="sec-ouvrants"') && vue.includes('<div id="sec-cameras"') && vue.includes('<div id="sec-journal">'), 'les ancres existent');
 });
 
-test('la carte Securite de l’Accueil mene a la vue d’un tap sur son en-tete', () => {
+test('l’Accueil mene a la vue par la tuile Alarme de la banniere, plus par une carte', () => {
   const home = bloc('function Dashboard(', NL + '}');
-  assert.ok(home.includes("<button type=\"button\" onClick={() => onNav && onNav('securite')} aria-label={tr('Ouvrir la vue Sécurité')}"), 'l’en-tete est un bouton');
-  assert.ok(home.includes('{alarmRailId && <RailArm id={alarmRailId} hass={dashHass} />}') && home.includes('{serrureId && <RailSerrure id={serrureId} hass={dashHass} />}'), 'les boutons d’armement et la serrure restent, hors du bouton');
-  assert.ok(en.includes("'Ouvrir la vue Sécurité':"), 'la traduction');
+  // ADR 0035 : la carte Securite de l'Accueil, ses boutons d'armement et la
+  // glissiere de serrure ont disparu ; la tuile « al » de la banniere mene a la vue.
+  assert.ok(!home.includes("aria-label={tr('Ouvrir la vue Sécurité')}") && !home.includes('<RailArm') && !home.includes('<RailSerrure'), 'plus de carte, plus de boutons, plus de glissiere');
+  assert.ok(home.includes("al: () => onNav && onNav('securite'),") && home.includes('key="al"'), 'la tuile Alarme mene a la vue');
+  assert.ok(en.includes("'Voir la sécurité':"), 'la traduction du libelle accessible');
 });
 
 test('la vue : l’etat en une seconde, A surveiller, un ouvrant par carte illustree, les fiches', () => {

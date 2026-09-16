@@ -20,8 +20,8 @@ test('« A surveiller » est une section du rail, la premiere, et n’existe que
   // Dans le rail, avec En ce moment et Rappels (retour user du 16/09) : sur
   // telephone c'est la seconde page, la banniere garde le compte des points.
   assert.ok(src.includes("const ACC_RAIL = ['attention', 'moment', 'rappels', 'agenda'];"), 'la section, en tete du rail');
-  assert.ok(src.includes("const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];"), 'plus dans la colonne');
-  assert.ok(src.includes("const ACC_NOMS = () => ({ attention: tr('À surveiller'), securite: tr('Sécurité'),"), 'son nom en edition');
+  assert.ok(src.includes("const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];"), 'plus dans la colonne');
+  assert.ok(src.includes("const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'),"), 'son nom en edition');
   assert.ok(src.includes('attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,'), 'rien quand tout va bien');
   const c = bloc('function CarteAttention(', NL + '}');
   assert.ok(c.includes('const visibles = points.slice(0, 6);') && c.includes("{tr('{n} autres', { n: reste })}"), 'six lignes, puis « n autres »');
@@ -38,7 +38,7 @@ test('la banniere porte la couleur du pire point et dit « Tout va bien » sinon
 test('les points viennent des etats, des cameras, du CO2 des pieces, du diagnostic en direct et du serveur', () => {
   const d = bloc('function Dashboard(', NL + '}');
   assert.ok(d.includes("const veillesEtat = useEtatServeur(dashHass, 'loggia/veilles/etat', 30000, '').etat;") && d.includes("const fenetresEtat = useEtatServeur(dashHass, 'loggia/fenetres/etat', 30000, '').etat;"), 'les veilles et les fenetres du serveur, toutes les 30 s');
-  assert.ok(d.includes('const comptesSec = comptesSecurite(etatsAcc, camsInfo);') && d.includes('const points = pointsAttention({'), 'comptes et points');
+  assert.ok(d.includes('const points = pointsAttention({'), 'comptes et points');
   assert.ok(d.includes("pieces: (a && a.rooms) ? a.rooms.map(r => ({ nom: r.name, co2: r.co2, haid: r.co2Id || null })) : [],") && d.includes('sante, veilles: veillesEtat, fenetres: fenetresEtat,') && d.includes('plantes: plantsCfg().map(p => p.base).filter(Boolean),'), 'le CO2 des pieces (et son capteur, pour le dedoublonnage), le diagnostic, les plantes epargnees');
   // Le diagnostic est recalcule en direct : celui de la decouverte est un
   // instantane du demarrage, une passerelle revenue y resterait hors service.
@@ -48,13 +48,13 @@ test('les points viennent des etats, des cameras, du CO2 des pieces, du diagnost
 
 test('la carte Securite : une sous-ligne verte ou ambre, la ligne d’etat, les boutons d’armement gardes', () => {
   const home = bloc('function Dashboard(', NL + '}');
-  assert.ok(home.includes('const sousSecurite = resumeSecurite(comptesSec);'), '« Tout est securise » quand rien n’est ouvert et que les cameras repondent — la meme phrase que la vue Securite (ADR 0033)');
-  assert.ok(home.includes("color: comptesSec.ok ? 'var(--o-ok)' : 'var(--o-warn)'"), 'verte ou ambre');
+  assert.ok(!home.includes('sousSecurite') && src.includes('resumeSecurite(comptesSecVue)'), '« Tout est securise » : la phrase vit dans la vue Securite (ADR 0035)');
+  assert.ok(src.includes("color: comptesSecVue.ok ? 'var(--o-ok)' : 'var(--o-warn)'"), 'verte ou ambre — dans la vue');
   // Depuis l'ADR 0033, la rangee est un composant partage avec la vue Securite.
   const tuilesBloc = bloc('function TuilesSecurite(', NL + '}');
-  assert.ok(tuilesBloc.includes('<div className="grid-sec-etat" style={{ display: \'grid\', gridTemplateColumns: \'repeat(\' + tuiles.length + \', minmax(0, 1fr))\'') && home.includes("<TuilesSecurite tuiles={tuilesSec} onTuile={() => onNav && onNav('securite')} />"), 'une tuile par famille presente');
+  assert.ok(tuilesBloc.includes('<div className="grid-sec-etat" style={{ display: \'grid\', gridTemplateColumns: \'repeat(\' + tuiles.length + \', minmax(0, 1fr))\'') && src.includes('<TuilesSecurite tuiles={tuilesSecVue} onTuile={(t) => defiler(t.cle)} />'), 'une tuile par famille presente');
   assert.ok(tuilesBloc.includes("<Fi i={t.icone} size={14} />") && tuilesBloc.includes('{t.valeur} <span className="sec-lib" style={{ fontSize: 11, fontWeight: 600, color: \'var(--o-text2)\' }}>{t.libelle}</span>'), 'icone, valeur, libelle');
-  assert.ok(home.includes('{alarmRailId && <RailArm id={alarmRailId} hass={dashHass} />}') && home.includes('{serrureId && <RailSerrure id={serrureId} hass={dashHass} />}'), 'les boutons d’aujourd’hui et la serrure restent');
+  assert.ok(!home.includes('<RailArm') && !home.includes('<RailSerrure'), 'les boutons d’armement et la serrure ont quitte l’Accueil (ADR 0035)');
   assert.ok(!src.includes('ouvrantsRow'), 'la ligne « Tout est ferme » a disparu : les tuiles la remplacent');
   // Retour user du 16/09 : « sur mobile cette partie revient a la ligne » — une
   // seule rangee au telephone, l'icone au-dessus, le libelle peut se replier.
@@ -67,7 +67,7 @@ test('l’accueil surveille ce que la carte Securite et « A surveiller » lisen
   const k = bloc('const bannerKeys = () => {', NL + '};');
   assert.ok(k.includes("dom === 'camera' || dom === 'alarm_control_panel'"), 'cameras et panneaux');
   assert.ok(k.includes('OUVRANT_DCS.indexOf(dc) >= 0 || CLASSES_MOUVEMENT.indexOf(dc) >= 0 || CLASSES_SURETE.indexOf(dc) >= 0'), 'ouvrants, mouvement, surete — par device_class');
-  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';"), 'une seule source pour les classes');
+  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';"), 'une seule source pour les classes');
 });
 
 test('la demo a de quoi montrer la carte, et les mots ont leur traduction', () => {

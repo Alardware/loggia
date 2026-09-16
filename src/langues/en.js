@@ -2025,4 +2025,12 @@ export default {
   '1 ouvrant ouvert : {noms}': '1 opening open: {noms}',
   '{n} capteurs contournés': '{n} sensors bypassed',
   '1 capteur contourné': '1 sensor bypassed',
+  // L'Accueil ne garde de la securite que l'essentiel (v3.36.0)
+  'Armée · Maison': 'Armed · Home',
+  'Armée · Absent': 'Armed · Away',
+  'Armée · Nuit': 'Armed · Night',
+  'Armée · Vacances': 'Armed · Vacation',
+  'Déclenchée': 'Triggered',
+  'EN CE MOMENT': 'RIGHT NOW',
+  'Lecture, machines, chauffage, volets en mouvement': 'Playback, machines, heating, moving covers',
 };

@@ -174,6 +174,41 @@ export function messageAlarme(st, comptes, S) {
   return parts.length ? { niveau: 'warn', texte: parts.join(' · ') } : null;
 }
 
+/** L'icône de chaque armement — la même sur les boutons de la carte Alarme et
+ * sur la tuile de la bannière (ADR 0035). */
+export const ICONES_ARMEMENT = { alarm_disarm: 'shield', alarm_arm_home: 'home', alarm_arm_away: 'plane-departure', alarm_arm_night: 'moon', alarm_arm_vacation: 'umbrella-beach' };
+
+/** La tuile ALARME de la bannière : l'état et le mode en trois mots, l'icône
+ * du mode, la couleur — d'après l'état du panneau. Sans panneau, ou muet :
+ * null, pas de tuile. */
+export function tuileAlarme(st) {
+  if (!estObjet(st) || !st.state || st.state === 'unavailable' || st.state === 'unknown') return null;
+  const s = String(st.state);
+  if (s === 'triggered') return { texte: tr('Déclenchée'), icone: 'bell-ring', couleur: 'var(--o-bad)' };
+  if (s === 'arming' || s === 'pending') return { texte: tr('Activation…'), icone: 'shield', couleur: 'var(--o-warn2)' };
+  if (s === 'disarmed') return { texte: tr('Désarmée'), icone: ICONES_ARMEMENT.alarm_disarm, couleur: 'var(--o-ok)' };
+  const modes = {
+    armed_home: [tr('Armée · Maison'), ICONES_ARMEMENT.alarm_arm_home, 'var(--o-warn)'],
+    armed_away: [tr('Armée · Absent'), ICONES_ARMEMENT.alarm_arm_away, 'var(--o-warn)'],
+    armed_night: [tr('Armée · Nuit'), ICONES_ARMEMENT.alarm_arm_night, 'var(--o-purple)'],
+    armed_vacation: [tr('Armée · Vacances'), ICONES_ARMEMENT.alarm_arm_vacation, 'var(--o-warn)'],
+  }[s];
+  if (modes) return { texte: modes[0], icone: modes[1], couleur: modes[2] };
+  return { texte: tr('Armée'), icone: 'shield-check', couleur: 'var(--o-warn)' };
+}
+
+/** Une sirène : le domaine `siren`, ou un interrupteur qui se nomme ainsi —
+ * beaucoup de sirènes Zigbee n'arrivent dans Home Assistant qu'en `switch`
+ * (ADR 0035). Le nom se lit sans accent ni casse, dans l'identifiant et le
+ * nom affiché. */
+export function estSirene(id, st) {
+  const dom = String(id || '').split('.')[0];
+  if (dom === 'siren') return true;
+  if (dom !== 'switch' && dom !== 'input_boolean') return false;
+  const texte = (String(id) + ' ' + String(attrs(st).friendly_name || '')).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return /siren/.test(texte);
+}
+
 /** Les tuiles de la rangée, dans l'ordre de lecture : portes, fenêtres,
  * mouvement, caméras — seulement les familles présentes. `nom` est le titre
  * au-dessus de la valeur ; `alerte` : quelque chose d'ouvert ou d'injoignable ;

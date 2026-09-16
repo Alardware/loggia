@@ -60,20 +60,20 @@ test('la carte Sirene : gabarit maison, bascule, tuiles d’apres les attributs 
   assert.ok(c.includes("{mort ? tr('Indisponible') : on ? tr('Sirène active') : tr('Sirène au repos')}"), 'l’etat, rouge quand elle sonne');
   assert.ok(c.includes("if (Array.isArray(a.available_tones) && a.available_tones.length) tuiles.push([tr('Sonneries'), String(a.available_tones.length)]);") && c.includes("if (typeof a.volume_level === 'number') tuiles.push([tr('Volume'), Math.round(a.volume_level * 100) + ' %']);"), 'les tuiles ne disent que ce que l’entite expose');
   assert.ok(!c.includes('dB') && !c.includes('entrée'), 'ni decibels ni delai d’entree inventes');
-  assert.ok(c.includes("if ((+a.supported_features || 0) & SIRENE_DUREE) { call('turn_on', { duration: 3 }); setTimeout(() => setTest(false), 3000); return; }") && c.includes("setTimeout(() => { call('turn_off'); setTest(false); }, 3000);") && src.includes('const SIRENE_DUREE = 16;'), 'trois secondes : par duration, sinon a la main');
+  assert.ok(c.includes("if (dom === 'siren' && ((+a.supported_features || 0) & SIRENE_DUREE)) { call('turn_on', { duration: 3 }); setTimeout(() => setTest(false), 3000); return; }") && c.includes("setTimeout(() => { call('turn_off'); setTest(false); }, 3000);") && src.includes('const SIRENE_DUREE = 16;'), 'trois secondes : par duration, sinon a la main');
   assert.ok(c.includes("{test ? tr('Test en cours…') : tr('Test sonore (3 s)')}"), 'le bouton');
 });
 
 test('la vue : la rangee des trois cartes remplace le bandeau, la presence y descend', () => {
   const vue = bloc('function SecuriteContent(', NL + '}');
   assert.ok(!vue.includes('armBtn') && !vue.includes('alarmShort') && !vue.includes('setAlarm') && !vue.includes('alarmRevertRef') && !vue.includes('demandeCode') && !vue.includes('réglages rapides'), 'le bandeau et son optimisme ont disparu');
-  assert.ok(vue.includes("const sirenes = Object.keys(S).filter(id => id.indexOf('siren.') === 0 && S[id]);") && vue.includes('const msgAlarme = messageAlarme(alarmId ? S[alarmId] : null, comptesSecVue, S);'), 'les sirenes de la maison, le message de l’alarme');
+  assert.ok(vue.includes('estSirene(id, S[id])') && vue.includes('const msgAlarme = messageAlarme(alarmId ? S[alarmId] : null, comptesSecVue, S);'), 'les sirenes de la maison, le message de l’alarme');
   assert.ok(vue.includes('{alarmId && <Anim i={0}><div style={{ height: \'100%\', minHeight: 184 }}><CvAlarm id={alarmId} hass={hass} sans message={msgAlarme} /></div></Anim>}'), 'ta carte Alarme, avec son message');
   assert.ok(vue.includes('{sirenes.map((id, i) => <Anim key={id} i={1 + i}><div style={{ height: \'100%\', minHeight: 184 }}><CvSirene id={id} hass={hass} /></div></Anim>)}'), 'une carte par sirene');
   assert.ok(vue.includes('{people.length > 0 && <Anim i={1 + sirenes.length}><div style={{ height: \'100%\', minHeight: 184 }}><CvPresence hass={hass} /></div></Anim>}'), 'la presence, dans la rangee');
   assert.ok(vue.includes("{tr('Ouvrants')}</div>") && !vue.includes("tr('Ouvrants et présence')"), 'la section des ouvrants ne parle plus de presence');
   assert.ok(vue.includes("{tr('Alarme')} {alarmWord} · {resumeSecurite(comptesSecVue)}") && vue.includes('const cptAlarme = armCompte(alarmId ? S[alarmId] : null);'), 'la sous-ligne garde le decompte');
-  assert.ok(src.includes("securite: [...secBaseKeys(), 'camera.', 'siren.', ...secKeys,"), 'les sirenes sont relues sur la vue');
+  assert.ok(src.includes("securite: [...secBaseKeys(), 'camera.', 'siren.', 'switch.', ...secKeys,"), 'les sirenes sont relues sur la vue');
 });
 
 test('la demo a une sirene, et les mots ont leur traduction', () => {

@@ -34,7 +34,7 @@ import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
-import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
+import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
 import { evenementCamera, detecteursDe, reduireDerniers, depuis } from './evenement.js';
 import { cleJour, plageSemaine, joursAgenda, comptesParJour, evenementsAVenir, evenementsDuJour } from './agenda.js';
@@ -6219,9 +6219,9 @@ function CarteAttention({ points, onNav = null }) {
 
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
-const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];
+const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];
 const ACC_RAIL = ['attention', 'moment', 'rappels', 'agenda'];
-const ACC_NOMS = () => ({ attention: tr('À surveiller'), securite: tr('Sécurité'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda') });
+const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda') });
 /* Les identifiants d'un accueil enregistre avant le 15/09 : la glissiere du
  * heros a disparu (son contenu vit dans « En ce moment »), « En cours » est
  * devenu « En ce moment ». Un identifiant inconnu est simplement ignore. */
@@ -6535,7 +6535,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     // quand c'est sa place : Securite (v3.24) dans la colonne, « A surveiller »
     // dans le rail (v3.29, deplacee la le 16/09 a la demande de l'utilisateur).
     if (sauve.length) {
-      const tete = (zone === 'main' ? ['securite'] : ['attention']).filter(s => manquants.indexOf(s) >= 0);
+      const tete = (zone === 'main' ? [] : ['attention']).filter(s => manquants.indexOf(s) >= 0);
       if (tete.length) return [...tete, ...sauve, ...manquants.filter(s => tete.indexOf(s) < 0)];
     }
     return [...sauve, ...manquants];
@@ -6769,15 +6769,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     out.push(lum === 0 ? tr('Tout est éteint') : lum === 1 ? tr('{n} lumière allumée', { n: 1 }) : tr('{n} lumières allumées', { n: lum }));
     const ouv = ouvrantsDe(S).filter(o => o.on).length;
     if (ouv > 0) out.push(ouv === 1 ? tr('{n} ouvrant ouvert', { n: 1 }) : tr('{n} ouvrants ouverts', { n: ouv }));
-    // L'entité configurée d'abord (Alarmo…) — le premier panneau trouvé sinon.
+    // L'alarme a sa tuile dans la banniere (ADR 0035) : la phrase ne la
+    // repete plus ; seule une alarme declenchee reste une alerte.
     const cfgAl = secAlarm();
     const al = (cfgAl && S[cfgAl] && S[cfgAl].state !== 'unavailable') ? cfgAl
       : Object.keys(S).find(x => x.indexOf('alarm_control_panel.') === 0 && S[x] && S[x].state !== 'unavailable');
-    if (al) {
-      const st = S[al].state;
-      if (st === 'triggered') { out.push(tr('Alarme déclenchée')); alerte = true; }
-      else out.push(st === 'disarmed' ? tr('Alarme désarmée') : tr('Alarme armée'));
-    }
+    if (al && S[al].state === 'triggered') alerte = true;
     return { txt: out, alerte };
   }, [a]);
   /* DERNIER EVENEMENT DES TUILES CAMERA (ADR 0031) : les detecteurs que la
@@ -6809,7 +6806,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   const fenetresEtat = useEtatServeur(dashHass, 'loggia/fenetres/etat', 30000, '').etat;
   const etatsAcc = (dashHass && dashHass.states) || {};
   const camsInfo = (a && a.cams && a.cams.length) ? a.cams.map(c => ({ nom: c.name, online: c.online })) : [];
-  const comptesSec = comptesSecurite(etatsAcc, camsInfo);
   const points = pointsAttention({
     S: etatsAcc, cams: camsInfo,
     // `haid` : le capteur CO2 de la piece, pour qu'une veille sur ce meme
@@ -6855,6 +6851,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     if (c && S[c]) return c;
     return Object.keys(S).find(x => x.indexOf('alarm_control_panel.') === 0 && S[x] && S[x].state !== 'unavailable') || null;
   })();
+  // La tuile ALARME de la banniere (ADR 0035) : l'etat et le mode, d'un tap
+  // vers la vue Securite — a la place du grand panneau. Sans panneau, rien.
+  const alarmeTuile = tuileAlarme(alarmRailId && dashHass && dashHass.states ? dashHass.states[alarmRailId] : null);
   // Ouvrants de la maison, pour la bannière : combien sont ouverts sur combien.
   const ouvStat = useMemo(() => {
     const S = (dashHass && dashHass.states) || null;
@@ -7051,6 +7050,52 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     } };
   };
 
+  /* EN CE MOMENT (maquette du 15/09, reduit a l'ESSENTIEL le 16/09 — ADR
+   * 0035 : « je m'en fiche des prises ») : un lecteur en lecture, un
+   * aspirateur ou une tondeuse au travail, le lave-vaisselle en cours, les
+   * zones qui chauffent, un volet EN MOUVEMENT. Ni prise, ni ventilateur, ni
+   * volet a mi-course. Calcule ici, avant le rendu : la banniere en porte le
+   * compte. Huit lignes au plus, le reste est dans Objets. */
+  const S0 = (dashHass && dashHass.states) || {};
+  const aEnt = (id) => !!(dashHass && dashHass.states && dashHass.states[id]);
+  const commande = (id, dom, svc, data) => commanderService(dashHass, id, dom, svc, { entity_id: id, ...(data || {}) });
+  const momentRows = [];
+  try {
+    medPlayers().forEach(m => {
+      const id = m.haid; if (!S0[id]) return;
+      const np = mpRead(S0, id); if (!np.playing) return;
+      momentRows.push(<LigneMoment key={id} icone="music-alt" rgb="236,72,153" nom={m.name} sous={[np.title, np.artist].filter(Boolean).join(' · ') || tr('Lecture')}
+        onOpen={() => dc.ouvrir(id)} action={tr('Mettre en pause')} actionIcone="pause" onAction={() => commande(id, 'media_player', 'media_play_pause')} />);
+    });
+    const meta = (a && a.index && a.index.entityMeta) || null;
+    const ETIQ = { vacuum: { cleaning: tr('Nettoyage'), returning: tr('Retour à la base') }, lawn_mower: { mowing: tr('Tonte'), returning: tr('Retour à la base') } };
+    Object.keys(S0).forEach(id => {
+      const e = S0[id]; if (!e) return;
+      const dom = id.slice(0, id.indexOf('.'));
+      // Les MACHINES seulement : une prise ou un ventilateur en marche n'est pas un evenement.
+      if (dom !== 'vacuum' && dom !== 'lawn_mower') return;
+      const test = APPAREIL_ACTIF[dom]; if (!test || !test(e.state)) return;
+      const mt = meta ? meta.get(id) : null; if (mt && (mt.category || mt.hidden)) return;
+      const nom = (e.attributes || {}).friendly_name || id;
+      const sous = (ETIQ[dom] && ETIQ[dom][e.state]) || tr('En marche');
+      const geste = dom === 'vacuum' ? [tr('Renvoyer au dock'), 'home', () => commande(id, 'vacuum', 'return_to_base')]
+        : [tr('Renvoyer au dock'), 'home', () => commande(id, 'lawn_mower', 'dock')];
+      momentRows.push(<LigneMoment key={id} icone={dom === 'vacuum' ? 'vacuum' : 'mower'} rgb="var(--o-accent-rgb)" nom={nom} sous={sous} onOpen={() => dc.ouvrir(id)} action={geste[0]} actionIcone={geste[1]} onAction={geste[2]} />);
+    });
+    if (mLv && mLv.active && (!a || aEnt(notifIds().dishwasher))) momentRows.push(<LigneMoment key="lv" icone="dishwasher" rgb="var(--o-accent-rgb)" nom={mLv.label} sous={[mLv.phase, mLv.valueText].filter(Boolean).join(' · ')} onOpen={onNav ? () => onNav('objets') : null} />);
+    const chauffe = climateZones(S0).filter(z => estClimate(z) && z.haid && S0[z.haid] && ['heating', 'cooling'].indexOf((S0[z.haid].attributes || {}).hvac_action) >= 0);
+    if (chauffe.length) momentRows.push(<LigneMoment key="clim" icone="flame" rgb="var(--o-bad-rgb)" nom={chauffe.length > 1 ? tr('{n} zones chauffent', { n: chauffe.length }) : tr('{n} zone chauffe', { n: 1 })} sous={chauffe.map(z => z.name).join(' · ')} onOpen={onNav ? () => onNav('climat') : null} />);
+    voletCovers(S0).forEach(c => {
+      const e = S0[c.haid]; if (!e) return;
+      // Un volet EN MOUVEMENT seulement : a mi-course, il ne se passe rien.
+      const bouge = e.state === 'opening' || e.state === 'closing';
+      if (!bouge) return;
+      momentRows.push(<LigneMoment key={c.haid} icone="blinds" rgb="167,139,250" nom={c.name || (e.attributes || {}).friendly_name || c.haid}
+        sous={e.state === 'opening' ? tr('Ouverture…') : tr('Fermeture…')}
+        onOpen={() => dc.ouvrir(c.haid)} action={tr('Stop')} actionIcone="stop" onAction={() => commande(c.haid, 'cover', 'stop_cover')} />);
+    });
+  } catch {}
+  const nEnCours = momentRows.length;
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <Header />
@@ -7153,6 +7198,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             /* Des BOUTONS, pas des cases : chaque chiffre mene la ou l'on agit
               * (ADR 0030). Meme dessin qu'avant, le survol en plus. */
             const clics = {
+              al: () => onNav && onNav('securite'),
               ex: () => onNav && onNav('energie'),
               air: () => { if (pieceCo2Max && onOpenRoom) onOpenRoom(pieceCo2Max); else if (onNav) onNav('objets'); },
               ouv: () => onNav && onNav('securite'),
@@ -7160,9 +7206,16 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               med: () => onNav && onNav('medias'),
               app: voirMoment,
             };
-            const libelles = { ex: tr('Voir l’énergie'), air: tr('Voir la pièce la plus chargée'), ouv: tr('Voir la sécurité'), lum: tr('Voir les lumières'), med: tr('Voir les médias'), app: tr('Voir ce qui tourne') };
+            const libelles = { al: tr('Voir la sécurité'), ex: tr('Voir l’énergie'), air: tr('Voir la pièce la plus chargée'), ouv: tr('Voir la sécurité'), lum: tr('Voir les lumières'), med: tr('Voir les médias'), app: tr('Voir ce qui tourne') };
             const tuile = (extra) => ({ flexShrink: 0, background: 'none', border: 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer', borderRadius: 10, padding: '4px 14px 4px 0', whiteSpace: 'nowrap', ...extra });
             const cases = [];
+            /* L'ALARME d'abord (retour user du 16/09, ADR 0035) : son etat et
+              * son mode, d'un tap vers la vue Securite. */
+            if (alarmeTuile) cases.push(
+              <button type="button" key="al" className="o-tuile-hero" onClick={clics.al} aria-label={libelles.al} style={tuile({ display: 'flex', alignItems: 'center', gap: 8 })}>
+                <Fi i={alarmeTuile.icone} color={alarmeTuile.couleur} size={17} />
+                <div><div style={{ fontSize: 15, fontWeight: 800, color: alarmeTuile.couleur, lineHeight: 1.1 }}>{alarmeTuile.texte}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('ALARME')}</div></div>
+              </button>);
             if (!a || a.metricExport) cases.push(
               <button type="button" key="ex" className="o-tuile-hero" onClick={clics.ex} aria-label={libelles.ex} style={tuile({ display: 'flex', alignItems: 'center', gap: 8 })}>
                 <Ico name="bolt" color="var(--o-ok)" size={17} />
@@ -7188,9 +7241,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               <button type="button" key="med" className="o-tuile-hero" onClick={clics.med} aria-label={libelles.med} style={tuile({ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 })}>
                 <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={actifsStat.medias} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {actifsStat.mediasTotal}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{actifsStat.medias > 1 ? tr('MÉDIAS EN LECTURE') : tr('MÉDIA EN LECTURE')}</div>
               </button>);
-            if (actifsStat.appareils > 0) cases.push(
+            /* Ce qui tourne VRAIMENT (ADR 0035) : le meme compte que le panneau
+              * « En ce moment » — plus les prises. */
+            if (nEnCours > 0) cases.push(
               <button type="button" key="app" className="o-tuile-hero" onClick={clics.app} aria-label={libelles.app} style={tuile({ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 })}>
-                <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={actifsStat.appareils} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {actifsStat.appareilsTotal}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{actifsStat.appareils > 1 ? tr('APPAREILS ACTIFS') : tr('APPAREIL ACTIF')}</div>
+                <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={nEnCours} /></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('EN CE MOMENT')}</div>
               </button>);
             if (!cases.length) return null;
             return (
@@ -7281,7 +7336,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           // ── Rail en lignes denses : meme vocabulaire que les cartes de synthese des
           // autres vues (libelle + contexte a gauche, valeur alignee a droite, filet entre
           // les lignes). Une entite absente = pas de ligne, jamais une ligne vide.
-          const hasEnt = (id) => !!(dashHass && dashHass.states && dashHass.states[id]);
           /* `vue` (nouvel accueil) : la ligne devient un RÉSUMÉ cliquable — tap
            * → la vue du domaine, chevron pour le dire. Sans vue, ligne inerte. */
           const railRow = (k, label, desc, val, col, vue = null) => {
@@ -7314,96 +7368,13 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             </div>
           ) : null;
           const OKRGB = '52,211,153', AMBRGB = '251,191,36';
-          /* SÉCURITÉ en tête de l'accueil (maquette du 15/09) : l'armement
-            * avec ses boutons d'aujourd'hui, la serrure, et les ouvrants — le
-            * geste du départ et du retour, en premier. Sans panneau, sans
-            * serrure et sans ouvrant, la carte n'existe pas. */
-          const serrureId = serrureRailId(dashHass && dashHass.states);
-          const alarmeEtat = (alarmRailId && dashHass && dashHass.states[alarmRailId]) ? String(dashHass.states[alarmRailId].state) : null;
-          const alarmeMots = { disarmed: tr('Désarmée'), armed_home: tr('Maison'), armed_away: tr('Absent'), armed_night: tr('Nuit'), armed_vacation: tr('Vacances'), triggered: tr('ALERTE'), arming: tr('Activation…'), pending: tr('Activation…') };
-          const alarmeCol = alarmeEtat === 'triggered' ? 'var(--o-bad)' : (alarmeEtat && alarmeEtat !== 'disarmed') ? 'var(--o-warn)' : 'var(--o-ok)';
-          const alarmeRgb = alarmeEtat === 'triggered' ? 'var(--o-bad-rgb)' : (alarmeEtat && alarmeEtat !== 'disarmed') ? 'var(--o-warn-rgb)' : 'var(--o-ok-rgb)';
-          /* La ligne d'etat (ADR 0028) : portes, fenetres, mouvement, cameras —
-            * seulement les familles qui ont des capteurs, chacune vers la vue
-            * Securite. Elle remplace la ligne « Tout est ferme » : memes
-            * donnees, lues en une seconde. */
-          const tuilesSec = tuilesSecurite(comptesSec);
-          const sousSecurite = resumeSecurite(comptesSec);
-          const carteSecurite = (alarmRailId || serrureId || tuilesSec.length) ? (
-            <div style={{ background: 'var(--o-surfA)', borderRadius: 'var(--o-radius,18px)', padding: '13px 15px', boxShadow: 'var(--o-shadow)' }}>
-              {/* L'en-tete est un bouton : un tap mene a la vue Securite, sur
-                * tous les ecrans (ADR 0033). Les boutons d'armement restent
-                * en dessous, hors du bouton. */}
-              <button type="button" onClick={() => onNav && onNav('securite')} aria-label={tr('Ouvrir la vue Sécurité')}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: 0, border: 'none', background: 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
-                <span style={RM_ICO('rgba(' + alarmeRgb + ',.16)', alarmeCol)}><Fi i={(alarmeEtat && alarmeEtat !== 'disarmed') ? 'shield-check' : 'shield'} size={17} /></span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr('Sécurité')}</div>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: comptesSec.ok ? 'var(--o-ok)' : 'var(--o-warn)' }}>
-                    {alarmRailId ? tr('Alarme') + ' ' + String(alarmeMots[alarmeEtat] || alarmeEtat || '—').toLowerCase() + ' · ' : ''}{sousSecurite}
-                  </div>
-                </div>
-                <Fi i="angle-right" size={11} color="var(--o-text3)" />
-              </button>
-              <TuilesSecurite tuiles={tuilesSec} onTuile={() => onNav && onNav('securite')} />
-              {alarmRailId && <RailArm id={alarmRailId} hass={dashHass} />}
-              {serrureId && <RailSerrure id={serrureId} hass={dashHass} />}
-            </div>
-          ) : null;
-          /* EN CE MOMENT (maquette du 15/09) : ce qui se passe, une ligne par
-            * chose et son geste — rien d'inventé : un lecteur en lecture, un
-            * appareil en marche (la règle de la bannière, APPAREIL_ACTIF), le
-            * lave-vaisselle en cours, les zones qui chauffent, un volet entre
-            * deux ou en mouvement. Huit lignes au plus, le reste est dans Objets. */
-          const S0 = (dashHass && dashHass.states) || {};
-          const commande = (id, dom, svc, data) => commanderService(dashHass, id, dom, svc, { entity_id: id, ...(data || {}) });
-          const momentRows = [];
-          try {
-            medPlayers().forEach(m => {
-              const id = m.haid; if (!S0[id]) return;
-              const np = mpRead(S0, id); if (!np.playing) return;
-              momentRows.push(<LigneMoment key={id} icone="music-alt" rgb="236,72,153" nom={m.name} sous={[np.title, np.artist].filter(Boolean).join(' · ') || tr('Lecture')}
-                onOpen={() => dc.ouvrir(id)} action={tr('Mettre en pause')} actionIcone="pause" onAction={() => commande(id, 'media_player', 'media_play_pause')} />);
-            });
-            const meta = (a && a.index && a.index.entityMeta) || null;
-            const lampes = new Set(switchLights());
-            const ETIQ = { vacuum: { cleaning: tr('Nettoyage'), returning: tr('Retour à la base') }, lawn_mower: { mowing: tr('Tonte'), returning: tr('Retour à la base') } };
-            Object.keys(S0).forEach(id => {
-              const e = S0[id]; if (!e) return;
-              const dom = id.slice(0, id.indexOf('.'));
-              const test = APPAREIL_ACTIF[dom]; if (!test || lampes.has(id) || !test(e.state)) return;
-              const mt = meta ? meta.get(id) : null; if (mt && (mt.category || mt.hidden)) return;
-              const nom = (e.attributes || {}).friendly_name || id;
-              const sous = (ETIQ[dom] && ETIQ[dom][e.state]) || (dom === 'valve' ? tr('Ouverte') : tr('En marche'));
-              const geste = dom === 'vacuum' ? [tr('Renvoyer au dock'), 'home', () => commande(id, 'vacuum', 'return_to_base')]
-                : dom === 'lawn_mower' ? [tr('Renvoyer au dock'), 'home', () => commande(id, 'lawn_mower', 'dock')]
-                  : dom === 'valve' ? [tr('Fermer la vanne'), 'power', () => commande(id, 'valve', 'close_valve')]
-                    : [tr('Éteindre'), 'power', () => commande(id, dom, 'turn_off')];
-              const icone = dom === 'vacuum' ? 'vacuum' : dom === 'lawn_mower' ? 'mower' : dom === 'fan' ? 'wind' : dom === 'humidifier' ? 'raindrops' : dom === 'valve' ? 'water' : null;
-              momentRows.push(<LigneMoment key={id} icone={icone} rgb="var(--o-accent-rgb)" nom={nom} sous={sous} onOpen={() => dc.ouvrir(id)} action={geste[0]} actionIcone={geste[1]} onAction={geste[2]} />);
-            });
-            if (mLv && mLv.active && (!a || hasEnt(notifIds().dishwasher))) momentRows.push(<LigneMoment key="lv" icone="dishwasher" rgb="var(--o-accent-rgb)" nom={mLv.label} sous={[mLv.phase, mLv.valueText].filter(Boolean).join(' · ')} onOpen={onNav ? () => onNav('objets') : null} />);
-            const chauffe = climateZones(S0).filter(z => estClimate(z) && z.haid && S0[z.haid] && ['heating', 'cooling'].indexOf((S0[z.haid].attributes || {}).hvac_action) >= 0);
-            if (chauffe.length) momentRows.push(<LigneMoment key="clim" icone="flame" rgb="var(--o-bad-rgb)" nom={chauffe.length > 1 ? tr('{n} zones chauffent', { n: chauffe.length }) : tr('{n} zone chauffe', { n: 1 })} sous={chauffe.map(z => z.name).join(' · ')} onOpen={onNav ? () => onNav('climat') : null} />);
-            voletCovers(S0).forEach(c => {
-              const e = S0[c.haid]; if (!e) return;
-              const pos = (e.attributes || {}).current_position;
-              const bouge = e.state === 'opening' || e.state === 'closing';
-              const entre = typeof pos === 'number' && pos > 0 && pos < 100;
-              if (!bouge && !entre) return;
-              momentRows.push(<LigneMoment key={c.haid} icone="blinds" rgb="167,139,250" nom={c.name || (e.attributes || {}).friendly_name || c.haid}
-                sous={bouge ? (e.state === 'opening' ? tr('Ouverture…') : tr('Fermeture…')) : tr('{p} % — ni ouvert ni fermé', { p: pos })}
-                onOpen={() => dc.ouvrir(c.haid)} action={bouge ? tr('Stop') : null} actionIcone="stop" onAction={bouge ? () => commande(c.haid, 'cover', 'stop_cover') : null} />);
-            });
-          } catch {}
-          const nEnCours = momentRows.length;
           const momentVisibles = nEnCours > 8
             ? [...momentRows.slice(0, 8), railRow('plus', tr('{n} autres', { n: nEnCours - 8 }), tr('Tout est dans Objets'), '', 'var(--o-text3)', 'objets')]
             : momentRows;
           const rappelsRows = [];
           if (!a || (a.repasIn && a.repasLabel)) rappelsRows.push(railRow('rep', tr('Repas chat'), a ? a.repasLabel : 'Collation après-midi · 18g', a ? a.repasIn.replace('DANS ', '').toLowerCase() : '1h38', 'var(--o-warn)'));
           if (mPb) rappelsRows.push(railRow('pb', tr('Poubelles'), mPb.valueText, mPb.phase, mPb.color));
-          const railMoment = railPanel(tr('En ce moment'), tr('Lecteurs, appareils, chauffage et volets'),
+          const railMoment = railPanel(tr('En ce moment'), tr('Lecture, machines, chauffage, volets en mouvement'),
             nEnCours ? (nEnCours > 1 ? tr('{n} EN COURS', { n: nEnCours }) : tr('1 EN COURS')) : tr('RIEN EN COURS'), nEnCours ? '79,140,255' : OKRGB,
             nEnCours ? momentVisibles : [<div key="rien" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', padding: '6px 0 2px' }}>{tr('Rien ne tourne pour le moment.')}</div>]);
           const railRappels = railPanel(tr('Rappels'), tr('Repas du chat et ramassage'), null, AMBRGB, rappelsRows);
@@ -7466,7 +7437,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             // Les favoris s'éditent EUX-MÊMES (leurs cartes ont leur barre
             // d'outils) : la section reste donc vivante en mode édition.
             favoris: <FavorisAccueil hass={dashHass} edit={editMode} />,
-            securite: carteSecurite,
             scenes: <ScenariosAccueil hass={dashHass} edit={editMode} onNav={onNav} />,
             pieces: <>{piecesHeader}{piecesGrid}</>,
             cameras: cams.length > 0 ? <>{camsHeader}{camsGrid}</> : null,
@@ -9424,7 +9394,12 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   /* TROIS CARTES a la place du bandeau (ADR 0034) : l'alarme — la carte
    * « Alarme (seule) » du catalogue, avec son message —, les sirenes de la
    * maison, et qui est la. Chacune n'existe que si son entite existe. */
-  const sirenes = Object.keys(S).filter(id => id.indexOf('siren.') === 0 && S[id]);
+  // Le domaine `siren`, un interrupteur nomme sirene, ou celle que l'utilisateur
+  // a choisie (`loggia_entities.sirene`) — beaucoup de sirenes Zigbee
+  // n'arrivent qu'en `switch` (retour user du 16/09 : « je n'ai pas la carte
+  // sirene »).
+  const sireneChoisie = loggiaEnt('sirene', null);
+  const sirenes = [...(sireneChoisie && S[sireneChoisie] ? [sireneChoisie] : []), ...Object.keys(S).filter(id => id !== sireneChoisie && S[id] && estSirene(id, S[id]))];
   const msgAlarme = messageAlarme(alarmId ? S[alarmId] : null, comptesSecVue, S);
 
   return (
@@ -9443,7 +9418,10 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
       {tuilesSecVue.length > 0 && <div style={{ marginTop: -14 }}><TuilesSecurite tuiles={tuilesSecVue} onTuile={(t) => defiler(t.cle)} /></div>}
 
       {(alarmId || sirenes.length > 0 || people.length > 0) && (
-        <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(250px,1fr))', gridAutoRows: 'minmax(184px, auto)', gap: 16, alignItems: 'stretch' }}>
+        /* Sa propre classe : `grid-objets` force deux colonnes au telephone, et
+         * une carte Alarme de 170 px ecrase ses cinq boutons (retour user du
+         * 16/09). Ici, 250 px au moins par carte — une colonne au telephone. */
+        <div className="grid-securite-cartes" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(250px,1fr))', gridAutoRows: 'minmax(184px, auto)', gap: 16, alignItems: 'stretch' }}>
           {alarmId && <Anim i={0}><div style={{ height: '100%', minHeight: 184 }}><CvAlarm id={alarmId} hass={hass} sans message={msgAlarme} /></div></Anim>}
           {sirenes.map((id, i) => <Anim key={id} i={1 + i}><div style={{ height: '100%', minHeight: 184 }}><CvSirene id={id} hass={hass} /></div></Anim>)}
           {people.length > 0 && <Anim i={1 + sirenes.length}><div style={{ height: '100%', minHeight: 184 }}><CvPresence hass={hass} /></div></Anim>}
@@ -10236,153 +10214,6 @@ function ArmAnneau({ pct, col = 'var(--o-warn2)', r = 9 }) {
  * ceux du panneau ; s'il réclame un code, on ouvre la vue Sécurité, qui sait le
  * demander. Composant à part pour battre la seconde du décompte sans faire
  * tictaquer tout l'accueil. */
-/* La serrure du rail : on GLISSE, on ne clique pas.
- *
- * Un bouton ouvre une porte d'un doigt qui derape. Une glissiere demande un
- * geste continu jusqu'au bout de la piste — le meme reflexe que le « glisser
- * pour deverrouiller » d'un telephone, et pour la meme raison : ce qui ouvre
- * une maison ne doit pas partir tout seul dans une poche.
- *
- * La course doit etre franchie a 85 %. En deca, le curseur revient a sa place
- * et rien n'est envoye.
- */
-function serrureRailId(S) {
-  if (!S) return null;
-  const toutes = Object.keys(S).filter(k => k.indexOf('lock.') === 0);
-  if (!toutes.length) return null;
-  /* Celle de l'entree si son nom le dit, sinon la premiere : une maison a
-   * rarement deux serrures connectees, et le nom tranche quand elle en a. */
-  const entree = toutes.find(k => /entree|entr\u00e9e|porte|front|main/i.test(
-    k + ' ' + (((S[k] || {}).attributes || {}).friendly_name || '')));
-  return entree || toutes.slice().sort()[0];
-}
-
-function RailSerrure({ id, hass }) {
-  const st = (hass && hass.states) ? hass.states[id] : null;
-  const etat = st ? String(st.state).toLowerCase() : '';
-  const verrouille = etat === 'locked';
-  const enRoute = etat === 'locking' || etat === 'unlocking';
-  const coince = etat === 'jammed';
-  const [x, setX] = useState(0);          // 0 a 1, la position du curseur
-  const [glisse, setGlisse] = useState(false);
-  const piste = useRef(null);
-
-  const nom = coince ? tr('Serrure bloquée')
-    : enRoute ? (etat === 'locking' ? tr('Verrouillage…') : tr('Ouverture…'))
-      : verrouille ? tr('Verrouill\u00e9e') : tr('D\u00e9verrouill\u00e9e');
-  /* Une seule direction, toujours la meme : le geste ne se reapprend pas
-     selon l'etat de la porte. */
-  const consigne = verrouille ? tr('Glisser pour ouvrir') : tr('Glisser pour verrouiller');
-  const col = coince ? 'var(--o-bad)' : verrouille ? 'var(--o-ok)' : 'var(--o-warn2)';
-
-  const agir = () => {
-    // Sans `try/catch` : il n'attraperait pas le refus, qui rejette la promesse
-    // plus tard. Le service dit bien lui-même s'il a échoué — par l'écoute
-    // globale et son toast, pas par un bloc synchrone.
-    if (hass && hass.callService) {
-      commander(hass, id, verrouille ? 'unlock' : 'lock');
-    }
-  };
-
-  const surX = (clientX) => {
-    const el = piste.current;
-    if (!el) return 0;
-    const r = el.getBoundingClientRect();
-    const large = Math.max(1, r.width - 44);   // moins la largeur du curseur
-    return Math.max(0, Math.min(1, (clientX - r.left - 22) / large));
-  };
-
-  const debut = (e) => {
-    if (enRoute) return;
-    setGlisse(true);
-    const el = e.currentTarget;
-    try { el.setPointerCapture(e.pointerId); } catch {}
-    el.onpointermove = (ev) => setX(surX(ev.clientX));
-    el.onpointerup = (ev) => {
-      const v = surX(ev.clientX);
-      el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null;
-      setGlisse(false);
-      // Franchi aux 85 % : sinon le curseur revient et rien ne part.
-      if (v >= 0.85) agir();
-      setX(0);
-    };
-    el.onpointercancel = () => {
-      el.onpointermove = null; el.onpointerup = null;
-      setGlisse(false); setX(0);
-    };
-  };
-
-  return (
-    <div style={{ padding: '10px 0 2px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 700 }}>{tr('Porte d’entrée')}</span>
-        <span style={{ fontSize: 12, fontWeight: 800, color: col }}>{nom}</span>
-      </div>
-      <div ref={piste} onPointerDown={debut}
-        style={{ position: 'relative', height: 44, borderRadius: 999, cursor: enRoute ? 'default' : 'grab',
-          background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)',
-          overflow: 'hidden', touchAction: 'none', opacity: enRoute ? 0.6 : 1 }}>
-        {/* La trainee : elle dit jusqu'ou le geste est alle. */}
-        <span style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: (x * 100) + '%',
-          background: 'rgba(var(--o-accent-rgb),.18)', transition: glisse ? 'none' : 'width .25s ease' }} />
-        <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
-          justifyContent: 'center', fontSize: 12, fontWeight: 700, color: 'var(--o-text3)',
-          pointerEvents: 'none' }}>{enRoute ? nom : consigne}</span>
-        <span style={{ position: 'absolute', top: 4, bottom: 4, width: 36,
-          left: 'calc(4px + (100% - 44px) * ' + x + ')', borderRadius: 999,
-          background: col, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: glisse ? 'none' : 'left .25s ease', pointerEvents: 'none' }}>
-          {/* Pas de blanc : sur ces aplats vifs il tombe a 2:1 en theme
-            * sombre. La couleur du fond, elle, contraste par construction
-            * dans les deux themes (4.5 a 9.7 selon la teinte). */}
-          <Fi i={verrouille ? 'lock' : 'unlock'} size={15} color="var(--o-bg)" />
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function RailArm({ id, hass }) {
-  const st = (hass && hass.states) ? hass.states[id] : null;
-  const a = (st && st.attributes) || {};
-  const cpt = armCompte(st);
-  useSeconde(!!cpt);
-  const svcVise = cpt ? armVise(st, null) : null;
-  /* Le panneau réclame un code ? On le demande ICI. Le rail renvoyait vers la
-   * vue Sécurité : appuyer sur « Désarmé » changeait d'écran au lieu de
-   * désarmer, et tout était à refaire là-bas (retour 03/09). */
-  const [demande, setDemande] = useState(null);
-  const [code, setCode] = useState('');
-  const call = (svc, c) => commanderService(hass, id, 'alarm_control_panel', svc, { entity_id: id, ...(c ? { code: c } : {}) });
-  const agir = (svc) => {
-    const faut = svc === 'alarm_disarm' ? !!a.code_format : (!!a.code_format && a.code_arm_required !== false);
-    if (faut) { setDemande(svc); setCode(''); return; }
-    call(svc);
-  };
-  const valider = () => { if (demande && code) { call(demande, code); setDemande(null); setCode(''); } };
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 0 10px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-      {demande ? (
-        <>
-          <input type="password" inputMode="numeric" autoFocus value={code} onChange={(e) => setCode(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') valider(); if (e.key === 'Escape') setDemande(null); }}
-            placeholder={tr('Code')} aria-label={tr('Code')}
-            style={{ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 14, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
-          <button onClick={valider} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
-          <button onClick={() => setDemande(null)} aria-label={tr('Annuler')} style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>✕</button>
-        </>
-      ) : armChips(a, st && st.state).map(([lbl, svc, actif]) => (
-        <button key={svc} onClick={() => agir(svc)} aria-pressed={actif}
-          style={{ position: 'relative', flex: 1, padding: '11px 6px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: actif ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
-          {(cpt && svcVise === svc) ? cpt.reste + ' s' : lbl}
-          {/* Le décompte se lit ici aussi : le tour du mode visé se referme. */}
-          {cpt && svcVise === svc && <ArmAnneau pct={100 - (cpt.reste / cpt.total) * 100} r={10} />}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /* Armements RÉELLEMENT offerts par un panneau, lus dans `supported_features`
  * (bits Home Assistant : 1 = maison, 2 = absent, 4 = nuit, 32 = vacances).
  * Alarmo ne déclare que les modes configurés : n'afficher que ceux-là évite
@@ -10422,12 +10253,14 @@ function CvSirene({ id, hass }) {
   const mort = !st || s === 'unavailable' || s === 'unknown';
   const on = !mort && s === 'on';
   const nom = cvName(st, id);
-  const call = (svc, data) => commanderService(hass, id, 'siren', svc, { entity_id: id, ...(data || {}) });
+  // Une sirene en `switch` s'allume et s'eteint comme un interrupteur.
+  const dom = String(id).split('.')[0];
+  const call = (svc, data) => commanderService(hass, id, dom, svc, { entity_id: id, ...(data || {}) });
   const [test, setTest] = useState(false);
   const tester = () => {
     if (mort || test) return;
     setTest(true);
-    if ((+a.supported_features || 0) & SIRENE_DUREE) { call('turn_on', { duration: 3 }); setTimeout(() => setTest(false), 3000); return; }
+    if (dom === 'siren' && ((+a.supported_features || 0) & SIRENE_DUREE)) { call('turn_on', { duration: 3 }); setTimeout(() => setTest(false), 3000); return; }
     call('turn_on');
     setTimeout(() => { call('turn_off'); setTest(false); }, 3000);
   };
@@ -10531,9 +10364,12 @@ function CvAlarm({ id, hass, sans = false, message = null }) {
         ) : (
           <div style={{ display: 'flex', gap: 8, margin: '7px 0 6px' }}>
             {CHIPS.map(([lbl, svc, actif]) => (
-              <button key={svc} onClick={() => agir(svc)}
-                style={{ position: 'relative', flex: 1, padding: sans ? '10px 4px' : '6px 4px', borderRadius: 10, border: 'none', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', background: actif ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
-                {(cpt && svcVise === svc) ? cpt.reste + ' s' : lbl}
+              <button key={svc} onClick={() => agir(svc)} aria-label={lbl} aria-pressed={actif} className="o-armchip"
+                style={{ position: 'relative', flex: 1, padding: sans ? '10px 4px' : '6px 4px', borderRadius: 10, border: 'none', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: actif ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
+                {/* L'icone du mode, et le mot — qui s'efface au telephone
+                  * (retour user du 16/09 : « on ne les voit pas bien »). */}
+                <Fi i={ICONES_ARMEMENT[svc] || 'shield'} size={13} />
+                {(cpt && svcVise === svc) ? <span>{cpt.reste + ' s'}</span> : <span className="o-armchip-txt">{lbl}</span>}
                 {/* Le tour se referme au rythme du décompte : à zéro, le mode
                   * visé est cerné — l'alarme prend. */}
                 {cpt && svcVise === svc && <ArmAnneau pct={100 - (cpt.reste / cpt.total) * 100} col={col} />}
@@ -13061,7 +12897,7 @@ export default function App() {
     energie: [...enKeys(), cfg.energy.consoNow, cfg.energy.solarOutput],
     aspirateur: vacKeys, croquettes: croqKeys(), medias: medKeys(),
     objets: [...vacKeys, 'lawn_mower.', ...mowerKeys(), ...croqKeys(), ...medKeys(), ...plantKeys()],
-    securite: [...secBaseKeys(), 'camera.', 'siren.', ...secKeys, ...(cfg.cams || []).map(c => c.haid)],
+    securite: [...secBaseKeys(), 'camera.', 'siren.', 'switch.', ...secKeys, ...(cfg.cams || []).map(c => c.haid)],
     systeme: [...sysKeys(), ...cfgKeys('system')],
     parametres: ['automation.', 'update.'], // clés-préfixes : automations + mises à jour (onglets admin)
   };

@@ -67,7 +67,7 @@ test('aucun compteur de la bannière ne s’affiche à zéro', () => {
     ['ouvrants', 'ouvStat.ouverts > 0'],
     ['lumières', 'a.lightsOn > 0'],
     ['médias', 'actifsStat.medias > 0'],
-    ['appareils', 'actifsStat.appareils > 0'],
+    ['en ce moment', 'nEnCours > 0'],
   ]) {
     assert.ok(b.includes(garde), `les ${quoi} s’affichent sans condition (${garde} attendu)`);
   }

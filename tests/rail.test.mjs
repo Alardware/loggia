@@ -42,27 +42,5 @@ test('les domaines commandés depuis le rail sont surveillés', () => {
     assert.ok(keys.includes(`'${dom}'`), `${dom} absent de GLOBAL_KEYS`);
   }
 });
-
-test('la glissière de la serrure demande le geste entier', () => {
-  // Une porte d'entrée ne s'ouvre pas d'un doigt qui dérape : le seuil existe,
-  // et il est haut. S'il tombait à zéro, un simple clic ouvrirait la maison.
-  const i = src.indexOf('function RailSerrure(');
-  assert.notEqual(i, -1, 'RailSerrure introuvable');
-  const corps = src.slice(i, src.indexOf('\nfunction ', i + 10));
-  const seuil = corps.match(/v\s*>=\s*(0\.\d+)/);
-  assert.ok(seuil, 'le seuil de validation a disparu');
-  assert.ok(parseFloat(seuil[1]) >= 0.8, `seuil trop bas : ${seuil[1]}`);
-  // Et le geste doit être continu : sans capture du pointeur, sortir de la
-  // piste en glissant abandonne le geste au milieu.
-  assert.ok(corps.includes('setPointerCapture'), 'le pointeur n’est pas capturé');
-});
-
-test('la serrure de l’entrée est préférée aux autres', () => {
-  const i = src.indexOf('function serrureRailId(');
-  assert.notEqual(i, -1, 'serrureRailId introuvable');
-  const corps = src.slice(i, src.indexOf('\nfunction ', i + 10));
-  // Le nom tranche quand une maison a plusieurs serrures ; sans ce filtre, le
-  // rail proposerait au hasard celle du garage ou du portail.
-  assert.match(corps, /porte/, 'le nom de l’entrée n’est plus reconnu');
-  assert.match(corps, /friendly_name/, 'seul l’id est lu, pas le nom affiché');
-});
+// La glissiere de la serrure et son choix d'entree ont quitte l'Accueil avec
+// le grand panneau (ADR 0035) : leurs tests avec.
