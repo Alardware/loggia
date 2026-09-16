@@ -34,6 +34,7 @@ import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
+import { comptesSecurite, tuilesSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS, ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, actionVide, scenarioVide, versEnregistrement } from './scenarios.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
@@ -6155,11 +6156,39 @@ function OngletsAccueil({ maison, moment, edit = false }) {
   );
 }
 
+/* « A SURVEILLER » (ADR 0028) : la carte qui n'existe que quand quelque
+ * chose le merite. Une ligne par point, du plus grave au moins grave, chacune
+ * vers la vue qui permet d'agir ; six au plus, puis « n autres ». Le lavis
+ * et l'icone prennent la couleur du pire point. */
+function CarteAttention({ points, onNav = null }) {
+  const niveau = niveauMax(points);
+  const { col, rgb } = couleurNiveau(niveau);
+  const visibles = points.slice(0, 6);
+  const reste = points.length - visibles.length;
+  return (
+    <div style={{ background: `linear-gradient(180deg, rgba(${rgb},.10), transparent 60%), var(--o-surfA)`, borderRadius: 'var(--o-radius,18px)', padding: '13px 15px', boxShadow: 'var(--o-shadow)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={RM_ICO(`rgba(${rgb},.16)`, col)}><Fi i={niveau === 'danger' ? 'triangle-warning' : 'exclamation'} size={17} /></span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>{tr('À surveiller')}</div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: col }}>{resumeAttention(points)}</div>
+        </div>
+      </div>
+      <div style={{ marginTop: 6 }}>
+        {visibles.map(p => { const c = couleurNiveau(p.niveau); return (
+          <LigneMoment key={p.cle} icone={p.icone} rgb={c.rgb} nom={p.titre} sous={p.sous} onOpen={p.vue && onNav ? () => onNav(p.vue) : null} />
+        ); })}
+        {reste > 0 && <div style={{ paddingTop: 8, fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('{n} autres', { n: reste })}</div>}
+      </div>
+    </div>
+  );
+}
+
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
-const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];
+const ACC_MAIN = ['attention', 'securite', 'favoris', 'scenes', 'pieces', 'cameras'];
 const ACC_RAIL = ['moment', 'rappels', 'calendrier', 'agenda'];
-const ACC_NOMS = () => ({ securite: tr('Sécurité'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), calendrier: tr('Calendrier'), agenda: tr('Agenda') });
+const ACC_NOMS = () => ({ attention: tr('À surveiller'), securite: tr('Sécurité'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), calendrier: tr('Calendrier'), agenda: tr('Agenda') });
 /* Les identifiants d'un accueil enregistre avant le 15/09 : la glissiere du
  * heros a disparu (son contenu vit dans « En ce moment »), « En cours » est
  * devenu « En ce moment ». Un identifiant inconnu est simplement ignore. */
@@ -6270,7 +6299,7 @@ function poserFantome(el, x0, y0) {
   };
 }
 
-function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onNav = null }) {
+function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onNav = null }) {
   const [override, setOverride] = useState(null);
   const agenda = useAgenda(accueil && accueil.hass);
   /* ── L'accueil se compose : ordre et visibilité des sections ───────────────
@@ -6437,8 +6466,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
     const base = zone === 'main' ? ACC_MAIN : ACC_RAIL;
     const sauve = (grille[zone] || []).map(s => ACC_RENOMME[s] || s).filter(s => base.indexOf(s) >= 0);
     const manquants = base.filter(s => sauve.indexOf(s) < 0);
-    // Un accueil enregistre avant la carte Securite la recoit en tete, pas en queue.
-    if (zone === 'main' && sauve.length && manquants.indexOf('securite') >= 0) return ['securite', ...sauve, ...manquants.filter(s => s !== 'securite')];
+    // Un accueil enregistre avant « A surveiller » (v3.29) ou avant la carte
+    // Securite (v3.24) les recoit en tete, dans cet ordre, pas en queue.
+    if (zone === 'main' && sauve.length) {
+      const tete = ['attention', 'securite'].filter(s => manquants.indexOf(s) >= 0);
+      if (tete.length) return [...tete, ...sauve, ...manquants.filter(s => tete.indexOf(s) < 0)];
+    }
     return [...sauve, ...manquants];
   };
   const [secDrag, setSecDrag] = useState(null); // { zone, id, ordre }
@@ -6691,6 +6724,25 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
   // ── Layout PC (≥1180) : rail « En cours / Rappels » accolé à la zone Pièces+Caméras ──
   const wideXL = useWide(1440); // tablette paysage (1180-1439) : rail plus étroit, cartes pièces prioritaires
   const dashHass = a && a.hass;
+  /* A SURVEILLER (ADR 0028) : ce qui merite l'attention, en tete de l'accueil
+   * — et rien du tout quand tout va bien. Les etats de la maison, les cameras,
+   * le CO2 des pieces, le diagnostic (`sante`, recalcule par App), plus deux
+   * lectures du serveur toutes les 30 s : les veilles (piles, CO2) et les
+   * fenetres (chauffage coupe). Sans serveur, la carte s'en tient aux etats. */
+  const veillesEtat = useEtatServeur(dashHass, 'loggia/veilles/etat', 30000, '').etat;
+  const fenetresEtat = useEtatServeur(dashHass, 'loggia/fenetres/etat', 30000, '').etat;
+  const etatsAcc = (dashHass && dashHass.states) || {};
+  const camsInfo = (a && a.cams && a.cams.length) ? a.cams.map(c => ({ nom: c.name, online: c.online })) : [];
+  const comptesSec = comptesSecurite(etatsAcc, camsInfo);
+  const points = pointsAttention({
+    S: etatsAcc, cams: camsInfo,
+    // `haid` : le capteur CO2 de la piece, pour qu'une veille sur ce meme
+    // capteur ne redise pas le point de la piece.
+    pieces: (a && a.rooms) ? a.rooms.map(r => ({ nom: r.name, co2: r.co2, haid: r.co2Id || null })) : [],
+    sante, veilles: veillesEtat, fenetres: fenetresEtat,
+    plantes: plantsCfg().map(p => p.base).filter(Boolean),
+  });
+  const couleurAcc = points.length ? couleurNiveau(niveauMax(points)).col : 'var(--o-ok)';
   // Le panneau d'alarme du rail : celui de la configuration d'abord.
   const alarmRailId = (() => {
     const S = (dashHass && dashHass.states) || null;
@@ -6984,7 +7036,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
                 * d'elle — un flex ne coupe pas un item, il le renvoie a la
                 * ligne. La pastille s'aligne donc sur la PREMIERE ligne, et le
                 * texte garde sa colonne. */}
-              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}><span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: faits.alerte ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: faits.alerte ? '0 0 8px var(--o-bad)' : '0 0 8px var(--o-ok)', animation: 'pulse 2.4s infinite' }} /><span style={{ flex: 1, minWidth: 0 }}>{faits.txt.join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span></span>
+              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}><span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: 'pulse 2.4s infinite' }} /><span style={{ flex: 1, minWidth: 0 }}>{[points.length ? resumeAttention(points) : tr('Tout va bien'), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span></span>
           </div>
           {(() => {
             /* Une metrique a zero ne dit rien : « 0 / 4 ouvrants ouverts »
@@ -7155,20 +7207,45 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
           const alarmeMots = { disarmed: tr('Désarmée'), armed_home: tr('Maison'), armed_away: tr('Absent'), armed_night: tr('Nuit'), armed_vacation: tr('Vacances'), triggered: tr('ALERTE'), arming: tr('Activation…'), pending: tr('Activation…') };
           const alarmeCol = alarmeEtat === 'triggered' ? 'var(--o-bad)' : (alarmeEtat && alarmeEtat !== 'disarmed') ? 'var(--o-warn)' : 'var(--o-ok)';
           const alarmeRgb = alarmeEtat === 'triggered' ? 'var(--o-bad-rgb)' : (alarmeEtat && alarmeEtat !== 'disarmed') ? 'var(--o-warn-rgb)' : 'var(--o-ok-rgb)';
-          const ouvrantsRow = ouvStat.total > 0 ? railRow('ouv',
-            ouvStat.ouverts > 1 ? tr('{n} ouvrants ouverts sur {m}', { n: ouvStat.ouverts, m: ouvStat.total }) : ouvStat.ouverts === 1 ? tr('{n} ouvrant ouvert sur {m}', { n: 1, m: ouvStat.total }) : tr('Tout est fermé'),
-            tr('Portes et fenêtres'), ouvStat.ouverts > 0 ? tr('Ouvrir') : '', ouvStat.ouverts > 0 ? 'var(--o-warn)' : 'var(--o-ok)', 'securite') : null;
-          const carteSecurite = (alarmRailId || serrureId || ouvrantsRow) ? (
+          /* La ligne d'etat (ADR 0028) : portes, fenetres, mouvement, cameras —
+            * seulement les familles qui ont des capteurs, chacune vers la vue
+            * Securite. Elle remplace la ligne « Tout est ferme » : memes
+            * donnees, lues en une seconde. */
+          const tuilesSec = tuilesSecurite(comptesSec);
+          const ouvertsSec = (comptesSec.portes ? comptesSec.portes.ouverts : 0) + (comptesSec.fenetres ? comptesSec.fenetres.ouverts : 0);
+          const sousSecurite = comptesSec.ok ? tr('Tout est sécurisé')
+            : ouvertsSec > 1 ? tr('{n} ouvrants ouverts', { n: ouvertsSec }) : ouvertsSec === 1 ? tr('{n} ouvrant ouvert', { n: 1 }) : tr('Caméra hors ligne');
+          const carteSecurite = (alarmRailId || serrureId || tuilesSec.length) ? (
             <div style={{ background: 'var(--o-surfA)', borderRadius: 'var(--o-radius,18px)', padding: '13px 15px', boxShadow: 'var(--o-shadow)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={RM_ICO('rgba(' + alarmeRgb + ',.16)', alarmeCol)}><Fi i={(alarmeEtat && alarmeEtat !== 'disarmed') ? 'shield-check' : 'shield'} size={17} /></span>
-                <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {alarmRailId ? tr('Alarme') + ' · ' + (alarmeMots[alarmeEtat] || alarmeEtat || '—') : tr('Sécurité')}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr('Sécurité')}</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: comptesSec.ok ? 'var(--o-ok)' : 'var(--o-warn)' }}>
+                    {alarmRailId ? tr('Alarme') + ' ' + String(alarmeMots[alarmeEtat] || alarmeEtat || '—').toLowerCase() + ' · ' : ''}{sousSecurite}
+                  </div>
                 </div>
               </div>
+              {tuilesSec.length > 0 && (
+                <div className="grid-sec-etat" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + tuilesSec.length + ', minmax(0, 1fr))', gap: 8, marginTop: 10 }}>
+                  {tuilesSec.map(t => {
+                    const col = t.alerte ? 'var(--o-warn)' : t.actif ? 'var(--o-accent-soft)' : 'var(--o-text)';
+                    const fond = t.alerte ? 'rgba(var(--o-warn-rgb),.16)' : t.actif ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)';
+                    return (
+                      <button key={t.cle} type="button" onClick={() => onNav && onNav('securite')} aria-label={t.nom + ' · ' + t.valeur + ' ' + t.libelle}
+                        style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text)', textAlign: 'left', minWidth: 0 }}>
+                        <span style={{ ...RM_ICO(fond, col), width: 30, height: 30, borderRadius: 10 }}><Fi i={t.icone} size={14} /></span>
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nom}</span>
+                          <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: col, whiteSpace: 'nowrap' }}>{t.valeur} <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text2)' }}>{t.libelle}</span></span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               {alarmRailId && <RailArm id={alarmRailId} hass={dashHass} />}
               {serrureId && <RailSerrure id={serrureId} hass={dashHass} />}
-              {ouvrantsRow}
             </div>
           ) : null;
           /* EN CE MOMENT (maquette du 15/09) : ce qui se passe, une ligne par
@@ -7248,6 +7325,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             // Les favoris s'éditent EUX-MÊMES (leurs cartes ont leur barre
             // d'outils) : la section reste donc vivante en mode édition.
             favoris: <FavorisAccueil hass={dashHass} edit={editMode} />,
+            // « A surveiller » : rien quand tout va bien — pas meme en edition.
+            attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,
             securite: carteSecurite,
             scenes: <ScenariosAccueil hass={dashHass} edit={editMode} onNav={onNav} />,
             pieces: <>{piecesHeader}{piecesGrid}</>,
@@ -10442,13 +10521,16 @@ function CvHistory({ id, hass, demoPoints = null }) {
  * Elles lisent la maison entière : découverte par device_class ou
  * configuration existante — zéro YAML, sources injectables pour la biblio. */
 const OUVRANT_DCS = ['door', 'window', 'garage_door', 'opening', 'gate'];
-/* Les entites que la BANNIERE compte, une par une plutot que par domaine.
+/* Les entites que la BANNIERE et la carte Securite comptent, une par une
+ * plutot que par domaine.
  *
- * Surveiller `binary_sensor.` en entier reveillerait tout l'accueil a chaque
- * detection de mouvement, alors que seuls les ouvrants y sont comptes. Sans
- * cette liste, a l'inverse, la banniere lit des etats que rien ne la fait
- * relire : elle garde une fenetre ouverte a l'ecran apres sa fermeture, et
- * cache un media qui vient de demarrer.
+ * Surveiller `binary_sensor.` en entier reveillerait l'accueil pour un
+ * capteur de vibration ou une pile ; on ne prend que ce qui se lit a
+ * l'ecran : les ouvrants, le mouvement (la ligne d'etat de Securite, v3.29),
+ * la surete (« A surveiller »), plus les cameras et les panneaux d'alarme.
+ * Sans cette liste, a l'inverse, la banniere lit des etats que rien ne la
+ * fait relire : elle garde une fenetre ouverte a l'ecran apres sa fermeture,
+ * et cache un media qui vient de demarrer.
  */
 const bannerKeys = () => {
   const S = (getHass() || {}).states || {};
@@ -10456,8 +10538,10 @@ const bannerKeys = () => {
   for (const id in S) {
     const p = id.indexOf('.');
     const dom = p > 0 ? id.slice(0, p) : '';
-    if (dom === 'media_player' || APPAREIL_ACTIF[dom]) { out.push(id); continue; }
-    if (dom === 'binary_sensor' && OUVRANT_DCS.indexOf((S[id].attributes || {}).device_class) >= 0) out.push(id);
+    if (dom === 'media_player' || dom === 'camera' || dom === 'alarm_control_panel' || APPAREIL_ACTIF[dom]) { out.push(id); continue; }
+    if (dom !== 'binary_sensor') continue;
+    const dc = (S[id].attributes || {}).device_class;
+    if (OUVRANT_DCS.indexOf(dc) >= 0 || CLASSES_MOUVEMENT.indexOf(dc) >= 0 || CLASSES_SURETE.indexOf(dc) >= 0) out.push(id);
   }
   return out;
 };
@@ -13180,6 +13264,16 @@ export default function App() {
 
   // Premier lancement : montre une seule fois, et seulement quand la decouverte
   // a repondu — sinon il annoncerait « 0 entite trouvee ».
+  /* Le diagnostic (health.js) en DIRECT pour la carte « A surveiller » :
+   * celui de la decouverte est un instantane du demarrage — une passerelle
+   * revenue en ligne y resterait hors service. Recalcule a chaque sondage,
+   * mais sur l'Accueil seulement. Place ici, apres `view`, `hass` et
+   * `discovery` : plus haut, le memo lisait une constante avant sa
+   * declaration — ecran d'erreur, vu en demo. */
+  const santeAccueil = useMemo(
+    () => (view === 'accueil' && discovery.devices && discovery.index) ? healthReport(discovery.devices, { states: (hass && hass.states) || {}, meta: discovery.index.entityMeta }) : null,
+    [view, discovery.devices, discovery.index, hass]
+  );
   const onboarded = serverCfg.loggia_onboarded != null || readLS('loggia_onboarded', null) != null;
   const showOnboarding = !onboarded && loggiaRuntime.ready;
   const closeOnboarding = (patch) => saveCfg({ ...(patch || {}), loggia_onboarded: CONFIG_VERSION });
@@ -13230,7 +13324,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}

@@ -28,7 +28,7 @@ const s = (state, attributes = {}) => ({ state: String(state), attributes, last_
 const PIECES = [
   ['salon', 'Salon', 21.4, 47, 612],
   ['cuisine', 'Cuisine', 22.8, 51, null],
-  ['chambre', 'Chambre', 19.6, 49, 704],
+  ['chambre', 'Chambre', 19.6, 49, 1280],  // charge : la carte « A surveiller » a de quoi montrer
   ['bureau', 'Bureau', 20.9, 45, 538],
   ['entree', 'Entrée', 20.1, 46, null],
   ['salle_de_bain', 'Salle de bain', 23.2, 58, null],
@@ -150,12 +150,12 @@ function configDemo() {
     // `loggia_cameras` est la cle que lit l'agregat — `loggia_entities.cameras`
     // sert ailleurs. Sans `haid`, la tuile prend son rendu de repli : degrade,
     // halo et badge « Direct », au lieu d'attendre un flux qui n'existe pas ici.
-    loggia_cameras: [{ name: 'Jardin', online: true }, { name: 'Entrée', haid: 'camera.entree', online: true }],
+    loggia_cameras: [{ name: 'Jardin', online: false }, { name: 'Entrée', haid: 'camera.entree', online: true }],
     loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
     loggia_entities: {
       weather: ['weather.maison', 'sun.sun'],
       alarm: 'alarm_control_panel.maison',
-      cameras: [{ name: 'Jardin', online: true }, { name: 'Entrée', haid: 'camera.entree', online: true }],
+      cameras: [{ name: 'Jardin', online: false }, { name: 'Entrée', haid: 'camera.entree', online: true }],
       people: [{ name: 'Camille', haid: 'person.camille' }, { name: 'Alex', haid: 'person.alex' }],
       energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
     },
