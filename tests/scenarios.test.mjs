@@ -113,6 +113,49 @@ test('ce que la fiche envoie : le scenario sans ce qu’il a calcule', () => {
   assert.equal(scenarioVide().icone, 'sparkles');
 });
 
+// ── Ce qu'App.jsx en fait (assertions sur les sources) ──────────────────────
+const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const NL = String.fromCharCode(10);
+const bloc = (debut, fin) => { const d = app.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = app.indexOf(fin, d + 1); return app.slice(d, f < 0 ? undefined : f); };
+
+test('l’Accueil : la rangee des scenarios, et « Gerer » cliquable malgre le contenu inerte de l’edition', () => {
+  const a = bloc('function ScenariosAccueil(', NL + '}');
+  assert.ok(a.includes('const liste = scenariosAccueil(sc.etat && sc.etat.scenarios);'), 'seuls les scenarios cochés « Sur l’Accueil »');
+  assert.ok(a.includes('<CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />'), 'des cartes compactes');
+  // En edition, `Sec` pose pointer-events none sur le contenu d'une section :
+  // le bouton doit se remettre en auto, sinon le clic tombe sur la section
+  // et part en glisser (bug vu sur HA le 16/09).
+  assert.ok(a.includes("<button data-drag-ui=\"1\" onClick={() => onNav('scenes')} style={{ pointerEvents: 'auto',"), '« Gérer les scénarios » reste cliquable en édition');
+  assert.ok(app.includes("scenes: <ScenariosAccueil hass={dashHass} edit={editMode} onNav={onNav} />,"), 'la section `scenes` de l’Accueil');
+  assert.ok(!app.includes('quickScenes') && !app.includes('QuickScenes') && !app.includes('ScenesView'), 'plus rien des scènes rapides');
+});
+
+test('la carte suit le gabarit : disque teinte en haut a gauche, dernier lancement a droite, titre sous l’icone, sans bordure', () => {
+  const c = bloc('function CarteScenario(', NL + '}');
+  assert.ok(c.includes("borderRadius: '50%'") && c.includes('background: `rgba(${t.rgb},.22)`') && c.includes('<Ico name={s.icone || \'sparkles\'}'), 'le disque teinté porte l’icône');
+  assert.ok(c.includes("{!sansDernier && <span") && c.includes("libelleDernier(s.dernier, Date.now(), locale())"), 'le repère haut-droit = dernier lancement, effacé en édition');
+  assert.ok(c.includes("height: compacte ? 88 : 184") && c.includes("border: 'none'"), 'deux tailles, sans bordure');
+  assert.ok(app.includes("const PUCE_SCN = { fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 9,"), 'des puces à l’arrondi 9');
+});
+
+test('la vue Scenarios : cartes standard, edition avec fleches et crayon, la bibliotheque Hue dessous', () => {
+  const v = bloc('function ScenariosView(', NL + '}');
+  assert.ok(v.includes("sansDernier={edit}") && v.includes("position: 'absolute', right: 12, top: 12"), 'les outils prennent la place du repère');
+  assert.ok(v.includes("<ScenesContent hass={hass} />"), 'les ambiances Hue restent, dessous');
+  assert.ok(v.includes("sc.enregistrer({ ordre: ids })"), 'l’ordre se range par les flèches');
+  assert.ok(app.includes("view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} />"), 'la route `scenes` mène à la vue');
+  assert.ok(app.includes("<div style={sectionTitle}>{tr('Ambiances lumineuses')}</div>"), 'la bibliothèque Hue devient une section');
+  const f = bloc('function FicheScenario(', NL + '}');
+  assert.ok(f.includes("{ reinitialiser: scenario.id }") && f.includes("{ supprimer: scenario.id }") && f.includes("{ enregistrer: doc }"), 'les trois gestes de la fiche');
+});
+
+test('la veille et la recherche passent aux scenarios ; les liens sont sondes avec l’Accueil', () => {
+  assert.ok(app.includes("{scenariosAccueil(scenarios()).slice(0, 4).map(s => ("), 'la veille : quatre scénarios de l’Accueil');
+  assert.ok(app.includes("scenarios().forEach(s => { const nom = nomScenario(s); if (!match(nom)) return; results.push({ group: tr('Scénarios'),"), 'la recherche ⌘K');
+  assert.ok(app.includes("const qsKeys = () => scenarios().map(s => s.lien).filter(Boolean);"), 'les scènes et scripts liés sont sondés');
+  assert.ok(app.includes("{ label: 'Scénarios', svg: <Fi i=\"sparkles\"") && app.includes("'Scénarios': 'scenes',"), '« Scènes » est devenue « Scénarios », l’identifiant reste');
+});
+
 test('les quarante icones existent dans la police regular, par pages de dix', () => {
   assert.equal(ICONES_SCENARIO.length, 40);
   assert.equal(new Set(ICONES_SCENARIO).size, 40, 'sans doublon');

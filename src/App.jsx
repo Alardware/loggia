@@ -4980,7 +4980,10 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={sectionTitle}>{tr('Scénarios')}</div>
         {edit && onNav
-          ? <button onClick={() => onNav('scenes')} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{tr('Gérer les scénarios')}</button>
+          /* `pointerEvents: auto` : en édition, `Sec` rend le contenu de la
+           * section inerte (pointer-events none) pour qu'elle se saisisse ;
+           * ce bouton, lui, doit rester cliquable (bug vu le 16/09 sur HA). */
+          ? <button data-drag-ui="1" onClick={() => onNav('scenes')} style={{ pointerEvents: 'auto', padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{tr('Gérer les scénarios')}</button>
           : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{sc.err && !liste.length ? sc.err : tr('{n} scénarios', { n: liste.length })}</span>}
       </div>
       {liste.length > 0 && (
