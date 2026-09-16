@@ -67,7 +67,7 @@ test('l’accueil surveille ce que la carte Securite et « A surveiller » lisen
   const k = bloc('const bannerKeys = () => {', NL + '};');
   assert.ok(k.includes("dom === 'camera' || dom === 'alarm_control_panel'"), 'cameras et panneaux');
   assert.ok(k.includes('OUVRANT_DCS.indexOf(dc) >= 0 || CLASSES_MOUVEMENT.indexOf(dc) >= 0 || CLASSES_SURETE.indexOf(dc) >= 0'), 'ouvrants, mouvement, surete — par device_class');
-  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';"), 'une seule source pour les classes');
+  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';"), 'une seule source pour les classes');
 });
 
 test('la demo a de quoi montrer la carte, et les mots ont leur traduction', () => {

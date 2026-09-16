@@ -2014,4 +2014,15 @@ export default {
   'Rien de prévu ces 7 jours': 'Nothing planned these 7 days',
   // La vue Securite parle comme l'Accueil (v3.34.0)
   'Ouvrir la vue Sécurité': 'Open the Security view',
+  // Trois cartes a la place du bandeau (v3.35.0)
+  'Sirène active': 'Siren active',
+  'Sirène au repos': 'Siren idle',
+  'Test sonore (3 s)': 'Sound test (3 s)',
+  'Test en cours…': 'Testing…',
+  'Sonneries': 'Tones',
+  'Déclenchée par {noms}': 'Triggered by {noms}',
+  '{n} ouvrants ouverts : {noms}': '{n} openings open: {noms}',
+  '1 ouvrant ouvert : {noms}': '1 opening open: {noms}',
+  '{n} capteurs contournés': '{n} sensors bypassed',
+  '1 capteur contourné': '1 sensor bypassed',
 };

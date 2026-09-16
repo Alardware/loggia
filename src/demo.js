@@ -54,6 +54,9 @@ function etatsInitiaux() {
      * bit — on en sort toujours. */
     'alarm_control_panel.maison': s('disarmed', { friendly_name: 'Alarme', supported_features: 39 }),
     'lock.porte_entree': s('locked', { friendly_name: 'Porte d’entrée' }),
+    // La sirene de la vue Securite (ADR 0034) : deux sonneries, pas de duree
+    // geree — le test sonore l'eteint lui-meme apres trois secondes.
+    'siren.interieure': s('off', { friendly_name: 'Sirène intérieure', supported_features: 7, available_tones: ['alarme', 'carillon'] }),
     // La camera de l'entree et ses reglages : cinq interrupteurs du meme appareil.
     'camera.entree': s('idle', { friendly_name: 'Caméra entrée' }),
     'switch.camera_entree_detection_mouvement': s('on', { friendly_name: 'Caméra entrée Détection de mouvement' }),
@@ -488,7 +491,7 @@ function indexDemo(states) {
     chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'cover.chambre',
               'binary_sensor.fenetre_chambre', 'switch.radiateur_chambre'],
     bureau: ['light.bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite'],
-    entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree',
+    entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree', 'siren.interieure',
              'camera.entree', 'switch.camera_entree_detection_mouvement', 'switch.camera_entree_suivi', 'switch.camera_entree_pleurs',
              'switch.camera_entree_prive', 'switch.camera_entree_voyant', 'binary_sensor.camera_entree_mouvement', 'binary_sensor.camera_entree_personne'],
     sdb: ['light.sdb', 'sensor.sdb_temperature'],
@@ -754,7 +757,8 @@ export function installerDemo() {
    * le chemin verifie du dashboard etait donc inerte ici, la ou on l'essaye. */
   const callService = (domaine, service, data, target) => {
     const id = (data && data.entity_id) || (target && target.entity_id);
-    if (domaine === 'homeassistant' || domaine === 'light' || domaine === 'switch' || domaine === 'fan') {
+    // La sirene aussi (ADR 0034) : sa bascule et son test sonore passent par turn_on / turn_off.
+    if (domaine === 'homeassistant' || domaine === 'light' || domaine === 'switch' || domaine === 'fan' || domaine === 'siren') {
       if (service === 'turn_on') toucher(id, 'on');
       else if (service === 'turn_off') toucher(id, 'off');
       else if (service === 'toggle') toucher(id, states[id] && states[id].state === 'on' ? 'off' : 'on');

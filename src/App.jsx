@@ -34,7 +34,7 @@ import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
-import { comptesSecurite, tuilesSecurite, resumeSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
+import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
 import { evenementCamera, detecteursDe, reduireDerniers, depuis } from './evenement.js';
 import { cleJour, plageSemaine, joursAgenda, comptesParJour, evenementsAVenir, evenementsDuJour } from './agenda.js';
@@ -9376,42 +9376,15 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   };
   // Même source que l'accueil : une personne ne peut pas exister ici et pas là.
   const secPeople = peopleList().filter(p => p && p.haid);
-  // ── Alarme : état réel + optimiste ──
+  // ── Alarme : l'état du panneau, tel quel. Les gestes (armer, code,
+  // décompte) vivent dans la carte Alarme, la même que le catalogue (ADR 0034).
   const alarmRaw = (alarmId && S[alarmId]) ? S[alarmId].state : null;
-  const rawMode = alarmRaw == null ? 'unknown'
+  const alarm = alarmRaw == null ? 'unknown'
     : (alarmRaw === 'armed_away' || alarmRaw === 'armed_vacation') ? 'away'
       : alarmRaw === 'armed_home' ? 'home'
         : alarmRaw === 'armed_night' ? 'night'
           : alarmRaw === 'triggered' ? 'triggered' : 'off';
-  const [alarm, setAlarm] = useState(rawMode);
-  useEffect(() => { setAlarm(rawMode); }, [rawMode]);
   const arming = alarmRaw === 'arming' || alarmRaw === 'pending';
-  // Optimiste avec filet : si HA n'a pas confirmé sous 6s (appel rejeté, code requis…), on revient à l'état réel.
-  const alarmRevertRef = useRef(null);
-  useEffect(() => () => clearTimeout(alarmRevertRef.current), []);
-  /* Le code du panneau, demandé AVANT d'agir : sans lui, Home Assistant
-   * refusait la commande en silence et l'écran revenait en arrière au bout de
-   * six secondes, sans un mot (retour 01/09). */
-  const [demandeCode, setDemandeCode] = useState(null); // { svc, mode }
-  const [codeAlarme, setCodeAlarme] = useState('');
-  const armer = (svc) => {
-    const mode = { alarm_disarm: 'off', alarm_arm_away: 'away', alarm_arm_home: 'home', alarm_arm_night: 'night', alarm_arm_vacation: 'away' }[svc] || 'away';
-    const aAl = (alarmId && S[alarmId] && S[alarmId].attributes) || {};
-    const faut = svc === 'alarm_disarm' ? !!aAl.code_format : (!!aAl.code_format && aAl.code_arm_required !== false);
-    if (faut) { setDemandeCode({ svc, mode }); setCodeAlarme(''); return; }
-    callAlarm(svc, mode);
-  };
-  const validerCode = () => {
-    if (!demandeCode || !codeAlarme) return;
-    callAlarm(demandeCode.svc, demandeCode.mode, codeAlarme);
-    setDemandeCode(null); setCodeAlarme('');
-  };
-  const callAlarm = (svc, mode, code) => {
-    setAlarm(mode);
-    if (alarmId) commanderService(hass, alarmId, 'alarm_control_panel', svc, { entity_id: alarmId, ...(code ? { code } : {}) });
-    clearTimeout(alarmRevertRef.current);
-    alarmRevertRef.current = setTimeout(() => { const cur = getHass(); const st = (cur && cur.states && alarmId && cur.states[alarmId]) ? cur.states[alarmId].state : null; const m = (st === 'armed_away' || st === 'armed_vacation') ? 'away' : st === 'armed_home' ? 'home' : st === 'armed_night' ? 'night' : st === 'triggered' ? 'triggered' : (st === 'arming' || st === 'pending') ? mode : 'off'; setAlarm(m); }, 6000);
-  };
   const triggered = alarm === 'triggered';
 
   // ── Caméras : live + détections ──
@@ -9442,28 +9415,17 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
 
   const cs = a => `rgb(${a.join(',')})`;
   const ca = (a, al) => `rgba(${a.join(',')},${al})`;
-  // Bouton d'armement compact (ligne dense)
-  // `position`/`overflow` : le tour de progression se dessine dedans, et son
-  // trait déborde de moitié pour rester collé au bord.
-  /* Largeur EGALE pour tous : elle suivait le libelle, si bien que « Nuit »
-   * etait deux fois plus etroit que « Desarme » — et que le bouton retrecissait
-   * en cours d'armement, quand le decompte remplace le mot (retour 03/09). */
-  const armBtn = (active, rgb) => ({ position: 'relative', overflow: 'hidden', minWidth: 96, textAlign: 'center', padding: '7px 13px', borderRadius: 10, border: '1px solid ' + (active ? ca(rgb, .5) : 'var(--o-bd1)'), cursor: 'pointer', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', transition: 'all .2s', background: active ? ca(rgb, .16) : 'var(--o-s2)', color: active ? cs(rgb) : 'var(--o-text1)' });
-  // Bandeau + carte de synthese repliables (patron Atrium)
-  // Bitmask AlarmControlPanelEntityFeature de HA : ARM_HOME=1, ARM_AWAY=2, ARM_NIGHT=4.
-  // On n'affiche « Nuit » que si le panneau la gere — sinon l'appel serait rejete.
-  // (Les modes offerts sont lus par `armChips` : plus de test de bits ici.)
   // Décompte d'armement : le temps qui reste pour sortir, battu à la seconde.
   const cptAlarme = armCompte(alarmId ? S[alarmId] : null);
   useSeconde(!!cptAlarme);
-  // Le bouton à cerner : le mode que le panneau prépare, ou celui qu'on vient
-  // de demander tant qu'il ne l'annonce pas.
-  const svcVise = cptAlarme ? armVise(alarmId ? S[alarmId] : null, alarm) : null;
   const armMot = cptAlarme ? tr('activation dans {n} s', { n: cptAlarme.reste }) : tr('activation en cours');
   const alarmWord = arming ? armMot : triggered ? tr('déclenchée') : alarm === 'unknown' ? tr('état inconnu')
     : alarm === 'away' ? tr('armée · absent') : alarm === 'home' ? tr('armée · présent') : alarm === 'night' ? tr('armée · nuit') : tr('désarmée');
-  const alarmShort = arming ? (cptAlarme ? cptAlarme.reste + ' s' : tr('activation…')) : triggered ? tr('déclenchée') : alarm === 'unknown' ? tr('inconnue')
-    : alarm === 'away' ? tr('absent') : alarm === 'home' ? tr('présent') : alarm === 'night' ? tr('nuit') : tr('prête');
+  /* TROIS CARTES a la place du bandeau (ADR 0034) : l'alarme — la carte
+   * « Alarme (seule) » du catalogue, avec son message —, les sirenes de la
+   * maison, et qui est la. Chacune n'existe que si son entite existe. */
+  const sirenes = Object.keys(S).filter(id => id.indexOf('siren.') === 0 && S[id]);
+  const msgAlarme = messageAlarme(alarmId ? S[alarmId] : null, comptesSecVue, S);
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -9480,51 +9442,13 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
       {/* La ligne d'etat de l'Accueil, tuile par tuile ; chacune defile jusqu'a sa section. */}
       {tuilesSecVue.length > 0 && <div style={{ marginTop: -14 }}><TuilesSecurite tuiles={tuilesSecVue} onTuile={(t) => defiler(t.cle)} /></div>}
 
-      {/* réglages rapides : armement + mode nuit */}
-      <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-        {/* Un seul groupe de MODES, ceux que le panneau offre — « Nuit »
-          * était un interrupteur alors que les états s'excluent, et le groupe
-          * n'affichait alors aucune sélection. Le code est demandé ici quand
-          * le panneau l'exige : il était simplement ignoré (retour 01/09). */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Alarme')} <span style={{ color: 'var(--o-text3)' }}>{alarmShort}</span></span>
-          {demandeCode ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="password" inputMode="numeric" autoFocus value={codeAlarme} onChange={(e) => setCodeAlarme(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') validerCode(); if (e.key === 'Escape') setDemandeCode(null); }}
-                placeholder={tr('Code')} aria-label={tr('Code')}
-                style={{ width: 118, padding: '6px 10px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
-              <button onClick={validerCode} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>{tr('Valider')}</button>
-              <button onClick={() => setDemandeCode(null)} aria-label={tr('Annuler')} style={{ width: 28, height: 28, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer' }}>✕</button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {armChips(alarmId ? (S[alarmId] || {}).attributes || {} : {}, alarmRaw).map(([lbl, svc, actif]) => {
-                const rgb = svc === 'alarm_disarm' ? [52, 211, 153] : svc === 'alarm_arm_away' ? [248, 113, 113] : svc === 'alarm_arm_night' ? [124, 92, 255] : [255, 179, 71];
-                return (
-                  <button key={svc} onClick={() => armer(svc)} aria-pressed={actif} style={armBtn(actif, rgb)}>
-                    {/* Le bouton visé COMPTE : son libellé cède la place aux
-                      * secondes qui restent, et revient une fois l'alarme
-                      * prise (retour 03/09). */}
-                    {(cptAlarme && svcVise === svc) ? cptAlarme.reste + ' s' : lbl}
-                    {/* Le temps qui reste se lit aussi sur le tour du bouton —
-                      * plus de barre à côté (retour 01/09). */}
-                    {cptAlarme && svcVise === svc && <ArmAnneau pct={100 - (cptAlarme.reste / cptAlarme.total) * 100} />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {/* Panneau muet sur le mode qu'il prépare : aucun bouton à cerner,
-            * la barre reste le seul repère. */}
-          {cptAlarme && !svcVise && (
-            <span aria-hidden="true" style={{ width: 74, height: 4, borderRadius: 4, background: 'var(--o-s1)', overflow: 'hidden', flexShrink: 0 }}>
-              <span style={{ display: 'block', height: '100%', width: Math.round((cptAlarme.reste / cptAlarme.total) * 100) + '%', background: 'var(--o-warn2)', transition: 'width 1s linear' }} />
-            </span>
-          )}
+      {(alarmId || sirenes.length > 0 || people.length > 0) && (
+        <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(250px,1fr))', gridAutoRows: 'minmax(184px, auto)', gap: 16, alignItems: 'stretch' }}>
+          {alarmId && <Anim i={0}><div style={{ height: '100%', minHeight: 184 }}><CvAlarm id={alarmId} hass={hass} sans message={msgAlarme} /></div></Anim>}
+          {sirenes.map((id, i) => <Anim key={id} i={1 + i}><div style={{ height: '100%', minHeight: 184 }}><CvSirene id={id} hass={hass} /></div></Anim>)}
+          {people.length > 0 && <Anim i={1 + sirenes.length}><div style={{ height: '100%', minHeight: 184 }}><CvPresence hass={hass} /></div></Anim>}
         </div>
-        <span style={{ flex: 1 }} />
-      </div>
+      )}
 
       {/* « A surveiller », comme sur l'Accueil : seulement quand il y a un
         * point, et seulement ceux de la securite (ADR 0033). Un point qui
@@ -9533,14 +9457,12 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
 
       {/* Les ouvrants UN PAR UN, avec la carte des pieces — la porte ou la
         * fenetre dessinee en fond, que l'utilisateur aime (retour 15/09) —,
-        * les ouverts d'abord ; puis qui est la. Presence seulement si la
-        * maison suit quelqu'un ; ouvrants seulement s'il y en a. */}
-      {(ouvrantsDe(S).length > 0 || people.length > 0) && (
+        * les ouverts d'abord. Seulement s'il y en a. */}
+      {ouvrantsDe(S).length > 0 && (
         <>
-          <div id="sec-ouvrants" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Ouvrants et présence')}</div>
+          <div id="sec-ouvrants" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Ouvrants')}</div>
           <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16, alignItems: 'stretch' }}>
             {[...ouvrantsDe(S)].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).map((o, i) => <Anim key={o.id} i={i}><div style={{ height: 184 }}><RoomGenericCard id={o.id} hass={hass} onOpen={dc.ouvrir} /></div></Anim>)}
-            {people.length > 0 && <Anim i={ouvrantsDe(S).length}><div style={{ height: 184 }}><CvPresence hass={hass} /></div></Anim>}
           </div>
         </>
       )}
@@ -10486,7 +10408,63 @@ function armChips(attrs, etat) {
 /* Alarme : l'état et les gestes que le panneau offre. Le désarmement passe par
  * le service ; si le panneau exige un code, Home Assistant refusera — comme
  * partout. */
-function CvAlarm({ id, hass, sans = false }) {
+/* Sirene (ADR 0034) : la carte de la vue Securite — au gabarit maison, icone
+ * en haut a gauche, bascule a droite, nom SOUS l'icone, puis l'etat. Les
+ * tuiles ne disent que ce que l'entite expose (`available_tones`,
+ * `volume_level`) : ni volume ni delai inventes. « Test sonore » sonne trois
+ * secondes — par `duration` quand la sirene le gere, sinon on l'eteint
+ * nous-memes. */
+const SIRENE_DUREE = 16; // SirenEntityFeature.DURATION
+function CvSirene({ id, hass }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const s = st ? st.state : null;
+  const a = (st && st.attributes) || {};
+  const mort = !st || s === 'unavailable' || s === 'unknown';
+  const on = !mort && s === 'on';
+  const nom = cvName(st, id);
+  const call = (svc, data) => commanderService(hass, id, 'siren', svc, { entity_id: id, ...(data || {}) });
+  const [test, setTest] = useState(false);
+  const tester = () => {
+    if (mort || test) return;
+    setTest(true);
+    if ((+a.supported_features || 0) & SIRENE_DUREE) { call('turn_on', { duration: 3 }); setTimeout(() => setTest(false), 3000); return; }
+    call('turn_on');
+    setTimeout(() => { call('turn_off'); setTest(false); }, 3000);
+  };
+  const col = on ? 'var(--o-bad)' : 'var(--o-text3)';
+  const tuiles = [];
+  if (Array.isArray(a.available_tones) && a.available_tones.length) tuiles.push([tr('Sonneries'), String(a.available_tones.length)]);
+  if (typeof a.volume_level === 'number') tuiles.push([tr('Volume'), Math.round(a.volume_level * 100) + ' %']);
+  return (
+    <div className={'o-piece' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <span style={RM_ICO(on ? 'rgba(var(--o-bad-rgb),.16)' : 'var(--o-s1)', col)}><Fi i="bell-ring" size={16} /></span>
+        {!mort && <RmBascule on={on} nom={nom} onToggle={() => call(on ? 'turn_off' : 'turn_on')} />}
+      </div>
+      <div style={{ marginTop: 10, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div style={RM_NAME}>{nom}</div>
+        <div style={{ ...RM_SUB, color: mort ? 'var(--o-text3)' : col }}>{mort ? tr('Indisponible') : on ? tr('Sirène active') : tr('Sirène au repos')}</div>
+        {tuiles.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + tuiles.length + ', minmax(0, 1fr))', gap: 8, marginTop: 10 }}>
+            {tuiles.map(([l, v]) => (
+              <div key={l} style={{ padding: '8px 10px', borderRadius: 10, background: 'var(--o-s1)' }}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--o-text3)' }}>{l}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, marginTop: 2 }}>{v}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ flex: 1 }} />
+        {!mort && <button type="button" onClick={tester} disabled={test} className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%', opacity: test ? .6 : 1 }}><Fi i="volume" size={12} /> {test ? tr('Test en cours…') : tr('Test sonore (3 s)')}</button>}
+      </div>
+    </div>
+  );
+}
+
+/* `message` (ADR 0034) : ce que la carte a a dire entre son nom et ses
+ * boutons — un ouvrant ouvert a l'armement, un capteur contourne, par quoi
+ * l'alarme s'est declenchee. Rien a dire : rien d'affiche. */
+function CvAlarm({ id, hass, sans = false, message = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const s = st ? st.state : null;
   const aAl = (st && st.attributes) || {};
@@ -10525,6 +10503,12 @@ function CvAlarm({ id, hass, sans = false }) {
       </div>
       <div style={{ marginTop: 8, ...(sans ? { flex: 1, display: 'flex', flexDirection: 'column' } : {}) }}>
         <div style={RM_NAME}>{cvName(st, id)}</div>
+        {message && message.texte && (
+          <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 8, padding: '8px 10px', borderRadius: 10, background: message.niveau === 'danger' ? 'rgba(var(--o-bad-rgb),.12)' : 'rgba(var(--o-warn-rgb),.12)', color: message.niveau === 'danger' ? 'var(--o-bad)' : 'var(--o-warn)', fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>
+            <Fi i="triangle-warning" size={13} style={{ marginTop: 1, flexShrink: 0 }} />
+            <span style={{ minWidth: 0 }}>{message.texte}</span>
+          </div>
+        )}
         {/* Le temps qui reste se lit sur le tour du mode visé (voir plus bas).
           * Panneau muet sur ce qu'il prépare : la barre reste le repère. */}
         {cpt && !svcVise && (
@@ -13077,7 +13061,7 @@ export default function App() {
     energie: [...enKeys(), cfg.energy.consoNow, cfg.energy.solarOutput],
     aspirateur: vacKeys, croquettes: croqKeys(), medias: medKeys(),
     objets: [...vacKeys, 'lawn_mower.', ...mowerKeys(), ...croqKeys(), ...medKeys(), ...plantKeys()],
-    securite: [...secBaseKeys(), 'camera.', ...secKeys, ...(cfg.cams || []).map(c => c.haid)],
+    securite: [...secBaseKeys(), 'camera.', 'siren.', ...secKeys, ...(cfg.cams || []).map(c => c.haid)],
     systeme: [...sysKeys(), ...cfgKeys('system')],
     parametres: ['automation.', 'update.'], // clés-préfixes : automations + mises à jour (onglets admin)
   };

@@ -54,7 +54,7 @@ test('la vue : l’etat en une seconde, A surveiller, un ouvrant par carte illus
   assert.ok(vue.includes('const pointsSec = pointsAttention({ S, cams: camsInfoSec });') && vue.includes("{pointsSec.length > 0 && <CarteAttention points={pointsSec} onNav={(v) => { if (v !== 'securite' && onNav) onNav(v); }} />}"), '« A surveiller » : seulement quand il y a un point, seulement la securite, jamais vers soi-meme');
   assert.ok(vue.includes("{[...ouvrantsDe(S)].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).map((o, i) => <Anim key={o.id} i={i}><div style={{ height: 184 }}><RoomGenericCard id={o.id} hass={hass} onOpen={dc.ouvrir} /></div></Anim>)}"), 'un ouvrant par carte des pieces (la porte dessinee), les ouverts d’abord');
   assert.ok(!vue.includes('<CvOuvrants hass={hass} />'), 'le resume de trois lignes a quitte la vue');
-  assert.ok(vue.includes('{people.length > 0 && <Anim i={ouvrantsDe(S).length}><div style={{ height: 184 }}><CvPresence hass={hass} /></div></Anim>}'), 'la presence reste');
+  assert.ok(vue.includes('<CvPresence hass={hass} />'), 'la presence reste (dans la rangee des trois cartes depuis l’ADR 0034)');
   assert.ok(vue.includes('const dc = useDomainCards(hass, { onNav });') && vue.includes('{dc.sheets}'), 'les fiches s’ouvrent');
   assert.ok(src.includes('function CvOuvrants({ hass }) {'), 'la carte du catalogue existe toujours');
 });

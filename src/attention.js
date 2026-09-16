@@ -142,6 +142,38 @@ export function resumeSecurite(comptes) {
   return ouverts > 1 ? tr('{n} ouvrants ouverts', { n: ouverts }) : ouverts === 1 ? tr('{n} ouvrant ouvert', { n: 1 }) : tr('Caméra hors ligne');
 }
 
+/** Ce que la carte Alarme dit entre son nom et ses boutons — ou rien (ADR 0034).
+ *  - déclenchée : par quel(s) capteur(s), si le panneau le dit (`open_sensors`
+ *    d'Alarmo), sinon « Alarme déclenchée » ;
+ *  - armée ou en cours d'armement avec un ouvrant ouvert : lesquels — d'après
+ *    le panneau, sinon d'après nos comptes — et ce que le panneau contourne
+ *    (`bypassed_sensors`) ;
+ *  - désarmée : rien. Un ouvrant ouvert de jour n'est pas un message.
+ *  `S` sert à nommer les capteurs que le panneau cite par leur identifiant.
+ *  → { niveau: 'danger' | 'warn', texte } | null */
+export function messageAlarme(st, comptes, S) {
+  if (!estObjet(st) || !st.state) return null;
+  const a = attrs(st);
+  const etats = estObjet(S) ? S : {};
+  const nom = (x) => estObjet(x) ? String(x.name || x.entity_id || '') : nomDe(String(x), etats[String(x)]);
+  const noms = (v) => Array.isArray(v) ? v.map(nom).filter(Boolean) : estObjet(v) ? Object.keys(v).map(k => nomDe(k, etats[k])).filter(Boolean) : [];
+  const ouvertsPanneau = noms(a.open_sensors);
+  const contournes = noms(a.bypassed_sensors);
+  const etat = String(st.state);
+  if (etat === 'triggered') {
+    return { niveau: 'danger', texte: ouvertsPanneau.length ? tr('Déclenchée par {noms}', { noms: ouvertsPanneau.join(', ') }) : tr('Alarme déclenchée') };
+  }
+  const armee = etat === 'arming' || etat === 'pending' || etat.indexOf('armed_') === 0;
+  if (!armee) return null;
+  const c = estObjet(comptes) ? comptes : {};
+  const nosOuverts = [].concat((c.portes && c.portes.noms) || [], (c.fenetres && c.fenetres.noms) || []);
+  const ouverts = ouvertsPanneau.length ? ouvertsPanneau : nosOuverts;
+  const parts = [];
+  if (ouverts.length) parts.push(ouverts.length > 1 ? tr('{n} ouvrants ouverts : {noms}', { n: ouverts.length, noms: ouverts.join(', ') }) : tr('1 ouvrant ouvert : {noms}', { noms: ouverts[0] }));
+  if (contournes.length) parts.push(contournes.length > 1 ? tr('{n} capteurs contournés', { n: contournes.length }) : tr('1 capteur contourné'));
+  return parts.length ? { niveau: 'warn', texte: parts.join(' · ') } : null;
+}
+
 /** Les tuiles de la rangée, dans l'ordre de lecture : portes, fenêtres,
  * mouvement, caméras — seulement les familles présentes. `nom` est le titre
  * au-dessus de la valeur ; `alerte` : quelque chose d'ouvert ou d'injoignable ;
