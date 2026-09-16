@@ -2006,4 +2006,10 @@ export default {
   'Quelqu’un': 'Someone',
   'Véhicule': 'Vehicle',
   'Colis': 'Parcel',
+  // Une carte agenda a la place de deux (v3.33.0)
+  '{n} AUJOURD’HUI': '{n} TODAY',
+  '1 AUJOURD’HUI': '1 TODAY',
+  'RIEN AUJOURD’HUI': 'NOTHING TODAY',
+  'Rien ce jour-là': 'Nothing that day',
+  'Rien de prévu ces 7 jours': 'Nothing planned these 7 days',
 };

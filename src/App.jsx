@@ -37,6 +37,7 @@ import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domain
 import { comptesSecurite, tuilesSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
 import { evenementCamera, detecteursDe, reduireDerniers, depuis } from './evenement.js';
+import { cleJour, plageSemaine, joursAgenda, comptesParJour, evenementsAVenir, evenementsDuJour } from './agenda.js';
 import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS, ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, actionVide, scenarioVide, versEnregistrement } from './scenarios.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
@@ -6219,8 +6220,8 @@ function CarteAttention({ points, onNav = null }) {
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
 const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];
-const ACC_RAIL = ['attention', 'moment', 'rappels', 'calendrier', 'agenda'];
-const ACC_NOMS = () => ({ attention: tr('À surveiller'), securite: tr('Sécurité'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), calendrier: tr('Calendrier'), agenda: tr('Agenda') });
+const ACC_RAIL = ['attention', 'moment', 'rappels', 'agenda'];
+const ACC_NOMS = () => ({ attention: tr('À surveiller'), securite: tr('Sécurité'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda') });
 /* Les identifiants d'un accueil enregistre avant le 15/09 : la glissiere du
  * heros a disparu (son contenu vit dans « En ce moment »), « En cours » est
  * devenu « En ce moment ». Un identifiant inconnu est simplement ignore. */
@@ -6333,7 +6334,13 @@ function poserFantome(el, x0, y0) {
 
 function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onNav = null }) {
   const [override, setOverride] = useState(null);
-  const agenda = useAgenda(accueil && accueil.hass);
+  // L'agenda du rail (ADR 0032) : d'aujourd'hui minuit a sept jours, TOUS les
+  // evenements — la bande des jours compte chacun d'eux, la liste ne montre
+  // que ce qui vient. `jourAuj` change a minuit, et la plage avec lui.
+  const jourAuj = new Date().toDateString();
+  const plageAgenda = useMemo(() => plageSemaine(new Date(jourAuj)), [jourAuj]);
+  const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda);
+  const [jourChoisi, setJourChoisi] = useState(null); // la cle du jour choisi dans la bande, ou null
   /* ── L'accueil se compose : ordre et visibilité des sections ───────────────
    * En mode édition, chaque section se SAISIT et se glisse sur une autre de sa
    * colonne pour prendre sa place, et la croix la masque — elle réapparaît
@@ -7388,13 +7395,52 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             nEnCours ? (nEnCours > 1 ? tr('{n} EN COURS', { n: nEnCours }) : tr('1 EN COURS')) : tr('RIEN EN COURS'), nEnCours ? '79,140,255' : OKRGB,
             nEnCours ? momentVisibles : [<div key="rien" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', padding: '6px 0 2px' }}>{tr('Rien ne tourne pour le moment.')}</div>]);
           const railRappels = railPanel(tr('Rappels'), tr('Repas du chat et ramassage'), null, AMBRGB, rappelsRows);
-          // Agenda : les prochains evenements des calendriers HA. Pas de
-          // calendrier, ou rien sous sept jours → pas de carte.
-          const agendaRows = (agenda || []).slice(0, 5).map((e, i) => {
-            const { jour, heure } = jourAgenda(e);
-            return railRow('ag' + i, e.summary, jour, heure, 'var(--o-accent-soft)');
-          });
-          const railAgenda = railPanel(tr('Agenda'), tr('Les 7 prochains jours'), null, AMBRGB, agendaRows);
+          /* AGENDA : une carte a la place de deux (ADR 0032). La date du jour,
+            * la bande des sept prochains jours — un point par evenement, un jour
+            * se choisit — puis ce qui vient (cinq lignes), ou le jour choisi en
+            * entier. Sans entite `calendar`, la carte n'existe pas ; sans
+            * evenement, elle le dit. Le dessin de la bande est celui du mini-mois
+            * du catalogue : la pastille du jour, les points sous le chiffre. */
+          const calRailId = (() => {
+            const S = (dashHass && dashHass.states) || null;
+            if (!S) return null;
+            return Object.keys(S).find(x => x.indexOf('calendar.') === 0 && S[x] && S[x].state !== 'unavailable') || null;
+          })();
+          const maintenantAg = new Date();
+          const joursAg = joursAgenda(maintenantAg);
+          const cleAuj = cleJour(maintenantAg);
+          const comptesAg = comptesParJour(agenda || [], joursAg);
+          const aVenir = evenementsAVenir(agenda || [], maintenantAg);
+          const jourAg = jourChoisi ? joursAg.find(j => cleJour(j) === jourChoisi) : null;
+          const montresAg = jourAg ? evenementsDuJour(agenda || [], jourAg) : aVenir.slice(0, 5);
+          const nAuj = evenementsDuJour(aVenir, maintenantAg).length;
+          const bandeAg = (
+            <div key="bande" className="o-agenda-bande" style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, margin: '6px 0 4px' }}>
+              {joursAg.map(d => {
+                const k = cleJour(d), n = comptesAg[k] || 0, auj = k === cleAuj, choisi = jourChoisi === k;
+                return (
+                  <button key={k} type="button" onClick={() => setJourChoisi(choisi ? null : k)} aria-pressed={choisi}
+                    aria-label={d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric' }) + (n ? ' · ' + n : '')}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '4px 0', border: 'none', borderRadius: 9, cursor: 'pointer', background: choisi ? 'var(--o-s2)' : 'transparent', color: 'inherit', font: 'inherit' }}>
+                    <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--o-text3)' }}>{d.toLocaleDateString(locale(), { weekday: 'narrow' })}</span>
+                    <span style={{ width: 24, height: 24, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: auj ? 'var(--o-accent-fond)' : 'transparent', fontSize: 12, fontWeight: auj ? 700 : 500, color: auj ? '#fff' : 'var(--o-text1)' }}>{d.getDate()}</span>
+                    <span aria-hidden="true" style={{ height: 4, display: 'flex', gap: 3 }}>{Array.from({ length: Math.min(n, 2) }).map((_, i) => <span key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--o-accent-soft)' }} />)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+          const lignesAg = montresAg.length
+            ? montresAg.map((e, i) => { const { jour, heure } = jourAgenda(e); return railRow('ag' + i, e.summary, jour, heure, 'var(--o-accent-soft)'); })
+            : [<div key="rien" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', padding: '6px 0 2px' }}>{jourAg ? tr('Rien ce jour-là') : tr('Rien de prévu ces 7 jours')}</div>];
+          const dateAg = maintenantAg.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' });
+          const sousAg = (
+            <button type="button" onClick={() => dc.ouvrir(calRailId)} aria-label={tr('Ouvrir le calendrier')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0, border: 'none', background: 'none', color: 'inherit', font: 'inherit', cursor: 'pointer' }}>
+              {dateAg.charAt(0).toUpperCase() + dateAg.slice(1)}<Fi i="angle-right" size={9} color="var(--o-text3)" />
+            </button>
+          );
+          const railAgenda = calRailId ? railPanel(tr('Agenda'), sousAg, nAuj ? (nAuj > 1 ? tr('{n} AUJOURD’HUI', { n: nAuj }) : tr('1 AUJOURD’HUI')) : tr('RIEN AUJOURD’HUI'), nAuj ? '79,140,255' : OKRGB, [bandeAg, ...lignesAg]) : null;
           const camsHeader = (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <div style={sectionTitle}>{tr('Caméras')}</div>
@@ -7413,24 +7459,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             pieces: <>{piecesHeader}{piecesGrid}</>,
             cameras: cams.length > 0 ? <>{camsHeader}{camsGrid}</> : null,
           };
-          /* Le calendrier du mois, sous les rappels : l'agenda dit CE QUI
-            * vient, lui dit QUAND — sans entité `calendar`, il n'existe pas. */
-          const calRailId = (() => {
-            const S = (dashHass && dashHass.states) || null;
-            if (!S) return null;
-            return Object.keys(S).find(x => x.indexOf('calendar.') === 0 && S[x] && S[x].state !== 'unavailable') || null;
-          })();
-          const railCal = calRailId ? (
-            <div>
-              <div style={{ height: 184 }} className="o-hero"><CvCalendrier id={calRailId} hass={dashHass} onOpen={dc.ouvrir} /></div>
-            </div>
-          ) : null;
           // « A surveiller » en tete du rail — sur le cote avec En ce moment et
           // Rappels (retour user du 16/09 ; seconde page sur telephone, la
           // banniere garde le compte) ; rien quand tout va bien, pas meme en edition.
           const secsRail = {
             attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,
-            moment: railMoment, rappels: railRappels, calendrier: railCal, agenda: railAgenda,
+            moment: railMoment, rappels: railRappels, agenda: railAgenda,
           };
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
           const renduRail = ordreDe('rail').map(id => secsRail[id] ? Sec('rail', id, secsRail[id]) : null).filter(Boolean);

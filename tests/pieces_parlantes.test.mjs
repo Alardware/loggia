@@ -37,7 +37,7 @@ test('l’Accueil range ce que chaque piece a de vivant, par zone puis par nom',
 });
 
 test('« A surveiller » vit dans le rail, et plus de point « appareils hors ligne »', () => {
-  assert.ok(src.includes("const ACC_RAIL = ['attention', 'moment', 'rappels', 'calendrier', 'agenda'];") && src.includes("const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];"), 'dans le rail, en tete');
+  assert.ok(src.includes("const ACC_RAIL = ['attention', 'moment', 'rappels', 'agenda'];") && src.includes("const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];"), 'dans le rail, en tete');
   const r = bloc('          const secsRail = {', NL + '          };');
   assert.ok(r.includes('attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,'), 'rien quand tout va bien');
   assert.ok(src.includes("const tete = (zone === 'main' ? ['securite'] : ['attention']).filter(s => manquants.indexOf(s) >= 0);"), 'en tete des rails deja ranges');
