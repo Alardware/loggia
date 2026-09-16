@@ -51,6 +51,13 @@ test('petite maison : lumieres, chauffage, volets — rien d’autre', () => {
   ['aspirateur', 'medias', 'securite', 'energie', 'systeme', 'croquettes'].forEach(v => ko(r, v));
 });
 
+test('scenarios : Loggia les compose des qu’il y a quelque chose a piloter, meme sans scene', () => {
+  ok(viewAvailability(ctx({ has: { light: 1 } })), 'scenes');
+  ok(viewAvailability(ctx({ has: { lock: 1 } })), 'scenes');
+  ok(viewAvailability(ctx({ has: { script: 2 } })), 'scenes');
+  assert.match(viewAvailability(ctx({ has: { sensor: 3 } })).scenes.reason, /rien à composer/);
+});
+
 test('zones toutes techniques : la vue Pieces disparait', () => {
   const r = viewAvailability(ctx({
     has: { light: 2 }, views: { lumieres: true },

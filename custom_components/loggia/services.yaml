@@ -1,0 +1,14 @@
+# Le service `loggia.scenario` : lance un scenario de Loggia — depuis une
+# automatisation, l'assistant vocal ou un interrupteur sans fil (une
+# affectation est un appel de service, il marche tel quel).
+#
+# L'identifiant est celui de la carte : `nuit`, `depart`, `retour`, `reveil`,
+# `cinema`, `musique`, `invites`, `tout_eteindre`, ou `perso_<nom>` pour un
+# scenario ajoute. Les noms et descriptions vivent dans translations/.
+scenario:
+  fields:
+    id:
+      required: true
+      example: nuit
+      selector:
+        text:

@@ -20,7 +20,7 @@ function Fi({ i, size = 18, color, style }) {
 }
 
 const VIEW_TITLES = {
-  pieces: tr('Pièces'), scenes: tr('Scènes'), objets: tr('Objets'), energie: tr('Énergie'),
+  pieces: tr('Pièces'), scenes: tr('Scénarios'), objets: tr('Objets'), energie: tr('Énergie'),
   securite: tr('Sécurité'), systeme: tr('Système'), lumieres: tr('Lumières'), climat: tr('Climat'),
   volets: tr('Volets'), aspirateur: tr('Aspirateur'), croquettes: tr('Croquettes'), medias: tr('Médias'),
 };

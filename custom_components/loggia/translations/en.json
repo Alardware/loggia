@@ -9,5 +9,17 @@
     "abort": {
       "already_configured": "Loggia is already installed."
     }
+  },
+  "services": {
+    "scenario": {
+      "name": "Run a scenario",
+      "description": "Runs a Loggia scenario: one of its own (nuit, depart, retour, reveil, cinema, musique, invites, tout_eteindre) or one of yours.",
+      "fields": {
+        "id": {
+          "name": "Scenario",
+          "description": "The scenario identifier, as the Scenarios view shows it: nuit, depart… or perso_… for a scenario you added."
+        }
+      }
+    }
   }
 }

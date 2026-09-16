@@ -9,5 +9,17 @@
     "abort": {
       "already_configured": "Loggia est déjà installé."
     }
+  },
+  "services": {
+    "scenario": {
+      "name": "Lancer un scénario",
+      "description": "Lance un scénario de Loggia : l'un des siens (nuit, depart, retour, reveil, cinema, musique, invites, tout_eteindre) ou l'un des vôtres.",
+      "fields": {
+        "id": {
+          "name": "Scénario",
+          "description": "L'identifiant du scénario, tel que la vue Scénarios le montre : nuit, depart… ou perso_… pour un scénario ajouté."
+        }
+      }
+    }
   }
 }

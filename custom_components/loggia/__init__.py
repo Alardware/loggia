@@ -104,7 +104,8 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                               lambda: hass.data.get(DOMAIN, {}).get("presence"),
                               lambda: hass.data.get(DOMAIN, {}).get("nuit"),
                               lambda: hass.data.get(DOMAIN, {}).get("veilles"),
-                              acces_regles=lambda: hass.data.get(DOMAIN, {}).get("regles"))
+                              acces_regles=lambda: hass.data.get(DOMAIN, {}).get("regles"),
+                              acces_scenarios=lambda: hass.data.get(DOMAIN, {}).get("scenarios"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
@@ -190,6 +191,37 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["veilles"] = LoggiaVeilles(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : veilles indisponibles")
+
+    # Les scenarios : ce que la maison fait d'un seul geste (ADR 0027). Ils
+    # ne posent aucun abonnement — seul le magasin leur est necessaire.
+    if not data.get("scenarios") and data.get("store"):
+        try:
+            from .scenarios import LoggiaScenarios
+
+            data["scenarios"] = LoggiaScenarios(hass, data["store"], data.get("regles"))
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : scenarios indisponibles")
+
+    # Le service `loggia.scenario` : une automatisation, l'assistant vocal ou
+    # un interrupteur sans fil lance un scenario comme la carte le fait. Un
+    # service ne se desenregistre pas : une fois pour la vie du process.
+    if not data.get("service_scenario") and data.get("scenarios"):
+        try:
+            import voluptuous as vol
+
+            async def _lancer_scenario(call):
+                scenarios = hass.data.get(DOMAIN, {}).get("scenarios")
+                if scenarios is None:
+                    return
+                contexte = getattr(call, "context", None)
+                await scenarios.async_lancer(str(call.data.get("id") or ""),
+                                             user_id=getattr(contexte, "user_id", None))
+
+            hass.services.async_register(DOMAIN, "scenario", _lancer_scenario,
+                                         schema=vol.Schema({vol.Required("id"): cv.string}))
+            data["service_scenario"] = True
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : service loggia.scenario indisponible")
 
     # ── Ce qui se refait a chaque chargement : le panneau ──
     # Il se retire proprement dans `async_unload_entry`, donc il se reenregistre

@@ -771,6 +771,8 @@ html.loggia-sky .o-sky-full { z-index: 0 !important; }
 /* Scènes : vignettes en 2 colonnes sur mobile */
 @media (max-width: 620px) {
   .grid-scenecards { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+  /* Scénarios : deux cartes par ligne sur téléphone, comme les vignettes Hue. */
+  .grid-scenarios { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
 }
 
 /* Croquettes : cartes repas en 2 colonnes sur mobile */

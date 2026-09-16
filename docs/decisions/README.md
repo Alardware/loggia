@@ -29,3 +29,6 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0022](0022-sur-un-danger-la-maison-reagit.md) | Sur un danger, la maison réagit : lumières, volets, vanne | appliqué (v3.16.0) |
 | [0023](0023-une-seule-vue-objets.md) | Une seule vue Objets, filtrée, remplace Lumières, Climat et Médias | appliqué (v3.19.0) |
 | [0024](0024-le-mode-edition-partout.md) | Le mode édition : une carte d'édition, un bandeau, un glisser libre — partout | appliqué (v3.20.0) |
+| [0025](0025-l-accueil-securite-en-tete-en-ce-moment-sur-le-cote.md) | L'Accueil : Sécurité en tête, En ce moment sur le côté, deux pages sur mobile | appliqué (v3.24.0) |
+| [0026](0026-un-seul-composeur-de-cartes.md) | Un seul composeur de cartes, une fabrique pour toute clé | appliqué (v3.27.0) |
+| [0027](0027-les-scenarios-de-loggia.md) | Les scénarios : composés par Loggia, lancés par le serveur — une main, pas une règle | appliqué (v3.28.0) |

@@ -528,7 +528,7 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
    * au-dessus. Une restriction se lève par défaut, un pouvoir se donne. */
   const [droits, setDroits] = useState(() => (user && Array.isArray(user.droits) ? user.droits : []));
   const VUES_CHOIX = [
-    ['pieces', tr('Pièces')], ['scenes', tr('Scènes')], ['objets', tr('Objets')],
+    ['pieces', tr('Pièces')], ['scenes', tr('Scénarios')], ['objets', tr('Objets')],
     ['energie', tr('Énergie')], ['securite', tr('Sécurité')], ['systeme', tr('Système')],
     ...customViews.map(cv => ['cv:' + cv.id, cv.name]),
   ];
@@ -1550,7 +1550,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         const BUILTIN_VIEWS = [
           ['accueil', tr('Accueil'), 'home', 'vue principale', true],
           ['pieces', tr('Pièces'), 'door-open', 'toutes les pièces', false],
-          ['scenes', tr('Scènes'), 'sparkles', 'raccourcis', false],
+          ['scenes', tr('Scénarios'), 'sparkles', 'scénarios de la maison', false],
           ['objets', tr('Objets'), 'apps', 'appareils par familles', false],
           ['energie', tr('Énergie'), 'bolt', 'production et consommation', false],
           ['securite', tr('Sécurité'), 'shield-check', 'alarme et caméras', false],

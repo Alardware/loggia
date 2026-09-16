@@ -34,6 +34,7 @@ import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
+import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS, ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, actionVide, scenarioVide, versEnregistrement } from './scenarios.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 /* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
@@ -192,7 +193,7 @@ const NAV = [
   { group: 'MAISON', items: [
     { label: 'Accueil', active: true, svg: <Fi i="home" color="var(--o-accent)" /> },
     { label: 'Pièces', svg: <Fi i="door-open" color="#ff8a4c" /> },
-    { label: 'Scènes', svg: <Fi i="sparkles" color="var(--o-purple)" /> },
+    { label: 'Scénarios', svg: <Fi i="sparkles" color="var(--o-purple)" /> },
     { label: 'Objets', svg: <Fi i="apps" color="var(--o-cyan)" /> },
     { label: 'Énergie', svg: <Fi i="bolt" color="var(--o-ok)" /> },
     { label: 'Sécurité', svg: <Fi i="shield-check" color="var(--o-ok)" /> },
@@ -209,7 +210,7 @@ const NAV = [
  * groupe Systeme remontait au-dessus des vues secondaires au lieu de rester en
  * bas — l'ordre du menu changeait avec la langue. Un drapeau ne se traduit pas. */
 
-const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scènes': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Aspirateur': 'aspirateur', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Caméras': 'cameras', 'Système': 'systeme', 'Paramètres': 'parametres' };
+const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scénarios': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Aspirateur': 'aspirateur', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Caméras': 'cameras', 'Système': 'systeme', 'Paramètres': 'parametres' };
 const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'aspirateur', 'croquettes', 'medias', 'objets', 'securite', 'systeme', 'parametres']);
 
 function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAutorisees = null, editMode = false, onToggleEdit = null }) {
@@ -449,7 +450,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
   NAV.forEach(g => g.items.forEach(it => { const vid = LABEL_VIEW[it.label]; if (BUILT.has(vid) && isViewAvailable(avail, vid) && match(it.label)) results.push({ group: tr('Vues'), label: tr(it.label), icon: it.svg, act: (close) => { onNav(vid); close(); } }); }));
   HIDDEN_VIEWS().forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: tr('Vues'), label: tr(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
   customViews.forEach(cv => { if (match(cv.name)) results.push({ group: tr('Vues'), label: cv.name, icon: <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" />, act: (close) => { onNav('cv:' + cv.id); close(); } }); });
-  quickScenes().forEach(s => { if (!match(s.name)) return; results.push({ group: tr('Scènes'), label: s.name, sub: s.sub, icon: <Fi i={s.icon} color="var(--o-purple)" />, run: true, act: (close) => { const h = getHass(); if (h && h.callService) commander(h, s.haid, 'turn_on'); close(); } }); });
+  scenarios().forEach(s => { const nom = nomScenario(s); if (!match(nom)) return; results.push({ group: tr('Scénarios'), label: nom, sub: resumeScenario(s, nomsLiens()), icon: <Ico name={s.icone || 'sparkles'} color={teinteScenario(s).col} />, run: true, act: (close) => { lancerScenario(getHass(), s.id); close(); } }); });
   // Appareils : par nom, dès deux caractères tapés — le déluge n'aide personne.
   // Les togglables se basculent sur place ; les autres mènent à leur vue.
   if (nq.length >= 2) {
@@ -4892,53 +4893,101 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   );
 }
 
-/* ════════════ SCÈNES RAPIDES (Accueil) — scripts/scènes HA, configurables ════════════ */
-const quickScenes = () => {
-  const raw = cfgVal('loggia_quickscenes', null);
-  // Sans choix explicite : les scènes que Home Assistant déclare, au plus six.
-  if (!Array.isArray(raw) || !raw.length) {
-    const S = (getHass() || {}).states || {};
-    return Object.keys(S).filter(id => id.indexOf('scene.') === 0).slice(0, 6).map(id => ({
-      name: (S[id].attributes && S[id].attributes.friendly_name) || id.slice(6).replace(/_/g, ' '),
-      sub: '', icon: 'sparkles', haid: id,
-    }));
-  }
-  return raw.filter(s => s && s.haid).map(s => ({ name: s.name || s.haid.split('.')[1].replace(/_/g, ' '), sub: s.sub || '', icon: s.icon || 'sparkles', haid: s.haid }));
-};
-const qsKeys = () => quickScenes().map(s => s.haid);
-function QuickScenes({ hass }) {
-  const [flash, setFlash] = useState(null); // retour visuel immédiat (les scripts n'ont pas d'état stable)
+/* ════════════ SCÉNARIOS — composés par Loggia, lancés par le serveur (ADR 0027) ════════════ */
+/* L'état des scénarios tel que le serveur l'a dit en dernier. La veille, la
+ * recherche et l'Accueil le lisent sans attendre : un seul sondage, celui de
+ * `useScenarios`. Avant la première réponse, rien. */
+let SCN_ETAT = null;
+const scenarios = () => scenariosVisibles(SCN_ETAT && SCN_ETAT.scenarios);
+const nomsLiens = () => { const o = {}; ((SCN_ETAT && SCN_ETAT.liens) || []).forEach(l => { o[l.haid] = l.nom; }); return o; };
+// Les scènes et scripts liés : sondés avec l'Accueil, comme les anciennes scènes rapides.
+const qsKeys = () => scenarios().map(s => s.lien).filter(Boolean);
+/* Lancer : le serveur résout et commande avec la main de l'utilisateur. Sans
+ * serveur — composant trop ancien —, une scène liée part quand même par le
+ * service standard ; un scénario composé, lui, ne peut rien sans lui. */
+function lancerScenario(h, id) {
+  if (!h) return Promise.resolve(null);
+  if (typeof h.callWS === 'function') return h.callWS({ type: 'loggia/scenarios/lancer', id }).catch(() => null);
+  const s = scenarios().find(x => x.id === id);
+  if (s && s.lien && h.callService) commander(h, s.lien, 'turn_on');
+  return Promise.resolve(null);
+}
+function useScenarios(hass) {
+  const { etat, setEtat, err } = useEtatServeur(hass, 'loggia/scenarios/etat', 5000, tr('Scénarios indisponibles.'));
+  useEffect(() => { if (etat) SCN_ETAT = etat; }, [etat]);
+  const [enCours, setEnCours] = useState(null); // retour visuel immédiat, le temps que le serveur réponde
   const fRef = useRef(null);
   useEffect(() => () => clearTimeout(fRef.current), []);
-  const run = (s) => {
-    setFlash(s.haid); clearTimeout(fRef.current); fRef.current = setTimeout(() => setFlash(null), 2500);
-    if (hass && hass.callService) commander(hass, s.haid, 'turn_on');
+  const lancer = (id) => {
+    setEnCours(id); clearTimeout(fRef.current); fRef.current = setTimeout(() => setEnCours(null), 2500);
+    lancerScenario(hass, id).then(r => { if (r) setEtat(e => e ? { ...e, scenarios: e.scenarios.map(s => s.id === id ? { ...s, dernier: Date.now() / 1000 } : s) } : e); });
   };
+  const enregistrer = async (patch) => {
+    const h = hass && typeof hass.callWS === 'function' ? hass : null;
+    if (!h) throw new Error(tr('Home Assistant n’est pas joignable.'));
+    const r = await h.callWS({ type: 'loggia/scenarios/config', patch });
+    if (r && r.etat) { SCN_ETAT = r.etat; setEtat(r.etat); }
+    return r;
+  };
+  const noms = {};
+  ((etat && etat.liens) || []).forEach(l => { noms[l.haid] = l.nom; });
+  return { etat, err, lancer, enCours, enregistrer, noms, liste: scenariosVisibles(etat && etat.scenarios) };
+}
+
+const PUCE_SCN = { fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 9, background: 'var(--o-s1)', color: 'var(--o-text1)', whiteSpace: 'nowrap' };
+/* La carte d'un scénario, au gabarit maison : l'icône en haut à gauche dans
+ * un disque teinté, le dernier lancement en haut à droite, le titre sous
+ * l'icône ; compacte (88) sur l'Accueil, standard (184) dans la vue, où elle
+ * dit aussi ce qu'elle fait. La teinte s'applique en entier — lavis, icône,
+ * repère —, sans bordure. En cours : le lavis se renforce. */
+function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLancer, style = null, sansDernier = false }) {
+  const t = teinteScenario(s);
+  const nom = nomScenario(s);
+  const cibles = nombreCibles(s);
+  const lavis = enCours ? .28 : .12;
+  const nActions = nombreActions(s);
+  return (
+    <button type="button" onClick={(e) => { fxTap(e); if (onLancer) onLancer(s.id); }} aria-label={tr('Lancer {x}', { x: nom })}
+      style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%', height: compacte ? 88 : 184, padding: compacte ? '12px 13px' : '14px 15px', boxSizing: 'border-box', borderRadius: 'var(--o-radius,18px)', border: 'none', cursor: 'pointer', textAlign: 'left', overflow: 'hidden', transition: 'background .25s, box-shadow .25s', color: 'var(--o-text)',
+        background: `linear-gradient(180deg, rgba(${t.rgb},${lavis}), rgba(${t.rgb},${lavis})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
+        boxShadow: enCours ? `0 10px 26px rgba(${t.rgb},.35)` : 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))', ...(style || {}) }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', width: '100%' }}>
+        <span aria-hidden="true" style={{ width: compacte ? 34 : 38, height: compacte ? 34 : 38, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: `rgba(${t.rgb},.22)`, color: t.col, flexShrink: 0 }}><Ico name={s.icone || 'sparkles'} size={compacte ? 18 : 20} color={t.col} /></span>
+        {/* En édition, la place du repère revient aux outils de la carte (voir ScenariosView). */}
+        {!sansDernier && <span style={{ fontSize: 11, fontWeight: 700, color: enCours ? t.col : 'var(--o-text3)', whiteSpace: 'nowrap', marginLeft: 6 }}>{enCours ? tr('En cours') : libelleDernier(s.dernier, Date.now(), locale())}</span>}
+      </div>
+      <div style={{ marginTop: compacte ? 8 : 12, fontSize: compacte ? 13 : 15, fontWeight: 700, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
+      {!compacte && <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, lineHeight: 1.45, color: 'var(--o-text2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.lien_absent ? tr('Scène introuvable') : resumeScenario(s, noms)}</div>}
+      {!compacte && (
+        <div style={{ position: 'absolute', left: 15, bottom: 14, display: 'flex', gap: 6 }}>
+          <span style={PUCE_SCN}>{nActions > 1 ? tr('{n} actions', { n: nActions }) : tr('{n} action', { n: nActions })}</span>
+          {cibles != null && <span style={PUCE_SCN}>{cibles > 1 ? tr('{n} cibles', { n: cibles }) : tr('{n} cible', { n: cibles })}</span>}
+          <span style={PUCE_SCN}>{s.lien ? tr('scène HA') : 'Loggia'}</span>
+        </div>
+      )}
+    </button>
+  );
+}
+
+/* La rangée de l'Accueil : les scénarios qui s'y montrent, en cartes
+ * compactes — six par rangée sur PC, une rangée qui glisse sur téléphone
+ * (`.grid-qscenes`). En édition, le chemin vers la vue, où tout se règle. */
+function ScenariosAccueil({ hass, edit = false, onNav = null }) {
+  const sc = useScenarios(hass);
+  const liste = scenariosAccueil(sc.etat && sc.etat.scenarios);
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={sectionTitle}>{tr('Scènes rapides')}</div>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('{n} raccourcis', { n: quickScenes().length })}</span>
+        <div style={sectionTitle}>{tr('Scénarios')}</div>
+        {edit && onNav
+          ? <button onClick={() => onNav('scenes')} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{tr('Gérer les scénarios')}</button>
+          : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{sc.err && !liste.length ? sc.err : tr('{n} scénarios', { n: liste.length })}</span>}
       </div>
-      <div className="grid-qscenes" style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12 }}>
-        {quickScenes().map(s => {
-          const st = hass && hass.states ? hass.states[s.haid] : null;
-          const running = flash === s.haid || (st && st.state === 'on' && s.haid.indexOf('script.') === 0);
-          const dead = hass && hass.states && !st;
-          return (
-            <button key={s.haid} onClick={(e) => { fxTap(e); run(s); }} className="o-scene-room" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: '14px 15px 15px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', textAlign: 'left', transition: 'all .25s', opacity: dead ? .45 : 1, background: running ? 'var(--o-accent-fond)' : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (running ? 'transparent' : 'var(--o-bd2)'), boxShadow: running ? '0 10px 26px rgba(var(--o-accent-rgb),.4)' : 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                <Fi i={s.icon} size={18} color={running ? '#fff' : 'var(--o-text1)'} />
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: running ? '#fff' : 'var(--o-bd1)', transition: 'background .25s' }} />
-              </div>
-              <div style={{ minWidth: 0, width: '100%' }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: running ? '#fff' : 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2, color: running ? 'rgba(255,255,255,.85)' : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dead ? 'Entité absente' : s.sub}</div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+      {liste.length > 0 && (
+        <div className="grid-qscenes" style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12 }}>
+          {liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}
+        </div>
+      )}
     </>
   );
 }
@@ -5511,9 +5560,9 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
   const scRef = useRef(0);
   useEffect(() => () => clearTimeout(scRef.current), []);
   const lancerScene = (s) => {
-    setScFlash(s.haid); clearTimeout(scRef.current); scRef.current = setTimeout(() => setScFlash(null), 1600);
+    setScFlash(s.id); clearTimeout(scRef.current); scRef.current = setTimeout(() => setScFlash(null), 1600);
     // Le refus remonte à l'écoute globale : un `try/catch` ne le verrait pas.
-    const h = getHass(); if (h && h.callService) commander(h, s.haid, 'turn_on');
+    lancerScenario(getHass(), s.id);
   };
   const hm = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const capit = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
@@ -5557,17 +5606,17 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
       {/* Scènes rapides SANS réveiller : le pointeur est stoppé avant d'atteindre
           la fenêtre (le réveil écoute là) — le geste du soir se fait depuis la
           veille, l'écran reste en veille. */}
-      {quickScenes().length > 0 && (
+      {scenariosAccueil(scenarios()).length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center', maxWidth: '84vw' }}>
-          {quickScenes().slice(0, 4).map(s => (
-            <button key={s.haid}
+          {scenariosAccueil(scenarios()).slice(0, 4).map(s => (
+            <button key={s.id}
               onPointerDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); lancerScene(s); }}
               style={{ ...chip, cursor: 'pointer', fontSize: 12, padding: '8px 14px', transition: 'background .3s, border-color .3s',
-                background: scFlash === s.haid ? 'rgba(var(--o-accent-rgb),.28)' : 'rgba(255,255,255,.05)',
-                border: '1px solid ' + (scFlash === s.haid ? 'rgba(var(--o-accent-rgb),.55)' : 'rgba(255,255,255,.09)') }}>
-              <Fi i={s.icon} size={13} />{s.name}
+                background: scFlash === s.id ? 'rgba(var(--o-accent-rgb),.28)' : 'rgba(255,255,255,.05)',
+                border: '1px solid ' + (scFlash === s.id ? 'rgba(var(--o-accent-rgb),.55)' : 'rgba(255,255,255,.09)') }}>
+              <Ico name={s.icone || 'sparkles'} size={13} />{nomScenario(s)}
             </button>
           ))}
         </div>
@@ -6107,7 +6156,7 @@ function OngletsAccueil({ maison, moment, edit = false }) {
  * libellés traduits) et libellés dits au rendu. */
 const ACC_MAIN = ['securite', 'favoris', 'scenes', 'pieces', 'cameras'];
 const ACC_RAIL = ['moment', 'rappels', 'calendrier', 'agenda'];
-const ACC_NOMS = () => ({ securite: tr('Sécurité'), favoris: tr('Favoris'), scenes: tr('Scènes rapides'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), calendrier: tr('Calendrier'), agenda: tr('Agenda') });
+const ACC_NOMS = () => ({ securite: tr('Sécurité'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), calendrier: tr('Calendrier'), agenda: tr('Agenda') });
 /* Les identifiants d'un accueil enregistre avant le 15/09 : la glissiere du
  * heros a disparu (son contenu vit dans « En ce moment »), « En cours » est
  * devenu « En ce moment ». Un identifiant inconnu est simplement ignore. */
@@ -7197,7 +7246,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, weatherMode = null, 
             // d'outils) : la section reste donc vivante en mode édition.
             favoris: <FavorisAccueil hass={dashHass} edit={editMode} />,
             securite: carteSecurite,
-            scenes: <QuickScenes hass={dashHass} />,
+            scenes: <ScenariosAccueil hass={dashHass} edit={editMode} onNav={onNav} />,
             pieces: <>{piecesHeader}{piecesGrid}</>,
             cameras: cams.length > 0 ? <>{camsHeader}{camsGrid}</> : null,
           };
@@ -7591,10 +7640,10 @@ function ScenesContent({ hass }) {
   const miniBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' });
 
   return (
-    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 8 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Scènes')}</h1>
+          <div style={sectionTitle}>{tr('Ambiances lumineuses')}</div>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>Bibliothèque Hue · {HUE_CATS.length} collections · {totalScenes} scènes</div>
         </div>
         <span style={{ flex: 1 }} />
@@ -7655,12 +7704,218 @@ function ScenesContent({ hass }) {
   );
 }
 
-function ScenesView({ hass }) {
+/* La vue Scénarios (ADR 0027) : les scénarios de Loggia et les siens en
+ * cartes standard, « Ajouter un scénario » en édition, la fiche pour tout
+ * régler — ordre compris, par les flèches de chaque carte ; puis, dessous,
+ * les ambiances lumineuses de la bibliothèque Hue, l'ancienne vue Scènes. */
+function ScenariosView({ hass, edit = false }) {
+  const sc = useScenarios(hass);
+  // En édition, les scénarios masqués se montrent, estompés : c'est là qu'on les remontre.
+  const liste = edit ? ((sc.etat && sc.etat.scenarios) || []).filter(s => s && s.id) : sc.liste;
+  const [fiche, setFiche] = useState(null); // un scénario, ou 'nouveau'
+  const deplacer = (id, delta) => {
+    const ids = liste.map(s => s.id); const i = ids.indexOf(id); const j = i + delta;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    ids.splice(j, 0, ids.splice(i, 1)[0]);
+    sc.enregistrer({ ordre: ids }).catch(() => {});
+  };
+  const pieces = (sc.etat && sc.etat.pieces) || [];
+  const liens = (sc.etat && sc.etat.liens) || [];
+  const dernier = liste.reduce((m, s) => (s.dernier && (!m || s.dernier > m)) ? s.dernier : m, null);
+  const outil = (actif) => ({ ...boutonEdition(false), ...BOUTON_PETIT, width: 28, height: 28, opacity: actif ? 1 : .35 });
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
-      <ScenesContent hass={hass} />
+      <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Scénarios')}</h1>
+            <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{sc.err && !liste.length ? sc.err : tr('{n} scénarios · dernier lancement {x}', { n: liste.length, x: libelleDernier(dernier, Date.now(), locale()).toLowerCase() })}</div>
+          </div>
+          <span style={{ flex: 1 }} />
+          {edit && <button onClick={() => setFiche('nouveau')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f' }}><Fi i="plus" size={12} />{tr('Ajouter un scénario')}</button>}
+        </div>
+        <div className="grid-scenarios" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(205px,1fr))', gap: 12 }}>
+          {liste.map((s, i) => (
+            <div key={s.id} style={{ position: 'relative', minWidth: 0 }}>
+              <CarteScenario s={s} noms={sc.noms} enCours={sc.enCours === s.id} onLancer={sc.lancer} sansDernier={edit} style={edit ? { outline: '1px dashed rgba(var(--o-accent-rgb),.45)', outlineOffset: 3, opacity: s.masque ? .45 : 1 } : null} />
+              {/* Les outils prennent la place du repere « dernier lancement » : en bas,
+                * ils mordaient sur les puces des cartes etroites (vu en demo, 16/09). */}
+              {edit && (
+                <div style={{ position: 'absolute', right: 12, top: 12, display: 'flex', gap: 4 }}>
+                  <button onClick={() => deplacer(s.id, -1)} disabled={i === 0} title={tr('Avancer')} aria-label={tr('Avancer') + ' ' + nomScenario(s)} style={outil(i > 0)}><Fi i="angle-small-left" size={12} /></button>
+                  <button onClick={() => deplacer(s.id, 1)} disabled={i === liste.length - 1} title={tr('Reculer')} aria-label={tr('Reculer') + ' ' + nomScenario(s)} style={outil(i < liste.length - 1)}><Fi i="angle-small-right" size={12} /></button>
+                  <button onClick={() => setFiche(s)} title={tr('Modifier')} aria-label={tr('Modifier') + ' ' + nomScenario(s)} style={outil(true)}><Fi i="pencil" size={12} /></button>
+                </div>
+              )}
+            </div>
+          ))}
+          {edit && (
+            <button onClick={() => setFiche('nouveau')} style={{ height: 184, borderRadius: 'var(--o-radius,18px)', border: '1px dashed var(--o-bd1)', background: 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--o-text3)', fontSize: 13, fontWeight: 700 }}>
+              <span aria-hidden="true" style={{ width: 38, height: 38, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)' }}><Fi i="plus" size={18} /></span>
+              {tr('Ajouter un scénario')}
+            </button>
+          )}
+        </div>
+        <ScenesContent hass={hass} />
+      </div>
+      {fiche && <FicheScenario key={fiche === 'nouveau' ? 'nouveau' : fiche.id} scenario={fiche === 'nouveau' ? null : fiche} pieces={pieces} liens={liens} onEnregistrer={sc.enregistrer} onClose={() => setFiche(null)} />}
     </main>
+  );
+}
+
+/* La fiche d'un scénario : nom, icône (quarante, par pages de dix), teinte,
+ * nature — composé par Loggia, ou lié à une scène ou un script de Home
+ * Assistant —, les actions (famille, geste, portée, pièce, valeur, moment),
+ * sur l'Accueil ou non, masqué ou non ; « Remettre d'origine » pour un
+ * scénario de Loggia qu'on a touché, « Supprimer » pour un des siens. */
+function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer, onClose }) {
+  const existant = !!scenario;
+  const [s, setS] = useState(() => scenario ? { ...scenario, nom: scenario.nom || '', actions: (scenario.actions || []).map(a => ({ ...a })) } : scenarioVide());
+  const maj = (patch) => setS(v => ({ ...v, ...patch }));
+  const [nature, setNature] = useState(scenario && scenario.lien ? 'lie' : 'compose');
+  const pages = Math.ceil(ICONES_SCENARIO.length / ICONES_PAR_PAGE);
+  const [page, setPage] = useState(Math.max(0, Math.floor(ICONES_SCENARIO.indexOf(s.icone) / ICONES_PAR_PAGE)));
+  const [err, setErr] = useState('');
+  const [attente, setAttente] = useState(false);
+  const t = teinteScenario(s);
+  const nomIntegre = existant && scenario.integre ? NOMS_INTEGRES()[scenario.id] : '';
+  const valide = existant ? true : !!(s.nom || '').trim();
+  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600, outline: 'none' };
+  const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
+  const note = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' };
+  const puce = (on, x) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + x.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + x.rgb + ',.14)' : 'var(--o-s1)', color: on ? x.col : 'var(--o-text1)' });
+  const pageur = (possible) => ({ width: 28, height: 28, padding: 0, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: possible ? 'pointer' : 'default', opacity: possible ? 1 : .35, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' });
+  const secondaire = { padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' };
+  const majAction = (i, patch) => setS(v => ({ ...v, actions: v.actions.map((a, k) => k === i ? { ...a, ...patch } : a) }));
+  const retirerAction = (i) => setS(v => ({ ...v, actions: v.actions.filter((_, k) => k !== i) }));
+  const ajouterAction = (famille) => setS(v => ({ ...v, actions: [...v.actions, actionVide(famille)] }));
+  const envoyer = async (close, patch) => {
+    setAttente(true); setErr('');
+    try { await onEnregistrer(patch); close(); }
+    catch (e) { setErr((e && (e.message || e.code)) || tr('Enregistrement impossible.')); setAttente(false); }
+  };
+  const valider = (close) => {
+    if (!valide || attente) return;
+    const doc = versEnregistrement({ ...s, lien: nature === 'lie' ? s.lien : null });
+    if (nature === 'lie' && !doc.lien) { setErr(tr('Choisis une scène ou un script.')); return; }
+    envoyer(close, { enregistrer: doc });
+  };
+  const optionsLiens = [{ id: '', label: tr('— choisir —') }, ...liens.map(l => ({ id: l.haid, label: l.nom + ' · ' + l.haid }))];
+  const optionsPieces = [{ id: '', label: tr('Pièce de la TV ou de l’enceinte') }, ...pieces.map(p => ({ id: p, label: p }))];
+  const famillesNoms = NOMS_FAMILLES(), gestesNoms = NOMS_GESTES(), porteesNoms = NOMS_PORTEES(), conditionsNoms = NOMS_CONDITIONS();
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (
+        <div style={{ padding: '4px 2px 8px' }}>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>{existant ? tr('Modifier le scénario') : tr('Ajouter un scénario')}</div>
+          <div style={{ ...note, marginTop: 4 }}>{existant && scenario.integre ? tr('Un scénario de Loggia : modifie-le, ou remets-le d’origine.') : tr('Compose-le à partir de ce que la maison possède, ou lie une scène ou un script.')}</div>
+
+          <label htmlFor="o-scn-nom" style={etiquette}>{tr('NOM')}</label>
+          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
+          <input id="o-scn-nom" value={s.nom} onChange={(e) => maj({ nom: e.target.value })} placeholder={nomIntegre || tr('Apéro, Sieste, Devoirs…')}
+            onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} autoFocus={!existant} />
+
+          <div style={etiquette}>{tr('ICÔNE')}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+            {ICONES_SCENARIO.slice(page * ICONES_PAR_PAGE, (page + 1) * ICONES_PAR_PAGE).map(ic => { const on = ic === s.icone; return (
+              <button key={ic} aria-pressed={on} aria-label={ic} onClick={() => maj({ icone: ic })}
+                style={{ height: 46, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + t.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + t.rgb + ',.14)' : 'var(--o-s1)' }}>
+                <Ico name={ic} size={20} color={on ? t.col : 'var(--o-text1)'} />
+              </button>
+            ); })}
+          </div>
+          {pages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
+              <button aria-label={tr('Icônes précédentes')} disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={pageur(page > 0)}><Fi i="angle-small-left" size={14} /></button>
+              {Array.from({ length: pages }, (_, i) => (
+                <button key={i} aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === page} onClick={() => setPage(i)}
+                  style={{ width: 8, height: 8, padding: 0, borderRadius: 4, border: 'none', cursor: 'pointer', background: i === page ? t.col : 'var(--o-bd2)' }} />
+              ))}
+              <button aria-label={tr('Icônes suivantes')} disabled={page === pages - 1} onClick={() => setPage(p => Math.min(pages - 1, p + 1))} style={pageur(page < pages - 1)}><Fi i="angle-small-right" size={14} /></button>
+            </div>
+          )}
+
+          <div style={etiquette}>{tr('TEINTE')}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {TEINTES_SCENARIO.map(x => { const on = x.id === s.teinte; return (
+              <button key={x.id} aria-pressed={on} onClick={() => maj({ teinte: x.id })} style={puce(on, x)}>
+                <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 5, background: x.col, display: 'inline-block' }} />{tr(x.label)}
+              </button>
+            ); })}
+          </div>
+
+          <div style={etiquette}>{tr('NATURE')}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button aria-pressed={nature === 'compose'} onClick={() => setNature('compose')} style={puce(nature === 'compose', t)}>{tr('Composé par Loggia')}</button>
+            <button aria-pressed={nature === 'lie'} onClick={() => setNature('lie')} style={puce(nature === 'lie', t)}>{tr('Lié à Home Assistant')}</button>
+          </div>
+          {nature === 'lie' ? (
+            <div style={{ marginTop: 10 }}>
+              <Dropdown value={s.lien || ''} options={optionsLiens} onChange={(v) => maj({ lien: v || null })} label={tr('Scène ou script')} width={260} />
+              {existant && scenario.suggestion && !s.lien && <div style={{ marginTop: 8 }}><button onClick={() => maj({ lien: scenario.suggestion })} style={puce(false, t)}><Fi i="sparkles" size={12} />{tr('Suggestion : {x}', { x: scenario.suggestion })}</button></div>}
+              <div style={note}>{tr('Loggia lance cette scène ou ce script, et rien d’autre.')}</div>
+            </div>
+          ) : (
+            <>
+              <div style={etiquette}>{tr('ACTIONS')}</div>
+              {s.actions.length === 0 && <div style={{ ...note, margin: '0 2px 8px' }}>{tr('Aucune action : ajoute une famille ci-dessous.')}</div>}
+              {s.actions.map((a, i) => (
+                <div key={i} style={{ padding: '10px 12px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Fi i={ICONES_FAMILLES[a.famille] || 'bulb'} size={14} color={t.col} />
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 800 }}>{famillesNoms[a.famille] || a.famille}</span>
+                    <button onClick={() => retirerAction(i)} title={tr('Retirer')} aria-label={tr('Retirer') + ' ' + (famillesNoms[a.famille] || a.famille)} style={{ ...boutonEdition(true), ...BOUTON_PETIT, width: 28, height: 28 }}><Fi i="cross-small" size={12} /></button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                    {(GESTES_SCN[a.famille] || []).map(g => <button key={g} aria-pressed={a.geste === g} onClick={() => majAction(i, { geste: g })} style={puce(a.geste === g, t)}>{(gestesNoms[a.famille] || {})[g] || g}</button>)}
+                  </div>
+                  {a.famille !== 'alarme' && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
+                      {PORTEES_SCN.map(p => <button key={p} aria-pressed={(a.portee || 'maison') === p} onClick={() => majAction(i, { portee: p })} style={puce((a.portee || 'maison') === p, t)}>{porteesNoms[p]}</button>)}
+                      {a.portee === 'piece' && <Dropdown value={a.piece || ''} options={optionsPieces} onChange={(v) => majAction(i, { piece: v || null })} label={tr('Pièce')} width={200} />}
+                    </div>
+                  )}
+                  {((a.famille === 'lumieres' && a.geste === 'allumer') || a.famille === 'chauffage') && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{a.famille === 'lumieres' ? tr('Luminosité') : tr('Consigne')}</span>
+                      <input type="number" aria-label={a.famille === 'lumieres' ? tr('Luminosité') : tr('Consigne')} min={a.famille === 'lumieres' ? 1 : 5} max={a.famille === 'lumieres' ? 100 : 30} step={a.famille === 'lumieres' ? 5 : 0.5}
+                        value={a.valeur != null ? a.valeur : (a.famille === 'lumieres' ? 100 : (a.geste === 'eco' ? 17 : 20))}
+                        onChange={(e) => majAction(i, { valeur: e.target.value === '' ? null : Number(e.target.value) })} style={{ ...champ, width: 90 }} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{a.famille === 'lumieres' ? '%' : '°C'}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                    {['toujours', 'nuit', 'jour'].map(c => { const on = (a.si || 'toujours') === c; return <button key={c} aria-pressed={on} onClick={() => majAction(i, { si: c === 'toujours' ? null : c })} style={puce(on, t)}>{conditionsNoms[c]}</button>; })}
+                    {a.famille === 'lumieres' && a.geste === 'eteindre' && <button aria-pressed={!!a.sauf_veilleuses} onClick={() => majAction(i, { sauf_veilleuses: !a.sauf_veilleuses })} style={puce(!!a.sauf_veilleuses, t)}>{tr('Sauf les veilleuses')}</button>}
+                  </div>
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                {FAMILLES_SCN.map(f => <button key={f} onClick={() => ajouterAction(f)} style={puce(false, t)}><Fi i="plus" size={11} />{famillesNoms[f]}</button>)}
+              </div>
+              <div style={note}>{tr('Résolu au lancement : une lampe ajoutée demain sera prise. Jamais de désarmement ni de déverrouillage.')}</div>
+            </>
+          )}
+
+          <div style={{ marginTop: 8 }}>
+            <FicheRangee premiere titre={tr('Sur l’Accueil')} desc={tr('Dans la rangée des scénarios de l’accueil et de la veille.')}
+              droite={<RmBascule on={s.accueil !== false} nom={tr('Sur l’Accueil')} onToggle={() => maj({ accueil: s.accueil === false })} couleur={t.col} />} />
+            {existant && <FicheRangee titre={tr('Masqué')} desc={tr('Gardé, mais plus montré nulle part.')}
+              droite={<RmBascule on={!!s.masque} nom={tr('Masqué')} onToggle={() => maj({ masque: !s.masque })} couleur={t.col} />} />}
+          </div>
+          {err && <div style={{ ...note, color: 'var(--o-bad)' }}>{err}</div>}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+            {existant && scenario.integre && scenario.modifie && <button onClick={() => envoyer(close, { reinitialiser: scenario.id })} style={secondaire}>{tr('Remettre d’origine')}</button>}
+            {existant && !scenario.integre && <button onClick={() => envoyer(close, { supprimer: scenario.id })} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>}
+            <span style={{ flex: 1 }} />
+            <button onClick={close} style={secondaire}>{tr('Annuler')}</button>
+            <button onClick={() => valider(close)} disabled={!valide || attente} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide && !attente ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f', opacity: valide && !attente ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
+          </div>
+        </div>
+      )}
+    </BottomSheet>
   );
 }
 
@@ -8624,7 +8879,7 @@ const VAC_KEYS = [];   // le poll vient de vacKeys() : préfixe de domaine + ent
 
 // Vue atteinte alors que l'installation n'a pas de quoi la remplir.
 const VIEW_TITLES = {
-  pieces: tr('Pièces'), scenes: tr('Scènes'), objets: tr('Objets'), energie: tr('Énergie'),
+  pieces: tr('Pièces'), scenes: tr('Scénarios'), objets: tr('Objets'), energie: tr('Énergie'),
   securite: tr('Sécurité'), systeme: tr('Système'), lumieres: tr('Lumières'), climat: tr('Climat'),
   volets: tr('Volets'), aspirateur: tr('Aspirateur'), croquettes: tr('Croquettes'), medias: tr('Médias'),
 };
@@ -12035,7 +12290,7 @@ function MobileNav({ view, onNav, onMenu, onAssistant = null }) {
   // Alignée sur la sidebar épurée — sans Pièces (accessibles via cartes Accueil), avec Énergie + Sécurité (demande user).
   const items = [
     { id: 'accueil', label: tr('Accueil'), icon: 'home' },
-    { id: 'scenes', label: tr('Scènes'), icon: 'sparkles' },
+    { id: 'scenes', label: tr('Scénarios'), icon: 'sparkles' },
     { id: 'objets', label: tr('Objets'), icon: 'apps' },
     { id: 'energie', label: tr('Énergie'), icon: 'bolt' },
     { id: 'securite', label: tr('Sécurité'), icon: 'shield-check' },
@@ -12972,7 +13227,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenesView hass={hass} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}

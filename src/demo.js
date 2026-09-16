@@ -161,12 +161,6 @@ function configDemo() {
     },
     // Deux profils : la demo doit exercer les DEUX branches, admin comprise.
     loggia_users: [{ name: 'Démo', role: 'Admin', c: 'var(--o-accent)' }, { name: 'Invité', role: 'Famille', c: 'var(--o-purple)' }],
-    loggia_quickscenes: [
-      { name: 'Réveil', sub: 'Volets, café', icon: 'mug-hot', haid: 'scene.reveil' },
-      { name: 'Je rentre', sub: 'Lumières + chauffage', icon: 'home', haid: 'scene.je_rentre' },
-      { name: 'Cinéma', sub: 'TV, volets', icon: 'film', haid: 'scene.cinema' },
-      { name: 'Nuit', sub: 'Tout éteint, alarme', icon: 'moon', haid: 'scene.nuit' },
-    ],
     loggia_plants: [{ base: 'sensor.basilic', name: 'Basilic', room: 'Cuisine' }],
     // Le distributeur a sa cle (alias `feeder` → `loggia_feeder`) : `loggia_entities`
     // ne se lit qu'avec un serveur, que la demo n'a pas.
@@ -174,6 +168,121 @@ function configDemo() {
       meals: [{ time: '07:30', g: 45, auto: 'input_boolean.repas_matin' }, { time: '19:00', g: 45, auto: 'input_boolean.repas_soir' }] },
     loggia_onboarded: 1,
   };
+}
+
+/* ── Les scénarios (ADR 0027) ─────────────────────────────────────────────────
+ * Le faux serveur : les huit de Loggia, résolus contre la maison de
+ * démonstration comme le vrai le ferait — on compte ce qui a quelque chose à
+ * faire —, deux déjà liés à une scène (ce que la reprise des anciennes scènes
+ * rapides donne), un scénario personnel. Le magasin est en mémoire : ce qu'on
+ * enregistre tient le temps de l'onglet. */
+const SCN_A = (famille, geste, portee = 'maison', reste = {}) => ({ famille, geste, portee, ...reste });
+const SCN_INTEGRES = [
+  { id: 'reveil', icone: 'sunrise', teinte: 'ambre', actions: [SCN_A('volets', 'ouvrir'), SCN_A('lumieres', 'allumer', 'maison', { valeur: 30, si: 'nuit' }), SCN_A('chauffage', 'confort')] },
+  { id: 'depart', icone: 'running', teinte: 'bain', actions: [SCN_A('lumieres', 'eteindre'), SCN_A('medias', 'eteindre'), SCN_A('chauffage', 'eco'), SCN_A('alarme', 'absent'), SCN_A('serrures', 'verrouiller')] },
+  { id: 'retour', icone: 'home', teinte: 'accent', actions: [SCN_A('lumieres', 'allumer', 'vie', { valeur: 60, si: 'nuit' }), SCN_A('chauffage', 'confort')] },
+  { id: 'nuit', icone: 'moon', teinte: 'chambre', actions: [SCN_A('lumieres', 'eteindre', 'maison', { sauf_veilleuses: true }), SCN_A('volets', 'fermer'), SCN_A('medias', 'eteindre'), SCN_A('alarme', 'nuit'), SCN_A('serrures', 'verrouiller')] },
+  { id: 'cinema', icone: 'film', teinte: 'vert', actions: [SCN_A('medias', 'pause'), SCN_A('lumieres', 'allumer', 'piece', { valeur: 10 }), SCN_A('volets', 'fermer', 'piece'), SCN_A('medias', 'allumer_tv', 'piece')] },
+  { id: 'musique', icone: 'music', teinte: 'tendre', actions: [SCN_A('medias', 'lecture', 'piece'), SCN_A('lumieres', 'allumer', 'piece', { valeur: 50 })] },
+  { id: 'invites', icone: 'users', teinte: 'ambre', actions: [SCN_A('lumieres', 'allumer', 'vie', { valeur: 100 }), SCN_A('chauffage', 'confort')] },
+  { id: 'tout_eteindre', icone: 'power', teinte: 'gris', actions: [SCN_A('lumieres', 'eteindre'), SCN_A('medias', 'eteindre')] },
+];
+const SCN_PIECE = {
+  'light.salon': 'Salon', 'cover.salon': 'Salon', 'cover.volet_salon': 'Salon', 'media_player.salon': 'Salon', 'media_player.enceinte_salon': 'Salon', 'climate.salon': 'Salon',
+  'light.cuisine': 'Cuisine', 'cover.cuisine': 'Cuisine', 'cover.volet_cuisine': 'Cuisine',
+  'light.chambre': 'Chambre', 'cover.chambre': 'Chambre', 'cover.volet_chambre': 'Chambre', 'climate.chambre': 'Chambre',
+  'light.bureau': 'Bureau', 'light.entree': 'Entrée', 'lock.porte_entree': 'Entrée', 'light.sdb': 'Salle de bain',
+};
+const SCN_INTIME = /chambre|bain/i;
+const SCN_CFG = {
+  integres: { reveil: { lien: 'scene.reveil' }, cinema: { lien: 'scene.cinema' } },
+  persos: [{ id: 'perso_apero', nom: 'Apéro', icone: 'glass-cheers', teinte: 'tendre', accueil: true, masque: false, lien: null, piece: null,
+    actions: [SCN_A('medias', 'lecture', 'piece', { piece: 'Salon' }), SCN_A('lumieres', 'allumer', 'piece', { piece: 'Salon', valeur: 40 })] }],
+  ordre: [],
+};
+const SCN_DERNIERS = { nuit: Date.now() / 1000 - 9 * 3600, depart: Date.now() / 1000 - 86400 - 1800 };
+function scnEffectifs() {
+  const out = SCN_INTEGRES.map(b => {
+    const o = SCN_CFG.integres[b.id] || {};
+    return { id: b.id, integre: true, nom: o.nom || null, icone: o.icone || b.icone, teinte: o.teinte || b.teinte, masque: !!o.masque, accueil: o.accueil !== false,
+      lien: o.lien || null, piece: o.piece || null, actions: (Array.isArray(o.actions) ? o.actions : b.actions).map(a => ({ ...a })), modifie: Object.keys(o).length > 0 };
+  }).concat(SCN_CFG.persos.map(p => ({ ...p, integre: false, modifie: true, actions: (p.actions || []).map(a => ({ ...a })) })));
+  if (SCN_CFG.ordre.length) { const rang = {}; SCN_CFG.ordre.forEach((id, i) => { rang[id] = i; }); out.sort((a, b) => (rang[a.id] == null ? 99 : rang[a.id]) - (rang[b.id] == null ? 99 : rang[b.id])); }
+  return out;
+}
+function scnCibles(a, states, piece) {
+  const dom = { lumieres: 'light.', volets: 'cover.', medias: 'media_player.', chauffage: 'climate.', alarme: 'alarm_control_panel.', serrures: 'lock.' }[a.famille];
+  const nuit = !!(states['sun.sun'] && states['sun.sun'].state === 'below_horizon');
+  if ((a.si === 'nuit' && !nuit) || (a.si === 'jour' && nuit) || !dom) return [];
+  const ou = a.piece || piece;
+  return Object.keys(states).filter(id => {
+    if (id.indexOf(dom) !== 0) return false;
+    const st = states[id].state, p = SCN_PIECE[id] || null;
+    if (a.portee === 'piece' && (!ou || !p || p.toLowerCase() !== ou.toLowerCase())) return false;
+    if (a.portee === 'vie' && (!p || SCN_INTIME.test(p))) return false;
+    if (a.famille === 'lumieres') return a.geste === 'eteindre' ? st === 'on' : true;
+    if (a.famille === 'volets') return a.geste === 'fermer' ? st !== 'closed' : st !== 'open';
+    if (a.famille === 'medias') { const tv = (states[id].attributes || {}).device_class === 'tv'; return a.geste === 'eteindre' ? st !== 'off' : a.geste === 'pause' ? st === 'playing' : a.geste === 'lecture' ? (!tv && st !== 'playing') : tv; }
+    if (a.famille === 'serrures') return st !== 'locked';
+    return true;
+  }).sort();
+}
+const scnPieceDe = (s) => s.piece || ((s.id === 'cinema' || s.id === 'musique') ? 'Salon' : null);
+function scenariosDemo(states) {
+  const liens = Object.keys(states).filter(id => /^(scene|script)\./.test(id)).sort().map(id => ({ haid: id, nom: (states[id].attributes || {}).friendly_name || id }));
+  const scenarios = scnEffectifs().map(s => {
+    const piece = scnPieceDe(s);
+    const resume = s.lien ? [] : s.actions.map(a => ({ famille: a.famille, geste: a.geste, portee: a.portee || 'maison', piece: a.piece || (a.portee === 'piece' ? piece : null), valeur: a.valeur, si: a.si, n: scnCibles(a, states, piece).length }));
+    // La suggestion suit la même règle de mots-clés que le serveur : « je_rentre » va à Je rentre, « nuit » à Bonne nuit.
+    const suggestion = s.integre && !s.lien ? ({ retour: 'scene.je_rentre', nuit: 'scene.nuit' }[s.id] || null) : null;
+    return { ...s, piece_effective: piece, resume, dernier: SCN_DERNIERS[s.id] || null, suggestion: suggestion && states[suggestion] ? suggestion : null, lien_absent: !!s.lien && !states[s.lien] };
+  });
+  return { scenarios, liens, pieces: ['Bureau', 'Chambre', 'Cuisine', 'Entrée', 'Salle de bain', 'Salon'], alarme: 'alarm_control_panel.maison', journal: [] };
+}
+function scenariosPatch(patch) {
+  const p = patch || {};
+  if (p.enregistrer) {
+    const s = { ...p.enregistrer };
+    if (SCN_INTEGRES.some(b => b.id === s.id)) {
+      const o = { ...(SCN_CFG.integres[s.id] || {}), ...s }; delete o.id; if (o.actions == null) delete o.actions;
+      SCN_CFG.integres[s.id] = o;
+    } else {
+      const ex = s.id ? SCN_CFG.persos.find(x => x.id === s.id) : null;
+      if (ex) Object.assign(ex, s, { actions: s.actions || [] });
+      else {
+        const base = 'perso_' + String(s.nom || 'scenario').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+        let id = base, n = 2;
+        while (SCN_CFG.persos.some(x => x.id === id)) { id = base + '_' + n; n += 1; }
+        SCN_CFG.persos.push({ id, nom: s.nom || id, icone: s.icone || 'sparkles', teinte: s.teinte || 'accent', lien: s.lien || null, piece: s.piece || null, actions: s.actions || [], accueil: s.accueil !== false, masque: !!s.masque });
+      }
+    }
+  }
+  if (p.supprimer) SCN_CFG.persos = SCN_CFG.persos.filter(x => x.id !== p.supprimer);
+  if (p.reinitialiser) delete SCN_CFG.integres[p.reinitialiser];
+  if (Array.isArray(p.ordre)) SCN_CFG.ordre = p.ordre.slice();
+  return SCN_CFG;
+}
+function scenariosLancer(id, states) {
+  const s = scnEffectifs().find(x => x.id === id);
+  if (!s) return null;
+  const fait = []; let n = 0;
+  if (s.lien) { fait.push({ famille: 'lien', geste: s.lien.split('.')[0], n: 1 }); n = 1; }
+  else {
+    const piece = scnPieceDe(s);
+    s.actions.forEach(a => {
+      const ids = scnCibles(a, states, piece);
+      ids.forEach(hid => {
+        const st = states[hid]; if (!st) return;
+        const etat = { lumieres: a.geste === 'eteindre' ? 'off' : 'on', volets: a.geste === 'fermer' ? 'closed' : 'open',
+          medias: a.geste === 'eteindre' ? 'off' : a.geste === 'pause' ? 'paused' : a.geste === 'lecture' ? 'playing' : 'on',
+          serrures: 'locked', alarme: { absent: 'armed_away', nuit: 'armed_night', maison: 'armed_home' }[a.geste] }[a.famille];
+        if (etat) states[hid] = { ...st, state: etat, last_changed: new Date().toISOString() };
+      });
+      fait.push({ famille: a.famille, geste: a.geste, n: ids.length }); n += ids.length;
+    });
+  }
+  SCN_DERNIERS[id] = Date.now() / 1000;
+  return { id, fait, n };
 }
 
 /* Un agenda pour la carte de l'accueil : demain, et les jours d'après. */
@@ -711,6 +820,9 @@ export function installerDemo() {
       if (msg && msg.type === 'media_player/browse_media') {
         return Promise.resolve(parcoursDemo(msg.media_content_id));
       }
+      if (msg && msg.type === 'loggia/scenarios/etat') return Promise.resolve(scenariosDemo(states));
+      if (msg && msg.type === 'loggia/scenarios/config') return Promise.resolve({ config: scenariosPatch(msg.patch), etat: scenariosDemo(states) });
+      if (msg && msg.type === 'loggia/scenarios/lancer') return Promise.resolve(scenariosLancer(msg.id, states));
       if (msg && msg.type === 'loggia/interrupteurs/etat') return Promise.resolve(interDemo());
       if (msg && msg.type === 'loggia/interrupteurs/affecter') {
         return Promise.resolve({ affectations: interAffecter(msg) });

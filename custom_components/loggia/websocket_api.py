@@ -58,6 +58,9 @@ WS_VEI_ETAT = "loggia/veilles/etat"
 WS_VEI_CONFIG = "loggia/veilles/config"
 WS_REG_ETAT = "loggia/regles/etat"
 WS_REG_DEGELER = "loggia/regles/degeler"
+WS_SCN_ETAT = "loggia/scenarios/etat"
+WS_SCN_CONFIG = "loggia/scenarios/config"
+WS_SCN_LANCER = "loggia/scenarios/lancer"
 
 
 def _user_info(connection: websocket_api.ActiveConnection) -> dict[str, Any]:
@@ -91,7 +94,7 @@ def _payload_too_big(patch: dict[str, Any]) -> str | None:
 def async_register(hass: HomeAssistant, store: LoggiaStore,
                    acces_interrupteurs=None, acces_volets=None, acces_fenetres=None,
                    acces_presence=None, acces_nuit=None,
-                   acces_veilles=None, acces_regles=None) -> None:
+                   acces_veilles=None, acces_regles=None, acces_scenarios=None) -> None:
     """Declare les commandes aupres du serveur WebSocket.
 
     `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
@@ -373,6 +376,53 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
 
     # ── Le socle : le journal de la maison, et ce qui retient en ce moment ──
     #
+    # ── Les scenarios (ADR 0027) ───────────────────────────────────────────
+    # Lire et lancer sont ouverts a tout compte connecte : lancer, c'est
+    # appeler des services que Home Assistant lui permet deja. Ecrire — les
+    # scenarios sont ceux de la maison — reste aux administrateurs.
+    @websocket_api.websocket_command({vol.Required("type"): WS_SCN_ETAT})
+    @websocket_api.async_response
+    async def handle_scn_etat(hass, connection, msg):
+        scenarios = acces_scenarios() if acces_scenarios else None
+        if scenarios is None:
+            connection.send_error(msg["id"], "not_available", "scenarios indisponibles")
+            return
+        connection.send_result(msg["id"], await scenarios.async_etat())
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_SCN_CONFIG, vol.Required("patch"): dict}
+    )
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_scn_config(hass, connection, msg):
+        scenarios = acces_scenarios() if acces_scenarios else None
+        if scenarios is None:
+            connection.send_error(msg["id"], "not_available", "scenarios indisponibles")
+            return
+        try:
+            config = await scenarios.async_enregistrer(msg["patch"])
+        except ValueError as err:
+            connection.send_error(msg["id"], "invalid_format", str(err))
+            return
+        # L'etat avec : l'ecran redessine sans attendre son sondage.
+        connection.send_result(msg["id"], {"config": config, "etat": await scenarios.async_etat()})
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_SCN_LANCER, vol.Required("id"): str}
+    )
+    @websocket_api.async_response
+    async def handle_scn_lancer(hass, connection, msg):
+        scenarios = acces_scenarios() if acces_scenarios else None
+        if scenarios is None:
+            connection.send_error(msg["id"], "not_available", "scenarios indisponibles")
+            return
+        # La main de celui qui appuie : les regles la verront comme telle.
+        resultat = await scenarios.async_lancer(msg["id"], user_id=connection.user.id)
+        if resultat is None:
+            connection.send_error(msg["id"], "not_found", "scenario inconnu : %s" % msg["id"])
+            return
+        connection.send_result(msg["id"], resultat)
+
     # Toutes les regles melees, dans l'ordre du temps — le seul outil de
     # debogage d'un non-technicien. Et le PRESENT : quand rien ne bouge, la
     # question n'est pas ce qui s'est passe mais ce qui retient — une main,
@@ -422,6 +472,9 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
 
     websocket_api.async_register_command(hass, handle_reg_etat)
     websocket_api.async_register_command(hass, handle_reg_degeler)
+    websocket_api.async_register_command(hass, handle_scn_etat)
+    websocket_api.async_register_command(hass, handle_scn_config)
+    websocket_api.async_register_command(hass, handle_scn_lancer)
     websocket_api.async_register_command(hass, handle_vei_etat)
     websocket_api.async_register_command(hass, handle_vei_config)
     websocket_api.async_register_command(hass, handle_nui_etat)

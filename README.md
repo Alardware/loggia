@@ -95,7 +95,7 @@ http://<votre-ha>:8123/loggia-static/index.html?demo
 ```
 
 La maison de démonstration se monte : pièces, lumières, volets, thermostats,
-agenda, scènes — **jouables** (une lampe basculée bascule), deux profils dont
+agenda, scénarios — **jouables** (une lampe basculée bascule), deux profils dont
 un administrateur pour tout essayer. Aucune trace : le stockage du navigateur
 est remplacé par un magasin en mémoire, votre configuration n'est ni lue ni
 écrite, et tout s'évapore à la fermeture de l'onglet. Un badge
@@ -138,7 +138,7 @@ redémarrer, puis ajouter l'intégration depuis l'interface. Le mode historique
 | Sécurité | `alarm_control_panel`, `camera` (flux dédoublonnés), `person` ; détecteurs pris parmi les `binary_sensor` de la même caméra |
 | Énergie | **préférences du tableau de bord Énergie natif** — compteur, injection, production solaire, appareils suivis |
 | Système | capteurs de charge processeur en `%`, puis mémoire, disque, température et disponibilité du même appareil |
-| Scènes | domaines `scene` et `script` |
+| Scénarios | proposés par Loggia — huit, composés d'après lumières, volets, lecteurs, thermostats, alarme et serrures — plus les vôtres ; une scène ou un script (`scene`, `script`) se lie |
 
 **Une vue sans rien à montrer disparaît du menu.** Elle réapparaît d'elle-même
 le jour où l'appareil correspondant existe. Paramètres → Vues liste celles qui

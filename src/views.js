@@ -96,7 +96,10 @@ export function viewAvailability(ctx) {
   const nRooms = (rooms.rooms || []).length || (rooms.suggested || []).length;
   out.pieces = nRooms ? OK : no('aucune zone Home Assistant ne contient d’équipement d’ambiance');
 
-  out.scenes = (has.scene || has.script) ? OK : no('aucune scène ni script dans Home Assistant');
+  // Scénarios (ADR 0027) : Loggia les compose dès qu'il y a quelque chose à
+  // piloter ; une scène ou un script de Home Assistant se lie, en plus.
+  const composable = has.light || has.cover || has.media_player || has.climate || has.alarm_control_panel || has.lock;
+  out.scenes = (composable || has.scene || has.script) ? OK : no('rien à composer : ni lumière, ni volet, ni lecteur, ni scène');
 
   // Objets montre tout ce qui se pilote (14/09/2026) : un seul appareil suffit.
   const objets = has.light || has.switch || has.cover || has.climate || has.water_heater || has.media_player
