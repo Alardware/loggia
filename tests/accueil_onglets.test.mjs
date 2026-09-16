@@ -29,7 +29,7 @@ test('les sections : Securite en tete de la colonne, En ce moment en tete du rai
 test('la carte Securite : les boutons d’armement d’aujourd’hui, la serrure, les ouvrants — ou rien', () => {
   assert.ok(home.includes('{alarmRailId && <RailArm id={alarmRailId} hass={dashHass} />}'), 'le systeme de boutons actuel (retour user : on le garde)');
   assert.ok(home.includes('{serrureId && <RailSerrure id={serrureId} hass={dashHass} />}'), 'la serrure');
-  assert.ok(home.includes('const tuilesSec = tuilesSecurite(comptesSec);') && home.includes("onClick={() => onNav && onNav('securite')}"), 'la ligne d’etat (portes, fenetres, mouvement, cameras), vers la vue Securite');
+  assert.ok(home.includes('const tuilesSec = tuilesSecurite(comptesSec);') && home.includes("onTuile={() => onNav && onNav('securite')}"), 'la ligne d’etat (portes, fenetres, mouvement, cameras), vers la vue Securite');
   assert.ok(home.includes('const carteSecurite = (alarmRailId || serrureId || tuilesSec.length) ? ('), 'sans panneau, serrure ni capteur : pas de carte');
   assert.ok(home.includes('securite: carteSecurite,'), 'une section comme les autres');
   assert.ok(!home.includes('Désactivé') && !home.includes('Partiel'), 'pas le selecteur de la maquette');

@@ -37,3 +37,4 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0030](0030-le-haut-informe-le-milieu-controle.md) | Le haut informe, le milieu contrôle : hero plus bas, tuiles cliquables, une rangée de scénarios | appliqué (v3.31.0) |
 | [0031](0031-les-cameras-disent-leur-dernier-evenement.md) | Les caméras disent leur dernier événement : détecteurs résolus + journal, jamais last_changed | appliqué (v3.32.0) |
 | [0032](0032-une-carte-agenda-a-la-place-de-deux.md) | Une carte agenda à la place de deux : la date, sept jours, ce qui vient | appliqué (v3.33.0) |
+| [0033](0033-la-vue-securite-parle-comme-l-accueil.md) | La vue Sécurité parle comme l'Accueil : état en une seconde, tuiles, À surveiller, un ouvrant par carte | appliqué (v3.34.0) |

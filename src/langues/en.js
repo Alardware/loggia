@@ -2012,4 +2012,6 @@ export default {
   'RIEN AUJOURD’HUI': 'NOTHING TODAY',
   'Rien ce jour-là': 'Nothing that day',
   'Rien de prévu ces 7 jours': 'Nothing planned these 7 days',
+  // La vue Securite parle comme l'Accueil (v3.34.0)
+  'Ouvrir la vue Sécurité': 'Open the Security view',
 };

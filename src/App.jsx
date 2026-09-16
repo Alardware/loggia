@@ -34,7 +34,7 @@ import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
-import { comptesSecurite, tuilesSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
+import { comptesSecurite, tuilesSecurite, resumeSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
 import { evenementCamera, detecteursDe, reduireDerniers, depuis } from './evenement.js';
 import { cleJour, plageSemaine, joursAgenda, comptesParJour, evenementsAVenir, evenementsDuJour } from './agenda.js';
@@ -6332,6 +6332,32 @@ function poserFantome(el, x0, y0) {
   };
 }
 
+/* LA LIGNE D'ETAT de la securite (ADR 0028) : une tuile par famille presente
+ * — portes, fenetres, mouvement, cameras —, le meme dessin sur l'Accueil et
+ * dans la vue Securite (ADR 0033). `onTuile(t)` recoit la tuile cliquee :
+ * l'Accueil mene a la vue, la vue defile jusqu'a la section. */
+function TuilesSecurite({ tuiles, onTuile = null }) {
+  if (!tuiles || !tuiles.length) return null;
+  return (
+    <div className="grid-sec-etat" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + tuiles.length + ', minmax(0, 1fr))', gap: 8, marginTop: 10 }}>
+      {tuiles.map(t => {
+        const col = t.alerte ? 'var(--o-warn)' : t.actif ? 'var(--o-accent-soft)' : 'var(--o-text)';
+        const fond = t.alerte ? 'rgba(var(--o-warn-rgb),.16)' : t.actif ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)';
+        return (
+          <button key={t.cle} type="button" className="sec-tuile" onClick={() => onTuile && onTuile(t)} aria-label={t.nom + ' · ' + t.valeur + ' ' + t.libelle}
+            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text)', textAlign: 'left', minWidth: 0 }}>
+            <span className="sec-ico" style={{ ...RM_ICO(fond, col), width: 30, height: 30, borderRadius: 10 }}><Fi i={t.icone} size={14} /></span>
+            <span style={{ minWidth: 0 }}>
+              <span className="sec-nom" style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nom}</span>
+              <span className="sec-val" style={{ display: 'block', fontSize: 13, fontWeight: 800, color: col, whiteSpace: 'nowrap' }}>{t.valeur} <span className="sec-lib" style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text2)' }}>{t.libelle}</span></span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onNav = null }) {
   const [override, setOverride] = useState(null);
   // L'agenda du rail (ADR 0032) : d'aujourd'hui minuit a sept jours, TOUS les
@@ -7302,12 +7328,14 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             * Securite. Elle remplace la ligne « Tout est ferme » : memes
             * donnees, lues en une seconde. */
           const tuilesSec = tuilesSecurite(comptesSec);
-          const ouvertsSec = (comptesSec.portes ? comptesSec.portes.ouverts : 0) + (comptesSec.fenetres ? comptesSec.fenetres.ouverts : 0);
-          const sousSecurite = comptesSec.ok ? tr('Tout est sécurisé')
-            : ouvertsSec > 1 ? tr('{n} ouvrants ouverts', { n: ouvertsSec }) : ouvertsSec === 1 ? tr('{n} ouvrant ouvert', { n: 1 }) : tr('Caméra hors ligne');
+          const sousSecurite = resumeSecurite(comptesSec);
           const carteSecurite = (alarmRailId || serrureId || tuilesSec.length) ? (
             <div style={{ background: 'var(--o-surfA)', borderRadius: 'var(--o-radius,18px)', padding: '13px 15px', boxShadow: 'var(--o-shadow)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {/* L'en-tete est un bouton : un tap mene a la vue Securite, sur
+                * tous les ecrans (ADR 0033). Les boutons d'armement restent
+                * en dessous, hors du bouton. */}
+              <button type="button" onClick={() => onNav && onNav('securite')} aria-label={tr('Ouvrir la vue Sécurité')}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: 0, border: 'none', background: 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
                 <span style={RM_ICO('rgba(' + alarmeRgb + ',.16)', alarmeCol)}><Fi i={(alarmeEtat && alarmeEtat !== 'disarmed') ? 'shield-check' : 'shield'} size={17} /></span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr('Sécurité')}</div>
@@ -7315,25 +7343,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                     {alarmRailId ? tr('Alarme') + ' ' + String(alarmeMots[alarmeEtat] || alarmeEtat || '—').toLowerCase() + ' · ' : ''}{sousSecurite}
                   </div>
                 </div>
-              </div>
-              {tuilesSec.length > 0 && (
-                <div className="grid-sec-etat" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + tuilesSec.length + ', minmax(0, 1fr))', gap: 8, marginTop: 10 }}>
-                  {tuilesSec.map(t => {
-                    const col = t.alerte ? 'var(--o-warn)' : t.actif ? 'var(--o-accent-soft)' : 'var(--o-text)';
-                    const fond = t.alerte ? 'rgba(var(--o-warn-rgb),.16)' : t.actif ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)';
-                    return (
-                      <button key={t.cle} type="button" className="sec-tuile" onClick={() => onNav && onNav('securite')} aria-label={t.nom + ' · ' + t.valeur + ' ' + t.libelle}
-                        style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text)', textAlign: 'left', minWidth: 0 }}>
-                        <span className="sec-ico" style={{ ...RM_ICO(fond, col), width: 30, height: 30, borderRadius: 10 }}><Fi i={t.icone} size={14} /></span>
-                        <span style={{ minWidth: 0 }}>
-                          <span className="sec-nom" style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nom}</span>
-                          <span className="sec-val" style={{ display: 'block', fontSize: 13, fontWeight: 800, color: col, whiteSpace: 'nowrap' }}>{t.valeur} <span className="sec-lib" style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text2)' }}>{t.libelle}</span></span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                <Fi i="angle-right" size={11} color="var(--o-text3)" />
+              </button>
+              <TuilesSecurite tuiles={tuilesSec} onTuile={() => onNav && onNav('securite')} />
               {alarmRailId && <RailArm id={alarmRailId} hass={dashHass} />}
               {serrureId && <RailSerrure id={serrureId} hass={dashHass} />}
             </div>
@@ -9320,7 +9332,7 @@ const secBaseKeys = () => {
 const ACTIFS = ['on', 'true', 'True', 'detected', 'Detected', 'home'];
 
 
-function SecuriteContent({ hass, edit = false, onEnt }) {
+function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   const S = (hass && hass.states) || {};
   const isOn = id => { const s = id && S[id]; return !!(s && ACTIFS.indexOf(s.state) >= 0); };
   // ── Sources : configuration utilisateur d'abord, découverte ensuite ──
@@ -9342,6 +9354,26 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
   })).filter(c => c && c.haid);
   // Le dernier declenchement de chaque detecteur, par le journal (ADR 0031).
   const derniersCams = useDerniersEvenements(hass, camList.flatMap(c => detecteursDe(c).map(d => d.id)), reduireDerniers);
+  /* LE MEME LANGAGE QUE L'ACCUEIL (ADR 0033) : les comptes et la ligne d'etat
+   * de la carte Securite, les points « A surveiller » qui touchent a la
+   * securite (les etats et les cameras — pas le CO2 ni les piles, qui ont
+   * leur place ailleurs), et les fiches des ouvrants. Une tuile de la ligne
+   * d'etat defile jusqu'a sa section. */
+  const dc = useDomainCards(hass, { onNav });
+  // Les cameras comptees comme sur l'Accueil : la liste de l'utilisateur
+  // (`loggia_cameras`, une camera sans entite y compte comme hors ligne),
+  // sinon celles de la resolution — memes chiffres des deux cotes.
+  const camsCfg = (() => { try { const c = cfgVal('loggia_cameras', null); return Array.isArray(c) && c.length ? c : null; } catch { return null; } })();
+  const camsInfoSec = (camsCfg || camList).map(c => ({ nom: c.name || c.label, online: S[c.haid] ? S[c.haid].state !== 'unavailable' : c.online !== false }));
+  const comptesSecVue = comptesSecurite(S, camsInfoSec);
+  const tuilesSecVue = tuilesSecurite(comptesSecVue);
+  const pointsSec = pointsAttention({ S, cams: camsInfoSec });
+  const defiler = (cle) => {
+    const el = document.getElementById(cle === 'cameras' ? 'sec-cameras' : cle === 'mouvement' ? 'sec-journal' : 'sec-ouvrants');
+    // Un saut net, pas un glissement : le glissement est ignore par certains
+    // navigateurs integres, et la section se cale sous l'en-tete fixe.
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' });
+  };
   // Même source que l'accueil : une personne ne peut pas exister ici et pas là.
   const secPeople = peopleList().filter(p => p && p.haid);
   // ── Alarme : état réel + optimiste ──
@@ -9398,12 +9430,10 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
       sub: sousCamera(online, ev),
     };
   });
-  const camOnline = cams.filter(c => c.online).length;
   const anyMotion = cams.some(c => c.online && c.active);
 
   // ── Présence ──
   const people = secPeople.map(p => ({ name: p.name, home: isOn(p.haid) }));
-  const homeCount = people.filter(p => p.home).length;
 
   // ── État global ──
   const unknownState = alarm === 'unknown';
@@ -9441,11 +9471,14 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
       <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Sécurité')}</h1>
-          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{camOnline > 1 ? tr('{n} caméras en ligne', { n: camOnline }) : tr('{n} caméra en ligne', { n: camOnline })} · {homeCount > 1 ? tr('{n} présents sur {t}', { n: homeCount, t: people.length }) : tr('{n} présent sur {t}', { n: homeCount, t: people.length })} · {tr('alarme {etat}', { etat: alarmWord })}</div>
+          {/* L'etat en une seconde, les mots de la carte Securite de l'Accueil (ADR 0033). */}
+          <div style={{ fontSize: 13, fontWeight: 600, marginTop: 5, color: comptesSecVue.ok ? 'var(--o-ok)' : 'var(--o-warn)' }}>{tr('Alarme')} {alarmWord} · {resumeSecurite(comptesSecVue)}</div>
         </div>
         <span style={{ flex: 1 }} />
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: ca(statusCol, .14), color: cs(statusCol) }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: cs(statusCol), animation: triggered ? 'pulse 1.2s infinite' : 'none' }} />{heroTitle.toUpperCase()}</span>
       </div>
+      {/* La ligne d'etat de l'Accueil, tuile par tuile ; chacune defile jusqu'a sa section. */}
+      {tuilesSecVue.length > 0 && <div style={{ marginTop: -14 }}><TuilesSecurite tuiles={tuilesSecVue} onTuile={(t) => defiler(t.cle)} /></div>}
 
       {/* réglages rapides : armement + mode nuit */}
       <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
@@ -9493,38 +9526,47 @@ function SecuriteContent({ hass, edit = false, onEnt }) {
         <span style={{ flex: 1 }} />
       </div>
 
-      {/* Ce que le panneau de synthèse disait en lignes, les cartes le disent
-        * mieux : les ouvrants un par un, qui est là, et ce qui a bougé. Les
-        * mêmes cartes que dans les pièces (retour 02/09). Présence seulement
-        * si la maison suit quelqu'un ; ouvrants seulement s'il y en a. */}
+      {/* « A surveiller », comme sur l'Accueil : seulement quand il y a un
+        * point, et seulement ceux de la securite (ADR 0033). Un point qui
+        * mene ici reste ici. */}
+      {pointsSec.length > 0 && <CarteAttention points={pointsSec} onNav={(v) => { if (v !== 'securite' && onNav) onNav(v); }} />}
+
+      {/* Les ouvrants UN PAR UN, avec la carte des pieces — la porte ou la
+        * fenetre dessinee en fond, que l'utilisateur aime (retour 15/09) —,
+        * les ouverts d'abord ; puis qui est la. Presence seulement si la
+        * maison suit quelqu'un ; ouvrants seulement s'il y en a. */}
       {(ouvrantsDe(S).length > 0 || people.length > 0) && (
         <>
-          <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Ouvrants et présence')}</div>
+          <div id="sec-ouvrants" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Ouvrants et présence')}</div>
           <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16, alignItems: 'stretch' }}>
-            {ouvrantsDe(S).length > 0 && <Anim i={0}><div style={{ height: 184 }}><CvOuvrants hass={hass} /></div></Anim>}
-            {people.length > 0 && <Anim i={1}><div style={{ height: 184 }}><CvPresence hass={hass} /></div></Anim>}
+            {[...ouvrantsDe(S)].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).map((o, i) => <Anim key={o.id} i={i}><div style={{ height: 184 }}><RoomGenericCard id={o.id} hass={hass} onOpen={dc.ouvrir} /></div></Anim>)}
+            {people.length > 0 && <Anim i={ouvrantsDe(S).length}><div style={{ height: 184 }}><CvPresence hass={hass} /></div></Anim>}
           </div>
         </>
       )}
 
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Caméras en direct')}</div>
+      <div id="sec-cameras" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Caméras en direct')}</div>
       <div className="grid-sec-cams" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         {cams.map((c, i) => <Anim key={c.haid || c.id} i={i} base={140}><CameraTile c={c} /></Anim>)}
       </div>
 
       {/* Le journal de ce qui touche à la sécurité : ouvrants, mouvements,
         * alarme et caméras — la carte des pièces, restreinte à ces entités. */}
-      <RoomActivityCard hass={hass} max={12} titre={tr('Journal de la sécurité')} sous={tr('Ouvrants, mouvements et alarme — 24 h, en direct')}
-        ids={[...ouvrantsDe(S).map(o => o.id), ...(alarmId ? [alarmId] : []), ...camList.map(c => c.haid).filter(Boolean), ...camList.flatMap(c => detecteursDe(c).map(d => d.id)), ...people.map(p => p.haid).filter(Boolean)]} />
+      <div id="sec-journal">
+        <RoomActivityCard hass={hass} max={12} titre={tr('Journal de la sécurité')} sous={tr('Ouvrants, mouvements et alarme — 24 h, en direct')}
+          ids={[...ouvrantsDe(S).map(o => o.id), ...(alarmId ? [alarmId] : []), ...camList.map(c => c.haid).filter(Boolean), ...camList.flatMap(c => detecteursDe(c).map(d => d.id)), ...people.map(p => p.haid).filter(Boolean)]} />
+      </div>
+      {/* Les fiches des ouvrants : sans elles, une carte cliquee resterait muette. */}
+      {dc.sheets}
     </div>
   );
 }
 
-function SecuriteView({ hass, edit = false, onEnt }) {
+function SecuriteView({ hass, edit = false, onEnt, onNav = null }) {
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
-      <SecuriteContent hass={hass} edit={edit} onEnt={onEnt} />
+      <SecuriteContent hass={hass} edit={edit} onEnt={onEnt} onNav={onNav} />
     </main>
   );
 }
@@ -13444,7 +13486,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}

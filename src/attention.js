@@ -131,6 +131,17 @@ export function comptesSecurite(S, cams = []) {
   };
 }
 
+/** La sous-ligne de la sécurité, en un mot : « Tout est sécurisé », sinon ce
+ * qui ne l'est pas — les ouvrants ouverts d'abord, une caméra injoignable
+ * ensuite. La même phrase sur l'Accueil et dans la vue Sécurité (ADR 0033). */
+export function resumeSecurite(comptes) {
+  const c = estObjet(comptes) ? comptes : {};
+  if (c.ok) return tr('Tout est sécurisé');
+  const n = (v) => Number(v) || 0;
+  const ouverts = n(c.portes && c.portes.ouverts) + n(c.fenetres && c.fenetres.ouverts);
+  return ouverts > 1 ? tr('{n} ouvrants ouverts', { n: ouverts }) : ouverts === 1 ? tr('{n} ouvrant ouvert', { n: 1 }) : tr('Caméra hors ligne');
+}
+
 /** Les tuiles de la rangée, dans l'ordre de lecture : portes, fenêtres,
  * mouvement, caméras — seulement les familles présentes. `nom` est le titre
  * au-dessus de la valeur ; `alerte` : quelque chose d'ouvert ou d'injoignable ;

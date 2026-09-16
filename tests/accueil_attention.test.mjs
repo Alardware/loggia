@@ -48,16 +48,18 @@ test('les points viennent des etats, des cameras, du CO2 des pieces, du diagnost
 
 test('la carte Securite : une sous-ligne verte ou ambre, la ligne d’etat, les boutons d’armement gardes', () => {
   const home = bloc('function Dashboard(', NL + '}');
-  assert.ok(home.includes("const sousSecurite = comptesSec.ok ? tr('Tout est sécurisé')"), '« Tout est securise » quand rien n’est ouvert et que les cameras repondent');
+  assert.ok(home.includes('const sousSecurite = resumeSecurite(comptesSec);'), '« Tout est securise » quand rien n’est ouvert et que les cameras repondent — la meme phrase que la vue Securite (ADR 0033)');
   assert.ok(home.includes("color: comptesSec.ok ? 'var(--o-ok)' : 'var(--o-warn)'"), 'verte ou ambre');
-  assert.ok(home.includes('<div className="grid-sec-etat" style={{ display: \'grid\', gridTemplateColumns: \'repeat(\' + tuilesSec.length + \', minmax(0, 1fr))\''), 'une tuile par famille presente');
-  assert.ok(home.includes("<Fi i={t.icone} size={14} />") && home.includes('{t.valeur} <span className="sec-lib" style={{ fontSize: 11, fontWeight: 600, color: \'var(--o-text2)\' }}>{t.libelle}</span>'), 'icone, valeur, libelle');
+  // Depuis l'ADR 0033, la rangee est un composant partage avec la vue Securite.
+  const tuilesBloc = bloc('function TuilesSecurite(', NL + '}');
+  assert.ok(tuilesBloc.includes('<div className="grid-sec-etat" style={{ display: \'grid\', gridTemplateColumns: \'repeat(\' + tuiles.length + \', minmax(0, 1fr))\'') && home.includes("<TuilesSecurite tuiles={tuilesSec} onTuile={() => onNav && onNav('securite')} />"), 'une tuile par famille presente');
+  assert.ok(tuilesBloc.includes("<Fi i={t.icone} size={14} />") && tuilesBloc.includes('{t.valeur} <span className="sec-lib" style={{ fontSize: 11, fontWeight: 600, color: \'var(--o-text2)\' }}>{t.libelle}</span>'), 'icone, valeur, libelle');
   assert.ok(home.includes('{alarmRailId && <RailArm id={alarmRailId} hass={dashHass} />}') && home.includes('{serrureId && <RailSerrure id={serrureId} hass={dashHass} />}'), 'les boutons d’aujourd’hui et la serrure restent');
   assert.ok(!src.includes('ouvrantsRow'), 'la ligne « Tout est ferme » a disparu : les tuiles la remplacent');
   // Retour user du 16/09 : « sur mobile cette partie revient a la ligne » — une
   // seule rangee au telephone, l'icone au-dessus, le libelle peut se replier.
   assert.ok(!css.includes('.grid-sec-etat { grid-template-columns: 1fr 1fr !important; }'), 'plus de deux colonnes forcees sur telephone');
-  assert.ok(home.includes('<button key={t.cle} type="button" className="sec-tuile"') && home.includes('<span className="sec-ico" style={{ ...RM_ICO(fond, col), width: 30, height: 30, borderRadius: 10 }}>') && home.includes('<span className="sec-nom" style={{ display: \'block\', fontSize: 11') && home.includes('<span className="sec-val" style={{ display: \'block\', fontSize: 13'), 'les tuiles ont des classes pour le telephone');
+  assert.ok(tuilesBloc.includes('<button key={t.cle} type="button" className="sec-tuile"') && tuilesBloc.includes('<span className="sec-ico" style={{ ...RM_ICO(fond, col), width: 30, height: 30, borderRadius: 10 }}>') && tuilesBloc.includes('<span className="sec-nom" style={{ display: \'block\', fontSize: 11') && tuilesBloc.includes('<span className="sec-val" style={{ display: \'block\', fontSize: 13'), 'les tuiles ont des classes pour le telephone');
   assert.ok(css.includes('.grid-sec-etat > .sec-tuile { flex-direction: column !important; align-items: flex-start !important; gap: 6px !important; padding: 8px !important; }') && css.includes('.sec-tuile .sec-val { font-size: 12px !important; white-space: normal !important; }') && css.includes('.sec-tuile .sec-ico { width: 26px !important; height: 26px !important; }'), 'une rangee au telephone : icone au-dessus, libelle repliable');
 });
 
@@ -65,7 +67,7 @@ test('l’accueil surveille ce que la carte Securite et « A surveiller » lisen
   const k = bloc('const bannerKeys = () => {', NL + '};');
   assert.ok(k.includes("dom === 'camera' || dom === 'alarm_control_panel'"), 'cameras et panneaux');
   assert.ok(k.includes('OUVRANT_DCS.indexOf(dc) >= 0 || CLASSES_MOUVEMENT.indexOf(dc) >= 0 || CLASSES_SURETE.indexOf(dc) >= 0'), 'ouvrants, mouvement, surete — par device_class');
-  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';"), 'une seule source pour les classes');
+  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';"), 'une seule source pour les classes');
 });
 
 test('la demo a de quoi montrer la carte, et les mots ont leur traduction', () => {
