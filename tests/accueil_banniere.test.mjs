@@ -34,7 +34,7 @@ test('l’entite meteo sert encore : fond de la banniere, veille, Exterieur, car
 test('la banniere : pas de vignette meteo, les avatars sur la ligne du nom', () => {
   const home = bloc('function Dashboard(', NL + 'function ');
   assert.ok(!home.includes('o-banner-wx') && !home.includes('extPiece') && !home.includes('<WxMini wx={wx} on={wxFx} />' + NL + '                <WeatherIco'), 'plus de vignette');
-  assert.ok(home.includes('<div className="o-banner-row" style={{ position: \'relative\', display: \'flex\', flexDirection: \'column\', gap: 2, minWidth: 0 }}>'), 'la banniere est une colonne');
+  assert.ok(home.includes('<div className="o-banner-row" style={{ position: \'relative\', display: \'flex\', flexDirection: \'column\', gap: 0, minWidth: 0 }}>'), 'la banniere est une colonne');
   const ligne = bloc('              <div className="o-greet-ligne"', '              {/* Le resume est un ITEM');
   assert.ok(ligne.includes('<span className="o-greet-name"') && ligne.includes('<div className="o-avatars" style={{ display: \'flex\', gap: 8, flexShrink: 0 }}>') && ligne.includes('{avatars.map((u, i) => {'), 'le nom et les avatars sur la meme ligne');
   assert.ok(ligne.includes("alignItems: 'center', justifyContent: 'space-between'"), 'alignes au centre, le nom a gauche, les avatars a droite');

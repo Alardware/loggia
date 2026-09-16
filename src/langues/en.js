@@ -1995,4 +1995,11 @@ export default {
   '{n} lumière': '{n} light',
   'TV': 'TV',
   'Rafraîchit': 'Cooling',
+  // Hero plus bas, tuiles cliquables (v3.31.0)
+  'Voir l’énergie': 'See energy',
+  'Voir la pièce la plus chargée': 'See the room with the highest CO₂',
+  'Voir la sécurité': 'See security',
+  'Voir les médias': 'See media',
+  'Voir ce qui tourne': 'See what is running',
+  'Tous les scénarios': 'All scenarios',
 };

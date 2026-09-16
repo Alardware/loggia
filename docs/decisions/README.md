@@ -34,3 +34,4 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0027](0027-les-scenarios-de-loggia.md) | Les scénarios : composés par Loggia, lancés par le serveur — une main, pas une règle | appliqué (v3.28.0) |
 | [0028](0028-l-accueil-montre-ce-qui-merite-l-attention.md) | L'Accueil montre ce qui mérite l'attention : Sécurité en une seconde, « À surveiller » seulement quand il le faut | appliqué (v3.29.0, amendée v3.30.0) |
 | [0029](0029-les-cartes-pieces-disent-leur-etat.md) | Les cartes pièces disent leur état : problème, activité, calme | appliqué (v3.30.0) |
+| [0030](0030-le-haut-informe-le-milieu-controle.md) | Le haut informe, le milieu contrôle : hero plus bas, tuiles cliquables, une rangée de scénarios | appliqué (v3.31.0) |

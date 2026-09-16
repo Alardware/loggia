@@ -51,10 +51,14 @@ test('la carte Securite : une sous-ligne verte ou ambre, la ligne d’etat, les 
   assert.ok(home.includes("const sousSecurite = comptesSec.ok ? tr('Tout est sécurisé')"), '« Tout est securise » quand rien n’est ouvert et que les cameras repondent');
   assert.ok(home.includes("color: comptesSec.ok ? 'var(--o-ok)' : 'var(--o-warn)'"), 'verte ou ambre');
   assert.ok(home.includes('<div className="grid-sec-etat" style={{ display: \'grid\', gridTemplateColumns: \'repeat(\' + tuilesSec.length + \', minmax(0, 1fr))\''), 'une tuile par famille presente');
-  assert.ok(home.includes("<Fi i={t.icone} size={14} />") && home.includes('{t.valeur} <span style={{ fontSize: 11, fontWeight: 600, color: \'var(--o-text2)\' }}>{t.libelle}</span>'), 'icone, valeur, libelle');
+  assert.ok(home.includes("<Fi i={t.icone} size={14} />") && home.includes('{t.valeur} <span className="sec-lib" style={{ fontSize: 11, fontWeight: 600, color: \'var(--o-text2)\' }}>{t.libelle}</span>'), 'icone, valeur, libelle');
   assert.ok(home.includes('{alarmRailId && <RailArm id={alarmRailId} hass={dashHass} />}') && home.includes('{serrureId && <RailSerrure id={serrureId} hass={dashHass} />}'), 'les boutons d’aujourd’hui et la serrure restent');
   assert.ok(!src.includes('ouvrantsRow'), 'la ligne « Tout est ferme » a disparu : les tuiles la remplacent');
-  assert.ok(css.includes('.grid-sec-etat { grid-template-columns: 1fr 1fr !important; }'), 'deux colonnes sur telephone');
+  // Retour user du 16/09 : « sur mobile cette partie revient a la ligne » — une
+  // seule rangee au telephone, l'icone au-dessus, le libelle peut se replier.
+  assert.ok(!css.includes('.grid-sec-etat { grid-template-columns: 1fr 1fr !important; }'), 'plus de deux colonnes forcees sur telephone');
+  assert.ok(home.includes('<button key={t.cle} type="button" className="sec-tuile"') && home.includes('<span className="sec-ico" style={{ ...RM_ICO(fond, col), width: 30, height: 30, borderRadius: 10 }}>') && home.includes('<span className="sec-nom" style={{ display: \'block\', fontSize: 11') && home.includes('<span className="sec-val" style={{ display: \'block\', fontSize: 13'), 'les tuiles ont des classes pour le telephone');
+  assert.ok(css.includes('.grid-sec-etat > .sec-tuile { flex-direction: column !important; align-items: flex-start !important; gap: 6px !important; padding: 8px !important; }') && css.includes('.sec-tuile .sec-val { font-size: 12px !important; white-space: normal !important; }') && css.includes('.sec-tuile .sec-ico { width: 26px !important; height: 26px !important; }'), 'une rangee au telephone : icone au-dessus, libelle repliable');
 });
 
 test('l’accueil surveille ce que la carte Securite et « A surveiller » lisent', () => {

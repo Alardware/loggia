@@ -4981,6 +4981,11 @@ function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLanc
 function ScenariosAccueil({ hass, edit = false, onNav = null }) {
   const sc = useScenarios(hass);
   const liste = scenariosAccueil(sc.etat && sc.etat.scenarios);
+  // Une seule rangee sur PC et tablette : six cases, cinq scenarios et la
+  // tuile « Tous les scenarios » ; sur telephone la rangee defile, tous y
+  // passent (ADR 0030 — l'etape 6 du plan, pliee ici).
+  const large = useWide(821);
+  const montres = large ? liste.slice(0, 5) : liste;
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -4992,9 +4997,15 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
           ? <button data-drag-ui="1" onClick={() => onNav('scenes')} style={{ pointerEvents: 'auto', padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{tr('Gérer les scénarios')}</button>
           : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{sc.err && !liste.length ? sc.err : tr('{n} scénarios', { n: liste.length })}</span>}
       </div>
-      {liste.length > 0 && (
+      {(montres.length > 0 || onNav) && (
         <div className="grid-qscenes" style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12 }}>
-          {liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}
+          {montres.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}
+          {onNav && (
+            <button type="button" onClick={() => onNav('scenes')} aria-label={tr('Tous les scénarios')}
+              style={{ height: 88, borderRadius: 'var(--o-radius,18px)', border: '1px dashed var(--o-bd1)', background: 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: 'var(--o-text3)', fontSize: 12, fontWeight: 700 }}>
+              <Fi i="apps" size={16} />{tr('Tous les scénarios')}{liste.length > montres.length ? ' · ' + liste.length : ''}
+            </button>
+          )}
         </div>
       )}
     </>
@@ -6110,11 +6121,14 @@ function defileHorizontal(el, racine) {
   return false;
 }
 const ONGLET_CLE = 'loggia-accueil-onglet';
-function OngletsAccueil({ maison, moment, edit = false }) {
+function OngletsAccueil({ maison, moment, edit = false, demande = null, onDemande = null }) {
   const [onglet, setOnglet] = useState(() => { try { return sessionStorage.getItem(ONGLET_CLE) === 'moment' ? 1 : 0; } catch { return 0; } });
   const [dx, setDx] = useState(0); // le decalage du panneau pendant le geste
   const geste = useRef(null);
-  const va = (i) => { setOnglet(i); setDx(0); try { sessionStorage.setItem(ONGLET_CLE, i ? 'moment' : 'maison'); } catch {} };
+  const va = useCallback((i) => { setOnglet(i); setDx(0); try { sessionStorage.setItem(ONGLET_CLE, i ? 'moment' : 'maison'); } catch {} }, []);
+  // Une demande venue d'ailleurs — la tuile « appareils actifs » de la
+  // banniere (ADR 0030) : on va a la page, puis on rend la main.
+  useEffect(() => { if (demande != null) { va(demande); if (onDemande) onDemande(); } }, [demande, va, onDemande]);
   const debut = (e) => {
     if (edit || e.pointerType === 'mouse' || defileHorizontal(e.target, e.currentTarget)) return;
     geste.current = { x: e.clientX, y: e.clientY, pris: null };
@@ -6750,6 +6764,24 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     plantes: plantsCfg().map(p => p.base).filter(Boolean),
   });
   const couleurAcc = points.length ? couleurNiveau(niveauMax(points)).col : 'var(--o-ok)';
+  /* TUILES CLIQUABLES (ADR 0030) : chaque chiffre de la banniere mene la ou
+   * l'on agit — l'energie, la piece la plus chargee en CO2, la securite, les
+   * lumieres, les medias, et « En ce moment » pour les appareils actifs (le
+   * rail sur PC, la seconde page sur telephone : `pageDemandee`). */
+  const [pageDemandee, setPageDemandee] = useState(null);
+  const pieceCo2Max = (() => {
+    const rs = ((a && a.rooms) || []).filter(r => r.co2 != null);
+    if (!rs.length) return null;
+    return rs.reduce((m, r) => (r.co2 > m.co2 ? r : m), rs[0]).name;
+  })();
+  const voirMoment = () => {
+    if (wide) {
+      const el = document.querySelector('[data-sec="moment"]');
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    setPageDemandee(1);
+  };
   /* L'AMBIANCE de chaque piece (ADR 0029) : une passe sur les etats — lecteurs
    * en lecture, chauffage qui chauffe, portes et fenetres ouvertes — rangee
    * par zone, pour la ligne d'etat des cartes pieces. La piece se cherche par
@@ -7017,7 +7049,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
         )}
 
         {/* BANNER */}
-        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)', padding: '22px 8px' }}>
+        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)', padding: '14px 8px' }}>
           {REDUCE_MOTION && <WeatherFx weather={wx} />}
           {editMode && (
           <div style={{ position: 'absolute', bottom: 14, right: 18, display: 'flex', gap: 4, zIndex: 3 }}>
@@ -7026,20 +7058,20 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             ))}
           </div>
           )}
-          <div className="o-banner-row" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-              <span className="o-greet-hi" style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{salut}</span>
+          <div className="o-banner-row" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+              <span className="o-greet-hi" style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{salut}</span>
               {/* Les avatars SUR la ligne du nom, a droite, sur tous les
                 * ecrans (retour user du 15/09 : « ils sont en dessous du
                 * texte au lieu d'etre alignes avec le nom »). La vignette
                 * meteo a disparu avec la vue Meteo : le fond de la banniere
                 * dit deja le temps, la piece Exterieur le detaille. */}
               <div className="o-greet-ligne" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 34, fontWeight: 500, lineHeight: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userName}</span>
+                <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 28, fontWeight: 500, lineHeight: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userName}</span>
                 <div className="o-avatars" style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                   {avatars.map((u, i) => {
                     const present = !u.dim;
                     return (
-                      <span key={i + (present ? '-p' : '-a')} className="o-avatarin" title={u.title} style={{ position: 'relative', width: 38, height: 38, flexShrink: 0, display: 'inline-block' }}>
+                      <span key={i + (present ? '-p' : '-a')} className="o-avatarin" title={u.title} style={{ position: 'relative', width: 34, height: 34, flexShrink: 0, display: 'inline-block' }}>
                         <span style={{ display: 'block', width: '100%', height: '100%', borderRadius: '50%', background: u.img ? `url(${u.img}) center/cover` : u.grad, boxShadow: present ? '0 0 0 2.5px var(--o-ok), 0 0 9px rgba(52,211,153,.5)' : '0 0 0 2px var(--o-bd1)', opacity: present ? 1 : 0.45 }} />
                         <span style={{ position: 'absolute', right: -1, bottom: -1, width: 12, height: 12, borderRadius: '50%', background: present ? 'var(--o-ok)' : 'var(--o-text3)', border: '2.5px solid var(--o-bg2)', boxShadow: present ? '0 0 6px rgba(52,211,153,.7)' : 'none' }} />
                       </span>
@@ -7053,7 +7085,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 * d'elle — un flex ne coupe pas un item, il le renvoie a la
                 * ligne. La pastille s'aligne donc sur la PREMIERE ligne, et le
                 * texte garde sa colonne. */}
-              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}><span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: 'pulse 2.4s infinite' }} /><span style={{ flex: 1, minWidth: 0 }}>{[points.length ? resumeAttention(points) : tr('Tout va bien'), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span></span>
+              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}><span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: 'pulse 2.4s infinite' }} /><span style={{ flex: 1, minWidth: 0 }}>{[points.length ? resumeAttention(points) : tr('Tout va bien'), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span></span>
           </div>
           {(() => {
             /* Une metrique a zero ne dit rien : « 0 / 4 ouvrants ouverts »
@@ -7063,39 +7095,51 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               *
               * Pendant le chargement, l'export et l'air gardent leur squelette :
               * sans eux la banniere naitrait vide, puis sauterait. */
+            /* Des BOUTONS, pas des cases : chaque chiffre mene la ou l'on agit
+              * (ADR 0030). Meme dessin qu'avant, le survol en plus. */
+            const clics = {
+              ex: () => onNav && onNav('energie'),
+              air: () => { if (pieceCo2Max && onOpenRoom) onOpenRoom(pieceCo2Max); else if (onNav) onNav('objets'); },
+              ouv: () => onNav && onNav('securite'),
+              lum: () => onNav && onNav('lumieres'),
+              med: () => onNav && onNav('medias'),
+              app: voirMoment,
+            };
+            const libelles = { ex: tr('Voir l’énergie'), air: tr('Voir la pièce la plus chargée'), ouv: tr('Voir la sécurité'), lum: tr('Voir les lumières'), med: tr('Voir les médias'), app: tr('Voir ce qui tourne') };
+            const tuile = (extra) => ({ flexShrink: 0, background: 'none', border: 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer', borderRadius: 10, padding: '4px 14px 4px 0', whiteSpace: 'nowrap', ...extra });
             const cases = [];
             if (!a || a.metricExport) cases.push(
-              <div key="ex" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+              <button type="button" key="ex" className="o-tuile-hero" onClick={clics.ex} aria-label={libelles.ex} style={tuile({ display: 'flex', alignItems: 'center', gap: 8 })}>
                 <Ico name="bolt" color="var(--o-ok)" size={17} />
                 <div><div style={{ fontSize: 15, fontWeight: 800, color: a && a.metricExport ? a.metricExport.color : 'var(--o-ok)', lineHeight: 1.1 }}>{a && a.metricExport ? <Num v={a.metricExport.raw} prefix={a.metricExport.sign} fmt={fmtWatts} /> : <Skel w={64} h={16} />}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a && a.metricExport ? a.metricExport.label : tr('EXPORT RÉSEAU')}</div></div>
-              </div>);
+              </button>);
             if (!a || a.maxCo2 != null) cases.push(
-              <div key="air" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+              <button type="button" key="air" className="o-tuile-hero" onClick={clics.air} aria-label={libelles.air} style={tuile({ display: 'flex', alignItems: 'center', gap: 8 })}>
                 <Ico name="wind" color="var(--o-accent)" size={17} />
                 <div><div style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-accent-soft)', lineHeight: 1.1 }}>{a ? (a.maxCo2 != null ? <Num v={a.maxCo2} /> : '—') : <Skel w={40} h={16} />}<span style={{ fontSize: 11, color: 'var(--o-text2)' }}> ppm</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('QUALITÉ AIR')} · {a && a.maxCo2 != null ? tr(airLabel(a.maxCo2)) : tr('BON')}</div></div>
-              </div>);
+              </button>);
             /* Les OUVRANTS ont pris la place de la température (retour
               * 01/09) : la chaleur de la maison se lit sur chaque tuile pièce,
               * une fenêtre restée ouverte ne se lit nulle part. */
             if (ouvStat.ouverts > 0) cases.push(
-              <div key="ouv" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+              <button type="button" key="ouv" className="o-tuile-hero" onClick={clics.ouv} aria-label={libelles.ouv} style={tuile({ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 })}>
                 <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-purple)' }}><Num v={ouvStat.ouverts} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {ouvStat.total}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{ouvStat.ouverts > 1 ? tr('OUVRANTS OUVERTS') : tr('OUVRANT OUVERT')}</div>
-              </div>);
+              </button>);
             if (a && a.lightsOn > 0) cases.push(
-              <div key="lum" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+              <button type="button" key="lum" className="o-tuile-hero" onClick={clics.lum} aria-label={libelles.lum} style={tuile({ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 })}>
                 <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={a.lightsOn} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {a.lightsTotal} {tr('prés.')}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a.lightsOn > 1 ? tr('LUMIÈRES ALLUMÉES') : tr('LUMIÈRE ALLUMÉE')}</div>
-              </div>);
+              </button>);
             if (actifsStat.medias > 0) cases.push(
-              <div key="med" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+              <button type="button" key="med" className="o-tuile-hero" onClick={clics.med} aria-label={libelles.med} style={tuile({ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 })}>
                 <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={actifsStat.medias} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {actifsStat.mediasTotal}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{actifsStat.medias > 1 ? tr('MÉDIAS EN LECTURE') : tr('MÉDIA EN LECTURE')}</div>
-              </div>);
+              </button>);
             if (actifsStat.appareils > 0) cases.push(
-              <div key="app" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '6px 14px 6px 0', whiteSpace: 'nowrap' }}>
+              <button type="button" key="app" className="o-tuile-hero" onClick={clics.app} aria-label={libelles.app} style={tuile({ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 })}>
                 <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={actifsStat.appareils} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {actifsStat.appareilsTotal}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{actifsStat.appareils > 1 ? tr('APPAREILS ACTIFS') : tr('APPAREIL ACTIF')}</div>
-              </div>);
+              </button>);
             if (!cases.length) return null;
             return (
-              <div className="o-banner-metrics" style={{ position: 'relative', display: 'flex', gap: 10, marginTop: 26, overflowX: 'auto', paddingBottom: 4 }}>
+              <div className="o-banner-metrics" style={{ position: 'relative', display: 'flex', gap: 10, marginTop: 10, overflowX: 'auto', paddingBottom: 2 }}>
                 {cases.map((c, i) => (i ? [<div key={'d' + i} style={metricDiv} />, c] : c))}
               </div>
             );
@@ -7249,12 +7293,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                     const col = t.alerte ? 'var(--o-warn)' : t.actif ? 'var(--o-accent-soft)' : 'var(--o-text)';
                     const fond = t.alerte ? 'rgba(var(--o-warn-rgb),.16)' : t.actif ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)';
                     return (
-                      <button key={t.cle} type="button" onClick={() => onNav && onNav('securite')} aria-label={t.nom + ' · ' + t.valeur + ' ' + t.libelle}
+                      <button key={t.cle} type="button" className="sec-tuile" onClick={() => onNav && onNav('securite')} aria-label={t.nom + ' · ' + t.valeur + ' ' + t.libelle}
                         style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text)', textAlign: 'left', minWidth: 0 }}>
-                        <span style={{ ...RM_ICO(fond, col), width: 30, height: 30, borderRadius: 10 }}><Fi i={t.icone} size={14} /></span>
+                        <span className="sec-ico" style={{ ...RM_ICO(fond, col), width: 30, height: 30, borderRadius: 10 }}><Fi i={t.icone} size={14} /></span>
                         <span style={{ minWidth: 0 }}>
-                          <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nom}</span>
-                          <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: col, whiteSpace: 'nowrap' }}>{t.valeur} <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text2)' }}>{t.libelle}</span></span>
+                          <span className="sec-nom" style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nom}</span>
+                          <span className="sec-val" style={{ display: 'block', fontSize: 13, fontWeight: 800, color: col, whiteSpace: 'nowrap' }}>{t.valeur} <span className="sec-lib" style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text2)' }}>{t.libelle}</span></span>
                         </span>
                       </button>
                     );
@@ -7369,7 +7413,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
           const renduRail = ordreDe('rail').map(id => secsRail[id] ? Sec('rail', id, secsRail[id]) : null).filter(Boolean);
           // Mobile et tablette : deux onglets, « Maison » et « En ce moment ».
-          if (!wide) return <OngletsAccueil maison={renduMain} moment={renduRail} edit={editMode} />;
+          if (!wide) return <OngletsAccueil maison={renduMain} moment={renduRail} edit={editMode} demande={pageDemandee} onDemande={() => setPageDemandee(null)} />;
           return (
             <div style={{ display: 'grid', gridTemplateColumns: wideXL ? '1fr 330px' : '1fr 276px', gap: wideXL ? 18 : 14 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
