@@ -7,12 +7,22 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
+
+/* La langue de la MACHINE qui lance les tests ne doit rien changer au resultat.
+ *
+ * `i18n.js` resout sa langue a l'import, d'apres `navigator.language` — que Node
+ * publie depuis la version 21, d'apres le systeme. Sur un poste francais les
+ * nombres sortaient « 1,9 Go » ; sur le runner d'integration, anglais, « 1.9 Go »
+ * et « 14 Sept » : quatre tests verts ici, rouges la-bas. Les attentes sont
+ * ecrites en francais, la langue est donc FIXEE avant le premier import — d'ou
+ * les imports dynamiques, les seuls a s'executer apres cette ligne. */
+Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
+const {
   SEUILS, niveau, enOctets, tailleLisible, paireTailles, nomCarte, dureeLisible, depuisDemarrage, dureeCapteur,
   tuilesMesures, seaux, resumeSerie, lignesVersions, derniereSauvegarde, momentLisible, modulesComplementaires,
   interfaceReseau, debitLisible, baseDeDonnees, etatCloud, journalSysteme, origineJournal, alertesSysteme,
-} from '../src/systeme.js';
-import { capteursHote, interfaceDe } from '../src/resolve.js';
+} = await import('../src/systeme.js');
+const { capteursHote, interfaceDe } = await import('../src/resolve.js');
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NL = String.fromCharCode(10);
