@@ -100,3 +100,29 @@ route passe `onEnt`, la détection), tests/objets.test.mjs réaligné (aucune
 famille sans puce), 34 mutations tuées. Le filtre mémorisé d'une famille
 disparue retombe sur « Tous ». Non fait : le compte sur chaque puce, un
 bandeau qui resterait collé en haut pendant le défilement.
+
+## Ajustement du 17/09 (v3.41.1) — la réponse
+
+La proposition a été tranchée le jour même : « C, les prises n'ont rien à faire
+dans IoT. IoT correspond aux appareils — robot, distributeur ; une prise c'est
+une prise. Je vois qu'il y a toujours Jardin aussi, pourtant il y a un robot
+dedans et une prise. »
+
+- **« Prises » revient à part** (interrupteurs et `input_boolean` qui ne sont
+  pas déclarés lumières), avec son icône de prise.
+- **« IoT » = les appareils**, ce qui travaille seul : robot aspirateur,
+  tondeuse, distributeur, ventilateur, humidificateur, vanne.
+- **« Jardin » s'en va** : c'était la seule famille de LIEU au milieu de
+  familles de NATURE, et tout ce qu'elle montrait a déjà la sienne — son robot
+  est de l'IoT, sa prise une prise. Être dehors ne range plus nulle part ;
+  `filtresObjet` ne lit plus `dehors`.
+- **L'ordre** : Lumières · Volets · Chauffage · Prises · Multimédia · IoT ·
+  Capteurs — ce que l'on commande d'abord, du plus courant au plus rare, puis
+  ce qui mesure. Toujours sept familles ; chez lui huit puces avec « Tous »,
+  sur une ligne au téléphone.
+
+La section « Décision · 1 » ci-dessus décrit donc la proposition d'origine ;
+c'est cet ajustement qui fait foi. Leçon : un mot technique (« IoT ») ne se
+remplit pas par déduction — pour lui ce sont des APPAREILS, pas « ce qui se
+branche ». Garde-fous : tests/objets.test.mjs (aucune puce sans appareil
+possible, aucun appareil sans puce), 20 mutations tuées.

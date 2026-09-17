@@ -4008,10 +4008,8 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
     [...par.keys()].sort((a, b) => cle(a).localeCompare(cle(b), 'fr')).forEach(g => groupes.push({ nom: g, liste: par.get(g) }));
   }
   const iconeDe = (a) => {
-    // La prise garde sa prise sous « IoT » ; la camera n'a plus de famille (17/09).
-    const dom = a.id.slice(0, a.id.indexOf('.'));
-    if (dom === 'switch' || dom === 'input_boolean') { if (a.filtres[0] === 'iot') return <PlugIcon size={15} />; }
-    if (dom === 'camera') return <Fi i="camera" size={15} />;
+    // La camera n'a plus de famille (17/09) : elle garde son icone.
+    if (a.id.indexOf('camera.') === 0) return <Fi i="camera" size={15} />;
     const f = OBJ_FILTRES().find(x => x.id === (a.filtres[0] || ''));
     return f ? (f.prise ? <PlugIcon size={15} /> : f.ico ? <Ico name={f.ico} size={15} /> : <Fi i={f.fi} size={15} />) : <Fi i="bolt" size={15} />;
   };
@@ -5249,19 +5247,21 @@ function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, port
  * agencement libre (sections, renommage, cartes libres : parties avec elle).
  * Ce qui range un appareil sous ses filtres, l'ordre de la grille et les
  * chiffres de tete vivent dans objets.js, sans React. */
-/* Sept familles (17/09) : « IoT » reunit les prises, le menager et la tondeuse ;
- * « Capteurs » recoit la presence et les plantes ; les cameras n'ont plus de
- * puce — elles restent sous « Tous ». Le rangement vit dans objets.js. */
+/* Sept familles (17/09) : « Prises » a part — une prise c'est une prise ;
+ * « IoT » = les appareils (robot, tondeuse, distributeur, ventilateur…) ;
+ * « Capteurs » recoit la presence et les plantes ; ni « Cameras » ni « Jardin » :
+ * leurs appareils restent sous « Tous » et sous leur famille. Le rangement vit
+ * dans objets.js. */
 const OBJ_FILTRES = () => [
   { id: 'tous', label: tr('Tous'), fi: 'apps' },
   { id: 'favoris', label: tr('Favoris'), fi: 'star' },
   { id: 'lumieres', label: tr('Lumières'), fi: 'bulb' },
   { id: 'volets', label: tr('Volets'), fi: 'blinds' },
   { id: 'chauffage', label: tr('Chauffage'), fi: 'flame' },
-  { id: 'iot', label: tr('IoT'), fi: 'microchip' },
+  { id: 'prises', label: tr('Prises'), prise: true },
   { id: 'multimedia', label: tr('Multimédia'), fi: 'tv-music' },
+  { id: 'iot', label: tr('IoT'), fi: 'microchip' },
   { id: 'capteurs', label: tr('Capteurs'), fi: 'sensor' },
-  { id: 'jardin', label: tr('Jardin'), fi: 'leaf' },
 ];
 // Les domaines qui font une carte, et leur rang dans un meme appareil : la
 // commande avant le capteur — une prise mesurante est une carte, pas deux.
@@ -5299,7 +5299,7 @@ function objetsDeLaMaison(hass, ajoutes = []) {
     out.push({
       cle, id: o.id || null, type, zone: o.zone || null, domaine, piece,
       nom: o.nom || (st && st.attributes && st.attributes.friendly_name) || o.id || cle,
-      filtres: filtresObjet({ domaine, type, estLumiere: !!o.estLumiere, dehors: !!piece && estDehors(piece), epingle: !!(o.id && epingles.has(o.id)), classe: (st && st.attributes && st.attributes.device_class) || '' }),
+      filtres: filtresObjet({ domaine, type, estLumiere: !!o.estLumiere, epingle: !!(o.id && epingles.has(o.id)), classe: (st && st.attributes && st.attributes.device_class) || '' }),
       actif: type === 'entite' ? objetActif({ domaine, etat, attributs: (st && st.attributes) || {} }) : !!o.actif,
       absent: type === 'entite' ? (!st || etat === 'unavailable' || etat === 'unknown') : false,
     });

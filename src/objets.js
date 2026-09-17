@@ -10,13 +10,16 @@
  *
  * Sept familles, pas onze (retour user du 17/09 : « trop de filtres, sur
  * mobile c'est pas agreable ») : une puce que l'on doit chercher en faisant
- * defiler la rangee ne filtre plus rien. « IoT » tient la place des prises et
- * reunit ce qui se branche et travaille seul ; « Capteurs », tout ce qui
- * mesure ou detecte. */
-export const OBJ_ORDRE = ['lumieres', 'volets', 'chauffage', 'iot', 'multimedia', 'capteurs', 'jardin'];
+ * defiler la rangee ne filtre plus rien. D'abord ce que l'on commande, du plus
+ * courant au plus rare, puis ce qui mesure. Des familles de NATURE, aucune de
+ * lieu : « Jardin » est parti le meme jour (« il y a un robot dedans et une
+ * prise » — ils ont deja leur famille). */
+export const OBJ_ORDRE = ['lumieres', 'volets', 'chauffage', 'prises', 'multimedia', 'iot', 'capteurs'];
 
-/** Ce qui se branche et travaille seul : la famille « IoT ». */
-export const DOMAINES_IOT = ['switch', 'input_boolean', 'vacuum', 'fan', 'humidifier', 'valve', 'feeder', 'lawn_mower'];
+/** « IoT » = les APPAREILS : ce qui travaille seul — robot aspirateur, tondeuse,
+ * distributeur, ventilateur, humidificateur, vanne. Pas les prises : « une
+ * prise c'est une prise » (retour user du 17/09). */
+export const DOMAINES_IOT = ['vacuum', 'lawn_mower', 'feeder', 'fan', 'humidifier', 'valve'];
 
 /** Les classes de capteur binaire qui disent une presence : la fiche d'edition
  * les nomme ; sous les filtres, ce sont des capteurs comme les autres. */
@@ -24,28 +27,27 @@ export const CLASSES_PRESENCE = ['motion', 'occupancy', 'presence'];
 
 /**
  * Les filtres d'un objet. Le premier est son filtre principal, tire du
- * domaine ; « jardin » s'ajoute a ce qui vit dehors, « favoris » a ce qui est
- * epingle. Un domaine que l'on ne sait pas ranger n'a aucun filtre : il ne
+ * domaine ; « favoris » s'ajoute a ce qui est epingle. Etre dehors ne range
+ * nulle part. Un domaine que l'on ne sait pas ranger n'a aucun filtre : il ne
  * s'affiche que sous « Tous » — les serrures, sirenes et alarmes : la maquette
  * n'a pas de puce « Securite » (retour user du 14/09) ; et les cameras, dont
  * la puce est partie le 17/09 (« deja camera on peut l'enlever ») : elles ont
  * leur place dans la vue Securite et sur l'Accueil.
  *
  * « Capteurs » recoit la presence et les plantes — une plante EST un bouquet
- * de capteurs. La tondeuse est de l'IoT ET du jardin, zone ou pas : c'est la
- * seule machine dont le metier dit ou elle vit.
+ * de capteurs.
  */
-export function filtresObjet({ domaine, type = 'entite', estLumiere = false, dehors = false, epingle = false }) {
+export function filtresObjet({ domaine, type = 'entite', estLumiere = false, epingle = false }) {
   const dom = type === 'zone' ? 'climate' : type === 'feeder' ? 'feeder' : type === 'plant' ? 'plant' : String(domaine || '');
   const principal = dom === 'light' || (dom === 'switch' && estLumiere) ? 'lumieres'
     : dom === 'cover' ? 'volets'
       : dom === 'climate' || dom === 'water_heater' ? 'chauffage'
-        : DOMAINES_IOT.indexOf(dom) >= 0 ? 'iot'
+        : dom === 'switch' || dom === 'input_boolean' ? 'prises'
           : dom === 'media_player' ? 'multimedia'
-            : dom === 'binary_sensor' || dom === 'sensor' || dom === 'plant' ? 'capteurs'
-              : null;
+            : DOMAINES_IOT.indexOf(dom) >= 0 ? 'iot'
+              : dom === 'binary_sensor' || dom === 'sensor' || dom === 'plant' ? 'capteurs'
+                : null;
   const f = principal ? [principal] : [];
-  if (dehors || dom === 'lawn_mower') f.push('jardin');
   if (epingle) f.push('favoris');
   return f;
 }

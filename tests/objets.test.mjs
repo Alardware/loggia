@@ -15,8 +15,8 @@ test('chaque domaine trouve son filtre ; une prise declaree lumiere est une lumi
   const f = (o) => filtresObjet(o);
   assert.deepEqual(f({ domaine: 'light' }), ['lumieres']);
   assert.deepEqual(f({ domaine: 'switch', estLumiere: true }), ['lumieres']);
-  assert.deepEqual(f({ domaine: 'switch' }), ['iot'], 'une prise est de l’IoT (17/09 : sept familles au lieu de onze)');
-  assert.deepEqual(f({ domaine: 'input_boolean' }), ['iot']);
+  assert.deepEqual(f({ domaine: 'switch' }), ['prises'], '« les prises n’ont rien a faire dans iot […] une prise c’est une prise »');
+  assert.deepEqual(f({ domaine: 'input_boolean' }), ['prises']);
   assert.deepEqual(f({ domaine: 'cover' }), ['volets']);
   assert.deepEqual(f({ domaine: 'climate' }), ['chauffage']);
   assert.deepEqual(f({ domaine: 'switch', type: 'zone' }), ['chauffage'], 'une zone fil pilote est du chauffage, pas une prise');
@@ -28,21 +28,23 @@ test('chaque domaine trouve son filtre ; une prise declaree lumiere est une lumi
   assert.deepEqual(f({ domaine: 'camera' }), [], '« deja camera on peut l’enlever » : une camera ne vit plus que sous Tous');
   assert.deepEqual(f({ domaine: 'lock' }), [], 'une serrure ne vit que sous Tous : pas de puce Securite, la maquette n’en a pas');
   assert.deepEqual(f({ domaine: 'vacuum' }), ['iot']);
-  ['fan', 'humidifier', 'valve'].forEach(d => assert.deepEqual(f({ domaine: d }), ['iot'], d + ' : ce qui se branche et travaille seul'));
-  assert.deepEqual(f({ domaine: 'feeder', type: 'feeder' }), ['iot']);
-  assert.deepEqual(f({ domaine: 'lawn_mower' }), ['iot', 'jardin'], 'la tondeuse est de l’IoT ET du jardin, zone ou pas');
+  ['fan', 'humidifier', 'valve'].forEach(d => assert.deepEqual(f({ domaine: d }), ['iot'], d + ' : un appareil qui travaille seul'));
+  assert.deepEqual(f({ domaine: 'feeder', type: 'feeder' }), ['iot'], '« iot correspond aux appareils, robot, distributeur »');
+  assert.deepEqual(f({ domaine: 'lawn_mower' }), ['iot'], 'le robot du jardin est un robot');
   assert.deepEqual(f({ domaine: 'plant', type: 'plant' }), ['capteurs'], 'une plante est un bouquet de capteurs');
-  assert.deepEqual(DOMAINES_IOT, ['switch', 'input_boolean', 'vacuum', 'fan', 'humidifier', 'valve', 'feeder', 'lawn_mower']);
+  assert.deepEqual(DOMAINES_IOT, ['vacuum', 'lawn_mower', 'feeder', 'fan', 'humidifier', 'valve'], 'aucune prise parmi les appareils');
   assert.deepEqual(f({ domaine: 'script' }), [], 'un domaine inconnu ne vit que sous Tous');
 });
 
-test('dehors et epingle s’ajoutent : une applique exterieure est aussi du jardin', () => {
-  assert.deepEqual(filtresObjet({ domaine: 'light', dehors: true }), ['lumieres', 'jardin']);
-  assert.deepEqual(filtresObjet({ domaine: 'lawn_mower', dehors: true }), ['iot', 'jardin'], 'pas deux fois jardin');
-  assert.deepEqual(filtresObjet({ domaine: 'camera', dehors: true }), ['jardin'], 'une camera dehors reste du jardin');
-  assert.deepEqual(filtresObjet({ domaine: 'plant', type: 'plant', dehors: true }), ['capteurs', 'jardin']);
+test('l’epingle s’ajoute ; etre dehors ne range nulle part : la puce Jardin est partie', () => {
+  // « je vois qu'il y a toujours jardin aussi, pourtant il y a un robot dedans
+  // et une prise » (17/09) : ils ont deja leur famille.
+  assert.deepEqual(filtresObjet({ domaine: 'light', dehors: true }), ['lumieres']);
+  assert.deepEqual(filtresObjet({ domaine: 'lawn_mower', dehors: true }), ['iot'], 'le robot');
+  assert.deepEqual(filtresObjet({ domaine: 'switch', dehors: true }), ['prises'], 'la prise');
+  assert.deepEqual(filtresObjet({ domaine: 'camera', dehors: true }), []);
   assert.deepEqual(filtresObjet({ domaine: 'cover', epingle: true }), ['volets', 'favoris']);
-  assert.equal(filtresObjet({ domaine: 'light', dehors: true, epingle: true })[0], 'lumieres', 'le principal reste premier');
+  assert.equal(filtresObjet({ domaine: 'light', epingle: true })[0], 'lumieres', 'le principal reste premier');
 });
 
 test('actif : ce qui fait quelque chose, pas ce qui existe', () => {
@@ -72,7 +74,7 @@ const MAISON = [
   { cle: 'light.a', nom: 'Plafonnier', piece: 'Salon', filtres: ['lumieres'], actif: true, absent: false },
   // « Baie » passe avant « Plafonnier » par le nom : seul l'ordre des filtres le range apres.
   { cle: 'cover.a', nom: 'Baie', piece: 'Salon', filtres: ['volets'], actif: false, absent: false },
-  { cle: 'light.b', nom: 'Applique', piece: 'Terrasse', filtres: ['lumieres', 'jardin', 'favoris'], actif: false, absent: true },
+  { cle: 'light.b', nom: 'Applique', piece: 'Terrasse', filtres: ['lumieres', 'favoris'], actif: false, absent: true },
   { cle: 'media_player.a', nom: 'Enceinte', piece: 'Cuisine', filtres: ['multimedia'], actif: true, absent: false },
   { cle: 'obj:feeder', nom: 'Distributeur', piece: null, filtres: ['iot'], actif: false, absent: false },
 ];
@@ -85,15 +87,16 @@ test('les chiffres de tete : appareils, pieces distinctes, actifs, absents', () 
 test('les puces : Tous toujours, Favoris s’il y a une epingle, puis dans l’ordre, avec leur compte', () => {
   assert.deepEqual(pucesObjets(MAISON), [
     { id: 'tous', n: 5 }, { id: 'favoris', n: 1 }, { id: 'lumieres', n: 2 }, { id: 'volets', n: 1 },
-    { id: 'iot', n: 1 }, { id: 'multimedia', n: 1 }, { id: 'jardin', n: 1 },
+    { id: 'multimedia', n: 1 }, { id: 'iot', n: 1 },
   ]);
   assert.deepEqual(pucesObjets([]), [{ id: 'tous', n: 0 }]);
-  assert.deepEqual(OBJ_ORDRE, ['lumieres', 'volets', 'chauffage', 'iot', 'multimedia', 'capteurs', 'jardin'], 'sept familles ; l’IoT tient la place des prises, la grille automatique ne saute pas');
+  assert.deepEqual(OBJ_ORDRE, ['lumieres', 'volets', 'chauffage', 'prises', 'multimedia', 'iot', 'capteurs'], 'sept familles de nature, aucune de lieu ; ce que l’on commande d’abord, ce qui mesure ensuite');
   // Aucune famille orpheline : tout ce que `filtresObjet` sait rendre a sa puce.
   const rendus = new Set();
   ['light', 'switch', 'input_boolean', 'cover', 'climate', 'water_heater', 'media_player', 'binary_sensor', 'sensor', 'camera', 'lock', 'vacuum', 'fan', 'humidifier', 'valve', 'lawn_mower', 'siren']
-    .forEach(d => filtresObjet({ domaine: d, dehors: true }).forEach(x => rendus.add(x)));
+    .forEach(d => filtresObjet({ domaine: d }).forEach(x => rendus.add(x)));
   [...rendus].forEach(x => assert.ok(OBJ_ORDRE.indexOf(x) >= 0, x + ' n’a pas de puce'));
+  assert.deepEqual([...rendus].sort(), OBJ_ORDRE.slice().sort(), 'et aucune puce sans appareil possible');
 });
 
 test('la grille : piece par piece dans l’ordre de la maison, puis filtre, puis nom — sans piece en dernier', () => {
@@ -130,7 +133,8 @@ test('la vue Objets dessine les cartes de la piece, une par appareil, derriere d
   const f = src.indexOf('const OBJ_FILTRES = () => [');
   const filtres = src.slice(f, src.indexOf('];', f));
   const ids = [...filtres.matchAll(/id: '([a-z]+)'/g)].map(m => m[1]);
-  assert.deepEqual(ids, ['tous', 'favoris', 'lumieres', 'volets', 'chauffage', 'iot', 'multimedia', 'capteurs', 'jardin']);
+  assert.deepEqual(ids, ['tous', 'favoris', 'lumieres', 'volets', 'chauffage', 'prises', 'multimedia', 'iot', 'capteurs']);
+  assert.ok(filtres.includes("{ id: 'prises', label: tr('Prises'), prise: true },"), 'la prise garde son icone de prise');
   assert.deepEqual(ids.slice(2), OBJ_ORDRE, 'les puces suivent l’ordre du module, une pour une');
   // Au telephone : l'icone seule, les puces se partagent la largeur — une ligne, sans defilement.
   assert.ok(vue.includes('<span className="o-objfiltre-mot">{f.label}</span>') && vue.includes('aria-label={f.label} title={f.label}'), 'le mot peut s’effacer : il reste lisible par un lecteur d’ecran et au survol');
