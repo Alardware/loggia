@@ -691,6 +691,7 @@ export function vacSensors(hass, vacId) {
  */
 const VAC_MOTS = {
   sweeping: 'Aspiration', mopping: 'Serpillière', vacuuming: 'Aspiration',
+  vacuum: 'Aspiration', mop: 'Serpillière', vacuum_and_mop: 'Aspiration + serpillière', mop_after_vacuum: 'Serpillière après aspiration',
   sweeping_and_mopping: 'Aspiration + serpillière', mopping_after_sweeping: 'Serpillière après aspiration',
   low: 'Faible', medium: 'Moyen', high: 'Élevé', ultrahigh: 'Maximum', ultra_high: 'Maximum',
   quiet: 'Silencieux', normal: 'Normal', max: 'Maximum', max_plus: 'Maximum +',

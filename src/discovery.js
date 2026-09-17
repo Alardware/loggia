@@ -128,7 +128,7 @@ async function registresDuComposant(hass) {
     })),
     entities: (index.entities || []).map(e => ({
       entity_id: e.id, name: e.name, device_id: e.device, area_id: e.area,
-      platform: e.platform, entity_category: e.category,
+      platform: e.platform, entity_category: e.category, translation_key: e.key || null,
       device_class: e.device_class, original_device_class: e.device_class,
       unit_of_measurement: e.unit, hidden_by: e.hidden ? 'user' : null,
     })),
@@ -211,6 +211,9 @@ export function buildIndex({ areas = [], devices = [], entities = [], floors = [
       // integration dans le registre, mais leurs entites, elles, en ont une.
       platform: e.platform || null,
       deviceClass: e.device_class || e.original_device_class || null,
+      // La cle de traduction : le nom que l'integration donne a l'entite, le
+      // meme dans toutes les langues (voir robots.js).
+      translationKey: e.translation_key || null,
     });
   });
 

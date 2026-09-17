@@ -49,7 +49,7 @@ def appareil(id_, **reste):
 
 def entite(entity_id, **reste):
     base = dict(name=None, original_name=None, device_id=None, area_id=None,
-                platform=None, entity_category=None, device_class=None,
+                platform=None, entity_category=None, device_class=None, translation_key=None,
                 original_device_class=None, unit_of_measurement=None,
                 hidden_by=None, disabled_by=None)
     base.update(reste)
@@ -182,6 +182,21 @@ def test_categorie_et_classe_transportees(decouverte):
     e = decouverte.async_index(hass)["entities"]
     assert e[0]["category"] == "diagnostic"
     assert e[1]["device_class"] == "temperature"
+
+
+def test_cle_de_traduction_transportee(decouverte):
+    """L'identifiant est traduit a la creation, la cle ne l'est pas.
+
+    « sensor.robot_temps_restant_filtre » ne dit « filtre » qu'en francais ; sa
+    cle `lifespan_filter` le dit partout. Une entite sans cle rend None.
+    """
+    hass = poser(decouverte, entites=[
+        entite("sensor.robot_temps_restant_filtre", translation_key="lifespan_filter"),
+        entite("sensor.autre"),
+    ])
+    e = decouverte.async_index(hass)["entities"]
+    assert e[0]["key"] == "lifespan_filter"
+    assert e[1]["key"] is None
 
 
 # ── Ce qu'on refuse d'exposer ───────────────────────────────────────────────

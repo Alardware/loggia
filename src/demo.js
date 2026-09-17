@@ -120,11 +120,44 @@ function etatsInitiaux() {
     // liste de vitesses, la fiche n'avait ni boutons ni selecteur a montrer.
     'vacuum.aspirateur': s('docked', { friendly_name: 'Aspirateur', battery_level: 92,
       supported_features: 8828, fan_speed: 'max_plus',
-      fan_speed_list: ['quiet', 'normal', 'max', 'max_plus'] }),
+      fan_speed_list: ['quiet', 'normal', 'max', 'max_plus'],
+      // Les pieces que le robot annonce, avec leurs segments (vue du robot, ADR 0042).
+      rooms: { salon: 1, cuisine: 2, bureau: 3, chambre: 4, 'entrée': 5 } }),
+    // Ses soeurs : pieces d'usure en %, surface de la session, compteurs, reglages.
+    'sensor.aspirateur_filtre': s(32, { friendly_name: 'Aspirateur Filtre', unit_of_measurement: '%' }),
+    'sensor.aspirateur_brosse_principale': s(58, { friendly_name: 'Aspirateur Brosse principale', unit_of_measurement: '%' }),
+    'sensor.aspirateur_brosse_laterale': s(81, { friendly_name: 'Aspirateur Brosse latérale', unit_of_measurement: '%' }),
+    'sensor.aspirateur_serpilliere': s(47, { friendly_name: 'Aspirateur Serpillière', unit_of_measurement: '%' }),
+    'sensor.aspirateur_surface_nettoyee': s(42, { friendly_name: 'Aspirateur Surface nettoyée', device_class: 'area', unit_of_measurement: 'm²' }),
+    'sensor.aspirateur_surface_totale': s(1843, { friendly_name: 'Aspirateur Surface totale nettoyée', device_class: 'area', unit_of_measurement: 'm²' }),
+    'sensor.aspirateur_duree_totale': s(164, { friendly_name: 'Aspirateur Durée totale de nettoyage', device_class: 'duration', unit_of_measurement: 'h' }),
+    'sensor.aspirateur_nombre_total': s(212, { friendly_name: 'Aspirateur Nombre total de nettoyages' }),
+    'button.aspirateur_reinitialiser_filtre': s('unknown', { friendly_name: 'Aspirateur Réinitialiser le filtre' }),
+    'select.aspirateur_mode_de_travail': s('vacuum', { friendly_name: 'Aspirateur Mode de travail', options: ['vacuum', 'mop', 'vacuum_and_mop'] }),
+    'select.aspirateur_debit_d_eau': s('medium', { friendly_name: "Aspirateur Débit d'eau", options: ['low', 'medium', 'high'] }),
+    'switch.aspirateur_detection_tapis': s('on', { friendly_name: 'Aspirateur Détection tapis' }),
+    'switch.aspirateur_mode_avance': s('off', { friendly_name: 'Aspirateur Mode avancé' }),
     // La tondeuse en pleine tonte : une fiche au repos ne montrerait ni la
     // couleur active du cadran ni le bouton pause.
     'lawn_mower.tondeuse': s('mowing', { friendly_name: 'Tondeuse', battery_level: 64,
       supported_features: 7 }),
+    // Ses soeurs : les zones sont des interrupteurs, les lames se comptent en heures.
+    'binary_sensor.tondeuse_en_charge': s('off', { friendly_name: 'Tondeuse En charge', device_class: 'battery_charging' }),
+    'switch.tondeuse_zone_pelouse_avant': s('off', { friendly_name: 'Tondeuse Zone Pelouse avant' }),
+    'switch.tondeuse_zone_pelouse_arriere': s('on', { friendly_name: 'Tondeuse Zone Pelouse arrière' }),
+    'switch.tondeuse_zone_cote_garage': s('off', { friendly_name: 'Tondeuse Zone Côté garage' }),
+    'sensor.tondeuse_usage_des_lames': s(43, { friendly_name: "Tondeuse Durée d'utilisation des lames", device_class: 'duration', unit_of_measurement: 'h' }),
+    'sensor.tondeuse_seuil_des_lames': s(60, { friendly_name: "Tondeuse Seuil d'usure des lames", device_class: 'duration', unit_of_measurement: 'h' }),
+    'sensor.tondeuse_surface': s(210, { friendly_name: 'Tondeuse Surface', unit_of_measurement: 'm²' }),
+    'sensor.tondeuse_cycles_de_batterie': s(86, { friendly_name: 'Tondeuse Cycles de batterie', unit_of_measurement: 'cycles' }),
+    'sensor.tondeuse_temps_de_travail_total': s(212, { friendly_name: 'Tondeuse Temps de travail total', device_class: 'duration', unit_of_measurement: 'h' }),
+    'sensor.tondeuse_kilometrage_total': s(148, { friendly_name: 'Tondeuse Kilométrage total', device_class: 'distance', unit_of_measurement: 'km' }),
+    'sensor.tondeuse_signal_wi_fi': s(-58, { friendly_name: 'Tondeuse Signal Wi-Fi', device_class: 'signal_strength', unit_of_measurement: 'dBm' }),
+    'number.tondeuse_hauteur_des_lames': s(40, { friendly_name: 'Tondeuse Hauteur des lames', min: 20, max: 70, step: 5, unit_of_measurement: 'mm' }),
+    'switch.tondeuse_detection_de_pluie': s('on', { friendly_name: 'Tondeuse Détection de pluie' }),
+    'select.tondeuse_securite_faune': s('high', { friendly_name: 'Tondeuse Sécurité faune', options: ['off', 'low', 'high'] }),
+    'switch.tondeuse_voix': s('on', { friendly_name: 'Tondeuse Voix' }),
+    'update.tondeuse_micrologiciel': s('off', { friendly_name: 'Tondeuse Micrologiciel', installed_version: '1.14.0', latest_version: '1.14.0' }),
     'binary_sensor.porte_entree': s('off', { friendly_name: "Porte d'entrée", device_class: 'door' }),
     'binary_sensor.mouvement_entree': s('off', { friendly_name: 'Mouvement entrée', device_class: 'motion' }),
     'sensor.pile_porte_entree': s(9, { friendly_name: 'Pile porte entrée', device_class: 'battery', unit_of_measurement: '%' }),
@@ -320,8 +353,41 @@ function scenariosLancer(id, states) {
  * lente, plus une bosse de journée pour ce qui suit le soleil, et rien
  * d'inventé pour un capteur qui n'existe pas.
  */
+/* L'historique d'un robot (ADR 0042) : son etat, session par session, et la
+ * surface que son capteur atteignait. La tondeuse de la demo est en pleine
+ * tonte : sa derniere session est en cours. */
+function historiqueRobotDemo(ids, states) {
+  const jour = (n, h, m) => { const d = new Date(); d.setDate(d.getDate() - n); d.setHours(h, m, 0, 0); return d.getTime(); };
+  const iso = (t) => new Date(t).toISOString();
+  const robot = ids.find(id => /^(vacuum|lawn_mower)\./.test(id));
+  const tond = robot.indexOf('lawn_mower.') === 0;
+  const travail = tond ? 'mowing' : 'cleaning';
+  // [il y a n jours, heure, minute, duree en minutes, issue, surface]
+  const passes = tond
+    ? [[5, 6, 0, 161, 'docked', 365], [3, 19, 30, 28, 'docked', 35], [2, 6, 0, 130, 'docked', 330]]
+    : [[5, 14, 2, 94, 'docked', 68], [3, 8, 30, 22, 'idle', 19], [1, 8, 30, 51, 'docked', 42], [0, 8, 31, 48, 'docked', 42]];
+  const etats = [{ entity_id: robot, state: 'docked', last_changed: iso(jour(8, 12, 0)) }];
+  const surfaces = [];
+  const capteur = ids.find(id => id !== robot) || null;
+  passes.forEach(([n, h, m, duree, issue, surface]) => {
+    const debut = jour(n, h, m);
+    if (debut > Date.now()) return;
+    etats.push({ state: travail, last_changed: iso(debut) });
+    if (issue === 'docked') { etats.push({ state: 'returning', last_changed: iso(debut + duree * 60000) }); etats.push({ state: 'docked', last_changed: iso(debut + (duree + 3) * 60000) }); }
+    else etats.push({ state: issue, last_changed: iso(debut + duree * 60000) });
+    if (capteur) { surfaces.push({ state: '0', last_changed: iso(debut) }); surfaces.push({ state: String(surface), last_changed: iso(debut + duree * 60000) }); }
+  });
+  const actuel = states[robot] && states[robot].state;
+  if (actuel === travail) { const t = Date.now() - 37 * 60000; etats.push({ state: travail, last_changed: iso(t) }); if (capteur) surfaces.push({ state: String(states[capteur] ? states[capteur].state : 0), last_changed: iso(t + 60000) }); }
+  const listes = [etats];
+  if (capteur && surfaces.length) { surfaces[0].entity_id = capteur; listes.push(surfaces); }
+  return listes;
+}
+
 function historiqueDemo(chemin, states) {
   const m = String(chemin).match(/filter_entity_id=([^&]+)/);
+  const plusieurs = m ? decodeURIComponent(m[1]).split(',') : [];
+  if (plusieurs.some(x => /^(vacuum|lawn_mower)\./.test(x))) return historiqueRobotDemo(plusieurs, states);
   const id = m ? decodeURIComponent(m[1]) : null;
   const cur = id && states[id] ? parseFloat(states[id].state) : NaN;
   if (!id || isNaN(cur)) return [];
@@ -601,6 +667,38 @@ function indexDemo(states) {
         unit: at.unit_of_measurement || null, hidden: false });
     });
   });
+  // Les robots (ADR 0042) : un appareil chacun. C'est par lui que leur vue
+  // retrouve pieces d'usure, zones et reglages — reconnus a la cle de traduction.
+  const ROBOTS = {
+    robot_aspirateur: ['ecovacs', {
+      'vacuum.aspirateur': [null, null], 'sensor.aspirateur_filtre': ['lifespan_filter', 'diagnostic'],
+      'sensor.aspirateur_brosse_principale': ['lifespan_brush', 'diagnostic'], 'sensor.aspirateur_brosse_laterale': ['lifespan_side_brush', 'diagnostic'],
+      'sensor.aspirateur_serpilliere': ['lifespan_round_mop', 'diagnostic'], 'sensor.aspirateur_surface_nettoyee': ['stats_area', null],
+      'sensor.aspirateur_surface_totale': ['total_stats_area', null], 'sensor.aspirateur_duree_totale': ['total_stats_time', null],
+      'sensor.aspirateur_nombre_total': ['total_stats_cleanings', null], 'button.aspirateur_reinitialiser_filtre': ['reset_lifespan_filter', 'config'],
+      'select.aspirateur_mode_de_travail': ['work_mode', 'config'], 'select.aspirateur_debit_d_eau': ['water_amount', 'config'],
+      'switch.aspirateur_detection_tapis': ['carpet_auto_fan_boost', 'config'], 'switch.aspirateur_mode_avance': ['advanced_mode', 'config'],
+    }],
+    robot_tondeuse: ['mammotion', {
+      'lawn_mower.tondeuse': [null, null], 'binary_sensor.tondeuse_en_charge': [null, 'diagnostic'],
+      'switch.tondeuse_zone_pelouse_avant': ['area', 'config'], 'switch.tondeuse_zone_pelouse_arriere': ['area', 'config'], 'switch.tondeuse_zone_cote_garage': ['area', 'config'],
+      'sensor.tondeuse_usage_des_lames': ['blade_used_time', 'diagnostic'], 'sensor.tondeuse_seuil_des_lames': ['blade_used_warn_time', 'diagnostic'],
+      'sensor.tondeuse_surface': ['area', 'diagnostic'], 'sensor.tondeuse_cycles_de_batterie': ['maintenance_bat_cycles', 'diagnostic'],
+      'sensor.tondeuse_temps_de_travail_total': ['maintenance_work_time', 'diagnostic'], 'sensor.tondeuse_kilometrage_total': ['maintenance_distance', 'diagnostic'],
+      'sensor.tondeuse_signal_wi_fi': ['wifi_rssi', 'diagnostic'], 'number.tondeuse_hauteur_des_lames': ['blade_height', 'config'],
+      'switch.tondeuse_detection_de_pluie': ['rain_detection', 'config'], 'select.tondeuse_securite_faune': ['wildlife_safety', 'config'],
+      'switch.tondeuse_voix': ['voice_on_off', 'config'], 'update.tondeuse_micrologiciel': ['update', 'config'],
+    }],
+  };
+  Object.keys(ROBOTS).forEach(appareil => {
+    const [plateforme, liste] = ROBOTS[appareil];
+    Object.keys(liste).forEach(id => {
+      if (!states[id]) return;
+      const at = states[id].attributes || {};
+      entities.push({ id, name: at.friendly_name || id, device: appareil, area: null, platform: plateforme, key: liste[id][0], category: liste[id][1],
+        device_class: at.device_class || null, unit: at.unit_of_measurement || null, hidden: false });
+    });
+  });
   // La machine : un appareil sans piece. C'est par lui que la vue Systeme
   // retrouve, autour de la charge processeur, la memoire, le swap et les debits.
   Object.keys(states).filter(id => id.indexOf('sensor.system_monitor_') === 0).forEach(id => {
@@ -613,7 +711,9 @@ function indexDemo(states) {
     version: 1,
     areas: ZONES.map(([id, name]) => ({ id, name, floor: null, icon: null })),
     devices: [{ id: 'cam_entree', name: 'Caméra entrée', area: 'entree', manufacturer: 'Démo', model: 'Caméra', firmware: null, via: null, entry_type: null, integration: 'demo' },
-      { id: 'sysmon', name: 'System Monitor', area: null, manufacturer: 'Démo', model: 'System Monitor', firmware: null, via: null, entry_type: 'service', integration: 'systemmonitor' }],
+      { id: 'sysmon', name: 'System Monitor', area: null, manufacturer: 'Démo', model: 'System Monitor', firmware: null, via: null, entry_type: 'service', integration: 'systemmonitor' },
+      { id: 'robot_aspirateur', name: 'Aspirateur', area: null, manufacturer: 'Démo', model: 'Orbit V3', firmware: null, via: null, entry_type: null, integration: 'ecovacs' },
+      { id: 'robot_tondeuse', name: 'Tondeuse', area: null, manufacturer: 'Démo', model: 'Meadow M2', firmware: null, via: null, entry_type: null, integration: 'mammotion' }],
     entities,
     floors: [],
     services: {},

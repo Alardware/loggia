@@ -21,7 +21,7 @@ export const VIEW_ALWAYS = ['accueil', 'parametres'];
 /** Tous les identifiants de vue que le dashboard sait afficher. */
 export const VIEW_IDS = [
   'accueil', 'pieces', 'scenes', 'objets', 'energie', 'securite', 'systeme',
-  'lumieres', 'climat', 'volets', 'aspirateur', 'croquettes', 'medias', 'parametres',
+  'lumieres', 'climat', 'volets', 'aspirateur', 'tondeuse', 'croquettes', 'medias', 'parametres',
 ];
 
 const OK = { ok: true, reason: null };
@@ -110,6 +110,7 @@ export function viewAvailability(ctx) {
   out.climat = views.climat ? OK : no('aucun thermostat ni chauffe-eau');
   out.volets = views.volets ? OK : no('aucun volet (domaine cover)');
   out.aspirateur = views.aspirateur ? OK : no('aucun aspirateur (domaine vacuum)');
+  out.tondeuse = views.tondeuse ? OK : no('aucune tondeuse (domaine lawn_mower)');
   out.medias = views.medias ? OK : no('aucun lecteur (domaine media_player)');
   out.securite = views.securite ? OK : no('aucune caméra ni panneau d’alarme');
 

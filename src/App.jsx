@@ -13,7 +13,8 @@ const SystemeContent = lazy(() => import('./views/systeme.jsx'));
 // d'entites vient du meme morceau — il ne s'ouvre qu'en mode edition.
 const ParametresContent = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ParametresContent })));
 const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
-import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling, cameraModes } from './discovery.js';
+import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling, siblingsOf, cameraModes } from './discovery.js';
+import { VUE_ROBOT } from './robots.js';
 import { planAction as actionsPlan, availableActions as actionsAvailable, runPlan, actionCtx,
   datesEvenement, finApresDebut, champsDepuisEvenement, peut, commander, commanderService } from './actions.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
@@ -47,7 +48,8 @@ import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as POR
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 /* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
-const AspirateurContent = lazy(() => import('./views/aspirateur.jsx'));
+// La vue d'un robot — aspirateur ou tondeuse (ADR 0042) : une seule, chargee a la demande.
+const RobotContent = lazy(() => import('./views/robot.jsx'));
 /* L'assistant : sa popup tire l'orbe, qui tire Three.js. Rien de tout cela
  * ne se telecharge tant qu'on ne lui a pas parle. */
 const AssistantSheet = lazy(() => import('./views/assistant.jsx'));
@@ -219,8 +221,8 @@ const NAV = [
  * groupe Systeme remontait au-dessus des vues secondaires au lieu de rester en
  * bas — l'ordre du menu changeait avec la langue. Un drapeau ne se traduit pas. */
 
-const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scénarios': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Aspirateur': 'aspirateur', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Caméras': 'cameras', 'Système': 'systeme', 'Paramètres': 'parametres' };
-const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'aspirateur', 'croquettes', 'medias', 'objets', 'securite', 'systeme', 'parametres']);
+const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scénarios': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Aspirateur': 'aspirateur', 'Tondeuse': 'tondeuse', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Caméras': 'cameras', 'Système': 'systeme', 'Paramètres': 'parametres' };
+const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'aspirateur', 'tondeuse', 'croquettes', 'medias', 'objets', 'securite', 'systeme', 'parametres']);
 
 function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAutorisees = null, editMode = false, onToggleEdit = null }) {
   // Permissions par profil : `null` = tout (admins et profils sans restriction).
@@ -465,8 +467,8 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
   if (nq.length >= 2) {
     const h = getHass();
     const S = (h && h.states) || {};
-    const DOMS = { light: 'bulb', switch: 'bolt', climate: 'thermometer-half', cover: 'blinds', media_player: 'tv-music', vacuum: 'broom', fan: 'wind' };
-    const VUE_DOM = { climate: 'climat', cover: 'volets', media_player: 'medias', vacuum: 'aspirateur' };
+    const DOMS = { light: 'bulb', switch: 'bolt', climate: 'thermometer-half', cover: 'blinds', media_player: 'tv-music', vacuum: 'broom', lawn_mower: 'tractor', fan: 'wind' };
+    const VUE_DOM = { climate: 'climat', cover: 'volets', media_player: 'medias', ...VUE_ROBOT };
     let n = 0;
     for (const id in S) {
       if (n >= 8) break;
@@ -4648,6 +4650,9 @@ function useDomainCards(hass, { onNav = null } = {}) {
     else if (d === 'switch' && !cvEstLumiere(id)) setPrisePop(id);
     else if (d === 'lock') setLockPop(id);
     else if (d === 'binary_sensor') setBinPop(id);
+    // Un robot a sa vue (ADR 0042) : accueil, zones, historique, entretien,
+    // reglages. Le robot tape est memorise — une maison peut en avoir deux.
+    else if (VUE_ROBOT[d] && onNav) { try { window.sessionStorage.setItem('loggia-robot-' + d, id); } catch { /* stockage indisponible */ } onNav(VUE_ROBOT[d]); }
     else setAppPop(id);
   };
   // ── Les cartes que Loggia compose lui-meme — distributeur, plantes, zones
@@ -9152,11 +9157,19 @@ function ViewEmpty({ vid, reason, onNav }) {
   );
 }
 
-function AspirateurView({ hass }) {
+function RobotView({ hass, domaine }) {
+  // La carte d'un robot mene a SA vue, plus a sa fiche : la fiche (l'epingle,
+  // Stop, Localiser, toutes ses entites) s'ouvre donc d'ici, par les reglages.
+  const [fiche, setFiche] = useState(null);
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
-      <AspirateurContent hass={hass} />
+      {/* Chargee a la demande : sans cette frontiere, un clic du menu — une
+        * mise a jour synchrone — la faisait tomber dans l'ecran d'erreur. */}
+      <Suspense fallback={<div className="loggia-content" style={{ padding: '26px 28px 56px' }} />}>
+        <RobotContent key={domaine} hass={hass} domaine={domaine} onFiche={setFiche} />
+      </Suspense>
+      {fiche && <FicheAppareil id={fiche} hass={hass} onClose={() => setFiche(null)} />}
     </main>
   );
 }
@@ -12980,12 +12993,19 @@ export default function App() {
     ...(cfg.rooms || []).flatMap(r => [r.haid && r.haid.temp, r.haid && r.haid.humidity, r.haid && r.haid.co2]),
     // Les detecteurs des cameras (ADR 0031) : « en cours » suit le direct.
     ...lightKeys, ...bannerKeys(), ...(cfg.cams || []).map(c => c.haid), ...secKeys];
+  /* La vue d'un robot lit toutes les entites de SON appareil — pieces d'usure,
+   * reglages, zones de tonte : sans elles au suivi, une bascule ou une jauge
+   * resterait figee jusqu'a un tick fortuit (ADR 0042). */
+  const robotKeys = (domaine) => {
+    const S = (getHass() || {}).states || {};
+    return [domaine + '.', ...Object.keys(S).filter(id => id.indexOf(domaine + '.') === 0).flatMap(id => siblingsOf(LOGGIA_INDEX, id))];
+  };
   const VIEW_HAKEYS = {
     accueil: accueilKeys, lumieres: lightKeys, scenes: lightKeys,
     climat: [...climateKeys(), 'climate.', ...cfgKeys('climate'), ...voletKeys(), 'cover.', ...cfgKeys('covers')],
     volets: [...voletKeys(), 'cover.', ...cfgKeys('covers')],
     energie: [...enKeys(), cfg.energy.consoNow, cfg.energy.solarOutput],
-    aspirateur: vacKeys, croquettes: croqKeys(), medias: medKeys(),
+    aspirateur: [...vacKeys, ...robotKeys('vacuum')], tondeuse: [...mowerKeys(), ...robotKeys('lawn_mower')], croquettes: croqKeys(), medias: medKeys(),
     objets: [...vacKeys, 'lawn_mower.', ...mowerKeys(), ...croqKeys(), ...medKeys(), ...plantKeys()],
     securite: [...secBaseKeys(), 'camera.', 'siren.', 'switch.', ...secKeys, ...(cfg.cams || []).map(c => c.haid)],
     // `update.` : le panneau Versions lit les entités de mise à jour en direct (ADR 0037).
@@ -13399,7 +13419,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <RobotView hass={hass} domaine="vacuum" /> : view === 'tondeuse' ? <RobotView hass={hass} domaine="lawn_mower" /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}

@@ -156,6 +156,11 @@ def _entites(hass: HomeAssistant, autorise: Any = None) -> list[dict[str, Any]]:
             "device": e.device_id,
             "area": e.area_id,
             "platform": e.platform,
+            # La cle de traduction : ce que l'integration appelle l'entite, dans
+            # toutes les langues. L'identifiant, lui, est traduit a la creation
+            # (« temps_restant_filtre ») : un motif ecrit en anglais ne le
+            # reconnait pas. Les robots s'y fient pour leurs pieces d'usure.
+            "key": getattr(e, "translation_key", None),
             # Une entite de diagnostic ou de configuration n'a rien a faire
             # dans une carte : le client a besoin de le savoir.
             "category": _valeur(e.entity_category),

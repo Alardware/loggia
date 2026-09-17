@@ -74,7 +74,12 @@ export const HIDDEN_VIEWS = () => [
   /* Aspirateur et Croquettes ont quitté la liste le 30/08/2026 : la FICHE
    * APPAREIL UNIVERSELLE (tap sur la carte, vue Objets) montre tout ce que
    * l'appareil expose — la vue dédiée ne racontait rien de plus. Les routes
-   * restent : un appareil qui a mémorisé cette vue l'affiche encore. */
+   * restent : un appareil qui a mémorisé cette vue l'affiche encore.
+   * Les robots REVIENNENT le 17/09/2026 (ADR 0042) : leur vue raconte
+   * désormais ce que la fiche ne dit pas — la semaine, l'historique,
+   * l'entretien. Activables dans le menu ; la carte d'un robot y mène. */
+  { label: tr('Aspirateur'), vid: 'aspirateur', icon: 'broom', c: 'var(--o-accent-soft)' },
+  { label: tr('Tondeuse'), vid: 'tondeuse', icon: 'tractor', c: 'var(--o-ok)' },
   { label: tr('Médias'), vid: 'medias', icon: 'tv-music', c: 'var(--o-purple)' },
   // Bibliothèque de cartes (31/08/2026) : catalogue sur données fictives —
   // activable dans le menu comme les autres vues secondaires, sinon

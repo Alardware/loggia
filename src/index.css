@@ -1015,3 +1015,32 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
 }
 /* Au doigt on glisse : pas de fleches. */
 @media (pointer: coarse) { .o-qscenes-fleche { display: none !important; } }
+
+/* ── La vue d'un robot : aspirateur, tondeuse (ADR 0042) ──
+ * La teinte du robot : l'accent du theme pour l'aspirateur, le vert d'etat pour
+ * la tondeuse. `--rb-fond` porte du texte blanc (meme regle que
+ * `--o-accent-fond`) : le vert est assombri pour tenir le contraste. */
+.rb-aspirateur { --rb-rgb: var(--o-accent-rgb); --rb-doux: var(--o-accent-soft); --rb-fond: var(--o-accent-fond); }
+.rb-tondeuse { --rb-rgb: var(--o-ok-rgb); --rb-doux: var(--o-ok); --rb-fond: var(--o-ok); }
+@supports (color: color-mix(in srgb, red 50%, black)) {
+  .rb-tondeuse { --rb-fond: color-mix(in srgb, var(--o-ok) 62%, #000); }
+}
+.rb-tondeuse [role="switch"][aria-checked="true"] { background: var(--rb-fond) !important; }
+.rb-vue { max-width: 1240px; width: 100%; box-sizing: border-box; }
+/* Les onglets : une rangee, l'icone a cote du mot ; au telephone l'icone passe
+ * au-dessus et les onglets se partagent la largeur — UNE ligne. */
+.rb-onglets { display: flex; gap: 6px; padding: 5px; border-radius: 16px; background: var(--o-s2); align-self: flex-start; max-width: 100%; box-sizing: border-box; }
+.rb-onglet { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border: none; border-radius: 12px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.rb-accueil, .rb-zones, .rb-histo { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.rb-pieces { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+@media (min-width: 980px) {
+  /* Ecran large : l'accueil du robot a gauche, ses zones et sa carte a droite. */
+  .rb-accueil { grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); grid-template-areas: "hero zones" "tuiles zones" "alerte zones" ". zones"; align-items: start; }
+  .rb-a-hero { grid-area: hero; } .rb-a-zones { grid-area: zones; } .rb-a-tuiles { grid-area: tuiles; } .rb-a-alerte { grid-area: alerte; }
+  .rb-zones { grid-template-columns: minmax(0, 1.25fr) minmax(300px, 1fr); align-items: start; }
+  .rb-histo { grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); align-items: start; }
+}
+@media (max-width: 560px) {
+  .rb-onglets { align-self: stretch; gap: 4px; }
+  .rb-onglet { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 4px; padding: 8px 2px; font-size: 10.5px; }
+}

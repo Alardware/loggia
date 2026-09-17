@@ -454,7 +454,10 @@ test('les icones de la vue existent dans la police', () => {
 test('au telephone les mesures restent sur UNE rangee ; les panneaux se rangent en colonne', () => {
   assert.ok(css.includes('.grid-sys-mesures { display: grid; gap: 14px; grid-template-columns: repeat(var(--sys-n, 5), minmax(0, 1fr)); }'), 'autant de colonnes que de mesures connues');
   assert.ok(vue.includes("<div className=\"grid-sys-mesures\" style={{ '--sys-n': tuiles.length }}>"));
-  const tel = css.slice(css.lastIndexOf('@media (max-width: 560px) {'));
+  // Le bloc telephone de CETTE vue : le dernier ouvert avant ses regles — pas le
+  // dernier du fichier, qu'une autre vue peut poser apres (la vue des robots, ADR 0042).
+  const debutTel = css.lastIndexOf('@media (max-width: 560px) {', css.indexOf('.sys-mesure .sys-mesure-tete'));
+  const tel = css.slice(debutTel, css.indexOf('/* ──', debutTel) > 0 ? css.indexOf('/* ──', debutTel) : undefined);
   assert.ok(tel.includes('.sys-mesure .sys-mesure-tete { flex-direction: column !important;') && tel.includes('.sys-mesure .sys-mesure-titre, .sys-mesure .sys-mesure-sous { display: none !important; }') && tel.includes('.sys-mesure .sys-mesure-court { display: block !important;'), 'l’icone au-dessus, le titre court');
   assert.ok(!tel.includes('.grid-sys-mesures { grid-template-columns'), 'jamais deux colonnes forcees');
   assert.ok(css.includes('@media (max-width: 1100px) {' + NL + '  .grid-sys-duo { grid-template-columns: minmax(0, 1fr); }'));
