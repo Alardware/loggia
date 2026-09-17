@@ -6,35 +6,46 @@
  * tete et l'ordre de la grille. Pas de React, pas de Home Assistant : le
  * dashboard lui passe des objets deja lus, les tests aussi. */
 
-/** Les filtres, dans l'ordre des puces — « Tous » et « Favoris » a part. */
-export const OBJ_ORDRE = ['lumieres', 'volets', 'chauffage', 'prises', 'multimedia', 'capteurs', 'cameras', 'presence', 'menager', 'jardin', 'plantes'];
+/** Les filtres, dans l'ordre des puces — « Tous » et « Favoris » a part.
+ *
+ * Sept familles, pas onze (retour user du 17/09 : « trop de filtres, sur
+ * mobile c'est pas agreable ») : une puce que l'on doit chercher en faisant
+ * defiler la rangee ne filtre plus rien. « IoT » tient la place des prises et
+ * reunit ce qui se branche et travaille seul ; « Capteurs », tout ce qui
+ * mesure ou detecte. */
+export const OBJ_ORDRE = ['lumieres', 'volets', 'chauffage', 'iot', 'multimedia', 'capteurs', 'jardin'];
 
-/** Les classes de capteur binaire qui disent une presence : un filtre a part (maquette du 14/09). */
+/** Ce qui se branche et travaille seul : la famille « IoT ». */
+export const DOMAINES_IOT = ['switch', 'input_boolean', 'vacuum', 'fan', 'humidifier', 'valve', 'feeder', 'lawn_mower'];
+
+/** Les classes de capteur binaire qui disent une presence : la fiche d'edition
+ * les nomme ; sous les filtres, ce sont des capteurs comme les autres. */
 export const CLASSES_PRESENCE = ['motion', 'occupancy', 'presence'];
 
 /**
  * Les filtres d'un objet. Le premier est son filtre principal, tire du
  * domaine ; « jardin » s'ajoute a ce qui vit dehors, « favoris » a ce qui est
  * epingle. Un domaine que l'on ne sait pas ranger n'a aucun filtre : il ne
- * s'affiche que sous « Tous » — les serrures, sirenes et alarmes aussi : la
- * maquette n'a pas de puce « Securite » (retour user du 14/09).
+ * s'affiche que sous « Tous » — les serrures, sirenes et alarmes : la maquette
+ * n'a pas de puce « Securite » (retour user du 14/09) ; et les cameras, dont
+ * la puce est partie le 17/09 (« deja camera on peut l'enlever ») : elles ont
+ * leur place dans la vue Securite et sur l'Accueil.
+ *
+ * « Capteurs » recoit la presence et les plantes — une plante EST un bouquet
+ * de capteurs. La tondeuse est de l'IoT ET du jardin, zone ou pas : c'est la
+ * seule machine dont le metier dit ou elle vit.
  */
-export function filtresObjet({ domaine, type = 'entite', estLumiere = false, dehors = false, epingle = false, classe = '' }) {
+export function filtresObjet({ domaine, type = 'entite', estLumiere = false, dehors = false, epingle = false }) {
   const dom = type === 'zone' ? 'climate' : type === 'feeder' ? 'feeder' : type === 'plant' ? 'plant' : String(domaine || '');
   const principal = dom === 'light' || (dom === 'switch' && estLumiere) ? 'lumieres'
     : dom === 'cover' ? 'volets'
       : dom === 'climate' || dom === 'water_heater' ? 'chauffage'
-        : dom === 'switch' || dom === 'input_boolean' ? 'prises'
+        : DOMAINES_IOT.indexOf(dom) >= 0 ? 'iot'
           : dom === 'media_player' ? 'multimedia'
-            : dom === 'binary_sensor' && CLASSES_PRESENCE.indexOf(String(classe || '')) >= 0 ? 'presence'
-              : dom === 'binary_sensor' || dom === 'sensor' ? 'capteurs'
-              : dom === 'camera' ? 'cameras'
-                : dom === 'vacuum' || dom === 'fan' || dom === 'humidifier' || dom === 'valve' || dom === 'feeder' ? 'menager'
-                  : dom === 'lawn_mower' ? 'jardin'
-                    : dom === 'plant' ? 'plantes'
-                      : null;
+            : dom === 'binary_sensor' || dom === 'sensor' || dom === 'plant' ? 'capteurs'
+              : null;
   const f = principal ? [principal] : [];
-  if (dehors && principal !== 'jardin') f.push('jardin');
+  if (dehors || dom === 'lawn_mower') f.push('jardin');
   if (epingle) f.push('favoris');
   return f;
 }

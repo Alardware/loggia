@@ -2116,4 +2116,10 @@ export default {
   'Bruyant': 'Noisy',
   'Très bruyant': 'Very noisy',
   'Niveau sonore élevé dans la pièce.': 'High noise level in the room.',
+  // Sept familles d'objets, le bandeau d'edition en tete, la meteo dans la fiche de l'Accueil (v3.41.0)
+  'IoT': 'IoT',
+  'Épingle un appareil depuis sa fiche': 'Pin a device from its sheet',
+  'Mode édition : avance, recule ou modifie un scénario, ou ajoutes-en un.': 'Edit mode: move a scenario forward or back, edit it, or add one.',
+  'Mode édition : prends une carte pour la déplacer, retire-la (×) ou ajoutes-en une.': 'Edit mode: grab a card to move it, remove it (×) or add one.',
+  "Entité météo : la carte météo sur le côté de l'Accueil, le fond de la bannière, la veille et les conseils d'extérieur.": 'Weather entity: the weather card on the side of Home, the banner backdrop, the ambient screen and the outdoor advice.',
 };

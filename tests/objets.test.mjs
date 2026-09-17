@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, OBJ_ORDRE, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from '../src/objets.js';
+import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, OBJ_ORDRE, DOMAINES_IOT, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from '../src/objets.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
@@ -15,27 +15,32 @@ test('chaque domaine trouve son filtre ; une prise declaree lumiere est une lumi
   const f = (o) => filtresObjet(o);
   assert.deepEqual(f({ domaine: 'light' }), ['lumieres']);
   assert.deepEqual(f({ domaine: 'switch', estLumiere: true }), ['lumieres']);
-  assert.deepEqual(f({ domaine: 'switch' }), ['prises']);
+  assert.deepEqual(f({ domaine: 'switch' }), ['iot'], 'une prise est de l’IoT (17/09 : sept familles au lieu de onze)');
+  assert.deepEqual(f({ domaine: 'input_boolean' }), ['iot']);
   assert.deepEqual(f({ domaine: 'cover' }), ['volets']);
   assert.deepEqual(f({ domaine: 'climate' }), ['chauffage']);
   assert.deepEqual(f({ domaine: 'switch', type: 'zone' }), ['chauffage'], 'une zone fil pilote est du chauffage, pas une prise');
   assert.deepEqual(f({ domaine: 'media_player' }), ['multimedia']);
   assert.deepEqual(f({ domaine: 'binary_sensor' }), ['capteurs']);
-  assert.deepEqual(f({ domaine: 'binary_sensor', classe: 'motion' }), ['presence'], 'un detecteur de mouvement est une presence');
+  assert.deepEqual(f({ domaine: 'binary_sensor', classe: 'motion' }), ['capteurs'], 'un detecteur de mouvement est un capteur comme les autres : « capteur peut surement en recevoir plus »');
   assert.deepEqual(f({ domaine: 'binary_sensor', classe: 'door' }), ['capteurs'], 'une porte reste un capteur');
   assert.deepEqual(f({ domaine: 'sensor' }), ['capteurs']);
-  assert.deepEqual(f({ domaine: 'camera' }), ['cameras']);
+  assert.deepEqual(f({ domaine: 'camera' }), [], '« deja camera on peut l’enlever » : une camera ne vit plus que sous Tous');
   assert.deepEqual(f({ domaine: 'lock' }), [], 'une serrure ne vit que sous Tous : pas de puce Securite, la maquette n’en a pas');
-  assert.deepEqual(f({ domaine: 'vacuum' }), ['menager']);
-  assert.deepEqual(f({ domaine: 'feeder', type: 'feeder' }), ['menager']);
-  assert.deepEqual(f({ domaine: 'lawn_mower' }), ['jardin']);
-  assert.deepEqual(f({ domaine: 'plant', type: 'plant' }), ['plantes']);
+  assert.deepEqual(f({ domaine: 'vacuum' }), ['iot']);
+  ['fan', 'humidifier', 'valve'].forEach(d => assert.deepEqual(f({ domaine: d }), ['iot'], d + ' : ce qui se branche et travaille seul'));
+  assert.deepEqual(f({ domaine: 'feeder', type: 'feeder' }), ['iot']);
+  assert.deepEqual(f({ domaine: 'lawn_mower' }), ['iot', 'jardin'], 'la tondeuse est de l’IoT ET du jardin, zone ou pas');
+  assert.deepEqual(f({ domaine: 'plant', type: 'plant' }), ['capteurs'], 'une plante est un bouquet de capteurs');
+  assert.deepEqual(DOMAINES_IOT, ['switch', 'input_boolean', 'vacuum', 'fan', 'humidifier', 'valve', 'feeder', 'lawn_mower']);
   assert.deepEqual(f({ domaine: 'script' }), [], 'un domaine inconnu ne vit que sous Tous');
 });
 
 test('dehors et epingle s’ajoutent : une applique exterieure est aussi du jardin', () => {
   assert.deepEqual(filtresObjet({ domaine: 'light', dehors: true }), ['lumieres', 'jardin']);
-  assert.deepEqual(filtresObjet({ domaine: 'lawn_mower', dehors: true }), ['jardin'], 'pas deux fois jardin');
+  assert.deepEqual(filtresObjet({ domaine: 'lawn_mower', dehors: true }), ['iot', 'jardin'], 'pas deux fois jardin');
+  assert.deepEqual(filtresObjet({ domaine: 'camera', dehors: true }), ['jardin'], 'une camera dehors reste du jardin');
+  assert.deepEqual(filtresObjet({ domaine: 'plant', type: 'plant', dehors: true }), ['capteurs', 'jardin']);
   assert.deepEqual(filtresObjet({ domaine: 'cover', epingle: true }), ['volets', 'favoris']);
   assert.equal(filtresObjet({ domaine: 'light', dehors: true, epingle: true })[0], 'lumieres', 'le principal reste premier');
 });
@@ -69,7 +74,7 @@ const MAISON = [
   { cle: 'cover.a', nom: 'Baie', piece: 'Salon', filtres: ['volets'], actif: false, absent: false },
   { cle: 'light.b', nom: 'Applique', piece: 'Terrasse', filtres: ['lumieres', 'jardin', 'favoris'], actif: false, absent: true },
   { cle: 'media_player.a', nom: 'Enceinte', piece: 'Cuisine', filtres: ['multimedia'], actif: true, absent: false },
-  { cle: 'obj:feeder', nom: 'Distributeur', piece: null, filtres: ['menager'], actif: false, absent: false },
+  { cle: 'obj:feeder', nom: 'Distributeur', piece: null, filtres: ['iot'], actif: false, absent: false },
 ];
 
 test('les chiffres de tete : appareils, pieces distinctes, actifs, absents', () => {
@@ -80,10 +85,15 @@ test('les chiffres de tete : appareils, pieces distinctes, actifs, absents', () 
 test('les puces : Tous toujours, Favoris s’il y a une epingle, puis dans l’ordre, avec leur compte', () => {
   assert.deepEqual(pucesObjets(MAISON), [
     { id: 'tous', n: 5 }, { id: 'favoris', n: 1 }, { id: 'lumieres', n: 2 }, { id: 'volets', n: 1 },
-    { id: 'multimedia', n: 1 }, { id: 'menager', n: 1 }, { id: 'jardin', n: 1 },
+    { id: 'iot', n: 1 }, { id: 'multimedia', n: 1 }, { id: 'jardin', n: 1 },
   ]);
   assert.deepEqual(pucesObjets([]), [{ id: 'tous', n: 0 }]);
-  assert.deepEqual(OBJ_ORDRE.slice(0, 3), ['lumieres', 'volets', 'chauffage']);
+  assert.deepEqual(OBJ_ORDRE, ['lumieres', 'volets', 'chauffage', 'iot', 'multimedia', 'capteurs', 'jardin'], 'sept familles ; l’IoT tient la place des prises, la grille automatique ne saute pas');
+  // Aucune famille orpheline : tout ce que `filtresObjet` sait rendre a sa puce.
+  const rendus = new Set();
+  ['light', 'switch', 'input_boolean', 'cover', 'climate', 'water_heater', 'media_player', 'binary_sensor', 'sensor', 'camera', 'lock', 'vacuum', 'fan', 'humidifier', 'valve', 'lawn_mower', 'siren']
+    .forEach(d => filtresObjet({ domaine: d, dehors: true }).forEach(x => rendus.add(x)));
+  [...rendus].forEach(x => assert.ok(OBJ_ORDRE.indexOf(x) >= 0, x + ' n’a pas de puce'));
 });
 
 test('la grille : piece par piece dans l’ordre de la maison, puis filtre, puis nom — sans piece en dernier', () => {
@@ -97,9 +107,9 @@ test('la grille : piece par piece dans l’ordre de la maison, puis filtre, puis
 });
 
 test('les vues Lumieres, Climat et Medias sont remplacees : leurs routes menent a Objets, filtre pose', () => {
-  assert.ok(src.includes('view === \'lumieres\' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} />'), 'lumieres → Objets');
-  assert.ok(src.includes('view === \'climat\' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} />'), 'climat → Objets');
-  assert.ok(src.includes('view === \'medias\' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} />'), 'medias → Objets');
+  assert.ok(src.includes('view === \'lumieres\' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} />'), 'lumieres → Objets');
+  assert.ok(src.includes('view === \'climat\' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} />'), 'climat → Objets');
+  assert.ok(src.includes('view === \'medias\' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} />'), 'medias → Objets');
   ['LumieresView', 'ClimatView', 'MediasView', 'LumieresContent', 'ClimatContent', 'MediasContent'].forEach(n =>
     assert.ok(!src.includes('function ' + n + '('), n + ' devrait avoir disparu'));
   assert.ok(src.includes('function VoletsView('), 'la vue Volets, elle, reste');
@@ -111,16 +121,23 @@ test('la vue Objets dessine les cartes de la piece, une par appareil, derriere d
   assert.ok(vue.includes('objetsDeLaMaison(hass, ajoutes)') && vue.includes('return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || null);'), 'les cartes de la piece');
   assert.ok(vue.includes('dc.card(null, nomDe(o), o.zone)'), 'une zone fil pilote a sa carte');
   assert.ok(vue.includes('borderRadius: 9') && !vue.includes('borderRadius: 999'), 'des puces, pas des pilules');
-  assert.ok(vue.includes(`className="o-favrow" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}`), 'une seule ligne qui defile, pas de retour a la ligne');
+  assert.ok(vue.includes(`className="o-favrow o-objfiltres" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}`), 'une seule ligne, pas de retour a la ligne ; elle defile si elle deborde');
   assert.ok(vue.includes(`flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px'`), 'une puce ne se casse ni ne se tasse');
   assert.ok(vue.includes('{dc.sheets}'), 'les fiches montent');
   assert.ok(vue.includes("useLayoutEditor(OBJ_LAYOUT_KEY, 'objets', derived)"), 'l’editeur d’agencement est de retour (mode edition)');
   assert.ok(vue.includes('<EditableCard key={o.cle} ed={ed} id={o.cle} nom={nomDe(o)} onEdit={setCardEdit} hass={hass} />'), 'en edition, la carte d’edition');
-  assert.ok(vue.includes('<CarteAjout onClick={() => setAddSheet(true)} />') && vue.includes('<BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} />'), 'la case d’ajout et le bandeau');
+  assert.ok(vue.includes('<CarteAjout onClick={() => setAddSheet(true)} />') && vue.includes('<BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} onEnt={onEnt} />'), 'la case d’ajout et le bandeau');
   const f = src.indexOf('const OBJ_FILTRES = () => [');
   const filtres = src.slice(f, src.indexOf('];', f));
   const ids = [...filtres.matchAll(/id: '([a-z]+)'/g)].map(m => m[1]);
-  assert.deepEqual(ids, ['tous', 'favoris', 'lumieres', 'volets', 'chauffage', 'prises', 'multimedia', 'capteurs', 'cameras', 'presence', 'menager', 'jardin', 'plantes']);
+  assert.deepEqual(ids, ['tous', 'favoris', 'lumieres', 'volets', 'chauffage', 'iot', 'multimedia', 'capteurs', 'jardin']);
+  assert.deepEqual(ids.slice(2), OBJ_ORDRE, 'les puces suivent l’ordre du module, une pour une');
+  // Au telephone : l'icone seule, les puces se partagent la largeur — une ligne, sans defilement.
+  assert.ok(vue.includes('<span className="o-objfiltre-mot">{f.label}</span>') && vue.includes('aria-label={f.label} title={f.label}'), 'le mot peut s’effacer : il reste lisible par un lecteur d’ecran et au survol');
+  const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
+  const tel = css.slice(css.indexOf('.o-objfiltres { gap: 6px'));
+  assert.ok(css.includes('.o-objfiltres > .o-objfiltre { flex: 1 1 0 !important; min-width: 0;') && css.includes('.o-objfiltre-mot { display: none; }') && tel.indexOf('overflow-x: visible') > 0, 'la regle du telephone');
+  assert.ok(css.lastIndexOf('@media (max-width: 560px)', css.indexOf('.o-objfiltres { gap: 6px')) > css.indexOf('.o-favrow::-webkit-scrollbar-track'), 'elle ne vaut qu’au telephone');
   const m = src.indexOf('function objetsDeLaMaison(');
   const maison = src.slice(m, src.indexOf(String.fromCharCode(10) + '}', m));
   assert.ok(maison.includes('parAppareil') && maison.includes('ROOM_BIN_CLASSES') && maison.includes('ROOM_SENSOR_CLASSES'), 'les memes regles que la piece : une carte par appareil, capteurs choisis');

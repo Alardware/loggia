@@ -63,8 +63,8 @@ test('partout : pieces, volets et Objets ont le bandeau, la case d’ajout et la
   assert.ok(room.includes('<BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)}') && room.includes('<CarteAjout onClick={() => setAddSheet(true)} />') && room.includes('piece={room}'));
   assert.ok(!room.includes("tr('Ajouter un appareil')"), 'l’ancien bandeau de la piece a disparu');
   const volets = bloc('function VoletsContent(', NL + 'function ');
-  assert.ok(volets.includes("<BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} ajouterLabel={tr('Ajouter un volet')} />") && volets.includes('<CarteAjout onClick={() => setAddSheet(true)}'));
-  assert.ok((src.match(/<ObjetsView hass=\{hass\} onNav=\{setView\}(?: filtre="[a-z]+")? edit=\{editMode && peutEditer\} \/>/g) || []).length === 4, 'Objets recoit l’edition sur ses quatre routes');
+  assert.ok(volets.includes("<BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} ajouterLabel={tr('Ajouter un volet')} onEnt={onEnt} />") && volets.includes('<CarteAjout onClick={() => setAddSheet(true)}'));
+  assert.ok((src.match(/<ObjetsView hass=\{hass\} onNav=\{setView\}(?: filtre="[a-z]+")? edit=\{editMode && peutEditer\} onEnt=/g) || []).length === 4, 'Objets recoit l’edition sur ses quatre routes');
 });
 
 test('un seul type de carte, le standard : plus de CARTE dans la fiche, plus de type dans l’editeur', () => {

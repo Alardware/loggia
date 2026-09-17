@@ -56,7 +56,7 @@ test('la vue Securite passe par le meme editeur d’agencement que les autres vu
   const vue = bloc('function SecuriteContent(', NL + '}');
   assert.ok(vue.includes("const ed = useLayoutEditor('loggia_seclayout', 'securite', derivesSec);"), 'le crochet commun, sa cle, son perimetre');
   assert.ok(vue.includes("const derivesSec = [...(alarmId ? [alarmId] : []), ...sirenes, ...(people.length ? ['carte:presence'] : []), ...(ouvrantsIds.length ? ['sect:ouvrants', ...ouvrantsIds] : [])];"), 'la decouverte propose : alarme, sirenes, presence, puis les ouvrants sous leur titre');
-  assert.ok(vue.includes('{edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} />}'), 'le bandeau d’edition des autres vues');
+  assert.ok(vue.includes('{edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} onEnt={onEnt} />}'), 'le bandeau d’edition des autres vues — un seul, en tete, avec « Entites de la vue » (17/09)');
   assert.ok(vue.includes('? <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass} taille={false} />'), 'chaque carte se saisit, se retire, se renomme — sans compacte ici');
   assert.ok(vue.includes('{bloc.titre && (edit ? <EditableCard plat ed={ed} id={bloc.titre} nom={nomDe(bloc.titre)} onEdit={setCardEdit}>{titre}</EditableCard> : titre)}'), 'les titres aussi');
   assert.ok(vue.includes("className={ed.estLarge(k) ? 'o-cvw2' : ''}"), 'la largeur choisie vaut hors edition');
@@ -71,7 +71,7 @@ test('la carte d’une cle, les noms choisis, la cle synchronisee, les mots', ()
   assert.ok(vue.includes('return dc.card(k, ed.labelOf(k));'), 'une carte ajoutee passe par la fabrique commune');
   assert.ok(src.includes('function CvSirene({ id, hass, label = null }) {') && src.includes('const nom = label || cvName(st, id);') && src.includes('<div style={RM_NAME}>{label || cvName(st, id)}</div>'), 'l’alarme et la sirene portent le nom choisi');
   assert.ok(LOGGIA_SYNC_KEYS.indexOf('loggia_seclayout') >= 0, 'l’agencement de la vue suit le compte, comme les autres');
-  for (const k of ['Sirène', 'Mode édition : choisis le panneau d’alarme et les caméras ; glisse une carte pour la déplacer, clique-la pour la modifier.']) {
+  for (const k of ['Sirène', 'Entités de la vue']) {
     assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
   }
 });

@@ -126,24 +126,14 @@ export const userImg = (u) => {
 export const userBg = (u) => { const im = userImg(u); if (im) return `url(${im}) center/cover`; if (u && u.grad) return u.grad; const c = (u && u.c) || 'var(--o-ok)'; return `linear-gradient(135deg,${c},rgba(${cl_hexRgb(c)},.6))`; };
 
 /**
- * Barre du mode edition, commune aux vues.
- *
- * Le pave flottant qui portait « Entites de la vue » faisait doublon des que la
- * vue avait deja une barre, et masquait le bas de l'ecran sur les autres. Une
- * seule barre, en tete du contenu, partout.
+ * Le bouton des barres d'edition. La barre elle-meme est `BandeauEdition`
+ * (App.jsx), la meme dans toutes les vues et toujours en tete du contenu :
+ * `ViewEditBar`, qui la doublait dans les Volets et la Securite, est partie
+ * le 17/09.
  */
 export const editBtn = (accent) => ({ padding: '7px 12px', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0,
   background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
   border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
-
-export const ViewEditBar = ({ texte, onEnt, entLabel = 'Entités de la vue', children, style }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)', ...style }}>
-    <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
-    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{texte}</span>
-    {children}
-    {onEnt && <button onClick={onEnt} style={editBtn(false)}>{entLabel}</button>}
-  </div>
-);
 
 // opts = { mode:'dark'|'light', loggiaTheme:'' | 'neumorphix' | 'google' | 'ios', haTheme:'' | 'FOLLOW' } → retourne isDark
 // Reglages fins de l'utilisateur, appliques PAR-DESSUS le preset (et par-dessus

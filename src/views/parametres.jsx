@@ -11,7 +11,7 @@ import {
 } from '../ui.jsx';
 import {
   cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, medCompanion,
-  medPlayers, normRooms, secAlarm, switchLightsCfg, exportLoggiaConfig, importLoggiaConfig,
+  medPlayers, normRooms, secAlarm, switchLightsCfg,
   exportConfigComplete, importConfigComplete, resetLoggiaComplet, cheminPanneau, lirePageAccueil,
   definirPageAccueil, DROITS
 } from '../state.js';
@@ -23,6 +23,7 @@ import {
 import { useLoggia } from '../runtime.js';
 import { commanderService } from '../actions.js';
 import { viewReason } from '../views.js';
+import { detecterCapteursPieces } from '../resolve.js';
 import { autoFamille } from '../autos.js';
 import { InterrupteursSection } from './interrupteurs.jsx';
 import { VoletsReglages } from './volets.jsx';
@@ -134,13 +135,12 @@ const MarginRow = ({ label, px, auto, onStep, onSet }) => (
 );
 
 const fleche = { width: 26, height: 26, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 };
-const Row = ({ icon, c, name, sub, on, locked, onT, onUp, onDown, onEntites }) => (
+const Row = ({ icon, c, name, sub, on, locked, onT, onUp, onDown }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
     <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', opacity: on ? 1 : .55 }}><Fi i={icon} size={15} color={c || 'var(--o-text2)'} /></span>
     <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700, color: on ? 'var(--o-text)' : 'var(--o-text3)' }}>{name}</div><div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600 }}>{on ? sub: tr('masquée')}</div></div>
     {onUp && <button onClick={onUp} title={tr('Monter')} aria-label={tr('Monter') + ' ' + name} style={fleche}><Fi i="angle-up" size={12} /></button>}
     {onDown && <button onClick={onDown} title={tr('Descendre')} aria-label={tr('Descendre') + ' ' + name} style={fleche}><Fi i="angle-down" size={12} /></button>}
-    <button onClick={onEntites} style={{ padding: '6px 11px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>{tr('Entités')}</button>
     {locked
       ? <span style={{ width: 46, textAlign: 'center', flexShrink: 0 }}><Fi i="lock" size={13} color="var(--o-text3)" /></span>
       : <span onClick={onT} role="switch" aria-checked={on} aria-label={name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onT(); } }} style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
@@ -714,7 +714,7 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
  * MAISON passe donc par le composant, code administrateur et profil actif
  * compris depuis le 03/09. Ne restent locales que les marges d'ecran. */
 
-// Hook partagé : état + persistance de la config d'entités (onglet Entités ET édition en place sur chaque vue).
+// Hook partagé : état + persistance de la config d'entités, pour la fiche « Entités de la vue » de chaque page.
 function useEntConfig(hass) {
   // Cle de rendu stable, posee DES la lecture : sans elle, les lignes se
   // reperaient par leur rang et une suppression deplacait le curseur de saisie.
@@ -747,7 +747,6 @@ function useEntConfig(hass) {
   const cfgSig = JSON.stringify(LOGGIA_CFG || {});
   useEffect(() => { if (!entTouched) setEnt(readEnt()); }, [cfgSig]);
   const entSet = (k) => (rows) => { setEntTouched(true); setEnt(o => ({ ...o, [k]: rows })); };
-  const ENT_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_climate'];
   const saveEnt = () => {
     try {
       cfgSet({
@@ -781,14 +780,6 @@ function useEntConfig(hass) {
     // avant de recharger, sinon la page relirait l'ancienne valeur.
     setTimeout(() => window.location.reload(), 700);
   };
-  const resetEnt = () => {
-    // `null` efface la clé côté serveur comme en local : sans quoi la valeur
-    // enregistrée reviendrait au rechargement.
-    const vide = {};
-    ENT_KEYS.forEach(k => { vide[k] = null; });
-    cfgSet(vide);
-    setTimeout(() => window.location.reload(), 700);
-  };
   const dlists = useMemo(() => {
     const doms = ['sensor', 'person', 'switch', 'camera', 'media_player', 'alarm_control_panel', 'weather',
       'climate', 'input_number', 'input_select', 'input_boolean'];
@@ -797,21 +788,39 @@ function useEntConfig(hass) {
     Object.keys(m).forEach(d => m[d].sort());
     return m;
   }, [hass]);
-  return { ent, setEnt, entSet, saveEnt, resetEnt, dlists };
+  return { ent, setEnt, entSet, saveEnt, dlists };
 }
 
 
 
-// Sections d'édition des entités — partagées entre l'onglet Paramètres→Entités et le sheet d'édition par vue.
+// Sections d'édition des entités — celles de la fiche « Entités de la vue », page par page.
 function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) {
   const has = (k) => !only || only.indexOf(k) >= 0;
   const check = hass && hass.states ? (id) => !!hass.states[id] : null;
+  const detecter = () => {
+    const r0 = LOGGIA_RESOLVED && LOGGIA_RESOLVED.rooms;
+    const r = detecterCapteursPieces(ent.rooms, {
+      suggestions: (r0 && r0.suggested) || [], capteurs: dlists.sensor || [],
+      vivant: (id) => !!(id && hass && hass.states && hass.states[id]),
+    });
+    entSet('rooms')(r.rooms);
+    alert(r.trouves
+      ? (r.trouves > 1 ? tr('{n} capteurs détectés', { n: r.trouves }) : tr('{n} capteur détecté', { n: r.trouves }))
+        + (r.parZone ? ' (' + r.parZone + ' par la zone Home Assistant)' : ' par le nom')
+        + ' — vérifie puis « Enregistrer et recharger ».'
+      : 'Aucun capteur supplémentaire trouvé. Range tes capteurs dans une zone Home Assistant : la détection s’appuie dessus en premier.');
+  };
   return (
     <>
       {/* Meme raison que plus haut : ces listes de suggestions ne se saisissent
         * pas, et les champs qui les referencent portent deja leur etiquette. */}
       {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
       {Object.keys(dlists).map(d => <datalist key={d} id={'o-dl-' + d}>{dlists[d].map(id => <option key={id} value={id} />)}</datalist>)}
+      {has('rooms') && hass && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+          <button onClick={detecter} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(var(--o-ok-rgb),.13)', border: '1px solid rgba(var(--o-ok-rgb),.3)', color: 'var(--o-ok)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}><Fi i="magic-wand" size={13} />{tr('Détecter automatiquement')}</button>
+        </div>
+      )}
       {has('rooms') && <EntSection title={tr('Pièces (Accueil)')} desc={tr("Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce.")} cols={[{ k: 'room', label: tr('Pièce'), ph: tr('Séjour'), flex: .8 }, { k: 'temp', label: tr('Température'), ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: tr('Humidité'), ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }, { k: 'lights', label: tr('Lampes du bouton'), ph: tr('toutes (light.a, light.b)'), domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
       {has('energy') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
@@ -837,7 +846,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
       {has('weather') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Météo')}</div>
-          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Entité météo (fond de la bannière de l'Accueil, veille, conseils extérieur).")}</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Entité météo : la carte météo sur le côté de l'Accueil, le fond de la bannière, la veille et les conseils d'extérieur.")}</div>
           <input aria-label={tr('Entité météo')} value={ent.weather} onChange={e => setEnt(o => ({ ...o, weather: e.target.value }))} placeholder="weather.…" list="o-dl-weather" spellCheck={false} style={entInp} />
         </div>
       )}
@@ -882,13 +891,13 @@ function lienSur(url) {
   return /^https?:\/\//i.test(u) ? u : null;
 }
 
-const VIEW_ENT_SECTIONS = {
-  accueil: ['rooms', 'energy', 'people', 'cams'],
+export const VIEW_ENT_SECTIONS = {
+  accueil: ['rooms', 'weather', 'energy', 'people', 'cams'],
+  objets: ['switches', 'medias', 'climate'],
   lumieres: ['switches'],
   energie: ['energy'],
   securite: ['alarm', 'cams'],
   medias: ['medias'],
-  meteo: ['weather'],
   climat: ['climate'],
 };
 
@@ -904,7 +913,7 @@ export function ViewEntSheet({ view, hass, onClose }) {
           <span style={{ fontSize: 19, fontWeight: 700 }}>{tr('Entités de cette vue')}</span>
         </div>
         <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 14 }}>{tr('Autocomplétion en tapant. « Enregistrer » recharge le dashboard pour appliquer.')}</div>
-        <EntSections ent={ent} setEnt={setEnt} entSet={entSet} dlists={dlists} only={VIEW_ENT_SECTIONS[view]} />
+        <EntSections ent={ent} setEnt={setEnt} entSet={entSet} dlists={dlists} only={VIEW_ENT_SECTIONS[view]} hass={hass} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
           <button onClick={close} style={{ padding: '10px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
           <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
@@ -1047,10 +1056,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     });
   }, [autoSig]);
   const autoCall = (svc, id) => commanderService(hass, id, 'automation', svc, { entity_id: id });
-  // ── Entités (config du dashboard) : édition des mappings, persistés localStorage, appliqués au rechargement ──
-  const { ent, setEnt, entSet, saveEnt, resetEnt, dlists } = useEntConfig(hass);
+  // ── Entités (config du dashboard) : leur compte, pour « À propos ». Elles se règlent dans la fiche de chaque vue. ──
+  const { ent } = useEntConfig(hass);
   const entIds = [...ent.rooms.flatMap(r => [r.temp, r.humidity, r.co2]), ent.energy.consoNow, ent.energy.surplusNow, ent.energy.solarOutput, ent.alarm, ...ent.people.map(x => x.haid), ...ent.switches.map(x => x.haid), ...ent.cams.map(x => x.haid), ...ent.medias.flatMap(x => [x.haid, x.ma])].filter(Boolean);
-  const entMissing = (hass && hass.states) ? entIds.filter(id => !hass.states[id]) : [];
   const [cvEditing, setCvEditing] = useState(null); // null | 'new' | objet vue custom
   // Veille : diaporama photos + réveil caméra — par appareil, lus par AmbientOverlay au montage.
   // Aperçu du nouvel accueil : par appareil, réversible — l'ancien reste le défaut.
@@ -1058,17 +1066,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const toggleAmbPhotos = () => setAmbPhotos(v => { const n = !v; try { localStorage.setItem('loggia-ambphotos', n ? '1' : '0'); } catch {} return n; });
   const [ambMotion, setAmbMotion] = useState(() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch { return false; } });
   const toggleAmbMotion = () => setAmbMotion(v => { const n = !v; try { localStorage.setItem('loggia-ambmotion', n ? '1' : '0'); } catch {} return n; });
-  // Synchro entre origines (WiFi/IP locale vs Nabu Casa) : export/import du localStorage Loggia.
-  const [syncOpen, setSyncOpen] = useState(false);
-  const [syncTxt, setSyncTxt] = useState('');
-  const [syncMsg, setSyncMsg] = useState('');
-  const doExport = async () => {
-    const j = exportLoggiaConfig();
-    setSyncTxt(j); setSyncOpen(true);
-    try { await navigator.clipboard.writeText(j); setSyncMsg('Copiée dans le presse-papier ✓ — colle-la sur l\'autre accès (Importer).'); }
-    catch { setSyncMsg('Copie auto impossible ici — sélectionne le texte ci-dessous et copie-le manuellement.'); }
-  };
-  const doImport = () => { try { importLoggiaConfig(syncTxt); } catch { setSyncMsg('Import impossible : colle une config valide (bouton « Copier la config » de l\'autre accès).'); } };
   // ── Mises à jour (entités update.*) : install avec confirmation 2 temps, skip, progression ──
   const [updConfirm, setUpdConfirm] = useState(null); // id en attente de confirmation
   const [updBusy, setUpdBusy] = useState({}); // id → timestamp : « Installation… » optimiste dès le clic (HA met du temps à passer in_progress)
@@ -1188,8 +1185,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       sub: tr('Ce que Loggia fait tout seul'), big: String(nbVolRegles), unit: nbVolRegles ? tr('règles actives') : tr('à régler'), admin: true },
     { id: 'vues', name: tr('Vues'), ico: 'layout-fluid', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
       sub: tr('Menu latéral et vues perso'), big: String(11 + customViews.length), unit: tr('vues disponibles'), admin: true },
-    { id: 'entites', name: tr('Entités'), ico: 'list', col: entMissing.length ? 'var(--o-bad)' : 'var(--o-text2)', bg: entMissing.length ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)',
-      sub: tr('Capteurs reliés aux cartes'), big: String(entMissing.length || entIds.length), unit: entMissing.length ? 'introuvables' : tr('configurées'), admin: true, dot: entMissing.length > 0 },
     { id: 'about', name: tr('À propos'), ico: 'info', col: 'var(--o-text2)', bg: 'var(--o-s1)',
       sub: tr('React + Vite · servi par l’intégration'),
       big: (LOGGIA_INDEX && LOGGIA_INDEX.componentVersion) ? 'v' + LOGGIA_INDEX.componentVersion : '—',
@@ -1213,19 +1208,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             {upsAvail > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(var(--o-warn2-rgb),.14)', color: 'var(--o-warn2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-warn2)' }} />{upsAvail > 1 ? tr('{n} MISES À JOUR', { n: upsAvail }) : tr('{n} MISE À JOUR', { n: upsAvail })}</span>}
           </div>
 
-          <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Mode</span>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {[['dark', 'Sombre'], ['light', 'Clair']].map(([id, lb]) => (
-                  <button key={id} onClick={() => onMode(id)} disabled={haTheme === 'FOLLOW'} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: haTheme === 'FOLLOW' ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, opacity: haTheme === 'FOLLOW' ? .5 : 1, background: themeMode === id ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: themeMode === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</button>
-                ))}
-              </div>
-            </div>
-            <span style={{ flex: 1 }} />
-          </div>
-
-
+          {/* Pas de barre « Mode Sombre / Clair » ici (retiree le 17/09) : le
+            * reglage vit dans Apparence, avec le theme qu'il accompagne. */}
           <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Toutes les sections')}</div>
           <div className="grid-parsections" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 16 }}>
             {SECTIONS.map(sec => (
@@ -1581,11 +1565,11 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 6px' }}>Masque celles que tu n'utilises pas, ou réactive une vue retirée. La barre mobile garde ses raccourcis.</div>
           <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
             {ordonnes.map(([vid, name, icon, sub, locked], idx) => { const why = viewReason(availViews, vid); return (
-              <Row key={vid} onEntites={() => setTab('entites')} icon={icon} name={name} sub={why || sub} locked={locked || !!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)}
+              <Row key={vid} icon={icon} name={name} sub={why || sub} locked={locked || !!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)}
                 onUp={idx > 0 ? () => bouger(vid, -1) : null} onDown={idx < ordonnes.length - 1 ? () => bouger(vid, 1) : null} />
             ); })}
             {HIDDEN_VIEWS().map(h => { const why = viewReason(availViews, h.vid); return (
-              <Row key={h.vid} onEntites={() => setTab('entites')} icon={h.icon} c={h.c} name={h.label} sub={why || 'vue retirée, accessible par la recherche'} locked={!!why} on={!why && cfg.shown.has(h.vid)} onT={() => toggleExtra(h.vid)} />
+              <Row key={h.vid} icon={h.icon} c={h.c} name={h.label} sub={why || 'vue retirée, accessible par la recherche'} locked={!!why} on={!why && cfg.shown.has(h.vid)} onT={() => toggleExtra(h.vid)} />
             ); })}
           </div>
         </div>
@@ -1669,83 +1653,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         </>
         );
       })()}
-
-      {tab === 'entites' && aD('entites') && (<>
-        <SecBar>
-          <SecGroup label="Configuration">
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              <button onClick={saveEnt} style={secBtn(true)}>{tr('Enregistrer et recharger')}</button>
-              <button onClick={resetEnt} style={secBtn(false)}>{tr('Rétablir les défauts')}</button>
-            </div>
-          </SecGroup>
-        </SecBar>
-        <div className="o-parcard" style={cardSt}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-            <button onClick={() => {
-              // 1) La zone Home Assistant : c'est elle qui fait autorité, et la
-              //    découverte a déjà relevé les capteurs d'ambiance de chacune.
-              const parZone = {};
-              const r0 = LOGGIA_RESOLVED && LOGGIA_RESOLVED.rooms;
-              ((r0 && r0.suggested) || []).forEach(a => { parZone[String(a.name).toLowerCase()] = a; });
-              // 2) Le nom, en second recours : pour qui n'a pas rangé ses
-              //    entités dans des zones.
-              const slug = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_');
-              const pool = dlists.sensor || [];
-              const vivant = (id) => !!(id && hass && hass.states && hass.states[id]);
-              let found = 0, parZoneN = 0;
-              const next = ent.rooms.map(r => {
-                if (!r.room) return r;
-                const zone = parZone[String(r.room).toLowerCase()];
-                const sl = slug(r.room);
-                const pick = (cle, suffixes, cur) => {
-                  if (vivant(cur)) return cur;              // ne jamais écraser un choix qui marche
-                  if (zone && zone[cle]) { found++; parZoneN++; return zone[cle]; }
-                  for (const sf of suffixes) {
-                    const hit = pool.find(id => id.indexOf(sl) >= 0 && id.indexOf(sf) >= 0);
-                    if (hit) { found++; return hit; }
-                  }
-                  return cur;
-                };
-                return {
-                  ...r,
-                  temp: pick('temp', ['temperature'], r.temp),
-                  humidity: pick('hum', ['humidity', 'humidite'], r.humidity),
-                  co2: pick('co2', ['co2', 'carbone'], r.co2),
-                };
-              });
-              entSet('rooms')(next);
-              alert(found
-                ? (found > 1 ? tr('{n} capteurs détectés', { n: found }) : tr('{n} capteur détecté', { n: found }))
-                  + (parZoneN ? ' (' + parZoneN + ' par la zone Home Assistant)' : ' par le nom')
-                  + ' — vérifie puis « Enregistrer et recharger ».'
-                : 'Aucun capteur supplémentaire trouvé. Range tes capteurs dans une zone Home Assistant : la détection s’appuie dessus en premier.');
-            }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(var(--o-ok-rgb),.13)', border: '1px solid rgba(var(--o-ok-rgb),.3)', color: 'var(--o-ok)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}><Fi i="magic-wand" size={13} />{tr('Détecter automatiquement')}</button>
-          </div>
-          <EntSections ent={ent} setEnt={setEnt} entSet={entSet} dlists={dlists} hass={hass} />
-          <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
-            <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Synchronisation entre accès')}</div>
-            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>WiFi (IP locale) et 5G (Nabu Casa) = deux stockages séparés du navigateur : la config peut diverger entre les deux. Copie-la ici, puis importe-la sur l'autre accès. (Le code PIN admin n'est jamais inclus.)</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={doExport} style={{ padding: '9px 14px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('Copier la config')}</button>
-              <button onClick={() => { setSyncTxt(''); setSyncMsg('Colle ici la config copiée depuis l\'autre accès, puis « Appliquer ».'); setSyncOpen(true); }} style={{ padding: '9px 14px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('Importer une config')}</button>
-            </div>
-            {syncOpen && (
-              <div style={{ marginTop: 10 }}>
-                {syncMsg && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)', marginBottom: 7 }}>{syncMsg}</div>}
-                <textarea aria-label={tr('Configuration à coller')} value={syncTxt} onChange={e => setSyncTxt(e.target.value)} rows={4} spellCheck={false} style={{ ...entInp, fontFamily: 'monospace', fontSize: 11, resize: 'vertical' }} />
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 7 }}>
-                  <button onClick={() => { setSyncOpen(false); setSyncMsg(''); }} style={{ padding: '8px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Fermer</button>
-                  <button onClick={doImport} style={{ padding: '8px 15px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Appliquer et recharger</button>
-                </div>
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-            <button onClick={resetEnt} style={{ padding: '10px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Rétablir les défauts')}</button>
-            <button onClick={saveEnt} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer et recharger')}</button>
-          </div>
-        </div>
-      </>)}
 
       {tab === 'alertes' && aD('alertes') && <AlertesTele hass={hass} cardSt={cardSt} />}
       {tab === 'inter' && aD('inter') && <InterrupteursSection hass={hass} cardSt={cardSt} />}

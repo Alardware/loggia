@@ -204,6 +204,14 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
 .o-favrow::-webkit-scrollbar { height: 5px; }
 .o-favrow::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 4px; }
 .o-favrow::-webkit-scrollbar-track { background: transparent; }
+/* Les filtres de la vue Objets au telephone : l'icone seule, les puces se
+ * partagent la largeur — UNE ligne, sans defilement (retour du 17/09). Le mot
+ * reste dans `aria-label` et `title` ; le titre sous la rangee le dit aussi. */
+@media (max-width: 560px) {
+  .o-objfiltres { gap: 6px !important; overflow-x: visible !important; padding-bottom: 2px; }
+  .o-objfiltres > .o-objfiltre { flex: 1 1 0 !important; min-width: 0; padding: 11px 0 !important; }
+  .o-objfiltre-mot { display: none; }
+}
 /* Héros « En ce moment » : la carte du catalogue remplit le gabarit 184 px. */
 .o-hero > * { height: 100%; box-sizing: border-box; }
 .o-heroslider::-webkit-scrollbar { display: none; }

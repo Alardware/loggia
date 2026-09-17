@@ -465,7 +465,6 @@ export const DROITS = [
   ['regles', 'Règles'],
   ['inter', 'Interrupteurs'],
   ['alertes', 'Alertes'],
-  ['entites', 'Entités'],
   ['maj', 'Mises à jour'],
 ];
 

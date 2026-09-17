@@ -24,7 +24,7 @@ import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
 import { isViewAvailable, viewReason } from './views.js';
 import {
-  REDUCE_MOTION, Fi, Anim, useTilt, editBtn, ViewEditBar, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
+  REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
   BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur
 } from './ui.jsx';
@@ -496,7 +496,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
    * cherchaient pourtant que sous un profil administrateur : la recherche
    * cachait ce que la page montrait. */
   {
-    [['users', tr('Utilisateurs'), null], ['apparence', tr('Apparence'), null], ['entites', tr('Entités'), 'entites'], ['vues', tr('Vues'), 'vues'], ['auto', tr('Automatisations'), 'auto'], ['alertes', tr('Alertes'), 'alertes'], ['maj', tr('Mises à jour'), 'maj'], ['connexion', tr('Connexion HA'), null], ['about', tr('À propos'), null]].forEach(([id, label, droit]) => {
+    [['users', tr('Utilisateurs'), null], ['apparence', tr('Apparence'), null], ['vues', tr('Vues'), 'vues'], ['auto', tr('Automatisations'), 'auto'], ['alertes', tr('Alertes'), 'alertes'], ['maj', tr('Mises à jour'), 'maj'], ['connexion', tr('Connexion HA'), null], ['about', tr('À propos'), null]].forEach(([id, label, droit]) => {
       if (droit && droits.indexOf(droit) < 0) return;
       if (!match(label)) return;
       results.push({ group: tr('Réglages'), label, icon: <Fi i="settings" color="var(--o-text2)" />, act: (close) => { try { sessionStorage.setItem('loggia-par-section', id); } catch {} onNav('parametres'); close(); } });
@@ -3766,8 +3766,14 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
 /* Le bandeau du mode edition (maquette du 14/09), le meme partout ou l'on
  * range des cartes : le mot d'ordre, « Ajouter une entite », « Toutes les
  * entites » (retour a la liste automatique : tout revient, l'ordre et les
- * noms aussi) et « Terminer ». */
-function BandeauEdition({ ed = null, onAjouter = null, toutes = null, ajouterLabel = null, extra = null }) {
+ * noms aussi) et « Terminer ».
+ *
+ * TOUJOURS le premier enfant du contenu de la vue (17/09) : il vivait en bas
+ * dans les pieces, au milieu dans l'Energie, et se dedoublait dans les Volets
+ * et la Securite, ou une seconde barre portait « Entites de la vue ». Une
+ * barre, une place : `onEnt` y pose ce bouton, `texte` change le mot d'ordre
+ * la ou l'on ne glisse pas de carte (Scenarios). */
+function BandeauEdition({ ed = null, onAjouter = null, toutes = null, ajouterLabel = null, extra = null, onEnt = null, entLabel = null, texte = null }) {
   const ctx = useContext(HeaderCtx) || {};
   const btn = (accent) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', flexShrink: 0, background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)', border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
   const peutTout = !!toutes || !!(ed && ed.edits > 0);
@@ -3775,9 +3781,10 @@ function BandeauEdition({ ed = null, onAjouter = null, toutes = null, ajouterLab
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
       <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
-      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une carte.')}</span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{texte || tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une carte.')}</span>
       {onAjouter && <button onClick={onAjouter} style={btn(true)}><Fi i="plus" size={12} />{ajouterLabel || tr('Ajouter une carte')}</button>}
       {extra}
+      {onEnt && <button onClick={onEnt} style={btn(false)}><Fi i="list" size={12} />{entLabel || tr('Entités de la vue')}</button>}
       {montreTout && <button onClick={toutes || (() => ed.reset())} disabled={!peutTout} title={tr('Rétablit la liste automatique : tout revient, l’ordre et les noms aussi.')} style={{ ...btn(false), opacity: peutTout ? 1 : .5 }}><Fi i="apps" size={12} />{tr('Toutes les cartes')}</button>}
       {ctx.onToggleEdit && <button onClick={ctx.onToggleEdit} style={btn(false)}><Fi i="cross-small" size={12} />{tr('Terminer')}</button>}
     </div>
@@ -4001,6 +4008,10 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
     [...par.keys()].sort((a, b) => cle(a).localeCompare(cle(b), 'fr')).forEach(g => groupes.push({ nom: g, liste: par.get(g) }));
   }
   const iconeDe = (a) => {
+    // La prise garde sa prise sous « IoT » ; la camera n'a plus de famille (17/09).
+    const dom = a.id.slice(0, a.id.indexOf('.'));
+    if (dom === 'switch' || dom === 'input_boolean') { if (a.filtres[0] === 'iot') return <PlugIcon size={15} />; }
+    if (dom === 'camera') return <Fi i="camera" size={15} />;
     const f = OBJ_FILTRES().find(x => x.id === (a.filtres[0] || ''));
     return f ? (f.prise ? <PlugIcon size={15} /> : f.ico ? <Ico name={f.ico} size={15} /> : <Fi i={f.fi} size={15} />) : <Fi i="bolt" size={15} />;
   };
@@ -4794,6 +4805,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} toutes={() => { ed.reset(); unhideAll(); }} />}
         {/* titre + navigation entre pièces + pastille de confort, sur une même ligne */}
         <div className="o-room-head" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0, flexShrink: 0 }}>
@@ -4847,7 +4859,6 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
             ))}
             </div>
           : <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun appareil détecté pour cette pièce.')}<br /><span style={{ fontSize: 12 }}>Loggia regroupe les entités dont le nom contient « {room} ».</span></div>}
-        {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} toutes={() => { ed.reset(); unhideAll(); }} />}
         {/* Pas de journal sous les appareils : retire le 14/09 (retour user).
           * Le journal vit dans la vue Securite, avec ses ouvrants et son alarme. */}
         {/* Les fiches des cartes (lumière, volet, climat…) : dc.card pose
@@ -5238,20 +5249,19 @@ function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, port
  * agencement libre (sections, renommage, cartes libres : parties avec elle).
  * Ce qui range un appareil sous ses filtres, l'ordre de la grille et les
  * chiffres de tete vivent dans objets.js, sans React. */
+/* Sept familles (17/09) : « IoT » reunit les prises, le menager et la tondeuse ;
+ * « Capteurs » recoit la presence et les plantes ; les cameras n'ont plus de
+ * puce — elles restent sous « Tous ». Le rangement vit dans objets.js. */
 const OBJ_FILTRES = () => [
   { id: 'tous', label: tr('Tous'), fi: 'apps' },
   { id: 'favoris', label: tr('Favoris'), fi: 'star' },
   { id: 'lumieres', label: tr('Lumières'), fi: 'bulb' },
   { id: 'volets', label: tr('Volets'), fi: 'blinds' },
   { id: 'chauffage', label: tr('Chauffage'), fi: 'flame' },
-  { id: 'prises', label: tr('Prises'), prise: true },
+  { id: 'iot', label: tr('IoT'), fi: 'microchip' },
   { id: 'multimedia', label: tr('Multimédia'), fi: 'tv-music' },
   { id: 'capteurs', label: tr('Capteurs'), fi: 'sensor' },
-  { id: 'cameras', label: tr('Caméras'), fi: 'camera' },
-  { id: 'presence', label: tr('Présence'), fi: 'users' },
-  { id: 'menager', label: tr('Ménager'), ico: 'dishwasher' },
   { id: 'jardin', label: tr('Jardin'), fi: 'leaf' },
-  { id: 'plantes', label: tr('Plantes'), fi: 'seedling' },
 ];
 // Les domaines qui font une carte, et leur rang dans un meme appareil : la
 // commande avant le capteur — une prise mesurante est une carte, pas deux.
@@ -5335,7 +5345,7 @@ function objetsDeLaMaison(hass, ajoutes = []) {
   return out;
 }
 
-function ObjetsView({ hass, onNav, filtre = null, edit = false }) {
+function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) {
   const S = (hass && hass.states) || {};
   // Le filtre choisi survit a un aller-retour ; une route (Lumieres, Climat,
   // Medias) l'impose a l'arrivee.
@@ -5378,7 +5388,7 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false }) {
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-        {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} />}
+        {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} onEnt={onEnt} />}
         <div>
           <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Objets')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('{n} appareils répartis dans {p} pièces · {a} actifs', { n: stats.appareils, p: stats.pieces, a: stats.actifs })}</div>
@@ -5392,12 +5402,14 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false }) {
           ))}
         </div>
         {/* Les filtres : des puces a l'arrondi 9 (pas de pilules), seulement celles
-          * qui ont quelque chose a montrer — sur UNE ligne qui defile, la barre fine
-          * de .o-favrow (retour user du 14/09 : « mets-moi ca dans une scrollbar »). */}
-        <div className="o-favrow" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}>
+          * qui ont quelque chose a montrer. Sur UNE ligne : elle defile si elle
+          * deborde (retour user du 14/09), mais au telephone elle n'a plus a le
+          * faire — le mot s'efface, l'icone reste, les puces se partagent la
+          * largeur (17/09) ; le titre juste dessous dit le filtre choisi. */}
+        <div className="o-favrow o-objfiltres" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}>
           {filtres.map(f => { const on = f.id === actuel; return (
-            <button key={f.id} onClick={() => setChoix(f.id)} aria-pressed={on} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.45)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
-              {f.prise ? <PlugIcon size={13} /> : f.ico ? <Ico name={f.ico} size={14} /> : <Fi i={f.fi} size={13} />}{f.label}
+            <button key={f.id} className="o-objfiltre" onClick={() => setChoix(f.id)} aria-pressed={on} aria-label={f.label} title={f.label} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.45)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
+              {f.prise ? <PlugIcon size={13} /> : f.ico ? <Ico name={f.ico} size={14} /> : <Fi i={f.fi} size={13} />}<span className="o-objfiltre-mot">{f.label}</span>
             </button>); })}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
@@ -7108,8 +7120,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               title={tr('Retrouver un agencement précédent')}>
               <Fi i="time-past" size={12} />{tr('Historique')}{histo.length ? ' · ' + histo.length : ''}
             </button>
-            {onEnt && <button onClick={onEnt} style={editBtn(false)}>{tr('Entités de la vue')}</button>}
-          </>} />
+          </>} onEnt={onEnt} />
         )}
 
         {/* BANNER */}
@@ -7884,13 +7895,13 @@ function ScenariosView({ hass, edit = false }) {
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {edit && <BandeauEdition onAjouter={() => setFiche('nouveau')} ajouterLabel={tr('Ajouter un scénario')}
+          texte={tr('Mode édition : avance, recule ou modifie un scénario, ou ajoutes-en un.')} />}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Scénarios')}</h1>
             <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{sc.err && !liste.length ? sc.err : tr('{n} scénarios · dernier lancement {x}', { n: liste.length, x: libelleDernier(dernier, Date.now(), locale()).toLowerCase() })}</div>
           </div>
-          <span style={{ flex: 1 }} />
-          {edit && <button onClick={() => setFiche('nouveau')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f' }}><Fi i="plus" size={12} />{tr('Ajouter un scénario')}</button>}
         </div>
         <div className="grid-scenarios" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(205px,1fr))', gap: 12 }}>
           {liste.map((s, i) => (
@@ -8320,7 +8331,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
 
   return (
     <div className="loggia-content" style={{ padding: embarque ? '0 28px 40px' : '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {!embarque && edit && <ViewEditBar onEnt={onEnt} texte={tr('Mode édition : clique un volet pour le modifier, glisse-le pour le déplacer.')} />}
+      {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} ajouterLabel={tr('Ajouter un volet')} onEnt={onEnt} />}
       {embarque
         /* L'intertitre de la vue Appareils : icône + titre serif — et les
          * chips de MODE à droite, seule commande qui n'a pas de carte. */
@@ -8355,7 +8366,6 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
         ))}
       </ViewBar>}
 
-      {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} ajouterLabel={tr('Ajouter un volet')} />}
       {!embarque && (edit || ed.ids.length > 0) && (
         <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Volet par volet')}</div>
       )}
@@ -8913,6 +8923,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {edit && <BandeauEdition ed={ed} onAjouter={() => setEnAdd(true)} ajouterLabel={tr('Ajouter un poste')} onEnt={onEnt} entLabel={tr('Entités du schéma')} />}
       <div className="o-en-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
         <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Énergie')}</h1>
@@ -8993,8 +9004,6 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       {/* Bilan instantané : les chiffres du moment, en lignes denses */}
 
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Postes de consommation')}</div>
-        {edit && <BandeauEdition ed={ed} onAjouter={() => setEnAdd(true)} ajouterLabel={tr('Ajouter un poste')}
-          extra={onEnt ? <button onClick={onEnt} style={editBtn(false)}>{tr('Entités du schéma')}</button> : null} />}
         <div ref={ed.gridRef} className="grid-edevices" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12 }}>
           {ed.ids.map((k) => { const d = posteDe(k); const di = ed.ids.indexOf(k); const w = Math.round(num(d.power)); const kwh = avail(d.kwh) ? num(d.kwh) : null; const on = w > 5;
             const carte = (
@@ -9408,7 +9417,7 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {edit && <ViewEditBar texte={tr('Mode édition : choisis le panneau d’alarme et les caméras ; glisse une carte pour la déplacer, clique-la pour la modifier.')} onEnt={onEnt} />}
+      {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} onEnt={onEnt} />}
       <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Sécurité')}</h1>
@@ -9430,8 +9439,8 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
         * (la carte du catalogue, avec son message), les sirenes, la presence,
         * puis les ouvrants un par un — la carte des pieces, la porte ou la
         * fenetre dessinee en fond. En edition : glisser, retirer, renommer,
-        * elargir, ajouter une carte ou un titre. */}
-      {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} />}
+        * elargir, ajouter une carte ou un titre. Le bandeau est en tete de
+        * la vue, comme partout (17/09). */}
       <div ref={ed.gridRef} id={ed.ids.indexOf('sect:ouvrants') < 0 ? 'sec-ouvrants' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {blocs.map((bloc, bi) => {
           if (!edit && bloc.titre && !bloc.cartes.length) return null;
@@ -11760,13 +11769,8 @@ function CustomView({ cv, hass, edit = false, onSave }) {
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-        {edit && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderRadius: 14, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
-            <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{tr('Mode édition')}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1 }}>{tr('Prends une carte pour la déplacer, retire (×) ou ajoute.')}</span>
-          </div>
-        )}
+        {edit && <BandeauEdition onAjouter={() => setAdding(true)}
+          texte={tr('Mode édition : prends une carte pour la déplacer, retire-la (×) ou ajoutes-en une.')} />}
         <div>
           {edit && renaming
             ? <div style={{ display: 'flex', gap: 10, alignItems: 'center', maxWidth: 420 }}>
@@ -13322,7 +13326,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'aspirateur' ? <AspirateurView hass={hass} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}

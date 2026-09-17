@@ -188,7 +188,9 @@ réparer.
 ## Ce qui demande une configuration
 
 Tout n'a pas d'équivalent standard dans Home Assistant. Ces éléments se
-désignent dans **Paramètres → Entités** :
+désignent sur la page concernée : passez en **mode édition**, puis ouvrez
+**Entités de la vue** dans le bandeau du haut (Accueil, Objets, Énergie,
+Sécurité) :
 
 - les radiateurs **fil pilote** — un `switch` entouré d'aides (consigne, mode,
   automatique) qu'aucune convention ne permet de deviner ;

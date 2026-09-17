@@ -555,6 +555,36 @@ export function resolveRooms({ index, states = {}, userCfg = {} } = {}) {
   return { source, rooms: chosen || [], suggested, technical };
 }
 
+/* La detection des capteurs de piece (« Detecter automatiquement » de la fiche
+ * « Entites de la vue » de l'Accueil). `rooms` : les lignes du formulaire
+ * `{ room, temp, humidity, co2 }` ; `suggestions` : `resolveRooms().suggested`.
+ *   1) La zone Home Assistant fait autorite : la decouverte a deja releve les
+ *      capteurs d'ambiance de chacune.
+ *   2) Le nom, en second recours, pour qui n'a pas range ses entites en zones.
+ * Un choix qui marche n'est jamais ecrase. */
+export function detecterCapteursPieces(rooms, { suggestions = [], capteurs = [], vivant = () => false } = {}) {
+  const parZone = {};
+  (suggestions || []).forEach(a => { parZone[String(a.name).toLowerCase()] = a; });
+  const slug = (t) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_');
+  let trouves = 0, parZoneN = 0;
+  const suivantes = (rooms || []).map(r => {
+    if (!r.room) return r;
+    const zone = parZone[String(r.room).toLowerCase()];
+    const sl = slug(r.room);
+    const pick = (cle, suffixes, cur) => {
+      if (vivant(cur)) return cur;
+      if (zone && zone[cle]) { trouves++; parZoneN++; return zone[cle]; }
+      for (const sf of suffixes) {
+        const hit = capteurs.find(id => id.indexOf(sl) >= 0 && id.indexOf(sf) >= 0);
+        if (hit) { trouves++; return hit; }
+      }
+      return cur;
+    };
+    return { ...r, temp: pick('temp', ['temperature'], r.temp), humidity: pick('hum', ['humidity', 'humidite'], r.humidity), co2: pick('co2', ['co2', 'carbone'], r.co2) };
+  });
+  return { rooms: suivantes, trouves, parZone: parZoneN };
+}
+
 /** Vue d'ensemble, pour verification. */
 export function resolveAll(ctx) {
   return {
