@@ -305,17 +305,17 @@ test('les modules : ceux qui tournent d’abord, puis l’alphabet ; les mesures
 
 test('le reseau et le stockage : ce qui est su, avec son unite', () => {
   assert.deepEqual(interfaceReseau({ interfaces: [
-    { interface: 'wlan0', type: 'wireless', primary: false, connected: true, ipv4: { address: ['192.168.1.30/24'] } },
-    { interface: 'eth0', type: 'ethernet', primary: true, connected: true, ipv4: { address: ['192.168.1.20/24'] } },
-  ] }), { ip: '192.168.1.20', nom: 'eth0', type: 'Ethernet' });
-  assert.deepEqual(interfaceReseau({ interfaces: [{ interface: 'wlan0', type: 'wireless', connected: true, ipv4: { address: ['10.0.0.4/8'] } }] }), { ip: '10.0.0.4', nom: 'wlan0', type: 'Wi-Fi' }, 'sans interface principale, la premiere branchee');
+    { interface: 'wlan0', type: 'wireless', primary: false, connected: true, ipv4: { address: ['192.0.2.30/24'] } },
+    { interface: 'eth0', type: 'ethernet', primary: true, connected: true, ipv4: { address: ['192.0.2.20/24'] } },
+  ] }), { ip: '192.0.2.20', nom: 'eth0', type: 'Ethernet' });
+  assert.deepEqual(interfaceReseau({ interfaces: [{ interface: 'wlan0', type: 'wireless', connected: true, ipv4: { address: ['198.51.100.4/24'] } }] }), { ip: '198.51.100.4', nom: 'wlan0', type: 'Wi-Fi' }, 'sans interface principale, la premiere branchee');
   assert.equal(interfaceReseau({ interfaces: [{ interface: 'eth0', primary: true, ipv4: { address: [] } }] }), null);
   assert.equal(interfaceReseau(null), null);
   assert.equal(debitLisible(e(4.23, { unit_of_measurement: 'Mbit/s' })), '4,2 Mbit/s');
   assert.equal(debitLisible(e(118.6, { unit_of_measurement: 'MB/s' })), '119 MB/s');
   assert.equal(debitLisible(e('unavailable', { unit_of_measurement: 'MB/s' })), null);
   assert.equal(debitLisible(undefined), null);
-  assert.deepEqual(baseDeDonnees({ estimated_db_size: '1433.60 MiB', database_engine: 'mysql', database_version: '10.11.6-MariaDB' }), { octets: 1433.6 * MIO, moteur: 'MariaDB' });
+  assert.deepEqual(baseDeDonnees({ estimated_db_size: '1433.60 MiB', database_engine: 'mysql', database_version: '11.4.2-MariaDB' }), { octets: 1433.6 * MIO, moteur: 'MariaDB' });
   assert.deepEqual(baseDeDonnees({ estimated_db_size: '512.00 MiB', database_engine: 'sqlite', database_version: '3.45.1' }), { octets: 512 * MIO, moteur: 'SQLite' });
   assert.deepEqual(baseDeDonnees({ database_engine: 'mysql', database_version: '8.0.36' }), { octets: null, moteur: 'MySQL' });
   assert.deepEqual(baseDeDonnees({ database_engine: 'postgresql' }), { octets: null, moteur: 'PostgreSQL' });

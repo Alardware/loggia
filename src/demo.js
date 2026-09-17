@@ -537,7 +537,7 @@ function superviseurDemo(msg) {
       { slug: 'demo1', name: 'Sauvegarde automatique', date: nuit.toISOString(), type: 'full', size: 1945.6 },
       { slug: 'demo0', name: 'Avant mise à jour', date: new Date(nuit.getTime() - 5 * 86400000).toISOString(), type: 'partial', size: 412.3 },
     ] },
-    '/network/info': { interfaces: [{ interface: 'eth0', type: 'ethernet', enabled: true, connected: true, primary: true, ipv4: { method: 'auto', address: ['192.168.1.20/24'], gateway: '192.168.1.1' } }] },
+    '/network/info': { interfaces: [{ interface: 'eth0', type: 'ethernet', enabled: true, connected: true, primary: true, ipv4: { method: 'auto', address: ['192.0.2.20/24'], gateway: '192.0.2.1' } }] },
   };
   return reponses[chemin] ? Promise.resolve(reponses[chemin]) : Promise.reject(new Error('démonstration : point du Superviseur inconnu'));
 }
@@ -1034,7 +1034,7 @@ export function installerDemo() {
           let mort = false;
           setTimeout(() => {
             if (mort) return;
-            rappel({ type: 'initial', data: { recorder: { info: { estimated_db_size: '1433.60 MiB', database_engine: 'mysql', database_version: '10.11.6-MariaDB' } } } });
+            rappel({ type: 'initial', data: { recorder: { info: { estimated_db_size: '1433.60 MiB', database_engine: 'mysql', database_version: '11.4.2-MariaDB' } } } });
             rappel({ type: 'finish' });
           }, 150);
           return Promise.resolve(() => { mort = true; });
