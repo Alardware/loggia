@@ -861,6 +861,14 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
   .o-assist-msg, .o-assist-dots i, .o-assist-fil, .o-assist-fil.sortant { animation: none; }
 }
 
+/* ── La carte météo du rail de l'Accueil (ADR 0038) ───────────────────────────
+ * Le rail fait 330 px sur grand écran, 276 px en dessous : le chiffre de la
+ * température se dimensionne sur la LARGEUR DE LA CARTE, pas sur celle de
+ * l'écran — d'où la requête de conteneur. */
+.o-carte-meteo { container-type: inline-size; transition: filter .2s ease; }
+.o-carte-meteo .o-meteo-temp { font-size: 52px; font-size: clamp(40px, 17.7cqw, 52px); }
+@media (hover: hover) and (pointer: fine) { .o-carte-meteo[role="button"]:hover { filter: brightness(1.07); } }
+
 /* ── La vue Système (ADR 0037) ────────────────────────────────────────────────
  * Les tuiles de mesure tiennent sur UNE rangée : autant de colonnes que de
  * mesures connues (`--sys-n`). Entre le téléphone et le grand écran elles se
@@ -868,9 +876,22 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
  * passe au-dessus, le chiffre dessous, le titre court remplace le long, la
  * ligne de détail s'efface (la règle des rangées de tuiles, 16/09). */
 .grid-sys-mesures { display: grid; gap: 14px; grid-template-columns: repeat(var(--sys-n, 5), minmax(0, 1fr)); }
-.grid-sys-duo { display: grid; gap: 20px; align-items: start; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); }
+.grid-sys-duo { display: grid; gap: 20px; align-items: stretch; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); }
 .grid-sys-duo > :only-child { grid-column: 1 / -1; }
-.grid-sys-modules { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
+.grid-sys-modules { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); }
+/* Le graphe a la hauteur de la carte Versions : la grille etire les deux
+ * panneaux, et le cadre des barres absorbe la difference. Les barres sont
+ * positionnees DANS ce cadre — leurs hauteurs en pourcent ne se resolvent que
+ * contre une boite de taille connue. En une colonne, 120 px suffisent. */
+.sys-barres-cadre { position: relative; height: 120px; }
+.sys-barres { position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 3px; }
+/* Le journal defile dans sa carte : sa liste ne pese rien dans la rangee, c'est
+ * le reseau d'a cote — ou cette hauteur minimale — qui fixe la taille. */
+.sys-journal { min-height: 320px; }
+.sys-journal-liste { scrollbar-width: thin; scrollbar-color: var(--o-bd1) transparent; margin-right: -10px; padding-right: 10px; }
+@media (min-width: 1101px) {
+  .sys-charge .sys-barres-cadre { height: auto; flex: 1 1 120px; min-height: 120px; }
+}
 @media (max-width: 1100px) {
   .grid-sys-duo { grid-template-columns: minmax(0, 1fr); }
 }

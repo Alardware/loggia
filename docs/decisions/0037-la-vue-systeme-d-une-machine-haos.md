@@ -75,3 +75,22 @@ heures). Les mesures des modules coûtent un appel par module démarré ; elles
 se relisent chaque minute, seulement quand la page se regarde. Non fait : la
 latence de la passerelle (pas de source), le choix de la période de
 l'historique, l'ouverture d'un module vers sa page Home Assistant.
+
+## Ajustements du 17/09 (v3.39.0)
+
+Retour de l'utilisateur, le jour même :
+
+- **Le graphe prend la hauteur de la carte Versions.** La grille étire les
+  deux panneaux d'une rangée ; dans celui de la charge, c'est le cadre des
+  barres qui absorbe la différence. Les barres y sont positionnées : des
+  hauteurs en pourcent ne se résolvent que contre une boîte de taille connue.
+- **Les modules complémentaires n'ont plus de cadre.** Ce sont déjà des
+  cartes ; un panneau autour n'ajoutait qu'une boîte dans une boîte. Un
+  titre de section, le compte à droite, la grille sur toute la largeur —
+  ses colonnes tombent sous celles des tuiles de mesure.
+- **Le journal défile dans sa carte, à côté du réseau.** Sa liste ne pèse
+  rien dans la hauteur de la rangée : c'est le réseau — ou une hauteur
+  minimale — qui fixe la taille, et toute la journée se parcourt (soixante
+  lignes au plus) sans allonger la page.
+- **Le journal de la maison quitte la vue.** La décision « reste en pied de
+  page » ci-dessus ne tient plus.

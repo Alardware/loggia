@@ -29,6 +29,7 @@ import {
   BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
+import { CarteMeteo } from './cartemeteo.jsx';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
@@ -6222,8 +6223,8 @@ function CarteAttention({ points, onNav = null }) {
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
 const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];
-const ACC_RAIL = ['attention', 'moment', 'rappels', 'agenda'];
-const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda') });
+const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda'];
+const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo') });
 /* Les identifiants d'un accueil enregistre avant le 15/09 : la glissiere du
  * heros a disparu (son contenu vit dans « En ce moment »), « En cours » est
  * devenu « En ce moment ». Un identifiant inconnu est simplement ignore. */
@@ -6535,9 +6536,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     const manquants = base.filter(s => sauve.indexOf(s) < 0);
     // Une section nee apres l'enregistrement de l'accueil se place en tete
     // quand c'est sa place : Securite (v3.24) dans la colonne, « A surveiller »
-    // dans le rail (v3.29, deplacee la le 16/09 a la demande de l'utilisateur).
+    // dans le rail (v3.29, deplacee la le 16/09 a la demande de l'utilisateur),
+    // puis la meteo (v3.39, ADR 0038) : demandee « sur le cote », elle ne doit
+    // pas naitre tout en bas d'un rail deja range.
     if (sauve.length) {
-      const tete = (zone === 'main' ? [] : ['attention']).filter(s => manquants.indexOf(s) >= 0);
+      const tete = (zone === 'main' ? [] : ['attention', 'meteo']).filter(s => manquants.indexOf(s) >= 0);
       if (tete.length) return [...tete, ...sauve, ...manquants.filter(s => tete.indexOf(s) < 0)];
     }
     return [...sauve, ...manquants];
@@ -7446,8 +7449,16 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           // « A surveiller » en tete du rail — sur le cote avec En ce moment et
           // Rappels (retour user du 16/09 ; seconde page sur telephone, la
           // banniere garde le compte) ; rien quand tout va bien, pas meme en edition.
+          // La meteo (ADR 0038) : seulement si une entite `weather` repond — sans
+          // elle la section n'existe pas, ni sa poignee en edition.
+          const meteoRailId = (() => {
+            const id = weatherEntity(dashHass);
+            const st = id && dashHass && dashHass.states ? dashHass.states[id] : null;
+            return st && st.state !== 'unavailable' && st.state !== 'unknown' ? id : null;
+          })();
           const secsRail = {
             attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,
+            meteo: meteoRailId ? <CarteMeteo hass={dashHass} onOpen={dc.ouvrir} /> : null,
             moment: railMoment, rappels: railRappels, agenda: railAgenda,
           };
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);

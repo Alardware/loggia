@@ -2090,4 +2090,8 @@ export default {
   'Modules complémentaires': 'Add-ons',
   '{n} en cours sur {t}': '{n} running out of {t}',
   'Les versions, les modules et le réseau se lisent auprès du Superviseur : il ne répond qu’à un compte administrateur.': 'Versions, add-ons and network are read from the Supervisor, which only answers an administrator account.',
+  // La carte meteo du rail de l'Accueil (v3.39.0)
+  'Maint.': 'Now',
+  'Max {n}': 'High {n}',
+  'Min {n}': 'Low {n}',
 };

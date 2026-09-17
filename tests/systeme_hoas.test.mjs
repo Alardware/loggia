@@ -413,14 +413,33 @@ test('la vue : les lectures passent par une reference vivante, jamais par `hass`
 });
 
 test('la vue : rien sans source, et les gestes qui coutent en deux temps', () => {
-  assert.ok(vue.includes('{tuiles.length > 0') && vue.includes('{(series.length > 0 || versions.length > 0) && (') && vue.includes('{(modules.total > 0 || lignesReseau.length > 0) && ('), 'un bloc sans donnee ne se dessine pas');
+  assert.ok(vue.includes('{tuiles.length > 0') && vue.includes('{(series.length > 0 || versions.length > 0) && (') && vue.includes('{modules.total > 0 && ('), 'un bloc sans donnee ne se dessine pas');
   assert.ok(vue.includes('{series.length > 0 && <PanneauCharge') && vue.includes('{versions.length > 0 && <PanneauVersions') && vue.includes('{lignesReseau.length > 0 && <PanneauReseau'));
   assert.ok(!vue.includes("'—'") && !vue.includes('Latence'), 'ni tirets de decor, ni latence sans capteur pour la mesurer');
   assert.ok(vue.includes('if (m.demarre && arme !== m.slug) { setArme(m.slug); minuterie.current = setTimeout(() => setArme(null), 4000); return; }'), 'arreter un module : un premier geste arme');
   assert.ok(vue.includes("endpoint: '/addons/' + m.slug + '/' + (m.demarre ? 'stop' : 'start'), method: 'post', timeout: null })"), 'puis le Superviseur agit, sans delai impose');
   assert.ok(vue.includes('if (arme === ac.id) { setArme(null); onAction(ac.domaine, ac.service); close(); return; }') && vue.includes("domaine: 'hassio', service: 'host_shutdown'"), 'l’alimentation garde ses deux temps, dans une feuille');
-  assert.ok(vue.includes("<RoomActivityCard hass={hass} ids={null} max={14} titre={tr('Journal de la maison')}"), 'le journal de la maison reste en pied');
+  assert.ok(!vue.includes('RoomActivityCard') && !vue.includes('Journal de la maison'), 'le journal de la maison a quitte la vue (retour du 17/09)');
   assert.ok(vue.includes('im.onload = () => { if (vivant) setImage(src); };') && vue.includes("const src = '/api/hassio/addons/' + slug + '/icon';"), 'l’icone du module se precharge, la piece de puzzle tient la place');
+});
+
+test('les retouches du 17/09 : le graphe a la hauteur des versions, les modules sans cadre, le journal qui defile a cote du reseau', () => {
+  // Le graphe : la grille etire les deux panneaux, le cadre des barres absorbe la difference.
+  assert.ok(css.includes('.grid-sys-duo { display: grid; gap: 20px; align-items: stretch; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); }'), 'les deux panneaux d’une rangee ont la meme hauteur');
+  assert.ok(vue.includes(`<div className="sys-charge" style={{ ...SYS_PANNEAU, display: 'flex', flexDirection: 'column' }}>`) && vue.includes(`<div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>`), 'le panneau de la charge est une colonne qui s’etire');
+  assert.ok(vue.includes('<div className="sys-barres-cadre">') && !/className="sys-barres"[^>]*height: 120/.test(vue), 'plus de hauteur figee sur les barres');
+  assert.ok(css.includes('.sys-barres-cadre { position: relative; height: 120px; }') && css.includes('.sys-barres { position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 3px; }'), 'les barres se mesurent contre un cadre de taille connue');
+  assert.ok(css.includes('@media (min-width: 1101px) {' + NL + '  .sys-charge .sys-barres-cadre { height: auto; flex: 1 1 120px; min-height: 120px; }'), 'cote a cote, le cadre prend la place qui reste ; en une colonne, 120 px');
+  // Les modules : des cartes posees sur la page, plus de boite autour.
+  const modules = vue.slice(vue.indexOf('{modules.total > 0 && ('), vue.indexOf('<div className="grid-sys-duo">', vue.indexOf('{modules.total > 0 && (')));
+  assert.ok(modules.includes('<div className="grid-sys-modules">') && !modules.includes('SYS_PANNEAU') && !modules.includes('EntetePanneau'), 'ni panneau ni en-tete de panneau autour des modules');
+  assert.ok(modules.includes(`fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19`) && modules.includes("{tr('{n} en cours sur {t}', { n: modules.enCours, t: modules.total })}"), 'un titre de section, le compte a droite');
+  // Le journal et le reseau cote a cote, le journal defile.
+  const pied = vue.slice(vue.lastIndexOf('<div className="grid-sys-duo">'));
+  assert.ok(pied.indexOf('<PanneauJournal') > 0 && pied.indexOf('<PanneauJournal') < pied.indexOf('<PanneauReseau'), 'le journal a gauche, le reseau a droite');
+  assert.ok(vue.includes(`<div className="sys-journal-liste" style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>`), 'la liste defile, et ne pese rien dans la hauteur de la rangee');
+  assert.ok(css.includes('.sys-journal { min-height: 320px; }') && css.includes('.sys-journal-liste { scrollbar-width: thin;'), 'une hauteur minimale, une barre fine');
+  assert.ok(vue.includes('logbook, maintenant, max: 60 });'), 'toute la journee se parcourt, pas huit lignes');
 });
 
 test('les icones de la vue existent dans la police', () => {

@@ -1,12 +1,12 @@
 /* ── La vue Systeme ─────────────────────────────────────────────────────────
  *
  * Chargee a la demande : on l'ouvre pour regarder l'etat de la machine, pas au
- * demarrage du tableau de bord. Elle ne partage avec le reste que le journal
- * d'activite et l'historique, partis dans `historique.jsx`.
+ * demarrage du tableau de bord. Elle ne partage avec le reste que la lecture de
+ * l'historique (`historique.jsx`) — le journal de la maison l'a quittee le 17/09.
  *
  * La page d'une machine Home Assistant OS (ADR 0037) : les mesures en tuiles, la
  * charge de la derniere heure, les versions, les modules complementaires, le
- * reseau, le journal. Tout ce qui se CALCULE vit dans `systeme.js`, teste a
+ * journal et le reseau. Tout ce qui se CALCULE vit dans `systeme.js`, teste a
  * sec ; ici il ne reste que les lectures et le dessin.
  *
  * RIEN NE S'AFFICHE SANS SOURCE. Les capteurs viennent de la table de
@@ -18,7 +18,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Fi, Gauge, Bascule, BottomSheet } from '../ui.jsx';
 import { tr } from '../i18n.js';
-import { RoomActivityCard, useSysHist } from '../historique.jsx';
+import { useSysHist } from '../historique.jsx';
 import { sysSensors, sysNames } from '../sysconf.js';
 import { LOGGIA_INDEX } from '../state.js';
 import {
@@ -175,7 +175,12 @@ function TuileMesure({ t }) {
 }
 
 /* La charge de la derniere heure, une barre par minute. L'echelle suit le pic :
- * un processeur a 18 % dessinerait sinon soixante traits au ras du sol. */
+ * un processeur a 18 % dessinerait sinon soixante traits au ras du sol.
+ *
+ * Le panneau prend la HAUTEUR de son voisin, la carte Versions (retour du
+ * 17/09) : la grille etire les deux, et ce sont les barres qui absorbent la
+ * difference. Elles vivent dans un cadre positionne — des hauteurs en pourcent
+ * ne se resolvent que contre une boite de taille connue (index.css). */
 function PanneauCharge({ series, releve }) {
   const [mode, setMode] = useState(series[0].cle);
   const s = series.find(x => x.cle === mode) || series[0];
@@ -191,26 +196,28 @@ function PanneauCharge({ series, releve }) {
     </div>
   );
   return (
-    <div style={SYS_PANNEAU}>
+    <div className="sys-charge" style={{ ...SYS_PANNEAU, display: 'flex', flexDirection: 'column' }}>
       <EntetePanneau titre={tr('Charge') + ' · ' + tr('60 dernières minutes')}
         sous={r ? tr('moy. {n} %', { n: nombre(r.moyenne) }) + ' · ' + tr('pic {n} %', { n: nombre(r.pic) }) : null} droite={bascule} />
       {r ? (
-        <div>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
             {/* Le chiffre du MOMENT, celui de la tuile — la derniere barre, elle, est une moyenne de minute. */}
             <span style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: s.couleur }}>{nombre(s.actuel != null ? s.actuel : r.dernier)} %</span>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{s.nom}</span>
           </div>
-          <div className="sys-barres" role="img" aria-label={s.nom + ' · ' + tr('60 dernières minutes')} style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 120 }}>
-            {vals.map((v, i) => (
-              <span key={i} style={{ flex: 1, minWidth: 0, borderRadius: 3, height: v == null ? 2 : Math.max(3, v / haut * 100) + '%', background: v == null ? 'var(--o-bd1)' : i === vals.length - 1 ? s.couleur : 'rgba(' + s.rgb + ',.5)' }} />
-            ))}
+          <div className="sys-barres-cadre">
+            <div className="sys-barres" role="img" aria-label={s.nom + ' · ' + tr('60 dernières minutes')}>
+              {vals.map((v, i) => (
+                <span key={i} style={{ flex: 1, minWidth: 0, borderRadius: 3, height: v == null ? 2 : Math.max(3, v / haut * 100) + '%', background: v == null ? 'var(--o-bd1)' : i === vals.length - 1 ? s.couleur : 'rgba(' + s.rgb + ',.5)' }} />
+              ))}
+            </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, fontWeight: 700, color: 'var(--o-text3)' }}>
             <span>{tr('−60 min')}</span><span>{tr('−30 min')}</span><span>{tr('maintenant')}</span>
           </div>
         </div>
-      ) : <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('historique indisponible')}</div>}
+      ) : <div style={{ flex: 1, minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('historique indisponible')}</div>}
     </div>
   );
 }
@@ -312,12 +319,17 @@ const NIVEAUX_JOURNAL = {
   erreur: ['var(--o-bad-rgb)', 'var(--o-bad)'],
 };
 
+/* Le journal DEFILE dans sa carte (retour du 17/09) : il se tient a cote du
+ * reseau, a sa hauteur, et toute la journee se parcourt sans allonger la page.
+ * La liste ne pese rien dans le calcul de la rangee (base nulle) : c'est le
+ * voisin — ou la hauteur minimale de la carte — qui fixe la taille. */
 function PanneauJournal({ journal, indisponible }) {
   const heure = (t) => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const mots = { info: tr('INFO'), avert: tr('AVERT.'), erreur: tr('ERREUR') };
   return (
-    <div style={SYS_PANNEAU}>
+    <div className="sys-journal" style={{ ...SYS_PANNEAU, display: 'flex', flexDirection: 'column' }}>
       <EntetePanneau titre={tr('Journal')} droite={journal.total > 0 ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{(journal.total > 1 ? tr('{n} événements', { n: journal.total }) : tr('{n} événement', { n: journal.total })) + ' · ' + tr('{n} h', { n: 24 })}</span> : null} />
+      <div className="sys-journal-liste" style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>
       {journal.lignes.length
         ? journal.lignes.map((l, i) => {
             const [rgb, col] = NIVEAUX_JOURNAL[l.niveau] || NIVEAUX_JOURNAL.info;
@@ -335,6 +347,7 @@ function PanneauJournal({ journal, indisponible }) {
             );
           })
         : <div style={{ padding: '6px 0', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{indisponible ? tr('Journal indisponible sur cet accès.') : tr('Aucun événement système sur 24 h.')}</div>}
+      </div>
     </div>
   );
 }
@@ -456,7 +469,8 @@ function SystemeContent({ hass }) {
     base && { cle: 'base', nom: tr('Base de données'), valeur: [tailleLisible(base.octets), base.moteur].filter(Boolean).join(' · ') },
     nabu && { cle: 'nabu', nom: 'Nabu Casa', valeur: nabu === 'connecte' ? tr('Connecté') : nabu === 'connexion' ? tr('Connexion…') : tr('Déconnecté'), couleur: nabu === 'connecte' ? 'var(--o-ok)' : 'var(--o-warn2)' },
   ].filter(Boolean);
-  const journal = journalSysteme({ erreurs: Array.isArray(erreursHA) ? erreursHA : null, logbook, maintenant });
+  // Le journal defile : toute la journee, pas seulement ses huit dernieres lignes.
+  const journal = journalSysteme({ erreurs: Array.isArray(erreursHA) ? erreursHA : null, logbook, maintenant, max: 60 });
   const alertes = alertesSysteme({ memPct, memTexte: paireTailles(memUtilise, memTotal), disquePct, temp, enLigne, modules: modules.liste });
   const series = [
     cpuId && { cle: 'cpu', nom: tr('Processeur'), points: hist[cpuId], actuel: cpu, rgb: 'var(--o-accent-rgb)', couleur: 'var(--o-accent-soft)' },
@@ -523,26 +537,27 @@ function SystemeContent({ hass }) {
         </div>
       )}
 
-      {(modules.total > 0 || lignesReseau.length > 0) && (
-        <div className="grid-sys-duo">
-          {modules.total > 0 && (
-            <div style={SYS_PANNEAU}>
-              <EntetePanneau titre={tr('Modules complémentaires')} droite={<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('{n} en cours sur {t}', { n: modules.enCours, t: modules.total })}</span>} />
-              <div className="grid-sys-modules">
-                {modules.liste.map(m => <CarteModule key={m.slug} m={m} arme={arme === m.slug} occupe={occupe === m.slug} onBascule={() => basculerModule(m)} />)}
-              </div>
-            </div>
-          )}
-          {lignesReseau.length > 0 && <PanneauReseau lignes={lignesReseau} type={reseau && reseau.type} />}
+      {/* Les modules SANS cadre (retour du 17/09) : ce sont deja des cartes, un
+        * panneau autour n'ajoutait qu'une boite dans une boite. Un titre de
+        * section, le compte a droite, puis la grille sur toute la largeur. */}
+      {modules.total > 0 && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
+            <div style={{ flex: 1, minWidth: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Modules complémentaires')}</div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('{n} en cours sur {t}', { n: modules.enCours, t: modules.total })}</span>
+          </div>
+          <div className="grid-sys-modules">
+            {modules.liste.map(m => <CarteModule key={m.slug} m={m} arme={arme === m.slug} occupe={occupe === m.slug} onBascule={() => basculerModule(m)} />)}
+          </div>
         </div>
       )}
 
-      <PanneauJournal journal={journal} indisponible={erreursHA === null && logbook === null} />
+      {/* Le journal et le reseau cote a cote, sur les colonnes du graphe et des versions. */}
+      <div className="grid-sys-duo">
+        <PanneauJournal journal={journal} indisponible={erreursHA === null && logbook === null} />
+        {lignesReseau.length > 0 && <PanneauReseau lignes={lignesReseau} type={reseau && reseau.type} />}
+      </div>
       {nonAdmin && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Les versions, les modules et le réseau se lisent auprès du Superviseur : il ne répond qu’à un compte administrateur.')}</div>}
-
-      {/* Le journal de TOUTE la maison — le pendant global du journal système
-          ci-dessus, poussé en direct par le logbook. */}
-      <RoomActivityCard hass={hass} ids={null} max={14} titre={tr('Journal de la maison')} sous={tr('Tout ce qui a bougé, pièces confondues — 24 h, en direct')} />
 
       {feuille && <FeuilleAlimentation onClose={() => setFeuille(false)} onAction={(domaine, service) => { if (hass && hass.callService) hass.callService(domaine, service, {}); }} />}
     </div>

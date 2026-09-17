@@ -43,7 +43,7 @@ function etatsInitiaux() {
       if (lever < new Date()) lever.setDate(lever.getDate() + 1);
       return s('above_horizon', { friendly_name: 'Soleil', elevation: 34, next_rising: lever.toISOString(), next_setting: coucher.toISOString() });
     })(),
-    'weather.maison': s('partlycloudy', { friendly_name: 'Météo', temperature: 24, humidity: 52, temperature_unit: '°C',
+    'weather.maison': s('partlycloudy', { friendly_name: 'Météo', temperature: 24.3, humidity: 52, temperature_unit: '°C', supported_features: 3,
       apparent_temperature: 26, wind_speed: 9, wind_gust_speed: 20, wind_bearing: 281, wind_speed_unit: 'km/h',
       pressure: 1014, uv_index: 3, visibility: 12 }),
     /* 39 = maison (1) + absent (2) + nuit (4) + vacances (32), les quatre modes
@@ -549,6 +549,13 @@ function erreursDemo() {
   return [
     { name: 'homeassistant.components.mqtt.client', message: ['Connexion au courtier perdue, nouvelle tentative dans 10 s'], level: 'WARNING', timestamp: ilYA(95), first_occurred: ilYA(95), count: 1, source: ['components/mqtt/client.py', 712], exception: '' },
     { name: 'homeassistant.components.rest.data', message: ['Délai dépassé en interrogeant la ressource distante'], level: 'ERROR', timestamp: ilYA(340), first_occurred: ilYA(700), count: 3, source: ['components/rest/data.py', 118], exception: '' },
+    // Assez de lignes pour que le journal DEFILE dans sa carte : c'est ce qu'il y a a montrer.
+    { name: 'homeassistant.components.zha.core.device', message: ['Appareil injoignable, nouvelle tentative'], level: 'WARNING', timestamp: ilYA(180), first_occurred: ilYA(260), count: 4, source: ['components/zha/core/device.py', 301], exception: '' },
+    { name: 'homeassistant.components.recorder.util', message: ['La purge de la base a pris 41 s'], level: 'WARNING', timestamp: ilYA(505), first_occurred: ilYA(505), count: 1, source: ['components/recorder/util.py', 220], exception: '' },
+    { name: 'homeassistant.components.camera', message: ['Flux interrompu, reconnexion'], level: 'WARNING', timestamp: ilYA(640), first_occurred: ilYA(900), count: 6, source: ['components/camera/__init__.py', 512], exception: '' },
+    { name: 'homeassistant.helpers.template', message: ['Le modèle renvoie « unknown » pour un capteur attendu numérique'], level: 'ERROR', timestamp: ilYA(820), first_occurred: ilYA(820), count: 1, source: ['helpers/template.py', 644], exception: '' },
+    { name: 'homeassistant.components.cast.media_player', message: ['Enceinte déconnectée du réseau'], level: 'WARNING', timestamp: ilYA(1010), first_occurred: ilYA(1010), count: 2, source: ['components/cast/media_player.py', 188], exception: '' },
+    { name: 'homeassistant.components.websocket_api.http.connection', message: ['Client déconnecté : file de messages pleine'], level: 'ERROR', timestamp: ilYA(1230), first_occurred: ilYA(1230), count: 1, source: ['components/websocket_api/http.py', 97], exception: '' },
   ];
 }
 
@@ -1026,6 +1033,13 @@ export function installerDemo() {
           ].filter(e => !ids || ids.indexOf(e.entity_id) >= 0);
           let mort = false;
           setTimeout(() => { if (!mort && vus.length) rappel({ events: vus }); }, 120);
+          return Promise.resolve(() => { mort = true; });
+        }
+        /* Les previsions de la carte meteo du rail (ADR 0038) : un abonnement,
+         * comme sur une vraie installation — une livraison, puis le silence. */
+        if (msg && msg.type === 'weather/subscribe_forecast') {
+          let mort = false;
+          setTimeout(() => { if (!mort) rappel({ type: msg.forecast_type, forecast: previsionsDemo(msg.forecast_type) }); }, 120);
           return Promise.resolve(() => { mort = true; });
         }
         /* Ce que l'enregistreur dit de sa base (vue Systeme) : le flux rend ce

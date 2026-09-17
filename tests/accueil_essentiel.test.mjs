@@ -55,7 +55,7 @@ test('la banniere : l’alarme d’abord, d’un tap vers la vue ; « en ce mome
 test('plus de grand panneau Securite sur l’Accueil', () => {
   assert.ok(src.includes("const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];"), 'plus de section securite');
   assert.ok(src.includes("const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'),"), 'ni son nom');
-  assert.ok(src.includes("const tete = (zone === 'main' ? [] : ['attention']).filter(s => manquants.indexOf(s) >= 0);"), 'rien en tete de la colonne');
+  assert.ok(src.includes("const tete = (zone === 'main' ? [] : ['attention', 'meteo']).filter(s => manquants.indexOf(s) >= 0);"), 'rien en tete de la colonne');
   assert.ok(!home.includes('carteSecurite') && !home.includes('<TuilesSecurite') && !home.includes('<RailArm') && !home.includes('<RailSerrure') && !home.includes('comptesSec'), 'la carte, ses tuiles, ses boutons et la glissiere ont quitte l’Accueil');
   assert.ok(!src.includes('function RailArm(') && !src.includes('function RailSerrure(') && !src.includes('function serrureRailId('), 'et leur code avec');
   assert.ok(src.includes('function TuilesSecurite('), 'la rangee de tuiles vit dans la vue Securite');

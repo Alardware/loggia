@@ -92,8 +92,9 @@ test('les evenements d’un jour, dans l’ordre', () => {
 });
 
 test('le rail : une carte Agenda a la place de deux — la date, la bande, ce qui vient', () => {
-  assert.ok(src.includes("const ACC_RAIL = ['attention', 'moment', 'rappels', 'agenda'];"), 'plus de section calendrier dans le rail');
-  assert.ok(src.includes("moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda') });"), 'ni son nom en edition (la carte du catalogue garde le sien)');
+  assert.ok(src.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda'];"), 'plus de section calendrier dans le rail');
+  // La meteo a rejoint le rail (ADR 0038) : elle ferme la liste des noms, toujours sans « calendrier ».
+  assert.ok(src.includes("moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo') });"), 'ni son nom en edition (la carte du catalogue garde le sien)');
   const d = bloc('function Dashboard(', NL + '}');
   assert.ok(d.includes('const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda);') && d.includes('const plageAgenda = useMemo(() => plageSemaine(new Date(jourAuj)), [jourAuj]);'), 'tous les evenements de la semaine, d’aujourd’hui minuit');
   assert.ok(d.includes('const [jourChoisi, setJourChoisi] = useState(null);'), 'un jour se choisit');
