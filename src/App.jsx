@@ -31,6 +31,8 @@ import {
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
 import { BarreConfort } from './barreconfort.jsx';
+import { HorlogeRail, CalendrierRail, FeuilleVilles } from './widgetsrail.jsx';
+import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, villesDe } from './horloge.js';
 import { indiceConfort, verdictMesure, capteurBruit } from './confort.js';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
 import { sysKeys } from './sysconf.js';
@@ -6194,8 +6196,10 @@ function CarteAttention({ points, onNav = null }) {
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
 const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];
-const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda'];
-const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo') });
+/* « heure » et « calendrier » sont EN OPTION (`WIDGETS_OPTION`, ADR 0041) : ils
+ * ferment le rail, et ne se montrent que si on les ajoute en mode edition. */
+const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier'];
+const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo'), heure: tr('Heure'), calendrier: tr('Calendrier') });
 /* Les identifiants d'un accueil enregistre avant le 15/09 : la glissiere du
  * heros a disparu (son contenu vit dans « En ce moment »), « En cours » est
  * devenu « En ce moment ». Un identifiant inconnu est simplement ignore. */
@@ -6354,6 +6358,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     // rechargement, alors que saveAccL les écrivait bien.
     return { main: Array.isArray(v.main) ? v.main : null, rail: Array.isArray(v.rail) ? v.rail : null, caches: Array.isArray(v.caches) ? v.caches : [],
       piecesOrdre: Array.isArray(v.piecesOrdre) ? v.piecesOrdre : [], tailles: (v.tailles && typeof v.tailles === 'object') ? v.tailles : {},
+      /* Les widgets en option du rail (ADR 0041) : ceux qu'on a ajoutes, leur
+       * style, et les villes du calendrier « mois » (`null` = jamais reglees). */
+      ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [], styles: (v.styles && typeof v.styles === 'object') ? v.styles : {}, villes: Array.isArray(v.villes) ? v.villes : null,
       /* Les grilles des autres formats. Les cles ci-dessus restent celles de
        * l'ORDINATEUR : une installation existante retrouve donc son accueil
        * tel qu'elle l'a laisse, et ne decouvre `formats` que le jour ou
@@ -6568,8 +6575,18 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     if (secDrag) saveGrille({ [secDrag.zone]: secDrag.ordre });
     setSecDrag(null);
   };
-  const cacheSec = (id) => saveGrille({ caches: [...grille.caches, id] });
-  const montreSec = (id) => saveGrille({ caches: grille.caches.filter(x => (ACC_RENOMME[x] || x) !== id) });
+  /* Un widget EN OPTION (l'heure, le calendrier — ADR 0041) ne se montre que si
+   * on l'a AJOUTE : sa croix le retire de `ajoutees`, elle ne le « masque » pas,
+   * et un vieux masquage de l'ancienne section « calendrier » ne le concerne pas. */
+  const estOption = (id) => WIDGETS_OPTION.indexOf(id) >= 0;
+  const cacheSec = (id) => estOption(id)
+    ? saveGrille({ ajoutees: (grille.ajoutees || []).filter(x => x !== id) })
+    : saveGrille({ caches: [...grille.caches, id] });
+  const montreSec = (id) => estOption(id)
+    ? saveGrille({ ajoutees: [...(grille.ajoutees || []).filter(x => x !== id), id] })
+    : saveGrille({ caches: grille.caches.filter(x => (ACC_RENOMME[x] || x) !== id) });
+  const choisirStyle = (id, style) => saveGrille({ styles: { ...(grille.styles || {}), [id]: style } });
+  const [villesOuvertes, setVillesOuvertes] = useState(false);
   // Drag d'une CARTE pièce (dans la section) : même mécanique que les sections
   // — souris directe, appui long au doigt — mais l'ordre est le sien
   // (accL.piecesOrdre). stopPropagation : sinon la section se saisit avec.
@@ -6643,7 +6660,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   };
   /** Enveloppe d'une section : drag + masque en édition, rien sinon. */
   const Sec = (zone, id, contenu) => {
-    const cache = (grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0;
+    const cache = estOption(id) ? (grille.ajoutees || []).indexOf(id) < 0 : (grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0;
     if (cache && !editMode) return null;
     const saisie = secDrag && secDrag.id === id;
     return (
@@ -6660,8 +6677,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           ...(editMode ? { border: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', padding: saisie ? '9px 11px' : '10px 12px', borderRadius: 18, cursor: 'grab', touchAction: 'pan-y', opacity: saisie ? .35 : 1 } : {}) }}>
         {cache
           ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--o-text3)' }}>{ACC_NOMS()[id]} · {tr('masquée')}</span>
-              <button onClick={() => montreSec(id)} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{tr('Réafficher')}</button>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--o-text3)' }}>{ACC_NOMS()[id]} · {estOption(id) ? tr('en option') : tr('masquée')}</span>
+              <button onClick={() => montreSec(id)} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{estOption(id) ? tr('Ajouter') : tr('Réafficher')}</button>
             </div>
           : <>
               {/* Bandeau d'outils de la section, EN FLUX au-dessus d'elle :
@@ -6670,7 +6687,19 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <Fi i="menu-burger" size={12} color="var(--o-text3)" />
                   <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ACC_NOMS()[id] || id}</span>
-                  <button onClick={() => cacheSec(id)} title={tr('Masquer')} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                  <button onClick={() => cacheSec(id)} title={estOption(id) ? tr('Retirer') : tr('Masquer')} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                </div>
+              )}
+              {/* Le STYLE d'un widget, sur sa propre ligne : a cote du nom il le
+                * tronquait dans un rail de 276 px. Le contenu etant inerte en
+                * edition, c'est ici que le choix se fait. */}
+              {editMode && STYLES_WIDGETS[id] && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                  {STYLES_WIDGETS[id].map(st => { const on = styleDe(grille.styles, id) === st; return (
+                    <button key={st} onClick={() => choisirStyle(id, st)} aria-pressed={on} style={{ padding: '6px 11px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, flexShrink: 0, background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{NOMS_STYLES()[st]}</button>); })}
+                  <span style={{ flex: 1 }} />
+                  {id === 'calendrier' && styleDe(grille.styles, id) === 'mois' && (
+                    <button onClick={() => setVillesOuvertes(true)} title={tr('Heures d’ailleurs')} aria-label={tr('Heures d’ailleurs')} style={EDIT_BTN}><Fi i="globe" size={12} /></button>)}
                 </div>
               )}
               {/* Contenu inerte en édition — SAUF les sections qui portent
@@ -7430,6 +7459,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,
             meteo: meteoRailId ? <CarteMeteo hass={dashHass} onOpen={dc.ouvrir} /> : null,
             moment: railMoment, rappels: railRappels, agenda: railAgenda,
+            // En option (ADR 0041) : `Sec` ne les monte que si on les a ajoutes.
+            heure: <HorlogeRail style={styleDe(grille.styles, 'heure')} hass={dashHass} />,
+            calendrier: <CalendrierRail style={styleDe(grille.styles, 'calendrier')} hass={dashHass} calId={calRailId} evenementsJour={evenementsDuJour(aVenir, maintenantAg)} villes={grille.villes} onOpen={dc.ouvrir} />,
           };
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
           const renduRail = ordreDe('rail').map(id => secsRail[id] ? Sec('rail', id, secsRail[id]) : null).filter(Boolean);
@@ -7459,6 +7491,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
       {/* Fiches des cartes du catalogue (héros « En ce moment »). */}
       {dc.sheets}
       {histoOuvert && <FeuilleHistorique entrees={histo} onRestaurer={restaurer} onOublier={oublierHisto} onClose={() => setHistoOuvert(false)} />}
+      {villesOuvertes && <FeuilleVilles villes={villesDe(grille.villes)} onEnregistrer={(v) => saveGrille({ villes: v })} onClose={() => setVillesOuvertes(false)} />}
       {pieceSheet && <FichePiece key={pieceSheet.nom} nom={pieceSheet.nom} compacte={pieceSheet.compacte} hass={dashHass} onEnregistrer={enregistrerPieceIci} onSupprimer={retirerPiece} onClose={() => setPieceSheet(null)} />}
     </main>
   );

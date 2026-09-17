@@ -92,9 +92,10 @@ test('les evenements d’un jour, dans l’ordre', () => {
 });
 
 test('le rail : une carte Agenda a la place de deux — la date, la bande, ce qui vient', () => {
-  assert.ok(src.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda'];"), 'plus de section calendrier dans le rail');
-  // La meteo a rejoint le rail (ADR 0038) : elle ferme la liste des noms, toujours sans « calendrier ».
-  assert.ok(src.includes("moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo') });"), 'ni son nom en edition (la carte du catalogue garde le sien)');
+  assert.ok(src.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier'];"), 'le mini-mois d’avant n’est pas revenu : « calendrier » est un widget EN OPTION (ADR 0041), absent tant qu’on ne l’ajoute pas');
+  // La meteo a rejoint le rail (ADR 0038), puis deux widgets en option (ADR 0041) ferment la liste des noms.
+  assert.ok(src.includes("moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo'), heure: tr('Heure'), calendrier: tr('Calendrier') });"), 'les noms en edition');
+  assert.ok(src.includes("import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, villesDe } from './horloge.js';"), 'par defaut le rail reste celui de l’ADR 0032 : UNE carte agenda');
   const d = bloc('function Dashboard(', NL + '}');
   assert.ok(d.includes('const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda);') && d.includes('const plageAgenda = useMemo(() => plageSemaine(new Date(jourAuj)), [jourAuj]);'), 'tous les evenements de la semaine, d’aujourd’hui minuit');
   assert.ok(d.includes('const [jourChoisi, setJourChoisi] = useState(null);'), 'un jour se choisit');
@@ -106,7 +107,7 @@ test('le rail : une carte Agenda a la place de deux — la date, la bande, ce qu
   assert.ok(d.includes("onClick={() => dc.ouvrir(calRailId)} aria-label={tr('Ouvrir le calendrier')}"), 'la date ouvre le calendrier, comme le mini-mois le faisait');
   assert.ok(d.includes('moment: railMoment, rappels: railRappels, agenda: railAgenda,') && !d.includes('calendrier: railCal') && !d.includes('<CvCalendrier id={calRailId}'), 'le mini-mois a quitte le rail (la carte du catalogue reste)');
   const o = bloc('  const ordreDe = (zone) => {', NL + '  };');
-  assert.ok(o.includes('.filter(s => base.indexOf(s) >= 0)'), 'un ordre enregistre avec « calendrier » l’ignore simplement');
+  assert.ok(o.includes('.filter(s => base.indexOf(s) >= 0)'), 'un ordre enregistre avec une section inconnue l’ignore simplement (un vieux « calendrier » ne fait que ranger le widget en option, toujours absent tant qu’on ne l’ajoute pas)');
   for (const k of ['{n} AUJOURD’HUI', '1 AUJOURD’HUI', 'RIEN AUJOURD’HUI', 'Rien ce jour-là', 'Rien de prévu ces 7 jours', 'Ouvrir le calendrier']) {
     assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
   }

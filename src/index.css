@@ -975,3 +975,23 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
   .grid-sys-modules { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .sys-releve { display: none; }
 }
+
+/* ── Les widgets en option du rail : l'heure et le calendrier (ADR 0041) ──
+ * Le rail fait 330 ou 276 px, le telephone 362 : les chiffres suivent la
+ * largeur du WIDGET (requete de conteneur), pas celle de l'ecran. */
+.o-w-temps { container-type: inline-size; }
+.o-w-cadran { height: clamp(86px, 37cqw, 128px); }
+.o-w-chiffres-fond { font-size: clamp(58px, 29cqw, 100px); }
+.o-w-tuile-chiffre { font-size: clamp(30px, 15.5cqw, 54px); }
+.o-w-mois-heure { font-size: clamp(19px, 8.2cqw, 28px); }
+/* Les jours du mois : trois lettres tant qu'elles tiennent, une seule sinon ;
+ * dans le rail etroit (276 px) la pastille et les villes se resserrent — un nom
+ * de ville ne se tronque pas, une pastille ne deborde pas de sa colonne. */
+.o-w-pm { width: 23px; height: 23px; }
+.o-w-j1 { display: none; }
+@container (max-width: 290px) {
+  .o-w-j3 { display: none; }
+  .o-w-j1 { display: inline; }
+  .o-w-pm { width: 20px; height: 20px; font-size: 11px !important; }
+  .o-w-ville { font-size: 10.5px !important; }
+}

@@ -123,8 +123,8 @@ test('le maximum et le minimum sont ceux d’AUJOURD’HUI, en date locale — s
 });
 
 test('la meteo est une section du rail, sous « A surveiller » — meme sur un accueil deja range', () => {
-  assert.ok(app.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda'];"), 'sur le cote, avant En ce moment');
-  assert.ok(app.includes("agenda: tr('Agenda'), meteo: tr('Météo') });"), 'son nom en edition');
+  assert.ok(app.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier'];"), 'sur le cote, avant En ce moment');
+  assert.ok(app.includes("agenda: tr('Agenda'), meteo: tr('Météo'), heure: tr('Heure'), calendrier: tr('Calendrier') });"), 'son nom en edition');
   assert.ok(app.includes("const tete = (zone === 'main' ? [] : ['attention', 'meteo']).filter(s => manquants.indexOf(s) >= 0);"), 'elle ne nait pas tout en bas d’un rail deja enregistre');
   assert.ok(app.includes("import { CarteMeteo } from './cartemeteo.jsx';") && app.includes('meteo: meteoRailId ? <CarteMeteo hass={dashHass} onOpen={dc.ouvrir} /> : null,'), 'la carte, et sa fiche d’un tap');
   const id = app.slice(app.indexOf('const meteoRailId = (() => {'), app.indexOf('const secsRail = {'));
