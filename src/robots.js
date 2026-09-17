@@ -381,3 +381,99 @@ export function ficheTechnique(appareil, soeurs) {
   if (wifi && nombre(wifi.etat) != null) lignes.push({ cle: 'wifi', nom: tr('Wi-Fi'), valeur: Math.round(nombre(wifi.etat)) + ' ' + (wifi.unite || 'dBm') + ' · ' + qualiteSignal(wifi.etat) });
   return lignes;
 }
+
+/* ════════════ Le planning (ADR 0043) ════════════
+ *
+ * Aucun robot ne publie son planning : c'est Loggia qui le tient, côté serveur
+ * (`custom_components/loggia/robots.py`), et qui lance le robot à l'heure. Ici,
+ * seulement ce que l'écran en calcule. Côté serveur lundi vaut 0 — le
+ * `weekday()` de Python —, et non dimanche comme le `getDay()` du navigateur.
+ */
+
+/** Le jour d'une date, lundi = 0. */
+export const jourPlanning = (date) => (new Date(date).getDay() + 6) % 7;
+
+/** Les sept jours dans l'ordre de la langue : `premier` vaut 1 (lundi) à 7 (dimanche). */
+export function ordreJours(premier = 1) {
+  const d = (((Number(premier) || 1) - 1) % 7 + 7) % 7;
+  return Array.from({ length: 7 }, (_, i) => (d + i) % 7);
+}
+
+/** Le nom d'un jour (0 = lundi) dans la langue : « L », « lun », « lundi ». */
+export function nomJour(j, loc = 'fr-FR', forme = 'narrow') {
+  // Le 1er janvier 2024 est un lundi.
+  const mot = new Date(2024, 0, 1 + j).toLocaleDateString(loc, { weekday: forme }).replace(/\./g, '');
+  return mot.charAt(0).toUpperCase() + mot.slice(1);
+}
+
+export const heureValide = (hhmm) => /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(hhmm == null ? '' : hhmm));
+const minutesDe = (hhmm) => { if (!heureValide(hhmm)) return null; const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + m; };
+
+/** « Tous les jours », « En semaine », « Le week-end », sinon les jours courts dans l'ordre de la langue. */
+export function resumeJours(jours, premier = 1, loc = 'fr-FR') {
+  const retenus = new Set((jours || []).filter(j => Number.isInteger(j) && j >= 0 && j <= 6));
+  if (!retenus.size) return tr('Aucun jour');
+  if (retenus.size === 7) return tr('Tous les jours');
+  const cle = [...retenus].sort().join('');
+  if (cle === '01234') return tr('En semaine');
+  if (cle === '56') return tr('Le week-end');
+  return ordreJours(premier).filter(j => retenus.has(j)).map(j => nomJour(j, loc, 'short')).join(' · ');
+}
+
+/**
+ * Ce qu'un planning vise : ses zones par leur nom ; sans zone, tout — sauf une
+ * tondeuse à interrupteurs d'aire, qui tond alors celles qui sont allumées.
+ */
+export function resumeZones(planning, { domaine = 'vacuum', aDesAires = false } = {}) {
+  const zones = (planning && planning.zones) || [];
+  if (zones.length) return zones.map(z => z.nom).join(' · ');
+  if (domaine === 'lawn_mower') return aDesAires ? tr('Les zones allumées') : tr('Tout le jardin');
+  return tr('Tout le logement');
+}
+
+/** Une zone de la vue, telle que le planning la garde. */
+export const zonePlanning = (z) => ({ id: z.id, nom: z.nom, segments: ((z.piece && z.piece.segments) || []).map(Number).filter(n => Number.isInteger(n)) });
+
+/** Un planning neuf : les jours ouvrés, neuf heures, tout le logement. */
+export function nouveauPlanning(idRobot, maintenant = Date.now()) {
+  return { id: 'p' + Math.floor(Number(maintenant)).toString(36), robot: idRobot, heure: '09:00', jours: [0, 1, 2, 3, 4], zones: [], actif: true };
+}
+
+/** Le prochain départ d'un robot : la première échéance STRICTEMENT après maintenant. */
+export function prochainPassage(plannings, idRobot, maintenant = Date.now()) {
+  const m = new Date(maintenant);
+  let mieux = null;
+  (plannings || []).forEach(p => {
+    if (!p || !p.actif || p.robot !== idRobot) return;
+    const min = minutesDe(p.heure);
+    if (min == null) return;
+    const jours = new Set(p.jours || []);
+    const dans = (k) => new Date(m.getFullYear(), m.getMonth(), m.getDate() + k, Math.floor(min / 60), min % 60, 0, 0);
+    // Huit jours : si l'heure d'aujourd'hui est passée, le même jour revient dans sept.
+    const k = [0, 1, 2, 3, 4, 5, 6, 7].find(n => dans(n).getTime() > m.getTime() && jours.has(jourPlanning(dans(n))));
+    if (k == null) return;
+    if (!mieux || dans(k).getTime() < mieux.date.getTime()) mieux = { date: dans(k), planning: p };
+  });
+  return mieux;
+}
+
+/** « Auj. 18:30 », « Demain 09:30 », « Lun 09:30 ». */
+export function etiquetteProchain(t, maintenant = Date.now(), loc = 'fr-FR') {
+  const ecart = Math.round((minuit(t).getTime() - minuit(maintenant).getTime()) / 86400000);
+  const heure = new Date(t).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
+  return (ecart === 0 ? tr('Auj.') : ecart === 1 ? tr('Demain') : nomJour(jourPlanning(t), loc, 'short')) + ' ' + heure;
+}
+
+/** Une heure tombe-t-elle dans une plage {actif, debut, fin} ? La plage peut enjamber minuit. */
+export function dansLaPlage(plage, hhmm) {
+  if (!plage || !plage.actif) return false;
+  const d = minutesDe(plage.debut), f = minutesDe(plage.fin), t = minutesDe(hhmm);
+  if (d == null || f == null || t == null || d === f) return false;
+  return d < f ? (t >= d && t < f) : (t >= d || t < f);
+}
+
+/** L'interrupteur de pluie de l'appareil, s'il en a un : le robot rentre alors de lui-même. */
+export function capteurPluie(soeurs) {
+  const s = (soeurs || []).find(x => x.domaine === 'switch' && vivant(x) && /rain|pluie/.test(x.texte));
+  return s ? { id: s.id, nom: s.nom, actif: s.etat === 'on' } : null;
+}

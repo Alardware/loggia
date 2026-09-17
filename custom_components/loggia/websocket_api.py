@@ -61,6 +61,8 @@ WS_REG_DEGELER = "loggia/regles/degeler"
 WS_SCN_ETAT = "loggia/scenarios/etat"
 WS_SCN_CONFIG = "loggia/scenarios/config"
 WS_SCN_LANCER = "loggia/scenarios/lancer"
+WS_ROB_ETAT = "loggia/robots/etat"
+WS_ROB_CONFIG = "loggia/robots/config"
 
 
 def _user_info(connection: websocket_api.ActiveConnection) -> dict[str, Any]:
@@ -94,7 +96,8 @@ def _payload_too_big(patch: dict[str, Any]) -> str | None:
 def async_register(hass: HomeAssistant, store: LoggiaStore,
                    acces_interrupteurs=None, acces_volets=None, acces_fenetres=None,
                    acces_presence=None, acces_nuit=None,
-                   acces_veilles=None, acces_regles=None, acces_scenarios=None) -> None:
+                   acces_veilles=None, acces_regles=None, acces_scenarios=None,
+                   acces_robots=None) -> None:
     """Declare les commandes aupres du serveur WebSocket.
 
     `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
@@ -423,6 +426,35 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             return
         connection.send_result(msg["id"], resultat)
 
+    # ── Le planning des robots (ADR 0043) ──────────────────────────────────
+    # Lire est ouvert a tout compte connecte ; ecrire — le planning est celui
+    # de la maison — reste aux administrateurs.
+    @websocket_api.websocket_command({vol.Required("type"): WS_ROB_ETAT})
+    @websocket_api.async_response
+    async def handle_rob_etat(hass, connection, msg):
+        robots = acces_robots() if acces_robots else None
+        if robots is None:
+            connection.send_error(msg["id"], "not_available", "planning des robots indisponible")
+            return
+        connection.send_result(msg["id"], await robots.async_etat())
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_ROB_CONFIG, vol.Required("patch"): dict}
+    )
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_rob_config(hass, connection, msg):
+        robots = acces_robots() if acces_robots else None
+        if robots is None:
+            connection.send_error(msg["id"], "not_available", "planning des robots indisponible")
+            return
+        try:
+            config = await robots.async_enregistrer(msg["patch"])
+        except ValueError as err:
+            connection.send_error(msg["id"], "invalid_format", str(err))
+            return
+        connection.send_result(msg["id"], {"config": config})
+
     # Toutes les regles melees, dans l'ordre du temps — le seul outil de
     # debogage d'un non-technicien. Et le PRESENT : quand rien ne bouge, la
     # question n'est pas ce qui s'est passe mais ce qui retient — une main,
@@ -475,6 +507,8 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_scn_etat)
     websocket_api.async_register_command(hass, handle_scn_config)
     websocket_api.async_register_command(hass, handle_scn_lancer)
+    websocket_api.async_register_command(hass, handle_rob_etat)
+    websocket_api.async_register_command(hass, handle_rob_config)
     websocket_api.async_register_command(hass, handle_vei_etat)
     websocket_api.async_register_command(hass, handle_vei_config)
     websocket_api.async_register_command(hass, handle_nui_etat)

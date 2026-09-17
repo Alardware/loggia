@@ -17,7 +17,7 @@
  */
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { tr, locale } from '../i18n.js';
-import { Fi, Bascule, Gauge, cl_hexRgb } from '../ui.jsx';
+import { Fi, Bascule, Gauge, BottomSheet, useEtatServeur, cl_hexRgb } from '../ui.jsx';
 import { LOGGIA_INDEX, loggiaEnt, vacRooms, vacOption } from '../state.js';
 import { commanderService } from '../actions.js';
 import { useLoggia, useEntities } from '../runtime.js';
@@ -26,7 +26,8 @@ import { premierJourSemaine } from '../horloge.js';
 import {
   decrireSoeurs, phaseRobot, motEtatRobot, enCharge, batterieRobot, actionPrincipale, serviceRetour, commandeZones,
   zonesTondeuse, piecesUsure, alerteEntretien, compteursRobot, sessionsRobot, motIssue, resumeSemaine, dureeLisible,
-  etiquetteJour, reglagesRobot, ficheTechnique,
+  etiquetteJour, reglagesRobot, ficheTechnique, ordreJours, nomJour, heureValide, resumeZones, zonePlanning, nouveauPlanning,
+  prochainPassage, etiquetteProchain, dansLaPlage, capteurPluie,
 } from '../robots.js';
 
 const VacPlan = lazy(() => import('../vacplan.jsx'));
@@ -137,7 +138,10 @@ function BoutonConfirme({ libelle, onConfirme }) {
 
 /* ════════════ L'accueil du robot ════════════ */
 
-function OngletAccueil({ domaine, robot, zones, nChoisies, basculerZone, peutChoisir, lancer, rentrer, resume, derniere, alerte, carte, aUneCarte, allerA }) {
+function OngletAccueil({ domaine, robot, zones, nChoisies, basculerZone, peutChoisir, lancer, rentrer, resume, derniere, prochain, alerte, carte, aUneCarte, allerA }) {
+  // Deux tuiles, comme sur les maquettes : ce qui VIENT quand un passage est
+  // planifié, sinon ce qui s'est passé (l'historique garde le reste).
+  const passage = prochain ? { ...prochain, nom: tr('Prochain passage'), vers: 'planning' } : derniere ? { ...derniere, nom: tr('Dernier passage'), vers: 'historique' } : null;
   const action = actionPrincipale(domaine, robot.etat, peutChoisir ? nChoisies : 0);
   const enRoute = robot.phase === 'travail' || robot.phase === 'pause' || robot.phase === 'retour';
   const sousEtat = zones.length
@@ -178,14 +182,14 @@ function OngletAccueil({ domaine, robot, zones, nChoisies, basculerZone, peutCho
         </div>
       )}
 
-      {(resume || derniere) && (
-        <div className="rb-a-tuiles" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + ((resume ? 1 : 0) + (derniere ? 1 : 0)) + ', minmax(0, 1fr))', gap: 12 }}>
-          {derniere && (
-            <div style={{ ...PANNEAU, padding: '14px 16px' }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Dernier passage')}</div>
-              <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.01em', marginTop: 5 }}>{derniere.titre}</div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3 }}>{derniere.sous}</div>
-            </div>
+      {(resume || passage) && (
+        <div className="rb-a-tuiles" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + ((resume ? 1 : 0) + (passage ? 1 : 0)) + ', minmax(0, 1fr))', gap: 12 }}>
+          {passage && (
+            <button type="button" onClick={() => allerA(passage.vers)} style={{ ...PANNEAU, padding: '14px 16px', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', color: 'inherit' }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)' }}>{passage.nom}</div>
+              <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.01em', marginTop: 5 }}>{passage.titre}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{passage.sous}</div>
+            </button>
           )}
           {resume && (
             <div style={{ ...PANNEAU, padding: '14px 16px' }}>
@@ -425,6 +429,175 @@ function PageReglages({ hass, domaine, robot, reglages, fiche, retour, onFiche =
   );
 }
 
+/* ════════════ Le planning ════════════
+ *
+ * Aucun robot ne publie son planning : c'est Loggia qui le tient, côté serveur,
+ * et qui lance le robot à l'heure (ADR 0043). L'onglet n'existe que si le
+ * composant répond. */
+
+const CHAMP_HEURE = { padding: '9px 12px', borderRadius: 12, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums', colorScheme: 'inherit' };
+const REGLAGES_NEUFS = { calme: { actif: false, debut: '22:00', fin: '07:00' }, pluie: { actif: false } };
+
+const PuceJour = ({ j, on, onClick, taille = 30 }) => (
+  <button type="button" onClick={onClick} aria-pressed={on} aria-label={nomJour(j, locale(), 'long')} title={nomJour(j, locale(), 'long')}
+    style={{ width: taille, height: taille, borderRadius: '50%', border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0, fontSize: 11.5, fontWeight: 800, fontFamily: 'inherit',
+      background: on ? 'rgba(var(--rb-rgb),.18)' : 'var(--o-s2)', color: on ? 'var(--rb-doux)' : 'var(--o-text3)' }}>{nomJour(j, locale(), 'narrow')}</button>
+);
+
+/* Un champ d'heure qui ne rend la valeur que lorsqu'elle est entière. */
+function ChampHeure({ valeur, onValide, nom }) {
+  const [v, setV] = useState(valeur);
+  useEffect(() => { setV(valeur); }, [valeur]);
+  return <input type="time" value={v} aria-label={nom} style={CHAMP_HEURE}
+    onChange={(e) => { const n = e.target.value; setV(n); if (heureValide(n) && n !== valeur) onValide(n); }} />;
+}
+
+function FeuillePlanning({ depart, neuf, zones, domaine, aDesAires, onEnregistrer, onSupprimer, onClose }) {
+  const [p, setP] = useState(depart);
+  const jours = ordreJours(premierJourSemaine(locale()));
+  const basculerJour = (j) => setP(x => ({ ...x, jours: x.jours.indexOf(j) >= 0 ? x.jours.filter(y => y !== j) : [...x.jours, j].sort() }));
+  const basculerZone = (z) => setP(x => ({ ...x, zones: x.zones.some(y => y.id === z.id) ? x.zones.filter(y => y.id !== z.id) : [...x.zones, zonePlanning(z)] }));
+  const valide = heureValide(p.heure) && p.jours.length > 0;
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ fontSize: 19, fontWeight: 700 }}>{neuf ? tr('Nouveau passage') : tr('Modifier le passage')}</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ fontSize: 14.5, fontWeight: 700 }}>{tr('Heure')}</span>
+            <input type="time" value={p.heure} aria-label={tr('Heure')} onChange={(e) => setP(x => ({ ...x, heure: e.target.value }))} style={CHAMP_HEURE} />
+          </div>
+          <div>
+            <div style={{ ...PETITES_CAPITALES, marginBottom: 9 }}>{tr('Jours')}</div>
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>{jours.map(j => <PuceJour key={j} j={j} taille={38} on={p.jours.indexOf(j) >= 0} onClick={() => basculerJour(j)} />)}</div>
+          </div>
+          {zones.length > 0 && (
+            <div>
+              <div style={{ ...PETITES_CAPITALES, marginBottom: 9 }}>{tr('Zones')}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {zones.map(z => <Puce key={z.id} on={p.zones.some(y => y.id === z.id)} couleur={z.couleur} onClick={() => basculerZone(z)}>{z.nom}</Puce>)}
+              </div>
+              {p.zones.length === 0 && <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 9 }}>{resumeZones(p, { domaine, aDesAires })}</div>}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {!neuf && <BoutonConfirme libelle={tr('Supprimer')} onConfirme={() => { onSupprimer(p); close(); }} />}
+            <button type="button" disabled={!valide} onClick={() => { onEnregistrer(p); close(); }}
+              style={{ flex: 1, padding: '14px 12px', borderRadius: 14, border: 'none', cursor: valide ? 'pointer' : 'default', fontSize: 14.5, fontWeight: 800, fontFamily: 'inherit', background: 'var(--rb-fond)', color: '#fff', opacity: valide ? 1 : .45 }}>{tr('Enregistrer')}</button>
+          </div>
+        </div>
+      )}
+    </BottomSheet>
+  );
+}
+
+function OngletPlanning({ hass, domaine, robot, zones, planning }) {
+  const { etat, setEtat, err, setErr, vivant } = planning;
+  const [feuille, setFeuille] = useState(null); // { p, neuf }
+  const cfg = (etat && etat.config) || { plannings: [], robots: {} };
+  const tous = cfg.plannings || [];
+  const miens = tous.filter(p => p.robot === robot.id).sort((a, b) => String(a.heure).localeCompare(String(b.heure)));
+  const reglages = { ...REGLAGES_NEUFS, ...((cfg.robots || {})[robot.id] || {}) };
+  const aDesAires = domaine === 'lawn_mower' && zones.length > 0;
+  const pluieNative = domaine === 'lawn_mower' ? capteurPluie(robot.soeurs) : null;
+  const jours = ordreJours(premierJourSemaine(locale()));
+  const h = hass && typeof hass.callWS === 'function' ? hass : null;
+
+  const enregistrer = async (patch, optimiste) => {
+    if (!h) return;
+    setEtat(e => (e ? { ...e, config: optimiste(e.config || { plannings: [], robots: {} }) } : e));
+    try {
+      const r = await h.callWS({ type: 'loggia/robots/config', patch });
+      if (vivant.current && r && r.config) { setEtat(e => (e ? { ...e, config: r.config } : e)); setErr(''); }
+    } catch (e) {
+      setErr(e && e.code === 'unauthorized' ? tr('Réservé aux administrateurs.') : ((e && (e.message || e.code)) || tr('Enregistrement impossible.')));
+    }
+  };
+  const poserPlannings = (liste) => enregistrer({ plannings: liste }, c => ({ ...c, plannings: liste }));
+  const poserPlanning = (p) => poserPlannings(tous.some(x => x.id === p.id) ? tous.map(x => (x.id === p.id ? p : x)) : [...tous, p]);
+  const retirerPlanning = (p) => poserPlannings(tous.filter(x => x.id !== p.id));
+  const poserReglage = (cle, valeur) => enregistrer({ robots: { [robot.id]: { [cle]: valeur } } },
+    c => ({ ...c, robots: { ...(c.robots || {}), [robot.id]: { ...reglages, [cle]: { ...reglages[cle], ...valeur } } } }));
+  const LIGNE = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '13px 18px' };
+  const sous = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 };
+
+  return (
+    <div className="rb-planning">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+          <div style={TITRE_SECTION}>{tr('Passages planifiés')}</div>
+          <button type="button" onClick={() => setFeuille({ p: nouveauPlanning(robot.id), neuf: true })}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 2px', border: 'none', background: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12.5, fontWeight: 700, color: 'var(--rb-doux)' }}><Fi i="plus" size={10} color="var(--rb-doux)" />{tr('Ajouter')}</button>
+        </div>
+        {err && <div role="alert" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
+        {miens.length === 0 && <div style={{ ...PANNEAU, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Aucun passage planifié. Loggia lance le robot à l’heure dite, même écran éteint.')}</div>}
+        {miens.map(p => {
+          const retenu = p.actif && dansLaPlage(reglages.calme, p.heure);
+          return (
+            <div key={p.id} style={{ ...PANNEAU, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button type="button" onClick={() => setFeuille({ p, neuf: false })} aria-label={tr('Modifier le passage') + ' ' + p.heure}
+                  style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', color: 'inherit', opacity: p.actif ? 1 : .55 }}>
+                  <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{p.heure}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resumeZones(p, { domaine, aDesAires })}</div>
+                </button>
+                <Bascule on={!!p.actif} nom={tr('Passage de {h}', { h: p.heure })} cb={() => poserPlanning({ ...p, actif: !p.actif })} />
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 12, opacity: p.actif ? 1 : .55 }}>
+                {jours.map(j => <PuceJour key={j} j={j} on={(p.jours || []).indexOf(j) >= 0}
+                  onClick={() => poserPlanning({ ...p, jours: (p.jours || []).indexOf(j) >= 0 ? p.jours.filter(y => y !== j) : [...(p.jours || []), j].sort() })} />)}
+              </div>
+              {retenu && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-warn)', marginTop: 10 }}>{tr('Dans la plage « Ne pas déranger » : ce passage ne partira pas.')}</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ ...PANNEAU, padding: '4px 0', alignSelf: 'start' }}>
+        <div style={LIGNE}>
+          <span style={{ minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700 }}>{tr('Ne pas déranger')}</span>
+            <span style={sous}>{reglages.calme.actif ? tr('Aucun départ planifié entre {a} et {b}', { a: reglages.calme.debut, b: reglages.calme.fin }) : tr('Une plage où Loggia ne lance jamais le robot')}</span>
+          </span>
+          <Bascule on={!!reglages.calme.actif} nom={tr('Ne pas déranger')} cb={() => poserReglage('calme', { actif: !reglages.calme.actif })} />
+        </div>
+        {reglages.calme.actif && (
+          <div style={{ ...LIGNE, justifyContent: 'flex-start', paddingTop: 0, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('De')}</span>
+            <ChampHeure valeur={reglages.calme.debut} nom={tr('Début')} onValide={(v) => poserReglage('calme', { debut: v })} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('à')}</span>
+            <ChampHeure valeur={reglages.calme.fin} nom={tr('Fin')} onValide={(v) => poserReglage('calme', { fin: v })} />
+          </div>
+        )}
+        {/* La pluie. Le robot a son capteur : c'est LUI qui rentre, l'interrupteur
+          * est le sien. Sinon la météo de la maison retient le départ — et sans
+          * météo, rien à proposer. */}
+        {pluieNative && (
+          <div style={{ ...LIGNE, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700 }}>{tr('Capteur de pluie')}</span>
+              <span style={sous}>{tr('Le robot rentre de lui-même s’il pleut')}</span>
+            </span>
+            <Bascule on={pluieNative.actif} nom={tr('Capteur de pluie')} cb={() => commanderService(hass, pluieNative.id, 'switch', pluieNative.actif ? 'turn_off' : 'turn_on', { entity_id: pluieNative.id })} />
+          </div>
+        )}
+        {domaine === 'lawn_mower' && !pluieNative && etat && etat.meteo && (
+          <div style={{ ...LIGNE, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700 }}>{tr('Pluie')}</span>
+              <span style={sous}>{tr('Pas de départ planifié quand la météo annonce la pluie')}</span>
+            </span>
+            <Bascule on={!!reglages.pluie.actif} nom={tr('Pluie')} cb={() => poserReglage('pluie', { actif: !reglages.pluie.actif })} />
+          </div>
+        )}
+      </div>
+
+      {feuille && <FeuillePlanning depart={feuille.p} neuf={feuille.neuf} zones={zones} domaine={domaine} aDesAires={aDesAires}
+        onEnregistrer={poserPlanning} onSupprimer={retirerPlanning} onClose={() => setFeuille(null)} />}
+    </div>
+  );
+}
+
 /* ════════════ La vue ════════════ */
 
 export default function RobotContent({ hass, domaine = 'vacuum', onFiche = null }) {
@@ -463,6 +636,9 @@ export default function RobotContent({ hass, domaine = 'vacuum', onFiche = null 
     : pieces.map(p => ({ id: p.id, nom: p.name, couleur: p.color || null, piece: p, inerte: parInterrupteurs ? !p.toggle : false,
         choisie: parInterrupteurs ? !!(p.toggle && S[p.toggle] && S[p.toggle].state === 'on') : !!choixLocal[p.id] }));
   const nChoisies = zones.filter(z => z.choisie).length;
+  // Ce qu'un PLANNING peut viser : le serveur n'a ni script maison ni sélection
+  // à l'écran — il lui faut les segments et une intégration qu'il sait commander.
+  const zonesPlanifiables = domaine === 'lawn_mower' ? zones : (commande([1]) ? zones.filter(z => ((z.piece && z.piece.segments) || []).length > 0) : []);
   const appel = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const basculerZone = (z) => {
     if (!peutChoisir || z.inerte) return;
@@ -495,6 +671,8 @@ export default function RobotContent({ hass, domaine = 'vacuum', onFiche = null 
 
   // L'historique, l'entretien, les réglages.
   const brut = useHistoriqueRobot(hass, idRobot, idSurface, robot.etat);
+  // Le planning : tenu par le composant. Sans réponse de sa part, ni onglet ni tuile.
+  const planning = useEtatServeur(hass, 'loggia/robots/etat', 15000, '');
   const sessions = useMemo(() => {
     if (!brut) return [];
     const de = (id) => (brut.find(l => l && l[0] && l[0].entity_id === id) || []);
@@ -509,6 +687,7 @@ export default function RobotContent({ hass, domaine = 'vacuum', onFiche = null 
   const onglets = [
     ['accueil', tr('Accueil'), 'home'],
     ...(zones.length || idCarte ? [['zones', idCarte ? tr('Carte') : tr('Zones'), 'map']] : []),
+    ...(planning.etat ? [['planning', tr('Planning'), 'calendar-clock']] : []),
     ['historique', tr('Historique'), 'time-past'],
     ...(usure.length || compteurs.length ? [['entretien', tr('Entretien'), 'wrench-simple']] : []),
   ];
@@ -535,6 +714,12 @@ export default function RobotContent({ hass, domaine = 'vacuum', onFiche = null 
       <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', aspectRatio: '16/10', background: 'var(--o-well2)' }}><CamLive hass={hass} haid={idCam} /></div>
     </div>
   ) : null;
+  // Le prochain départ planifié, s'il y en a un.
+  const echeance = planning.etat ? prochainPassage((planning.etat.config || {}).plannings, idRobot, Date.now()) : null;
+  const prochain = echeance ? {
+    titre: etiquetteProchain(echeance.date, Date.now(), locale()),
+    sous: resumeZones(echeance.planning, { domaine, aDesAires: domaine === 'lawn_mower' && zones.length > 0 }),
+  } : null;
   // Le dernier passage FINI : un robot en plein travail en a un aussi.
   const finie = sessions.find(x => x.issue !== 'en_cours') || null;
   const derniere = finie ? {
@@ -564,8 +749,9 @@ export default function RobotContent({ hass, domaine = 'vacuum', onFiche = null 
       )}
 
       {actuel === 'accueil' && <OngletAccueil domaine={domaine} robot={robot} zones={zones} nChoisies={nChoisies} basculerZone={basculerZone} peutChoisir={peutChoisir} lancer={lancer} rentrer={rentrer}
-        resume={brut ? resume : null} derniere={derniere} alerte={alerteEntretien(usure)} carte={idCarte && large ? planDe() : null} aUneCarte={!!idCarte} allerA={setOnglet} />}
+        resume={brut ? resume : null} derniere={derniere} prochain={prochain} alerte={alerteEntretien(usure)} carte={idCarte && large ? planDe() : null} aUneCarte={!!idCarte} allerA={setOnglet} />}
       {actuel === 'zones' && <OngletZones domaine={domaine} robot={robot} zones={zones} nChoisies={nChoisies} basculerZone={basculerZone} peutChoisir={peutChoisir} lancer={lancer} carte={idCarte ? planDe() : null} camera={camera} />}
+      {actuel === 'planning' && <OngletPlanning hass={hass} domaine={domaine} robot={robot} zones={zonesPlanifiables} planning={planning} />}
       {actuel === 'historique' && <OngletHistorique domaine={domaine} sessions={sessions} resume={resume} chargee={!!brut} />}
       {actuel === 'entretien' && <OngletEntretien hass={hass} pieces={usure} compteurs={compteurs} />}
       {actuel === 'reglages' && <PageReglages hass={hass} domaine={domaine} robot={robot} reglages={reglages} fiche={fiche} retour={() => setOnglet('accueil')} onFiche={onFiche ? () => onFiche(idRobot) : null} />}

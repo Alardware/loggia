@@ -105,7 +105,8 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                               lambda: hass.data.get(DOMAIN, {}).get("nuit"),
                               lambda: hass.data.get(DOMAIN, {}).get("veilles"),
                               acces_regles=lambda: hass.data.get(DOMAIN, {}).get("regles"),
-                              acces_scenarios=lambda: hass.data.get(DOMAIN, {}).get("scenarios"))
+                              acces_scenarios=lambda: hass.data.get(DOMAIN, {}).get("scenarios"),
+                              acces_robots=lambda: hass.data.get(DOMAIN, {}).get("robots"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
@@ -191,6 +192,16 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["veilles"] = LoggiaVeilles(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : veilles indisponibles")
+
+    # Le planning des robots : l'aspirateur et la tondeuse partent a l'heure
+    # dite (ADR 0043). Meme regime que les regles ci-dessus.
+    if not data.get("robots") and data.get("store") and data.get("regles"):
+        try:
+            from .robots import LoggiaRobots
+
+            data["robots"] = LoggiaRobots(hass, data["store"], data.get("regles"))
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : planning des robots indisponible")
 
     # Les scenarios : ce que la maison fait d'un seul geste (ADR 0027). Ils
     # ne posent aucun abonnement — seul le magasin leur est necessaire.

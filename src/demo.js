@@ -850,6 +850,38 @@ function veillesPatch(patch) {
   return VEI_CFG;
 }
 
+/* Le planning des robots (ADR 0043). Lundi vaut 0, comme côté serveur. La
+ * tondeuse de la démo a son capteur de pluie : c'est lui que l'onglet montre. */
+const ROB_CFG = {
+  plannings: [
+    { id: 'p-semaine', robot: 'vacuum.aspirateur', heure: '09:30', jours: [0, 1, 2, 3, 4], actif: true,
+      zones: [{ id: 'salon', nom: 'Salon', segments: [1] }, { id: 'cuisine', nom: 'Cuisine', segments: [2] }] },
+    { id: 'p-samedi', robot: 'vacuum.aspirateur', heure: '18:00', jours: [5], actif: true, zones: [] },
+    { id: 'p-nuit', robot: 'vacuum.aspirateur', heure: '23:00', jours: [6], actif: false, zones: [] },
+    { id: 'p-tonte', robot: 'lawn_mower.tondeuse', heure: '10:00', jours: [1, 4], actif: true,
+      zones: [{ id: 'switch.tondeuse_zone_pelouse_avant', nom: 'Pelouse avant', segments: [] }] },
+  ],
+  robots: { 'vacuum.aspirateur': { calme: { actif: true, debut: '22:00', fin: '07:00' }, pluie: { actif: false } } },
+};
+
+/* Une COPIE à chaque réponse, comme un vrai serveur : l'écran ne doit pas
+ * tenir l'objet que la commande suivante modifiera. */
+const copieRobots = () => JSON.parse(JSON.stringify(ROB_CFG));
+
+function robotsDemo(states) {
+  return { config: copieRobots(), meteo: Object.keys(states).filter(id => id.startsWith('weather.')).sort()[0] || null, journal: [] };
+}
+
+function robotsPatch(patch) {
+  const p = patch || {};
+  if (Array.isArray(p.plannings)) ROB_CFG.plannings = p.plannings;
+  Object.keys(p.robots || {}).forEach(id => {
+    const actuel = ROB_CFG.robots[id] || { calme: { actif: false, debut: '22:00', fin: '07:00' }, pluie: { actif: false } };
+    ROB_CFG.robots[id] = { calme: { ...actuel.calme, ...(p.robots[id].calme || {}) }, pluie: { ...actuel.pluie, ...(p.robots[id].pluie || {}) } };
+  });
+  return copieRobots();
+}
+
 /* Deux agendas, pas un : le choix des agendas et la mention du calendrier
  * sous chaque evenement n apparaissent qu a partir de deux. */
 /* L'arbre que la demonstration fait parcourir. Les radios viennent en
@@ -1053,6 +1085,8 @@ export function installerDemo() {
       if (msg && msg.type === 'loggia/nuit/config') {
         return Promise.resolve({ config: nuitPatch(msg.patch) });
       }
+      if (msg && msg.type === 'loggia/robots/etat') return Promise.resolve(robotsDemo(states));
+      if (msg && msg.type === 'loggia/robots/config') return Promise.resolve({ config: robotsPatch(msg.patch) });
       if (msg && msg.type === 'loggia/veilles/etat') return Promise.resolve(veillesDemo(states));
       if (msg && msg.type === 'loggia/regles/etat') return Promise.resolve(reglesDemo(states));
       if (msg && msg.type === 'loggia/regles/degeler') {

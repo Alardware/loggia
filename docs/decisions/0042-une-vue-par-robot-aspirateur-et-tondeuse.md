@@ -89,7 +89,8 @@ Rien sans source.
   report en cas de pluie) : aucun des deux robots ne publie son planning, et
   Home Assistant n'a pas de service commun pour l'écrire. Ce sera un
   planificateur de Loggia, côté serveur — la tranche suivante. D'ici là, la
-  tuile « Prochain passage » est « Dernier passage ».
+  tuile « Prochain passage » est « Dernier passage ». *Fait en v3.44.0 : voir
+  l'ADR 0043.*
 - **Le plan schématique, les m² et le type de sol de chaque pièce** : aucune
   géométrie n'est publiée. La vraie carte du robot est utilisée quand son image
   existe.

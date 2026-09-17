@@ -133,7 +133,7 @@ redémarrer, puis ajouter l'intégration depuis l'interface. Le mode historique
 | Lumières | domaine `light`, regroupées par zone |
 | Climat | domaine `climate`, avec le capteur de température de l'appareil ou de la zone |
 | Volets | domaine `cover` |
-| Aspirateur | domaine `vacuum` et les entités du même appareil (batterie, carte, pièces, surface, consommables, réglages) — accueil, carte, historique, entretien |
+| Aspirateur | domaine `vacuum` et les entités du même appareil (batterie, carte, pièces, surface, consommables, réglages) — accueil, carte, planning, historique, entretien |
 | Tondeuse | domaine `lawn_mower` et les entités du même appareil (zones de tonte, lames, hauteur de coupe, pluie) — les mêmes onglets |
 | Médias | domaine `media_player` |
 | Sécurité | `alarm_control_panel`, `camera` (flux dédoublonnés), `person` ; détecteurs pris parmi les `binary_sensor` de la même caméra |

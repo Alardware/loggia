@@ -1031,7 +1031,7 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
  * au-dessus et les onglets se partagent la largeur — UNE ligne. */
 .rb-onglets { display: flex; gap: 6px; padding: 5px; border-radius: 16px; background: var(--o-s2); align-self: flex-start; max-width: 100%; box-sizing: border-box; }
 .rb-onglet { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border: none; border-radius: 12px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; }
-.rb-accueil, .rb-zones, .rb-histo { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.rb-accueil, .rb-zones, .rb-histo, .rb-planning { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .rb-pieces { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 @media (min-width: 980px) {
   /* Ecran large : l'accueil du robot a gauche, ses zones et sa carte a droite. */
@@ -1039,6 +1039,8 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
   .rb-a-hero { grid-area: hero; } .rb-a-zones { grid-area: zones; } .rb-a-tuiles { grid-area: tuiles; } .rb-a-alerte { grid-area: alerte; }
   .rb-zones { grid-template-columns: minmax(0, 1.25fr) minmax(300px, 1fr); align-items: start; }
   .rb-histo { grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); align-items: start; }
+  /* Le planning : les passages a gauche, ce qui les retient a droite. */
+  .rb-planning { grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr); align-items: start; }
 }
 @media (max-width: 560px) {
   .rb-onglets { align-self: stretch; gap: 4px; }
