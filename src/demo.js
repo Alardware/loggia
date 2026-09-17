@@ -67,6 +67,8 @@ function etatsInitiaux() {
     // Ses deux detecteurs : ce que la tuile raconte en dernier evenement (ADR 0031).
     'binary_sensor.camera_entree_mouvement': s('off', { friendly_name: 'Caméra entrée Mouvement', device_class: 'motion' }),
     'binary_sensor.camera_entree_personne': s('off', { friendly_name: 'Caméra entrée Personne' }),
+    // Le sonometre du salon : la pastille « Bruit » de la barre de confort (ADR 0039).
+    'sensor.salon_bruit': s(34, { friendly_name: 'Salon Bruit', unit_of_measurement: 'dB', device_class: 'sound_pressure' }),
     /* La machine de la vue Systeme (ADR 0037) : un System Monitor tel que la
      * decouverte le reconnait — la charge processeur, et ses freres sur le meme
      * appareil — puis les trois mises a jour que publie le Superviseur. */
@@ -575,7 +577,7 @@ function indexDemo(states) {
     ['bureau', 'Bureau'], ['entree', 'Entrée'], ['sdb', 'Salle de bain'],
   ];
   const ZONE_DE = {
-    salon: ['light.salon', 'media_player.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'cover.salon',
+    salon: ['light.salon', 'media_player.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_bruit', 'cover.salon',
             'binary_sensor.fenetre_salon', 'switch.radiateur_salon', 'media_player.enceinte_salon'],
     cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine', 'binary_sensor.detecteur_fumee'],
     chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'cover.chambre',

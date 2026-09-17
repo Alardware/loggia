@@ -53,3 +53,14 @@ que l'abonnement et le dessin. La vue Météo ne revient pas : c'est une carte
 sur le côté. La carte simple du catalogue (`CvWeather`) reste telle quelle.
 Non fait : la pluie attendue (probabilité, cumul) et le vent, que la capture
 ne montre pas.
+
+## Ajustement du 17/09 (v3.40.0)
+
+Le fond bleu de la capture avait été repris tel quel, texte blanc compris.
+Retour de l'utilisateur : « applique les mêmes teintes que pour les autres
+cartes, c'est ridicule là ». La carte prend la surface, le filet et l'ombre
+des cartes voisines du rail (`railPanel`) et les couleurs de texte du thème,
+clair comme sombre ; plus aucune couleur en dur. La DISPOSITION de la
+capture reste. Leçon : une capture venue d'ailleurs donne une mise en page,
+pas une palette — la règle « la couleur d'une maquette s'applique en entier »
+vaut pour une maquette dessinée POUR Loggia.

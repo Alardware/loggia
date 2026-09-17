@@ -46,3 +46,17 @@ Assistant répond assez vite, et la carte du catalogue n'en a jamais eu. La
 section « Ouvrants et présence » devient « Ouvrants ». Les sirènes rejoignent
 les entités relues sur la vue. Non fait : les couleurs et le lettrage serif
 des maquettes — la règle est de garder nos cartes.
+
+## Ajustement du 17/09 (v3.40.0)
+
+Les trois cartes avaient leur propre grille (250 px, une seule colonne de
+362 px au téléphone, 251 × 223 px sur tablette). Retour de l'utilisateur :
+« sur mobile et tablette, elles ne respectent pas les dimensions, trop
+large ». Elles prennent la grille des cartes standard — 225 px, deux
+colonnes au téléphone et sur tablette, rangées de 184 px : 176 × 184 au
+téléphone, alignées sur les ouvrants. Ce qui ne tient plus s'efface d'après
+la largeur DE LA CARTE (requêtes de conteneur) : le mot d'une chip
+d'armement — jamais tronqué, un seuil par nombre de modes — et le « · À la
+maison » d'une personne, que sa pastille dit déjà. Les tuiles de la sirène
+(sonneries, volume) rejoignent sa ligne d'état : en tuiles, la carte
+montait à 223 px et entraînait toute sa rangée.

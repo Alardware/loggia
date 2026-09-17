@@ -2,8 +2,11 @@
  *
  * Sur le côté, avec « À surveiller », « En ce moment » et l'agenda : le lieu et
  * la température en grand, le ciel et les extrêmes du jour à droite, puis les
- * heures qui viennent. Le dessin est celui que l'utilisateur a fourni le
- * 17/09 — son fond bleu compris, appliqué en entier.
+ * heures qui viennent. La DISPOSITION est celle de la capture fournie le 17/09 ;
+ * les TEINTES sont celles des autres cartes du rail. Le fond bleu de la capture
+ * avait d'abord été repris tel quel : « applique les mêmes teintes que pour les
+ * autres cartes, c'est ridicule là » — une capture venue d'ailleurs donne une
+ * mise en page, pas une palette.
  *
  * Tout ce qui se calcule vit dans `meteo.js`, testé à sec. Les prévisions
  * arrivent par abonnement (`weather/subscribe_forecast`) : Home Assistant les
@@ -15,11 +18,11 @@ import { tr } from './i18n.js';
 import { weatherEntity, WeatherIco, haWeatherLabel } from './wxutil.jsx';
 import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour } from './meteo.js';
 
-/* Le fond de la maquette : un ciel bleu ardoise le jour, plus profond la nuit.
- * Le texte y est blanc dans les deux thèmes — c'est un ciel, pas une surface. */
-const FOND_JOUR = 'linear-gradient(180deg, #35527c 0%, #253c60 48%, #1b2c48 100%)';
-const FOND_NUIT = 'linear-gradient(180deg, #27324f 0%, #19233a 50%, #10182b 100%)';
-const DOUX = 'rgba(255,255,255,.64)';
+/* La surface, le filet et l'ombre de `railPanel` (App.jsx) — « En ce moment »,
+ * « Rappels », « Agenda » : la météo est une carte du rail parmi les autres, et
+ * ses textes prennent les couleurs du thème, clair comme sombre. */
+const CARTE_RAIL = { background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', boxShadow: 'var(--o-shadow)', color: 'var(--o-text)' };
+const DOUX = 'var(--o-text2)';
 
 /* Home Assistant REMPLACE son objet `hass` à chaque changement d'état :
  * l'abonnement lit le `hass` du moment par une référence vivante, et ne dépend
@@ -60,13 +63,12 @@ export function CarteMeteo({ hass, onOpen = null }) {
   const extremes = extremesDuJour(parJour, maintenant);
   const heures = heuresMeteo({ etat: st, previsions: parHeure, maintenant, soleil });
   const nom = a.friendly_name || tr('Météo');
-  const ouvrir = onOpen ? () => onOpen(id) : null;
+  const ouvrir = () => { if (onOpen) onOpen(id); };
 
   return (
-    <div className="o-carte-meteo" role={ouvrir ? 'button' : undefined} tabIndex={ouvrir ? 0 : undefined}
-      aria-label={ouvrir ? tr('Ouvrir') + ' ' + nom : undefined}
-      onClick={ouvrir || undefined} onKeyDown={ouvrir ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrir(); } } : undefined}
-      style={{ background: nuit ? FOND_NUIT : FOND_JOUR, borderRadius: 'var(--o-radius,18px)', padding: '16px 18px 14px', boxShadow: 'var(--o-shadow)', color: '#fff', cursor: ouvrir ? 'pointer' : 'default', minWidth: 0 }}>
+    <div className="o-carte-meteo" role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
+      onClick={ouvrir} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrir(); } }}
+      style={{ ...CARTE_RAIL, padding: '14px 16px 13px', cursor: 'pointer', minWidth: 0 }}>
       {/* La temperature ne cede jamais sa place : c'est la colonne de droite qui
         * se plie — « Partiellement nuageux » passe sur deux lignes dans un rail
         * etroit. Le corps du chiffre suit la largeur de la carte (index.css). */}
@@ -82,10 +84,10 @@ export function CarteMeteo({ hass, onOpen = null }) {
         </div>
       </div>
       {heures.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + heures.length + ', minmax(0, 1fr))', gap: 2, marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,.13)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + heures.length + ', minmax(0, 1fr))', gap: 2, marginTop: 12, paddingTop: 11, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
           {heures.map(h => (
             <div key={h.cle} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 0 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: DOUX, whiteSpace: 'nowrap' }}>{h.libelle}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{h.libelle}</span>
               <span style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{h.mode && <WeatherIco wx={h.mode} size={28} />}</span>
               <span style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{h.temp}</span>
             </div>

@@ -43,3 +43,4 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0036](0036-la-vue-securite-s-edite-comme-les-autres.md) | La vue Sécurité s'édite comme les autres ; la tuile Alarme en verre teinté par son état | appliqué (v3.37.0) |
 | [0037](0037-la-vue-systeme-d-une-machine-haos.md) | La vue Système d'une machine Home Assistant OS : mesures, charge de l'heure, versions, modules, réseau, journal — rien sans source | appliqué (v3.38.0) |
 | [0038](0038-la-meteo-sur-le-cote-de-l-accueil.md) | La météo sur le côté de l'Accueil : le lieu, la température, le ciel, Max · Min, six heures — par abonnement, rien sans prévision | appliqué (v3.39.0) |
+| [0039](0039-la-barre-de-confort-des-pieces.md) | La barre de confort des pièces : un indice sur 100 et une pastille par mesure (température, humidité, CO₂, bruit), à la place des réglages rapides | appliqué (v3.40.0) |

@@ -142,14 +142,22 @@ test('la carte : les previsions par abonnement, par une reference vivante, et ri
   assert.ok(carte.includes("const nom = a.friendly_name || tr('Météo');") && carte.includes('{nom}</div>'), 'le lieu est le nom de l’entite, jamais une ville en dur');
 });
 
-test('la carte : le dessin fourni — le lieu et le chiffre a gauche, le ciel a droite, les heures dessous, sur son fond bleu', () => {
+test('la carte : la disposition fournie — le lieu et le chiffre a gauche, le ciel a droite, les heures dessous — aux teintes des autres cartes du rail', () => {
   const rendu = carte.slice(carte.indexOf('<div className="o-carte-meteo"'));
   const ordre = ['{nom}</div>', 'className="o-meteo-temp"', '<WeatherIco wx={mode} size={44} />', '{ciel}</div>', "tr('Max {n}'", "gridTemplateColumns: 'repeat(' + heures.length", '{h.libelle}</span>', '<WeatherIco wx={h.mode} size={28} />', '{h.temp}</span>'];
   let curseur = -1;
   for (const morceau of ordre) { const i = rendu.indexOf(morceau); assert.ok(i > curseur, morceau + ' n’est pas a sa place'); curseur = i; }
-  assert.ok(carte.includes("const FOND_JOUR = 'linear-gradient(180deg, #35527c 0%, #253c60 48%, #1b2c48 100%)';") && carte.includes('background: nuit ? FOND_NUIT : FOND_JOUR') && carte.includes("color: '#fff'"), 'le fond de la maquette, en entier — plus profond la nuit');
-  assert.ok(!/border: /.test(rendu), 'sans bordure, comme les autres cartes');
-  assert.ok(rendu.includes("role={ouvrir ? 'button' : undefined} tabIndex={ouvrir ? 0 : undefined}") && rendu.includes("if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrir(); }"), 'la carte s’ouvre au clavier comme au doigt');
+  // Retour du 17/09 sur le fond bleu de la capture : « applique les memes teintes
+  // que pour les autres cartes, c'est ridicule la ». La surface, le filet et
+  // l'ombre sont ceux de `railPanel` — la carte voisine, mot pour mot.
+  const voisin = app.slice(app.indexOf('const railPanel = (title, sub, tag, tagCol, rows) => rows.length ? ('));
+  for (const morceau of ["background: 'var(--o-surfA)'", "border: 'var(--o-bw,1px) solid var(--o-bd2)'", "borderRadius: 'var(--o-radius,18px)'", "boxShadow: 'var(--o-shadow)'"]) {
+    assert.ok(voisin.slice(0, 400).includes(morceau) && carte.includes(morceau), morceau + ' : la meme surface que « En ce moment »');
+  }
+  assert.ok(carte.includes("const CARTE_RAIL = { background: 'var(--o-surfA)',") && carte.includes("color: 'var(--o-text)' };") && carte.includes('style={{ ...CARTE_RAIL,'), 'les textes prennent les couleurs du theme');
+  assert.ok(!/#[0-9a-fA-F]{3,8}/.test(carte) && !carte.includes('linear-gradient') && !carte.includes('FOND_JOUR') && !carte.includes('rgba(255,255,255'), 'plus aucune couleur en dur : ni fond bleu, ni texte blanc');
+  assert.ok(rendu.includes("borderTop: 'var(--o-bw,1px) solid var(--o-bd3)'") && carte.includes("const DOUX = 'var(--o-text2)';") && rendu.includes("color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{h.libelle}</span>"), 'le filet et les gris des lignes du rail');
+  assert.ok(rendu.includes('role="button" tabIndex={0}') && rendu.includes("if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrir(); }"), 'la carte s’ouvre au clavier comme au doigt');
   assert.ok(rendu.includes("flex: '0 0 auto'") && rendu.includes("flex: '1 1 0', minWidth: 0, textAlign: 'right'"), 'le chiffre ne cede pas sa place : c’est le libelle qui passe a la ligne');
   assert.ok(css.includes('.o-carte-meteo { container-type: inline-size;') && css.includes('.o-carte-meteo .o-meteo-temp { font-size: 52px; font-size: clamp(40px, 17.7cqw, 52px); }'), 'le chiffre suit la largeur de la CARTE : 330 px ou 276 px de rail');
 });

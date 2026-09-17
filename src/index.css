@@ -403,15 +403,6 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .grid-cams, .grid-rappels, .grid-scenes, .grid-covers, .grid-volcfg, .grid-ehero, .grid-ebilan, .grid-vac-top, .grid-vac-map, .grid-croq, .grid-speakers, .grid-sec-cams, .grid-par-pal, .grid-par-about { grid-template-columns: 1fr !important; }
   /* Caméras : une par ligne sur téléphone. La grille de deux (v3.24.2) n'a pas
      plu — retour user du 15/09 : « pas fan finalement ». */
-  /* Barres d'actions : le bouton de réglages se réduit à son icône, le libellé
-     mangeant une largeur précieuse sur un téléphone.
-     Escamoté plutôt que `display: none` : le texte reste lu par les lecteurs
-     d'écran, sans quoi le bouton n'aurait plus de nom du tout. Sorti du flux,
-     il n'occupe plus l'espacement du conteneur — le bouton devient carré. */
-  .o-barlabel {
-    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-  }
   /* Sécurité mobile : hero compact, jauge circulaire gardée SUR LE CÔTÉ (pas de wrap dessous), 4 tuiles en grille 2-col */
   .o-sec-hero { padding: 18px 16px !important; border-radius: 18px !important; }
   .o-sec-herotop { flex-wrap: nowrap !important; gap: 16px !important; align-items: flex-start !important; }
@@ -860,6 +851,70 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
 @media (prefers-reduced-motion: reduce) {
   .o-assist-msg, .o-assist-dots i, .o-assist-fil, .o-assist-fil.sortant { animation: none; }
 }
+
+/* ── La barre de confort d'une pièce (ADR 0039) ───────────────────────────────
+ * L'indice à gauche, un filet, puis une pastille par mesure. Sous 900 px
+ * l'indice passe au-dessus et les pastilles se partagent la largeur ; au
+ * téléphone la rangée reste sur UNE ligne — l'icône au-dessus, la valeur, le
+ * verdict, le nom de la mesure s'efface (la règle des rangées de tuiles). */
+.o-confort { display: flex; align-items: center; gap: 18px; padding: 12px 16px; border-radius: var(--o-radius,18px); background: var(--o-surfA); border: var(--o-bw,1px) solid var(--o-bd2); box-sizing: border-box; min-width: 0; cursor: pointer; }
+.o-confort-indice { display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-width: 0; }
+.o-confort-anneau { position: relative; width: 46px; height: 46px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+.o-confort-anneau svg { position: absolute; inset: 0; }
+.o-confort-anneau circle { transition: stroke-dashoffset .6s cubic-bezier(.22,.61,.36,1), stroke .3s ease; }
+.o-confort-titre { font-size: 10.5px; font-weight: 800; letter-spacing: .09em; color: var(--o-text3); white-space: nowrap; }
+.o-confort-note { display: flex; align-items: baseline; gap: 6px; margin-top: 3px; white-space: nowrap; }
+.o-confort-note .n { font-size: 22px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.o-confort-note .sur { font-size: 12px; font-weight: 700; color: var(--o-text3); }
+.o-confort-note .mot { font-size: 13px; font-weight: 700; margin-left: 4px; }
+.o-confort-sep { width: 1px; align-self: stretch; margin: 4px 0; background: var(--o-bd2); flex-shrink: 0; }
+.o-confort-mesures { display: flex; flex-wrap: wrap; gap: 10px; flex: 1; min-width: 0; }
+.o-confort-mesure { display: flex; align-items: center; gap: 10px; padding: 7px 14px 7px 8px; border-radius: 12px; background: var(--o-s2); min-width: 0; }
+.o-confort-ico { width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+.o-confort-txt { min-width: 0; }
+.o-confort-nom { font-size: 11.5px; font-weight: 600; color: var(--o-text2); white-space: nowrap; }
+.o-confort-val { display: flex; align-items: center; gap: 6px; margin-top: 1px; font-size: 13px; white-space: nowrap; min-width: 0; }
+.o-confort-val .v { font-weight: 800; font-variant-numeric: tabular-nums; }
+.o-confort-val .pt { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.o-confort-val .mot { font-size: 12px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@media (hover: hover) and (pointer: fine) { .o-confort:hover { filter: brightness(1.06); } }
+@media (max-width: 900px) {
+  .o-confort { flex-direction: column; align-items: stretch; gap: 12px; }
+  .o-confort-sep { display: none; }
+  .o-confort-mesures { display: grid; grid-template-columns: repeat(var(--conf-n, 4), minmax(0, 1fr)); gap: 8px; }
+  .o-confort-mesure { padding: 7px 8px; gap: 8px; }
+  /* Quatre pastilles sur une tablette : le point de couleur cede sa place au
+     verdict, qui ne doit pas se tronquer (« Excellent »). Sa couleur le dit deja. */
+  .o-confort-val { gap: 5px; }
+  .o-confort-val .pt { display: none; }
+}
+@media (max-width: 560px) {
+  .o-confort { padding: 12px; }
+  .o-confort-mesures { gap: 6px; }
+  .o-confort-mesure { flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px; }
+  .o-confort-ico { width: 26px; height: 26px; border-radius: 9px; }
+  .o-confort-ico .fi { font-size: 13px !important; }
+  .o-confort-txt { max-width: 100%; }
+  .o-confort-nom { display: none; }
+  .o-confort-val { flex-direction: column; align-items: flex-start; gap: 1px; font-size: 12px; max-width: 100%; }
+  .o-confort-val .pt { display: none; }
+  .o-confort-val .mot { font-size: 10px; max-width: 100%; }
+}
+
+/* ── L'alarme et la présence dans une carte STANDARD (retour du 17/09) ─────────
+ * Elles suivent la grille des autres cartes — 225 px, deux colonnes au téléphone
+ * et sur tablette. Ce qui ne tient plus s'efface d'après la largeur DE LA CARTE :
+ * le mot d'une chip d'armement (jamais tronqué : il faut ~84 px par chip, d'où un
+ * seuil par nombre de modes) et le « · À la maison » d'une personne, que sa
+ * pastille de couleur dit déjà. */
+.o-carte-alarme, .o-carte-presence { container-type: inline-size; }
+@container (max-width: 176px) { .o-armchips[data-n="2"] .o-armchip-txt { display: none; } }
+@container (max-width: 268px) { .o-armchips[data-n="3"] .o-armchip-txt { display: none; } }
+@container (max-width: 360px) { .o-armchips[data-n="4"] .o-armchip-txt { display: none; } }
+@container (max-width: 452px) { .o-armchips[data-n="5"] .o-armchip-txt { display: none; } }
+@container (max-width: 544px) { .o-armchips[data-n="6"] .o-armchip-txt { display: none; } }
+@container (max-width: 190px) { .o-armchips { gap: 5px !important; } }
+@container (max-width: 230px) { .o-presence-ou { display: none; } }
 
 /* ── La carte météo du rail de l'Accueil (ADR 0038) ───────────────────────────
  * Le rail fait 330 px sur grand écran, 276 px en dessous : le chiffre de la

@@ -30,6 +30,8 @@ import {
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
+import { BarreConfort } from './barreconfort.jsx';
+import { indiceConfort, verdictMesure, capteurBruit } from './confort.js';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
@@ -1310,29 +1312,36 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
 
 // ════════════ POPUP CONFORT PIÈCE (temp / humidité / CO2 + barres dégradées + courbe 24h) ════════════
 // Échelles de confort : min/max de la barre, dégradé traffic-light, ticks chiffrés, verdict(valeur).
+// Les VERDICTS viennent de `confort.js` (ADR 0039) : la barre de la pièce et cette fiche lisent la même table.
 const COMFORT = {
   temp: {
     key: 'temp', label: tr('Température'), ico: 'thermometer-half', min: 14, max: 30,
     grad: 'linear-gradient(90deg,#ef4444 0%,#f59e0b 11%,#fbbf24 19%,#34d399 33%,#34d399 62%,#fbbf24 75%,#f59e0b 87%,#ef4444 100%)',
     ticks: ['15°', '19°', '24°', '29°'], tickV: [15, 19, 24, 29],
-    verdict: v => v < 16 ? { t: 'Trop froid', c: 'var(--o-cold)' } : v < 18 ? { t: 'Frais', c: 'var(--o-accent-soft)' } : v <= 24 ? { t: 'Idéal', c: 'var(--o-ok)' } : v <= 26 ? { t: 'Un peu chaud', c: 'var(--o-warn)' } : v <= 28 ? { t: 'Trop chaud', c: 'var(--o-warn2)' } : { t: 'Très chaud', c: 'var(--o-bad)' },
+    verdict: v => verdictMesure('temp', v),
   },
   hum: {
     key: 'hum', label: tr('Humidité'), ico: 'humidity', min: 20, max: 80,
     grad: 'linear-gradient(90deg,#ef4444 0%,#f59e0b 12%,#fbbf24 22%,#34d399 33%,#34d399 67%,#fbbf24 78%,#f59e0b 88%,#ef4444 100%)',
     ticks: ['30%', '40%', '50%', '60%', '70%'], tickV: [30, 40, 50, 60, 70],
-    verdict: v => v < 30 ? { t: 'Trop sec', c: 'var(--o-warn2)' } : v < 40 ? { t: 'Correct', c: 'var(--o-warn)' } : v <= 60 ? { t: 'Bon', c: 'var(--o-ok)' } : v <= 70 ? { t: 'Humide', c: 'var(--o-warn)' } : { t: 'Trop humide', c: 'var(--o-bad)' },
+    verdict: v => verdictMesure('hum', v),
   },
   co2: {
     key: 'co2', label: "Qualité de l'air", ico: 'leaf', min: 400, max: 1600,
     grad: 'linear-gradient(90deg,#34d399 0%,#34d399 33%,#fbbf24 58%,#f59e0b 83%,#ef4444 100%)',
     ticks: ['600', '900', '1200', '1400'], tickV: [600, 900, 1200, 1400],
-    verdict: v => v < 800 ? { t: 'Excellent', c: 'var(--o-ok)' } : v < 1000 ? { t: 'Bon', c: 'var(--o-ok)' } : v < 1200 ? { t: 'Moyen', c: 'var(--o-warn)' } : v < 1400 ? { t: 'Élevé', c: 'var(--o-warn2)' } : { t: 'Confiné', c: 'var(--o-bad)' },
+    verdict: v => verdictMesure('co2', v),
+  },
+  bruit: {
+    key: 'bruit', label: tr('Bruit'), ico: 'volume', min: 20, max: 80,
+    grad: 'linear-gradient(90deg,#34d399 0%,#34d399 33%,#fbbf24 58%,#f59e0b 83%,#ef4444 100%)',
+    ticks: ['30', '40', '55', '70'], tickV: [30, 40, 55, 70],
+    verdict: v => verdictMesure('bruit', v),
   },
 };
 const cf_pct = (v, m) => Math.max(0, Math.min(100, (v - m.min) / (m.max - m.min) * 100));
-const cf_big = (v, m) => m.key === 'temp' ? v.toFixed(1).replace('.', ',') + ' °C' : m.key === 'hum' ? Math.round(v) + ' %' : Math.round(v) + ' ppm';
-const cf_tag = (v, m) => m.key === 'temp' ? Math.round(v) + '°C' : m.key === 'hum' ? Math.round(v) + '%' : Math.round(v) + ' ppm';
+const cf_big = (v, m) => m.key === 'temp' ? v.toFixed(1).replace('.', ',') + ' °C' : m.key === 'hum' ? Math.round(v) + ' %' : m.key === 'bruit' ? Math.round(v) + ' dB' : Math.round(v) + ' ppm';
+const cf_tag = (v, m) => m.key === 'temp' ? Math.round(v) + '°C' : m.key === 'hum' ? Math.round(v) + '%' : m.key === 'bruit' ? Math.round(v) + ' dB' : Math.round(v) + ' ppm';
 // Sévérité par couleur de verdict (tokens theme-aware). Trop froid (--o-cold, <16°) = rank 2 → jamais « Sain ».
 const cf_rank = { 'var(--o-ok)': 0, 'var(--o-accent-soft)': 1, 'var(--o-cold)': 2, 'var(--o-warn)': 2, 'var(--o-warn2)': 3, 'var(--o-bad)': 4 };
 
@@ -1376,23 +1385,27 @@ function Sparkline({ points, color }) {
   );
 }
 
-function RoomComfortModal({ piece, hass, onClose }) {
+function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
   const live = piece.live || null;
   const parseNum = (s) => { if (s == null) return null; const n = parseFloat(String(s).replace(',', '.')); return isNaN(n) ? null : n; };
   const vals = {
     temp: live && live.temp != null ? live.temp : parseNum(piece.temp),
     hum: live && live.hum != null ? live.hum : parseNum(piece.hum),
     co2: live && live.co2 != null ? live.co2 : parseNum(piece.badge),
+    // Le bruit ne vit pas dans la configuration des pièces : la vue le trouve dans la zone (ADR 0039).
+    bruit: bruitId && hass && hass.states && hass.states[bruitId] ? parseNum(hass.states[bruitId].state) : null,
   };
-  const ids = { temp: live && live.tempId, hum: live && live.humId, co2: live && live.co2Id };
-  const metrics = [COMFORT.temp, COMFORT.hum, COMFORT.co2].filter(m => vals[m.key] != null);
+  const ids = { temp: live && live.tempId, hum: live && live.humId, co2: live && live.co2Id, bruit: bruitId };
+  const metrics = [COMFORT.temp, COMFORT.hum, COMFORT.co2, COMFORT.bruit].filter(m => vals[m.key] != null);
   const verdicts = metrics.map(m => ({ m, vd: m.verdict(vals[m.key]) }));
   const worst = verdicts.reduce((a, b) => (cf_rank[b.vd.c] || 0) > (cf_rank[a.vd.c] || 0) ? b : a, verdicts[0]);
-  const overall = !verdicts.length ? { t: '—', c: 'var(--o-text2)' }
-    : (cf_rank[worst.vd.c] >= 3 ? { t: tr('À surveiller'), c: 'var(--o-warn2)' } : cf_rank[worst.vd.c] === 2 ? { t: 'Acceptable', c: 'var(--o-warn)' } : { t: 'Sain', c: 'var(--o-ok)' });
+  // Le mot de la fiche est celui de la barre : l'indice de confort (ADR 0039).
+  const confort = indiceConfort(vals);
+  const overall = confort ? confort.verdict : { t: '—', c: 'var(--o-text2)' };
   const advice = !verdicts.length ? 'Aucune donnée capteur pour cette pièce.'
     : (cf_rank[worst.vd.c] <= 1 ? 'Conditions idéales dans cette pièce.'
       : worst.m.key === 'co2' ? "Niveau de CO2 élevé, pensez à aérer la pièce."
+        : worst.m.key === 'bruit' ? tr('Niveau sonore élevé dans la pièce.')
         : worst.m.key === 'temp' ? (vals.temp > 24 ? 'Il fait chaud, pensez à ventiler ou rafraîchir.' : 'Il fait frais, un peu de chauffage ?')
           : (vals.hum > 60 ? 'Air humide, aérez pour assainir.' : 'Air un peu sec, pensez à humidifier.'));
 
@@ -1427,6 +1440,7 @@ function RoomComfortModal({ piece, hass, onClose }) {
         </div>
         <div style={{ textAlign: 'center', margin: '16px 0 2px' }}>
           <div style={{ fontSize: 30, fontWeight: 800, color: overall.c, letterSpacing: '-.01em' }}>{overall.t}</div>
+          {confort && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', marginTop: 4 }}>{tr('Indice de confort')} · {confort.indice} / 100</div>}
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.45, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto' }}>{advice}</div>
         </div>
         {!metrics.length
@@ -1621,6 +1635,15 @@ function applyLayout(L, derived) {
 }
 // Les appareils d'une pièce viennent des CONFIGS d'Loggia (lumières découvertes, zones climat, volets, médias) :
 // ça écarte d'office le bruit HA (LED d'équipement, *_announcement, communications, prises techniques…).
+/* Le capteur de bruit d'une piece (ADR 0039) : parmi les entites de sa ZONE
+ * Home Assistant. La configuration des pieces ne nomme que la temperature,
+ * l'humidite et le CO2 ; le bruit se decouvre, et une piece sans sonometre n'a
+ * simplement pas de pastille Bruit. */
+function capteurBruitPiece(S, roomName) {
+  const cible = rmNorm(roomName);
+  const zone = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).find(z => rmNorm(z.name) === cible);
+  return zone ? capteurBruit(zone.entities, S) : null;
+}
 /** Ce que la decouverte propose pour une piece, avant tout agencement. */
 function roomEntitiesBrutes(hass, roomName) {
   if (!hass || !hass.states) return [];
@@ -4756,42 +4779,17 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   const unhideAll = () => { try { localStorage.removeItem('loggia_roomhidden'); } catch {} setHidden([]); };
   const live = piece && piece.live;
   const onOpenComfort = () => setComfort(true);
-  // ── Barre de contrôles de la pièce ──
-  /* La carte Ambiance et son bouton de repli ont disparu (retour 02/09) : elle
-   * répétait ce que les cartes disent déjà, en pleine hauteur d'écran. Seul
-   * l'historique du confort, qui n'existait nulle part ailleurs, rejoint la
-   * barre. */
+  /* LA BARRE DE CONFORT (ADR 0039) remplace les réglages rapides — luminosité
+   * du groupe, couleur, volets : les cartes de la pièce pilotent déjà tout
+   * cela. Elle dit si l'on est BIEN dans la pièce : un indice sur 100, puis
+   * une pastille par mesure que la pièce possède. Le bruit se trouve dans la
+   * zone Home Assistant de la pièce ; sans aucune mesure, pas de barre. */
   const S = (hass && hass.states) || {};
   const dom = (id) => id.slice(0, id.indexOf('.'));
-  const call = (d, svc, data) => commanderService(hass, (data || {}).entity_id, d, svc, data || {});
   const lightIds = ents.filter(id => dom(id) === 'light');
-  const coverIds = ents.filter(id => dom(id) === 'cover');
   const lightsOn = lightIds.filter(id => S[id] && S[id].state === 'on');
-  const rgbIds = lightIds.filter(id => { const m = S[id] && S[id].attributes && S[id].attributes.supported_color_modes; return Array.isArray(m) && m.some(x => ['rgb', 'rgbw', 'rgbww', 'hs', 'xy'].indexOf(x) >= 0); });
-  // luminosité du groupe = moyenne des lumières allumées (optimiste au clic)
-  const briReal = lightsOn.length ? Math.round(lightsOn.reduce((a, id) => a + ((S[id].attributes || {}).brightness || 0) / 2.55, 0) / lightsOn.length) : 0;
-  const [briOv, setBriOv] = useState(null);
-  const briRef = useRef(null);
-  useEffect(() => () => clearTimeout(briRef.current), []);
-  useEffect(() => { setBriOv(null); }, [room]);
-  const bri = briOv != null ? briOv : briReal;
-  const setGroupBri = (nv) => {
-    const v = Math.max(0, Math.min(100, nv));
-    setBriOv(v); clearTimeout(briRef.current); briRef.current = setTimeout(() => setBriOv(null), 6000);
-    if (!lightIds.length) return;
-    if (v === 0) call('light', 'turn_off', { entity_id: lightIds });
-    else call('light', 'turn_on', { entity_id: lightsOn.length ? lightsOn : lightIds, brightness_pct: v });
-  };
-  const setGroupColor = (hex) => { if (!rgbIds.length) return; const n = parseInt(hex.slice(1), 16); call('light', 'turn_on', { entity_id: rgbIds, rgb_color: [(n >> 16) & 255, (n >> 8) & 255, n & 255] }); };
-  // volet : ouvert si au moins un cover l'est
-  const coverOpen = coverIds.some(id => { const st = S[id]; if (!st) return false; const pos = (st.attributes || {}).current_position; return pos != null ? pos > 5 : st.state === 'open'; });
-  const [covOv, setCovOv] = useState(null);
-  const covRef = useRef(null);
-  useEffect(() => () => clearTimeout(covRef.current), []);
-  useEffect(() => { setCovOv(null); }, [room]);
-  const covOn = covOv != null ? covOv : coverOpen;
-  const toggleCovers = () => { const nv = !covOn; setCovOv(nv); clearTimeout(covRef.current); covRef.current = setTimeout(() => setCovOv(null), 8000); call('cover', nv ? 'open_cover' : 'close_cover', { entity_id: coverIds }); };
-  const coverPct = (() => { const ps = coverIds.map(id => (S[id] && (S[id].attributes || {}).current_position)).filter(v => v != null); return ps.length ? Math.round(ps.reduce((a, b) => a + b, 0) / ps.length) : null; })();
+  const bruitId = capteurBruitPiece(S, room);
+  const confortPiece = indiceConfort({ temp: live && live.temp, hum: live && live.hum, co2: live && live.co2, bruit: bruitId ? parseFloat(S[bruitId].state) : null });
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
@@ -4814,47 +4812,8 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
           <div style={{ flex: 1, minWidth: 0 }}><RoomNav room={room} onNav={onNav} hass={hass} /></div>
         </div>
 
-        {/* réglages rapides de la pièce : luminosité du groupe, couleur, volet */}
-        {(lightIds.length > 0 || coverIds.length > 0) && (
-          <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-            {lightIds.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 6px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Luminosité')}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider('Luminosité de ' + room, bri, setGroupBri, { min: 0, max: 100, step: 5 })}>
-                  <button onClick={() => setGroupBri(bri - 5)} aria-label="Baisser" style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
-                  <span style={{ minWidth: 44, textAlign: 'center', fontSize: 12, fontWeight: 800, color: bri > 0 ? 'var(--o-warn)' : 'var(--o-text3)' }}>{bri} %</span>
-                  <button onClick={() => setGroupBri(bri + 5)} aria-label="Monter" style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
-                </div>
-              </div>
-            )}
-            {rgbIds.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Couleur')}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {LIGHT_PALETTE.map(c => <button key={c} onClick={() => setGroupColor(c)} title={tr('Appliquer {c}', { c })} aria-label={tr('Couleur {c}', { c })} style={{ width: 18, height: 18, borderRadius: 10, cursor: 'pointer', background: c, border: '2px solid transparent', padding: 0 }} />)}
-                </div>
-              </div>
-            )}
-            {coverIds.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-                <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15, whiteSpace: 'nowrap' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{coverIds.length > 1 ? tr('Volets') : tr('Volet')}</span>
-                  {coverPct != null && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)' }}>{covOn ? coverPct + ' %' : 'fermé'}</span>}
-                </span>
-                <span onClick={toggleCovers} role="switch" aria-checked={covOn} aria-label={'Volets ' + room} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCovers(); } }} style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 10, cursor: 'pointer', background: covOn ? 'var(--o-accent-fond)' : 'var(--o-s4)', border: covOn ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}><span style={{ position: 'absolute', top: 2, left: covOn ? 19 : 2, width: 17, height: 17, borderRadius: '50%', background: '#fff', transition: 'left .2s cubic-bezier(.4,1.3,.5,1)' }} /></span>
-              </div>
-            )}
-            <span style={{ flex: 1 }} />
-            {/* L'historique du confort n'avait qu'une porte : la carte Ambiance,
-              * partie avec les panneaux de réglages. Elle passe donc dans la
-              * barre, à la place du bouton qui repliait la carte. */}
-            {live && (live.temp != null || live.hum != null || live.co2 != null) && (
-              <button onClick={onOpenComfort} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: 'var(--o-bw,1px) solid var(--o-bd1)', background: 'var(--o-s2)', color: 'var(--o-text2)' }}><Fi i="chart-line-up" size={13} /><span className="o-barlabel">{tr('Historique du confort')}</span></button>
-            )}
-          </div>
-        )}
-
-        {/* carte Ambiance : mesures et état de la pièce (repliable par le bouton du bandeau) */}
+        {/* le confort de la pièce : l'indice, puis une pastille par mesure ; un tap ouvre la fiche et son historique */}
+        {confortPiece && <BarreConfort confort={confortPiece} onOpen={onOpenComfort} />}
 
         {ents.length > 0 && <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Appareils de la pièce')}</div>}
         {/* appareils de la pièce — mêmes cartes que les vues dédiées */}
@@ -4898,7 +4857,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
         {addSheet && <ComposeurCartes piece={room} dc={dc} hass={hass} present={ents} onToggle={ed.toggle} onClose={() => setAddSheet(false)}
           pied={<button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} piece={room} onClose={() => setCardEdit(null)} />}
-        {comfort && piece && <RoomComfortModal piece={piece} hass={hass} onClose={() => setComfort(false)} />}
+        {comfort && piece && <RoomComfortModal piece={piece} hass={hass} bruitId={bruitId} onClose={() => setComfort(false)} />}
       </div>
     </main>
   );
@@ -9479,13 +9438,14 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
           const titre = bloc.titre ? (
             <div id={bloc.titre === 'sect:ouvrants' ? 'sec-ouvrants' : undefined} style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{nomDe(bloc.titre)}</div>
           ) : null;
-          // Les cartes larges (alarme, sirene, presence) a 250 px ; une section
-          // d'ouvrants garde la grille des objets — deux colonnes au telephone.
-          const ouvrantsSeuls = bloc.cartes.length > 0 && bloc.cartes.every(k => k.indexOf('binary_sensor.') === 0);
+          // UNE grille pour toute la vue, celle des objets : 225 px, deux colonnes au
+          // telephone et sur tablette, rangees de 184 px. L'alarme, la sirene et la
+          // presence avaient la leur (250 px, une colonne de 362 px au telephone) :
+          // « trop large », elles ne respectaient pas les dimensions (retour du 17/09).
           return (
             <div key={bloc.titre || 'b' + bi} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {bloc.titre && (edit ? <EditableCard plat ed={ed} id={bloc.titre} nom={nomDe(bloc.titre)} onEdit={setCardEdit}>{titre}</EditableCard> : titre)}
-              <div className={ouvrantsSeuls ? 'grid-objets' : 'grid-securite-cartes'} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(' + (ouvrantsSeuls ? 225 : 250) + 'px,1fr))', gridAutoRows: 'minmax(184px, auto)', gap: 16, alignItems: 'stretch' }}>
+              <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gridAutoRows: 'minmax(184px, auto)', gap: 16, alignItems: 'stretch' }}>
                 {bloc.cartes.map(k => edit
                   ? <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass} taille={false} />
                   : <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}><div style={{ height: '100%', minHeight: 184 }}>{carteSec(k)}</div></Anim>)}
@@ -10333,16 +10293,10 @@ function CvSirene({ id, hass, label = null }) {
       <div style={{ marginTop: 10, flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: mort ? 'var(--o-text3)' : col }}>{mort ? tr('Indisponible') : on ? tr('Sirène active') : tr('Sirène au repos')}</div>
-        {tuiles.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + tuiles.length + ', minmax(0, 1fr))', gap: 8, marginTop: 10 }}>
-            {tuiles.map(([l, v]) => (
-              <div key={l} style={{ padding: '8px 10px', borderRadius: 10, background: 'var(--o-s1)' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--o-text3)' }}>{l}</div>
-                <div style={{ fontSize: 15, fontWeight: 800, marginTop: 2 }}>{v}</div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Ce que l'entite expose (sonneries, volume) tient sur UNE ligne : en
+          * tuiles, la carte montait a 223 px et entrainait toute sa rangee — le
+          * format standard est de 184 px (retour du 17/09). */}
+        {!mort && tuiles.length > 0 && <div style={RM_SUB}>{tuiles.map(([l, v]) => l + ' ' + v).join(' · ')}</div>}
         <div style={{ flex: 1 }} />
         {!mort && <button type="button" onClick={tester} disabled={test} className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%', opacity: test ? .6 : 1 }}><Fi i="volume" size={12} /> {test ? tr('Test en cours…') : tr('Test sonore (3 s)')}</button>}
       </div>
@@ -10383,7 +10337,7 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
   // à un panneau qui l'ignore, c'est promettre un geste sans effet.
   const CHIPS = armChips(aAl, s);
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
+    <div className="o-piece o-carte-alarme" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       {/* GABARIT MAISON — règle dure : icône hg SEULE, état hd, TITRE SOUS
         * L'ICÔNE avec de l'air. Jamais côte à côte, maquette ou pas. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -10418,9 +10372,12 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
             <button onClick={() => setDemande(null)} aria-label={tr('Annuler')} style={{ width: 30, height: 30, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>✕</button>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: 8, margin: '7px 0 6px' }}>
+          /* Le mot d'une chip ne se TRONQUE jamais (« Dés », « Mais ») : quand la
+           * carte est trop etroite pour ses modes, il s'efface et l'icone reste —
+           * requete de conteneur, d'apres le nombre de chips (index.css). */
+          <div className="o-armchips" data-n={CHIPS.length} style={{ display: 'flex', gap: 8, margin: '7px 0 6px' }}>
             {CHIPS.map(([lbl, svc, actif]) => (
-              <button key={svc} onClick={() => agir(svc)} aria-label={lbl} aria-pressed={actif} className="o-armchip"
+              <button key={svc} onClick={() => agir(svc)} aria-label={lbl} aria-pressed={actif} className="o-armchip" title={lbl}
                 style={{ position: 'relative', flex: 1, padding: sans ? '10px 4px' : '6px 4px', borderRadius: 10, border: 'none', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: actif ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: actif ? '#fff' : 'var(--o-text2)' }}>
                 {/* L'icone du mode, et le mot — qui s'efface au telephone
                   * (retour user du 16/09 : « on ne les voit pas bien »). */}
@@ -10643,13 +10600,13 @@ function CvPresence({ hass, gens = null }) {
   });
   const maison = liste.filter(p => p.home).length;
   return (
-    <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
+    <div className="o-piece o-carte-presence" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       {/* Gabarit maison : icône hg, compteur hd, TITRE SOUS L'ICÔNE. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(maison ? 'rgba(52,211,153,.14)' : 'var(--o-s1)', maison ? 'var(--o-ok)' : 'var(--o-text3)')}><Fi i="users" size={16} /></span>
         {liste.length > 0 && <span style={{ fontSize: 11, fontWeight: 800, color: maison ? 'var(--o-ok)' : 'var(--o-text3)' }}>{maison + ' / ' + liste.length}</span>}
       </div>
-      <div style={{ marginTop: 10 }}>
+      <div style={{ marginTop: 8 }}>
         <div style={RM_NAME}>{tr('Présence')}</div>
         {liste.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Personne de configuré')}</div>}
         {/* Trois lignes au plus : le FORMAT STANDARD (2 rangées de 88 px) est
@@ -10657,7 +10614,7 @@ function CvPresence({ hass, gens = null }) {
         {liste.slice(0, 3).map((p) => (
           <div key={p.haid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', marginTop: 2 }}>
             <span style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 10, fontWeight: 800, color: 'var(--o-text2)', opacity: p.home ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<span style={{ fontWeight: 600, color: 'var(--o-text3)' }}> · {p.home ? tr('À la maison') : 'Absent'}</span></span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<span className="o-presence-ou" style={{ fontWeight: 600, color: 'var(--o-text3)' }}> · {p.home ? tr('À la maison') : 'Absent'}</span></span>
             <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', boxShadow: p.home ? '0 0 6px rgba(52,211,153,.6)' : 'none' }} />
           </div>
         ))}
@@ -12962,7 +12919,9 @@ export default function App() {
   // Nav « Pièces » = ouvre la 1re pièce configurée (les chips de RoomView naviguent ensuite entre pièces)
   const activeRoom = view.indexOf('room:') === 0 ? view.slice(5) : view === 'pieces' ? ((cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))[0] || null) : null;
   // Vue pièce : on poll le domaine des appareils pilotables + les capteurs de la pièce (clés-préfixes).
-  const roomKeys = activeRoom ? ['light.', 'switch.', 'cover.', 'climate.', 'media_player.', 'fan.', 'lock.', ...climateKeys(), ...(cfg.rooms || []).flatMap(r => [r.haid && r.haid.temp, r.haid && r.haid.humidity, r.haid && r.haid.co2])] : [];
+  const roomKeys = activeRoom ? ['light.', 'switch.', 'cover.', 'climate.', 'media_player.', 'fan.', 'lock.', ...climateKeys(), ...(cfg.rooms || []).flatMap(r => [r.haid && r.haid.temp, r.haid && r.haid.humidity, r.haid && r.haid.co2]),
+    // Le sonometre de la piece ouverte : sa pastille de la barre de confort suit le direct (ADR 0039).
+    capteurBruitPiece((getHass() || {}).states, activeRoom)].filter(Boolean) : [];
   // Les cartes d'une vue custom suivent leur entity_id — y compris les cartes
   // TYPÉES ({ t, id }), sans quoi une jauge ou un gros interrupteur ne se
   // redessinait jamais. Seuls les templates restent dehors : leur souscription
