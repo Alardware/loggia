@@ -2144,4 +2144,8 @@ export default {
   'Tokyo': 'Tokyo',
   'Londres': 'London',
   'Sydney': 'Sydney',
+  // La rangee des scenarios de l'Accueil (v3.42.1)
+  'Scénarios précédents': 'Previous scenarios',
+  'Scénarios suivants': 'Next scenarios',
+  '{n} scénario': '{n} scenario',
 };

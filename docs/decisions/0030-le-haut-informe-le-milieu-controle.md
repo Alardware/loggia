@@ -44,3 +44,31 @@ revient à la ligne car trop long ») : les tuiles d'état de la carte Sécurit�
 restent sur une seule rangée au téléphone — autant de colonnes que de tuiles,
 l'icône au-dessus, le libellé sur sa propre ligne — au lieu des deux colonnes
 forcées qui envoyaient la troisième tuile à la ligne.
+
+## Ajustement du 17/09 (v3.42.1) — la rangée des scénarios
+
+Retour transmis par l'utilisateur : « le bloc Scénarios est trop horizontal […]
+le bouton "Tous les scénarios" ressemble presque à une carte de scénario alors
+que ce n'en est pas une. Je ferais plutôt : *Scénarios … 9 scénarios →*, et les
+autres apparaissent avec un clic / scroll horizontal. »
+
+- **La tuile « Tous les scénarios » quitte la rangée.** Le chemin vers la vue
+  devient un lien de l'en-tête, à droite du titre : « 9 scénarios → » (ou
+  « Tous les scénarios → » quand aucun n'est coché pour l'Accueil). En mode
+  édition, l'en-tête garde « Gérer les scénarios ».
+- **Tous les scénarios de l'Accueil tiennent dans UNE rangée qui défile**, sur
+  tous les écrans : six visibles sur PC, jamais sous 116 px — sur un écran plus
+  étroit on en voit moins, mais un nom ne se tronque plus (à 1200 px les cartes
+  faisaient 87 px et coupaient « Tout éteindre ») ; 150 px par carte sur
+  téléphone, comme avant. Plus de coupe à cinq.
+- **Deux flèches dans l'en-tête, à la souris seulement**, et seulement quand la
+  rangée déborde ; chacune n'est active que du côté où il reste quelque chose.
+  Au doigt on glisse. La barre de défilement est masquée sur PC ; le clavier
+  passe de carte en carte. Un moteur qui n'anime pas le défilement doux ne
+  laisse pas la rangée sur place : sans mouvement au bout d'un instant, le
+  saut se fait d'un coup.
+- Les ombres des cartes ne sont pas coupées par le défilement (rembourrage
+  compensé par une marge négative) : la mise en page ne bouge pas d'un pixel.
+
+Garde-fous : `bordsDefilement` (src/scenarios.js, pur, 8 mutations tuées),
+tests/accueil_hero et tests/scenarios réalignés.

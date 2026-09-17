@@ -10,6 +10,7 @@ import {
   GESTES_SCENARIO, FAMILLES, IDS_INTEGRES, TEINTES_SCENARIO, ICONES_SCENARIO,
   nomScenario, teinteScenario, libelleAction, resumeScenario, nombreActions, nombreCibles,
   libelleDernier, scenariosVisibles, scenariosAccueil, actionVide, scenarioVide, versEnregistrement,
+  bordsDefilement,
 } from '../src/scenarios.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -117,6 +118,23 @@ test('ce que la fiche envoie : le scenario sans ce qu’il a calcule', () => {
 const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = app.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = app.indexOf(fin, d + 1); return app.slice(d, f < 0 ? undefined : f); };
+
+test('les bords d’une rangee qui defile : ce qui montre et active les fleches', () => {
+  assert.deepEqual(bordsDefilement(0, 1150, 762), { avant: false, apres: true }, 'au depart : rien avant, la suite apres');
+  assert.deepEqual(bordsDefilement(200, 1150, 762), { avant: true, apres: true }, 'au milieu : les deux');
+  assert.deepEqual(bordsDefilement(388, 1150, 762), { avant: true, apres: false }, 'au bout : plus rien apres');
+  assert.deepEqual(bordsDefilement(387.4, 1150, 762), { avant: true, apres: false }, 'a une fraction de pixel du bout, c’est le bout');
+  assert.deepEqual(bordsDefilement(1.5, 1150, 762), { avant: false, apres: true }, 'a une fraction de pixel du depart, c’est le depart');
+  assert.deepEqual(bordsDefilement(2, 1150, 762), { avant: false, apres: true }, 'pile sur la marge : pas encore');
+  assert.deepEqual(bordsDefilement(386, 1150, 762), { avant: true, apres: false }, 'pile a la marge du bout : deja le bout');
+  assert.deepEqual(bordsDefilement(3, 1150, 762), { avant: true, apres: true }, 'au-dela de la marge, on a bien avance');
+  assert.deepEqual(bordsDefilement(385, 1150, 762), { avant: true, apres: true }, 'en deca de la marge du bout, il reste de quoi avancer');
+  assert.deepEqual(bordsDefilement(0, 700, 762), { avant: false, apres: false }, 'tout tient : pas de fleche du tout');
+  assert.deepEqual(bordsDefilement(0, 762, 762), { avant: false, apres: false });
+  assert.deepEqual(bordsDefilement(-40, 1150, 762), { avant: false, apres: true }, 'le rebond elastique ne compte pas');
+  assert.deepEqual(bordsDefilement(undefined, null, NaN), { avant: false, apres: false }, 'rien de mesurable : rien a montrer');
+  assert.deepEqual(bordsDefilement(10, 1150, 762, 12), { avant: false, apres: true }, 'la marge se regle');
+});
 
 test('l’Accueil : la rangee des scenarios, et « Gerer » cliquable malgre le contenu inerte de l’edition', () => {
   const a = bloc('function ScenariosAccueil(', NL + '}');

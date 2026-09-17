@@ -114,6 +114,18 @@ export function nombreCibles(s) {
   return s.resume.reduce((n, r) => n + (Number(r && r.n) || 0), 0);
 }
 
+/**
+ * Les bords d'une rangee qui defile : y a-t-il quelque chose avant, apres ?
+ * C'est ce qui montre, et rend actives, les fleches de la rangee de l'Accueil.
+ * `marge` absorbe les arrondis du navigateur : un defilement « fini » s'arrete
+ * souvent a une fraction de pixel du bord.
+ */
+export function bordsDefilement(scrollLeft, scrollWidth, clientWidth, marge = 2) {
+  const max = Math.max(0, (Number(scrollWidth) || 0) - (Number(clientWidth) || 0));
+  const x = Math.max(0, Number(scrollLeft) || 0);
+  return { avant: x > marge, apres: x < max - marge };
+}
+
 /** Quand il a tourne : « — », « À l'instant », « Il y a 12 min », « 23:04 »,
  * « hier », « Il y a 3 j ». `ts` en secondes (le serveur), `maintenant` en
  * millisecondes (Date.now). */

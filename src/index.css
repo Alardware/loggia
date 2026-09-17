@@ -995,3 +995,23 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
   .o-w-pm { width: 20px; height: 20px; font-size: 11px !important; }
   .o-w-ville { font-size: 10.5px !important; }
 }
+
+/* ── Les scenarios de l'Accueil : UNE rangee qui defile (17/09) ──
+ * Six cartes visibles sur PC — jamais sous 116 px : un nom ne se tronque pas
+ * pour en loger une de plus —, les autres d'un glissement ou d'un clic sur les
+ * fleches de l'en-tete ; sous 821 px la regle du telephone (150 px
+ * par carte) prend le relais, plus haut. La barre de defilement est masquee :
+ * les fleches et le clavier (chaque carte est un bouton) en tiennent lieu. Le
+ * rembourrage laisse vivre les ombres des cartes, que le defilement couperait ;
+ * la marge negative le rend sans effet sur la mise en page. */
+@media (min-width: 821px) {
+  .grid-qscenes {
+    display: grid; grid-auto-flow: column; grid-auto-columns: max(116px, calc((100% - 60px) / 6)); gap: 12px;
+    overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none;
+    padding: 6px 6px 26px; margin: -6px -6px -26px; scroll-padding-inline: 6px;
+  }
+  .grid-qscenes::-webkit-scrollbar { display: none; }
+  .grid-qscenes > button { scroll-snap-align: start; min-width: 0; }
+}
+/* Au doigt on glisse : pas de fleches. */
+@media (pointer: coarse) { .o-qscenes-fleche { display: none !important; } }

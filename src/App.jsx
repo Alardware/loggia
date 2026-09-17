@@ -43,7 +43,7 @@ import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAl
 import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
 import { evenementCamera, detecteursDe, reduireDerniers, depuis } from './evenement.js';
 import { cleJour, plageSemaine, joursAgenda, comptesParJour, evenementsAVenir, evenementsDuJour } from './agenda.js';
-import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS, ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, actionVide, scenarioVide, versEnregistrement } from './scenarios.js';
+import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS, ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, bordsDefilement, actionVide, scenarioVide, versEnregistrement } from './scenarios.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 /* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
@@ -4950,37 +4950,77 @@ function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLanc
   );
 }
 
-/* La rangée de l'Accueil : les scénarios qui s'y montrent, en cartes
- * compactes — six par rangée sur PC, une rangée qui glisse sur téléphone
- * (`.grid-qscenes`). En édition, le chemin vers la vue, où tout se règle. */
+/* La rangée de l'Accueil : TOUS les scénarios qui s'y montrent, en cartes
+ * compactes, sur UNE rangée qui défile — six visibles sur PC et tablette, les
+ * autres d'un clic sur les flèches ou d'un glissement ; 150 px par carte sur
+ * téléphone (`.grid-qscenes`). Le chemin vers la vue vit dans l'EN-TÊTE
+ * (« 9 scénarios → ») : la tuile « Tous les scénarios », posée en bout de
+ * rangée, ressemblait à un scénario sans en être un (retour du 17/09). En
+ * édition, l'en-tête porte « Gérer les scénarios ». */
 function ScenariosAccueil({ hass, edit = false, onNav = null }) {
   const sc = useScenarios(hass);
   const liste = scenariosAccueil(sc.etat && sc.etat.scenarios);
-  // Une seule rangee sur PC et tablette : six cases, cinq scenarios et la
-  // tuile « Tous les scenarios » ; sur telephone la rangee defile, tous y
-  // passent (ADR 0030 — l'etape 6 du plan, pliee ici).
-  const large = useWide(821);
-  const montres = large ? liste.slice(0, 5) : liste;
+  const nScenarios = liste.length;
+  // Les flèches : seulement quand la rangée déborde, actives du côté où il
+  // reste quelque chose. La mesure suit le défilement et la largeur.
+  const rangee = useRef(null);
+  const mesure = useRef(null);
+  const [bords, setBords] = useState({ avant: false, apres: false });
+  useEffect(() => {
+    const el = rangee.current;
+    if (!el) return undefined;
+    const mesurer = () => setBords(b => { const n = bordsDefilement(el.scrollLeft, el.scrollWidth, el.clientWidth); return n.avant === b.avant && n.apres === b.apres ? b : n; });
+    mesure.current = mesurer;
+    mesurer();
+    el.addEventListener('scroll', mesurer, { passive: true });
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(mesurer) : null;
+    if (ro) ro.observe(el);
+    return () => { mesure.current = null; el.removeEventListener('scroll', mesurer); if (ro) ro.disconnect(); };
+  }, [nScenarios]);
+  const glisser = (sens) => {
+    const el = rangee.current;
+    if (!el) return;
+    const depart = el.scrollLeft, pas = sens * el.clientWidth * 0.85;
+    el.scrollBy({ left: pas, behavior: REDUCE_MOTION ? 'auto' : 'smooth' });
+    // Un moteur qui n'anime pas (onglet masque, vue embarquee) laisserait la
+    // rangee sur place : sans mouvement au bout d'un instant, on y va d'un coup.
+    // Dans tous les cas on relit les bords : l'evenement `scroll` peut tarder.
+    setTimeout(() => {
+      if (rangee.current !== el) return;
+      if (Math.abs(el.scrollLeft - depart) < 2) el.scrollBy({ left: pas, behavior: 'auto' });
+      if (mesure.current) mesure.current();
+    }, 350);
+  };
+  const fleche = (active) => ({ width: 26, height: 26, borderRadius: 9, border: 'none', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: active ? 'pointer' : 'default', opacity: active ? 1 : .35 });
+  const compte = nScenarios > 1 ? tr('{n} scénarios', { n: nScenarios }) : tr('{n} scénario', { n: nScenarios });
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
         <div style={sectionTitle}>{tr('Scénarios')}</div>
         {edit && onNav
           /* `pointerEvents: auto` : en édition, `Sec` rend le contenu de la
            * section inerte (pointer-events none) pour qu'elle se saisisse ;
            * ce bouton, lui, doit rester cliquable (bug vu le 16/09 sur HA). */
           ? <button data-drag-ui="1" onClick={() => onNav('scenes')} style={{ pointerEvents: 'auto', padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{tr('Gérer les scénarios')}</button>
-          : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{sc.err && !liste.length ? sc.err : tr('{n} scénarios', { n: liste.length })}</span>}
+          : <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              {(bords.avant || bords.apres) && (<>
+                <button type="button" className="o-qscenes-fleche" onClick={() => glisser(-1)} disabled={!bords.avant} aria-label={tr('Scénarios précédents')} title={tr('Scénarios précédents')} style={fleche(bords.avant)}><Fi i="angle-small-left" size={13} /></button>
+                <button type="button" className="o-qscenes-fleche" onClick={() => glisser(1)} disabled={!bords.apres} aria-label={tr('Scénarios suivants')} title={tr('Scénarios suivants')} style={fleche(bords.apres)}><Fi i="angle-small-right" size={13} /></button>
+              </>)}
+              {sc.err && !nScenarios
+                ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{sc.err}</span>
+                : onNav
+                  /* Le chemin vers la vue : un LIEN dans l'en-tête, pas une carte de plus dans la rangée. */
+                  ? <button type="button" onClick={() => onNav('scenes')} aria-label={tr('Tous les scénarios')}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 2px', border: 'none', background: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>
+                      {nScenarios ? compte : tr('Tous les scénarios')}<Fi i="angle-right" size={10} color="var(--o-text3)" />
+                    </button>
+                  : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{compte}</span>}
+            </div>}
       </div>
-      {(montres.length > 0 || onNav) && (
-        <div className="grid-qscenes" style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12 }}>
-          {montres.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}
-          {onNav && (
-            <button type="button" onClick={() => onNav('scenes')} aria-label={tr('Tous les scénarios')}
-              style={{ height: 88, borderRadius: 'var(--o-radius,18px)', border: '1px dashed var(--o-bd1)', background: 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: 'var(--o-text3)', fontSize: 12, fontWeight: 700 }}>
-              <Fi i="apps" size={16} />{tr('Tous les scénarios')}{liste.length > montres.length ? ' · ' + liste.length : ''}
-            </button>
-          )}
+      {nScenarios > 0 && (
+        <div ref={rangee} className="grid-qscenes">
+          {liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}
         </div>
       )}
     </>

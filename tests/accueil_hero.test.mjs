@@ -48,12 +48,25 @@ test('« appareils actifs » mene a En ce moment : le rail sur PC, la seconde pa
   assert.ok(d.includes('demande={pageDemandee} onDemande={() => setPageDemandee(null)} />;'), 'la demande voyage jusqu’aux pages');
 });
 
-test('les scenarios : une rangee sur PC et tablette, cinq et « Tous les scenarios » ; tous sur telephone', () => {
+test('les scenarios : UNE rangee qui defile, tous dedans ; le chemin vers la vue est un lien de l’en-tete', () => {
+  // Retour du 17/09 : la tuile « Tous les scenarios », en bout de rangee,
+  // ressemblait a un scenario sans en etre un.
   const s = bloc('function ScenariosAccueil(', NL + '}');
-  assert.ok(s.includes('const large = useWide(821);') && s.includes('const montres = large ? liste.slice(0, 5) : liste;'), 'cinq au plus des 821 px');
-  assert.ok(s.includes("{montres.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}"), 'les cartes montrees');
-  assert.ok(s.includes("<button type=\"button\" onClick={() => onNav('scenes')} aria-label={tr('Tous les scénarios')}") && s.includes("{tr('Tous les scénarios')}{liste.length > montres.length ? ' · ' + liste.length : ''}"), 'la tuile vers la vue, avec le compte quand il en manque');
-  for (const k of ['Voir l’énergie', 'Voir la pièce la plus chargée', 'Voir la sécurité', 'Voir les lumières', 'Voir les médias', 'Voir ce qui tourne', 'Tous les scénarios']) {
+  assert.ok(!s.includes('liste.slice(') && !s.includes('useWide('), 'plus de coupe a cinq : tous les scenarios de l’Accueil sont dans la rangee');
+  assert.ok(s.includes('<div ref={rangee} className="grid-qscenes">') && s.includes("{liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}"), 'la rangee ne contient QUE des scenarios');
+  const rangee = s.slice(s.indexOf('<div ref={rangee} className="grid-qscenes">'));
+  assert.ok(!rangee.includes("onNav('scenes')") && !rangee.includes('dashed'), 'plus de fausse carte dans la rangee');
+  assert.ok(s.includes("? <button type=\"button\" onClick={() => onNav('scenes')} aria-label={tr('Tous les scénarios')}") && s.includes("{nScenarios ? compte : tr('Tous les scénarios')}<Fi i=\"angle-right\" size={10} color=\"var(--o-text3)\" />"), 'le lien de l’en-tete : « 9 scenarios → », ou « Tous les scenarios » quand aucun n’est sur l’Accueil');
+  assert.ok(s.includes("const compte = nScenarios > 1 ? tr('{n} scénarios', { n: nScenarios }) : tr('{n} scénario', { n: nScenarios });"), 'un scenario ne s’ecrit pas au pluriel');
+  assert.ok(s.includes('{(bords.avant || bords.apres) && (<>') && s.includes('disabled={!bords.avant}') && s.includes('disabled={!bords.apres}'), 'les fleches n’existent que si la rangee deborde, actives du cote ou il reste quelque chose');
+  assert.ok(s.includes('bordsDefilement(el.scrollLeft, el.scrollWidth, el.clientWidth)') && s.includes("el.addEventListener('scroll', mesurer, { passive: true });") && s.includes('new ResizeObserver(mesurer)'), 'la mesure suit le defilement et la largeur');
+  assert.ok(s.includes("behavior: REDUCE_MOTION ? 'auto' : 'smooth'") && s.includes("if (Math.abs(el.scrollLeft - depart) < 2) el.scrollBy({ left: pas, behavior: 'auto' });"), 'un moteur qui n’anime pas ne laisse pas la rangee sur place');
+  const large = css.slice(css.indexOf("/* ── Les scenarios de l'Accueil : UNE rangee qui defile"));
+  assert.ok(large.includes('@media (min-width: 821px) {') && large.includes('grid-auto-flow: column; grid-auto-columns: max(116px, calc((100% - 60px) / 6));'), 'six visibles sur PC, jamais sous 116 px : un nom ne se tronque pas');
+  assert.ok(large.includes('padding: 6px 6px 26px; margin: -6px -6px -26px;'), 'les ombres vivent, la mise en page ne bouge pas');
+  assert.ok(large.includes('@media (pointer: coarse) { .o-qscenes-fleche { display: none !important; } }'), 'au doigt on glisse : pas de fleches');
+  assert.ok(css.includes('.grid-qscenes > button { flex: 0 0 150px; scroll-snap-align: start; }'), 'le telephone garde sa regle : 150 px par carte');
+  for (const k of ['Voir l’énergie', 'Voir la pièce la plus chargée', 'Voir la sécurité', 'Voir les lumières', 'Voir les médias', 'Voir ce qui tourne', 'Tous les scénarios', 'Scénarios précédents', 'Scénarios suivants', '{n} scénario']) {
     assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
   }
 });
