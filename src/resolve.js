@@ -403,6 +403,66 @@ const CPU_RE = /(processor_use|utilisation_cpu|cpu_utilization|cpu_use|_cpu$|_cp
 const MEM_RE = /(memory_use_percent|utilisation_de_la_memoire|memory_utilization|_memoire|_memory|_speicher|_memoria|_geheugen|_minne)/;
 const DISK_RE = /(disk_use_percent|utilisation_disque|utilisation_du_disque|storage_utilization|_disk|_disque|_festplatte|_speicherplatz|_disco|_schijf)/;
 
+/* ── Les capteurs frères de la machine (vue Système, ADR 0037) ───────────────
+ * La configuration nomme le capteur de charge processeur ; le swap, la mémoire
+ * en octets et les débits se ramassent sur le MÊME appareil. Même pis-aller que
+ * ci-dessus pour les noms traduits (« swap » se dit « espace d'échange » chez un
+ * System Monitor français) ; l'unité et la `device_class` font le tri.
+ *
+ * Une entité désactivée n'a pas d'état : elle ne se ramasse pas, et sa tuile ne
+ * s'affiche pas. */
+const SWAP_RE = /(swap|espace_d_echange|_echange|auslagerung|intercambio|scambio|wisselgeheugen)/;
+const MEMOIRE_RE = /(memory|memoire|speicher|memoria|geheugen|minne)/;
+const LIBRE_RE = /(free|libre|frei|libero|vrij|ledig)/;
+const RX_RE = /(_rx$|_rx_|entrant|_in_|_in$|eingehend|inkomend)/;
+const TX_RE = /(_tx$|_tx_|sortant|_out_|_out$|ausgehend|saliente|uscente|uitgaand)/;
+const TAILLE_RE = /^(B|kB|KB|KiB|MB|MiB|GB|GiB|TB|TiB)$/;
+/* Les interfaces que personne ne branche : boucle locale, ponts et paires
+ * virtuelles de Docker, tunnels. */
+const VIRTUELLE_RE = /^(lo|docker\d*|veth\w*|hassio|br-\w+|br\d+|virbr\d*|tun\d*|tap\d*|wg\d*|tailscale\d*|zt\w+)$/;
+const rangInterface = (nom) => (/^(eth|en|em)/.test(nom) ? 0 : /^wl/.test(nom) ? 2 : 1);
+
+/** `sensor.hote_enp1s0_rx` → `enp1s0` ; `…_debit_entrant_via_eth0` → `eth0`. */
+export function interfaceDe(id) {
+  const court = String(id).replace(/^sensor\./, '').replace(/_(rx|tx)$/, '');
+  return court.slice(court.lastIndexOf('_') + 1);
+}
+
+export function capteursHote(freres, states) {
+  const out = {};
+  const debits = {};
+  (freres || []).forEach(id => {
+    if (String(id).indexOf('sensor.') !== 0 || !states || !states[id]) return;
+    const a = states[id].attributes || {};
+    const unite = String(a.unit_of_measurement || '');
+    if (a.device_class === 'data_rate') {
+      const sens = RX_RE.test(id) ? 'rx' : TX_RE.test(id) ? 'tx' : null;
+      const nom = interfaceDe(id);
+      if (!sens || VIRTUELLE_RE.test(nom)) return;
+      (debits[nom] = debits[nom] || {})[sens] = id;
+      return;
+    }
+    if (SWAP_RE.test(id)) {
+      if (unite === '%') { if (!out.swapPct) out.swapPct = id; }
+      else if (TAILLE_RE.test(unite)) {
+        const cle = LIBRE_RE.test(id) ? 'swapFree' : 'swapUsed';
+        if (!out[cle]) out[cle] = id;
+      }
+      return;
+    }
+    // Glances publie aussi la mémoire de SES conteneurs : ce n'est pas celle de la machine.
+    if (MEMOIRE_RE.test(id) && TAILLE_RE.test(unite) && !/(container|conteneur|docker)/.test(id)) {
+      const cle = LIBRE_RE.test(id) ? 'memFree' : 'memUsed';
+      if (!out[cle]) out[cle] = id;
+    }
+  });
+  // UNE interface : celle qui a ses deux sens, filaire d'abord, le Wi-Fi en dernier.
+  const noms = Object.keys(debits).filter(n => debits[n].rx && debits[n].tx)
+    .sort((a, b) => rangInterface(a) - rangInterface(b) || (a < b ? -1 : a > b ? 1 : 0));
+  if (noms.length) { out.netIn = debits[noms[0]].rx; out.netOut = debits[noms[0]].tx; }
+  return out;
+}
+
 export function resolveSystem({ index, states = {}, userCfg = {} } = {}) {
   const cfg = (userCfg && typeof userCfg.loggia_system === 'object' && userCfg.loggia_system) || null;
   if (cfg) return { available: true, source: 'utilisateur', hosts: [] , table: cfg };

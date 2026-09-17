@@ -860,3 +860,34 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
 @media (prefers-reduced-motion: reduce) {
   .o-assist-msg, .o-assist-dots i, .o-assist-fil, .o-assist-fil.sortant { animation: none; }
 }
+
+/* ── La vue Système (ADR 0037) ────────────────────────────────────────────────
+ * Les tuiles de mesure tiennent sur UNE rangée : autant de colonnes que de
+ * mesures connues (`--sys-n`). Entre le téléphone et le grand écran elles se
+ * replient d'elles-mêmes ; au téléphone elles restent sur une ligne — l'icône
+ * passe au-dessus, le chiffre dessous, le titre court remplace le long, la
+ * ligne de détail s'efface (la règle des rangées de tuiles, 16/09). */
+.grid-sys-mesures { display: grid; gap: 14px; grid-template-columns: repeat(var(--sys-n, 5), minmax(0, 1fr)); }
+.grid-sys-duo { display: grid; gap: 20px; align-items: start; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); }
+.grid-sys-duo > :only-child { grid-column: 1 / -1; }
+.grid-sys-modules { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
+@media (max-width: 1100px) {
+  .grid-sys-duo { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 1000px) and (min-width: 561px) {
+  .grid-sys-mesures { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+}
+@media (max-width: 560px) {
+  .grid-sys-mesures { gap: 6px; }
+  .grid-sys-mesures > .sys-mesure { min-height: 0 !important; padding: 9px 8px !important; gap: 8px; }
+  .sys-mesure .sys-mesure-tete { flex-direction: column !important; gap: 7px !important; }
+  .sys-mesure .sys-mesure-ico { width: 26px !important; height: 26px !important; border-radius: 9px !important; }
+  .sys-mesure .sys-mesure-ico .fi { font-size: 13px !important; }
+  .sys-mesure .sys-mesure-val { font-size: 14px !important; }
+  .sys-mesure .sys-mesure-titre, .sys-mesure .sys-mesure-sous { display: none !important; }
+  .sys-mesure .sys-mesure-court { display: block !important; font-size: 10px !important; color: var(--o-text2) !important; }
+  .sys-mesure .sys-mesure-court + .sys-mesure-sous + div { margin-top: 6px !important; }
+  .sys-barres { gap: 2px !important; }
+  .grid-sys-modules { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .sys-releve { display: none; }
+}

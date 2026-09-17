@@ -1,219 +1,550 @@
 /* ── La vue Systeme ─────────────────────────────────────────────────────────
  *
- * Chargee a la demande : on l'ouvre pour regarder l'etat des machines, pas au
- * demarrage du tableau de bord. Elle ne partageait avec le reste que le journal
- * d'activite et les courbes, partis dans `historique.jsx`.
+ * Chargee a la demande : on l'ouvre pour regarder l'etat de la machine, pas au
+ * demarrage du tableau de bord. Elle ne partage avec le reste que le journal
+ * d'activite et l'historique, partis dans `historique.jsx`.
+ *
+ * La page d'une machine Home Assistant OS (ADR 0037) : les mesures en tuiles, la
+ * charge de la derniere heure, les versions, les modules complementaires, le
+ * reseau, le journal. Tout ce qui se CALCULE vit dans `systeme.js`, teste a
+ * sec ; ici il ne reste que les lectures et le dessin.
+ *
+ * RIEN NE S'AFFICHE SANS SOURCE. Les capteurs viennent de la table de
+ * `sysconf.js` ; le Superviseur (`supervisor/api`) ne repond qu'a un
+ * administrateur, sur une installation qui en a un. Un bloc sans donnee ne se
+ * dessine pas — ni tirets, ni valeurs de decor.
  *
  * `SystemeContent` est l'export par defaut, comme `views/meteo.jsx`. */
 import { useState, useEffect, useRef } from 'react';
-import { Fi } from '../ui.jsx';
+import { Fi, Gauge, Bascule, BottomSheet } from '../ui.jsx';
 import { tr } from '../i18n.js';
-import { RoomActivityCard, SysArea, useSysHist } from '../historique.jsx';
+import { RoomActivityCard, useSysHist } from '../historique.jsx';
 import { sysSensors, sysNames } from '../sysconf.js';
+import { LOGGIA_INDEX } from '../state.js';
+import {
+  tuilesMesures, seaux, resumeSerie, lignesVersions, derniereSauvegarde, momentLisible, modulesComplementaires,
+  interfaceReseau, debitLisible, baseDeDonnees, etatCloud, journalSysteme, alertesSysteme, nomCarte, dureeLisible,
+  depuisDemarrage, dureeCapteur, enOctets, tailleLisible, paireTailles, nombre,
+} from '../systeme.js';
 
-const BRAND_ICONS = {
-  haos: "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 xml:space=%22preserve%22 viewBox=%220 0 512 512%22%3E%3Cpath d=%22M512 473.3c0 17.6-14.4 32-32 32H32c-17.6 0-32-14.4-32-32v-192c0-17.6 10.2-42.2 22.6-54.6L233.4 16c12.4-12.4 32.8-12.4 45.2 0l210.8 210.8c12.4 12.4 22.6 37 22.6 54.6z%22 style=%22fill:%23f2f4f9%22/%3E%3Cpath d=%22M489.4 226.7 278.6 16c-12.4-12.4-32.8-12.4-45.2 0L22.6 226.7C10.2 239.1 0 263.7 0 281.3v192c0 17.6 14.4 32 32 32h196.8l-86.7-86.7c-4.5 1.5-9.2 2.4-14.2 2.4-24.1 0-43.7-19.6-43.7-43.7s19.6-43.7 43.7-43.7 43.7 19.6 43.7 43.7c0 5-.9 9.7-2.4 14.2l67.5 67.5V211.8c-14.5-7.1-24.5-22-24.5-39.2 0-24.1 19.6-43.7 43.7-43.7s43.7 19.6 43.7 43.7c0 17.2-10 32.1-24.5 39.2v173.4l67.1-67.1c-1.3-4.2-2-8.6-2-13.2 0-24.1 19.6-43.7 43.7-43.7s43.7 19.6 43.7 43.7-19.6 43.7-43.7 43.7c-5.3 0-10.4-1-15.1-2.8l-93.7 93.7v65.9H480c17.6 0 32-14.4 32-32v-192c0-17.6-10.2-42.2-22.6-54.7%22 style=%22fill:%2318bcf2%22/%3E%3C/svg%3E",
-  unraid: "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 xml:space=%22preserve%22 viewBox=%220 108.3 512 295.4%22%3E%3ClinearGradient id=%22a%22 x1=%2291.058%22 x2=%22420.942%22 y1=%2293.45%22 y2=%22423.333%22 gradientTransform=%22matrix(1 0 0 -1 0 514.2)%22 gradientUnits=%22userSpaceOnUse%22%3E%3Cstop offset=%220%22 style=%22stop-color:%23e32929%22/%3E%3Cstop offset=%221%22 style=%22stop-color:%23ff8d30%22/%3E%3C/linearGradient%3E%3Cpath d=%22M243.3 181.9h24.9v147.8h-24.9zM24.9 329.7H0V181.9h24.9zm96.8 17.6h24.9v56.4h-24.9zM60.6 284h24.9v91.3H60.6zm121.7 0h24.9v91.3h-24.9zm304.8-102.1H512v147.8h-24.9zm-96.8-17.2h-24.9v-56.4h24.9zm61.1 62.9h-24.9v-91h24.9zm-122.1 0h-24.9v-91h24.9z%22 style=%22fill:url(%23a)%22/%3E%3C/svg%3E",
-  unifi: "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1024 1024%22%3E%3Ccircle cx=%22512%22 cy=%22512%22 r=%22512%22 style=%22fill:%230559c9%22/%3E%3Cpath d=%22M588.6 385q0-31.49 20.72-58.54t107.68-27V518l-9.91 31.93a213 213 0 0 1-18.92 43.69 144.8 144.8 0 0 1-26.58 33.49 136.6 136.6 0 0 1-34.46 23.29A175.8 175.8 0 0 1 585 663.93a217.5 217.5 0 0 0 3.61-38.58zM384 324.2h25.69V349H384zm25.69 37.69h25.71v24.85h-25.67zM384 393.38h25.7v24.85H384zm-25.67 37.27H384v25.27h-25.64zM307 298.92h25.67v25.28H307zm128.4 326.43q0 32.37 11.94 56.33t26.37 39.91q14.4 16 26.35 23.74l11.94 7.75q-48.19 0-86.27-13.52t-64.44-37.7a163.2 163.2 0 0 1-40.32-57q-14-32.84-14-71V368.11h25.67V505.6h25.7v-24.83H384v55.43h25.69v-93.13h25.71zm94.6 51.89q35.6 1.32 65.34-5.33a163.2 163.2 0 0 0 53.38-22 148.9 148.9 0 0 0 40.78-39.48q17.12-24.15 27.48-57.87v21.34q0 36.37-12.39 67.64a159.6 159.6 0 0 1-36.28 55q-23.87 23.74-58.12 38.37t-77.92 17.29l-15.33-8q-1.79-1.32-29.73-23.29t-38.3-66.3a151.8 151.8 0 0 0 35.38 15.3q20.05 6 45.71 7.33M358.36 349.47h25.24v24.85h-25.24z%22 style=%22fill:%23fff%22/%3E%3C/svg%3E",
-};
-/* Duree de fonctionnement, quelle que soit la forme sous laquelle l'integration
- * la publie : « 5 days, 03:12 », un nombre de secondes, ou un horodatage de
- * demarrage.
- *
- * Le mot du jour se lit dans plusieurs langues — un capteur allemand ecrit
- * « Tag », un espagnol « dia ». Auparavant seuls `day` et `jour` etaient
- * reconnus : ailleurs, la duree tombait dans le dernier cas et s'affichait
- * telle quelle, brute. Et les unites de sortie passent par le catalogue : le
- * « j » de jour n'est un jour qu'en francais. */
-const UPT_JOUR = /(\d+)\s*(?:days?|jours?|tage?|d[ií]as?|giorni?|dias?)/i;
-function fmtUptime(raw) {
-  if (raw == null || raw === '' || raw === 'unknown' || raw === 'unavailable') return '—';
-  const s = String(raw);
-  const jh = (d, h) => (d > 0 ? tr('{n} j', { n: d }) + ' ' + tr('{n} h', { n: String(h).padStart(2, '0') }) : tr('{n} h', { n: h }));
-  const dm = s.match(UPT_JOUR), tm = s.match(/(\d+):(\d+)/);
-  if (dm || tm) return jh(dm ? +dm[1] : 0, tm ? +tm[1] : 0);
-  if (/^\s*[\d.]+\s*$/.test(s)) { const n = parseFloat(s); if (!isNaN(n) && n > 600) return jh(Math.floor(n / 86400), Math.floor((n % 86400) / 3600)); }
-  const t = Date.parse(s); if (!isNaN(t)) { let sec = (Date.now() - t) / 1000; if (sec < 0) sec = 0; return jh(Math.floor(sec / 86400), Math.floor((sec % 86400) / 3600)); }
-  return s;
+/* Le gabarit des cartes de la maison, repris de `RM_CARD` (App.jsx) : l'icone
+ * en haut a gauche, la metrique ou la bascule en haut a droite, le titre SOUS
+ * l'icone, le contenu ensuite ; hauteur standard, sans bordure. La vue est un
+ * morceau a part : elle ne peut pas importer le monolithe, elle en recopie les
+ * valeurs — tests/systeme_hoas.test.mjs verifie qu'elles restent les memes. */
+const SYS_FOND = 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
+const SYS_CARTE = { display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 172, padding: 16, borderRadius: 'var(--o-radius,18px)', background: SYS_FOND, border: 'none', boxShadow: 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))', boxSizing: 'border-box', minWidth: 0 };
+const SYS_ICO = (rgb, col) => ({ width: 38, height: 38, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(' + rgb + ',.16)', color: col });
+const SYS_NOM = { fontSize: 14, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+const SYS_SOUS = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+const SYS_PANNEAU = { background: SYS_FOND, border: 'none', borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', minWidth: 0 };
+const SYS_BADGE = (rgb, col) => ({ flexShrink: 0, padding: '4px 9px', borderRadius: 9, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(' + rgb + ',.14)', color: col });
+const COULEUR_NIVEAU = { warn: 'var(--o-warn2)', bad: 'var(--o-bad)' };
+const ESPACE = String.fromCharCode(160);
+
+/* ── Les lectures ────────────────────────────────────────────────────────────
+ * Home Assistant REMPLACE son objet `hass` a chaque changement d'etat : un
+ * effet qui en dependrait relancerait ses requetes plusieurs fois par seconde.
+ * Chaque lecture passe donc par une reference vivante, comme `useEtatServeur`,
+ * et ne depend que d'un booleen et du tour de rafraichissement. */
+function useHassVivant(hass) {
+  const ref = useRef(hass);
+  useEffect(() => { ref.current = hass; });
+  return ref;
 }
 
-// History HA pour la vue Système : points {t,v} par entité, période en heures, refresh manuel.
+const POINTS_SUPERVISEUR = ['/host/info', '/os/info', '/core/info', '/supervisor/info', '/addons', '/backups', '/network/info'];
 
-/* La machine hôte, au gabarit d'Atrium : logo et nom en tête, le chiffre qui
- * compte en très gros, le reste en deux lignes serrées, l'état en pied. Une
- * carte plutôt qu'un panneau repliable — elle tient dans un écran de mobile. */
-function SysCarteHote({ nom, logo, online, cpu, mem, disque, temp, uptime, courbe, courbeLbl, col }) {
-  const pc = (v) => v == null ? null : Math.round(v) + ' %';
-  const ligne1 = [pc(mem) && pc(mem) + ' ' + tr('ram'), pc(disque) && pc(disque) + ' ' + tr('disque')].filter(Boolean).join(' · ');
-  const ligne2 = [temp != null && Math.round(temp) + ' °C ' + tr('température'), uptime && uptime !== '—' && uptime + ' ' + tr('uptime')].filter(Boolean).join(' · ');
+/* Le Superviseur : sept lectures, puis les mesures des modules DEMARRES. Un
+ * point qui ne repond pas (pas d'administrateur, pas de Superviseur) vaut
+ * `null`, et son bloc ne se dessine pas. */
+function useSuperviseur(hass, tour) {
+  const [d, setD] = useState({});
+  const hRef = useHassVivant(hass);
+  const connecte = !!(hass && typeof hass.callWS === 'function');
+  useEffect(() => {
+    let vivant = true;
+    if (!connecte) return undefined;
+    const lire = (endpoint) => hRef.current.callWS({ type: 'supervisor/api', endpoint, method: 'get' }).catch(() => null);
+    Promise.all(POINTS_SUPERVISEUR.map(lire)).then(([host, os, core, supervisor, addons, backups, network]) => {
+      if (!vivant) return;
+      const liste = (addons && addons.addons) || null;
+      setD(avant => ({ ...avant, host, os, core, supervisor, addons: liste, backups: (backups && backups.backups) || null, network }));
+      const demarres = (liste || []).filter(a => a && a.state === 'started');
+      Promise.all(demarres.map(a => lire('/addons/' + a.slug + '/stats').then(s => [a.slug, s]))).then(paires => {
+        if (!vivant) return;
+        const stats = {};
+        paires.forEach(([slug, s]) => { if (s) stats[slug] = s; });
+        setD(avant => ({ ...avant, stats }));
+      });
+    });
+    return () => { vivant = false; };
+  }, [connecte, tour, hRef]);
+  return d;
+}
+
+/* Une commande WebSocket lue une fois par tour : le journal d'erreurs, l'etat
+ * de Nabu Casa. */
+function useLectureWS(hass, type, tour) {
+  const [r, setR] = useState(null);
+  const hRef = useHassVivant(hass);
+  const connecte = !!(hass && typeof hass.callWS === 'function');
+  useEffect(() => {
+    let vivant = true;
+    if (!connecte) return undefined;
+    hRef.current.callWS({ type }).then(x => { if (vivant) setR(x); }).catch(() => { if (vivant) setR(null); });
+    return () => { vivant = false; };
+  }, [connecte, type, tour, hRef]);
+  return r;
+}
+
+/* Ce que l'enregistreur dit de sa base. `system_health/info` est un FLUX : il
+ * rend d'abord ce qu'il sait, puis les verifications lentes une a une, puis
+ * « finish ». Lu une seule fois a l'ouverture — il sonde aussi le cloud, et la
+ * taille d'une base ne bouge pas a la minute. */
+function useInfoBase(hass) {
+  const [info, setInfo] = useState(null);
+  const hRef = useHassVivant(hass);
+  const connecte = !!(hass && hass.connection && typeof hass.connection.subscribeMessage === 'function');
+  useEffect(() => {
+    if (!connecte) return undefined;
+    let fini = false, stop = null;
+    const fermer = (f) => { try { f(); } catch { /* deja ferme */ } };
+    const arreter = () => { fini = true; if (stop) { fermer(stop); stop = null; } };
+    hRef.current.connection.subscribeMessage((ev) => {
+      if (fini || !ev) return;
+      if (ev.type === 'initial' && ev.data && ev.data.recorder) setInfo(ev.data.recorder.info || null);
+      if (ev.type === 'update' && ev.domain === 'recorder' && ev.success) setInfo(avant => ({ ...(avant || {}), [ev.key]: ev.data }));
+      if (ev.type === 'finish') arreter();
+    }, { type: 'system_health/info' }).then(u => { if (fini) fermer(u); else stop = u; }).catch(() => { /* pas d'administrateur : la ligne ne s'affiche pas */ });
+    return arreter;
+  }, [connecte, hRef]);
+  return info;
+}
+
+/* Le logbook des entites systeme (mises a jour, machine en ligne), 24 h. */
+function useJournalEntites(hass, ids, tour) {
+  const [r, setR] = useState(null);
+  const hRef = useHassVivant(hass);
+  const connecte = !!(hass && typeof hass.callApi === 'function');
+  useEffect(() => {
+    let vivant = true;
+    if (!connecte || !ids) { setR(null); return undefined; }
+    const debut = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    hRef.current.callApi('GET', 'logbook/' + debut + '?entity=' + encodeURIComponent(ids))
+      .then(res => { if (vivant) setR(Array.isArray(res) ? res : null); })
+      .catch(() => { if (vivant) setR(null); });
+    return () => { vivant = false; };
+  }, [connecte, ids, tour, hRef]);
+  return r;
+}
+
+/* ── Les morceaux ──────────────────────────────────────────────────────────── */
+function EntetePanneau({ titre, sous = null, droite = null }) {
   return (
-    <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', maxWidth: 460 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ width: 42, height: 42, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(3,169,244,.14)' }}>
-          {logo ? <img src={logo} alt="" draggable={false} style={{ width: 28, height: 26, objectFit: 'contain' }} /> : <Fi i="home" size={20} color="var(--o-accent-soft)" />}
-        </span>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom}</div>
-          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}>Home Assistant</div>
-        </div>
-        {/* L'etat se tient A COTE du nom, jamais dessous : sur telephone il
-          * passait a la ligne et le texte venait buter sur la pastille
-          * (retour 03/09). `flexShrink` le garde entier. */}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '4px 11px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: online ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-bad-rgb),.16)', color: online ? 'var(--o-ok)' : 'var(--o-bad)' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: online ? 'var(--o-ok)' : 'var(--o-bad)' }} />{online ? tr('en ligne') : tr('hors ligne')}
-        </span>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 800 }}>{titre}</div>
+        {sous && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{sous}</div>}
       </div>
-      <div style={{ marginTop: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: col }}>{pc(cpu) || '—'}</span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('cpu')}</span>
-        </div>
-        {ligne1 && <div style={{ marginTop: 9, fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{ligne1}</div>}
-        {ligne2 && <div style={{ marginTop: 3, fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{ligne2}</div>}
-        {courbe && courbe.length > 1 && (
-          <div style={{ marginTop: 11 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 3 }}>{courbeLbl}</div>
-            <SysArea pts={courbe} color={col} fill="rgba(var(--o-ok-rgb),.08)" h={30} />
-          </div>
-        )}
+      {droite}
+    </div>
+  );
+}
+
+/* Une mesure : l'icone a gauche, le chiffre a droite, le titre dessous, la
+ * jauge en pied. La ligne du dessous est TOUJOURS reservee, pour que les titres
+ * s'alignent d'une tuile a l'autre. Au telephone la rangee reste sur une ligne
+ * (index.css) : l'icone passe au-dessus, le titre court remplace le long. */
+function TuileMesure({ t }) {
+  const col = COULEUR_NIVEAU[t.niveau] || t.couleur;
+  return (
+    <div className="sys-mesure" style={SYS_CARTE}>
+      <div className="sys-mesure-tete" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <span className="sys-mesure-ico" style={SYS_ICO(t.rgb, t.couleur)}><Fi i={t.icone} size={17} color={t.couleur} /></span>
+        <span className="sys-mesure-val" style={{ fontSize: 24, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: t.niveau === 'ok' ? 'var(--o-text)' : col }}>{t.valeur}</span>
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div className="sys-mesure-titre" style={SYS_NOM}>{t.titre}</div>
+        <div className="sys-mesure-court" style={{ ...SYS_NOM, display: 'none' }}>{t.court}</div>
+        <div className="sys-mesure-sous" style={SYS_SOUS}>{t.sous || ESPACE}</div>
+        <Gauge pct={t.pct} color={col} h={5} style={{ marginTop: 12 }} />
       </div>
     </div>
   );
 }
 
+/* La charge de la derniere heure, une barre par minute. L'echelle suit le pic :
+ * un processeur a 18 % dessinerait sinon soixante traits au ras du sol. */
+function PanneauCharge({ series, releve }) {
+  const [mode, setMode] = useState(series[0].cle);
+  const s = series.find(x => x.cle === mode) || series[0];
+  const vals = seaux(s.points, releve);
+  const r = resumeSerie(vals);
+  const haut = r ? Math.max(r.pic * 1.15, 5) : 100;
+  const bascule = series.length > 1 && (
+    <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
+      {series.map(x => (
+        <button key={x.cle} type="button" onClick={() => setMode(x.cle)} aria-pressed={x.cle === s.cle}
+          style={{ padding: '5px 10px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: x.cle === s.cle ? 'rgba(' + x.rgb + ',.18)' : 'transparent', color: x.cle === s.cle ? x.couleur : 'var(--o-text2)' }}>{x.nom}</button>
+      ))}
+    </div>
+  );
+  return (
+    <div style={SYS_PANNEAU}>
+      <EntetePanneau titre={tr('Charge') + ' · ' + tr('60 dernières minutes')}
+        sous={r ? tr('moy. {n} %', { n: nombre(r.moyenne) }) + ' · ' + tr('pic {n} %', { n: nombre(r.pic) }) : null} droite={bascule} />
+      {r ? (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+            {/* Le chiffre du MOMENT, celui de la tuile — la derniere barre, elle, est une moyenne de minute. */}
+            <span style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: s.couleur }}>{nombre(s.actuel != null ? s.actuel : r.dernier)} %</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{s.nom}</span>
+          </div>
+          <div className="sys-barres" role="img" aria-label={s.nom + ' · ' + tr('60 dernières minutes')} style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 120 }}>
+            {vals.map((v, i) => (
+              <span key={i} style={{ flex: 1, minWidth: 0, borderRadius: 3, height: v == null ? 2 : Math.max(3, v / haut * 100) + '%', background: v == null ? 'var(--o-bd1)' : i === vals.length - 1 ? s.couleur : 'rgba(' + s.rgb + ',.5)' }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, fontWeight: 700, color: 'var(--o-text3)' }}>
+            <span>{tr('−60 min')}</span><span>{tr('−30 min')}</span><span>{tr('maintenant')}</span>
+          </div>
+        </div>
+      ) : <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('historique indisponible')}</div>}
+    </div>
+  );
+}
+
+function PanneauVersions({ lignes, sauvegarde, maintenant }) {
+  return (
+    <div style={SYS_PANNEAU}>
+      <EntetePanneau titre={tr('Versions')} />
+      {lignes.map(l => (
+        <div key={l.cle} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.nom}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{l.version}</div>
+          </div>
+          {l.etat === 'ajour' && <span style={SYS_BADGE('var(--o-ok-rgb)', 'var(--o-ok)')}>{tr('À jour')}</span>}
+          {l.etat === 'dispo' && <span style={SYS_BADGE('var(--o-accent-rgb)', 'var(--o-accent-soft)')}>{l.cible ? tr('{v} dispo', { v: l.cible }) : tr('Mise à jour')}</span>}
+        </div>
+      ))}
+      {sauvegarde && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, paddingTop: 14, borderTop: '1px solid var(--o-bd1)' }}>
+          <Fi i="cloud-check" size={16} color="var(--o-ok)" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{sauvegarde.complete ? tr('Dernière sauvegarde complète') : tr('Dernière sauvegarde')}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginTop: 1 }}>{[momentLisible(sauvegarde.t, maintenant), tailleLisible(sauvegarde.octets)].filter(Boolean).join(' · ')}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LigneJauge({ lib, pct, val, couleur }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
+      <span style={{ width: 27, flexShrink: 0, fontSize: 10, fontWeight: 800, letterSpacing: '.04em', color: 'var(--o-text3)' }}>{lib}</span>
+      <Gauge pct={pct} color={couleur} h={4} style={{ flex: 1, minWidth: 0 }} />
+      <span style={{ minWidth: 46, textAlign: 'right', flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{val}</span>
+    </div>
+  );
+}
+
+/* Un module complementaire, au gabarit : son icone, sa bascule, son nom, puis
+ * ce qu'il consomme. ARRETER demande un second geste — couper Zigbee2MQTT ou
+ * le serveur SSH d'un doigt distrait se paie cher ; demarrer n'en demande pas. */
+function CarteModule({ m, arme, occupe, onBascule }) {
+  /* L'icone du module se PRECHARGE : tant qu'elle n'est pas arrivee — ou si
+   * elle n'arrive jamais — la piece de puzzle tient la place. */
+  const [image, setImage] = useState(null);
+  const { icone, slug } = m;
+  useEffect(() => {
+    if (!icone) return undefined;
+    let vivant = true;
+    const src = '/api/hassio/addons/' + slug + '/icon';
+    const im = new Image();
+    im.onload = () => { if (vivant) setImage(src); };
+    im.src = src;
+    return () => { vivant = false; };
+  }, [icone, slug]);
+  const etat = m.erreur ? tr('En erreur') : !m.demarre ? tr('Arrêté') : m.version ? 'v' + m.version : ESPACE;
+  return (
+    <div className={'sys-module' + (m.erreur ? ' o-panne' : '')} style={SYS_CARTE}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        {image
+          ? <img src={image} alt="" draggable={false} style={{ width: 38, height: 38, borderRadius: 14, objectFit: 'cover', flexShrink: 0, opacity: m.demarre ? 1 : .55 }} />
+          : <span style={SYS_ICO(m.demarre ? 'var(--o-accent-rgb)' : '140,152,180', m.demarre ? 'var(--o-accent-soft)' : 'var(--o-text3)')}><Fi i="puzzle" size={17} /></span>}
+        {arme
+          ? <button type="button" onClick={onBascule} style={{ padding: '6px 9px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(var(--o-bad-rgb),.2)', color: 'var(--o-bad)' }}>{tr('Arrêter ?')}</button>
+          : <span style={{ opacity: occupe ? .45 : 1, pointerEvents: occupe ? 'none' : 'auto', display: 'inline-flex' }}><Bascule on={m.demarre} cb={onBascule} nom={(m.demarre ? tr('Arrêter') : tr('Démarrer')) + ' ' + m.nom} /></span>}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={SYS_NOM}>{m.nom}</div>
+        <div style={{ ...SYS_SOUS, color: m.erreur ? 'var(--o-bad)' : 'var(--o-text3)' }}>
+          {etat}{m.demarre && m.cible && <span style={{ color: 'var(--o-accent-soft)' }}>{' → ' + m.cible}</span>}
+        </div>
+        {m.cpu != null && <LigneJauge lib="CPU" pct={Math.min(100, m.cpu)} val={nombre(m.cpu, m.cpu < 10 ? 1 : 0) + ' %'} couleur="var(--o-accent-soft)" />}
+        {m.ram != null && <LigneJauge lib="RAM" pct={m.ramPct != null ? m.ramPct : 0} val={tailleLisible(m.ram)} couleur="var(--o-purple)" />}
+      </div>
+    </div>
+  );
+}
+
+function PanneauReseau({ lignes, type }) {
+  return (
+    <div style={SYS_PANNEAU}>
+      <EntetePanneau titre={tr('Réseau & stockage')} droite={type ? <span style={SYS_BADGE('var(--o-ok-rgb)', 'var(--o-ok)')}>{type}</span> : null} />
+      {lignes.map(l => (
+        <div key={l.cle} style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '8px 0' }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{l.nom}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: l.couleur || 'var(--o-text)' }}>{l.valeur}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const NIVEAUX_JOURNAL = {
+  info: ['var(--o-accent-rgb)', 'var(--o-accent-soft)'],
+  avert: ['var(--o-warn2-rgb)', 'var(--o-warn2)'],
+  erreur: ['var(--o-bad-rgb)', 'var(--o-bad)'],
+};
+
+function PanneauJournal({ journal, indisponible }) {
+  const heure = (t) => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  const mots = { info: tr('INFO'), avert: tr('AVERT.'), erreur: tr('ERREUR') };
+  return (
+    <div style={SYS_PANNEAU}>
+      <EntetePanneau titre={tr('Journal')} droite={journal.total > 0 ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{(journal.total > 1 ? tr('{n} événements', { n: journal.total }) : tr('{n} événement', { n: journal.total })) + ' · ' + tr('{n} h', { n: 24 })}</span> : null} />
+      {journal.lignes.length
+        ? journal.lignes.map((l, i) => {
+            const [rgb, col] = NIVEAUX_JOURNAL[l.niveau] || NIVEAUX_JOURNAL.info;
+            return (
+              <div key={l.t + ':' + i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 0' }}>
+                <span style={{ width: 38, flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{heure(l.t)}</span>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: col, flexShrink: 0, marginTop: 5 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.titre}</div>
+                  {/* Deux lignes au plus : au telephone, une seule coupait le message avant son sens. */}
+                  {l.detail && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{l.detail}</div>}
+                </div>
+                <span style={SYS_BADGE(rgb, col)}>{mots[l.niveau] || mots.info}</span>
+              </div>
+            );
+          })
+        : <div style={{ padding: '6px 0', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{indisponible ? tr('Journal indisponible sur cet accès.') : tr('Aucun événement système sur 24 h.')}</div>}
+    </div>
+  );
+}
+
+/* L'alimentation, en deux temps : le premier geste arme, le second confirme.
+ * Elle quitte la page pour une feuille — la maquette n'a pas de barre, et trois
+ * boutons qui eteignent la maison n'ont pas a rester sous le pouce. */
+function FeuilleAlimentation({ onAction, onClose }) {
+  const [arme, setArme] = useState(null);
+  const minuterie = useRef(null);
+  useEffect(() => () => { if (minuterie.current) clearTimeout(minuterie.current); }, []);
+  const actions = [
+    { id: 'ha', label: tr('Redémarrer HA'), desc: tr('Relance le cœur sans toucher à la machine · ~40 s'), rgb: 'var(--o-warn-rgb)', col: 'var(--o-warn)', domaine: 'homeassistant', service: 'restart' },
+    { id: 'reboot', label: tr('Redémarrer'), desc: tr('Redémarrage complet de la machine · 2 à 3 min hors ligne'), rgb: 'var(--o-warn-rgb)', col: 'var(--o-warn)', domaine: 'hassio', service: 'host_reboot' },
+    { id: 'shutdown', label: tr('Éteindre'), desc: tr('Arrêt complet · rallumage physique requis'), rgb: 'var(--o-bad-rgb)', col: 'var(--o-bad)', domaine: 'hassio', service: 'host_shutdown' },
+  ];
+  const taper = (ac, close) => {
+    if (minuterie.current) clearTimeout(minuterie.current);
+    if (arme === ac.id) { setArme(null); onAction(ac.domaine, ac.service); close(); return; }
+    setArme(ac.id);
+    minuterie.current = setTimeout(() => setArme(null), 4000);
+  };
+  return (
+    <BottomSheet onClose={onClose}>
+      {(close) => (
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 800 }}>{tr('Alimentation')}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3, marginBottom: 14 }}>{tr('Deux gestes : le premier arme, le second confirme.')}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {actions.map(ac => (
+              <button key={ac.id} type="button" onClick={() => taper(ac, close)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, border: 'none', cursor: 'pointer', textAlign: 'left', color: 'inherit', font: 'inherit', background: arme === ac.id ? 'rgba(' + ac.rgb + ',.22)' : 'var(--o-s1)' }}>
+                <span style={SYS_ICO(ac.rgb, ac.col)}><Fi i={ac.id === 'shutdown' ? 'power' : 'refresh'} size={16} /></span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: arme === ac.id ? ac.col : 'var(--o-text)' }}>{arme === ac.id ? tr('Confirmer ?') : ac.label}</span>
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{ac.desc}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </BottomSheet>
+  );
+}
+
+const BOUTON_TETE = { width: 36, height: 36, borderRadius: 10, border: 'none', cursor: 'pointer', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s2)', color: 'var(--o-text1)' };
+
 function SystemeContent({ hass }) {
   const S = (hass && hass.states) || {};
-  const num = id => { const s = S[id]; if (!s) return null; const v = parseFloat(s.state); return isNaN(v) ? null : v; };
-  const unitOf = id => { const s = S[id]; return (s && s.attributes && s.attributes.unit_of_measurement) || ''; };
-  const onl = id => { const s = S[id]; return s ? ['on', 'home', 'online', 'connected'].indexOf(String(s.state).toLowerCase()) >= 0 : false; };
-  const has = id => !!S[id];
-  const stateRaw = id => S[id] ? S[id].state : null;
-  const [armed, setArmed] = useState(null);
-  const armRef = useRef(null);
-  const power = (id, domain, service) => {
-    if (armed === id) { if (hass && hass.callService) hass.callService(domain, service, {}); setArmed(null); if (armRef.current) clearTimeout(armRef.current); }
-    else { setArmed(id); if (armRef.current) clearTimeout(armRef.current); armRef.current = setTimeout(() => setArmed(null), 4000); }
-  };
-  useEffect(() => () => { if (armRef.current) clearTimeout(armRef.current); }, []);
-  // Hote principal (Glances ou System Monitor)
-  const SYS = sysSensors();
-  const SYSN = sysNames();
-  const hCpu = num(SYS.host.cpu) != null ? num(SYS.host.cpu) : num(SYS.host.cpuAlt);
-  const hTemp = num(SYS.host.temp);
-  const hUsed = num(SYS.host.memUsed), hFree = num(SYS.host.memFree);
-  // % mémoire : capteur Glances, sinon System Monitor. Le rapport utilisée/(utilisée+libre)
-  // n'est utilisé qu'en tout dernier recours car il ignore le cache et surestime fortement.
-  const hMemPct = num(SYS.host.memPct) != null ? Math.round(num(SYS.host.memPct))
-    : num(SYS.host.memPctAlt) != null ? Math.round(num(SYS.host.memPctAlt))
-      : ((hUsed != null && hFree != null && (hUsed + hFree) > 0) ? Math.round(hUsed / (hUsed + hFree) * 100) : null);
-  // L'unite vient du capteur ; sans capteur il n'y a pas de valeur a habiller,
-  // et un repli « Go » francais s'afficherait a cote de chiffres anglais.
-  const hMemUnit = unitOf(SYS.host.memUsed) || '';
-  const hDisk = num(SYS.host.disk) != null ? num(SYS.host.disk) : num(SYS.host.diskAlt);
-  const hUp = fmtUptime(stateRaw(SYS.host.uptime));
-  const hOnline = onl(SYS.host.online) || has(SYS.host.cpu);
-  /* Une seule machine : celle qui porte Home Assistant (retour 02/09). Le NAS
-   * et la passerelle ont leur propre tableau de bord ailleurs ; les suivre ici
-   * ne faisait que rallonger la page. */
-  const machinesOnline = hOnline ? 1 : 0;
-  // ── v6 (design Claude Design 21/08) : période, refresh, machine détaillée, history réel, journal ──
-  const [period, setPeriod] = useState(1); // heures : 1 | 24 | 168
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [lastFetch, setLastFetch] = useState(() => new Date());
-  const doRefresh = () => { setRefreshKey(k => k + 1); setLastFetch(new Date()); };
-  const HIST_IDS = [SYS.host.cpu, SYS.host.memUsed];
-  const hist = useSysHist(hass, HIST_IDS, period, refreshKey);
-  const perLbl = period === 1 ? tr('{n} h', { n: 1 }) : period === 24 ? tr('{n} h', { n: 24 }) : tr('{n} j', { n: 7 });
-  // Alertes calculées sur les seuils réels
-  const alerts = [];
-  if (hMemPct != null && hMemPct >= 85) alerts.push({ key: 'hmem', m: sysNames().host, target: 'host', sev: hMemPct >= 92 ? 'bad' : 'warn', txt: tr('Mémoire à {n} %', { n: hMemPct }) + (hUsed != null && hFree != null ? ` (${Math.round(hUsed)} / ${Math.round(hUsed + hFree)} ${hMemUnit})` : '') + ' ' + tr('— le cœur risque un redémarrage forcé.') });
-  if (hDisk != null && hDisk >= 85) alerts.push({ key: 'hdisk', m: sysNames().host, target: 'host', sev: hDisk >= 92 ? 'bad' : 'warn', txt: tr('Partition /data à {n} % — prévoir une purge de la base ou des sauvegardes.', { n: Math.round(hDisk) }) });
-  if (!hOnline) alerts.push({ key: 'offhost', m: sysNames().host, target: 'host', sev: 'bad', txt: tr('Machine hors ligne — dernier état inconnu.') });
-  // Journal : logbook HA sur les entités système suivies (24 h), meilleur effort
-  const [logbook, setLogbook] = useState(null);
-  const connecte = hass ? 1 : 0;
-  useEffect(() => {
-    let alive = true;
-    if (!hass || !hass.callApi) { setLogbook(null); return undefined; }
-    const ids = [...HIST_IDS, SYS.host.online, ...Object.keys((hass.states || {})).filter(id => id.indexOf('update.') === 0)].filter(Boolean);
-    const start = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-    hass.callApi('GET', 'logbook/' + start + '?entity=' + encodeURIComponent(ids.slice(0, 30).join(',')))
-      .then(res => { if (alive) setLogbook(Array.isArray(res) ? res.slice(-8).reverse() : null); })
-      .catch(() => { if (alive) setLogbook(null); });
-    return () => { alive = false; };
-  }, [connecte, refreshKey]);
+  const num = (id) => { const s = id ? S[id] : null; if (!s) return null; const v = parseFloat(s.state); return isNaN(v) ? null : v; };
+  const octetsDe = (id) => { const s = id ? S[id] : null; return s ? enOctets(num(id), s.attributes && s.attributes.unit_of_measurement) : null; };
+  const premier = (...ids) => ids.find(id => num(id) != null) || null;
+  const H = sysSensors().host || {};
 
-  // ── Patron Atrium (22/08) : bandeau Alimentation, machine HAOS, journaux ──
-  const relFetch = (() => { const sec = Math.round((Date.now() - lastFetch.getTime()) / 1000); if (sec < 60) return tr('il y a {n} s', { n: sec }); const mn = Math.round(sec / 60); return mn < 60 ? tr('il y a {n} min', { n: mn }) : tr('il y a {n} h', { n: Math.round(mn / 60) }); })();
-  const lvlCol = (v, warn = 70, bad = 86) => v == null ? 'var(--o-text3)' : v >= bad ? 'var(--o-bad)' : v >= warn ? 'var(--o-warn2)' : 'var(--o-ok)';
-  const powerActions = [
-    { id: 'ha', label: tr('Redémarrer HA'), desc: tr('Relance le cœur sans toucher à la machine · ~40 s'), col: '255,179,71', run: () => power('ha', 'homeassistant', 'restart') },
-    { id: 'reboot', label: tr('Redémarrer'), desc: tr('Redémarrage complet de la machine · 2 à 3 min hors ligne'), col: '255,179,71', run: () => power('reboot', 'hassio', 'host_reboot') },
-    { id: 'shutdown', label: tr('Éteindre'), desc: tr('Arrêt complet · rallumage physique requis'), col: '248,113,113', run: () => power('shutdown', 'hassio', 'host_shutdown') },
-  ];
+  // ── Le tour de rafraichissement : a la main, et chaque minute tant que la page se regarde.
+  const [tour, setTour] = useState(0);
+  const [releve, setReleve] = useState(() => Date.now());
+  const rafraichir = () => { setTour(t => t + 1); setReleve(Date.now()); };
+  useEffect(() => {
+    const t = setInterval(() => { if (document.visibilityState === 'visible') { setTour(x => x + 1); setReleve(Date.now()); } }, 60000);
+    return () => clearInterval(t);
+  }, []);
+  // « Rafraîchi il y a … » avance seul, sans attendre un changement d'état.
+  const [, setBattement] = useState(0);
+  useEffect(() => { const t = setInterval(() => setBattement(x => x + 1), 5000); return () => clearInterval(t); }, []);
+  const maintenant = Date.now();
+
+  // ── Les lectures
+  const sup = useSuperviseur(hass, tour);
+  const erreursHA = useLectureWS(hass, 'system_log/list', tour);
+  const cloud = useLectureWS(hass, 'cloud/status', tour);
+  const infoBase = useInfoBase(hass);
+  const cpuId = premier(H.cpu, H.cpuAlt);
+  const memId = premier(H.memPct, H.memPctAlt);
+  const hist = useSysHist(hass, [cpuId, memId], 1, tour);
+  const idsJournal = [H.online, ...Object.keys(S).filter(id => id.indexOf('update.') === 0)].filter(Boolean).slice(0, 30).join(',');
+  const logbook = useJournalEntites(hass, idsJournal, tour);
+
+  // ── Les mesures
+  const cpu = num(cpuId);
+  const memUtilise = octetsDe(H.memUsed), memLibre = octetsDe(H.memFree);
+  const memTotal = memUtilise != null && memLibre != null ? memUtilise + memLibre : null;
+  const memPct = num(memId) != null ? num(memId) : (memTotal > 0 ? memUtilise / memTotal * 100 : null);
+  const gio = (v) => (v != null && !isNaN(v) ? Number(v) * 1024 ** 3 : null);
+  const disqueTotal = sup.host ? gio(sup.host.disk_total) : null;
+  const disqueUtilise = sup.host ? gio(sup.host.disk_used) : null;
+  const disquePct = disqueTotal > 0 && disqueUtilise != null ? disqueUtilise / disqueTotal * 100 : num(premier(H.disk, H.diskAlt));
+  const swapUtilise = octetsDe(H.swapUsed), swapLibre = octetsDe(H.swapFree);
+  const swapTotal = swapUtilise != null && swapLibre != null ? swapUtilise + swapLibre : null;
+  const temp = num(H.temp);
+  const serieCpu = resumeSerie(seaux(hist[cpuId], releve));
+  const tuiles = tuilesMesures({ cpu, cpuMoyenne: serieCpu ? serieCpu.moyenne : null, memPct, memUtilise, memTotal, temp,
+    disquePct, disqueUtilise, disqueTotal, swapPct: num(H.swapPct), swapUtilise, swapTotal });
+
+  // ── La machine
+  const etatDe = (id) => (id && S[id] ? String(S[id].state).toLowerCase() : null);
+  const enLigne = ['on', 'home', 'online', 'connected'].indexOf(etatDe(H.online)) >= 0 || cpuId != null || !!sup.host;
+  const depuis = depuisDemarrage(sup.host && sup.host.boot_timestamp, maintenant);
+  const duree = depuis != null ? dureeLisible(depuis) : dureeCapteur(H.uptime && S[H.uptime] ? S[H.uptime].state : null, maintenant);
+  const sousTitre = [
+    nomCarte(sup.os && sup.os.board) || sysNames().host,
+    sup.host && sup.host.operating_system,
+    enLigne ? (duree ? tr('en ligne depuis {d}', { d: duree }) : tr('en ligne')) : tr('hors ligne'),
+  ].filter(Boolean).join(' · ');
+
+  // ── Les panneaux
+  const versions = lignesVersions({ S, core: sup.core, supervisor: sup.supervisor, os: sup.os,
+    versionCore: (hass && hass.config && hass.config.version) || null, versionLoggia: (LOGGIA_INDEX && LOGGIA_INDEX.componentVersion) || null });
+  const sauvegarde = derniereSauvegarde(sup.backups);
+  const modules = modulesComplementaires(sup.addons, sup.stats);
+  const reseau = interfaceReseau(sup.network);
+  const base = baseDeDonnees(infoBase);
+  const nabu = etatCloud(cloud);
+  const lignesReseau = [
+    reseau && { cle: 'ip', nom: tr('Adresse IP locale'), valeur: reseau.ip },
+    debitLisible(S[H.netIn]) && { cle: 'rx', nom: tr('Débit entrant'), valeur: debitLisible(S[H.netIn]) },
+    debitLisible(S[H.netOut]) && { cle: 'tx', nom: tr('Débit sortant'), valeur: debitLisible(S[H.netOut]) },
+    base && { cle: 'base', nom: tr('Base de données'), valeur: [tailleLisible(base.octets), base.moteur].filter(Boolean).join(' · ') },
+    nabu && { cle: 'nabu', nom: 'Nabu Casa', valeur: nabu === 'connecte' ? tr('Connecté') : nabu === 'connexion' ? tr('Connexion…') : tr('Déconnecté'), couleur: nabu === 'connecte' ? 'var(--o-ok)' : 'var(--o-warn2)' },
+  ].filter(Boolean);
+  const journal = journalSysteme({ erreurs: Array.isArray(erreursHA) ? erreursHA : null, logbook, maintenant });
+  const alertes = alertesSysteme({ memPct, memTexte: paireTailles(memUtilise, memTotal), disquePct, temp, enLigne, modules: modules.liste });
+  const series = [
+    cpuId && { cle: 'cpu', nom: tr('Processeur'), points: hist[cpuId], actuel: cpu, rgb: 'var(--o-accent-rgb)', couleur: 'var(--o-accent-soft)' },
+    memId && { cle: 'memoire', nom: tr('Mémoire'), points: hist[memId], actuel: num(memId), rgb: 'var(--o-purple-rgb)', couleur: 'var(--o-purple)' },
+  ].filter(Boolean);
+
+  // ── Les gestes
+  const [feuille, setFeuille] = useState(false);
+  const [arme, setArme] = useState(null);
+  const [occupe, setOccupe] = useState(null);
+  const minuterie = useRef(null);
+  useEffect(() => () => { if (minuterie.current) clearTimeout(minuterie.current); }, []);
+  const basculerModule = (m) => {
+    if (minuterie.current) clearTimeout(minuterie.current);
+    if (m.demarre && arme !== m.slug) { setArme(m.slug); minuterie.current = setTimeout(() => setArme(null), 4000); return; }
+    setArme(null);
+    if (!hass || typeof hass.callWS !== 'function') return;
+    setOccupe(m.slug);
+    hass.callWS({ type: 'supervisor/api', endpoint: '/addons/' + m.slug + '/' + (m.demarre ? 'stop' : 'start'), method: 'post', timeout: null })
+      .catch(() => { /* le Superviseur a refuse : le releve suivant dira l'etat reel */ })
+      .then(() => { setOccupe(null); rafraichir(); });
+  };
+
+  const sec = Math.max(0, Math.round((maintenant - releve) / 1000));
+  const ilYA = sec < 60 ? tr('il y a {n} s', { n: sec }) : tr('il y a {n} min', { n: Math.round(sec / 60) });
+  const nonAdmin = !!(hass && hass.user && hass.user.is_admin === false);
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+      <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Système')}</h1>
-          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{machinesOnline > 1 ? tr('{n} machines en ligne', { n: machinesOnline }) : tr('{n} machine en ligne', { n: machinesOnline })} · {tr('relevé')} {relFetch}</div>
+          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{sousTitre}</div>
         </div>
         <span style={{ flex: 1 }} />
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: alerts.length ? 'rgba(var(--o-warn2-rgb),.14)' : 'rgba(var(--o-ok-rgb),.14)', color: alerts.length ? 'var(--o-warn2)' : 'var(--o-ok)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: alerts.length ? 'var(--o-warn2)' : 'var(--o-ok)' }} />{alerts.length ? tr('{n} À SURVEILLER', { n: alerts.length }) : tr('TOUT VA BIEN')}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: alertes.length ? 'rgba(var(--o-warn2-rgb),.14)' : 'rgba(var(--o-ok-rgb),.14)', color: alertes.length ? 'var(--o-warn2)' : 'var(--o-ok)' }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: alertes.length ? 'var(--o-warn2)' : 'var(--o-ok)' }} />{alertes.length ? tr('{n} à surveiller', { n: alertes.length }) : tr('Tout fonctionne')}
+        </span>
+        <span className="sys-releve" style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{tr('Rafraîchi')} {ilYA}</span>
+        <button type="button" onClick={rafraichir} aria-label={tr('Rafraîchir')} title={tr('Rafraîchir')} style={BOUTON_TETE}><Fi i="refresh" size={14} /></button>
+        <button type="button" onClick={() => setFeuille(true)} aria-label={tr('Alimentation')} title={tr('Alimentation')} style={BOUTON_TETE}><Fi i="power" size={14} /></button>
       </div>
 
-      {/* reglages rapides : alimentation (2 temps), periode d'historique, rafraichir */}
-      <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Alimentation')}</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {powerActions.map(ac => (
-              <button key={ac.id} onClick={ac.run} title={ac.desc} style={{ padding: '5px 10px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', border: armed === ac.id ? '1px solid rgba(' + ac.col + ',.65)' : (ac.id === 'shutdown' ? '1px solid rgba(' + ac.col + ',.3)' : 'none'), background: armed === ac.id ? 'rgba(' + ac.col + ',.24)' : (ac.id === 'shutdown' ? 'rgba(' + ac.col + ',.08)' : 'var(--o-s1)'), color: (ac.id === 'shutdown' || armed === ac.id) ? 'rgb(' + ac.col + ')' : 'var(--o-text1)' }}>{armed === ac.id ? tr('Confirmer ?') : ac.label}</button>
-            ))}
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Historique')}</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[[1, tr('{n} h', { n: 1 })], [24, tr('{n} h', { n: 24 })], [168, tr('{n} j', { n: 7 })]].map(([h, lb]) => (
-              <button key={h} onClick={() => { setPeriod(h); setLastFetch(new Date()); }} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: period === h ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: period === h ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</button>
-            ))}
-          </div>
-        </div>
-        <button onClick={doRefresh} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}><Fi i="refresh" size={13} />{tr('Rafraîchir')}</button>
-        <span style={{ flex: 1 }} />
-      </div>
-
-      {/* La machine qui porte Home Assistant, dans le gabarit d'Atrium : le
-        * chiffre qui compte en grand, le reste en une ligne, l'état en pied.
-        * Le détail repliable a disparu avec les panneaux de réglages. */}
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Machine')}</div>
-      <SysCarteHote nom={SYSN.host} logo={BRAND_ICONS.haos} online={hOnline}
-        cpu={hCpu} mem={hMemPct} disque={hDisk} temp={hTemp} uptime={hUp}
-        courbe={hist[SYS.host.memUsed]} courbeLbl={tr('Mémoire') + ' · ' + perLbl} col={lvlCol(hMemPct)} />
-
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Journal système')}</div>
-      <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '18px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-        {logbook && logbook.length
-          ? <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
-              {logbook.map((e, li) => {
-                const dt = new Date(e.when || e.last_changed || 0);
-                const hm = isNaN(dt.getTime()) ? '' : String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
-                return (
-                  <div key={li} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 0' }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, marginTop: 1 }}>{hm}</span>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-ok)', flexShrink: 0, marginTop: 5 }} />
-                    <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, lineHeight: 1.35 }}>{e.name || e.entity_id}{e.message ? ' ' + e.message : e.state ? ' → ' + e.state : ''}</div>
-                  </div>
-                );
-              })}
+      {/* Ce qui demande un regard : rare, et dit en clair. */}
+      {alertes.length > 0 && (
+        <div style={{ ...SYS_PANNEAU, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {alertes.map(a => (
+            <div key={a.cle} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, fontWeight: 600 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 6, background: COULEUR_NIVEAU[a.niveau] || 'var(--o-warn2)' }} />
+              <span style={{ minWidth: 0 }}>{a.texte}</span>
             </div>
-          : <div style={{ padding: '6px 0', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{logbook === null ? tr('Journal indisponible sur cet accès.') : tr('Aucun événement système sur 24 h.')}</div>}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {tuiles.length > 0
+        ? <div className="grid-sys-mesures" style={{ '--sys-n': tuiles.length }}>{tuiles.map(t => <TuileMesure key={t.cle} t={t} />)}</div>
+        : <div style={{ ...SYS_PANNEAU, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Aucun capteur de charge trouvé : active l’intégration System Monitor (ou Glances) pour suivre le processeur, la mémoire et la température.')}</div>}
+
+      {(series.length > 0 || versions.length > 0) && (
+        <div className="grid-sys-duo">
+          {series.length > 0 && <PanneauCharge series={series} releve={releve} />}
+          {versions.length > 0 && <PanneauVersions lignes={versions} sauvegarde={sauvegarde} maintenant={maintenant} />}
+        </div>
+      )}
+
+      {(modules.total > 0 || lignesReseau.length > 0) && (
+        <div className="grid-sys-duo">
+          {modules.total > 0 && (
+            <div style={SYS_PANNEAU}>
+              <EntetePanneau titre={tr('Modules complémentaires')} droite={<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('{n} en cours sur {t}', { n: modules.enCours, t: modules.total })}</span>} />
+              <div className="grid-sys-modules">
+                {modules.liste.map(m => <CarteModule key={m.slug} m={m} arme={arme === m.slug} occupe={occupe === m.slug} onBascule={() => basculerModule(m)} />)}
+              </div>
+            </div>
+          )}
+          {lignesReseau.length > 0 && <PanneauReseau lignes={lignesReseau} type={reseau && reseau.type} />}
+        </div>
+      )}
+
+      <PanneauJournal journal={journal} indisponible={erreursHA === null && logbook === null} />
+      {nonAdmin && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Les versions, les modules et le réseau se lisent auprès du Superviseur : il ne répond qu’à un compte administrateur.')}</div>}
+
       {/* Le journal de TOUTE la maison — le pendant global du journal système
           ci-dessus, poussé en direct par le logbook. */}
       <RoomActivityCard hass={hass} ids={null} max={14} titre={tr('Journal de la maison')} sous={tr('Tout ce qui a bougé, pièces confondues — 24 h, en direct')} />
+
+      {feuille && <FeuilleAlimentation onClose={() => setFeuille(false)} onAction={(domaine, service) => { if (hass && hass.callService) hass.callService(domaine, service, {}); }} />}
     </div>
   );
 }

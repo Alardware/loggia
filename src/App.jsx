@@ -12943,7 +12943,8 @@ export default function App() {
     aspirateur: vacKeys, croquettes: croqKeys(), medias: medKeys(),
     objets: [...vacKeys, 'lawn_mower.', ...mowerKeys(), ...croqKeys(), ...medKeys(), ...plantKeys()],
     securite: [...secBaseKeys(), 'camera.', 'siren.', 'switch.', ...secKeys, ...(cfg.cams || []).map(c => c.haid)],
-    systeme: [...sysKeys(), ...cfgKeys('system')],
+    // `update.` : le panneau Versions lit les entités de mise à jour en direct (ADR 0037).
+    systeme: [...sysKeys(), ...cfgKeys('system'), 'update.'],
     parametres: ['automation.', 'update.'], // clés-préfixes : automations + mises à jour (onglets admin)
   };
   const activeCv = view.indexOf('cv:') === 0 ? customViews.find(c => 'cv:' + c.id === view) : null;

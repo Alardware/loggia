@@ -67,6 +67,24 @@ function etatsInitiaux() {
     // Ses deux detecteurs : ce que la tuile raconte en dernier evenement (ADR 0031).
     'binary_sensor.camera_entree_mouvement': s('off', { friendly_name: 'Caméra entrée Mouvement', device_class: 'motion' }),
     'binary_sensor.camera_entree_personne': s('off', { friendly_name: 'Caméra entrée Personne' }),
+    /* La machine de la vue Systeme (ADR 0037) : un System Monitor tel que la
+     * decouverte le reconnait — la charge processeur, et ses freres sur le meme
+     * appareil — puis les trois mises a jour que publie le Superviseur. */
+    'sensor.system_monitor_processor_use': s(18, { friendly_name: 'System Monitor Processor use', unit_of_measurement: '%' }),
+    'sensor.system_monitor_memory_use_percent': s(31, { friendly_name: 'System Monitor Memory usage', unit_of_measurement: '%' }),
+    'sensor.system_monitor_memory_use': s(2540, { friendly_name: 'System Monitor Memory use', unit_of_measurement: 'MiB', device_class: 'data_size' }),
+    'sensor.system_monitor_memory_free': s(5652, { friendly_name: 'System Monitor Memory free', unit_of_measurement: 'MiB', device_class: 'data_size' }),
+    'sensor.system_monitor_disk_use_percent': s(46, { friendly_name: 'System Monitor Disk usage', unit_of_measurement: '%' }),
+    'sensor.system_monitor_processor_temperature': s(52, { friendly_name: 'System Monitor Processor temperature', unit_of_measurement: '°C', device_class: 'temperature' }),
+    'sensor.system_monitor_last_boot': s(new Date(Date.now() - (12 * 24 + 6) * 3600000).toISOString(), { friendly_name: 'System Monitor Last boot', device_class: 'timestamp' }),
+    'sensor.system_monitor_swap_use_percent': s(4, { friendly_name: 'System Monitor Swap usage', unit_of_measurement: '%' }),
+    'sensor.system_monitor_swap_use': s(82, { friendly_name: 'System Monitor Swap use', unit_of_measurement: 'MiB', device_class: 'data_size' }),
+    'sensor.system_monitor_swap_free': s(1966, { friendly_name: 'System Monitor Swap free', unit_of_measurement: 'MiB', device_class: 'data_size' }),
+    'sensor.system_monitor_network_throughput_in_eth0': s(4.2, { friendly_name: 'System Monitor Network throughput in eth0', unit_of_measurement: 'Mbit/s', device_class: 'data_rate' }),
+    'sensor.system_monitor_network_throughput_out_eth0': s(1.1, { friendly_name: 'System Monitor Network throughput out eth0', unit_of_measurement: 'Mbit/s', device_class: 'data_rate' }),
+    'update.home_assistant_core_update': s('on', { friendly_name: 'Home Assistant Core Update', title: 'Home Assistant Core', installed_version: '2026.3.4', latest_version: '2026.4.0' }),
+    'update.home_assistant_supervisor_update': s('off', { friendly_name: 'Home Assistant Supervisor Update', title: 'Home Assistant Supervisor', installed_version: '2026.03.2', latest_version: '2026.03.2' }),
+    'update.home_assistant_operating_system_update': s('off', { friendly_name: 'Home Assistant Operating System Update', title: 'Home Assistant Operating System', installed_version: '16.2', latest_version: '16.2' }),
     // Le distributeur de croquettes et une plante : ce que la vue Objets et
     // leurs fiches ont a montrer.
     'input_number.croquettes_reservoir': s(760, { friendly_name: 'Réservoir de croquettes', min: 0, max: 2000, step: 10, unit_of_measurement: 'g' }),
@@ -477,6 +495,71 @@ function fenetresPatch(patch) {
   return FEN_CFG;
 }
 
+/* Le Superviseur de la demonstration (vue Systeme, ADR 0037) : une machine, six
+ * modules complementaires dont un arrete, une sauvegarde de la nuit. Les
+ * modules se demarrent et s'arretent pour de vrai — la bascule doit repondre. */
+const MODULES_DEMO = [
+  { slug: 'demo_zigbee2mqtt', name: 'Zigbee2MQTT', version: '2.1.3', version_latest: '2.1.3', update_available: false, state: 'started', icon: false },
+  { slug: 'demo_mosquitto', name: 'Mosquitto broker', version: '6.5.1', version_latest: '6.5.1', update_available: false, state: 'started', icon: false },
+  { slug: 'demo_esphome', name: 'ESPHome', version: '2026.3.1', version_latest: '2026.3.2', update_available: true, state: 'started', icon: false },
+  { slug: 'demo_mariadb', name: 'MariaDB', version: '2.7.2', version_latest: '2.7.2', update_available: false, state: 'started', icon: false },
+  { slug: 'demo_samba', name: 'Samba share', version: '12.5.0', version_latest: '12.5.0', update_available: false, state: 'started', icon: false },
+  { slug: 'demo_vscode', name: 'Studio Code Server', version: '5.19.0', version_latest: '5.19.0', update_available: false, state: 'stopped', icon: false },
+];
+const MESURES_MODULES_DEMO = {
+  demo_zigbee2mqtt: [5.2, 412], demo_mosquitto: [0.4, 38], demo_esphome: [1.8, 264], demo_mariadb: [3.1, 356], demo_samba: [0.2, 24], demo_vscode: [2.4, 310],
+};
+
+function superviseurDemo(msg) {
+  const chemin = String(msg.endpoint || '');
+  const geste = chemin.match(/^\/addons\/([^/]+)\/(start|stop)$/);
+  if (geste && msg.method === 'post') {
+    const m = MODULES_DEMO.find(x => x.slug === geste[1]);
+    if (m) m.state = geste[2] === 'start' ? 'started' : 'stopped';
+    return Promise.resolve({});
+  }
+  const mesures = chemin.match(/^\/addons\/([^/]+)\/stats$/);
+  if (mesures) {
+    const [cpu, mio] = MESURES_MODULES_DEMO[mesures[1]] || [0, 0];
+    const total = 8192 * 1048576;
+    return Promise.resolve({ cpu_percent: cpu, memory_usage: mio * 1048576, memory_limit: total, memory_percent: Math.round(mio * 1048576 / total * 1000) / 10 });
+  }
+  const nuit = new Date(); nuit.setHours(3, 0, 0, 0);
+  if (nuit > new Date()) nuit.setDate(nuit.getDate() - 1);
+  const reponses = {
+    '/host/info': { hostname: 'homeassistant', operating_system: 'Home Assistant OS 16.2', chassis: 'embedded', disk_total: 128.0, disk_used: 58.4, disk_free: 69.6,
+      boot_timestamp: (Date.now() - (12 * 24 + 6) * 3600000) * 1000 },
+    '/os/info': { version: '16.2', version_latest: '16.2', update_available: false, board: 'rpi5-64' },
+    '/core/info': { version: '2026.3.4', version_latest: '2026.4.0', update_available: true },
+    '/supervisor/info': { version: '2026.03.2', version_latest: '2026.03.2', update_available: false },
+    '/addons': { addons: MODULES_DEMO.map(m => ({ ...m })) },
+    '/backups': { backups: [
+      { slug: 'demo1', name: 'Sauvegarde automatique', date: nuit.toISOString(), type: 'full', size: 1945.6 },
+      { slug: 'demo0', name: 'Avant mise à jour', date: new Date(nuit.getTime() - 5 * 86400000).toISOString(), type: 'partial', size: 412.3 },
+    ] },
+    '/network/info': { interfaces: [{ interface: 'eth0', type: 'ethernet', enabled: true, connected: true, primary: true, ipv4: { method: 'auto', address: ['192.168.1.20/24'], gateway: '192.168.1.1' } }] },
+  };
+  return reponses[chemin] ? Promise.resolve(reponses[chemin]) : Promise.reject(new Error('démonstration : point du Superviseur inconnu'));
+}
+
+/* Le journal d'erreurs de Home Assistant, et le logbook des mises a jour : de
+ * quoi montrer les trois niveaux du journal de la vue Systeme. */
+function erreursDemo() {
+  const ilYA = (min) => (Date.now() - min * 60000) / 1000;
+  return [
+    { name: 'homeassistant.components.mqtt.client', message: ['Connexion au courtier perdue, nouvelle tentative dans 10 s'], level: 'WARNING', timestamp: ilYA(95), first_occurred: ilYA(95), count: 1, source: ['components/mqtt/client.py', 712], exception: '' },
+    { name: 'homeassistant.components.rest.data', message: ['Délai dépassé en interrogeant la ressource distante'], level: 'ERROR', timestamp: ilYA(340), first_occurred: ilYA(700), count: 3, source: ['components/rest/data.py', 118], exception: '' },
+  ];
+}
+
+function logbookDemo() {
+  const ilYA = (min) => new Date(Date.now() - min * 60000).toISOString();
+  return [
+    { when: ilYA(610), name: 'ESPHome Update', entity_id: 'update.esphome_update', state: 'on' },
+    { when: ilYA(420), name: 'Home Assistant Core Update', entity_id: 'update.home_assistant_core_update', state: 'on' },
+  ];
+}
+
 /* Les registres, tels que le composant les enverrait : des zones, et les
  * entites qui y sont rangees. Le dashboard croise ensuite avec les etats. */
 function indexDemo(states) {
@@ -509,10 +592,19 @@ function indexDemo(states) {
         unit: at.unit_of_measurement || null, hidden: false });
     });
   });
+  // La machine : un appareil sans piece. C'est par lui que la vue Systeme
+  // retrouve, autour de la charge processeur, la memoire, le swap et les debits.
+  Object.keys(states).filter(id => id.indexOf('sensor.system_monitor_') === 0).forEach(id => {
+    const at = states[id].attributes || {};
+    entities.push({ id, name: at.friendly_name || id, device: 'sysmon', area: null,
+      platform: 'systemmonitor', category: 'diagnostic', device_class: at.device_class || null,
+      unit: at.unit_of_measurement || null, hidden: false });
+  });
   return {
     version: 1,
     areas: ZONES.map(([id, name]) => ({ id, name, floor: null, icon: null })),
-    devices: [{ id: 'cam_entree', name: 'Caméra entrée', area: 'entree', manufacturer: 'Démo', model: 'Caméra', firmware: null, via: null, entry_type: null, integration: 'demo' }],
+    devices: [{ id: 'cam_entree', name: 'Caméra entrée', area: 'entree', manufacturer: 'Démo', model: 'Caméra', firmware: null, via: null, entry_type: null, integration: 'demo' },
+      { id: 'sysmon', name: 'System Monitor', area: null, manufacturer: 'Démo', model: 'System Monitor', firmware: null, via: null, entry_type: 'service', integration: 'systemmonitor' }],
     entities,
     floors: [],
     services: {},
@@ -907,6 +999,12 @@ export function installerDemo() {
         }), 600));
       }
       if (msg && msg.type === 'loggia/discovery') return Promise.resolve({ index: indexDemo(states) });
+      /* La vue Systeme (ADR 0037) : sans ces reponses elle ne montrerait que
+       * ses tuiles, alors que les versions, les modules et le journal sont
+       * justement ce qu'il y a a voir. */
+      if (msg && msg.type === 'supervisor/api') return superviseurDemo(msg);
+      if (msg && msg.type === 'system_log/list') return Promise.resolve(erreursDemo());
+      if (msg && msg.type === 'cloud/status') return Promise.resolve({ logged_in: true, cloud: 'connected' });
       return Promise.reject(new Error('démonstration : pas de composant serveur'));
     },
     /* `connection.subscribeMessage` : le seul endroit ou la demo doit imiter
@@ -928,6 +1026,17 @@ export function installerDemo() {
           ].filter(e => !ids || ids.indexOf(e.entity_id) >= 0);
           let mort = false;
           setTimeout(() => { if (!mort && vus.length) rappel({ events: vus }); }, 120);
+          return Promise.resolve(() => { mort = true; });
+        }
+        /* Ce que l'enregistreur dit de sa base (vue Systeme) : le flux rend ce
+         * qu'il sait, puis se termine. */
+        if (msg && msg.type === 'system_health/info') {
+          let mort = false;
+          setTimeout(() => {
+            if (mort) return;
+            rappel({ type: 'initial', data: { recorder: { info: { estimated_db_size: '1433.60 MiB', database_engine: 'mysql', database_version: '10.11.6-MariaDB' } } } });
+            rappel({ type: 'finish' });
+          }, 150);
           return Promise.resolve(() => { mort = true; });
         }
         if (!msg || msg.type !== 'demo/chat') return Promise.reject(new Error('démonstration : pas de composant serveur'));
@@ -962,6 +1071,7 @@ export function installerDemo() {
         return Promise.resolve(calendrierDemo(cid));
       }
       if (methode === 'GET' && String(chemin).indexOf('history/period/') === 0) return Promise.resolve(historiqueDemo(String(chemin), states));
+      if (methode === 'GET' && String(chemin).indexOf('logbook/') === 0) return Promise.resolve(logbookDemo());
       return Promise.resolve({});
     },
     auth: { data: { access_token: null } },

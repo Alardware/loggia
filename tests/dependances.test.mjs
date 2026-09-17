@@ -72,7 +72,10 @@ const VERIFIE = {
     'vuSig', 'vuesAutorisees',
   ],
   'src/historique.jsx': ['hass', 'ids'],
-  'src/views/systeme.jsx': ['HIST_IDS, SYS.host.online, and hass'],
+  /* `src/views/systeme.jsx` figurait ici avec « HIST_IDS, SYS.host.online, and
+   * hass ». La vue a été refaite (17/09/2026, ADR 0037) : toutes ses lectures
+   * passent par une référence vivante, comme `useEtatServeur` — l'omission a
+   * disparu, elle n'a pas déménagé. */
   /* `src/ciel3d.jsx` figurait ici avec « exposure and limitMag ». Le fichier a
    * disparu : un ciel étoilé de 284 lignes qu'aucun import n'atteignait. */
   'src/ui.jsx': ['cur'],

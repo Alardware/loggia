@@ -5,7 +5,9 @@
  * Systeme ne se charge, pour savoir a quels capteurs s'abonner. Le laisser dans
  * la vue aurait force son chargement au demarrage, ce qui annulait la raison
  * meme de l'avoir sortie. */
-import { LOGGIA_RESOLVED, loggiaEnt } from './state.js';
+import { LOGGIA_INDEX, LOGGIA_RESOLVED, loggiaEnt, getHass } from './state.js';
+import { siblingsOf } from './discovery.js';
+import { capteursHote } from './resolve.js';
 
 export const sysKeys = () => Object.values(sysSensors()).flatMap(o => Object.values(o || {})).filter(Boolean);
 export const SYS_SLOTS = ['host', 'nebula', 'ucg'];
@@ -25,9 +27,34 @@ export const SYS_SLOTS = ['host', 'nebula', 'ucg'];
  * C'est exactement ce que le commentaire de `SYS_SLOTS` promet. */
 export const SYS_VIDE = () => ({ host: {}, nebula: {}, ucg: {} });
 
+/* Ce que la table ne nomme pas se ramasse sur l'appareil du capteur de charge :
+ * le swap, la mémoire en octets, les débits de l'interface branchée (vue
+ * Système, ADR 0037). La table PRIME — un capteur choisi à la main n'est jamais
+ * remplacé. Le ramassage balaie tout l'index : il se fait une fois par index et
+ * par capteur de référence, pas à chaque rendu (`sysKeys` est lu à chaque tour
+ * d'`App`). Tant que les états ne sont pas là, rien n'est retenu. */
+let _freres = { index: null, cle: '', extra: null };
+function freresDeLHote(host) {
+  const refs = [host.cpu, host.cpuAlt].filter(Boolean);
+  const cle = refs.join('|');
+  if (!LOGGIA_INDEX || !cle) return {};
+  if (_freres.index === LOGGIA_INDEX && _freres.cle === cle) return _freres.extra;
+  const h = getHass();
+  const S = h && h.states;
+  if (!S || !refs.some(ref => S[ref])) return {};
+  const extra = {};
+  refs.forEach(ref => {
+    const e = capteursHote(siblingsOf(LOGGIA_INDEX, ref), S);
+    Object.keys(e).forEach(k => { if (!extra[k]) extra[k] = e[k]; });
+  });
+  _freres = { index: LOGGIA_INDEX, cle, extra };
+  return extra;
+}
+const avecFreres = (table) => ({ ...table, host: { ...freresDeLHote(table.host || {}), ...(table.host || {}) } });
+
 export function sysSensors() {
   const cfg = loggiaEnt('system', null);
-  if (cfg && typeof cfg === 'object') return { ...SYS_VIDE(), ...cfg };
+  if (cfg && typeof cfg === 'object') return avecFreres({ ...SYS_VIDE(), ...cfg });
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.system;
   if (r && r.available && r.hosts.length) {
     const out = SYS_VIDE();
@@ -35,7 +62,7 @@ export function sysSensors() {
       const h = r.hosts[i];
       out[k] = h ? { cpu: h.cpu, memPct: h.memPct, mem: h.memPct, disk: h.disk, temp: h.temp, uptime: h.uptime, online: h.online, clients: h.clients } : {};
     });
-    return out;
+    return avecFreres(out);
   }
   return SYS_VIDE();
 }
