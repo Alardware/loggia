@@ -37,7 +37,7 @@ test('la rangee de tuiles est UN composant, partage par l’Accueil et la vue', 
   const vue = bloc('function SecuriteContent(', NL + '}');
   assert.ok(vue.includes('<TuilesSecurite tuiles={tuilesSecVue} onTuile={(t) => defiler(t.cle)} />'), 'la vue : vers la section');
   assert.ok(vue.includes("const el = document.getElementById(cle === 'cameras' ? 'sec-cameras' : cle === 'mouvement' ? 'sec-journal' : 'sec-ouvrants');"), 'cameras, journal (le mouvement s’y lit), ouvrants');
-  assert.ok(vue.includes('<div id="sec-ouvrants"') && vue.includes('<div id="sec-cameras"') && vue.includes('<div id="sec-journal">'), 'les ancres existent');
+  assert.ok(vue.includes("id={bloc.titre === 'sect:ouvrants' ? 'sec-ouvrants' : undefined}") && vue.includes('<div id="sec-cameras"') && vue.includes('<div id="sec-journal">'), 'les ancres existent');
 });
 
 test('l’Accueil mene a la vue par la tuile Alarme de la banniere, plus par une carte', () => {
@@ -55,7 +55,7 @@ test('la vue : l’etat en une seconde, A surveiller, un ouvrant par carte illus
   assert.ok(vue.includes("const camsInfoSec = (camsCfg || camList).map(c => ({ nom: c.name || c.label, online: S[c.haid] ? S[c.haid].state !== 'unavailable' : c.online !== false }));") && vue.includes("cfgVal('loggia_cameras', null)") && vue.includes('const comptesSecVue = comptesSecurite(S, camsInfoSec);') && vue.includes('const tuilesSecVue = tuilesSecurite(comptesSecVue);'), 'les comptes de l’Accueil, sur les cameras de la vue');
   assert.ok(vue.includes("{tr('Alarme')} {alarmWord} · {resumeSecurite(comptesSecVue)}") && vue.includes("color: comptesSecVue.ok ? 'var(--o-ok)' : 'var(--o-warn)'"), 'la sous-ligne : l’alarme et la securite, verte ou ambre');
   assert.ok(vue.includes('const pointsSec = pointsAttention({ S, cams: camsInfoSec });') && vue.includes("{pointsSec.length > 0 && <CarteAttention points={pointsSec} onNav={(v) => { if (v !== 'securite' && onNav) onNav(v); }} />}"), '« A surveiller » : seulement quand il y a un point, seulement la securite, jamais vers soi-meme');
-  assert.ok(vue.includes("{[...ouvrantsDe(S)].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).map((o, i) => <Anim key={o.id} i={i}><div style={{ height: 184 }}><RoomGenericCard id={o.id} hass={hass} onOpen={dc.ouvrir} /></div></Anim>)}"), 'un ouvrant par carte des pieces (la porte dessinee), les ouverts d’abord');
+  assert.ok(vue.includes('const ouvrantsIds = [...ouvrantsDe(S)].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).map(o => o.id);') && vue.includes("if (k.indexOf('binary_sensor.') === 0) return <RoomGenericCard id={k} hass={hass} onOpen={dc.ouvrir} label={ed.labelOf(k)} />;"), 'un ouvrant par carte des pieces (la porte dessinee), les ouverts d’abord');
   assert.ok(!vue.includes('<CvOuvrants hass={hass} />'), 'le resume de trois lignes a quitte la vue');
   assert.ok(vue.includes('<CvPresence hass={hass} />'), 'la presence reste (dans la rangee des trois cartes depuis l’ADR 0034)');
   assert.ok(vue.includes('const dc = useDomainCards(hass, { onNav });') && vue.includes('{dc.sheets}'), 'les fiches s’ouvrent');

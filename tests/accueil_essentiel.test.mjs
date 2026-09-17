@@ -18,15 +18,15 @@ const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, d
 const home = bloc('function Dashboard(', NL + '}');
 
 test('la tuile Alarme : l’etat et le mode, l’icone du mode, la couleur — ou rien', () => {
-  assert.deepEqual(tuileAlarme({ state: 'disarmed' }), { texte: 'Désarmée', icone: 'shield', couleur: 'var(--o-ok)' });
-  assert.deepEqual(tuileAlarme({ state: 'armed_night' }), { texte: 'Armée · Nuit', icone: 'moon', couleur: 'var(--o-purple)' });
-  assert.deepEqual(tuileAlarme({ state: 'armed_away' }), { texte: 'Armée · Absent', icone: 'plane-departure', couleur: 'var(--o-warn)' });
-  assert.deepEqual(tuileAlarme({ state: 'armed_home' }), { texte: 'Armée · Maison', icone: 'home', couleur: 'var(--o-warn)' });
-  assert.deepEqual(tuileAlarme({ state: 'armed_vacation' }), { texte: 'Armée · Vacances', icone: 'umbrella-beach', couleur: 'var(--o-warn)' });
-  assert.deepEqual(tuileAlarme({ state: 'arming' }), { texte: 'Activation…', icone: 'shield', couleur: 'var(--o-warn2)' });
+  assert.deepEqual(tuileAlarme({ state: 'disarmed' }), { texte: 'Désarmée', icone: 'shield', couleur: 'var(--o-ok)', rgb: 'var(--o-ok-rgb)' });
+  assert.deepEqual(tuileAlarme({ state: 'armed_night' }), { texte: 'Armée · Nuit', icone: 'moon', couleur: 'var(--o-purple)', rgb: 'var(--o-purple-rgb)' });
+  assert.deepEqual(tuileAlarme({ state: 'armed_away' }), { texte: 'Armée · Absent', icone: 'plane-departure', couleur: 'var(--o-warn2)', rgb: 'var(--o-warn2-rgb)' });
+  assert.deepEqual(tuileAlarme({ state: 'armed_home' }), { texte: 'Armée · Maison', icone: 'home', couleur: 'var(--o-accent-soft)', rgb: 'var(--o-accent-rgb)' });
+  assert.deepEqual(tuileAlarme({ state: 'armed_vacation' }), { texte: 'Armée · Vacances', icone: 'umbrella-beach', couleur: 'var(--o-warn2)', rgb: 'var(--o-warn2-rgb)' });
+  assert.deepEqual(tuileAlarme({ state: 'arming' }), { texte: 'Activation…', icone: 'shield', couleur: 'var(--o-warn)', rgb: 'var(--o-warn-rgb)' });
   assert.deepEqual(tuileAlarme({ state: 'pending' }).texte, 'Activation…');
-  assert.deepEqual(tuileAlarme({ state: 'triggered' }), { texte: 'Déclenchée', icone: 'bell-ring', couleur: 'var(--o-bad)' });
-  assert.deepEqual(tuileAlarme({ state: 'armed_custom_bypass' }), { texte: 'Armée', icone: 'shield-check', couleur: 'var(--o-warn)' }, 'un mode inconnu reste une alarme armee');
+  assert.deepEqual(tuileAlarme({ state: 'triggered' }), { texte: 'Déclenchée', icone: 'bell-ring', couleur: 'var(--o-bad)', rgb: 'var(--o-bad-rgb)' });
+  assert.deepEqual(tuileAlarme({ state: 'armed_custom_bypass' }), { texte: 'Armée', icone: 'shield-check', couleur: 'var(--o-warn2)', rgb: 'var(--o-warn2-rgb)' }, 'un mode inconnu reste une alarme armee');
   assert.equal(tuileAlarme({ state: 'unavailable' }), null);
   assert.equal(tuileAlarme(null), null);
   assert.deepEqual(Object.keys(ICONES_ARMEMENT), ['alarm_disarm', 'alarm_arm_home', 'alarm_arm_away', 'alarm_arm_night', 'alarm_arm_vacation'], 'une icone par armement');

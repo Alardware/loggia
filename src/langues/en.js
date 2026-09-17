@@ -2033,4 +2033,7 @@ export default {
   'Déclenchée': 'Triggered',
   'EN CE MOMENT': 'RIGHT NOW',
   'Lecture, machines, chauffage, volets en mouvement': 'Playback, machines, heating, moving covers',
+  // La vue Securite prend le mode edition des autres vues (v3.37.0)
+  'Sirène': 'Siren',
+  'Mode édition : choisis le panneau d’alarme et les caméras ; glisse une carte pour la déplacer, clique-la pour la modifier.': 'Edit mode: pick the alarm panel and the cameras; drag a card to move it, click it to edit it.',
 };

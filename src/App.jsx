@@ -3541,6 +3541,8 @@ const DOMAINES_EDITION = () => [
   { id: 'capteur', label: tr('Capteur'), fi: 'sensor', rgb: '255,204,68' },
   { id: 'camera', label: tr('Caméra'), fi: 'camera', rgb: 'var(--o-accent-rgb)' },
   { id: 'serrure', label: tr('Serrure'), fi: 'lock', rgb: 'var(--o-ok-rgb)' },
+  { id: 'alarme', label: tr('Alarme'), fi: 'shield-check', rgb: 'var(--o-ok-rgb)' },
+  { id: 'sirene', label: tr('Sirène'), fi: 'bell-ring', rgb: 'var(--o-bad-rgb)' },
   { id: 'presence', label: tr('Présence'), fi: 'users', rgb: 'var(--o-accent-rgb)' },
   { id: 'aspirateur', label: tr('Aspirateur'), ico: 'vacuum', rgb: 'var(--o-ok-rgb)' },
   { id: 'tondeuse', label: tr('Tondeuse'), fi: 'tractor', rgb: 'var(--o-ok-rgb)' },
@@ -7212,7 +7214,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             /* L'ALARME d'abord (retour user du 16/09, ADR 0035) : son etat et
               * son mode, d'un tap vers la vue Securite. */
             if (alarmeTuile) cases.push(
-              <button type="button" key="al" className="o-tuile-hero" onClick={clics.al} aria-label={libelles.al} style={tuile({ display: 'flex', alignItems: 'center', gap: 8 })}>
+              <button type="button" key="al" className="o-tuile-hero o-tuile-alarme" onClick={clics.al} aria-label={libelles.al} style={tuile({ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 6px 10px', '--al-rgb': alarmeTuile.rgb })}>
                 <Fi i={alarmeTuile.icone} color={alarmeTuile.couleur} size={17} />
                 <div><div style={{ fontSize: 15, fontWeight: 800, color: alarmeTuile.couleur, lineHeight: 1.1 }}>{alarmeTuile.texte}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('ALARME')}</div></div>
               </button>);
@@ -9401,10 +9403,42 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   const sireneChoisie = loggiaEnt('sirene', null);
   const sirenes = [...(sireneChoisie && S[sireneChoisie] ? [sireneChoisie] : []), ...Object.keys(S).filter(id => id !== sireneChoisie && S[id] && estSirene(id, S[id]))];
   const msgAlarme = messageAlarme(alarmId ? S[alarmId] : null, comptesSecVue, S);
+  /* MODE EDITION, le meme que les autres vues (ADR 0036) : la decouverte
+   * propose — l'alarme, les sirenes, la presence, puis les ouvrants sous leur
+   * titre (les ouverts d'abord) —, l'utilisateur dispose : ordre, retrait,
+   * nom, largeur, ajout, titres. L'agencement vit dans `loggia_seclayout`,
+   * perimetre `securite`. */
+  const ouvrantsIds = [...ouvrantsDe(S)].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).map(o => o.id);
+  const derivesSec = [...(alarmId ? [alarmId] : []), ...sirenes, ...(people.length ? ['carte:presence'] : []), ...(ouvrantsIds.length ? ['sect:ouvrants', ...ouvrantsIds] : [])];
+  const ed = useLayoutEditor('loggia_seclayout', 'securite', derivesSec);
+  const [cardEdit, setCardEdit] = useState(null);
+  const [addSheet, setAddSheet] = useState(false);
+  const origineDe = (k) => {
+    if (k === 'sect:ouvrants') return tr('Ouvrants');
+    if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
+    if (k === 'carte:presence') return tr('Présence');
+    return (S[k] && S[k].attributes && S[k].attributes.friendly_name) || k;
+  };
+  const nomDe = (k) => ed.labelOf(k) || origineDe(k);
+  const addSection = () => ed.toggle('sect:' + Date.now().toString(36));
+  const blocs = [];
+  ed.ids.forEach(k => {
+    if (k.indexOf('sect:') === 0) blocs.push({ titre: k, cartes: [] });
+    else { if (!blocs.length) blocs.push({ titre: null, cartes: [] }); blocs[blocs.length - 1].cartes.push(k); }
+  });
+  // La carte d'une cle : l'alarme et la sirene ont la leur, la presence aussi,
+  // un ouvrant prend la carte illustree des pieces, le reste passe par la fabrique.
+  const carteSec = (k) => {
+    if (k.indexOf('alarm_control_panel.') === 0) return <CvAlarm id={k} hass={hass} sans message={k === alarmId ? msgAlarme : null} label={ed.labelOf(k)} />;
+    if (k === 'carte:presence') return <CvPresence hass={hass} />;
+    if (S[k] && estSirene(k, S[k])) return <CvSirene id={k} hass={hass} label={ed.labelOf(k)} />;
+    if (k.indexOf('binary_sensor.') === 0) return <RoomGenericCard id={k} hass={hass} onOpen={dc.ouvrir} label={ed.labelOf(k)} />;
+    return dc.card(k, ed.labelOf(k));
+  };
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {edit && <ViewEditBar texte={tr('Mode édition : choisis le panneau d’alarme et les caméras de cette vue.')} onEnt={onEnt} />}
+      {edit && <ViewEditBar texte={tr('Mode édition : choisis le panneau d’alarme et les caméras ; glisse une carte pour la déplacer, clique-la pour la modifier.')} onEnt={onEnt} />}
       <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Sécurité')}</h1>
@@ -9417,33 +9451,40 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
       {/* La ligne d'etat de l'Accueil, tuile par tuile ; chacune defile jusqu'a sa section. */}
       {tuilesSecVue.length > 0 && <div style={{ marginTop: -14 }}><TuilesSecurite tuiles={tuilesSecVue} onTuile={(t) => defiler(t.cle)} /></div>}
 
-      {(alarmId || sirenes.length > 0 || people.length > 0) && (
-        /* Sa propre classe : `grid-objets` force deux colonnes au telephone, et
-         * une carte Alarme de 170 px ecrase ses cinq boutons (retour user du
-         * 16/09). Ici, 250 px au moins par carte — une colonne au telephone. */
-        <div className="grid-securite-cartes" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(250px,1fr))', gridAutoRows: 'minmax(184px, auto)', gap: 16, alignItems: 'stretch' }}>
-          {alarmId && <Anim i={0}><div style={{ height: '100%', minHeight: 184 }}><CvAlarm id={alarmId} hass={hass} sans message={msgAlarme} /></div></Anim>}
-          {sirenes.map((id, i) => <Anim key={id} i={1 + i}><div style={{ height: '100%', minHeight: 184 }}><CvSirene id={id} hass={hass} /></div></Anim>)}
-          {people.length > 0 && <Anim i={1 + sirenes.length}><div style={{ height: '100%', minHeight: 184 }}><CvPresence hass={hass} /></div></Anim>}
-        </div>
-      )}
-
       {/* « A surveiller », comme sur l'Accueil : seulement quand il y a un
         * point, et seulement ceux de la securite (ADR 0033). Un point qui
         * mene ici reste ici. */}
       {pointsSec.length > 0 && <CarteAttention points={pointsSec} onNav={(v) => { if (v !== 'securite' && onNav) onNav(v); }} />}
 
-      {/* Les ouvrants UN PAR UN, avec la carte des pieces — la porte ou la
-        * fenetre dessinee en fond, que l'utilisateur aime (retour 15/09) —,
-        * les ouverts d'abord. Seulement s'il y en a. */}
-      {ouvrantsDe(S).length > 0 && (
-        <>
-          <div id="sec-ouvrants" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Ouvrants')}</div>
-          <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16, alignItems: 'stretch' }}>
-            {[...ouvrantsDe(S)].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).map((o, i) => <Anim key={o.id} i={i}><div style={{ height: 184 }}><RoomGenericCard id={o.id} hass={hass} onOpen={dc.ouvrir} /></div></Anim>)}
-          </div>
-        </>
-      )}
+      {/* LES CARTES, editables comme dans les autres vues (ADR 0036) : l'alarme
+        * (la carte du catalogue, avec son message), les sirenes, la presence,
+        * puis les ouvrants un par un — la carte des pieces, la porte ou la
+        * fenetre dessinee en fond. En edition : glisser, retirer, renommer,
+        * elargir, ajouter une carte ou un titre. */}
+      {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} />}
+      <div ref={ed.gridRef} id={ed.ids.indexOf('sect:ouvrants') < 0 ? 'sec-ouvrants' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {blocs.map((bloc, bi) => {
+          if (!edit && bloc.titre && !bloc.cartes.length) return null;
+          const titre = bloc.titre ? (
+            <div id={bloc.titre === 'sect:ouvrants' ? 'sec-ouvrants' : undefined} style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{nomDe(bloc.titre)}</div>
+          ) : null;
+          // Les cartes larges (alarme, sirene, presence) a 250 px ; une section
+          // d'ouvrants garde la grille des objets — deux colonnes au telephone.
+          const ouvrantsSeuls = bloc.cartes.length > 0 && bloc.cartes.every(k => k.indexOf('binary_sensor.') === 0);
+          return (
+            <div key={bloc.titre || 'b' + bi} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {bloc.titre && (edit ? <EditableCard plat ed={ed} id={bloc.titre} nom={nomDe(bloc.titre)} onEdit={setCardEdit}>{titre}</EditableCard> : titre)}
+              <div className={ouvrantsSeuls ? 'grid-objets' : 'grid-securite-cartes'} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(' + (ouvrantsSeuls ? 225 : 250) + 'px,1fr))', gridAutoRows: 'minmax(184px, auto)', gap: 16, alignItems: 'stretch' }}>
+                {bloc.cartes.map(k => edit
+                  ? <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass} taille={false} />
+                  : <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}><div style={{ height: '100%', minHeight: 184 }}>{carteSec(k)}</div></Anim>)}
+                {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} />}
+              </div>
+            </div>
+          );
+        })}
+        {edit && !blocs.length && <CarteAjout onClick={() => setAddSheet(true)} />}
+      </div>
 
       <div id="sec-cameras" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Caméras en direct')}</div>
       <div className="grid-sec-cams" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -9458,6 +9499,10 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
       </div>
       {/* Les fiches des ouvrants : sans elles, une carte cliquee resterait muette. */}
       {dc.sheets}
+      {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
+      {addSheet && <ComposeurCartes hass={hass} dc={dc} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter une carte')} composites={false}
+        pied={<button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>}
+        domaines={['binary_sensor', 'lock', 'siren', 'switch', 'alarm_control_panel', 'sensor', 'camera']} onClose={() => setAddSheet(false)} />}
     </div>
   );
 }
@@ -10246,13 +10291,13 @@ function armChips(attrs, etat) {
  * secondes — par `duration` quand la sirene le gere, sinon on l'eteint
  * nous-memes. */
 const SIRENE_DUREE = 16; // SirenEntityFeature.DURATION
-function CvSirene({ id, hass }) {
+function CvSirene({ id, hass, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const s = st ? st.state : null;
   const a = (st && st.attributes) || {};
   const mort = !st || s === 'unavailable' || s === 'unknown';
   const on = !mort && s === 'on';
-  const nom = cvName(st, id);
+  const nom = label || cvName(st, id);
   // Une sirene en `switch` s'allume et s'eteint comme un interrupteur.
   const dom = String(id).split('.')[0];
   const call = (svc, data) => commanderService(hass, id, dom, svc, { entity_id: id, ...(data || {}) });
@@ -10297,7 +10342,7 @@ function CvSirene({ id, hass }) {
 /* `message` (ADR 0034) : ce que la carte a a dire entre son nom et ses
  * boutons — un ouvrant ouvert a l'armement, un capteur contourne, par quoi
  * l'alarme s'est declenchee. Rien a dire : rien d'affiche. */
-function CvAlarm({ id, hass, sans = false, message = null }) {
+function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const s = st ? st.state : null;
   const aAl = (st && st.attributes) || {};
@@ -10335,7 +10380,7 @@ function CvAlarm({ id, hass, sans = false, message = null }) {
         <span style={{ fontSize: 11, fontWeight: 800, color: col }}>{txt}</span>
       </div>
       <div style={{ marginTop: 8, ...(sans ? { flex: 1, display: 'flex', flexDirection: 'column' } : {}) }}>
-        <div style={RM_NAME}>{cvName(st, id)}</div>
+        <div style={RM_NAME}>{label || cvName(st, id)}</div>
         {message && message.texte && (
           <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 8, padding: '8px 10px', borderRadius: 10, background: message.niveau === 'danger' ? 'rgba(var(--o-bad-rgb),.12)' : 'rgba(var(--o-warn-rgb),.12)', color: message.niveau === 'danger' ? 'var(--o-bad)' : 'var(--o-warn)', fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>
             <Fi i="triangle-warning" size={13} style={{ marginTop: 1, flexShrink: 0 }} />

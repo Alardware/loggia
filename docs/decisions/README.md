@@ -40,3 +40,4 @@ entraîne. Le vocabulaire est celui de `../GLOSSAIRE.md`.
 | [0033](0033-la-vue-securite-parle-comme-l-accueil.md) | La vue Sécurité parle comme l'Accueil : état en une seconde, tuiles, À surveiller, un ouvrant par carte | appliqué (v3.34.0) |
 | [0034](0034-trois-cartes-a-la-place-du-bandeau.md) | Trois cartes à la place du bandeau : Alarme (avec message), Sirène, Présence | appliqué (v3.35.0) |
 | [0035](0035-l-accueil-ne-garde-que-l-essentiel.md) | L'Accueil ne garde que l'essentiel : tuile Alarme, plus de grand panneau, En ce moment sans prises, modes en icônes | appliqué (v3.36.0) |
+| [0036](0036-la-vue-securite-s-edite-comme-les-autres.md) | La vue Sécurité s'édite comme les autres ; la tuile Alarme en verre teinté par son état | appliqué (v3.37.0) |

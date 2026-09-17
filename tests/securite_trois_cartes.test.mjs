@@ -45,9 +45,9 @@ test('declenchee : par quoi, si le panneau le dit', () => {
 });
 
 test('la carte Alarme du catalogue porte le message entre le nom et les boutons', () => {
-  assert.ok(src.includes('function CvAlarm({ id, hass, sans = false, message = null }) {'), 'la prop');
+  assert.ok(src.includes('function CvAlarm({ id, hass, sans = false, message = null, label = null }) {'), 'la prop');
   const c = bloc('function CvAlarm(', NL + '}');
-  const iNom = c.indexOf('<div style={RM_NAME}>{cvName(st, id)}</div>');
+  const iNom = c.indexOf('<div style={RM_NAME}>{label || cvName(st, id)}</div>');
   const iMsg = c.indexOf('{message && message.texte && (');
   const iChips = c.indexOf('{CHIPS.map(([lbl, svc, actif]) => (');
   assert.ok(iNom >= 0 && iMsg > iNom && iChips > iMsg, 'le nom, puis le message, puis les boutons');
@@ -68,10 +68,10 @@ test('la vue : la rangee des trois cartes remplace le bandeau, la presence y des
   const vue = bloc('function SecuriteContent(', NL + '}');
   assert.ok(!vue.includes('armBtn') && !vue.includes('alarmShort') && !vue.includes('setAlarm') && !vue.includes('alarmRevertRef') && !vue.includes('demandeCode') && !vue.includes('réglages rapides'), 'le bandeau et son optimisme ont disparu');
   assert.ok(vue.includes('estSirene(id, S[id])') && vue.includes('const msgAlarme = messageAlarme(alarmId ? S[alarmId] : null, comptesSecVue, S);'), 'les sirenes de la maison, le message de l’alarme');
-  assert.ok(vue.includes('{alarmId && <Anim i={0}><div style={{ height: \'100%\', minHeight: 184 }}><CvAlarm id={alarmId} hass={hass} sans message={msgAlarme} /></div></Anim>}'), 'ta carte Alarme, avec son message');
-  assert.ok(vue.includes('{sirenes.map((id, i) => <Anim key={id} i={1 + i}><div style={{ height: \'100%\', minHeight: 184 }}><CvSirene id={id} hass={hass} /></div></Anim>)}'), 'une carte par sirene');
-  assert.ok(vue.includes('{people.length > 0 && <Anim i={1 + sirenes.length}><div style={{ height: \'100%\', minHeight: 184 }}><CvPresence hass={hass} /></div></Anim>}'), 'la presence, dans la rangee');
-  assert.ok(vue.includes("{tr('Ouvrants')}</div>") && !vue.includes("tr('Ouvrants et présence')"), 'la section des ouvrants ne parle plus de presence');
+  assert.ok(vue.includes("if (k.indexOf('alarm_control_panel.') === 0) return <CvAlarm id={k} hass={hass} sans message={k === alarmId ? msgAlarme : null} label={ed.labelOf(k)} />;"), 'ta carte Alarme, avec son message');
+  assert.ok(vue.includes('if (S[k] && estSirene(k, S[k])) return <CvSirene id={k} hass={hass} label={ed.labelOf(k)} />;'), 'une carte par sirene');
+  assert.ok(vue.includes("if (k === 'carte:presence') return <CvPresence hass={hass} />;") && vue.includes("...(people.length ? ['carte:presence'] : [])"), 'la presence, dans les cartes de la vue');
+  assert.ok(vue.includes("if (k === 'sect:ouvrants') return tr('Ouvrants');") && !vue.includes("tr('Ouvrants et présence')"), 'la section des ouvrants ne parle plus de presence');
   assert.ok(vue.includes("{tr('Alarme')} {alarmWord} · {resumeSecurite(comptesSecVue)}") && vue.includes('const cptAlarme = armCompte(alarmId ? S[alarmId] : null);'), 'la sous-ligne garde le decompte');
   assert.ok(src.includes("securite: [...secBaseKeys(), 'camera.', 'siren.', 'switch.', ...secKeys,"), 'les sirenes sont relues sur la vue');
 });

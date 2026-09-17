@@ -184,17 +184,19 @@ export const ICONES_ARMEMENT = { alarm_disarm: 'shield', alarm_arm_home: 'home',
 export function tuileAlarme(st) {
   if (!estObjet(st) || !st.state || st.state === 'unavailable' || st.state === 'unknown') return null;
   const s = String(st.state);
-  if (s === 'triggered') return { texte: tr('Déclenchée'), icone: 'bell-ring', couleur: 'var(--o-bad)' };
-  if (s === 'arming' || s === 'pending') return { texte: tr('Activation…'), icone: 'shield', couleur: 'var(--o-warn2)' };
-  if (s === 'disarmed') return { texte: tr('Désarmée'), icone: ICONES_ARMEMENT.alarm_disarm, couleur: 'var(--o-ok)' };
+  // `rgb` : la teinte du verre de la tuile — vert désarmée, bleu maison, orange
+  // absent et vacances, violet nuit, ambre en cours d'armement, rouge déclenchée.
+  if (s === 'triggered') return { texte: tr('Déclenchée'), icone: 'bell-ring', couleur: 'var(--o-bad)', rgb: 'var(--o-bad-rgb)' };
+  if (s === 'arming' || s === 'pending') return { texte: tr('Activation…'), icone: 'shield', couleur: 'var(--o-warn)', rgb: 'var(--o-warn-rgb)' };
+  if (s === 'disarmed') return { texte: tr('Désarmée'), icone: ICONES_ARMEMENT.alarm_disarm, couleur: 'var(--o-ok)', rgb: 'var(--o-ok-rgb)' };
   const modes = {
-    armed_home: [tr('Armée · Maison'), ICONES_ARMEMENT.alarm_arm_home, 'var(--o-warn)'],
-    armed_away: [tr('Armée · Absent'), ICONES_ARMEMENT.alarm_arm_away, 'var(--o-warn)'],
-    armed_night: [tr('Armée · Nuit'), ICONES_ARMEMENT.alarm_arm_night, 'var(--o-purple)'],
-    armed_vacation: [tr('Armée · Vacances'), ICONES_ARMEMENT.alarm_arm_vacation, 'var(--o-warn)'],
+    armed_home: [tr('Armée · Maison'), ICONES_ARMEMENT.alarm_arm_home, 'var(--o-accent-soft)', 'var(--o-accent-rgb)'],
+    armed_away: [tr('Armée · Absent'), ICONES_ARMEMENT.alarm_arm_away, 'var(--o-warn2)', 'var(--o-warn2-rgb)'],
+    armed_night: [tr('Armée · Nuit'), ICONES_ARMEMENT.alarm_arm_night, 'var(--o-purple)', 'var(--o-purple-rgb)'],
+    armed_vacation: [tr('Armée · Vacances'), ICONES_ARMEMENT.alarm_arm_vacation, 'var(--o-warn2)', 'var(--o-warn2-rgb)'],
   }[s];
-  if (modes) return { texte: modes[0], icone: modes[1], couleur: modes[2] };
-  return { texte: tr('Armée'), icone: 'shield-check', couleur: 'var(--o-warn)' };
+  if (modes) return { texte: modes[0], icone: modes[1], couleur: modes[2], rgb: modes[3] };
+  return { texte: tr('Armée'), icone: 'shield-check', couleur: 'var(--o-warn2)', rgb: 'var(--o-warn2-rgb)' };
 }
 
 /** Une sirène : le domaine `siren`, ou un interrupteur qui se nomme ainsi —

@@ -115,6 +115,7 @@ export function domaineEdition(cle, { estLumiere = false, classe = '' } = {}) {
   if (k.indexOf('plant:') === 0) return 'plante';
   if (k === 'obj:feeder') return 'animaux';
   if (k.indexOf('sect:') === 0) return 'titre';
+  if (k === 'carte:presence') return 'presence';
   const dom = k.indexOf('.') > 0 ? k.slice(0, k.indexOf('.')) : '';
   if (dom === 'light' || (dom === 'switch' && estLumiere)) return 'lumiere';
   if (dom === 'switch' || dom === 'input_boolean') return 'prise';
@@ -125,6 +126,8 @@ export function domaineEdition(cle, { estLumiere = false, classe = '' } = {}) {
   if (dom === 'binary_sensor' || dom === 'sensor') return 'capteur';
   if (dom === 'camera') return 'camera';
   if (dom === 'lock') return 'serrure';
+  if (dom === 'alarm_control_panel') return 'alarme';
+  if (dom === 'siren') return 'sirene';
   if (dom === 'vacuum') return 'aspirateur';
   if (dom === 'lawn_mower') return 'tondeuse';
   return 'carte';
