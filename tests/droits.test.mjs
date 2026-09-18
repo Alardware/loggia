@@ -66,7 +66,7 @@ test('la gestion des profils et le code admin ne sont jamais accordables', () =>
   // bouton d'ajout, le crayon de chaque ligne, et l'éditeur du code.
   const par = lire('src', 'views', 'parametres.jsx');
   for (const garde of ['{isAdmin && <SecGroup label="Profils">',
-    '{isAdmin && <AdminPinEditor />}',
+    '{isAdmin && <AdminPinEditor hass={hass} />}',
     '{editing && isAdmin && <UserEditor']) {
     assert.ok(par.indexOf(garde) >= 0,
       `cette garde ne dépend plus du rôle : ${garde}`);

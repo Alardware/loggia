@@ -513,6 +513,29 @@ def _epoch(texte: Any) -> float | None:
         return None
 
 
+def controle_de(user: Any) -> Any:
+    """Le test `(entity_id) -> bool` des permissions de CONTROLE d'un compte, ou
+    None si tout lui est permis — un administrateur, ou une installation sans
+    politique d'entites (le cas de presque toutes). Miroir de
+    `discovery._lecture_autorisee`, pour l'ecriture."""
+    if user is None or getattr(user, "is_admin", False):
+        return None
+    verif = getattr(getattr(user, "permissions", None), "check_entity", None)
+    if verif is None:
+        return None
+    return lambda entity_id: bool(verif(entity_id, "control"))
+
+
+def filtrer_autorisees(haids, controle: Any) -> tuple[list, list]:
+    """(gardees, ecartees) : ce que le compte peut piloter, et le reste."""
+    if controle is None:
+        return list(haids), []
+    gardees, ecartees = [], []
+    for h in haids:
+        (gardees if controle(h) else ecartees).append(h)
+    return gardees, ecartees
+
+
 class LoggiaScenarios:
     """Compose, garde et lance les scenarios de la maison."""
 
@@ -614,8 +637,18 @@ class LoggiaScenarios:
         return piece, resume
 
     # ── Lancer ──────────────────────────────────────────────────────────────
-    async def async_lancer(self, ident: str, user_id: str | None = None) -> dict[str, Any] | None:
-        """Lance un scenario. Rend ce qui est parti, ou None s'il n'existe pas."""
+    async def async_lancer(self, ident: str, user_id: str | None = None,
+                           controle: Any = None) -> dict[str, Any] | None:
+        """Lance un scenario. Rend ce qui est parti, ou None s'il n'existe pas.
+
+        `controle` : le test `(entity_id) -> bool` des permissions du compte qui
+        lance (`controle_de`), ou None quand tout lui est permis. Le composant
+        appelle les services LUI-MEME, sans passer par la verification que Home
+        Assistant applique a un appel direct du client : sans ce filtre, un
+        compte restreint a certaines entites pilotait les autres par un
+        scenario (audit 18/09). Une cible refusee est ecartee et comptee, pas
+        le scenario entier.
+        """
         cfg = await self.async_config()
         s = next((x for x in effectifs(cfg) if x["id"] == ident), None)
         if s is None:
@@ -624,9 +657,16 @@ class LoggiaScenarios:
         nom = s.get("nom") or s["id"]
         fait: list[dict[str, Any]] = []
         touchees: list[str] = []
+        refusees: list[str] = []
         if s.get("lien"):
             lien = s["lien"]
             domaine = lien.split(".", 1)[0]
+            if controle is not None and not controle(lien):
+                refusees.append(lien)
+                fait.append({"famille": "lien", "geste": domaine, "n": 0})
+                self._derniers[s["id"]] = time.time()
+                await self._noter_lancement(s, nom, touchees, refusees, fait)
+                return {"id": s["id"], "fait": fait, "n": 0, "refusees": len(refusees)}
             try:
                 await self.hass.services.async_call(domaine, "turn_on", {"entity_id": [lien]},
                                                     blocking=False, context=ctx)
@@ -639,6 +679,8 @@ class LoggiaScenarios:
             piece = piece_de(s, c["maison"])
             for a in s["actions"]:
                 haids = cibles(a, c["maison"], piece, c["veilleuses"], c["alarme"], c["nuit"])
+                haids, ecartees = filtrer_autorisees(haids, controle)
+                refusees.extend(ecartees)
                 n = 0
                 for domaine, service, cibles_, data in ordres(a, haids, c["maison"]):
                     charge: dict[str, Any] = {"entity_id": list(cibles_)}
@@ -654,14 +696,20 @@ class LoggiaScenarios:
                 fait.append({"famille": a["famille"], "geste": a["geste"], "n": n,
                              "piece": a.get("piece") or (piece if a.get("portee") == "piece" else None)})
         self._derniers[s["id"]] = time.time()
-        if self.regles is not None:
-            try:
-                await self.regles.noter(MODULE, s["id"], nom, cibles=touchees,
-                                        motif="lie" if s.get("lien") else "compose",
-                                        detail=", ".join(f"{f['famille']} {f['n']}" for f in fait))
-            except Exception:  # noqa: BLE001
-                _LOGGER.debug("Loggia scenarios : journal indisponible")
-        return {"id": s["id"], "fait": fait, "n": len(touchees)}
+        await self._noter_lancement(s, nom, touchees, refusees, fait)
+        return {"id": s["id"], "fait": fait, "n": len(touchees), "refusees": len(refusees)}
+
+    async def _noter_lancement(self, s, nom, touchees, refusees, fait) -> None:
+        if self.regles is None:
+            return
+        detail = ", ".join(f"{f['famille']} {f['n']}" for f in fait)
+        if refusees:
+            detail += f" · {len(refusees)} cible(s) refusee(s) par les permissions du compte"
+        try:
+            await self.regles.noter(MODULE, s["id"], nom, cibles=touchees,
+                                    motif="lie" if s.get("lien") else "compose", detail=detail)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Loggia scenarios : journal indisponible")
 
     # ── Ce que l'interface lit et ecrit ─────────────────────────────────────
     async def async_config(self) -> dict[str, Any]:

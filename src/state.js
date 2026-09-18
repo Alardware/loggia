@@ -257,7 +257,11 @@ export function loggiaEnt(domain, fallback = null) {
   return (v == null) ? fallback : v;
 }
 
-export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_weather', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_customviews', 'loggia_users', 'loggia_assistant', 'loggia_accueil', 'loggia_look', 'loggia_active_user', 'loggia_admin_pin', 'loggia_roomlayout', 'loggia_objlayout', 'loggia_lightlayout', 'loggia_climlayout', 'loggia_coverlayout', 'loggia_enlayout', 'loggia_medlayout', 'loggia_seclayout', 'loggia_lights', 'loggia_climate', 'loggia-theme', 'loggia-mode', 'loggia-ha', 'loggia-navbar', 'loggia-navoffset', 'loggia-topoffset', 'loggia-wxfx', 'loggia-ciel', 'loggia-langue'];
+/* Le code administrateur ne vit plus dans le navigateur (18/09) : hache par le
+ * composant, verifie par lui. Une copie laissee la par les versions d'avant
+ * s'efface au premier chargement. */
+try { localStorage.removeItem('loggia_admin_pin'); } catch { /* stockage indisponible, ou pas de navigateur */ }
+export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_weather', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_customviews', 'loggia_users', 'loggia_assistant', 'loggia_accueil', 'loggia_look', 'loggia_active_user', 'loggia_roomlayout', 'loggia_objlayout', 'loggia_lightlayout', 'loggia_climlayout', 'loggia_coverlayout', 'loggia_enlayout', 'loggia_medlayout', 'loggia_seclayout', 'loggia_lights', 'loggia_climate', 'loggia-theme', 'loggia-mode', 'loggia-ha', 'loggia-navbar', 'loggia-navoffset', 'loggia-topoffset', 'loggia-wxfx', 'loggia-ciel', 'loggia-langue'];
 
 /** Les cles que le MOTEUR lit : la configuration de la maison, pas l'apparence.
  *

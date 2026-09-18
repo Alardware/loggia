@@ -425,3 +425,54 @@ def test_les_mots_cles_ne_se_trompent_pas_de_scenario(module):
     nuit = next(s for s in module.INTEGRES if s["id"] == "nuit")
     assert module.score_integre(nuit, "good_night") > module.score_integre(nuit, "kid_bedtime")
     assert module.normaliser("Bonne nuit !") == "bonne_nuit" and module.slug("Apéro du soir") == "apero_du_soir"
+
+
+# ── Les permissions d'entite du compte qui lance (audit 18/09) ─────────────
+
+class _Permissions:
+    def __init__(self, refusees):
+        self.refusees = set(refusees)
+
+    def check_entity(self, entity_id, cle):
+        assert cle == "control"
+        return entity_id not in self.refusees
+
+
+class _Compte:
+    def __init__(self, is_admin=False, refusees=(), sans_politique=False):
+        self.is_admin = is_admin
+        self.permissions = None if sans_politique else _Permissions(refusees)
+
+
+def test_controle_de_ne_filtre_que_les_comptes_restreints(module):
+    assert module.controle_de(None) is None
+    assert module.controle_de(_Compte(is_admin=True, refusees=["light.salon"])) is None, "un administrateur n'est jamais filtre"
+    assert module.controle_de(_Compte(sans_politique=True)) is None, "sans politique d'entites, tout est permis"
+    ctrl = module.controle_de(_Compte(refusees=["light.salon"]))
+    assert ctrl("light.salon") is False and ctrl("light.chambre") is True
+    assert module.filtrer_autorisees(["a", "b"], None) == (["a", "b"], [])
+    assert module.filtrer_autorisees(["light.salon", "light.chambre"], ctrl) == (["light.chambre"], ["light.salon"])
+
+
+def test_un_compte_restreint_ne_pilote_pas_par_scenario_ce_qu_on_lui_refuse(creer, module):
+    s = creer()
+    ctrl = module.controle_de(_Compte(refusees=["light.salon", "lock.entree", "alarm_control_panel.maison"]))
+    r = lancer(s.async_lancer("depart", user_id="u2", controle=ctrl))
+    touchees = [h for _, _, data, _ in s.hass.services.appels for h in data["entity_id"]]
+    assert "light.salon" not in touchees and "lock.entree" not in touchees and "alarm_control_panel.maison" not in touchees
+    assert "light.chambre" in touchees, "le reste part quand meme"
+    assert r["refusees"] == 3 and r["n"] == 6
+    journal = lancer(s.regles.journal(module="scenarios"))
+    assert "3 cible(s) refusee(s)" in journal[0]["detail"], "le journal dit ce qui a ete retenu"
+    # Sans restriction : rien ne change.
+    s2 = creer()
+    r2 = lancer(s2.async_lancer("depart", user_id="u1"))
+    assert r2["n"] == 9 and r2["refusees"] == 0
+
+
+def test_un_scenario_lie_refuse_ne_part_pas(creer, module):
+    s = creer(config={"integres": {"nuit": {"lien": "scene.bonne_nuit"}}})
+    ctrl = module.controle_de(_Compte(refusees=["scene.bonne_nuit"]))
+    r = lancer(s.async_lancer("nuit", user_id="u2", controle=ctrl))
+    assert s.hass.services.appels == [], "la scene n'est pas lancee"
+    assert r["n"] == 0 and r["refusees"] == 1 and r["fait"] == [{"famille": "lien", "geste": "scene", "n": 0}]

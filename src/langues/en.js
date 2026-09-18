@@ -2240,4 +2240,13 @@ export default {
   'CO₂ sur 24 heures': 'CO₂ over 24 hours',
   'Ventiler': 'Ventilate',
   'Ouvrir les volets · aérer': 'Open the shutters · air out',
+  // Le code administrateur, verifie par le composant (v3.47.0)
+  'Trop d’essais. Réessaie dans {n} s.': 'Too many attempts. Try again in {n} s.',
+  'Home Assistant n’est pas joignable : le code ne peut pas être vérifié.': 'Home Assistant cannot be reached: the code cannot be checked.',
+  'Le code fait de 4 à 8 chiffres.': 'The code is 4 to 8 digits long.',
+  'Les deux codes ne correspondent pas.': 'The two codes do not match.',
+  'Code administrateur mis à jour — le même sur tous les appareils.': 'Administrator code updated — the same on every device.',
+  'Requis pour basculer vers un profil Admin. Gardé par le composant, haché : le même code sur tous les appareils, jamais affiché.': 'Required to switch to an Admin profile. Kept by the component, hashed: the same code on every device, never shown.',
+  'Code défini': 'Code set',
+  'Code par défaut (0000) — à changer': 'Default code (0000) — change it',
 };

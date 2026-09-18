@@ -14,6 +14,8 @@ Commandes :
   loggia/discovery      -> ce que Home Assistant sait de l'installation
   loggia/regles/etat    -> le journal de la maison, et ce qui retient en ce moment
   loggia/regles/degeler -> rendre la main aux regles sur une entite (admin)
+  loggia/pin/verifier   -> le code administrateur, verifie ici (essais limites)
+  loggia/pin/definir    -> le definir, hache (admin uniquement)
 
 `loggia/discovery` est ouverte a tout compte authentifie, a dessein. Les
 commandes equivalentes de Home Assistant — `config/area_registry/list` et ses
@@ -24,6 +26,7 @@ appareil.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 from typing import Any
@@ -34,7 +37,9 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 
+from .code_admin import CODE_DEFAUT, Limiteur, code_valide, hacher, verifier
 from .discovery import async_index
+from .scenarios import controle_de
 from .store import MAX_TOTAL_BYTES, MAX_VALUE_BYTES, LoggiaStore, MaisonReserveeError
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,6 +68,8 @@ WS_SCN_CONFIG = "loggia/scenarios/config"
 WS_SCN_LANCER = "loggia/scenarios/lancer"
 WS_ROB_ETAT = "loggia/robots/etat"
 WS_ROB_CONFIG = "loggia/robots/config"
+WS_PIN_VERIFIER = "loggia/pin/verifier"
+WS_PIN_DEFINIR = "loggia/pin/definir"
 
 
 def _user_info(connection: websocket_api.ActiveConnection) -> dict[str, Any]:
@@ -420,11 +427,55 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             connection.send_error(msg["id"], "not_available", "scenarios indisponibles")
             return
         # La main de celui qui appuie : les regles la verront comme telle.
-        resultat = await scenarios.async_lancer(msg["id"], user_id=connection.user.id)
+        # Ses permissions d'entite, pas celles du composant (audit 18/09).
+        resultat = await scenarios.async_lancer(msg["id"], user_id=connection.user.id,
+                                                controle=controle_de(connection.user))
         if resultat is None:
             connection.send_error(msg["id"], "not_found", "scenario inconnu : %s" % msg["id"])
             return
         connection.send_result(msg["id"], resultat)
+
+    # ── Le code administrateur (18/09) : verifie ICI, jamais renvoye ───────
+    # Tout compte connecte peut tenter le code (c'est son usage : basculer de
+    # profil sur une tablette de famille) ; les essais rates sont comptes par
+    # compte et bloquent. Le definir reste aux administrateurs.
+    limiteur = Limiteur()
+
+    @websocket_api.websocket_command({vol.Required("type"): WS_PIN_VERIFIER, vol.Required("pin"): str})
+    @websocket_api.async_response
+    async def handle_pin_verifier(hass, connection, msg):
+        uid = connection.user.id
+        attente = limiteur.bloque_pendant(uid)
+        if attente:
+            connection.send_result(msg["id"], {"ok": False, "bloque": attente})
+            return
+        pin = msg["pin"]
+        enregistrement = await store.async_get_code_admin()
+        if enregistrement is None:
+            # Jamais defini : le code par defaut, compare a temps constant.
+            ok = code_valide(pin) and hmac.compare_digest(pin.encode("utf-8"), CODE_DEFAUT.encode("utf-8"))
+        else:
+            # PBKDF2 pese quelques dizaines de millisecondes : hors de la boucle.
+            ok = await hass.async_add_executor_job(verifier, pin, enregistrement)
+        if ok:
+            limiteur.reussi(uid)
+            connection.send_result(msg["id"], {"ok": True})
+            return
+        duree = limiteur.rate(uid)
+        if duree:
+            _LOGGER.warning("Loggia : code administrateur — trop d'essais rates, compte bloque %d s", duree)
+        connection.send_result(msg["id"], {"ok": False, "bloque": duree})
+
+    @websocket_api.websocket_command({vol.Required("type"): WS_PIN_DEFINIR, vol.Required("pin"): str})
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_pin_definir(hass, connection, msg):
+        if not code_valide(msg["pin"]):
+            connection.send_error(msg["id"], "invalid_format", "le code fait de quatre a huit chiffres")
+            return
+        enregistrement = await hass.async_add_executor_job(hacher, msg["pin"])
+        await store.async_set_code_admin(enregistrement)
+        connection.send_result(msg["id"], {"defini": True})
 
     # ── Le planning des robots (ADR 0043) ──────────────────────────────────
     # Lire est ouvert a tout compte connecte ; ecrire — le planning est celui
@@ -509,6 +560,8 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_scn_lancer)
     websocket_api.async_register_command(hass, handle_rob_etat)
     websocket_api.async_register_command(hass, handle_rob_config)
+    websocket_api.async_register_command(hass, handle_pin_verifier)
+    websocket_api.async_register_command(hass, handle_pin_definir)
     websocket_api.async_register_command(hass, handle_vei_etat)
     websocket_api.async_register_command(hass, handle_vei_config)
     websocket_api.async_register_command(hass, handle_nui_etat)

@@ -12248,11 +12248,38 @@ function deriveAccueil(hass, cfg, resolved) {
   };
 }
 
-// Modal code admin (4 chiffres) — gate le basculement vers un profil Admin (comme V1, clé loggia_admin_pin, défaut 0000).
-function PinModal({ expected, onClose, onSuccess }) {
+// Modale du code administrateur — gate le basculement vers un profil Admin.
+// Le code n'est PLUS dans le navigateur (18/09) : il est vérifié par le
+// composant (`loggia/pin/verifier`), qui compte les essais ratés et bloque.
+// Un seul code pour la maison, le même sur chaque appareil et chaque accès.
+function PinModal({ hass, onClose, onSuccess }) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
+  const [attente, setAttente] = useState(false);
+  const [bloque, setBloque] = useState(0);   // secondes annoncées par le serveur
+  const [horsLigne, setHorsLigne] = useState(false);
   const timers = useRef([]);
+  // Le compte à rebours du blocage : on l'affiche, on ne le contourne pas.
+  useEffect(() => {
+    if (!bloque) return undefined;
+    const iv = setInterval(() => setBloque(b => (b > 1 ? b - 1 : 0)), 1000);
+    return () => clearInterval(iv);
+  }, [bloque]);
+  const verifier = async (np) => {
+    const h = hass && typeof hass.callWS === 'function' ? hass : null;
+    if (!h) { setHorsLigne(true); setError(true); timers.current.push(setTimeout(() => { setPin(''); setError(false); }, 900)); return; }
+    setAttente(true);
+    try {
+      const r = await h.callWS({ type: 'loggia/pin/verifier', pin: np });
+      if (r && r.ok) { onSuccess(); return; }
+      setBloque(r && r.bloque ? Number(r.bloque) : 0);
+      setError(true);
+      timers.current.push(setTimeout(() => { setPin(''); setError(false); }, 650));
+    } catch {
+      setHorsLigne(true); setError(true);
+      timers.current.push(setTimeout(() => { setPin(''); setError(false); }, 900));
+    } finally { setAttente(false); }
+  };
   const partiDuVoile = useRef(false);
   const boiteRef = useRef(null);
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
@@ -12265,14 +12292,12 @@ function PinModal({ expected, onClose, onSuccess }) {
   }, []);
   const padBtn = { height: 52, borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 600, cursor: 'pointer' };
   const add = (d) => {
-    setError(false);
+    if (attente || bloque) return;
+    setError(false); setHorsLigne(false);
     setPin(p => {
       if (p.length >= 4) return p;
       const np = p + d;
-      if (np.length === 4) timers.current.push(setTimeout(() => {
-        if (np === String(expected || '0000')) onSuccess();
-        else { setError(true); timers.current.push(setTimeout(() => { setPin(''); setError(false); }, 650)); }
-      }, 110));
+      if (np.length === 4) timers.current.push(setTimeout(() => { verifier(np); }, 110));
       return np;
     });
   };
@@ -12288,6 +12313,8 @@ function PinModal({ expected, onClose, onSuccess }) {
         onClick={e => e.stopPropagation()} style={{ width: 296, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 'var(--o-radius,18px)', padding: 24, boxShadow: '0 30px 70px rgba(0,0,0,.6)', animation: error ? 'm-shake .45s' : 'none' }}>
         <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700 }}>Code administrateur</div>
         <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--o-text2)', marginTop: 4 }}>{tr('Requis pour ce profil')}</div>
+        {bloque > 0 && <div role="alert" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Trop d’essais. Réessaie dans {n} s.', { n: bloque })}</div>}
+        {horsLigne && <div role="alert" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Home Assistant n’est pas joignable : le code ne peut pas être vérifié.')}</div>}
         <div style={{ display: 'flex', justifyContent: 'center', gap: 12, margin: '22px 0' }}>{[0, 1, 2, 3].map(i => <span key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: i < pin.length ? (error ? '#ef4444' : 'var(--o-accent-soft)') : 'transparent', border: `1px solid ${error ? '#ef4444' : 'var(--o-bd2)'}`, transition: 'background .15s' }} />)}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => <button key={n} onClick={() => add(String(n))} style={padBtn}>{n}</button>)}
@@ -13299,7 +13326,6 @@ export default function App() {
     let n = 0; for (const id in S) { if (id.indexOf('light.') === 0 && S[id] && S[id].state === 'on') n++; }
     return n;
   }, [hass]);
-  const adminPin = String(cfgVal('loggia_admin_pin', null) || '0000');
   const applyUser = (i) => { cfgSet({ loggia_active_user: String(i) }); try { const u = users[i]; if (u && u.name) { const m = JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); m[u.name] = Date.now(); localStorage.setItem('loggia-lastseen', JSON.stringify(m)); } } catch {} setUserIdx(i); };
   const switchUser = (i) => { if (i === userIdx) return; if (users[i] && users[i].role === 'Admin') setPinTarget(i); else applyUser(i); };
   const isAdmin = !!(users[userIdx] && users[userIdx].role === 'Admin');
@@ -13425,7 +13451,7 @@ export default function App() {
         return { online: ok, devCount, alarmTxt: al.t, alarmRgb: al.c };
       })()} />
       {navOpen && <div className="loggia-backdrop" role="presentation" onClick={() => setNavOpen(false)} />}
-      {pinTarget != null && <PinModal expected={adminPin} onClose={() => setPinTarget(null)} onSuccess={() => { applyUser(pinTarget); setPinTarget(null); }} />}
+      {pinTarget != null && <PinModal hass={hass} onClose={() => setPinTarget(null)} onSuccess={() => { applyUser(pinTarget); setPinTarget(null); }} />}
       <div key={view} className="o-view" style={{ display: 'flex', flex: 1, minWidth: 0 }}>
       {/* Tant que la decouverte n'a pas repondu, on ne monte aucune vue autre que
           l'accueil : plusieurs lisent leur configuration sans verifier qu'elle

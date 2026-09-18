@@ -24,6 +24,8 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
+from .code_admin import CLE_CLAIR, CLE_HACHE, code_valide, enregistrement_valide, hacher
+
 _LOGGER = logging.getLogger(__name__)
 
 STORAGE_KEY = "loggia_dashboard_config"
@@ -39,14 +41,15 @@ ANCIEN_PREFIXES = (("orion_", "loggia_"), ("orion-", "loggia-"))
 
 # Cles refusees a l'enregistrement, quoi qu'envoie le client.
 #
-# Le code PIN administrateur y figurait, au nom du secret. Un PIN de quatre
-# chiffres ecrit en clair dans le localStorage n'en est pourtant pas un : il se
-# lit en deux clics dans les outils du navigateur. Ce que ce refus coutait,
-# lui, etait bien reel — un code different sur chaque appareil, et un de plus
-# entre l'acces local et l'acces distant, qui n'ont pas la meme origine
-# (retour 03/09). Il est desormais accepte comme le reste ; il protege un
-# basculement de profil, pas un compte.
-FORBIDDEN_KEYS: frozenset[str] = frozenset()
+# Le code administrateur, en clair puis hache, ne s'ecrit pas par la
+# configuration : il passe par sa propre commande (`loggia/pin/definir`,
+# administrateurs seulement) qui le hache avant de le ranger. Entre le 03/09
+# et le 18/09 il etait accepte en clair, au nom d'un code identique sur tous
+# les appareils — ce qui reste vrai : il vit dans la partie commune, hache.
+FORBIDDEN_KEYS: frozenset[str] = frozenset({CLE_CLAIR, CLE_HACHE})
+# Ce qui ne sort JAMAIS du magasin, meme pour un administrateur : le client
+# apprend seulement si un code est defini (`loggia_admin_pin_defini`).
+SECRETES: frozenset[str] = frozenset({CLE_CLAIR, CLE_HACHE})
 
 # Le dashboard est celui de la MAISON : ses reglages sont communs a tous les
 # comptes Home Assistant, sinon un telephone ou une tablette connectee sous un
@@ -158,7 +161,8 @@ class LoggiaStore:
             # copie existante, et le dashboard repartirait vide.
             remontee = self._migrer(raw)
             menage = self._purger_ombres(raw)
-            if remontee or menage or renomme:
+            code = self._migrer_code(raw)
+            if remontee or menage or renomme or code:
                 await self._store.async_save(raw)
             self._data = raw
         return self._data
@@ -256,6 +260,34 @@ class LoggiaStore:
             len(raw["shared"]),
         )
         return True
+
+    @staticmethod
+    def _migrer_code(raw: dict[str, Any]) -> bool:
+        """Le code administrateur en clair devient un hache, et disparait de partout.
+
+        Un fichier ecrit avant le 18/09 porte `loggia_admin_pin` en clair dans
+        la partie commune (et parfois dans des sections de compte, ombres
+        d'avant le 03/09). On le hache une fois, on efface le clair, et l'on
+        jette un hache abime : un enregistrement qu'on ne sait pas verifier ne
+        vaut pas mieux que rien.
+        """
+        change = False
+        clair = raw["shared"].pop(CLE_CLAIR, None)
+        if clair is not None:
+            change = True
+            if code_valide(str(clair)) and not enregistrement_valide(raw["shared"].get(CLE_HACHE)):
+                raw["shared"][CLE_HACHE] = hacher(str(clair))
+                _LOGGER.info("Loggia : code administrateur hache, l'ancien code en clair est efface")
+        for reglages in raw["users"].values():
+            if isinstance(reglages, dict):
+                for cle in (CLE_CLAIR, CLE_HACHE):
+                    if cle in reglages:
+                        reglages.pop(cle, None)
+                        change = True
+        if CLE_HACHE in raw["shared"] and not enregistrement_valide(raw["shared"][CLE_HACHE]):
+            raw["shared"].pop(CLE_HACHE, None)
+            change = True
+        return change
 
     @staticmethod
     def _purger_ombres(raw: dict[str, Any]) -> bool:
@@ -373,7 +405,25 @@ class LoggiaStore:
         value = data["users"].get(user_id)
         perso = dict(value) if isinstance(value, dict) else {}
         couvre = {k: v for k, v in perso.items() if est_personnelle(k)}
-        return {**data["shared"], **couvre}
+        # Les secrets restent ici ; le client sait seulement s'il y a un code.
+        commun = {k: v for k, v in data["shared"].items() if k not in SECRETES}
+        commun["loggia_admin_pin_defini"] = enregistrement_valide(data["shared"].get(CLE_HACHE))
+        return {**commun, **couvre}
+
+    async def async_get_code_admin(self) -> dict[str, Any] | None:
+        """L'enregistrement du code (sel, hache), ou None s'il n'a jamais ete defini."""
+        data = await self._load()
+        e = data["shared"].get(CLE_HACHE)
+        return dict(e) if enregistrement_valide(e) else None
+
+    async def async_set_code_admin(self, enregistrement: dict[str, Any]) -> None:
+        """Range un enregistrement deja hache (code_admin.hacher). Jamais un code en clair."""
+        if not enregistrement_valide(enregistrement):
+            raise ValueError("enregistrement de code invalide")
+        async with self._lock:
+            data = await self._load()
+            data["shared"][CLE_HACHE] = dict(enregistrement)
+            await self._store.async_save(data)
 
     async def async_set_user(
         self,

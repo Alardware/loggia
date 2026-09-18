@@ -12,6 +12,8 @@ import asyncio
 
 import pytest
 
+from conftest import charger
+
 
 def lancer(coro):
     """Execute une coroutine dans un contexte neuf."""
@@ -116,7 +118,10 @@ def test_seul_le_personnel_prime_a_la_lecture(creer_store):
 
     vu = lancer(magasin.async_get_user("u1"))
     assert vu["loggia-topoffset"] == 8, "un reglage d'appareil ne suit plus son appareil"
-    assert vu["loggia_admin_pin"] == "4271", "une ombre masque encore le code de la maison"
+    # Le code, lui, ne sort plus (18/09) : ni le clair d'avant, ni l'ombre, ni
+    # le hache — seulement le fait qu'un code existe.
+    assert "loggia_admin_pin" not in vu and "loggia_admin_pin_hache" not in vu
+    assert vu["loggia_admin_pin_defini"] is True, "le code en clair d'avant a ete hache au chargement"
     assert vu["loggia_look"] == "clair"
 
 
@@ -165,16 +170,49 @@ def test_cle_devenue_personnelle_ne_laisse_pas_d_orpheline(creer_store):
     assert data["users"]["u1"]["loggia-secpanel"] == "0"
 
 
-def test_le_pin_suit_la_maison(creer_store, store_module):
-    """Le code administrateur etait refuse au nom du secret. Un PIN de quatre
-    chiffres ecrit en clair dans le localStorage n'en est pas un ; ce refus, en
-    revanche, donnait un code different sur chaque appareil et un de plus entre
-    l'acces local et l'acces distant (retour 03/09). Il est commun."""
-    assert store_module.FORBIDDEN_KEYS == frozenset()
+def test_le_pin_suit_la_maison_mais_hache(creer_store, store_module):
+    """Le code administrateur est commun (un seul code, partout : retour 03/09)
+    ET secret depuis le 18/09 : hache dans le magasin, jamais renvoye, jamais
+    ecrit par la configuration — il passe par sa commande, qui le hache."""
+    assert store_module.FORBIDDEN_KEYS == frozenset({"loggia_admin_pin", "loggia_admin_pin_hache"})
     magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
-    lancer(magasin.async_set_user("u1", {"loggia_admin_pin": "1234"}, is_admin=True))
+    lancer(magasin.async_set_user("u1", {"loggia_admin_pin": "1234", "loggia_admin_pin_hache": {"sel": "00", "hache": "00", "iterations": 1000}}, is_admin=True))
     data = lancer(magasin._load())
-    assert data["shared"]["loggia_admin_pin"] == "1234"
+    assert "loggia_admin_pin" not in data["shared"] and "loggia_admin_pin_hache" not in data["shared"], "refuse a l'enregistrement, meme par un administrateur"
+    vu = lancer(magasin.async_get_user("u1"))
+    assert vu["loggia_admin_pin_defini"] is False, "jamais defini : le code par defaut vaut"
+    assert lancer(magasin.async_get_code_admin()) is None
+
+    code = charger("code_admin")
+    lancer(magasin.async_set_code_admin(code.hacher("4271")))
+    e = lancer(magasin.async_get_code_admin())
+    assert code.verifier("4271", e) and not code.verifier("0000", e)
+    vu = lancer(magasin.async_get_user("u1"))
+    assert vu["loggia_admin_pin_defini"] is True
+    assert "loggia_admin_pin_hache" not in vu and "loggia_admin_pin" not in vu, "le hache ne sort pas non plus"
+    with pytest.raises(ValueError):
+        lancer(magasin.async_set_code_admin({"sel": "zz", "hache": "00", "iterations": 1000}))
+
+
+def test_le_code_en_clair_d_avant_est_hache_puis_efface(creer_store):
+    """Un fichier d'avant le 18/09 : le clair devient un hache, les ombres des
+    comptes disparaissent, un hache abime est jete."""
+    magasin = creer_store({
+        "users": {"u1": {"loggia_admin_pin": "0000", "loggia_admin_pin_hache": "vieux"}},
+        "shared": {"loggia_admin_pin": "4271"},
+        "migrated": True,
+    })
+    data = lancer(magasin._load())
+    assert "loggia_admin_pin" not in data["shared"]
+    assert "loggia_admin_pin" not in data["users"]["u1"] and "loggia_admin_pin_hache" not in data["users"]["u1"]
+    code = charger("code_admin")
+    assert code.verifier("4271", data["shared"]["loggia_admin_pin_hache"]), "le code d'avant vaut toujours"
+    assert magasin._store.ecritures == 1, "la migration est ecrite une fois"
+    # Un hache illisible dans le commun est jete : mieux vaut le code par defaut qu'un code que personne ne peut verifier.
+    casse = creer_store({"users": {}, "shared": {"loggia_admin_pin_hache": {"sel": "zz"}}, "migrated": True})
+    data = lancer(casse._load())
+    assert "loggia_admin_pin_hache" not in data["shared"]
+    assert lancer(casse.async_get_user("u1"))["loggia_admin_pin_defini"] is False
 
 
 # ── Migration ───────────────────────────────────────────────────────────────

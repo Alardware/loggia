@@ -16,7 +16,10 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
-const SCAN = ['src', 'custom_components', 'tests'];
+// `docs` et les fichiers de la racine sont publies avec le depot : une ADR qui
+// recopierait un extrait de journal doit etre arretee ici aussi (audit 18/09).
+const SCAN = ['src', 'custom_components', 'tests', 'docs'];
+const RACINE_FICHIERS = ['README.md', 'info.md', 'CHANGELOG.md', 'hacs.json', 'package.json'];
 const EXT = /\.(m?js|jsx|py|json|css|html|md)$/;
 const SKIP = /(node_modules|__pycache__|\.avant-|frontend[/\\]assets|frontend[/\\]fonts)/;
 
@@ -46,9 +49,9 @@ function walk(dir, out = []) {
 }
 
 const hits = [];
-for (const base of SCAN) {
-  let files;
-  try { files = walk(join(ROOT, base)); } catch { continue; }
+const lots = SCAN.map(base => { try { return walk(join(ROOT, base)); } catch { return []; } });
+lots.push(RACINE_FICHIERS.map(f => join(ROOT, f)).filter(p => { try { return statSync(p).isFile(); } catch { return false; } }));
+for (const files of lots) {
   for (const path of files) {
     const lines = readFileSync(path, 'utf8').split('\n');
     lines.forEach((line, i) => {

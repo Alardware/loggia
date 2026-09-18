@@ -107,12 +107,12 @@ test('les profils et le code admin appartiennent à la maison des deux côtés',
   // Ils ont rejoint le commun le 03/09 : ils différaient d'un appareil à
   // l'autre, et même entre l'accès local et l'accès distant, faute d'origine
   // partagée. Les redéclarer personnels ramènerait exactement ce symptôme.
-  for (const cle of ['loggia_users', 'loggia_admin_pin', 'loggia_active_user']) {
+  for (const cle of ['loggia_users', 'loggia_admin_pin_hache', 'loggia_active_user']) {
     assert.ok(!estPersonnelle(cle), `« ${cle} » est redevenue propre à l’appareil`);
   }
   const py = lire('custom_components', 'loggia', 'store.py');
   const bloc = py.slice(py.indexOf('PERSONAL_KEYS: frozenset'), py.indexOf('PERSONAL_SUFFIXES'));
-  for (const cle of ['loggia_users', 'loggia_admin_pin', 'loggia_active_user']) {
+  for (const cle of ['loggia_users', 'loggia_admin_pin_hache', 'loggia_active_user']) {
     assert.ok(bloc.indexOf(cle) < 0, `« ${cle} » est redevenue personnelle côté composant`);
   }
 });

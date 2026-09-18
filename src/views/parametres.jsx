@@ -367,7 +367,7 @@ function AlertesTele({ hass, cardSt }) {
 
 /* ════════════ VUES PERSONNALISÉES : cartes génériques par domaine + éditeur (admin) ════════════ */
 
-// Éditeur du code administrateur (comme V1 AdminPinEditor), cle 'loggia_admin_pin'.
+// Éditeur du code administrateur : défini par `loggia/pin/definir`, jamais lu (18/09).
 // Aperçu vivant du thème (Paramètres → Apparence) : il rend avec les CSS vars COURANTES,
 // donc il suit chaque clic de thème/mode sans plomberie. Valeurs réelles si hass est là.
 function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = LOOK_DEF }) {
@@ -476,39 +476,45 @@ function ResetLoggiaBtn({ compact = false }) {
   return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ padding: compact ? '5px 10px' : '9px 16px', borderRadius: compact ? 8 : 11, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: arm ? '#fff' : 'var(--o-bad)', fontWeight: 700, fontSize: compact ? 11.5 : 12.5, cursor: 'pointer', transition: 'all .2s' }}>{arm ? 'Confirmer ?' : (compact ? 'Réinitialiser Loggia' : 'Réinitialiser')}</button>;
 }
 
-function AdminPinEditor() {
-  /* Le code suit la MAISON depuis le 03/09 : il etait ecrit dans le seul
-   * navigateur, donc different sur le PC, la tablette et le telephone — et
-   * meme entre l'acces local et l'acces distant, qui n'ont pas la meme
-   * origine. Il part au composant comme le reste de la configuration. */
-  const [pin, setPin] = useState(() => String(cfgVal('loggia_admin_pin', null) || '0000'));
-  const [show, setShow] = useState(false);
+function AdminPinEditor({ hass }) {
+  /* Le code suit la MAISON (03/09) et, depuis le 18/09, il est HACHÉ par le
+   * composant : l'écran ne le lit jamais — il sait seulement s'il est défini
+   * (`loggia_admin_pin_defini`) — et ne l'écrit que par sa commande, réservée
+   * aux administrateurs Home Assistant. Un seul code, partout. */
+  const [defini, setDefini] = useState(() => cfgVal('loggia_admin_pin_defini', false) === true);
   const [np, setNp] = useState('');
   const [cf, setCf] = useState('');
   const [msg, setMsg] = useState(null);
-  const dg = v => v.replace(/\D/g, '').slice(0, 4);
-  const save = () => {
-    if (np.length !== 4) { setMsg({ ok: false, t: 'Le code doit faire 4 chiffres.' }); return; }
-    if (np !== cf) { setMsg({ ok: false, t: 'Les deux codes ne correspondent pas.' }); return; }
-    cfgSet({ loggia_admin_pin: np });
-    setPin(np); setNp(''); setCf(''); setMsg({ ok: true, t: 'Code administrateur mis à jour.' });
+  const [enCours, setEnCours] = useState(false);
+  const dg = v => v.replace(/\D/g, '').slice(0, 8);
+  const save = async () => {
+    if (np.length < 4) { setMsg({ ok: false, t: tr('Le code fait de 4 à 8 chiffres.') }); return; }
+    if (np !== cf) { setMsg({ ok: false, t: tr('Les deux codes ne correspondent pas.') }); return; }
+    const h = hass && typeof hass.callWS === 'function' ? hass : null;
+    if (!h) { setMsg({ ok: false, t: tr('Home Assistant n’est pas joignable.') }); return; }
+    setEnCours(true);
+    try {
+      await h.callWS({ type: 'loggia/pin/definir', pin: np });
+      setDefini(true); setNp(''); setCf(''); setMsg({ ok: true, t: tr('Code administrateur mis à jour — le même sur tous les appareils.') });
+    } catch (e) {
+      setMsg({ ok: false, t: e && e.code === 'unauthorized' ? tr('Réservé aux administrateurs.') : ((e && (e.message || e.code)) || tr('Enregistrement impossible.')) });
+    } finally { setEnCours(false); }
   };
   const inp = { width: '100%', padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 700, letterSpacing: '.3em', textAlign: 'center', fontFamily: 'monospace' };
   return (
     <div style={{ marginTop: 22, paddingTop: 20, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Code administrateur</div>
-      <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 16 }}>{tr('Requis pour basculer vers un profil Admin. Reste local à cet appareil (jamais synchronisé).')}</div>
+      <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 16 }}>{tr('Requis pour basculer vers un profil Admin. Gardé par le composant, haché : le même code sur tous les appareils, jamais affiché.')}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)' }}>ACTUEL</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 19, fontWeight: 700, letterSpacing: '.3em', color: 'var(--o-accent-soft)' }}>{show ? pin : '••••'}</span>
-        <button onClick={() => setShow(s => !s)} style={{ padding: '5px 12px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{show ? 'Masquer' : 'Afficher'}</button>
+        <span style={{ fontSize: 13, fontWeight: 700, color: defini ? 'var(--o-text1)' : 'var(--o-warn)' }}>{defini ? tr('Code défini') : tr('Code par défaut (0000) — à changer')}</span>
       </div>
       <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
         <div><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>NOUVEAU CODE</div><input aria-label="Nouveau code" value={np} onChange={e => { setNp(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" style={inp} /></div>
         <div><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>CONFIRMER</div><input aria-label="Confirmer le nouveau code" value={cf} onChange={e => { setCf(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" style={inp} /></div>
       </div>
-      {msg && <div style={{ fontSize: 12, fontWeight: 600, color: msg.ok ? 'var(--o-ok)' : '#f87171', marginBottom: 12 }}>{msg.t}</div>}
-      <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer le code')}</button>
+      {msg && <div role="status" style={{ fontSize: 12, fontWeight: 600, color: msg.ok ? 'var(--o-ok)' : 'var(--o-bad)', marginBottom: 12 }}>{msg.t}</div>}
+      <button onClick={save} disabled={enCours} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer le code')}</button>
     </div>
   );
 }
@@ -1526,7 +1532,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               </div>
             ); })}
           </div>
-          {isAdmin && <AdminPinEditor />}
+          {isAdmin && <AdminPinEditor hass={hass} />}
         </div>
       </>)}
 

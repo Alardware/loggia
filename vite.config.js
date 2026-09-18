@@ -14,6 +14,9 @@ export default defineConfig({
     warmup: { clientFiles: ['./src/main.jsx', './src/App.jsx', './src/ui.jsx', './src/index.css'] },
   },
   build: {
+    // La cible de Vite 5 (« modules »), gardée telle quelle à la montée en Vite 7 :
+    // la nouvelle cible par défaut laisserait tomber les tablettes en Safari 14-15.
+    target: ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari14'],
     outDir: 'dist', emptyOutDir: false, // emptyOutDir false : on garde les anciens bundles (caches clients)
     // Pas de sourcemap en production : le composant est distribué par HACS et
     // les vieux bundles s'accumulent (emptyOutDir) — les .map multiplieraient

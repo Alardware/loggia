@@ -855,6 +855,9 @@ function veillesPatch(patch) {
 
 /* Le planning des robots (ADR 0043). Lundi vaut 0, comme côté serveur. La
  * tondeuse de la démo a son capteur de pluie : c'est lui que l'onglet montre. */
+/* Le code administrateur de la demo : verifie « par le serveur », comme en vrai. */
+const PIN_DEMO = { code: '0000', rates: 0 };
+
 const ROB_CFG = {
   plannings: [
     { id: 'p-semaine', robot: 'vacuum.aspirateur', heure: '09:30', jours: [0, 1, 2, 3, 4], actif: true,
@@ -1088,6 +1091,12 @@ export function installerDemo() {
       if (msg && msg.type === 'loggia/nuit/config') {
         return Promise.resolve({ config: nuitPatch(msg.patch) });
       }
+      if (msg && msg.type === 'loggia/pin/verifier') {
+        if (String(msg.pin) === PIN_DEMO.code) { PIN_DEMO.rates = 0; return Promise.resolve({ ok: true }); }
+        PIN_DEMO.rates += 1;
+        return Promise.resolve({ ok: false, bloque: PIN_DEMO.rates >= 5 ? 60 : 0 });
+      }
+      if (msg && msg.type === 'loggia/pin/definir') { PIN_DEMO.code = String(msg.pin); return Promise.resolve({ defini: true }); }
       if (msg && msg.type === 'loggia/robots/etat') return Promise.resolve(robotsDemo(states));
       if (msg && msg.type === 'loggia/robots/config') return Promise.resolve({ config: robotsPatch(msg.patch) });
       if (msg && msg.type === 'loggia/veilles/etat') return Promise.resolve(veillesDemo(states));

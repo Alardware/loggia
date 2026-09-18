@@ -225,8 +225,20 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                 if scenarios is None:
                     return
                 contexte = getattr(call, "context", None)
-                await scenarios.async_lancer(str(call.data.get("id") or ""),
-                                             user_id=getattr(contexte, "user_id", None))
+                uid = getattr(contexte, "user_id", None)
+                # Appele par une personne : ses permissions d'entite valent ici
+                # aussi. Par une automatisation (pas d'utilisateur) : celles de
+                # la maison.
+                utilisateur = None
+                if uid:
+                    try:
+                        utilisateur = await hass.auth.async_get_user(uid)
+                    except Exception:  # noqa: BLE001
+                        utilisateur = None
+                from .scenarios import controle_de
+
+                await scenarios.async_lancer(str(call.data.get("id") or ""), user_id=uid,
+                                             controle=controle_de(utilisateur) if uid else None)
 
             hass.services.async_register(DOMAIN, "scenario", _lancer_scenario,
                                          schema=vol.Schema({vol.Required("id"): cv.string}))
