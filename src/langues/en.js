@@ -2234,4 +2234,5 @@ export default {
   'Les zones allumées': 'The zones switched on',
   'Tout le jardin': 'The whole garden',
   'Tout le logement': 'The whole home',
+  'Ce robot ne répond plus.': 'This robot no longer answers.',
 };

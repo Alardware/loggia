@@ -50,7 +50,6 @@ test('la phase, le mot et le geste d’un robot', () => {
   assert.equal(R.actionPrincipale('vacuum', 'unavailable', 0).service, null, 'un robot injoignable ne reçoit pas d’ordre');
   assert.equal(R.serviceRetour('vacuum'), 'return_to_base');
   assert.equal(R.serviceRetour('lawn_mower'), 'dock');
-  assert.deepEqual(R.VUE_ROBOT, { vacuum: 'aspirateur', lawn_mower: 'tondeuse' });
 });
 
 test('les sœurs d’un robot : celles de SON appareil, décrites une fois', () => {
@@ -294,26 +293,32 @@ test('la fiche technique : ce que l’appareil dit de lui, rien de plus', () => 
   assert.equal(R.qualiteSignal('inconnu'), null);
 });
 
-test('la vue : une seule pour les deux robots, branchée partout où un robot se touche', () => {
+test('la fiche : une feuille pour les deux robots, ouverte depuis leur carte — partout, le même rendu', () => {
   const app = lire('src', 'App.jsx');
-  assert.ok(app.includes("const RobotContent = lazy(() => import('./views/robot.jsx'));") && !existsSync(join(RACINE, 'src', 'views', 'aspirateur.jsx')), 'l’ancienne vue Aspirateur est remplacée');
-  const v = bloc(app, 'function RobotView(', NL + '}');
-  assert.ok(v.includes('<Suspense fallback=') && v.includes('<RobotContent key={domaine} hass={hass} domaine={domaine} onFiche={setFiche} />'), 'chargée à la demande DANS une frontière : sans elle, un clic du menu finissait dans l’écran d’erreur');
-  assert.ok(v.includes('{fiche && <FicheAppareil id={fiche} hass={hass} onClose={() => setFiche(null)} />}'), 'la carte ne mène plus à la fiche : la fiche (épingle, Stop, Localiser, entités) s’ouvre depuis la vue');
-  const vueRobot = lire('src', 'views', 'robot.jsx');
-  assert.ok(vueRobot.includes("onFiche={onFiche ? () => onFiche(idRobot) : null}") && vueRobot.includes("{tr('Fiche de l’appareil')}"), 'par les réglages du robot');
-  assert.ok(app.includes("<RobotView hass={hass} domaine=\"vacuum\" /> : view === 'tondeuse' ? <RobotView hass={hass} domaine=\"lawn_mower\" />"), 'les deux routes');
-  assert.ok(app.includes("else if (VUE_ROBOT[d] && onNav) { try { window.sessionStorage.setItem('loggia-robot-' + d, id); }"), 'la carte d’un robot mène à SA vue, et le robot tapé est mémorisé');
-  assert.ok(app.includes("aspirateur: [...vacKeys, ...robotKeys('vacuum')], tondeuse: [...mowerKeys(), ...robotKeys('lawn_mower')],"), 'les sœurs du robot suivent le direct');
-  assert.ok(app.includes("'Tondeuse': 'tondeuse'") && app.includes("'aspirateur', 'tondeuse', 'croquettes',"));
+  assert.ok(app.includes("const FicheRobotContent = lazy(() => import('./ficherobot.jsx'));"), 'chargée à la demande');
+  assert.ok(!existsSync(join(RACINE, 'src', 'views', 'robot.jsx')) && !existsSync(join(RACINE, 'src', 'views', 'aspirateur.jsx')), 'plus de vue : une fiche, comme les autres appareils (18/09)');
+  const f = bloc(app, 'function FicheRobot(', NL + '}');
+  assert.ok(f.includes('<BottomSheet onClose={onClose}>') && f.includes('<Suspense fallback=') && f.includes('<FicheRobotContent hass={H} idRobot={id} domaine={domaine} onClose={close} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />'),
+    'une feuille, le contenu chargé DANS une frontière, l’épingle dans l’en-tête');
+  assert.ok(f.includes('useHass([id, ...siblingsOf(LOGGIA_INDEX, id)])'), 'la fiche suit en direct les sœurs du robot : le poll de la vue derrière ne les connaît pas');
+  assert.ok(f.includes('{fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}'), 'la fiche universelle (Stop, Localiser, entités) s’ouvre par-dessus');
+  assert.ok(app.includes('else if (DOMAINES_ROBOT.indexOf(d) >= 0) setRobotPop(id);'), 'la carte d’un robot ouvre sa fiche, partout — plus de condition sur la navigation');
+  assert.ok(app.includes('{robotPop && <FicheRobot id={robotPop} hass={hass} onClose={() => setRobotPop(null)} />}'));
+  assert.ok(!app.includes('RobotView') && !app.includes("'Tondeuse': 'tondeuse'") && !app.includes("robotKeys(") && !app.includes('loggia-robot-'), 'la vue, ses routes et son poll ont disparu');
+  assert.ok(app.includes("vacuum: 'objets', lawn_mower: 'objets' }"), 'la recherche mène à Objets, où la carte du robot ouvre la fiche');
   const vues = lire('src', 'views.js');
-  assert.ok(vues.includes("'aspirateur', 'tondeuse', 'croquettes'") && vues.includes("out.tondeuse = views.tondeuse ? OK : no('aucune tondeuse (domaine lawn_mower)');"));
+  assert.ok(!vues.includes("'aspirateur'") && !vues.includes("'tondeuse'"), 'plus d’identifiant de vue');
   const ui = lire('src', 'ui.jsx');
-  assert.ok(ui.includes("{ label: tr('Aspirateur'), vid: 'aspirateur', icon: 'broom'") && ui.includes("{ label: tr('Tondeuse'), vid: 'tondeuse', icon: 'tractor'"), 'activables dans le menu');
+  assert.ok(!ui.includes("vid: 'aspirateur'") && !ui.includes("vid: 'tondeuse'"), 'plus rien à activer dans le menu');
+  const fiche = lire('src', 'ficherobot.jsx');
+  assert.ok(fiche.includes("onFiche={onFiche ? () => onFiche(idRobot) : null}") && fiche.includes("{tr('Fiche de l’appareil')}"), 'la fiche universelle par les réglages du robot');
+  assert.ok(fiche.includes("export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', onFiche = null, onClose = null, epingle = null }) {"), 'le robot est celui de la carte tapée');
+  assert.ok(!fiche.includes('useLarge') && !fiche.includes('sessionStorage'), 'un seul agencement, celui du téléphone ; plus de robot mémorisé');
+  assert.ok(fiche.includes("{actuel !== 'reglages' && epingle}"), 'l’épingle dans l’en-tête, comme sur la fiche universelle');
 });
 
 test('le dessin : les teintes de Loggia, la couleur qui dit l’état, rien sans source', () => {
-  const vue = lire('src', 'views', 'robot.jsx');
+  const vue = lire('src', 'ficherobot.jsx');
   assert.ok(!/#[0-9a-fA-F]{6}\b/.test(vue), 'aucune couleur en dur : les maquettes donnent une disposition, pas une palette (seul le blanc du texte posé sur l’accent y est)');
   const anneau = bloc(vue, 'function Anneau(', NL + '}');
   const regle = anneau.slice(anneau.indexOf('const couleur ='), anneau.indexOf(';', anneau.indexOf('const couleur =')));
@@ -323,7 +328,7 @@ test('le dessin : les teintes de Loggia, la couleur qui dit l’état, rien sans
   assert.ok(vue.includes('{robot.batterie != null && <Anneau'), 'sans batterie publiée, pas d’anneau');
   assert.ok(vue.includes("...(zones.length || idCarte ? [['zones', idCarte ? tr('Carte') : tr('Zones'), 'map']] : []),") && vue.includes("...(usure.length || compteurs.length ? [['entretien', tr('Entretien'), 'wrench-simple']] : []),"), 'un onglet sans donnée n’existe pas');
   assert.ok(vue.includes('{p.reset && <div') && vue.includes("<BoutonConfirme libelle={tr('Remplacé')}"), '« Remplacé » seulement si l’appareil a le bouton, et en deux appuis');
-  assert.ok(vue.includes('carte={idCarte && large ? planDe() : null}'), 'sur téléphone la carte n’est pas montée dès l’accueil');
+  assert.ok(vue.includes('carte={idCarte ? planDe() : null}') && !vue.includes('carte={idCarte && large'), 'la carte vit dans son onglet, sur tous les écrans');
   assert.ok(vue.includes("if (parInterrupteurs) { appel('script', 'turn_on', { entity_id: scripts.pieces_selectionnees }); return; }"), 'le script maison garde la main quand il existe');
   const css = lire('src', 'index.css');
   for (const r of ['.rb-aspirateur { --rb-rgb: var(--o-accent-rgb); --rb-doux: var(--o-accent-soft); --rb-fond: var(--o-accent-fond); }', '.rb-tondeuse { --rb-fond: color-mix(in srgb, var(--o-ok) 62%, #000); }', '.rb-onglet { flex: 1 1 0; min-width: 0; flex-direction: column;']) {

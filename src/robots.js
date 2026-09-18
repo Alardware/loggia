@@ -1,7 +1,7 @@
 /* ── Les robots de la maison : aspirateur et tondeuse (ADR 0042) ─────────────
  *
- * Une vue par robot, en onglets (maquettes du 17/09) : l'accueil du robot, ses
- * zones, son historique, son entretien, ses réglages. Ce fichier porte tout ce
+ * Une fiche par robot, en onglets (maquettes du 17/09) : l'accueil du robot,
+ * ses zones, son planning, son historique, son entretien, ses réglages. Ce fichier porte tout ce
  * qui se CALCULE ; pas de React, pas de Home Assistant : la vue lui passe des
  * entités déjà lues, les tests aussi.
  *
@@ -16,8 +16,6 @@
 import { tr } from './i18n.js';
 
 export const DOMAINES_ROBOT = ['vacuum', 'lawn_mower'];
-/** La vue d'un robot, par domaine. */
-export const VUE_ROBOT = { vacuum: 'aspirateur', lawn_mower: 'tondeuse' };
 
 const sansAccents = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const nombre = (v) => { const n = typeof v === 'number' ? v : parseFloat(v); return isNaN(n) ? null : n; };

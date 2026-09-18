@@ -1,10 +1,14 @@
-/* ── La vue d'un robot : aspirateur ou tondeuse (ADR 0042) ──────────────────
+/* ── La fiche d'un robot : aspirateur ou tondeuse (ADR 0042) ─────────────────
  *
  * Quinze maquettes fournies le 17/09 (« pour les robots aspirateur et
  * tondeuse ») : l'accueil du robot — l'anneau de batterie, l'état, « Démarrer »,
  * les zones, la semaine, l'entretien qui presse —, puis la carte et ses zones,
- * l'historique, l'entretien, les réglages. UNE vue pour les deux robots : ce
+ * l'historique, l'entretien, les réglages. UNE fiche pour les deux robots : ce
  * qui les sépare n'est pas leur nature mais ce qu'ils savent dire.
+ *
+ * Une FEUILLE, comme les autres appareils (ajustement du 18/09) : la carte du
+ * robot l'ouvre, partout, et le rendu est le même sur PC, tablette et
+ * téléphone — l'agencement du téléphone, que l'utilisateur préfère.
  *
  * Les maquettes donnent la DISPOSITION ; les teintes sont celles de Loggia —
  * l'accent du thème pour l'aspirateur, le vert d'état pour la tondeuse. Tout
@@ -12,25 +16,25 @@
  * onglet sans donnée n'existe pas, une jauge sans total ne se dessine pas, et
  * aucune pièce, surface ni durée n'est inventée.
  *
- * Chargée à la demande ; elle emporte le plan du logement (`vacplan.jsx`),
- * demandé seulement si une carte existe.
+ * Chargée à la demande par `FicheRobot` (App.jsx) ; elle emporte le plan du
+ * logement (`vacplan.jsx`), demandé seulement si une carte existe.
  */
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-import { tr, locale } from '../i18n.js';
-import { Fi, Bascule, Gauge, BottomSheet, useEtatServeur, cl_hexRgb } from '../ui.jsx';
-import { LOGGIA_INDEX, loggiaEnt, vacRooms, vacOption } from '../state.js';
-import { commanderService } from '../actions.js';
-import { useLoggia, useEntities } from '../runtime.js';
-import { CamLive } from '../camera.jsx';
-import { premierJourSemaine } from '../horloge.js';
+import { tr, locale } from './i18n.js';
+import { Fi, Bascule, Gauge, BottomSheet, useEtatServeur, cl_hexRgb } from './ui.jsx';
+import { LOGGIA_INDEX, loggiaEnt, vacRooms, vacOption } from './state.js';
+import { commanderService } from './actions.js';
+import { useLoggia, useEntities } from './runtime.js';
+import { CamLive } from './camera.jsx';
+import { premierJourSemaine } from './horloge.js';
 import {
   decrireSoeurs, phaseRobot, motEtatRobot, enCharge, batterieRobot, actionPrincipale, serviceRetour, commandeZones,
   zonesTondeuse, piecesUsure, alerteEntretien, compteursRobot, sessionsRobot, motIssue, resumeSemaine, dureeLisible,
   etiquetteJour, reglagesRobot, ficheTechnique, ordreJours, nomJour, heureValide, resumeZones, zonePlanning, nouveauPlanning,
   prochainPassage, etiquetteProchain, dansLaPlage, capteurPluie,
-} from '../robots.js';
+} from './robots.js';
 
-const VacPlan = lazy(() => import('../vacplan.jsx'));
+const VacPlan = lazy(() => import('./vacplan.jsx'));
 
 const FOND = 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
 const PANNEAU = { background: FOND, border: 'none', borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', minWidth: 0 };
@@ -74,21 +78,6 @@ function useHistoriqueRobot(hass, idRobot, idSurface, etat, jours = 14) {
     return () => { vivant = false; };
   }, [connecte, idRobot, idSurface, etat, jours]);
   return reponse;
-}
-
-/* Un écran large : la carte se montre dès l'accueil du robot. Sur téléphone,
- * elle n'est pas montée du tout — son analyse d'image ne tourne pas pour rien. */
-function useLarge(px) {
-  const lire = () => { try { return window.matchMedia('(min-width: ' + px + 'px)').matches; } catch { return false; } };
-  const [large, setLarge] = useState(lire);
-  useEffect(() => {
-    let mq = null;
-    try { mq = window.matchMedia('(min-width: ' + px + 'px)'); } catch { return undefined; }
-    const suivre = () => setLarge(mq.matches);
-    mq.addEventListener('change', suivre);
-    return () => mq.removeEventListener('change', suivre);
-  }, [px]);
-  return large;
 }
 
 /* ════════════ Les briques ════════════ */
@@ -138,7 +127,7 @@ function BoutonConfirme({ libelle, onConfirme }) {
 
 /* ════════════ L'accueil du robot ════════════ */
 
-function OngletAccueil({ domaine, robot, zones, nChoisies, basculerZone, peutChoisir, lancer, rentrer, resume, derniere, prochain, alerte, carte, aUneCarte, allerA }) {
+function OngletAccueil({ domaine, robot, zones, nChoisies, basculerZone, peutChoisir, lancer, rentrer, resume, derniere, prochain, alerte, aUneCarte, allerA }) {
   // Deux tuiles, comme sur les maquettes : ce qui VIENT quand un passage est
   // planifié, sinon ce qui s'est passé (l'historique garde le reste).
   const passage = prochain ? { ...prochain, nom: tr('Prochain passage'), vers: 'planning' } : derniere ? { ...derniere, nom: tr('Dernier passage'), vers: 'historique' } : null;
@@ -178,7 +167,6 @@ function OngletAccueil({ domaine, robot, zones, nChoisies, basculerZone, peutCho
               {zones.map(z => <Puce key={z.id} on={!!z.choisie} disabled={!peutChoisir || z.inerte} couleur={z.couleur} onClick={() => basculerZone(z)}>{z.nom}</Puce>)}
             </div>
           )}
-          {carte && <div style={{ ...PANNEAU, padding: 14 }}>{carte}</div>}
         </div>
       )}
 
@@ -600,19 +588,11 @@ function OngletPlanning({ hass, domaine, robot, zones, planning }) {
 
 /* ════════════ La vue ════════════ */
 
-export default function RobotContent({ hass, domaine = 'vacuum', onFiche = null }) {
+export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', onFiche = null, onClose = null, epingle = null }) {
   const S = (hass && hass.states) || {};
   const { resolved } = useLoggia();
   const entVac = useEntities('vacuum', null) || {};
   const entRooms = useEntities('vacuumRooms', null);
-  const large = useLarge(980);
-  // Le robot : celui que la découverte a retenu (ou que la configuration
-  // désigne) ; la carte d'un autre robot du même domaine peut l'imposer.
-  const demande = (() => { try { return window.sessionStorage.getItem('loggia-robot-' + domaine); } catch { return null; } })();
-  const parDefaut = domaine === 'vacuum'
-    ? ((resolved && resolved.vacuum && resolved.vacuum.available && resolved.vacuum.main) || null)
-    : ((() => { const c = loggiaEnt('mower', null); return c && c.main && S[c.main] ? c.main : null; })() || Object.keys(S).find(id => id.indexOf('lawn_mower.') === 0) || null);
-  const idRobot = demande && S[demande] && demande.indexOf(domaine + '.') === 0 ? demande : parDefaut;
   const robot = lireRobot(hass, domaine, idRobot);
 
   const vac = domaine === 'vacuum' && resolved && resolved.vacuum && resolved.vacuum.available && resolved.vacuum.main === idRobot ? resolved.vacuum : null;
@@ -696,9 +676,9 @@ export default function RobotContent({ hass, domaine = 'vacuum', onFiche = null 
 
   if (!idRobot || !robot.st) {
     return (
-      <div className="loggia-content" style={{ padding: '26px 28px 56px' }}>
-        <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{domaine === 'lawn_mower' ? tr('Tondeuse') : tr('Aspirateur')}</h1>
-        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 10 }}>{domaine === 'lawn_mower' ? tr('Aucune tondeuse (domaine lawn_mower) dans cette installation.') : tr('Aucun aspirateur (domaine vacuum) dans cette installation.')}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button type="button" onClick={onClose || undefined} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Ce robot ne répond plus.')}</div>
       </div>
     );
   }
@@ -728,12 +708,18 @@ export default function RobotContent({ hass, domaine = 'vacuum', onFiche = null 
   } : null;
 
   return (
-    <div className={'loggia-content rb-vue ' + (domaine === 'lawn_mower' ? 'rb-tondeuse' : 'rb-aspirateur')} style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <h1 style={{ margin: 0, flex: 1, minWidth: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{actuel === 'reglages' ? tr('Réglages') : robot.nom}</h1>
+    <div className={'rb-fiche ' + (domaine === 'lawn_mower' ? 'rb-tondeuse' : 'rb-aspirateur')} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* L'en-tête des fiches : fermer, le nom, l'épingle — et la roue des réglages. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button type="button" onClick={onClose || undefined} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{actuel === 'reglages' ? tr('Réglages') : robot.nom}</div>
+          {actuel === 'reglages' && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{robot.nom}</div>}
+        </div>
+        {actuel !== 'reglages' && epingle}
         {actuel !== 'reglages' && (
           <button type="button" onClick={() => setOnglet('reglages')} aria-label={tr('Réglages')} title={tr('Réglages')}
-            style={{ width: 42, height: 42, borderRadius: 14, border: 'none', cursor: 'pointer', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)' }}><Fi i="settings" size={16} /></button>
+            style={{ width: 34, height: 34, borderRadius: 10, border: 'none', cursor: 'pointer', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)' }}><Fi i="settings" size={14} /></button>
         )}
       </div>
 
@@ -749,7 +735,7 @@ export default function RobotContent({ hass, domaine = 'vacuum', onFiche = null 
       )}
 
       {actuel === 'accueil' && <OngletAccueil domaine={domaine} robot={robot} zones={zones} nChoisies={nChoisies} basculerZone={basculerZone} peutChoisir={peutChoisir} lancer={lancer} rentrer={rentrer}
-        resume={brut ? resume : null} derniere={derniere} prochain={prochain} alerte={alerteEntretien(usure)} carte={idCarte && large ? planDe() : null} aUneCarte={!!idCarte} allerA={setOnglet} />}
+        resume={brut ? resume : null} derniere={derniere} prochain={prochain} alerte={alerteEntretien(usure)} aUneCarte={!!idCarte} allerA={setOnglet} />}
       {actuel === 'zones' && <OngletZones domaine={domaine} robot={robot} zones={zones} nChoisies={nChoisies} basculerZone={basculerZone} peutChoisir={peutChoisir} lancer={lancer} carte={idCarte ? planDe() : null} camera={camera} />}
       {actuel === 'planning' && <OngletPlanning hass={hass} domaine={domaine} robot={robot} zones={zonesPlanifiables} planning={planning} />}
       {actuel === 'historique' && <OngletHistorique domaine={domaine} sessions={sessions} resume={resume} chargee={!!brut} />}

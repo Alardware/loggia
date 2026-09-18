@@ -115,7 +115,7 @@ test('le capteur de pluie de l’appareil, s’il en a un', () => {
 });
 
 test('l’onglet Planning : il n’existe que si le composant répond, et rien ne s’y invente', () => {
-  const vue = lire('src', 'views', 'robot.jsx');
+  const vue = lire('src', 'ficherobot.jsx');
   assert.ok(vue.includes("const planning = useEtatServeur(hass, 'loggia/robots/etat', 15000, '');"), 'l’état vient du serveur');
   assert.ok(vue.includes("...(planning.etat ? [['planning', tr('Planning'), 'calendar-clock']] : []),"), 'sans réponse du composant, pas d’onglet');
   const o = vue.indexOf("['zones', idCarte"), p = vue.indexOf("['planning', tr('Planning')"), h = vue.indexOf("['historique', tr('Historique')");
@@ -129,7 +129,7 @@ test('l’onglet Planning : il n’existe que si le composant répond, et rien n
   assert.ok(vue.includes("const retenu = p.actif && dansLaPlage(reglages.calme, p.heure);"), 'un passage pris dans « Ne pas déranger » le dit');
   assert.ok(!/planning[^\n]*#[0-9a-fA-F]{6}\b/.test(vue), 'aucune couleur en dur');
   const css = lire('src', 'index.css');
-  assert.ok(css.includes('.rb-accueil, .rb-zones, .rb-histo, .rb-planning { display: grid;') && css.includes('.rb-planning { grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr); align-items: start; }'));
+  assert.ok(css.includes('.rb-accueil, .rb-zones, .rb-histo, .rb-planning { display: grid; grid-template-columns: minmax(0, 1fr);'), 'une colonne, partout');
 });
 
 test('la démo répond comme le serveur', () => {

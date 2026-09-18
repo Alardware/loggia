@@ -48,7 +48,7 @@ test('petite maison : lumieres, chauffage, volets — rien d’autre', () => {
     resolved: { rooms: { suggested: [{ id: 'salon' }] } },
   }));
   ['lumieres', 'climat', 'volets', 'scenes', 'pieces'].forEach(v => ok(r, v));
-  ['aspirateur', 'medias', 'securite', 'energie', 'systeme', 'croquettes'].forEach(v => ko(r, v));
+  ['medias', 'securite', 'energie', 'systeme', 'croquettes'].forEach(v => ko(r, v));
 });
 
 test('scenarios : Loggia les compose des qu’il y a quelque chose a piloter, meme sans scene', () => {
@@ -128,7 +128,6 @@ test('des lumieres seules suffisent a ouvrir Objets : la vue montre tout ce qui 
 test('un seul aspirateur suffit a ouvrir Objets', () => {
   const r = viewAvailability(ctx({ has: { vacuum: 1 }, views: { aspirateur: true } }));
   ok(r, 'objets');
-  ok(r, 'aspirateur');
 });
 
 test('plusieurs appareils du meme type ne changent rien a la disponibilite', () => {

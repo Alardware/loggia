@@ -109,3 +109,33 @@ finissait dans l'écran d'erreur — défaut latent de l'ancienne vue.
 `vacSensors` (state.js) double en partie la reconnaissance de `robots.js` : la
 fiche de l'appareil s'en sert encore, à unifier. Vérifié en démo seulement, à
 390 et 1440 px, pour les deux robots.
+
+## Ajustement du 18/09 (v3.45.0) — une fiche, pas une vue
+
+Retour de l'utilisateur : « pourquoi ne pas faire comme pour les autres
+appareils en mettant ça dans une popup comme avant, surtout que j'aime
+beaucoup la vue mobile et ça permettrait d'uniformiser le tout sur les
+différents appareils PC / téléphone / tablette ».
+
+- **Le robot a une FICHE, en feuille, comme les autres appareils** :
+  `FicheRobot` (App.jsx) ouvre `src/ficherobot.jsx` — l'ancien
+  `views/robot.jsx`, même contenu : onglets Accueil · Carte ou Zones ·
+  Planning · Historique · Entretien, réglages par la roue — dans une
+  `BottomSheet` de 480 px au plus. Le rendu est celui du téléphone, partout :
+  une colonne, les onglets sur une ligne avec l'icône au-dessus du mot ; la
+  carte du robot vit dans son onglet, elle ne se montre plus « dès l'accueil
+  sur grand écran ». L'en-tête est celui des fiches : fermer, le nom,
+  l'épingle, la roue.
+- **La carte d'un robot ouvre sa fiche PARTOUT** — Objets, pièces, Sécurité,
+  favoris de l'Accueil, vues personnalisées — sans condition de navigation ;
+  l'incohérence de la veille (les favoris ouvraient encore la fiche
+  universelle) disparaît. Le robot est celui de la carte tapée : plus de robot
+  « mémorisé ».
+- **Les vues Aspirateur et Tondeuse disparaissent** : routes, entrées du menu
+  à activer, identifiants de `views.js`, sondage dédié. Ce qu'elles portaient
+  est dans la fiche ; la fiche suit en direct les entités sœurs du robot par
+  son propre abonnement (`useHass`), comme la fiche universelle. La recherche
+  mène un robot à Objets, où sa carte ouvre la fiche. Une barre de navigation
+  enregistrée qui citait encore « aspirateur » ignore l'entrée.
+- La fiche universelle (Stop, Localiser, toutes les entités) reste la dernière
+  ligne des réglages du robot, par-dessus la fiche.
