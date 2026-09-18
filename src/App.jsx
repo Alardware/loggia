@@ -2474,7 +2474,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {zoneModes(S, zone).map((opt) => { const on = z.modeBrut === opt; return (
-            <button key={opt} onClick={() => { if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', opt); else call('input_select', 'select_option', { entity_id: zone.modeEnt, option: opt }); }} style={{ flex: 1, padding: '12px 8px', borderRadius: 14, cursor: 'pointer', fontWeight: 700, fontSize: 12, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-warn2-rgb),.5)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-warn2-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-warn2)' : 'var(--o-text1)' }}>{zoneModeLabel(zone, opt)}</button>
+            <button key={opt} onClick={() => { if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', opt); else call('input_select', 'select_option', { entity_id: zone.modeEnt, option: opt }); }} style={{ flex: 1, padding: '12px 8px', borderRadius: 14, cursor: 'pointer', fontWeight: 700, fontSize: 12, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>{zoneModeLabel(zone, opt)}</button>
           ); })}
         </div>
         {/* Préréglage du thermostat (Turbo, Comfort, Overnight…) : le sélecteur
@@ -2973,12 +2973,13 @@ const FicheValeur = ({ children, couleur = 'var(--o-text)' }) => (
 const FicheBouton = ({ children, onClick, icone = null, title = null }) => (
   <button onClick={onClick} title={title || undefined} aria-label={title || undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>{icone && <Fi i={icone} size={12} />}{children}</button>
 );
-/* Des puces exclusives, arrondi 9 — pas de pilules. */
-function FichePuces({ options, valeur, onChoix, couleur = 'var(--o-accent)' }) {
+/* Des puces exclusives, arrondi 9 — pas de pilules. Choisie : bleu plein,
+ * texte blanc, quel que soit l'appareil (retour du 18/09). */
+function FichePuces({ options, valeur, onChoix }) {
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {options.map(o => { const on = o.id === valeur; return (
-        <button key={o.id} onClick={() => onChoix(o.id)} aria-pressed={on} style={{ padding: '8px 14px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? hx(couleur, .45) : 'var(--o-bd2)'), background: on ? hx(couleur, .14) : 'var(--o-s1)', color: on ? couleur : 'var(--o-text1)' }}>{o.nom}</button>
+        <button key={o.id} onClick={() => onChoix(o.id)} aria-pressed={on} style={{ padding: '8px 14px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>{o.nom}</button>
       ); })}
     </div>
   );
@@ -3068,7 +3069,7 @@ function RoomCoverSheet({ id, hass, onClose }) {
         <FicheLibelle droite={<span style={{ fontSize: 18, fontWeight: 800, color: pos ? 'var(--o-purple)' : 'var(--o-text3)' }}>{pos} %</span>}>{tr('POSITION')}</FicheLibelle>
         <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" label={tr('Position') + ' ' + nom} onCommit={poser} marge={0} />
         <div style={{ marginTop: 12 }}>
-          <FichePuces options={chips} valeur={chip} couleur="var(--o-purple)" onChoix={(c) => { if (c === 'ferme') { setOv(0); cov('close_cover'); } else if (c === 'ouvert') { setOv(100); cov('open_cover'); } else poser(50); }} />
+          <FichePuces options={chips} valeur={chip} onChoix={(c) => { if (c === 'ferme') { setOv(0); cov('close_cover'); } else if (c === 'ouvert') { setOv(100); cov('open_cover'); } else poser(50); }} />
         </div>
         <div style={{ marginTop: 14 }}>
           {plan && <FicheRangee premiere titre={tr('Auto lever / coucher')}
@@ -3137,8 +3138,8 @@ function RoomClimateSheet({ id, hass, onClose }) {
         </div>
         <div style={{ marginTop: 12 }}>
           {presets.length > 0
-            ? <FichePuces options={presets.map(p => ({ id: p, nom: p }))} valeur={a.preset_mode && a.preset_mode !== 'unknown' ? a.preset_mode : null} couleur="var(--o-bad)" onChoix={(p) => commander(hass, id, 'set_preset_mode', p)} />
-            : <FichePuces options={all.map(m => ({ id: m, nom: tr(MODE_FR[m]) || m }))} valeur={mode} couleur="var(--o-bad)" onChoix={(m) => commander(hass, id, 'set_hvac_mode', m)} />}
+            ? <FichePuces options={presets.map(p => ({ id: p, nom: p }))} valeur={a.preset_mode && a.preset_mode !== 'unknown' ? a.preset_mode : null} onChoix={(p) => commander(hass, id, 'set_preset_mode', p)} />
+            : <FichePuces options={all.map(m => ({ id: m, nom: tr(MODE_FR[m]) || m }))} valeur={mode} onChoix={(m) => commander(hass, id, 'set_hvac_mode', m)} />}
         </div>
         <div style={{ marginTop: 14 }}>
           <FicheRangee premiere titre={tr('Chauffe')} desc={tr('Coupe la zone sans toucher à la consigne')} droite={<RmBascule on={marche} nom={nom} onToggle={basculer} />} />
@@ -7888,8 +7889,8 @@ function Dropdown({ value, options, onChange, label, width = 150 }) {
             const on = o.id === value;
             return (
               <button key={o.id} role="option" aria-selected={on} onClick={() => { onChange(o.id); setOpen(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', fontSize: 12, fontWeight: on ? 700 : 600, background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'transparent', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
-                <span style={{ width: 13, display: 'inline-flex', flexShrink: 0 }}>{on ? <Fi i="check" size={12} color="var(--o-accent-soft)" /> : null}</span>
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', fontSize: 12, fontWeight: on ? 700 : 600, background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)' }}>
+                <span style={{ width: 13, display: 'inline-flex', flexShrink: 0 }}>{on ? <Fi i="check" size={12} color="#fff" /> : null}</span>
                 {o.label}
               </button>
             );
@@ -9708,7 +9709,7 @@ function MenuDeroulant({ icone = null, etiquette, valeur, options, surChoix, ren
         <div role="listbox" style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 30, minWidth: 158, padding: 6, borderRadius: 14, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: '0 12px 30px rgba(0,0,0,.45)' }}>
           {options.map(v => { const act = valeur === v; return (
             <button key={v} role="option" aria-selected={act} onClick={() => { surChoix(v); setOuvert(false); }}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: act ? 'rgba(var(--o-accent-rgb),.16)' : 'transparent', color: act ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{rendre(v)}</button>
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: act ? 'var(--o-accent-fond)' : 'transparent', color: act ? '#fff' : 'var(--o-text1)' }}>{rendre(v)}</button>
           ); })}
         </div>
       )}

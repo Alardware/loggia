@@ -241,7 +241,19 @@ test('les puces de navigation choisies sont en bleu plein, texte blanc', () => {
     [lire('src', 'ficherobot.jsx'), "style={{ background: actuel === id ? 'var(--o-accent-fond)' : 'transparent', color: actuel === id ? '#fff' : 'var(--o-text2)' }}>", 'onglets d’un robot'],
     [lire('src', 'views', 'systeme.jsx'), "background: x.cle === s.cle ? 'var(--o-accent-fond)' : 'transparent', color: x.cle === s.cle ? '#fff' : 'var(--o-text2)' }}>{x.nom}</button>", 'séries du Système'],
   ];
+  // Puis « mets aussi les zones et modes en bleu » : plus d'exception.
+  const ROBOT = lire('src', 'ficherobot.jsx');
+  sites.push(
+    [APP, "border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>{o.nom}</button>", 'modes d’une fiche'],
+    [APP, "background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>{zoneModeLabel(zone, opt)}</button>", 'modes du fil pilote'],
+    [APP, "background: act ? 'var(--o-accent-fond)' : 'transparent', color: act ? '#fff' : 'var(--o-text1)' }}>{rendre(v)}</button>", 'options d’un menu déroulant'],
+    [ROBOT, "border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd2)'),", 'zones d’un robot'],
+    [ROBOT, "background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text3)' }}>{nomJour(j, locale(), 'narrow')}</button>", 'jours du planning'],
+  );
   for (const [src, bout, nom] of sites) assert.ok(src.includes(bout), nom + ' : la puce choisie n’est plus en bleu plein');
+  assert.ok(!APP.includes('function FichePuces({ options, valeur, onChoix, couleur'), 'les modes d’une fiche ont retrouvé leur couleur');
+  // La zone garde son carré de couleur : il la relie à la carte.
+  assert.ok(ROBOT.includes('background: couleur, flexShrink: 0 }} />}'), 'la zone a perdu le repère de sa couleur');
   assert.ok(!APP.includes("background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>"), 'un filtre pâle est revenu');
 });
 

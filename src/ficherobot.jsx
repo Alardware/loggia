@@ -21,7 +21,7 @@
  */
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { tr, locale } from './i18n.js';
-import { Fi, Bascule, Gauge, BottomSheet, useEtatServeur, cl_hexRgb } from './ui.jsx';
+import { Fi, Bascule, Gauge, BottomSheet, useEtatServeur } from './ui.jsx';
 import { LOGGIA_INDEX, loggiaEnt, vacRooms, vacOption } from './state.js';
 import { commanderService } from './actions.js';
 import { useLoggia, useEntities } from './runtime.js';
@@ -103,17 +103,23 @@ function Anneau({ pct, phase }) {
   );
 }
 
+/* Une zone choisie : bleu plein, texte blanc, comme toute puce choisie
+ * (retour du 18/09). Sa couleur reste en petit carre — c'est elle qui la
+ * relie a la carte, comme dans la liste des zones. */
 const Puce = ({ on, children, onClick, disabled = false, couleur = null }) => (
   <button type="button" onClick={onClick} aria-pressed={on} disabled={disabled}
-    style={{ padding: '9px 15px', borderRadius: 12, cursor: disabled ? 'default' : 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: disabled ? .5 : 1,
-      border: '1px solid ' + (on ? (couleur || 'rgba(var(--rb-rgb),.55)') : 'var(--o-bd2)'),
-      background: on ? (couleur ? 'rgba(' + cl_hexRgb(couleur) + ',.14)' : 'rgba(var(--rb-rgb),.14)') : 'var(--o-s2)',
-      color: on ? (couleur || 'var(--rb-doux)') : 'var(--o-text1)' }}>{children}</button>
+    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 15px', borderRadius: 12, cursor: disabled ? 'default' : 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: disabled ? .5 : 1,
+      border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd2)'),
+      background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)',
+      color: on ? '#fff' : 'var(--o-text1)' }}>
+    {couleur && <span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: 3, background: couleur, flexShrink: 0 }} />}
+    {children}
+  </button>
 );
 
 const Case = ({ on }) => (
   <span aria-hidden="true" style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
-    border: on ? 'none' : '2px solid var(--o-bd1)', background: on ? 'var(--rb-fond)' : 'transparent', color: '#fff' }}>{on && <Fi i="check" size={12} color="#fff" />}</span>
+    border: on ? 'none' : '2px solid var(--o-bd1)', background: on ? 'var(--o-accent-fond)' : 'transparent', color: '#fff' }}>{on && <Fi i="check" size={12} color="#fff" />}</span>
 );
 
 /* Un geste qui ne se rattrape pas (remettre un compteur à neuf) : deux appuis. */
@@ -432,7 +438,7 @@ const REGLAGES_NEUFS = { calme: { actif: false, debut: '22:00', fin: '07:00' }, 
 const PuceJour = ({ j, on, onClick, taille = 30 }) => (
   <button type="button" onClick={onClick} aria-pressed={on} aria-label={nomJour(j, locale(), 'long')} title={nomJour(j, locale(), 'long')}
     style={{ width: taille, height: taille, borderRadius: '50%', border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0, fontSize: 11.5, fontWeight: 800, fontFamily: 'inherit',
-      background: on ? 'rgba(var(--rb-rgb),.18)' : 'var(--o-s2)', color: on ? 'var(--rb-doux)' : 'var(--o-text3)' }}>{nomJour(j, locale(), 'narrow')}</button>
+      background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text3)' }}>{nomJour(j, locale(), 'narrow')}</button>
 );
 
 /* Un champ d'heure qui ne rend la valeur que lorsqu'elle est entière. */

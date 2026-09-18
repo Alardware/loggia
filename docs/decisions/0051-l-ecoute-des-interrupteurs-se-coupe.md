@@ -51,3 +51,13 @@ administrateurs (test_websocket_api) ; l'écoute se teste sans Home Assistant
 l'écoute se coupe : avant, l'ancien composant écoute toujours, et « Écouter
 5 min » répond une erreur. La démo simule l'écoute. Tests JS :
 parametres_maquettes.test.mjs (+4).
+
+## Amendement (18/09/2026, v3.52.1) — plus d'exception
+
+Demande : « mets aussi les zones et modes en bleu ». Les puces gardées en
+couleur passent au bleu plein, texte blanc : modes d'une fiche (`FichePuces`
+perd sa couleur par domaine — le rouge du climat, le violet du volet), modes
+du fil pilote, options des menus déroulants, zones et jours des robots, cases
+des zones. Une zone garde un petit carré à sa couleur, dans la puce comme dans
+la liste : c'est lui qui la relie à la carte. Les icônes d'état des cartes
+(RM_ICO) ne sont pas des puces et gardent leurs teintes.
