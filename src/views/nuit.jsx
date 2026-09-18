@@ -8,8 +8,9 @@ import {
   useMemo
 } from 'react';
 import { LOGGIA_INDEX } from '../state.js';
-import { cvName, RegleEntete, usePli , useEtatServeur, Bascule } from '../ui.jsx';
-import { tr, locale } from '../i18n.js';
+import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
+import { ZONE_REGLAGES } from './parcommun.jsx';
+import { tr } from '../i18n.js';
 
 // Le bit TRANSITION de Home Assistant : une lampe qui ne l'a pas ne sait pas
 // s'éteindre en fondu.
@@ -103,7 +104,6 @@ export function NuitReglages({ hass, cardSt }) {
   const epargnees = c.sauf || [];
   const ecl = cfg.eclairage || {};
 
-  const titre = { fontSize: 15, fontWeight: 700 };
   const simu = cfg.simulation || {};
   const label = { fontSize: 12, fontWeight: 700 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
@@ -136,7 +136,7 @@ export function NuitReglages({ hass, cardSt }) {
           </div>
         )}
         {v.actif && !pliVeilleuse && (
-          <div id="nuit-veilleuse">
+          <div id="nuit-veilleuse" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 78 }}>{tr('S’éteint après')}</span>
               <input aria-label={tr('Extinction après, en minutes')} type="number" value={v.duree != null ? v.duree : 30} min={0} max={240}
@@ -193,7 +193,7 @@ export function NuitReglages({ hass, cardSt }) {
           desc={tr('À l’heure dite, ce qui traîne encore allumé s’éteint.')}
           on={c.actif} cb={() => enregistrer({ coucher: { actif: !c.actif } })} plie={pliCoucher} onPlier={plierCoucher} zone="nuit-coucher" />
         {c.actif && !pliCoucher && (
-          <div id="nuit-coucher">
+          <div id="nuit-coucher" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 78 }}>{tr('À')}</span>
               <input aria-label={tr('Heure d’extinction')} type="time" value={c.heure || '23:30'}
@@ -247,7 +247,7 @@ export function NuitReglages({ hass, cardSt }) {
           </div>
         )}
         {ecl.actif && !pliEclairage && (
-          <div id="nuit-eclairage">
+          <div id="nuit-eclairage" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 78 }}>{tr('Intensité')}</span>
               <input aria-label={tr('Intensité de l’éclairage nocturne, en pourcentage')} type="number" value={ecl.luminosite != null ? ecl.luminosite : 10} min={1} max={100}
@@ -286,37 +286,6 @@ export function NuitReglages({ hass, cardSt }) {
           </div>
         )}
       </div>
-
-      {/* ── Observer sans agir ── */}
-      {/* Un MODE, pas une règle : il ne commande rien et n'a rien à replier. */}
-      <div style={cardSt}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={titre}>{tr('Observer sans agir')}</div>
-            <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{tr('Les règles notent ce qu’elles auraient fait, sans toucher aux lumières.')}</div>
-          </div>
-          <Bascule nom={tr('Observer sans agir')} on={!!simu.actif} cb={() => enregistrer({ simulation: { actif: !simu.actif } })} />
-        </div>
-      </div>
-
-      {etat.journal && etat.journal.length > 0 && (
-        <div style={cardSt}>
-          <div style={titre}>{tr('Dernières extinctions')}</div>
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
-            {etat.journal.slice(0, 8).map((j, i) => (
-              <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
-                {/* Les champs du journal COMMUN : ce qui a été fait, par quelle
-                  * règle, pourquoi — et ce qui a manqué. */}
-                <span style={{ minWidth: 0 }}>
-                  {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
-                  {j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
-                </span>
-                <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {err && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
     </div>

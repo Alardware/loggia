@@ -7,7 +7,7 @@
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  Fi, EnRow, EnVal, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg
+  Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg
 } from '../ui.jsx';
 import {
   cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, medCompanion,
@@ -25,7 +25,7 @@ import { commanderService } from '../actions.js';
 import { viewReason } from '../views.js';
 import { detecterCapteursPieces } from '../resolve.js';
 import { autoFamille } from '../autos.js';
-import { InterrupteursSection } from './interrupteurs.jsx';
+import { InterrupteursSection, gestesRegles } from './interrupteurs.jsx';
 import { VoletsReglages } from './volets.jsx';
 import { FenetresReglages } from './fenetres.jsx';
 import { PresenceReglages } from './presence.jsx';
@@ -33,7 +33,8 @@ import { NuitReglages } from './nuit.jsx';
 import { VeillesReglages } from './veilles.jsx';
 import { JournalReglages } from './journal.jsx';
 import { weatherEntity } from '../wxutil.jsx';
-import { tr, choixLangue, languesDisponibles } from '../i18n.js';
+import { tr, locale, choixLangue, languesDisponibles } from '../i18n.js';
+import { Panneau, Ligne, Pastille, CAPITALES, MONO, DESC_PANNEAU, FILET, btnPrimaire, btnSecondaire, btnDiscret, btnDanger } from './parcommun.jsx';
 
 /* ── Les briques d'affichage, au niveau du module ────────────────────────────
  *
@@ -55,95 +56,86 @@ import { tr, choixLangue, languesDisponibles } from '../i18n.js';
 const Tgl = ({ on, cb, label, off = false }) => (
   <span onClick={off ? undefined : cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={off ? -1 : 0} onKeyDown={(e) => { if (!off && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); cb(); } }}
     style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: off ? 'not-allowed' : 'pointer', opacity: off ? .45 : 1, flexShrink: 0, transition: 'background .25s', display: 'inline-block' }}>
-    <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
+    <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1), background .25s', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
   </span>
 );
 
-// sur une ligne rend la barre illisible. Le reste vit dans les cartes en lignes denses.
-const SecBar = ({ children }) => (
-  <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-    {children}
-    <span style={{ flex: 1 }} />
-  </div>
-);
-
-const SecGroup = ({ label, children }) => (
-  /*  : le groupe tenait ses boutons sur une seule ligne et
-   * debordait de l'ecran d'un telephone, la barre ayant beau savoir se
-   * replier (retour 03/09). */
-  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', maxWidth: '100%', padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{label}</span>
-    {children}
-  </div>
-);
-
-const SecTgl = ({ on, cb, label }) => (
-  <span onClick={cb} role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } }}
-    style={{ position: 'relative', width: 38, height: 21, flexShrink: 0, borderRadius: 10, cursor: 'pointer', background: on ? 'var(--o-accent-fond)' : 'var(--o-s4)', border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd1)', transition: 'background .2s' }}>
-    <span style={{ position: 'absolute', top: 2, left: on ? 19 : 2, width: 17, height: 17, borderRadius: '50%', background: '#fff', transition: 'left .2s cubic-bezier(.4,1.3,.5,1)' }} />
-  </span>
-);
-
-// Carte de reglages : en-tete a fond leger + corps en lignes denses (patron Atrium).
+// Carte et ligne de reglages : les briques communes (parcommun.jsx, maquettes
+// du 18/09). Les noms restent, pour les sections qui les appellent deja.
 const AppCard = ({ title, sub, note, action, children }) => (
-  <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', background: 'var(--o-s4)', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 14, fontWeight: 700 }}>{title}</span>
-      {sub ? <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{sub}</span> : null}
-      <span style={{ flex: 1 }} />
-      {note ? <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', fontFamily: 'ui-monospace,monospace' }}>{note}</span> : null}
-      {action}
-    </div>
-    <div style={{ padding: '4px 18px 16px' }}>{children}</div>
-  </div>
+  <Panneau titre={title} desc={sub} droite={note ? <span style={CAPITALES}>{note}</span> : action}>{children}</Panneau>
 );
 
-const OptRow = ({ title, desc, children }) => (
-  <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '13px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-    <div style={{ flex: 1, minWidth: 0, maxWidth: '62ch' }}>
-      <div style={{ fontSize: 13, fontWeight: 700 }}>{title}</div>
-      <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{children}</div>
-  </div>
+const OptRow = ({ title, desc, children, retrait = false, eteint = false }) => (
+  <Ligne titre={title} desc={desc} retrait={retrait} eteint={eteint}>{children}</Ligne>
 );
 
 // Segment : 2 a 3 choix mutuellement exclusifs, sur une piste unique.
 /* `wrap` : une liste dont on ne connait pas la longueur — les entites d'une
  * maison — se replie au lieu de deborder de l'ecran d'un telephone. */
 const Seg = ({ value, opts, onPick, disabled = false, wrap = false }) => (
-  <div style={{ display: 'flex', flexWrap: wrap ? 'wrap' : 'nowrap', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', opacity: disabled ? .5 : 1 }}>
+  <div style={{ display: 'flex', flexWrap: wrap ? 'wrap' : 'nowrap', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: disabled ? .5 : 1 }}>
     {opts.map(([v, lb]) => (
-      <button key={String(v)} disabled={disabled} onClick={() => onPick(v)} style={{ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: value === v ? 'var(--o-surfA)' : 'transparent', color: value === v ? 'var(--o-text)' : 'var(--o-text2)', boxShadow: value === v ? '0 1px 3px rgba(0,0,0,.25)' : 'none' }}>{lb}</button>
+      <button key={String(v)} disabled={disabled} onClick={() => onPick(v)} style={{ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: value === v ? 'var(--o-accent-fond)' : 'transparent', color: value === v ? '#fff' : 'var(--o-text2)', boxShadow: 'none', fontFamily: 'inherit' }}>{lb}</button>
     ))}
   </div>
 );
 
 const stepBtn = { width: 30, height: 30, borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd1)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
-// Marge : stepper + glissiere absolue. « auto » = valeur calculee, non figee.
-const MarginRow = ({ label, px, auto, onStep, onSet }) => (
-  <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '11px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-    <div style={{ fontSize: 13, fontWeight: 700, width: 108, flexShrink: 0 }}>{label}</div>
+// Marge : un pas a pas. « auto » = valeur calculee, non figee.
+const MarginRow = ({ label, px, auto, onStep }) => (
+  <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 22px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+    <div style={{ fontSize: 13, fontWeight: 700, width: 120, flexShrink: 0 }}>{label}</div>
     <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
-      <button onClick={() => onStep(-2)} style={stepBtn} aria-label={'Réduire ' + label}>−</button>
+      <button onClick={() => onStep(-2)} style={stepBtn} aria-label={tr('Réduire') + ' ' + label}>−</button>
       <span style={{ minWidth: 48, textAlign: 'center', fontWeight: 800, fontSize: 12, fontFamily: 'ui-monospace,monospace', color: auto ? 'var(--o-text3)' : 'var(--o-text)' }}>{auto ? 'auto' : Math.round(px) + 'px'}</span>
-      <button onClick={() => onStep(2)} style={stepBtn} aria-label={'Augmenter ' + label}>+</button>
+      <button onClick={() => onStep(2)} style={stepBtn} aria-label={tr('Augmenter') + ' ' + label}>+</button>
     </div>
-    <input type="range" min={0} max={100} step={1} value={Math.round(px) || 0} onChange={e => onSet && onSet(+e.target.value)} aria-label={label}
-      style={{ flex: 1, minWidth: 60, accentColor: 'var(--o-accent)', cursor: 'pointer' }} />
   </div>
 );
 
+/* Les marges de l'ecran : un reglage de secours, replie par defaut — « auto »
+ * convient presque partout, et un panneau ouvert invitait a y toucher. */
+function MargesAvancees({ navbar, navMargin, navAuto, onNavOffset, topMargin, topAuto, onTopOffset, onReset }) {
+  const [ouvert, setOuvert] = useState(false);
+  const auto = navAuto && topAuto;
+  return (
+    <Panneau>
+      <button type="button" onClick={() => setOuvert(o => !o)} aria-expanded={ouvert}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '18px 22px', background: 'none', border: 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 800 }}>{tr('Avancé — marges de l’écran')}</span>
+          <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3 }}>{auto ? tr('« auto » convient dans la quasi-totalité des cas.') : tr('Réglées à la main.')}</span>
+        </span>
+        <Fi i={ouvert ? 'angle-small-up' : 'angle-small-down'} size={15} color="var(--o-text2)" />
+      </button>
+      {ouvert && (<>
+        <div style={{ padding: '0 22px 12px', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', lineHeight: 1.5, maxWidth: '62ch' }}>{tr("À ajuster seulement si la barre passe sous l'encoche ou la barre d'accueil de votre téléphone.")}</div>
+        {navbar && <MarginRow label={tr('Marge du bas')} px={navMargin} auto={navAuto} onStep={onNavOffset} />}
+        <MarginRow label={tr('Marge du haut')} px={topMargin} auto={topAuto} onStep={onTopOffset} />
+        {!auto && <Ligne><button onClick={onReset} style={btnDiscret}>{tr('Rétablir « auto »')}</button></Ligne>}
+      </>)}
+    </Panneau>
+  );
+}
+
 const fleche = { width: 26, height: 26, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 };
-const Row = ({ icon, c, name, sub, on, locked, onT, onUp, onDown }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
-    <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', opacity: on ? 1 : .55 }}><Fi i={icon} size={15} color={c || 'var(--o-text2)'} /></span>
-    <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700, color: on ? 'var(--o-text)' : 'var(--o-text3)' }}>{name}</div><div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600 }}>{on ? sub: tr('masquée')}</div></div>
-    {onUp && <button onClick={onUp} title={tr('Monter')} aria-label={tr('Monter') + ' ' + name} style={fleche}><Fi i="angle-up" size={12} /></button>}
-    {onDown && <button onClick={onDown} title={tr('Descendre')} aria-label={tr('Descendre') + ' ' + name} style={fleche}><Fi i="angle-down" size={12} /></button>}
-    {locked
-      ? <span style={{ width: 46, textAlign: 'center', flexShrink: 0 }}><Fi i="lock" size={13} color="var(--o-text3)" /></span>
-      : <span onClick={onT} role="switch" aria-checked={on} aria-label={name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onT(); } }} style={{ width: 46, height: 26, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
+const Row = ({ icon, c, name, sub, on, locked, fixe = false, onT, onUp, onDown }) => (
+  <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 22px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+    <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)' }}><Fi i={icon} size={15} color={on ? (c || 'var(--o-text2)') : 'var(--o-text3)'} /></span>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: on ? 'var(--o-text)' : 'var(--o-text3)' }}>{name}</div>
+      <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{sub}</div>
+    </div>
+    {fixe
+      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0 }}><Fi i="thumbtack" size={12} color="var(--o-text3)" />{tr('toujours visible')}</span>
+      : <>
+        <button onClick={onUp || undefined} disabled={!onUp} title={tr('Monter')} aria-label={tr('Monter') + ' ' + name} style={{ ...fleche, opacity: onUp ? 1 : .35, cursor: onUp ? 'pointer' : 'default' }}><Fi i="angle-up" size={12} /></button>
+        <button onClick={onDown || undefined} disabled={!onDown} title={tr('Descendre')} aria-label={tr('Descendre') + ' ' + name} style={{ ...fleche, opacity: onDown ? 1 : .35, cursor: onDown ? 'pointer' : 'default' }}><Fi i="angle-down" size={12} /></button>
+        {locked
+          ? <span style={{ width: 46, textAlign: 'center', flexShrink: 0 }}><Fi i="lock" size={13} color="var(--o-text3)" /></span>
+          : <Tgl on={on} cb={onT} label={name} />}
+      </>}
   </div>
 );
 
@@ -205,16 +197,6 @@ const PRESET_META = () => [
 
 // Nav latérale des Paramètres, groupée façon Atrium (réf. user 20/08) : { grp, items: [id, label, glyphe UICons] }
 
-/* Une FONCTION, pas une table.
- *
- * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
- * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
- * langue. Appelee au rendu, elle se dit dans la langue du moment. */
-const PAR_HELPS = () => [
-  { id: 'nabu', title: tr('Bascule automatique pour Nabu Casa'), body: "Si tu ouvres Loggia depuis une URL *.ui.nabu.casa (HTTPS) alors que l'URL stockée est en http://, Loggia détecte le conflit et utilise automatiquement l'origine de la page courante. Aucune intervention nécessaire." },
-  { id: 'why', title: 'Pourquoi cette bascule ?', body: 'Les navigateurs bloquent les requêtes HTTP depuis une page HTTPS (protection "mixed content"). Le token n\'est pas en cause — il marche pour les deux URLs.' },
-  { id: 'notoken', title: tr('Sans token'), body: 'Loggia fonctionne en mode démo (état local seulement).' },
-];
 
 /* ════════════ ALERTES SÛRETÉ → TÉLÉPHONE (admin) ════════════
  * L'écoute vit dans le COMPOSANT serveur (alertes.py) : le dashboard peut être
@@ -226,20 +208,57 @@ const ALERTES_DEF = () => ({ actif: false, service: '', categories: { fumee: tru
   calme: { actif: false, debut: '22:00', fin: '07:00' },
   // La moitié « action » de §18 : sur un danger, la maison réagit (ADR 0022).
   actions: { actif: true, lumieres: true, volets: true, vanne: { actif: true, entite: '' } } });
-function AlertesTele({ hass, cardSt }) {
+/* Les familles de capteurs et les classes qui les font reconnaitre : les
+ * memes que le composant (alertes.py, BINAIRES). */
+const ALERTES_CLASSES = { fumee: ['smoke', 'safety'], gaz: ['gas'], co: ['carbon_monoxide'], fuite: ['moisture'] };
+
+/** Le nom d'un telephone. L'app compagnon nomme son service d'apres
+ *  l'appareil (`mobile_app_<appareil>`), et son traceur porte le meme nom. */
+function nomTelephone(hass, service) {
+  const slug = String(service || '').replace(/^mobile_app_/, '');
+  const st = hass && hass.states && hass.states['device_tracker.' + slug];
+  const nom = st && st.attributes && st.attributes.friendly_name;
+  if (nom) return nom;
+  const t = slug.replace(/_/g, ' ').trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+}
+
+/** Un choix qui se lit comme la maquette — un nom, l'identifiant dessous —,
+ *  porte par un vrai <select> pose invisible par-dessus : le clavier, le
+ *  lecteur d'ecran et la liste du telephone restent ceux du systeme. */
+function ChoixEntite({ icone, nom, ident, label, value, onChange, children }) {
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 12, minWidth: 0, width: 268, maxWidth: '100%', padding: '9px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+      <Fi i={icone} size={15} color="var(--o-text2)" />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800, color: 'var(--o-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom}</span>
+        <span style={{ display: 'block', ...MONO, fontSize: 11, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{ident}</span>
+      </span>
+      <Fi i="angle-small-down" size={14} color="var(--o-text3)" />
+      <select aria-label={label} value={value} onChange={e => onChange(e.target.value)}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', font: 'inherit' }}>{children}</select>
+    </span>
+  );
+}
+
+function AlertesTele({ hass }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const [cfg, setCfg] = useState(null);
   const [services, setServices] = useState([]);
   const [msg, setMsg] = useState('');
+  // La demonstration n'a pas de composant : ses reglages vivent dans sa
+  // configuration locale, et rien ne part.
+  const [local, setLocal] = useState(false);
   const connecte = !!h;
+  const complet = (c0) => {
+    const d = ALERTES_DEF(); const c = c0 || {};
+    return { ...d, ...c, categories: { ...d.categories, ...(c.categories || {}) }, calme: { ...d.calme, ...(c.calme || {}) },
+      actions: { ...d.actions, ...(c.actions || {}), vanne: { ...d.actions.vanne, ...((c.actions || {}).vanne || {}) } } };
+  };
   useEffect(() => {
     if (!h) { setCfg(ALERTES_DEF()); return; }
-    h.callWS({ type: 'loggia/config/get' }).then(r => {
-      const c = (r && r.config && r.config.loggia_alertes) || {};
-      const d = ALERTES_DEF();
-      setCfg({ ...d, ...c, categories: { ...d.categories, ...(c.categories || {}) }, calme: { ...d.calme, ...(c.calme || {}) },
-        actions: { ...d.actions, ...(c.actions || {}), vanne: { ...d.actions.vanne, ...((c.actions || {}).vanne || {}) } } });
-    }).catch(() => {
+    h.callWS({ type: 'loggia/config/get' }).then(r => setCfg(complet(r && r.config && r.config.loggia_alertes))).catch(() => {
+      if (typeof window !== 'undefined' && window.__loggiaDemo) { setLocal(true); setCfg(complet(cfgVal('loggia_alertes', null))); return; }
       // Lecture ratee : on ne montre PAS les valeurs par defaut — un reglage
       // touche ensuite aurait ecrase la vraie configuration de surete (audit 18/09).
       setCfg(null);
@@ -248,127 +267,146 @@ function AlertesTele({ hass, cardSt }) {
     // La liste des cibles possibles : les services notify de l'installation.
     h.callWS({ type: 'get_services' }).then(r => {
       const n = (r && r.notify) || {};
-      setServices(Object.keys(n).filter(s => ['notify', 'persistent_notification', 'send_message'].indexOf(s) < 0).sort());
+      setServices(Object.keys(n).filter(x => ['notify', 'persistent_notification', 'send_message'].indexOf(x) < 0).sort());
     }).catch(() => {});
   }, [connecte]);
   const save = (patch) => {
     if (!cfg) return;
     const n = { ...cfg, ...patch };
     setCfg(n); setMsg('');
+    if (local) { cfgSet({ loggia_alertes: n }); return; }
     if (h) h.callWS({ type: 'loggia/config/set', config: { loggia_alertes: n } })
-      .catch(() => setMsg("Enregistrement impossible — le composant ne répond pas."));
+      .catch(() => setMsg(tr('Enregistrement impossible — le composant ne répond pas.')));
   };
   const test = () => {
-    if (!cfg.service) { setMsg(tr('Choisis d’abord un service.')); return; }
-    try {
-      hass.callService('notify', cfg.service, { title: 'Loggia — sûreté', message: tr('Notification de test — tout est en place.') });
-      setMsg(tr('Test envoyé — regarde ton téléphone.'));
-    } catch { setMsg("Envoi impossible."); }
+    if (!cfg.service) { setMsg(tr('Choisis d’abord un téléphone.')); return; }
+    if (local) { setMsg(tr('Démonstration : rien ne part vers un vrai téléphone.')); return; }
+    Promise.resolve().then(() => hass.callService('notify', cfg.service, { title: 'Loggia — sûreté', message: tr('Notification de test — tout est en place.') }))
+      .then(() => setMsg(tr('Test envoyé — regarde ton téléphone.')))
+      .catch(() => setMsg(tr('Envoi impossible — Home Assistant a refusé ce service.')));
   };
-  const ligne = { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' };
-  const lbl = (t, d) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 13, fontWeight: 700 }}>{t}</div>
-      {d && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{d}</div>}
-    </div>
-  );
-  if (!cfg) return <div className="o-parcard" style={cardSt}><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Chargement…')}</div></div>;
+  if (!cfg) {
+    return (
+      <Panneau niveau={msg ? 'alerte' : null}>
+        <div style={{ padding: '18px 22px', fontSize: 13, fontWeight: 700, color: msg ? 'var(--o-warn)' : 'var(--o-text3)' }}>{msg || tr('Chargement…')}</div>
+      </Panneau>
+    );
+  }
+  const S = (hass && hass.states) || {};
+  // Les detecteurs de chaque famille, reconnus a leur classe — comme le composant.
+  const capteurs = (classes) => Object.keys(S).filter(id => id.indexOf('binary_sensor.') === 0 && classes.indexOf((S[id].attributes || {}).device_class) >= 0);
+  const decompte = (ids, humidite = false) => {
+    if (!ids.length) return tr('Aucun détecteur pour l’instant');
+    const n = ids.length;
+    const base = humidite
+      ? (n > 1 ? tr('{n} détecteurs d’humidité', { n }) : tr('{n} détecteur d’humidité', { n }))
+      : (n > 1 ? tr('{n} détecteurs', { n }) : tr('{n} détecteur', { n }));
+    const piece = n === 1 && LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' ? LOGGIA_INDEX.areaNameOf(ids[0]) : null;
+    return piece ? base + ' · ' + piece : base;
+  };
   const CATS = [
-    ['fumee', tr('Fumée'), tr('Détecteurs de fumée et de sûreté')],
-    ['gaz', tr('Gaz'), tr('Détecteurs de gaz')],
-    ['co', tr('Monoxyde de carbone'), tr('Détecteurs de CO')],
-    ['fuite', tr("Fuite d'eau"), tr("Détecteurs d'humidité et de fuite")],
-    ['alarme', tr('Alarme déclenchée'), tr('Toujours envoyée, sans délai anti-rafale')],
-    ['portes', tr("Ouverture pendant que l'alarme est armée"), tr('Portes, fenêtres et garage')],
+    ['fumee', tr('Fumée'), 'fire-flame-curved', 'bad', decompte(capteurs(ALERTES_CLASSES.fumee))],
+    ['gaz', tr('Gaz'), 'wind', 'orange', decompte(capteurs(ALERTES_CLASSES.gaz))],
+    ['co', tr('Monoxyde de carbone'), 'temperature-high', 'warn', decompte(capteurs(ALERTES_CLASSES.co))],
+    ['fuite', tr("Fuite d'eau"), 'water', 'cold', decompte(capteurs(ALERTES_CLASSES.fuite), true)],
+    ['alarme', tr('Alarme déclenchée'), 'bell', 'bad', tr('Toujours envoyée, sans délai anti-rafale')],
+    ['portes', tr('Ouverture sous alarme armée'), 'door-closed', null, tr('Portes, fenêtres et garage')],
   ];
-  // Les vannes possibles : une `valve`, ou une prise commandée sur l'arrivée d'eau.
-  const vannes = Object.keys((hass && hass.states) || {}).filter(id => id.indexOf('valve.') === 0 || id.indexOf('switch.') === 0).sort();
-  const ACTIONS = [
-    ['lumieres', tr('Lumières à 100 %'), tr('Fumée, monoxyde, alarme — pas le gaz : un relais qui claque est une étincelle')],
-    ['volets', tr('Volets remontés'), tr('Fumée, monoxyde, gaz — les issues, et l’accès des secours')],
-  ];
+  // Les vannes possibles : une `valve`, ou une prise commandee sur l'arrivee d'eau.
+  const vannes = Object.keys(S).filter(id => id.indexOf('valve.') === 0).sort();
+  const prises = Object.keys(S).filter(id => id.indexOf('switch.') === 0).sort();
+  // Sans choix, le composant prend la premiere vanne d'EAU qu'il connait (alertes.py, _vanne).
+  const vanneAuto = vannes.find(id => (S[id].attributes || {}).device_class === 'water') || null;
+  const nomDe = (id) => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id;
+  const vanne = cfg.actions.vanne.entite || '';
+  const svcs = cfg.service && services.indexOf(cfg.service) < 0 ? [cfg.service, ...services] : services;
+  const actOff = !cfg.actions.actif;
+  const carre = (icone, teinte) => (
+    <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: teinte ? 'rgba(var(--o-' + teinte + '-rgb),.14)' : 'var(--o-s1)' }}>
+      <Fi i={icone} size={15} color={teinte ? 'var(--o-' + teinte + ')' : 'var(--o-text2)'} />
+    </span>
+  );
   return (
-    <div className="o-parcard" style={cardSt}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Alertes téléphone')}</div>
-          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 3 }}>{tr("Envoyées par le serveur via l'app compagnon Home Assistant — même dashboard fermé.")}</div>
-        </div>
-        <Tgl on={cfg.actif} cb={() => save({ actif: !cfg.actif })} label={tr('Activer les alertes')} />
-      </div>
-      <div className="o-optrow" style={{ ...ligne, marginTop: 14 }}>
-        {lbl(tr('Téléphone cible'), tr('Le service notify de l’app compagnon'))}
-        <input aria-label={tr('Service de notification')} list="loggia-notify-svcs" value={cfg.service} onChange={e => save({ service: e.target.value.trim() })} placeholder="mobile_app_…"
-          style={{ ...cvInp, maxWidth: 260, padding: '9px 12px', fontSize: 13 }} />
-        {/* Un <datalist> n'est pas un controle : il ne se saisit pas, il propose des
-          * valeurs a l'<input> qui le reference. C'est ce dernier qui porte
-          * l'etiquette, et il l'a. */}
-        {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
-        <datalist id="loggia-notify-svcs">{services.map(s => <option key={s} value={s} />)}</datalist>
-      </div>
-      {/* Entre ces heures, les notifications arrivent en silence — on les lit
-        * au réveil. Une seule chose passe quand même, et par-dessus le mode
-        * silencieux du téléphone : le danger. Fumée, gaz, CO, fuite, alarme. */}
-      <div className="o-optrow" style={ligne}>
-        {lbl(tr('Heures calmes'), tr('Rien ne sonne entre ces heures ; seul le danger passe.'))}
-        <Tgl on={!!cfg.calme.actif} cb={() => save({ calme: { ...cfg.calme, actif: !cfg.calme.actif } })} label={tr('Heures calmes')} />
-      </div>
-      {cfg.calme.actif && (
-        <div className="o-optrow" style={ligne}>
-          {lbl(tr('De … à'), tr('La plage peut traverser minuit.'))}
-          <input aria-label={tr('Début des heures calmes')} type="time" value={cfg.calme.debut || ''} onChange={e => save({ calme: { ...cfg.calme, debut: e.target.value } })}
-            style={{ ...cvInp, width: 'auto', padding: '9px 12px', fontSize: 13 }} />
-          <input aria-label={tr('Fin des heures calmes')} type="time" value={cfg.calme.fin || ''} onChange={e => save({ calme: { ...cfg.calme, fin: e.target.value } })}
-            style={{ ...cvInp, width: 'auto', padding: '9px 12px', fontSize: 13 }} />
+    <>
+      <Panneau titre={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>{tr('Livraison')}<Pastille capitales niveau={cfg.actif ? 'ok' : 'alerte'}>{cfg.actif ? tr('Actives') : tr('Coupées')}</Pastille></span>}
+        desc={tr("Envoyées par le serveur via l'app compagnon Home Assistant.")}
+        droite={<Tgl on={!!cfg.actif} cb={() => save({ actif: !cfg.actif })} label={tr('Activer les alertes')} />}>
+        <Ligne titre={tr('Téléphone cible')} desc={tr('Le service notify de l’app compagnon')}>
+          <ChoixEntite icone="mobile-button" label={tr('Téléphone cible')} value={cfg.service || ''} onChange={v => save({ service: v })}
+            nom={cfg.service ? nomTelephone(hass, cfg.service) : tr('Aucun téléphone')} ident={cfg.service ? 'notify.' + cfg.service : tr('à choisir')}>
+            <option value="">{tr('Aucun téléphone')}</option>
+            {svcs.map(x => <option key={x} value={x}>{nomTelephone(hass, x) + ' — notify.' + x}</option>)}
+          </ChoixEntite>
+        </Ligne>
+        {/* Entre ces heures, les notifications arrivent en silence — on les lit
+          * au réveil. Une seule chose passe quand même, et par-dessus le mode
+          * silencieux du téléphone : le danger. Fumée, gaz, CO, fuite, alarme. */}
+        <Ligne titre={tr('Heures calmes')} desc={tr('Rien ne sonne pendant ces heures ; seul le danger passe.')}>
+          <Tgl on={!!cfg.calme.actif} cb={() => save({ calme: { ...cfg.calme, actif: !cfg.calme.actif } })} label={tr('Heures calmes')} />
+        </Ligne>
+        {cfg.calme.actif && (
+          <Ligne retrait titre={tr('De … à')} desc={tr('La plage peut traverser minuit.')}>
+            <input aria-label={tr('Début des heures calmes')} type="time" value={cfg.calme.debut || ''} onChange={e => save({ calme: { ...cfg.calme, debut: e.target.value } })}
+              style={{ ...cvInp, width: 'auto', padding: '9px 12px', fontSize: 13 }} />
+            <input aria-label={tr('Fin des heures calmes')} type="time" value={cfg.calme.fin || ''} onChange={e => save({ calme: { ...cfg.calme, fin: e.target.value } })}
+              style={{ ...cvInp, width: 'auto', padding: '9px 12px', fontSize: 13 }} />
+          </Ligne>
+        )}
+        <Ligne desc={msg || tr('Vérifier que le téléphone reçoit bien.')}>
+          <button onClick={test} disabled={!cfg.actif || !cfg.service} style={{ ...btnSecondaire, opacity: cfg.actif && cfg.service ? 1 : .45, cursor: cfg.actif && cfg.service ? 'pointer' : 'not-allowed' }}><Fi i="test-tube" size={13} />{tr('Envoyer un test')}</button>
+        </Ligne>
+      </Panneau>
+
+      {!cfg.actif && (
+        <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', borderRadius: 14, background: 'rgba(var(--o-warn-rgb),.10)', border: '1px solid rgba(var(--o-warn-rgb),.45)', color: 'var(--o-warn)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.45 }}>
+          <Fi i="triangle-warning" size={15} color="var(--o-warn)" />
+          {/* Couper les alertes ne coupe QUE le telephone : la maison, elle,
+            * reagit toujours aux dangers (alertes.py, _reagir). */}
+          <span>{tr('Les alertes téléphone sont coupées. Les réglages ci-dessous restent enregistrés, mais aucune notification ne partira.')}{cfg.actions.actif ? ' ' + tr('La maison réagit quand même aux dangers.') : ''}</span>
         </div>
       )}
-      {CATS.map(([k, t, d]) => (
-        <div key={k} className="o-optrow" style={ligne}>
-          {lbl(t, d)}
-          <Tgl on={!!cfg.categories[k]} cb={() => save({ categories: { ...cfg.categories, [k]: !cfg.categories[k] } })} label={t} />
-        </div>
-      ))}
+
+      <Panneau titre={tr('Ce qui alerte')} desc={tr('Une famille de capteurs par ligne — reconnue par sa classe, rien à désigner à la main.')}
+        pied={<span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Anti-rafale : {n} min par capteur, sauf l’alarme.', { n: cfg.cooldown_min || 5 })}</span>}>
+        {CATS.map(([k, t, icone, teinte, d]) => (
+          <div key={k} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 22px', borderTop: FILET, opacity: cfg.actif ? 1 : .5, transition: 'opacity .2s' }}>
+            {carre(icone, teinte)}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{d}</div>
+            </div>
+            <Tgl on={!!cfg.categories[k]} cb={() => save({ categories: { ...cfg.categories, [k]: !cfg.categories[k] } })} label={t} />
+          </div>
+        ))}
+      </Panneau>
+
       {/* La moitié « action » de §18 : sur un danger, la maison réagit
         * d'elle-même — en tête de l'échelle, tenu tant que le danger dure,
         * puis rendu à l'état d'avant. La vanne, elle, reste coupée : une
         * fuite s'inspecte avant de rouvrir (ADR 0022). */}
-      <div className="o-optrow" style={{ ...ligne, marginTop: 6 }}>
-        {lbl(tr('La maison réagit'), tr('Sur un danger, sans attendre personne — puis tout revient comme avant, sauf la vanne.'))}
-        <Tgl on={!!cfg.actions.actif} cb={() => save({ actions: { ...cfg.actions, actif: !cfg.actions.actif } })} label={tr('La maison réagit')} />
-      </div>
-      {cfg.actions.actif && ACTIONS.map(([k, t, d]) => (
-        <div key={k} className="o-optrow" style={ligne}>
-          {lbl(t, d)}
-          <Tgl on={!!cfg.actions[k]} cb={() => save({ actions: { ...cfg.actions, [k]: !cfg.actions[k] } })} label={t} />
-        </div>
-      ))}
-      {cfg.actions.actif && (
-        <div className="o-optrow" style={ligne}>
-          {lbl(tr('Vanne d’eau coupée'), tr('Sur une fuite. Reste coupée jusqu’à ce qu’on la rouvre à la main.'))}
+      <Panneau titre={tr('La maison réagit')} desc={tr('Sur un danger, sans attendre personne — puis tout revient comme avant, sauf la vanne.')}
+        droite={<Tgl on={!!cfg.actions.actif} cb={() => save({ actions: { ...cfg.actions, actif: !cfg.actions.actif } })} label={tr('La maison réagit')} />}>
+        <Ligne eteint={actOff} titre={tr('Lumières à 100 %')} desc={tr('Fumée, monoxyde, alarme — pas le gaz : un relais qui claque est une étincelle.')}>
+          <Tgl on={!!cfg.actions.lumieres} cb={() => save({ actions: { ...cfg.actions, lumieres: !cfg.actions.lumieres } })} label={tr('Lumières à 100 %')} />
+        </Ligne>
+        <Ligne eteint={actOff} titre={tr('Volets remontés')} desc={tr('Fumée, monoxyde, gaz — les issues, et l’accès des secours.')}>
+          <Tgl on={!!cfg.actions.volets} cb={() => save({ actions: { ...cfg.actions, volets: !cfg.actions.volets } })} label={tr('Volets remontés')} />
+        </Ligne>
+        <Ligne eteint={actOff} titre={tr('Vanne d’eau coupée')} desc={tr('Sur une fuite. Reste coupée jusqu’à ce qu’on la rouvre à la main.')}>
           <Tgl on={!!cfg.actions.vanne.actif} cb={() => save({ actions: { ...cfg.actions, vanne: { ...cfg.actions.vanne, actif: !cfg.actions.vanne.actif } } })} label={tr('Vanne d’eau coupée')} />
-        </div>
-      )}
-      {cfg.actions.actif && cfg.actions.vanne.actif && (
-        <div className="o-optrow" style={ligne}>
-          {lbl(tr('Quelle vanne'), tr('Vide : la première vanne d’eau que Home Assistant connaît. Une prise commandée vaut aussi.'))}
-          <input aria-label={tr('Entité de la vanne d’eau')} list="loggia-vannes" value={cfg.actions.vanne.entite || ''} onChange={e => save({ actions: { ...cfg.actions, vanne: { ...cfg.actions.vanne, entite: e.target.value.trim() } } })} placeholder="valve.… / switch.…"
-            style={{ ...cvInp, maxWidth: 260, padding: '9px 12px', fontSize: 13 }} />
-          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
-          <datalist id="loggia-vannes">{vannes.map(s => <option key={s} value={s} />)}</datalist>
-        </div>
-      )}
-      <div style={{ ...ligne, borderBottom: 'none' }}>
-        {lbl(tr('Essai'), tr('Envoie une notification de test au téléphone choisi'))}
-        <button onClick={test} style={{ padding: '9px 16px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Envoyer un test')}</button>
-      </div>
-      {msg && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)', marginTop: 4 }}>{msg}</div>}
-      {/* Les derniers envois se lisent dans Règles › Journal, avec tout le
-        * reste : une liste à part ici en faisait un doublon (ADR 0009). */}
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 12 }}>{tr("Les catégories se reconnaissent à la classe des capteurs (device_class) — rien à désigner à la main. Anti-rafale : 5 min par capteur, sauf l'alarme.")}</div>
-    </div>
+        </Ligne>
+        <Ligne retrait eteint={actOff || !cfg.actions.vanne.actif} titre={tr('Quelle vanne')} desc={tr('Vide : la première vanne d’eau que Home Assistant connaît. Une prise commandée vaut aussi.')}>
+          <ChoixEntite icone="water" label={tr('Entité de la vanne d’eau')} value={vanne} onChange={v => save({ actions: { ...cfg.actions, vanne: { ...cfg.actions.vanne, entite: v } } })}
+            nom={vanne ? nomDe(vanne) : vanneAuto ? nomDe(vanneAuto) : tr('Aucune vanne d’eau')} ident={vanne || (vanneAuto ? vanneAuto + ' · ' + tr('auto') : tr('rien à couper'))}>
+            <option value="">{tr('Automatique')}{vanneAuto ? ' — ' + nomDe(vanneAuto) : ''}</option>
+            {vannes.length > 0 && <optgroup label={tr('Vannes')}>{vannes.map(x => <option key={x} value={x}>{nomDe(x) + ' — ' + x}</option>)}</optgroup>}
+            {prises.length > 0 && <optgroup label={tr('Prises commandées')}>{prises.map(x => <option key={x} value={x}>{nomDe(x) + ' — ' + x}</option>)}</optgroup>}
+          </ChoixEntite>
+        </Ligne>
+      </Panneau>
+    </>
   );
 }
-
 
 
 /* ════════════ VUES PERSONNALISÉES : cartes génériques par domaine + éditeur (admin) ════════════ */
@@ -417,7 +455,7 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 9 }}>
           {tile(temp, rooms[0] ? rooms[0].room : tr('Pièce'), 'var(--o-orange)')}
-          {tile(lightsOn + ' on', tr('Lumières'), 'var(--o-gold)')}
+          {tile(lightsOn > 1 ? tr('{n} allumées', { n: lightsOn }) : tr('{n} allumée', { n: lightsOn }), tr('Lumières'), 'var(--o-gold)')}
           {tile(conso, tr('Consommation'), 'var(--o-ok)')}
           {tile(alTxt, tr('Alarme'), 'var(--o-accent)')}
         </div>
@@ -455,7 +493,7 @@ function telechargerConfig(texte, base) {
   } catch { return false; }
 }
 
-function ResetLoggiaBtn({ compact = false }) {
+function ResetLoggiaBtn() {
   const [arm, setArm] = useState(false);
   useEffect(() => { if (!arm) return undefined; const t = setTimeout(() => setArm(false), 4000); return () => clearTimeout(t); }, [arm]);
   const [enCours, setEnCours] = useState(false);
@@ -489,7 +527,7 @@ function ResetLoggiaBtn({ compact = false }) {
     }
     window.location.reload();
   };
-  return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ padding: compact ? '5px 10px' : '9px 16px', borderRadius: compact ? 8 : 11, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: arm ? '#fff' : 'var(--o-bad)', fontWeight: 700, fontSize: compact ? 11.5 : 12.5, cursor: 'pointer', transition: 'all .2s' }}>{arm ? 'Confirmer ?' : (compact ? 'Réinitialiser Loggia' : 'Réinitialiser')}</button>;
+  return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ ...btnDanger, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'transparent', color: arm ? '#fff' : 'var(--o-bad)', transition: 'background .2s, color .2s' }}>{enCours ? tr('Sauvegarde…') : arm ? tr('Confirmer ?') : tr('Réinitialiser…')}</button>;
 }
 
 function AdminPinEditor({ hass }) {
@@ -516,22 +554,23 @@ function AdminPinEditor({ hass }) {
       setMsg({ ok: false, t: e && e.code === 'unauthorized' ? tr('Réservé aux administrateurs.') : ((e && (e.message || e.code)) || tr('Enregistrement impossible.')) });
     } finally { setEnCours(false); }
   };
-  const inp = { width: '100%', padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 700, letterSpacing: '.3em', textAlign: 'center', fontFamily: 'monospace' };
+  const inp = { width: '100%', padding: '11px 14px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 17, fontWeight: 700, letterSpacing: '.3em', textAlign: 'center', fontFamily: 'ui-monospace,monospace', boxSizing: 'border-box' };
+  const champ = { ...CAPITALES, marginBottom: 7 };
   return (
-    <div style={{ marginTop: 22, paddingTop: 20, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Code administrateur</div>
-      <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 16 }}>{tr('Requis pour basculer vers un profil Admin. Gardé par le composant, haché : le même code sur tous les appareils, jamais affiché.')}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)' }}>ACTUEL</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: defini ? 'var(--o-text1)' : 'var(--o-warn)' }}>{defini ? tr('Code défini') : tr('Code par défaut (0000) — à changer')}</span>
+    <Panneau niveau={defini ? null : 'alerte'}
+      titre={<span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: defini ? 'var(--o-s1)' : 'rgba(var(--o-warn-rgb),.16)' }}><Fi i="key" size={15} color={defini ? 'var(--o-text2)' : 'var(--o-warn)'} /></span>
+        {tr('Code administrateur')}
+      </span>}
+      desc={<span style={{ display: 'block', paddingLeft: 44 }}>{tr('Requis pour basculer vers un profil Admin. Haché, jamais affiché — le même sur tous les appareils.')}</span>}
+      droite={defini ? <Pastille niveau="ok" icone="check">{tr('Code défini')}</Pastille> : <Pastille niveau="alerte" icone="triangle-warning">{tr('Encore 0000')}</Pastille>}>
+      <div className="grid-par-pin" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) auto', gap: 14, alignItems: 'end', padding: '4px 22px 20px' }}>
+        <div><div style={champ}>{tr('Nouveau code')}</div><input aria-label={tr('Nouveau code')} value={np} onChange={e => { setNp(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" type="password" autoComplete="new-password" style={inp} /></div>
+        <div><div style={champ}>{tr('Confirmer')}</div><input aria-label={tr('Confirmer le nouveau code')} value={cf} onChange={e => { setCf(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" type="password" autoComplete="new-password" style={inp} /></div>
+        <button onClick={save} disabled={enCours} style={{ ...btnPrimaire, padding: '12px 20px', opacity: enCours ? .6 : 1 }}>{tr('Enregistrer le code')}</button>
       </div>
-      <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-        <div><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>NOUVEAU CODE</div><input aria-label="Nouveau code" value={np} onChange={e => { setNp(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" style={inp} /></div>
-        <div><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>CONFIRMER</div><input aria-label="Confirmer le nouveau code" value={cf} onChange={e => { setCf(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" style={inp} /></div>
-      </div>
-      {msg && <div role="status" style={{ fontSize: 12, fontWeight: 600, color: msg.ok ? 'var(--o-ok)' : 'var(--o-bad)', marginBottom: 12 }}>{msg.t}</div>}
-      <button onClick={save} disabled={enCours} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer le code')}</button>
-    </div>
+      {msg && <div role="status" style={{ padding: '0 22px 18px', fontSize: 12, fontWeight: 700, color: msg.ok ? 'var(--o-ok)' : 'var(--o-bad)' }}>{msg.t}</div>}
+    </Panneau>
   );
 }
 
@@ -631,19 +670,18 @@ function FondPhotoBtn({ actif, onLook }) {
       alert(tr("L'image n'a pas pu être utilisée : ") + (er && er.message === 'image trop lourde' ? tr('trop lourde même compressée.') : tr('fichier illisible.')));
     }
   };
+  const seg = (on) => ({ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)' });
   return (
-    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>
-      <input aria-label={tr('Choisir une image de profil')} ref={fichierRef} type="file" accept="image/*" onChange={choisir} style={{ display: 'none' }} />
-      <button onClick={() => { if (!photo) { fichierRef.current && fichierRef.current.click(); return; } onLook({ fond: 'photo' }); }}
-        aria-pressed={actif} aria-label={tr("Fond d'écran") + ' ' + tr('Photo')}
-        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: actif ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent-fond)' : 'var(--o-bd1)') }}>
-        <span style={{ width: 34, height: 22, borderRadius: 10, border: '1px solid ' + (actif ? 'var(--o-accent)' : 'var(--o-bd2)'), background: photo ? `url("${photo}") center/cover` : 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{!photo && <Fi i="picture" size={11} color="var(--o-text3)" />}</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: actif ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{tr('Photo')}</span>
-      </button>
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
+      <input aria-label={tr('Choisir une image de fond')} ref={fichierRef} type="file" accept="image/*" onChange={choisir} style={{ display: 'none' }} />
+      <span style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+        <button onClick={() => onLook({ fond: 'aucun' })} aria-pressed={!actif} style={seg(!actif)}>{tr('Aucun')}</button>
+        <button onClick={() => { if (!photo) { fichierRef.current && fichierRef.current.click(); return; } onLook({ fond: 'photo' }); }} aria-pressed={actif} style={seg(actif)}>{tr('Photo')}</button>
+      </span>
       {photo && (
-        <span style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => fichierRef.current && fichierRef.current.click()} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 10, fontWeight: 700, cursor: 'pointer', padding: 0 }}>{tr('changer')}</button>
-          <button onClick={() => { try { localStorage.removeItem(FOND_PHOTO_CLE); } catch {} prev(); if (actif) onLook({ fond: 'aucun' }); }} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 10, fontWeight: 700, cursor: 'pointer', padding: 0 }}>{tr('retirer')}</button>
+        <span style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => fichierRef.current && fichierRef.current.click()} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>{tr('changer')}</button>
+          <button onClick={() => { try { localStorage.removeItem(FOND_PHOTO_CLE); } catch {} prev(); if (actif) onLook({ fond: 'aucun' }); }} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>{tr('retirer')}</button>
         </span>
       )}
     </span>
@@ -963,7 +1001,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // Une vue que l'installation ne peut pas remplir se montre ici verrouillée,
   // avec son motif : mieux vaut expliquer que faire disparaître sans un mot.
   const { views: availViews } = useLoggia();
-  const [open, setOpen] = useState({});
   // Loggia est-il la page ouverte au démarrage, sur ce compte ?
   // true = oui · false = non · null = impossible à savoir (page parente
   // inaccessible, ou Home Assistant qui ne répond pas).
@@ -982,7 +1019,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   };
   // Connexion : latence mesurée sur l'API (design Claude Design 21/08)
   const [lat, setLat] = useState(null); // null = pas mesurée, -1 = échec, n = ms
-  const [latBusy, setLatBusy] = useState(false);
+  const [, setLatBusy] = useState(false);
   const ping = () => {
     if (!hass || !hass.callApi) { setLat(-1); return; }
     setLatBusy(true); const t0 = performance.now();
@@ -1026,22 +1063,22 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const testUrl = (key) => {
     const raw = (haDraft[key] || '').trim().replace(/\/+$/, '');
     const set = (o) => setUrlTest(t => ({ ...t, [key]: { ...o, ts: Date.now() } }));
-    if (!raw) { set({ ms: -1, msg: 'Adresse vide' }); return; }
-    if (!/^https?:\/\//.test(raw)) { set({ ms: -1, msg: 'Doit commencer par http:// ou https://' }); return; }
+    if (!raw) { set({ ms: -1, msg: tr('Adresse vide') }); return; }
+    if (!/^https?:\/\//.test(raw)) { set({ ms: -1, msg: tr('Doit commencer par http:// ou https://') }); return; }
     setUrlTest(t => ({ ...t, [key]: { busy: true } }));
     if (raw === accessOrigin && hass && hass.callApi) { // acces courant : vrai appel API
       const t0 = performance.now();
-      hass.callApi('GET', 'config').then(() => set({ ms: Math.round(performance.now() - t0) })).catch(() => set({ ms: -1, msg: "L'API ne répond pas" }));
+      hass.callApi('GET', 'config').then(() => set({ ms: Math.round(performance.now() - t0) })).catch(() => set({ ms: -1, msg: tr('L’API ne répond pas') }));
       return;
     }
-    if (window.location.protocol === 'https:' && raw.indexOf('http://') === 0) { set({ ms: -1, msg: 'Bloqué : page HTTPS, adresse HTTP (contenu mixte)' }); return; }
+    if (window.location.protocol === 'https:' && raw.indexOf('http://') === 0) { set({ ms: -1, msg: tr('Bloqué : page HTTPS, adresse HTTP (contenu mixte)') }); return; }
     const t0 = performance.now();
     const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     const to = setTimeout(() => { try { if (ctl) ctl.abort(); } catch {} }, 2500);
     // no-cors : reponse opaque, on ne lit pas le corps — on mesure la JOIGNABILITE.
     fetch(raw + '/manifest.json', { mode: 'no-cors', cache: 'no-store', signal: ctl ? ctl.signal : undefined })
       .then(() => { clearTimeout(to); set({ ms: Math.round(performance.now() - t0) }); })
-      .catch(() => { clearTimeout(to); set({ ms: -1, msg: 'Injoignable depuis ce réseau' }); });
+      .catch(() => { clearTimeout(to); set({ ms: -1, msg: tr('Injoignable depuis ce réseau') }); });
   };
   const saveHaCfg = () => { writeHaCfg(haDraft); location.reload(); };
   const resetHaCfg = () => {
@@ -1049,18 +1086,22 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     setUrlTest({});
   };
   const POLL_CHOICES = [[2000, '2 s'], [5000, '5 s'], [10000, '10 s'], [30000, '30 s']];
-  const testLine = (key) => {
+  // Le resultat d'un test d'adresse, court : « ✓ 18 ms », ou ce qui a manque.
+  const resultatTest = (key) => {
     const r = urlTest[key];
     if (!r) return null;
-    if (r.busy) return { txt: 'Test en cours…', col: 'var(--o-text3)' };
-    if (r.ms >= 0) return { txt: 'Répond en ' + r.ms + ' ms' + (hass && hass.states ? ' · ' + Object.keys(hass.states).length + ' entités synchronisées.' : '.'), col: 'var(--o-ok)' };
-    return { txt: r.msg || 'Échec', col: 'var(--o-bad)' };
+    if (r.busy) return <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{tr('Test…')}</span>;
+    if (r.ms >= 0) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800, color: 'var(--o-ok)', whiteSpace: 'nowrap' }}><Fi i="check" size={12} color="var(--o-ok)" />{r.ms} ms</span>;
+    return <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{r.msg || tr('Échec')}</span>;
   };
   const [autoQ, setAutoQ] = useState('');
   const [autoFilter, setAutoFilter] = useState('all'); // all | on | off
   const [autoOpen, setAutoOpen] = useState({});
   // Mises à jour : « Tout installer » (confirmation 2 temps) + revérification
   const [updAllConfirm, setUpdAllConfirm] = useState(false);
+  // Quand a-t-on demande a Home Assistant de reverifier ? Par appareil : c'est
+  // ce navigateur qui a appuye, rien de plus.
+  const [majVerifie, setMajVerifie] = useState(() => { try { return Number(localStorage.getItem('loggia-maj-verifie')) || 0; } catch { return 0; } });
   // Utilisateurs : dernière activité par profil (posée par applyUser)
   const lastSeen = (() => { try { return JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); } catch { return {}; } })();
   const seenRel = (name, isCur) => { if (isCur) return 'actif maintenant'; const t = lastSeen[name]; if (!t) return ''; const m = (Date.now() - t) / 60000; if (m < 60) return 'vu il y a ' + Math.max(1, Math.round(m)) + ' min'; if (m < 1440) return 'vu il y a ' + Math.round(m / 60) + ' h'; if (m < 2880) return 'vu hier'; return 'vu il y a ' + Math.round(m / 1440) + ' j'; };
@@ -1103,7 +1144,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     let prog = at.in_progress === true ? (at.update_percentage != null ? at.update_percentage : true) : (typeof at.in_progress === 'number' ? at.in_progress : false);
     // optimiste : « Installation… » dès le clic, tant que HA n'a pas confirmé (filet 3 min)
     if (prog === false && updBusy[id] && Date.now() - updBusy[id] < 180000 && s.state === 'on') prog = true;
-    return { id, name: at.friendly_name || at.title || id.replace('update.', '').replace(/_/g, ' '), avail: s.state === 'on', installed: at.installed_version, latest: at.latest_version, prog, pic: at.entity_picture, notes: lienSur(at.release_url) };
+    // « Home Assistant Core Update » : le mot de la fin ne dit rien de plus
+    // que la section ou il s'affiche.
+    const nom = String(at.friendly_name || at.title || id.replace('update.', '').replace(/_/g, ' ')).replace(/\s+(update|mise à jour)$/i, '');
+    return { id, name: nom, avail: s.state === 'on', installed: at.installed_version, latest: at.latest_version, prog, pic: at.entity_picture, notes: lienSur(at.release_url) };
   }) : [];
   // purge l'optimiste dès que HA prend le relais (in_progress réel) ou que la MàJ est terminée (state off)
   const connecte = !!hass;
@@ -1126,23 +1170,27 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const upsTotal = upsAll.length;
   const toggleAuto = (a) => { setAutoOv(o => ({ ...o, [a.id]: !a.on })); autoCall(a.on ? 'turn_off' : 'turn_on', a.id); };
   const runAuto = (a) => autoCall('trigger', a.id);
-  const autoRel = (t) => { try { if (!t) return ''; const m = (Date.now() - new Date(t).getTime()) / 60000; if (m < 1) return "à l'instant"; if (m < 60) return 'il y a ' + Math.round(m) + ' min'; if (m < 1440) return 'il y a ' + Math.round(m / 60) + ' h'; return 'il y a ' + Math.round(m / 1440) + ' j'; } catch { return ''; } };
+  const depuisMin = (m) => m < 1 ? tr('à l’instant') : m < 60 ? tr('il y a {n} min', { n: Math.round(m) }) : m < 1440 ? tr('il y a {n} h', { n: Math.round(m / 60) }) : tr('il y a {n} j', { n: Math.round(m / 1440) });
+  const autoRel = (t) => { try { if (!t) return ''; const ms = new Date(t).getTime(); return Number.isFinite(ms) ? depuisMin((Date.now() - ms) / 60000) : ''; } catch { return ''; } };
   const autos = (hass && hass.states) ? Object.keys(hass.states).filter(e => e.indexOf('automation.') === 0).map(id => { const s = hass.states[id], at = s.attributes || {}; return { id, name: at.friendly_name || id.replace('automation.', '').replace(/_/g, ' '), on: autoOv[id] != null ? autoOv[id] : s.state === 'on', last: at.last_triggered }; }).sort((a, b) => a.name.localeCompare(b.name)) : [];
   const tabStyle = on => on
     ? { padding: '9px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff', flexShrink: 0, whiteSpace: 'nowrap' }
-    : { padding: '9px 18px', borderRadius: 14, border: 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s2)', color: 'var(--o-text1)', flexShrink: 0, whiteSpace: 'nowrap' };
-  const cardSt = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' };
+    : { padding: '9px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)', flexShrink: 0, whiteSpace: 'nowrap' };
+  const cardSt = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '18px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' };
 
   // Combien de boutons sont deja regles : le chiffre du sommaire. Lu une
   // fois a l'ouverture — la section, elle, sonde en continu quand on y est.
   const [nbInter, setNbInter] = useState(0);
+  // Telecommandes et gestes : l'en-tete de la section, tenu a jour par elle.
+  const [compteInter, setCompteInter] = useState(null);
+  const surCompteInter = (c) => { setCompteInter(c); setNbInter(c.gestes); };
   useEffect(() => {
     const h = hass;
     if (!peutInter || !h || typeof h.callWS !== 'function') return;
     h.callWS({ type: 'loggia/interrupteurs/etat' })
       .then(r => {
-        const t = (r && r.affectations) || {};
-        setNbInter(Object.values(t).reduce((n, a) => n + Object.keys((a && a.actions) || {}).length, 0));
+        setNbInter(gestesRegles(r && r.affectations));
+        setCompteInter({ telecommandes: ((r && r.appareils) || []).length, gestes: gestesRegles(r && r.affectations) });
       })
       .catch(() => { /* composant trop ancien, ou ecoute absente */ });
   }, [connecte, peutInter]);
@@ -1152,6 +1200,42 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // l'une n'empeche pas de compter l'autre.
   const [nbVolRegles, setNbVolRegles] = useState(0);
   const [ongletRegle, setOngletRegle] = useState('volets');
+  /* Observer sans agir : UN interrupteur pour les quatre modules qui
+   * commandent quelque chose — volets, chauffage, depart, nuit (maquettes du
+   * 18/09). Chaque module garde son propre drapeau cote serveur ; ici on les
+   * lit ensemble et on les pose ensemble. `null` : pas encore lus. */
+  const [observe, setObserve] = useState(null);
+  const lireObserve = () => {
+    const h = hass;
+    if (!h || typeof h.callWS !== 'function') return;
+    const lire = (type, f) => h.callWS({ type }).then(r => f((r && r.config) || {})).catch(() => undefined);
+    Promise.all([
+      lire('loggia/volets/etat', c => !!(c.simulation && c.simulation.actif)),
+      lire('loggia/fenetres/etat', c => !!c.simulation),
+      lire('loggia/presence/etat', c => !!(c.simulation && c.simulation.actif)),
+      lire('loggia/nuit/etat', c => !!(c.simulation && c.simulation.actif)),
+    ]).then(([volets, fenetres, presence, nuit]) => setObserve({ volets, fenetres, presence, nuit }));
+  };
+  useEffect(() => {
+    if (tab !== 'regles' || !peutRegles) return undefined;
+    lireObserve();
+    // Un module change aussi depuis ailleurs : on relit comme ses vues.
+    const iv = setInterval(lireObserve, 5000);
+    return () => clearInterval(iv);
+  }, [tab, connecte, peutRegles]);
+  const basculerObserve = async () => {
+    const h = hass;
+    if (!h || typeof h.callWS !== 'function' || !observe) return;
+    const cible = !Object.values(observe).some(v => v === true);
+    setObserve({ volets: cible, fenetres: cible, presence: cible, nuit: cible });
+    await Promise.all([
+      h.callWS({ type: 'loggia/volets/config', patch: { simulation: { actif: cible } } }),
+      h.callWS({ type: 'loggia/fenetres/config', patch: { simulation: cible } }),
+      h.callWS({ type: 'loggia/presence/config', patch: { simulation: { actif: cible } } }),
+      h.callWS({ type: 'loggia/nuit/config', patch: { simulation: { actif: cible } } }),
+    ].map(p => p.catch(() => null)));
+    lireObserve();
+  };
   useEffect(() => {
     const h = hass;
     if (!peutRegles || !h || typeof h.callWS !== 'function') return undefined;
@@ -1163,7 +1247,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     h.callWS({ type: 'loggia/volets/etat' })
       .then(r => {
         const c = (r && r.config) || {};
-        n += ['planning', 'soleil', 'vent'].filter(k => c[k] && c[k].actif).length;
+        n += ['planning', 'soleil', 'vent', 'baies'].filter(k => c[k] && c[k].actif).length;
         compter();
       })
       .catch(() => { /* composant trop ancien, ou regles absentes */ });
@@ -1176,7 +1260,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     h.callWS({ type: 'loggia/nuit/etat' })
       .then(r => {
         const c = (r && r.config) || {};
-        n += ['veilleuse', 'coucher'].filter(k => c[k] && c[k].actif).length;
+        n += ['veilleuse', 'coucher', 'eclairage'].filter(k => c[k] && c[k].actif).length;
         compter();
       })
       .catch(() => { /* idem */ });
@@ -1218,8 +1302,87 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   ].filter(x => !x.admin || aD(x.id));
   // Interrupteur du bandeau (Tgl n'existe que dans la portée d'Apparence)
   const curSection = SECTIONS.find(x => x.id === tab);
+  /* L'en-tete d'une section : ce qu'elle compte, et ses actions a droite
+   * (maquettes du 18/09). Chaque section le dit a sa facon ; par defaut, sa
+   * phrase du sommaire. */
+  const enTete = (() => {
+    const moi = users[userIdx] || {};
+    if (tab === 'users') return {
+      sous: (users.length > 1 ? tr('{n} profils du foyer', { n: users.length }) : tr('{n} profil du foyer', { n: users.length })) + (moi.name ? ' · ' + tr('vous êtes {nom}', { nom: moi.name }) : ''),
+      droite: isAdmin ? <button onClick={() => setEditing({ i: null })} style={btnPrimaire}>{tr('Ajouter un profil')}</button> : null,
+    };
+    if (tab === 'apparence') return { sous: tr('Thème, couleurs, effets'), droite: null };
+    if (tab === 'inter') {
+      const c = compteInter;
+      const t = c ? (c.telecommandes > 1 ? tr('{n} télécommandes', { n: c.telecommandes }) : tr('{n} télécommande', { n: c.telecommandes })) : null;
+      const g = c ? (c.gestes > 1 ? tr('{n} gestes réglés', { n: c.gestes }) : tr('{n} geste réglé', { n: c.gestes })) : null;
+      return { sous: tr('Boutons sans fil Zigbee') + (c ? ' · ' + t + ', ' + g : ''), droite: null };
+    }
+    if (tab === 'alertes') return { sous: tr('Ce que le téléphone doit apprendre, même dashboard fermé'), droite: null };
+    if (tab === 'auto') return {
+      sous: tr('Écrites et gérées dans Home Assistant') + (autos.length ? ' · ' + tr('{a} actives sur {n}', { a: autos.filter(a => a.on).length, n: autos.length }) : ''),
+      // La demo n'a pas de Home Assistant derriere elle : pas de lien vers nulle part.
+      droite: window.__loggiaDemo ? null : <a href={accessOrigin + '/config/automation/dashboard'} target="_top" rel="noopener" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: 'var(--o-accent-soft)', textDecoration: 'none' }}>{tr('Ouvrir dans Home Assistant')}<Fi i="arrow-right" size={12} color="var(--o-accent-soft)" /></a>,
+    };
+    if (tab === 'maj') {
+      const verifier = () => {
+        if (hass && hass.callService && upsAll.length) hass.callService('homeassistant', 'update_entity', { entity_id: upsAll.map(u => u.id) });
+        const t = Date.now();
+        try { localStorage.setItem('loggia-maj-verifie', String(t)); } catch { /* stockage indisponible */ }
+        setMajVerifie(t);
+      };
+      const toutInstaller = () => {
+        if (!updAllConfirm) { setUpdAllConfirm(true); setTimeout(() => setUpdAllConfirm(false), 4000); return; }
+        setUpdAllConfirm(false);
+        ups.filter(u => u.avail && u.prog === false).forEach(u => { setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updCall('install', u.id); });
+      };
+      return {
+        sous: (upsAvail ? tr('{n} en attente', { n: upsAvail }) : tr('Tout est à jour')) + (majVerifie ? ' · ' + tr('vérifié {quand}', { quand: depuisMin((Date.now() - majVerifie) / 60000) }) : ''),
+        droite: <>
+          <button onClick={verifier} style={btnSecondaire}><Fi i="refresh" size={13} />{tr('Vérifier')}</button>
+          {upsAvail > 1 && <button onClick={toutInstaller} style={{ ...btnPrimaire, background: updAllConfirm ? 'var(--o-warn2)' : btnPrimaire.background }}>{updAllConfirm ? tr('Confirmer ?') : tr('Tout installer ({n})', { n: upsAvail })}</button>}
+        </>,
+      };
+    }
+    if (tab === 'connexion') return {
+      sous: tr('Session empruntée au navigateur · accès local et distant'),
+      // Mesuree a l'ouverture de la section : un appel a l'API, pas une supposition.
+      droite: !hass ? <Pastille niveau="danger" point>{tr('Session absente')}</Pastille>
+        : lat === -1 ? <Pastille niveau="danger" point>{tr('Home Assistant ne répond pas')}</Pastille>
+          : lat == null ? <Pastille point>{tr('Vérification…')}</Pastille>
+            : <Pastille niveau="ok" point>{tr('Session active')}</Pastille>,
+    };
+    if (tab === 'about') {
+      const inst = installationReelle();
+      // Sans entite de suivi, aucune pastille : mieux vaut ne rien dire que
+      // d'annoncer « a jour » sans l'avoir verifie.
+      const droite = inst.aJour === null ? null : inst.aJour
+        ? <Pastille niveau="ok" point>{tr('À jour')}</Pastille>
+        : <Pastille niveau="alerte" point>{inst.disponible ? tr('v{v} disponible', { v: String(inst.disponible).replace(/^v/, '') }) : tr('Mise à jour disponible')}</Pastille>;
+      return { sous: tr('Tableau de bord domotique auto-hébergé pour Home Assistant'), droite };
+    }
+    if (tab === 'regles') {
+      // Douze regles : volets 4, chauffage 1, depart 1, nuit 3, veilles 3.
+      const total = 12;
+      return { sous: tr('Ce que Loggia fait tout seul') + ' · ' + (nbVolRegles > 1 ? tr('{a} règles actives sur {t}', { a: nbVolRegles, t: total }) : tr('{a} règle active sur {t}', { a: nbVolRegles, t: total })), droite: null };
+    }
+    if (tab === 'vues') {
+      const c = readViewsCfg();
+      const principales = ['pieces', 'scenes', 'objets', 'energie', 'securite', 'systeme'];
+      const vues = 1 + principales.filter(v => !viewReason(availViews, v) && !c.hidden.has(v)).length
+        + HIDDEN_VIEWS().filter(h => !viewReason(availViews, h.vid) && c.shown.has(h.vid)).length + customViews.length;
+      const total = 1 + principales.length + HIDDEN_VIEWS().length + customViews.length;
+      return {
+        sous: tr('Menu latéral et vues perso') + ' · ' + tr('{v} visibles, {m} masquées', { v: vues, m: total - vues }),
+        droite: <>
+          {onNav && <button onClick={() => onNav('biblio')} style={btnSecondaire}>{tr('Bibliothèque de cartes')}</button>}
+          <button onClick={() => setCvEditing('new')} style={btnPrimaire}>{tr('Créer une vue')}</button>
+        </>,
+      };
+    }
+    return { sous: curSection ? (curSection.pageSub || curSection.sub) : '', droite: null };
+  })();
   // Bandeau d'une section : volontairement LEGER (1 a 2 groupes) — entasser dix reglages
-  const secBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' });
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1228,7 +1391,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Paramètres')}</h1>
-              <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Réglages propres à cet appareil')} · {tr('{n} profils', { n: users.length })}</div>
+              <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Réglages de Loggia')} · {users.length > 1 ? tr('{n} profils du foyer', { n: users.length }) : tr('{n} profil du foyer', { n: users.length })}</div>
             </div>
             <span style={{ flex: 1 }} />
             {upsAvail > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(var(--o-warn2-rgb),.14)', color: 'var(--o-warn2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-warn2)' }} />{upsAvail > 1 ? tr('{n} MISES À JOUR', { n: upsAvail }) : tr('{n} MISE À JOUR', { n: upsAvail })}</span>}
@@ -1261,22 +1424,18 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div>
             <button onClick={() => setTab('hub')} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}><Fi i="angle-small-left" size={13} color="var(--o-text2)" />{tr('Paramètres')}</button>
-            <h1 style={{ margin: '10px 0 0', fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 34, fontWeight: 500 }}>{curSection ? (curSection.long || curSection.name) : tr('Paramètres')}</h1>
-            <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{curSection ? (curSection.pageSub || curSection.sub) : ''}</div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+                <h1 style={{ margin: '10px 0 0', fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 34, fontWeight: 500 }}>{curSection ? (curSection.long || curSection.name) : tr('Paramètres')}</h1>
+                <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{enTete.sous}</div>
+              </div>
+              {enTete.droite && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingBottom: 2 }}>{enTete.droite}</div>}
+            </div>
           </div>
 
       {editing && isAdmin && <UserEditor user={editing.u} customViews={customViews} onSave={(data) => { if (editing.i == null) onAddUser && onAddUser(data); else onUpdateUser && onUpdateUser(editing.i, data); setEditing(null); }} onDelete={editing.i != null ? () => { onDeleteUser && onDeleteUser(editing.i); setEditing(null); } : null} onClose={() => setEditing(null)} />}
 
-      {tab === 'apparence' && (<>
-        <SecBar>
-          <SecGroup label={tr('Mode')}>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {[['auto', 'Auto'], ['dark', 'Foncé'], ['light', 'Clair']].map(([id, lb]) => (
-                <button key={id} onClick={() => onMode(id)} disabled={haTheme === 'FOLLOW'} style={{ ...secBtn(haTheme !== 'FOLLOW' && themeMode === id), opacity: haTheme === 'FOLLOW' ? .5 : 1, cursor: haTheme === 'FOLLOW' ? 'not-allowed' : 'pointer' }}>{lb}</button>
-              ))}
-            </div>
-          </SecGroup>
-        </SecBar>
+      {tab === 'apparence' && (
         <div className="grid-appar" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 264px', gap: 16, alignItems: 'start' }}>
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>{(() => {
         const notFollow = haTheme !== 'FOLLOW';
@@ -1285,98 +1444,113 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         const COMMU = ['frosted', 'onedark', 'dracula', 'github', 'tokyo', 'nightowl', 'plum', 'material', 'lavande'];
         const ids = themeTab === 'natifs' ? NATIFS : COMMU;
         const themeList = ids.map(id => PRESET_META().find(x => x.id === id)).filter(Boolean);
-        const tabBtn = (on) => ({ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: on ? 'var(--o-surfA)' : 'transparent', color: on ? 'var(--o-text)' : 'var(--o-text2)', boxShadow: on ? '0 1px 3px rgba(0,0,0,.25)' : 'none' });
+        const veille = !!ambient;
         return (<>
-          <AppCard title="Affichage">
+          <AppCard title={tr('Thème')}
+            sub={themeTab === 'natifs' ? tr('{n} thèmes natifs installés', { n: themeList.length }) : tr('{n} thèmes de la communauté', { n: themeList.length })}
+            action={<Seg value={themeTab} opts={[['natifs', tr('Natifs')], ['commu', tr('Communauté')]]} onPick={setThemeTab} />}>
+            <div className="grid-par-pal" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: 10, opacity: notFollow ? 1 : .55, transition: 'opacity .25s', padding: '0 22px 20px' }}>
+              {themeList.map(p => {
+                const on = notFollow && (loggiaTheme || '') === p.id, rgb = cl_hexRgb(p.cols[0]);
+                return (
+                  <button key={p.id || 'loggia'} onClick={() => onPickTheme(p.id)} aria-pressed={on} style={{ position: 'relative', textAlign: 'left', padding: '13px 14px', borderRadius: 14, cursor: 'pointer', transition: 'all .25s', fontFamily: 'inherit', color: 'inherit',
+                    border: '1px solid ' + (on ? 'rgba(' + rgb + ',.7)' : 'var(--o-bd2)'), background: on ? 'rgba(' + rgb + ',.10)' : 'var(--o-s3)', boxShadow: on ? '0 0 0 1px rgba(' + rgb + ',.35)' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                      {on && <span style={{ flexShrink: 0, marginLeft: 6, display: 'inline-flex' }}><Fi i="check" size={13} color={p.cols[0]} /></span>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 5, marginBottom: 9 }}>
+                      {p.cols.map((c, k) => <div key={k} style={{ width: 18, height: 18, borderRadius: 9, background: c, border: '1px solid var(--o-bd1)' }} />)}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {!notFollow && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '0 22px 18px' }}>{tr('Thème suivi depuis Home Assistant — coupe « Suivre » pour choisir manuellement.')}</div>}
+          </AppCard>
+
+          <AppCard title={tr('Couleurs')}>
             <OptRow title={tr('Mode')} desc={tr('Appliqué au thème choisi.')}>
-              <Seg value={themeMode} opts={[['auto', 'Auto'], ['dark', 'Foncé'], ['light', 'Clair']]} onPick={onMode} disabled={!notFollow} />
+              <Seg value={themeMode} opts={[['auto', tr('Auto')], ['dark', tr('Foncé')], ['light', tr('Clair')]]} onPick={onMode} disabled={!notFollow} />
             </OptRow>
-            <OptRow title={tr('Langue')} desc={tr('Les états et les commandes viennent de Home Assistant, dans toutes les langues qu’il connaît. Les noms de pièces et d’appareils aussi : ils ne sont pas traduits ici.')}>
-              {/* Plus de liste deroulante.
-                *
-                * Un `<select>` n'est pas peint par la page : le systeme dessine
-                * son menu et ignore le style pose sur les `<option>`. Les
-                * colorer ne pouvait rien changer, et `color-scheme` ne suffit
-                * pas partout — les langues restaient illisibles.
-                *
-                * Le commentaire d'origine justifiait le `<select>` par « une
-                * soixantaine de langues ». Il n'y en a plus que cinq : le
-                * segmente maison, deja utilise partout ailleurs sur cet ecran,
-                * les affiche tres bien et suit le theme comme le reste. */}
+            <OptRow title={tr("Couleur d'accent")} desc={tr('Éléments actifs, jauges et liens.')}>
+              {ACCENTS.map(([c, lb]) => {
+                const on = (look.accent || '') === c;
+                return (
+                  <button key={c || 'auto'} onClick={() => onLook({ accent: c })} title={lb} aria-label={lb} aria-pressed={on}
+                    style={{ width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: c || 'var(--o-accent)', border: on ? '2px solid var(--o-text)' : '2px solid transparent', boxShadow: on ? '0 0 0 2px var(--o-surfA) inset' : 'none' }}>
+                    {on ? <Fi i="check" size={12} color="#fff" /> : null}
+                  </button>
+                );
+              })}
+            </OptRow>
+            <OptRow title={tr("Teinte d'état")} desc={tr('Une carte active se lave de sa couleur.')}>
+              <Seg value={look.tint || 'douce'}
+                opts={[['sans', tr('Sans')], ['discrete', tr('Discrète')], ['douce', tr('Douce')], ['pleine', tr('Pleine')]]}
+                onPick={v => onLook({ tint: v })} />
+            </OptRow>
+          </AppCard>
+
+          <AppCard title={tr('Affichage')}>
+            <OptRow title={tr('Suivre Home Assistant')} desc={tr('Calque le thème actif de Home Assistant.')}>
+              <Tgl on={haTheme === 'FOLLOW'} cb={onFollowHa} label={tr('Suivre le thème Home Assistant')} />
+            </OptRow>
+            <OptRow title={tr('Langue')} desc={tr('Les noms de pièces et d’appareils viennent de Home Assistant.')}>
               <Seg value={choixLangue()}
                 opts={languesDisponibles(hass).map(l => [l.code, l.code === 'auto' ? tr('Auto') : l.code.toUpperCase()])}
                 onPick={v => {
-                  /* Plus de rechargement.
-                   *
-                   * Il n'existait que pour reconstruire les libelles figes a
-                   * l'import — navigation, themes, onglets. Ces listes sont
-                   * devenues des fonctions : elles se disent dans la langue du
-                   * moment, et un simple redessin suffit. */
+                  /* Pas de rechargement : les listes sont des fonctions, elles
+                   * se disent dans la langue du moment, un redessin suffit. */
                   cfgSet({ 'loggia-langue': v });
                   // La racine ecoute : elle rappelle `preparerLangue` puis redessine.
                   try { window.dispatchEvent(new CustomEvent('loggia-langue-changee')); } catch {}
                 }} />
             </OptRow>
-            <OptRow title="Suivre Home Assistant" desc={tr('Calque le thème actif de Home Assistant et désactive les choix ci-dessous.')}>
-              <Tgl on={haTheme === 'FOLLOW'} cb={onFollowHa} label={tr('Suivre le thème Home Assistant')} />
-            </OptRow>
-            <OptRow title={tr('Barre de navigation')} desc={tr('Accès rapide en bas de l’écran, sur mobile uniquement.')}>
+            <OptRow title={tr('Barre de navigation')} desc={tr('Accès rapide en bas de l’écran, sur mobile.')}>
               <Tgl on={!!navbar} cb={onToggleNavbar} label={tr('Barre de navigation mobile')} />
             </OptRow>
-            <OptRow title="Page d'accueil"
+            <OptRow title={tr("Page d'accueil")}
               desc={accueilDefaut === true
-                ? 'Home Assistant ouvre Loggia au démarrage, sur ce compte.'
+                ? tr('Home Assistant ouvre Loggia au démarrage, sur ce compte.')
                 : accueilDefaut === null
-                  ? 'Réglage indisponible : la page qui affiche Loggia n’a pas pu être identifiée.'
-                  : 'Home Assistant ouvre un autre écran au démarrage. Son sélecteur ne propose que les tableaux de bord — ce bouton fait le réglage à sa place.'}>
-              <button onClick={mettreEnAccueil} disabled={accueilDefaut !== false}
-                style={{ padding: '8px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                  cursor: accueilDefaut === false ? 'pointer' : 'default',
-                  border: '1px solid ' + (accueilDefaut === false ? 'rgba(var(--o-accent-rgb),.5)' : 'var(--o-bd2)'),
-                  background: accueilDefaut === false ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)',
-                  color: accueilDefaut === false ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>
-                {accueilDefaut === true ? 'C’est déjà le cas' : 'Ouvrir Loggia au démarrage'}
-              </button>
+                  ? tr('Réglage indisponible : la page qui affiche Loggia n’a pas pu être identifiée.')
+                  : tr('Home Assistant ouvre un autre écran au démarrage. Son sélecteur ne propose que les tableaux de bord — ce bouton fait le réglage à sa place.')}>
+              {accueilDefaut === true
+                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800, color: 'var(--o-ok)' }}><Fi i="check" size={12} color="var(--o-ok)" />{tr('Déjà le cas')}</span>
+                : <button onClick={mettreEnAccueil} disabled={accueilDefaut !== false} style={{ ...btnSecondaire, opacity: accueilDefaut === false ? 1 : .5, cursor: accueilDefaut === false ? 'pointer' : 'default' }}>{tr('Ouvrir Loggia au démarrage')}</button>}
             </OptRow>
           </AppCard>
 
-          <AppCard title="Effets" note="coût GPU modéré">
-            <OptRow title={tr('Effets météo animés')} desc={tr("Ciel vivant derrière la bannière d'accueil, suivant la météo réelle.")}>
+          <AppCard title={tr('Effets')} note={tr('coût GPU modéré')}>
+            <OptRow title={tr('Effets météo animés')} desc={tr("Ciel vivant derrière la bannière d'accueil.")}>
               <Tgl on={!!wxFx} cb={onToggleWxFx} label={tr('Effets météo animés')} />
             </OptRow>
-            <OptRow title={tr('Mode ambiant')} desc={tr("Pour une tablette murale : après ce délai sans toucher, un écran de veille — heure, météo, alertes. Un toucher le retire. Réglage propre à cet appareil.")}>
+            <OptRow title={tr('Écran de veille')} desc={tr('Pour une tablette murale : après ce délai sans toucher, heure et météo.')}>
               <Seg value={String(ambient || 0)}
-                opts={[['0', 'Off'], ['1', '1 min'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']]}
+                opts={[['0', tr('Off')], ['1', '1 min'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']]}
                 onPick={v => onAmbient && onAmbient(parseInt(v, 10) || 0)} />
             </OptRow>
-            <OptRow title={tr('Plage de la veille')} desc={tr("Quand la veille a le droit de s'afficher. La nuit (23 h – 6 h) elle baisse d'un ton, et l'horloge dérive doucement pour ménager l'écran.")}>
-              <Seg value={ambPlage} disabled={!ambient}
+            {/* Trois réglages de la veille : grisés tant qu'elle est coupée,
+              * sans être verrouillés — on peut les préparer avant. */}
+            <OptRow retrait eteint={!veille} title={tr('Plage horaire')} desc={tr("La nuit, la veille baisse d'un ton et l'horloge dérive pour ménager l'écran.")}>
+              <Seg value={ambPlage}
                 opts={[['toujours', tr('Toujours')], ['nuit', tr('Nuit')], ['jour', tr('Journée')]]}
                 onPick={v => onAmbPlage && onAmbPlage(v)} />
             </OptRow>
-            <OptRow title={tr('Photos en veille')} desc={tr('Diaporama des images du dossier media de Home Assistant, en fond de veille — une photo toutes les 30 secondes, jamais un service externe.')}>
-              <Tgl on={ambPhotos} cb={toggleAmbPhotos} label={tr('Photos en veille')} />
+            <OptRow retrait eteint={!veille} title={tr('Photos en fond')} desc={tr('Diaporama du dossier media, une photo toutes les 30 s, jamais un service externe.')}>
+              <Tgl on={ambPhotos} cb={toggleAmbPhotos} label={tr('Photos en fond')} />
             </OptRow>
-            <OptRow title={tr('Réveil par la caméra')} desc={tr("La caméra de la tablette réveille l'écran quand quelqu'un passe. Tout reste local — rien n'est envoyé ni enregistré. Nécessite un accès HTTPS (Nabu Casa) et l'autorisation caméra.")}>
+            <OptRow retrait eteint={!veille} title={tr('Réveil par la caméra')} desc={tr("Tout reste local. Nécessite un accès HTTPS et l'autorisation caméra.")}>
               <Tgl on={ambMotion} cb={toggleAmbMotion} label={tr('Réveil par la caméra')} />
             </OptRow>
           </AppCard>
 
           {/* La matière n'est plus un choix : un seul matériau — le translucide de
-              l'accueil — partout (décision user 29/08). L'ancien réglage glass
-              reste dans les configs mais n'est plus lu. */}
-          <AppCard title={tr('Matière & formes')} note="aucun coût GPU">
-            <OptRow title="Arrondi" desc={tr('Rayon des cartes, des champs et des boutons.')}>
-              {[['net', 'Net', 3], ['doux', 'Doux', 8], ['rond', 'Rond', 999]].map(([v, lb, r]) => {
-                const on = look.radius === v;
-                return (
-                  <button key={v} onClick={() => onLook({ radius: v })} aria-pressed={on} aria-label={'Arrondi ' + lb}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent-fond)' : 'var(--o-bd1)') }}>
-                    <span style={{ width: 22, height: 22, borderRadius: r, background: 'var(--o-s1)', border: '2px solid ' + (on ? 'var(--o-accent-fond)' : 'var(--o-text3)') }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</span>
-                  </button>
-                );
-              })}
+              l'accueil — partout (décision user 29/08). */}
+          <AppCard title={tr('Matière & formes')} note={tr('aucun coût GPU')}>
+            <OptRow title={tr('Arrondi')} desc={tr('Rayon des cartes, des champs et des boutons.')}>
+              <Seg value={look.radius || 'doux'} opts={[['net', tr('Net')], ['doux', tr('Doux')], ['rond', tr('Rond')]]} onPick={v => onLook({ radius: v })} />
             </OptRow>
             <OptRow title={tr('Ombres portées')} desc={tr('Détache les cartes du fond. À couper pour un rendu plat.')}>
               <Tgl on={!!look.shadow} cb={() => onLook({ shadow: !look.shadow })} label={tr('Ombres portées')} />
@@ -1384,309 +1558,223 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <OptRow title={tr('Liserés')} desc={tr('Trait de 1 px autour des cartes et des tableaux.')}>
               <Tgl on={!!look.hairline} cb={() => onLook({ hairline: !look.hairline })} label={tr('Liserés')} />
             </OptRow>
-            <OptRow title={tr("Teinte d'état")} desc={tr('Les cartes actives — lampe allumée, volet ouvert, chauffage en marche — se lavent de leur couleur.')}>
-              <Seg value={look.tint || 'douce'}
-                opts={[['sans', tr('Sans')], ['discrete', tr('Discrète')], ['douce', tr('Douce')], ['pleine', tr('Pleine')]]}
-                onPick={v => onLook({ tint: v })} />
-            </OptRow>
-            <OptRow title={tr("Fond d'écran")} desc={tr('Votre photo sous les cartes — et sous leur flou si la matière Verre est active.')}>
-              {(() => {
-                const on = (look.fond || 'aucun') !== 'photo';
-                return (
-                  <button onClick={() => onLook({ fond: 'aucun' })} aria-pressed={on} aria-label={tr("Fond d'écran") + ' ' + tr('Aucun')}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '9px 11px 7px', borderRadius: 14, cursor: 'pointer', transition: 'all .2s', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'var(--o-s2)', border: '1px solid ' + (on ? 'var(--o-accent-fond)' : 'var(--o-bd1)') }}>
-                    <span style={{ width: 34, height: 22, borderRadius: 10, background: 'var(--o-bg)', border: '1px solid ' + (on ? 'var(--o-accent-fond)' : 'var(--o-bd2)') }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{tr('Aucun')}</span>
-                  </button>
-                );
-              })()}
+            <OptRow title={tr("Fond d'écran")} desc={tr('Votre photo sous les cartes.')}>
               <FondPhotoBtn actif={(look.fond || 'aucun') === 'photo'} onLook={onLook} />
             </OptRow>
-            <OptRow title="Couleur d'accent" desc={tr('Éléments actifs, jauges et liens.')}>
-              {ACCENTS.map(([c, lb]) => {
-                const on = (look.accent || '') === c;
-                return (
-                  <button key={c || 'auto'} onClick={() => onLook({ accent: c })} title={lb} aria-label={lb} aria-pressed={on}
-                    style={{ width: 26, height: 26, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: c || 'var(--o-accent)', border: c ? (on ? '2px solid var(--o-text)' : '2px solid transparent') : (on ? '2px solid var(--o-text)' : '2px dashed var(--o-bd1)') }}>
-                    {on ? <Fi i="check" size={12} color="#fff" /> : null}
-                  </button>
-                );
-              })}
-            </OptRow>
           </AppCard>
 
-          <AppCard title="Marges de l'écran" action={(navAuto && topAuto) ? null : (
-            <button onClick={() => { onNavOffsetReset && onNavOffsetReset(); onTopOffsetReset && onTopOffsetReset(); }} style={{ padding: '6px 12px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{tr('Revenir à auto')}</button>
-          )}>
-            <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, lineHeight: 1.5, maxWidth: '62ch', padding: '12px 0 2px' }}>
-              À ajuster seulement si la barre passe sous l'encoche ou la barre d'accueil de votre téléphone. « auto » convient dans la quasi-totalité des cas.
-            </div>
-            {navbar && <MarginRow label="Marge du bas" px={navMargin} auto={navAuto} onStep={onNavOffset} onSet={onNavSet} />}
-            <MarginRow label="Marge du haut" px={topMargin} auto={topAuto} onStep={onTopOffset} onSet={onTopSet} />
-          </AppCard>
-
-          <AppCard title={tr('Thème')} sub={themeList.length + ' disponibles'} action={(
-            <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)' }}>
-              <button onClick={() => setThemeTab('natifs')} style={tabBtn(themeTab === 'natifs')}>Natifs</button>
-              <button onClick={() => setThemeTab('commu')} style={tabBtn(themeTab === 'commu')}>{tr('Communauté')}</button>
-            </div>
-          )}>
-            <div className="grid-par-pal" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, opacity: notFollow ? 1 : .55, transition: 'opacity .25s', paddingTop: 14 }}>
-              {themeList.map(p => {
-                const on = notFollow && (loggiaTheme || '') === p.id, rgb = cl_hexRgb(p.cols[0]);
-                return (
-                  <button key={p.id || 'loggia'} onClick={() => onPickTheme(p.id)} style={{ position: 'relative', textAlign: 'left', padding: '11px 12px', borderRadius: 14, cursor: 'pointer', transition: 'all .25s', border: '1px solid ' + (on ? `rgba(${rgb},.55)` : 'var(--o-bd1)'), background: on ? `rgba(${rgb},.10)` : 'var(--o-s2)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-                      {on && <span style={{ flexShrink: 0, marginLeft: 6, display: 'inline-flex' }}><Fi i="check" size={13} color={p.cols[0]} /></span>}
-                    </div>
-                    <div style={{ display: 'flex', gap: 4, marginBottom: 7 }}>
-                      {p.cols.map((c, k) => <div key={k} style={{ width: 20, height: 20, borderRadius: 10, background: c, border: '1px solid rgba(255,255,255,.12)' }} />)}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
-                  </button>
-                );
-              })}
-            </div>
-            {!notFollow && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 12 }}>{tr('Thème suivi depuis Home Assistant — coupe « Suivre » pour choisir manuellement.')}</div>}
-          </AppCard>
+          <MargesAvancees navbar={navbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset}
+            topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset}
+            onReset={() => { onNavOffsetReset && onNavOffsetReset(); onTopOffsetReset && onTopOffsetReset(); }} />
         </>);
       })()}</div><ParPreview themeMode={themeMode} loggiaTheme={loggiaTheme} hass={hass} userName={(users[userIdx] || {}).name || ''} look={look} /></div>
-      </>)}
+      )}
 
-      {tab === 'connexion' && (<>
-        {/* L'assistant conversationnel.
-          *
-          * Son nom vit ici et non dans le code : un assistant porte souvent le
-          * prénom de quelqu'un, et le code de Loggia est public. Réglé, il fait
-          * apparaître un bouton au centre de la barre du bas ; vide, Loggia ne
-          * cherche rien. C'est une entité de conversation qu'on choisit :
-          * Assist, un modèle en ligne, un composant d'assistant — celui qui a
-          * son propre protocole est reconnu seul, et en profite. */}
-        <SecBar>
-          <SecGroup label={<span>{tr('Assistant')}<span className="o-bar-sub"><br /><span style={{ fontWeight: 600, color: 'var(--o-text3)' }}>{tr('entité de conversation')}</span></span></span>}>
+      {tab === 'connexion' && (
+        <Panneau titre={tr('Adresses du serveur')} desc={tr('Loggia n’a pas de compte : il emprunte la session Home Assistant ouverte dans ce navigateur.')}
+          pied={<>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: '1 1 220px' }}>{tr('Enregistrer recharge Loggia avec ces réglages.')}</span>
+            <button onClick={resetHaCfg} style={btnSecondaire}>{tr('Rétablir')}</button>
+            <button onClick={saveHaCfg} style={btnPrimaire}>{tr('Enregistrer')}</button>
+          </>}>
+          {[['local', tr('URL locale'), 'http://homeassistant.local:8123'],
+            ['remote', tr('URL distante · Nabu Casa'), 'https://xxxx.ui.nabu.casa']].map(([k, lb, ph]) => (
+            <div key={k} className="o-optrow" style={{ padding: '14px 22px', borderTop: FILET }}>
+              <div style={{ ...CAPITALES, marginBottom: 8 }}>{lb}</div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input aria-label={lb} value={haDraft[k] || ''} onChange={e => setHaDraft(d => ({ ...d, [k]: e.target.value }))} placeholder={ph} spellCheck={false} autoComplete="off"
+                  style={{ ...entInp, ...MONO, flex: '1 1 260px', width: 'auto', minWidth: 0, padding: '10px 14px', borderRadius: 12, fontSize: 12.5, fontWeight: 500 }} />
+                <button onClick={() => testUrl(k)} style={btnSecondaire}>{tr('Tester')}</button>
+                {resultatTest(k)}
+              </div>
+            </div>
+          ))}
+          <Ligne titre={tr('Bascule automatique')} desc={tr('Passer par Nabu Casa quand Home Assistant ne répond pas sous 2 s.')}>
+            <Tgl on={!!haDraft.fallback} cb={toggleFallback} label={tr('Bascule automatique')} />
+          </Ligne>
+          <Ligne titre={tr('Intervalle de rafraîchissement')} desc={tr('Plus court = plus de requêtes vers Home Assistant.')}>
+            <Seg value={haDraft.pollMs || 2000} opts={POLL_CHOICES} onPick={(ms) => setHaDraft(d => ({ ...d, pollMs: ms }))} />
+          </Ligne>
+          {/* L'assistant : une entite de conversation. Son nom vit ici et non
+            * dans le code — un assistant porte souvent un prenom, et le code de
+            * Loggia est public. */}
+          <Ligne titre={tr('Assistant vocal')} desc={tr('L’entité de conversation qui répond à l’orbe, en haut de l’écran et dans la barre du bas.')}>
             <Seg value={assistantChoix} opts={assistantOpts} onPick={choisirAssistant} wrap />
-          </SecGroup>
-        </SecBar>
+          </Ligne>
+        </Panneau>
+      )}
 
-        <SecBar>
-          <SecGroup label={<span>Bascule Nabu Casa<span className="o-bar-sub"><br /><span style={{ fontWeight: 600, color: 'var(--o-text3)' }}>{tr('hors du réseau local')}</span></span></span>}>
-            <SecTgl on={!!haDraft.fallback} cb={toggleFallback} label={tr('Proposer la bascule Nabu Casa')} />
-          </SecGroup>
-        </SecBar>
-
-        <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 20px', background: 'var(--o-s4)', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-            <Fi i="settings" size={15} color="var(--o-text2)" />
-            <span style={{ fontSize: 14, fontWeight: 700 }}>{tr('Adresses du serveur')}</span>
-            <span style={{ flex: 1 }} />
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{tr("testées à l'enregistrement")}</span>
-          </div>
-          <div style={{ padding: '18px 20px 20px' }}>
-            <div style={{ fontSize: 12, color: 'var(--o-accent-soft)', fontWeight: 600, lineHeight: 1.55, maxWidth: '62ch', marginBottom: 16 }}>
-              Loggia n'a pas de compte : il emprunte la session Home Assistant ouverte dans ce navigateur. Si elle expire, c'est l'écran de connexion de Home Assistant qui s'affiche.
-            </div>
-            {[['local', 'URL LOCALE', 'http://homeassistant.local:8123', "Adresse du serveur sur le réseau domestique."],
-              ['remote', 'URL DISTANTE · NABU CASA', 'https://xxxx.ui.nabu.casa', 'Utilisée quand le réseau local ne répond pas sous 2 s.']].map(([k, lb, ph, hint]) => {
-              const r = testLine(k);
-              return (
-                <div key={k} style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.07em', color: 'var(--o-text3)', marginBottom: 6 }}>{lb}</div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input aria-label={lb} value={haDraft[k] || ''} onChange={e => setHaDraft(d => ({ ...d, [k]: e.target.value }))} placeholder={ph} spellCheck={false} autoComplete="off" style={{ ...entInp, flex: 1, minWidth: 0 }} />
-                    <button onClick={() => testUrl(k)} style={{ padding: '9px 15px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>Tester</button>
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: r ? r.col : 'var(--o-text3)' }}>{r ? r.txt : hint}</div>
-                </div>
-              );
-            })}
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.07em', color: 'var(--o-text3)', marginBottom: 6 }}>{tr('INTERVALLE DE RAFRAÎCHISSEMENT')}</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {POLL_CHOICES.map(([ms, lb]) => (
-                <button key={ms} onClick={() => setHaDraft(d => ({ ...d, pollMs: ms }))} style={{ padding: '8px 15px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + ((haDraft.pollMs || 2000) === ms ? 'var(--o-accent)' : 'var(--o-bd1)'), background: (haDraft.pollMs || 2000) === ms ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: (haDraft.pollMs || 2000) === ms ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{lb}</button>
-              ))}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 6 }}>{tr('Plus court = plus de requêtes vers Home Assistant.')}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
-              <button onClick={saveHaCfg} style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
-              <button onClick={resetHaCfg} style={{ padding: '10px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Rétablir')}</button>
-              <span style={{ flex: 1 }} />
-              <button onClick={ping} disabled={latBusy} style={{ padding: '9px 14px', borderRadius: 10, background: 'transparent', border: 'none', color: 'var(--o-text3)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>{latBusy ? 'Test…' : 'Tester la session'}</button>
-            </div>
-          </div>
-        </div>
-
-        <div className="o-parcard" style={cardSt}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>{tr('Bon à savoir')}</div>
-          {PAR_HELPS().map(h => {
-            const isOpen = !!open[h.id];
+      {tab === 'users' && (<>
+        <Panneau titre={tr('Utilisateurs')} desc={tr('L’utilisateur Home Assistant connecté est reconnu automatiquement.')}>
+          {!isAdmin && <div style={{ padding: '0 22px 14px', fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Seul un administrateur peut ajouter, modifier ou supprimer un utilisateur.')}</div>}
+          {users.map((u, i) => {
+            const im = userImg(u);
+            const moi = i === userIdx;
+            const vu = seenRel(u.name, moi);
+            const admin = u.role === 'Admin';
+            // L'identifiant du profil : celui que l'editeur ecrit (« Admin · prenom »).
+            const ident = String(u.sub || '').split(' · ')[1] || String(u.name || '').toLowerCase().replace(/\s+/g, '.');
             return (
-              <div key={h.id} style={{ border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, marginBottom: 10, overflow: 'hidden' }}>
-                <button onClick={() => setOpen(o => ({ ...o, [h.id]: !o[h.id] }))} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 16px', background: 'var(--o-s4)', border: 'none', cursor: 'pointer', color: 'var(--o-text)', textAlign: 'left' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 700 }}><Fi i="info" size={16} color="var(--o-accent-soft)" />{h.title}</span>
-                  <span style={{ display: 'inline-flex', transition: 'transform .25s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)' }}><Fi i="angle-small-down" size={16} color="var(--o-text2)" /></span>
-                </button>
-                <div style={{ maxHeight: isOpen ? 200 : 0, overflow: 'hidden', transition: 'max-height .3s ease' }}><div style={{ padding: '0 16px 15px', fontSize: 12, color: 'var(--o-text2)', fontWeight: 500, lineHeight: 1.6 }}>{h.body}</div></div>
+              <div key={u._k || 'u' + i} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 22px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+                <span style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, color: '#fff', background: userBg(u) }}>{im ? '' : (u.name || '?').charAt(0).toUpperCase()}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 14, fontWeight: 800 }}>{u.name}</span>
+                    <Pastille capitales niveau={admin ? 'alerte' : 'ok'}>{u.role || tr('Famille')}</Pastille>
+                  </div>
+                  <div style={{ ...MONO, fontSize: 11.5, color: 'var(--o-text3)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ident}</div>
+                </div>
+                {vu && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0 }}>{vu}</span>}
+                {isAdmin && <button type="button" aria-label={tr('Modifier ce profil')} title={tr('Modifier ce profil')} onClick={() => setEditing({ i, u })}
+                  style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)' }}><Fi i="pencil" size={13} /></button>}
               </div>
             );
           })}
-        </div>
-      </>)}
-
-      {tab === 'users' && (<>
-        <SecBar>
-          {isAdmin && <SecGroup label="Profils"><button onClick={() => setEditing({ i: null })} style={secBtn(false)}>{tr('Ajouter un profil')}</button></SecGroup>}
-        </SecBar>
-        <div className="o-parcard" style={cardSt}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><div style={{ fontSize: 15, fontWeight: 700 }}>Utilisateurs ({users.length})</div></div>
-          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '-12px 0 12px' }}>Profils locaux à cet appareil — l'utilisateur Home Assistant connecté est reconnu automatiquement.</div>
-          {!isAdmin && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 14 }}>{tr('Seul un administrateur peut ajouter, modifier ou supprimer un utilisateur.')}</div>}
-          <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
-            {users.map((u, i) => { const im = userImg(u); return (
-              <div key={u._k || 'u' + i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
-                <span style={{ width: 40, height: 40, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, color: '#fff', background: userBg(u) }}>{im ? '' : (u.name[0] || '?').toUpperCase()}</span>
-                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{u.name}{i === userIdx && <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', padding: '2px 7px', borderRadius: 999, marginLeft: 7, verticalAlign: '1px', letterSpacing: '.04em' }}>{tr('VOUS')}</span>}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}>{u.sub || u.role}</div></div>
-                {(() => { const r = seenRel(u.name, i === userIdx); return r ? <span style={{ fontSize: 11, fontWeight: 600, color: i === userIdx ? 'var(--o-ok)' : 'var(--o-text3)', flexShrink: 0 }}>{r}</span> : null; })()}
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: u.role === 'Admin' ? 'rgba(var(--o-warn-rgb),.16)' : 'rgba(var(--o-ok-rgb),.16)', color: u.role === 'Admin' ? 'var(--o-warn)' : 'var(--o-ok)' }}>{u.role}</span>
-                {isAdmin && <span role="button" tabIndex={0} aria-label={tr('Modifier ce profil')} onClick={() => setEditing({ i, u })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing({ i, u }); } }} style={{ cursor: 'pointer', color: 'var(--o-text3)', display: 'flex' }}><Fi i="pencil" size={16} /></span>}
-              </div>
-            ); })}
-          </div>
-          {isAdmin && <AdminPinEditor hass={hass} />}
-        </div>
+        </Panneau>
+        {isAdmin && <AdminPinEditor hass={hass} />}
       </>)}
 
       {tab === 'vues' && aD('vues') && (() => {
-        const BUILTIN_VIEWS = [
-          ['accueil', tr('Accueil'), 'home', 'vue principale', true],
-          ['pieces', tr('Pièces'), 'door-open', 'toutes les pièces', false],
-          ['scenes', tr('Scénarios'), 'sparkles', 'scénarios de la maison', false],
-          ['objets', tr('Objets'), 'apps', 'appareils par familles', false],
-          ['energie', tr('Énergie'), 'bolt', 'production et consommation', false],
-          ['securite', tr('Sécurité'), 'shield-check', 'alarme et caméras', false],
-          ['systeme', tr('Système'), 'microchip', 'machines et maintenance', false],
+        const PRINCIPALES = [
+          ['pieces', tr('Pièces'), 'door-open', tr('toutes les pièces'), 'var(--o-orange)'],
+          ['scenes', tr('Scénarios'), 'sparkles', tr('scénarios de la maison'), 'var(--o-purple)'],
+          ['objets', tr('Objets'), 'apps', tr('appareils par familles'), 'var(--o-cyan)'],
+          ['energie', tr('Énergie'), 'bolt', tr('production et consommation'), 'var(--o-ok)'],
+          ['securite', tr('Sécurité'), 'shield-check', tr('alarme et caméras'), 'var(--o-ok)'],
+          ['systeme', tr('Système'), 'microchip', tr('machines et maintenance'), 'var(--o-text2)'],
         ];
+        // Une vue masquee garde sa description : c'est ce qu'on lit pour
+        // decider de la remettre, « masquée » ne disait rien.
+        const DESC_SECONDAIRE = { lumieres: tr('éclairages de la maison'), climat: tr('chauffage et clim'), medias: tr('enceintes et écrans'), biblio: tr('catalogue des cartes') };
         const cfg = readViewsCfg();
         const bump = () => setAutoOpen(o => ({ ...o }));
         const toggleMain = (vid) => { const c = readViewsCfg(); if (c.hidden.has(vid)) c.hidden.delete(vid); else c.hidden.add(vid); writeViewsCfg(c); bump(); };
         const toggleExtra = (vid) => { const c = readViewsCfg(); if (c.shown.has(vid)) c.shown.delete(vid); else c.shown.add(vid); writeViewsCfg(c); bump(); };
-        // Ordre choisi des vues intégrées : appliqué ici ET dans le menu latéral.
+        // Un seul ordre enregistre, deux groupes : chacun se reordonne dans le
+        // sien — le menu lateral range les vues secondaires a part.
         const iOrdre = (vid) => { const i = (cfg.order || []).indexOf(vid); return i < 0 ? 999 : i; };
-        const ordonnes = [...BUILTIN_VIEWS].sort((a, b) => iOrdre(a[0]) - iOrdre(b[0]));
-        const bouger = (vid, dir) => {
-          const ids = ordonnes.map(v => v[0]);
-          const i = ids.indexOf(vid), j = i + dir;
-          if (j < 0 || j >= ids.length) return;
-          const t2 = ids[i]; ids[i] = ids[j]; ids[j] = t2;
-          const c = readViewsCfg(); c.order = ids; writeViewsCfg(c); bump();
-        };
+        const principales = [...PRINCIPALES].sort((a, b) => iOrdre(a[0]) - iOrdre(b[0]));
+        const secondaires = HIDDEN_VIEWS().sort((a, b) => iOrdre(a.vid) - iOrdre(b.vid));
+        const idsP = principales.map(v => v[0]);
+        const idsS = secondaires.map(h => h.vid);
+        const echanger = (ids, vid, dir) => { const n = ids.slice(); const i = n.indexOf(vid), j = i + dir; if (i < 0 || j < 0 || j >= n.length) return null; const t = n[i]; n[i] = n[j]; n[j] = t; return n; };
+        const ecrireOrdre = (ids) => { const c = readViewsCfg(); c.order = ids; writeViewsCfg(c); bump(); };
+        const deplacerP = (vid, dir) => { const n = echanger(idsP, vid, dir); if (n) ecrireOrdre(['accueil', ...n, ...idsS]); };
+        const deplacerS = (vid, dir) => { const n = echanger(idsS, vid, dir); if (n) ecrireOrdre(['accueil', ...idsP, ...n]); };
         return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <SecBar>
-          <SecGroup label={tr('Vue personnalisée')}><button onClick={() => setCvEditing('new')} style={secBtn(false)}>{tr('Créer une vue')}</button></SecGroup>
-          {onNav && <SecGroup label={tr('Catalogue')}><button onClick={() => onNav('biblio')} style={secBtn(false)}>{tr('Bibliothèque de cartes')}</button></SecGroup>}
-        </SecBar>
-        <div className="o-parcard" style={cardSt}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Vues intégrées')}</div><span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.05em' }}>{tr('visibilité du menu latéral')}</span></div>
-          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 6px' }}>Masque celles que tu n'utilises pas, ou réactive une vue retirée. La barre mobile garde ses raccourcis.</div>
-          <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
-            {ordonnes.map(([vid, name, icon, sub, locked], idx) => { const why = viewReason(availViews, vid); return (
-              <Row key={vid} icon={icon} name={name} sub={why || sub} locked={locked || !!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)}
-                onUp={idx > 0 ? () => bouger(vid, -1) : null} onDown={idx < ordonnes.length - 1 ? () => bouger(vid, 1) : null} />
+          <Panneau titre={tr('Vues intégrées')} desc={tr('Masque celles que tu n’utilises pas, réordonne les autres. La barre mobile garde ses raccourcis.')}
+            droite={<span style={CAPITALES}>{tr('Visibilité du menu latéral')}</span>}>
+            <Row icon="home" c="var(--o-accent)" name={tr('Accueil')} sub={tr('vue principale')} on fixe />
+            {principales.map(([vid, name, icon, sub, c], idx) => { const why = viewReason(availViews, vid); return (
+              <Row key={vid} icon={icon} c={c} name={name} sub={why || sub} locked={!!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)}
+                onUp={idx > 0 ? () => deplacerP(vid, -1) : null} onDown={idx < principales.length - 1 ? () => deplacerP(vid, 1) : null} />
             ); })}
-            {HIDDEN_VIEWS().map(h => { const why = viewReason(availViews, h.vid); return (
-              <Row key={h.vid} icon={h.icon} c={h.c} name={h.label} sub={why || 'vue retirée, accessible par la recherche'} locked={!!why} on={!why && cfg.shown.has(h.vid)} onT={() => toggleExtra(h.vid)} />
+            {secondaires.map((h, idx) => { const why = viewReason(availViews, h.vid); return (
+              <Row key={h.vid} icon={h.icon} c={h.c} name={h.label} sub={why || DESC_SECONDAIRE[h.vid] || ''} locked={!!why} on={!why && cfg.shown.has(h.vid)} onT={() => toggleExtra(h.vid)}
+                onUp={idx > 0 ? () => deplacerS(h.vid, -1) : null} onDown={idx < secondaires.length - 1 ? () => deplacerS(h.vid, 1) : null} />
             ); })}
-          </div>
-        </div>
-        <div className="o-parcard" style={cardSt}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 10 }}><div><div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Gestion des vues')}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}>{tr('Crée tes propres vues avec tes entités — elles apparaissent dans le menu latéral.')}</div></div></div>
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '18px 0 10px' }}>MES VUES ({customViews.length})</div>
-          <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
-            {customViews.map(cv => (
-              <div key={cv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
-                <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><Fi i={cv.icon || 'sparkles'} size={15} /></span>
-                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{cv.name}</div><div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div></div>
-                <button onClick={() => setCvEditing(cv)} title="Modifier" style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="pencil" size={13} /></button>
-                <button onClick={() => onSaveCustomViews(customViews.filter(x => x.id !== cv.id))} title="Supprimer" style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>×</button>
-              </div>
-            ))}
-            {!customViews.length && <div style={{ padding: '16px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucune vue personnalisée. « + Nouvelle vue » pour commencer.')}</div>}
-          </div>
-        </div>
+          </Panneau>
+          {customViews.length > 0 && (
+            <Panneau titre={tr('Mes vues')} desc={tr('Tes vues, avec tes entités — elles apparaissent dans le menu latéral.')}>
+              {customViews.map(cv => (
+                <div key={cv.id} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 22px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+                  <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><Fi i={cv.icon || 'sparkles'} size={15} /></span>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 700 }}>{cv.name}</div><div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div></div>
+                  <button onClick={() => setCvEditing(cv)} title={tr('Modifier')} aria-label={tr('Modifier') + ' ' + cv.name} style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="pencil" size={13} /></button>
+                  <button onClick={() => onSaveCustomViews(customViews.filter(x => x.id !== cv.id))} title={tr('Supprimer')} aria-label={tr('Supprimer') + ' ' + cv.name} style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>×</button>
+                </div>
+              ))}
+            </Panneau>
+          )}
         </div>
         );
       })()}
       {cvEditing && isAdmin && <CvEditor cv={cvEditing === 'new' ? null : cvEditing} hass={hass} onClose={() => setCvEditing(null)} onSave={(cv) => { onSaveCustomViews(cvEditing === 'new' ? [...customViews, cv] : customViews.map(x => x.id === cv.id ? cv : x)); setCvEditing(null); }} />}
 
       {tab === 'auto' && aD('auto') && (() => {
-        const norm = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const norm = (t) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const q = norm(autoQ.trim());
         const filtered = autos.filter(a => (!q || norm(a.name).indexOf(q) >= 0) && (autoFilter === 'all' || (autoFilter === 'on') === a.on));
         // Le classement vit dans `autos.js`, avec ses tests : le premier mot du
-        // nom faisait deux familles pour « Lumière » et « Lumières », et rangeait
-        // « Force veilleuse » sous « Force » (retour 02/09).
-        const grpOf = (a) => autoFamille(a.name);
+        // nom faisait deux familles pour « Lumière » et « Lumières » (retour 02/09).
         const groups = [];
-        filtered.forEach(a => { const g = grpOf(a); let e = groups.find(x => x.g === g); if (!e) { e = { g, items: [] }; groups.push(e); } e.items.push(a); });
+        filtered.forEach(a => { const g = autoFamille(a.name); let e = groups.find(x => x.g === g); if (!e) { e = { g, items: [] }; groups.push(e); } e.items.push(a); });
         groups.sort((x, y) => x.g.localeCompare(y.g));
-        const onCount = autos.filter(a => a.on).length;
-        const anyOpen = groups.some(gr => autoOpen[gr.g]);
         const line = (a) => (
-          <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0' }}>
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: a.on ? 'var(--o-text)' : 'var(--o-text2)' }}>{a.name}</div><div style={{ fontSize: 12, fontWeight: 600, color: a.on ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>{a.on ? 'active' : 'inactive'}{a.last ? ' · dernière exécution ' + autoRel(a.last) : ''}</div></div>
-            <button onClick={() => runAuto(a)} title={tr('Exécuter maintenant')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><Fi i="play" size={12} />{tr('Exécuter')}</button>
-            <span onClick={() => toggleAuto(a)} role="switch" aria-checked={a.on} aria-label={a.name} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAuto(a); } }} style={{ width: 46, height: 26, borderRadius: 14, background: a.on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: a.on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>
+          <div key={a.id} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 22px 10px 51px', borderTop: FILET }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: a.on ? 'var(--o-text)' : 'var(--o-text2)' }}>{a.name}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{a.on ? tr('active') : tr('inactive')}{a.last ? ' · ' + tr('dernière exécution {quand}', { quand: autoRel(a.last) }) : ''}</div>
+            </div>
+            <button onClick={() => runAuto(a)} title={tr('Exécuter maintenant')} style={btnDiscret}><Fi i="play" size={11} />{tr('Exécuter')}</button>
+            <Tgl on={a.on} cb={() => toggleAuto(a)} label={a.name} />
           </div>
         );
         return (
         <>
-        <SecBar>
-          <SecGroup label="Filtre">
-            <div style={{ display: 'flex', gap: 4 }}>
-              {[['all', tr('Toutes'), autos.length], ['on', 'Actives', onCount], ['off', 'Inactives', autos.length - onCount]].map(([k, lb, n]) => (
-                <button key={k} onClick={() => setAutoFilter(k)} style={secBtn(autoFilter === k)}>{lb} <span style={{ opacity: .7, fontVariantNumeric: 'tabular-nums' }}>{n}</span></button>
-              ))}
-            </div>
-          </SecGroup>
-        </SecBar>
-        <div className="o-parcard" style={cardSt}>
-          <div style={{ display: 'flex', gap: 8, margin: '10px 0 14px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ flex: '1 1 200px', position: 'relative' }}>
-              <input aria-label={tr('Filtrer par nom…')} value={autoQ} onChange={e => setAutoQ(e.target.value)} placeholder={tr('Filtrer par nom…')} spellCheck={false} style={{ width: '100%', boxSizing: 'border-box', padding: '9px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
-            </div>
-                        <button onClick={() => setAutoOpen(anyOpen ? {} : Object.fromEntries(groups.map(gr => [gr.g, true])))} style={{ padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s2)', color: 'var(--o-text1)' }}>{anyOpen ? 'Tout replier' : 'Tout déplier'}</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: 14, borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+          <div style={{ flex: '1 1 240px', position: 'relative', minWidth: 0 }}>
+            <Fi i="search" size={14} color="var(--o-text3)" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+            <input aria-label={tr('Filtrer par nom…')} value={autoQ} onChange={e => setAutoQ(e.target.value)} placeholder={tr('Filtrer par nom…')} spellCheck={false}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px 10px 38px', borderRadius: 12, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }} />
           </div>
-          {!groups.length && <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{autos.length ? 'Aucune automatisation ne correspond au filtre.' : 'Aucune automatisation détectée.'}</div>}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {groups.map(gr => {
-              const isOpen = !!autoOpen[gr.g] || !!q;
-              const nOn = gr.items.filter(a => a.on).length;
-              return (
-                <div key={gr.g} style={{ border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, overflow: 'hidden' }}>
-                  <button onClick={() => setAutoOpen(o => ({ ...o, [gr.g]: !o[gr.g] }))} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 15px', background: 'var(--o-s4)', border: 'none', cursor: 'pointer', color: 'var(--o-text)', textAlign: 'left' }}>
-                    <span style={{ display: 'inline-flex', transition: 'transform .22s', transform: isOpen ? 'rotate(90deg)' : 'rotate(0)' }}><Fi i="angle-small-right" size={15} color="var(--o-text3)" /></span>
-                    <span style={{ fontSize: 13, fontWeight: 800 }}>{gr.g}</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{gr.items.length > 1 ? tr('{n} automatisations', { n: gr.items.length }) : tr('{n} automatisation', { n: gr.items.length })}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: nOn ? 'rgba(var(--o-ok-rgb),.13)' : 'var(--o-s1)', color: nOn ? 'var(--o-ok)' : 'var(--o-text3)' }}>{nOn ? (nOn > 1 ? tr('{n} actives', { n: nOn }) : tr('{n} active', { n: nOn })) : tr('toutes inactives')}</span>
-                  </button>
-                  {isOpen && <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column', padding: '2px 15px 6px' }}>{gr.items.map(line)}</div>}
-                </div>
-              );
-            })}
-          </div>
+          <Seg value={autoFilter} opts={[['all', tr('Toutes')], ['on', tr('Actives')], ['off', tr('Inactives')]]} onPick={setAutoFilter} />
         </div>
+        <Panneau>
+          {!groups.length && <div style={{ padding: '24px 22px', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{autos.length ? tr('Aucune automatisation ne correspond au filtre.') : tr('Aucune automatisation détectée.')}</div>}
+          {groups.map((gr, gi) => {
+            const isOpen = !!autoOpen[gr.g] || !!q;
+            const nOn = gr.items.filter(a => a.on).length;
+            return (
+              <div key={gr.g}>
+                <button onClick={() => setAutoOpen(o => ({ ...o, [gr.g]: !o[gr.g] }))} aria-expanded={isOpen}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '13px 22px', background: 'none', border: 'none', borderTop: gi ? FILET : 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+                  <span style={{ display: 'inline-flex', transition: 'transform .22s', transform: isOpen ? 'rotate(90deg)' : 'rotate(0)' }}><Fi i="angle-small-right" size={15} color="var(--o-text3)" /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 14, fontWeight: 800 }}>{gr.g}</span>
+                    <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{gr.items.length > 1 ? tr('{n} automatisations', { n: gr.items.length }) : tr('{n} automatisation', { n: gr.items.length })}</span>
+                  </span>
+                  <Pastille niveau={nOn ? 'ok' : 'neutre'}>{nOn === gr.items.length ? (nOn > 1 ? tr('{n} actives', { n: nOn }) : tr('{n} active', { n: nOn })) : tr('{a} sur {n}', { a: nOn, n: gr.items.length })}</Pastille>
+                </button>
+                {isOpen && gr.items.map(line)}
+              </div>
+            );
+          })}
+        </Panneau>
         </>
         );
       })()}
 
-      {tab === 'alertes' && aD('alertes') && <AlertesTele hass={hass} cardSt={cardSt} />}
-      {tab === 'inter' && aD('inter') && <InterrupteursSection hass={hass} cardSt={cardSt} />}
+      {tab === 'alertes' && aD('alertes') && <AlertesTele hass={hass} />}
+      {tab === 'inter' && aD('inter') && <InterrupteursSection hass={hass} onCompte={surCompteInter} />}
       {tab === 'regles' && aD('regles') && (<>
-        <div className="o-bar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-          {[['volets', tr('Volets')], ['fenetres', tr('Chauffage')], ['presence', tr('Départ et retour')], ['nuit', tr('La nuit')], ['veilles', tr('Veilles')], ['journal', tr('Journal')]].map(([id, nom]) => (
-            <button key={id} onClick={() => setOngletRegle(id)} style={tabStyle(ongletRegle === id)}>{nom}</button>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+          <div className="o-onglets" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
+            {[['volets', tr('Volets')], ['fenetres', tr('Chauffage')], ['presence', tr('Départ et retour')], ['nuit', tr('La nuit')], ['veilles', tr('Veilles')], ['journal', tr('Journal')]].map(([id, nom]) => (
+              <button key={id} onClick={() => setOngletRegle(id)} style={tabStyle(ongletRegle === id)}>{nom}</button>
+            ))}
+          </div>
+          <span style={{ flex: 1 }} />
+          {(() => {
+            const noms = { volets: tr('Volets'), fenetres: tr('Chauffage'), presence: tr('Départ et retour'), nuit: tr('La nuit') };
+            const actifs = observe ? Object.keys(observe).filter(k => observe[k] === true) : [];
+            const tous = observe && actifs.length === Object.keys(noms).length;
+            // Des regles qui n'agissent plus : un etat d'attention (ADR 0047).
+            const texte = !observe ? tr('Lecture…')
+              : !actifs.length ? tr('Les règles agissent normalement.')
+                : tous ? tr('Les règles notent ce qu’elles feraient, sans rien toucher.')
+                  : tr('En observation : {liste}', { liste: actifs.map(k => noms[k]).join(', ') });
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '2px 4px', minWidth: 0 }}>
+                <div style={{ textAlign: 'right', minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800 }}>{tr('Observer sans agir')}</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: actifs.length ? 'var(--o-warn)' : 'var(--o-text2)' }}>{texte}</div>
+                </div>
+                <Tgl on={actifs.length > 0} cb={basculerObserve} off={!observe} label={tr('Observer sans agir')} />
+              </div>
+            );
+          })()}
         </div>
         {ongletRegle === 'volets' ? <VoletsReglages hass={hass} cardSt={cardSt} />
           : ongletRegle === 'fenetres' ? <FenetresReglages hass={hass} cardSt={cardSt} />
@@ -1695,150 +1783,127 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 : ongletRegle === 'journal' ? <JournalReglages hass={hass} cardSt={cardSt} />
                   : <VeillesReglages hass={hass} cardSt={cardSt} />}
       </>)}
-      {tab === 'maj' && aD('maj') && (<>
-        <SecBar>
-          <SecGroup label="Installer">
-            <div style={{ display: 'flex', gap: 4 }}>
-              {upsAvail > 1 && <button onClick={() => { if (!updAllConfirm) { setUpdAllConfirm(true); setTimeout(() => setUpdAllConfirm(false), 4000); return; } setUpdAllConfirm(false); ups.filter(u => u.avail && u.prog === false).forEach(u => { setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updCall('install', u.id); }); }} style={secBtn(!!updAllConfirm)}>{updAllConfirm ? 'Confirmer ?' : 'Tout installer (' + upsAvail + ')'}</button>}
-              <button onClick={() => { if (hass && hass.callService && upsAll.length) hass.callService('homeassistant', 'update_entity', { entity_id: upsAll.map(u => u.id) }); }} style={secBtn(false)}>{tr('Vérifier')}</button>
-            </div>
-          </SecGroup>
-        </SecBar>
-        <div className="o-parcard" style={cardSt}>
+      {tab === 'maj' && aD('maj') && (() => {
+        /* Le groupe d'une mise a jour : l'integration qui la publie — les
+         * firmwares Zigbee ensemble, les modules HACS ensemble. */
+        const groupe = (u) => {
+          const meta = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && typeof LOGGIA_INDEX.entityMeta.get === 'function' ? LOGGIA_INDEX.entityMeta.get(u.id) : null;
+          const p = (meta && meta.platform) || '';
+          if (p === 'mqtt') return { g: tr('Firmwares · Zigbee2MQTT'), icone: 'terminal', rang: 0 };
+          if (p === 'zha') return { g: tr('Firmwares · ZHA'), icone: 'terminal', rang: 1 };
+          if (p === 'hacs') return { g: tr('Modules · HACS'), icone: 'apps', rang: 2 };
+          if (p === 'esphome') return { g: 'ESPHome', icone: 'microchip', rang: 3 };
+          if (p === 'hassio' || /^update\.home_assistant_/.test(u.id)) return { g: 'Home Assistant', icone: 'home', rang: 4 };
+          return { g: tr('Autres'), icone: 'download', rang: 5 };
+        };
+        const groupes = [];
+        ups.forEach(u => { const { g, icone, rang } = groupe(u); let e = groupes.find(x => x.g === g); if (!e) { e = { g, icone, rang, items: [] }; groupes.push(e); } e.items.push(u); });
+        groupes.sort((a, b) => a.rang - b.rang);
+        const btnIgnorer = { padding: '8px 14px', borderRadius: 11, background: 'transparent', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' };
+        const btnInstaller = (arme) => ({ padding: '8px 15px', borderRadius: 11, cursor: 'pointer', flexShrink: 0, fontSize: 12.5, fontWeight: 800, fontFamily: 'inherit', transition: 'background .2s',
+          background: arme ? 'var(--o-warn2)' : 'rgba(var(--o-accent-rgb),.14)', border: '1px solid ' + (arme ? 'var(--o-warn2)' : 'rgba(var(--o-accent-rgb),.5)'), color: arme ? '#fff' : 'var(--o-accent-soft)' });
+        return (
+        <Panneau>
           {ups.length === 0
-            ? <div style={{ padding: '26px 0 14px', textAlign: 'center' }}>
+            ? <div style={{ padding: '28px 22px 24px', textAlign: 'center' }}>
                 <div style={{ width: 52, height: 52, borderRadius: '50%', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-ok-rgb),.14)' }}><Fi i="check" size={22} color="var(--o-ok)" /></div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--o-ok)' }}>{tr('Tout est à jour')}</div>
                 <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 3 }}>{upsTotal > 1 ? tr('{n} modules suivis', { n: upsTotal }) : tr('{n} module suivi', { n: upsTotal })}</div>
               </div>
-            : <div className="o-optlist" style={{ display: 'flex', flexDirection: 'column' }}>
-                {ups.map(u => (
-                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
-                    <span style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: u.avail ? 'rgba(var(--o-warn2-rgb),.16)' : 'var(--o-s1)', color: u.avail ? 'var(--o-warn2)' : 'var(--o-text3)' }}>
-                      {/* `onError` n'est pas une interaction : c'est le repli quand l'image de
-                        * profil ne charge pas. La regle vise les gestionnaires de CLIC poses sur
-                        * un element non interactif. */}
+            : groupes.map((gr, gi) => (
+              <div key={gr.g}>
+                <div style={{ ...CAPITALES, padding: '16px 22px 12px', borderTop: gi ? FILET : 'none' }}>{gr.g}</div>
+                {gr.items.map(u => (
+                  <div key={u.id} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 22px', borderTop: FILET }}>
+                    <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: 'var(--o-s1)', color: 'var(--o-text2)' }}>
+                      {/* `onError` n'est pas une interaction : c'est le repli quand l'image ne charge pas. */}
                       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-                      {u.pic ? <img src={u.pic} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.currentTarget.remove(); }} /> : <Fi i="download" size={16} />}
+                      {u.pic ? <img src={u.pic} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.currentTarget.remove(); }} /> : <Fi i={gr.icone} size={14} />}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
+                      <div style={{ ...MONO, fontSize: 11.5, color: 'var(--o-text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {u.prog !== false
-                          ? <span style={{ color: 'var(--o-accent-soft)' }}>Installation…{typeof u.prog === 'number' ? ' ' + Math.round(u.prog) + '%' : ''}</span>
-                          : u.avail
-                            ? <>{u.installed || '?'} <span style={{ opacity: .6 }}>→</span> <span style={{ color: 'var(--o-warn2)' }}>{u.latest || '?'}</span>{u.notes && <> · <a href={u.notes} target="_blank" rel="noreferrer" style={{ color: 'var(--o-accent-soft)', textDecoration: 'none' }}>Notes</a></>}</>
-                            : <>À jour · {u.installed || '—'}</>}
+                          ? <span style={{ color: 'var(--o-accent-soft)' }}>{tr('Installation…')}{typeof u.prog === 'number' ? ' ' + Math.round(u.prog) + ' %' : ''}</span>
+                          : u.avail ? (u.installed || '?') + ' → ' + (u.latest || '?') : tr('À jour') + ' · ' + (u.installed || '—')}
                       </div>
                     </div>
                     {u.avail && u.prog === false && <>
-                      <button onClick={() => updCall('skip', u.id)} title="Ignorer cette version" style={{ padding: '7px 11px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>Ignorer</button>
-                      <button onClick={() => askInstall(u)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 10, background: updConfirm === u.id ? 'var(--o-warn2)' : 'var(--o-accent)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0, transition: 'background .2s' }}><Fi i="download" size={12} />{updConfirm === u.id ? 'Confirmer ?' : 'Installer'}</button>
+                      {u.notes && <a href={u.notes} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--o-accent-soft)', textDecoration: 'none', padding: '0 6px', flexShrink: 0 }}>{tr('Notes')}</a>}
+                      <button onClick={() => updCall('skip', u.id)} title={tr('Ignorer cette version')} style={btnIgnorer}>{tr('Ignorer')}</button>
+                      <button onClick={() => askInstall(u)} style={btnInstaller(updConfirm === u.id)}>{updConfirm === u.id ? tr('Confirmer ?') : tr('Installer')}</button>
                     </>}
                     {u.prog !== false && <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid var(--o-bd1)', borderTopColor: 'var(--o-accent)', animation: 'spin 1s linear infinite', flexShrink: 0 }} />}
                   </div>
                 ))}
-              </div>}
-        </div>
-      </>)}
+              </div>
+            ))}
+        </Panneau>
+        );
+      })()}
 
       {tab === 'about' && (() => {
         const cacheKb = (() => { try { let n = 0; for (let k = 0; k < localStorage.length; k++) { const key = localStorage.key(k); n += (localStorage.getItem(key) || '').length + key.length; } return Math.round(n / 1024 * 10) / 10; } catch { return null; } })();
         const entCount = (hass && hass.states) ? Object.keys(hass.states).length : 0;
+        const inst = installationReelle();
+        const nombre = (v) => Number(v).toLocaleString(locale(), { maximumFractionDigits: 1 });
+        const valeur = { ...MONO, fontSize: 13, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap' };
+        const texte = { fontSize: 13.5, fontWeight: 800, color: 'var(--o-text1)', whiteSpace: 'nowrap' };
+        /* Liens du projet : navigation volontaire au clic — rien n'est charge
+         * depuis GitHub tant qu'on ne tape pas. */
+        const tuile = ([titre, sous, url]) => (
+          <a key={url} href={url} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '16px 18px', borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', textDecoration: 'none', color: 'var(--o-text)', minWidth: 0 }}>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800 }}>{titre}</span>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 3 }}>{sous}</span>
+            </span>
+            <Fi i="arrow-right" size={12} color="var(--o-text3)" />
+          </a>
+        );
         return (
         <>
-          <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Configuration</span>
-              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                <button onClick={() => window.location.reload()} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)' }}>Recharger</button>
-                {/* Sauvegarder et restaurer la configuration COMPLETE : celle
-                    du serveur, partagee entre tous les appareils, et non le
-                    seul stockage de ce navigateur. */}
-                <button onClick={async () => {
-                  const j = await exportConfigComplete();
-                  telechargerConfig(j, 'loggia-config');
-                }} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text)' }}>Exporter</button>
-                {isAdmin && (
-                  <>
-                    <input aria-label={tr('Importer un fichier de configuration')} type="file" accept="application/json,.json" style={{ display: 'none' }} id="o-import-cfg"
-                      onChange={async (e) => {
-                        const f = e.target.files && e.target.files[0];
-                        if (!f) return;
-                        try {
-                          await importConfigComplete(await f.text());
-                          window.location.reload();
-                        } catch (err) {
-                          alert('Import impossible : ' + ((err && err.message) || err));
-                        } finally { e.target.value = ''; }
-                      }} />
-                    <button onClick={() => { const el = document.getElementById('o-import-cfg'); if (el) el.click(); }}
-                      style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text)' }}>Importer</button>
-                    <ResetLoggiaBtn compact />
-                  </>
-                )}
-              </div>
-            </div>
-            <span style={{ flex: 1 }} />
-          </div>
-
-          {/* Toujours affiché : la carte de l'installation N'EST PAS un réglage,
+          {/* Toujours affichée : la carte de l'installation N'EST PAS un réglage,
             * c'est la réponse à « quelle version ai-je ? » (retour 02/09). */}
-          <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>Installation</div>
-              {(() => {
-                const inst = installationReelle();
-                // Sans entite de suivi, aucun badge : mieux vaut ne rien dire
-                // que d'annoncer « a jour » sans l'avoir verifie.
-                if (inst.aJour === null) return null;
-                const bon = inst.aJour;
-                const col = bon ? 'var(--o-ok)' : 'var(--o-warn2)';
-                const rgb = bon ? 'var(--o-ok-rgb)' : 'var(--o-warn2-rgb)';
-                return (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, background: 'rgba(' + rgb + ',.14)', color: col }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: col }} />
-                    {bon ? tr('À JOUR') : (inst.disponible ? 'v' + inst.disponible + ' DISPONIBLE' : 'MISE À JOUR')}
-                  </span>
-                );
-              })()}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '3px 0 8px' }}>{tr('Tableau de bord domotique auto-hébergé pour Home Assistant')}</div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {(() => {
-                const inst = installationReelle();
-                return (
-                  <EnRow label="Version" desc={inst.suiviPar ? 'Suivie par ' + inst.suiviPar : 'Lue dans le composant installé'}>
-                    <EnVal v={inst.version || '—'} col={inst.version ? 'var(--o-ok)' : 'var(--o-text3)'} />
-                  </EnRow>
-                );
-              })()}
-              <EnRow label="Socle technique" desc="Construit et servi depuis Home Assistant"><EnVal v="React + Vite" col="var(--o-text)" /></EnRow>
-              <EnRow label="Typographie" desc={tr('Auto-hébergée, sans CDN')}><EnVal v="Manrope / Newsreader" col="var(--o-text)" /></EnRow>
-              <EnRow label={tr('Entités suivies')} desc={entIds.length + ' configurées sur ' + entCount + ' disponibles'}><EnVal v={String(entCount)} col="var(--o-accent-soft)" /></EnRow>
-              <EnRow label="Cache local" desc={tr('États des entités et réglages de cet appareil')}>
-                <EnVal v={cacheKb != null ? (cacheKb >= 1024 ? (cacheKb / 1024).toFixed(1).replace('.', ',') + ' Mo' : cacheKb + ' Ko') : '—'} col="var(--o-text)" />
-              </EnRow>
-            </div>
-          </div>
+          <Panneau titre={tr('Installation')} titreStyle={{ ...CAPITALES, fontFamily: 'inherit', fontStyle: 'normal', lineHeight: 1.4 }}
+            pied={<>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: '1 1 220px' }}>{tr('La configuration Loggia s’exporte en un fichier JSON.')}</span>
+              <button onClick={() => window.location.reload()} style={btnSecondaire}>{tr('Recharger')}</button>
+              {isAdmin && (
+                <>
+                  <input aria-label={tr('Importer un fichier de configuration')} type="file" accept="application/json,.json" style={{ display: 'none' }} id="o-import-cfg"
+                    onChange={async (e) => {
+                      const f = e.target.files && e.target.files[0];
+                      if (!f) return;
+                      try {
+                        await importConfigComplete(await f.text());
+                        window.location.reload();
+                      } catch (err) {
+                        alert(tr('Import impossible : ') + ((err && err.message) || err));
+                      } finally { e.target.value = ''; }
+                    }} />
+                  <button onClick={() => { const el = document.getElementById('o-import-cfg'); if (el) el.click(); }} style={btnSecondaire}>{tr('Importer')}</button>
+                </>
+              )}
+              {/* Sauvegarder la configuration COMPLETE : celle du serveur,
+                  partagee entre tous les appareils, et non le seul navigateur. */}
+              <button onClick={async () => { const j = await exportConfigComplete(); telechargerConfig(j, 'loggia-config'); }} style={btnSecondaire}>{tr('Exporter')}</button>
+            </>}>
+            <Ligne titre={tr('Version')} desc={inst.suiviPar ? tr('Suivie par {x}', { x: inst.suiviPar }) : tr('Lue dans le composant installé')}><span style={valeur}>{inst.version || '—'}</span></Ligne>
+            <Ligne titre={tr('Socle technique')} desc={tr('Construit et servi depuis Home Assistant')}><span style={texte}>React + Vite</span></Ligne>
+            <Ligne titre={tr('Typographie')} desc={tr('Auto-hébergée, sans CDN')}><span style={texte}>Manrope / Newsreader</span></Ligne>
+            <Ligne titre={tr('Entités suivies')} desc={tr('{a} configurées sur {n} disponibles', { a: nombre(entIds.length), n: nombre(entCount) })}><span style={valeur}>{nombre(entIds.length)}</span></Ligne>
+            <Ligne titre={tr('Cache local')} desc={tr('États des entités et réglages de cet appareil')}>
+              <span style={valeur}>{cacheKb != null ? (cacheKb >= 1024 ? nombre(cacheKb / 1024) + ' Mo' : nombre(cacheKb) + ' Ko') : '—'}</span>
+            </Ligne>
+          </Panneau>
 
-          {/* Liens du projet : navigation volontaire au clic — rien n'est
-            * chargé depuis GitHub tant qu'on ne tape pas. */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12 }}>
             {[
               [tr('Dépôt GitHub'), 'Alardware/loggia', 'https://github.com/Alardware/loggia'],
               [tr('Journal des versions'), tr('nouveautés et correctifs'), 'https://github.com/Alardware/loggia/releases'],
               [tr('Signaler un problème'), tr('ouvrir un ticket'), 'https://github.com/Alardware/loggia/issues'],
-            ].map(([titre, sous, url]) => (
-              <a key={url} href={url} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '14px 16px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', textDecoration: 'none' }}>
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{titre}</span>
-                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{sous}</span>
-                </span>
-                <Fi i="arrow-up-right" size={12} color="var(--o-text3)" />
-              </a>
-            ))}
+            ].map(tuile)}
           </div>
 
           {/* Ko-fi : meme regle que les liens ci-dessus, rien n'est charge
@@ -1853,6 +1918,21 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </svg>
             {tr('Me soutenir sur Ko-fi')}
           </a>
+
+          {/* La remise a zero vide la configuration de la MAISON — vues,
+            * profils, regles, scenarios — et non ce seul appareil. */}
+          {isAdmin && (
+            <Panneau niveau="danger">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '18px 22px', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                  <div style={{ ...CAPITALES, color: 'var(--o-bad)' }}>{tr('Irréversible')}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginTop: 5 }}>{tr('Réinitialiser Loggia')}</div>
+                  <div style={DESC_PANNEAU}>{tr('Efface les vues, les règles, les scénarios et les réglages de Loggia, pour toute la maison — une sauvegarde part d’abord. Les automatisations Home Assistant ne sont pas touchées.')}</div>
+                </div>
+                <ResetLoggiaBtn />
+              </div>
+            </Panneau>
+          )}
         </>
         );
       })()}

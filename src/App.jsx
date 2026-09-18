@@ -239,7 +239,8 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
   // Vues remises au menu depuis Parametres : ce ne sont pas des vues
   // principales, elles ont donc leur propre section plutot que d'etre
   // melangees a MAISON, ou rien ne les distinguait.
-  const secondaires = HIDDEN_VIEWS().filter(h => permis(h.vid) && viewsCfg.shown.has(h.vid) && isViewAvailable(avail, h.vid));
+  const secondaires = HIDDEN_VIEWS().filter(h => permis(h.vid) && viewsCfg.shown.has(h.vid) && isViewAvailable(avail, h.vid))
+    .sort((x, y) => { const o = viewsCfg.order || []; const i = o.indexOf(x.vid), j = o.indexOf(y.vid); return (i < 0 ? 999 : i) - (j < 0 ? 999 : j); });
   useEffect(() => { const f = () => setViewsCfg(readViewsCfg()); window.addEventListener('loggia-views-changed', f); return () => window.removeEventListener('loggia-views-changed', f); }, []);
   // Pill de sélection unique qui GLISSE vers l'item actif (au lieu de réapparaître)
   const navRef = useRef(null);

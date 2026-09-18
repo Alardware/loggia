@@ -79,10 +79,19 @@ const VERIFIE = {
   /* `src/ciel3d.jsx` figurait ici avec « exposure and limitMag ». Le fichier a
    * disparu : un ciel étoilé de 284 lignes qu'aucun import n'atteignait. */
   'src/ui.jsx': ['cur'],
+  /* `lireObserve` (18/09/2026) : l'interrupteur « Observer sans agir » des
+   * Regles relit les quatre modules toutes les cinq secondes. La fonction est
+   * recreee a chaque rendu — et le rendu suit chaque changement d'etat de la
+   * maison : la mettre dans le tableau relancerait l'intervalle a ce rythme. */
   'src/views/parametres.jsx': [
     'entTouched and readEnt', 'h', 'hass', 'hass',
-    'hass', 'hass and updBusy', 'lat and ping',
+    'hass', 'hass and updBusy', 'lat and ping', 'lireObserve',
   ],
+  /* `onCompte` (18/09/2026) : la section remonte ses chiffres a l'en-tete de
+   * la page. Le parent recree ce rappel a chaque rendu, et chaque appel le
+   * fait rendre : la dependance tournerait en boucle. Seuls les chiffres
+   * relancent l'effet. */
+  'src/views/interrupteurs.jsx': ['onCompte'],
 };
 
 const APOSTROPHE = String.fromCharCode(39);

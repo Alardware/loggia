@@ -92,13 +92,23 @@ test('les libellés de l’alarme passent tous par la traduction', () => {
 });
 
 test('les heures du journal et des règles suivent la langue choisie, pas celle du navigateur', () => {
-  const fichiers = ['src/App.jsx', 'src/ficherobot.jsx', 'src/widgetsrail.jsx',
-    'src/views/journal.jsx', 'src/views/fenetres.jsx', 'src/views/nuit.jsx', 'src/views/presence.jsx', 'src/views/veilles.jsx', 'src/views/volets.jsx'];
+  // Ceux qui formatent eux-memes. Les regles passent par `quandCourt`
+  // (parcommun.jsx, 18/09) : une seule heure a tenir, pour toutes.
+  const fichiers = ['src/App.jsx', 'src/ficherobot.jsx', 'src/widgetsrail.jsx', 'src/views/parcommun.jsx'];
   for (const f of fichiers) {
     const s = lire(...f.split('/'));
     const appels = s.match(/toLocaleTimeString\([^)]*\)/g) || [];
     assert.ok(appels.length > 0, f + ' formate au moins une heure');
     for (const a of appels) assert.ok(a.startsWith('toLocaleTimeString(locale()'), f + ' : ' + a);
+  }
+  for (const f of ['src/views/journal.jsx', 'src/views/volets.jsx', 'src/views/veilles.jsx']) {
+    assert.ok(lire(...f.split('/')).includes('quandCourt('), f + ' : ses heures ne passent plus par quandCourt');
+  }
+  // Et aucune vue des regles ne formate une heure dans le dos de la langue.
+  for (const f of ['journal', 'fenetres', 'nuit', 'presence', 'veilles', 'volets']) {
+    for (const a of lire('src', 'views', f + '.jsx').match(/toLocaleTimeString\([^)]*\)/g) || []) {
+      assert.ok(a.startsWith('toLocaleTimeString(locale()'), f + ' : ' + a);
+    }
   }
 });
 

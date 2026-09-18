@@ -73,8 +73,8 @@ test('le bandeau porte « Entites de la vue » et sait changer son mot d’ordre
 
 test('Parametres : plus de barre Sombre / Clair au sommaire, le reglage reste dans Apparence', () => {
   assert.ok(!par.includes("['dark', 'Sombre']"), 'le selecteur du sommaire est parti');
-  assert.equal((par.match(/onMode\(id\)/g) || []).length, 1, 'un seul selecteur de mode : celui d’Apparence');
-  assert.ok(par.includes("{[['auto', 'Auto'], ['dark', 'Foncé'], ['light', 'Clair']].map(([id, lb]) => ("), 'Apparence garde le sien, « Auto » compris');
+  assert.equal((par.match(/onPick=\{onMode\}|onMode\(/g) || []).length, 1, 'un seul selecteur de mode : celui d’Apparence');
+  assert.ok(par.includes("opts={[['auto', tr('Auto')], ['dark', tr('Foncé')], ['light', tr('Clair')]]} onPick={onMode}"), 'Apparence garde le sien, « Auto » compris');
   const hub = bloc(par, "{tab === 'hub' ? (", '{SECTIONS.map(sec =>');
   assert.ok(!hub.includes('onMode(') && !hub.includes('className="o-bar"'), 'le sommaire n’a plus de barre');
   assert.ok(hub.includes("{tr('Toutes les sections')}"), 'il ouvre sur ses sections');

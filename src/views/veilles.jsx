@@ -9,7 +9,9 @@ import {
   useMemo
 } from 'react';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
-import { tr, locale } from '../i18n.js';
+import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt } from './parcommun.jsx';
+import { niveauPile, couleurNiveau } from '../attention.js';
+import { tr } from '../i18n.js';
 import { puce } from '../styles.js';
 
 /* Au niveau du module, et non dans le composant.
@@ -101,7 +103,33 @@ export function VeillesReglages({ hass, cardSt }) {
   const bat = cfg.batterie || {};
   const cr = cfg.creuses || {};
 
-  const titre = { fontSize: 15, fontWeight: 700 };
+  /* Les derniers signalements d'une regle, dans sa carte (maquette du 18/09) :
+   * le message du journal dit « <capteur> : <ce qui se passe> ». La pile se
+   * colore selon son niveau (ADR 0047) : rouge a 5 %, ambre a 20 %. */
+  const nomSignal = (j) => { const d = String(j.detail || '').split(' · ').pop(); return d.split(' : ')[0] || d; };
+  const signaux = (regle, valeur) => {
+    const l = (etat.journal || []).filter(j => j.regle === regle && (j.quoi === 'prevenir' || j.quoi === 'alerter')).slice(0, 3);
+    if (!l.length) return null;
+    return (
+      <div style={{ margin: '14px -22px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+        <div style={{ ...CAPITALES, padding: '12px 22px 4px' }}>{tr('Derniers signalements')}</div>
+        {l.map((j, i) => (
+          <div key={j.ts + '' + i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 22px', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12.5, fontWeight: 600 }}>
+            {valeur(j)}
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomSignal(j)}</span>
+            <span style={{ marginLeft: 'auto', ...MONO, fontSize: 11.5, color: 'var(--o-text3)', flexShrink: 0 }}>{quandCourt(j.ts)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+  const valeurPile = (j) => {
+    const pct = parseInt(j.motif, 10);
+    const niv = niveauPile(pct);
+    return <span style={{ ...MONO, fontWeight: 800, minWidth: 40, color: niv ? couleurNiveau(niv).col : 'var(--o-text2)' }}>{Number.isFinite(pct) ? pct + ' %' : '—'}</span>;
+  };
+  const valeurBrute = (j) => <span style={{ ...MONO, fontWeight: 800, color: 'var(--o-text2)', flexShrink: 0 }}>{j.motif || '—'}</span>;
+
   const label = { fontSize: 12, fontWeight: 700 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
   const champ = { padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
@@ -127,7 +155,7 @@ export function VeillesReglages({ hass, cardSt }) {
           desc={tr('Au-delà de 1000 à 1200 ppm on dort mal et on pense moins bien. Personne ne consulte un capteur de CO2 : il faut qu’il vienne le dire.')}
           on={co2.actif} cb={() => enregistrer({ co2: { actif: !co2.actif } })} plie={pliCo2} onPlier={plierCo2} zone="veilles-co2" />
         {co2.actif && !pliCo2 && (
-          <div id="veilles-co2">
+          <div id="veilles-co2" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('Au-delà de')}</span>
               <input aria-label={tr('Seuil de CO₂, en ppm')} type="number" value={co2.seuil != null ? co2.seuil : 1200} min={400} max={3000} step={50}
@@ -151,6 +179,7 @@ export function VeillesReglages({ hass, cardSt }) {
                 <Choix enregistrer={enregistrer} liste={commandables} retenues={co2.ventilation} champNom="ventilation" section="co2" />
               </div>
             )}
+            {signaux('co2', valeurBrute)}
           </div>
         )}
       </div>
@@ -161,7 +190,7 @@ export function VeillesReglages({ hass, cardSt }) {
           desc={tr('Un détecteur à plat ne prévient pas qu’il est à plat : il se tait, et on croit la porte fermée.')}
           on={bat.actif} cb={() => enregistrer({ batterie: { actif: !bat.actif } })} plie={pliBat} onPlier={plierBat} zone="veilles-bat" />
         {bat.actif && !pliBat && (
-          <div id="veilles-bat">
+          <div id="veilles-bat" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('En dessous de')}</span>
               <input aria-label={tr('Seuil de batterie, en pourcentage')} type="number" value={bat.seuil != null ? bat.seuil : 15} min={1} max={50}
@@ -174,6 +203,7 @@ export function VeillesReglages({ hass, cardSt }) {
                 ? tr('{n} capteurs de batterie surveillés, vérifiés une fois par heure.', { n: etat.capteurs_batterie.length })
                 : tr('{n} capteur de batterie surveillé, vérifié une fois par heure.', { n: (etat.capteurs_batterie || []).length })}
             </div>
+            {signaux('batterie', valeurPile)}
           </div>
         )}
       </div>
@@ -184,7 +214,7 @@ export function VeillesReglages({ hass, cardSt }) {
           desc={tr('Le lave-vaisselle attend souvent qu’on y pense.')}
           on={cr.actif} cb={() => enregistrer({ creuses: { actif: !cr.actif } })} plie={pliCr} onPlier={plierCr} zone="veilles-cr" />
         {cr.actif && !pliCr && (
-          <div id="veilles-cr">
+          <div id="veilles-cr" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('L’entité')}</span>
               <select value={cr.entite || ''} onChange={e => enregistrer({ creuses: { entite: e.target.value } })}
@@ -216,26 +246,6 @@ export function VeillesReglages({ hass, cardSt }) {
           </div>
         )}
       </div>
-
-      {etat.journal && etat.journal.length > 0 && (
-        <div style={cardSt}>
-          <div style={titre}>{tr('Derniers signalements')}</div>
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
-            {etat.journal.slice(0, 8).map((j, i) => (
-              <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
-                {/* Les champs du journal COMMUN : ce qui a été fait, par quelle
-                  * règle, pourquoi — et ce qui a été dit au téléphone, avec son
-                  * régime (critique, silencieuse). */}
-                <span style={{ minWidth: 0 }}>
-                  {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
-                  {j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
-                </span>
-                <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {err && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
     </div>

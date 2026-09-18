@@ -13,7 +13,7 @@ import {
 } from 'react';
 import { LOGGIA_INDEX } from '../state.js';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
-import { tr, locale } from '../i18n.js';
+import { tr } from '../i18n.js';
 
 /* Au niveau du module, et non dans le composant.
  *
@@ -105,7 +105,6 @@ export function FenetresReglages({ hass, cardSt }) {
   }
 
   const reglees = cfg.pieces || {};
-  const titre = { fontSize: 15, fontWeight: 700 };
   const simu = !!cfg.simulation;
   const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };
   const label = { fontSize: 12, fontWeight: 700 };
@@ -240,37 +239,6 @@ export function FenetresReglages({ hass, cardSt }) {
           </div>
         );
       })}
-
-      {/* ── Observer sans agir ── */}
-      {/* Un MODE, pas une règle : il ne commande rien et n'a rien à replier. */}
-      <div style={cardSt}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={titre}>{tr('Observer sans agir')}</div>
-            <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{tr('La règle note ce qu’elle aurait fait, sans toucher au chauffage.')}</div>
-          </div>
-          <Bascule nom={tr('Observer sans agir')} on={simu} cb={() => enregistrer({ simulation: !simu })} />
-        </div>
-      </div>
-
-      {etat.journal && etat.journal.length > 0 && (
-        <div style={cardSt}>
-          <div style={titre}>{tr('Dernières coupures')}</div>
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
-            {etat.journal.slice(0, 8).map((j, i) => (
-              <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
-                {/* Les champs du journal COMMUN : ce qui a été fait, par quelle
-                  * règle, pourquoi — et ce qui a manqué. */}
-                <span style={{ minWidth: 0 }}>
-                  {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
-                  {j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
-                </span>
-                <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {err && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
     </div>

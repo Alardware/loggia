@@ -113,7 +113,8 @@ on ferme, et le journal dit « capteur indisponible » (ADR 0010).
 
 **Simulation** (observer sans agir) — Un mode par module : rien ne part, le
 journal note ce qui *serait* parti, marqué `simule`. Les tenues bougent comme
-en vrai. Basculer remet l'état des règles à zéro.
+en vrai. Basculer remet l'état des règles à zéro. L'écran pose les quatre
+drapeaux d'un seul interrupteur, au-dessus des onglets des Règles (ADR 0050).
 
 ## Ce qui se voit
 

@@ -12,11 +12,13 @@
  * est fermé — c'est bien le moins pour un interrupteur.
  */
 import {
-  useState, useMemo
+  useState, useMemo, useEffect
 } from 'react';
 import { BottomSheet, EntPicker, cvName , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
 import { entityCaps } from '../capabilities.js';
+import { libelleGeste } from '../gestes.js';
+import { Panneau, Pastille, Intertitre, MONO, FILET, btnDiscret } from './parcommun.jsx';
 
 /* Les gestes proposés. `homeassistant.turn_on` et ses voisins marchent sur
  * TOUS les domaines — une lampe, une prise, un volet — là où `light.turn_on`
@@ -94,7 +96,14 @@ function depuis(ts) {
 
 const SOURCES = { z2m: 'Zigbee2MQTT', zha: 'ZHA', deconz: 'deCONZ' };
 
-export function InterrupteursSection({ hass, cardSt }) {
+/* Combien de gestes sont regles : un bouton compte des qu'il declenche
+ * quelque chose. Le meme chiffre en tete de page et dans le sommaire. */
+export function gestesRegles(affectations) {
+  return Object.values(affectations || {}).reduce((n, a) => n
+    + Object.values((a && a.actions) || {}).filter(g => Array.isArray(g) && g.length > 0).length, 0);
+}
+
+export function InterrupteursSection({ hass, onCompte = null }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const { etat, setEtat, err, setErr } =
     useEtatServeur(hass, 'loggia/interrupteurs/etat', 1500, tr('Écoute indisponible.'));
@@ -121,109 +130,111 @@ export function InterrupteursSection({ hass, cardSt }) {
   const journal = (etat && etat.journal) || [];
   const sources = (etat && etat.sources) || null;
 
-  const titre = { fontSize: 15, fontWeight: 700, marginBottom: 3 };
-  const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 };
-  const btnDoux = { padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)' };
+  // L'en-tete de la page compte les telecommandes et les gestes regles.
+  // `onCompte` reste hors des dependances : recree a chaque rendu du parent,
+  // il relancerait l'effet — et le parent — sans fin. Seuls les chiffres comptent.
+  const nbTele = appareils.length, nbGestes = gestesRegles(affectations), lu = !!etat;
+  useEffect(() => { if (onCompte && lu) onCompte({ telecommandes: nbTele, gestes: nbGestes }); }, [nbTele, nbGestes, lu]);
+
+  /* Un même bouton n'apparaît qu'une fois, à son dernier appui : le journal
+   * arrive du plus récent au plus ancien, on garde la première ligne de
+   * chaque télécommande. Sans cela, trois appuis sur la même touche
+   * poussaient les autres hors de la liste. */
+  const derniers = [];
+  journal.forEach(v => { if (!derniers.some(x => x.cle === v.cle)) derniers.push(v); });
+
+  // Le libellé en français, et le code — toujours : c'est lui qu'on affecte.
+  const geste = (code, grand = false) => {
+    const lib = libelleGeste(code);
+    return grand
+      ? <>
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--o-text)' }}>{lib || code}</div>
+          {lib && <div style={{ ...MONO, fontSize: 11, color: 'var(--o-text3)', marginTop: 1 }}>{code}</div>}
+        </>
+      : <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          {lib && <span>{lib}</span>}
+          <span style={{ ...MONO, fontSize: 11, color: 'var(--o-text3)' }}>{code}</span>
+        </span>;
+  };
+  const puce = (nom, ok, pourquoi) => (
+    <span key={nom} title={ok ? '' : pourquoi}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, fontSize: 11.5, fontWeight: 800, background: ok ? 'rgba(var(--o-ok-rgb),.12)' : 'var(--o-s1)', color: ok ? 'var(--o-ok)' : 'var(--o-text3)' }}>
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: ok ? 'var(--o-ok)' : 'var(--o-text3)' }} />
+      {nom}
+    </span>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Apprentissage : la page ne sait rien tant qu'on n'a pas appuyé. */}
-      <div style={cardSt}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={titre}>{tr('Appuie sur un bouton')}</div>
-            <div style={sous}>{tr('Loggia écoute Zigbee2MQTT, ZHA et deCONZ. Chaque appui apparaît ici avec le nom de son bouton — c’est ce nom qu’on affecte.')}</div>
-          </div>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '4px 11px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: err ? 'rgba(var(--o-bad-rgb),.16)' : 'rgba(var(--o-ok-rgb),.14)', color: err ? 'var(--o-bad)' : 'var(--o-ok)' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: err ? 'var(--o-bad)' : 'var(--o-ok)' }} />
-            {err ? tr('HORS D’ÉCOUTE') : tr('À L’ÉCOUTE')}
-          </span>
-        </div>
-        {err && <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
+      <Panneau titre={tr('Apprendre un bouton')} desc={tr('Appuie sur un bouton : il apparaît ici, avec son nom. C’est ce nom qu’on affecte.')}
+        droite={<Pastille niveau={err ? 'danger' : 'ok'} point>{err ? tr('hors d’écoute') : tr('à l’écoute')}</Pastille>}>
         {/* Ce qui est reellement branche. Une page muette ne disait pas si
           * personne n'appuyait ou si personne n'ecoutait (retour 03/09). */}
         {sources && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-            {[
-              ['Zigbee2MQTT', sources.z2m, sources.mqtt_present ? tr('MQTT est là, mais l’abonnement a échoué — regarde le journal de Home Assistant') : tr('Pas d’intégration MQTT sur cette installation')],
-              ['ZHA', sources.zha, ''],
-              ['deCONZ', sources.deconz, ''],
-            ].map(([nom, ok, pourquoi]) => (
-              <span key={nom} title={ok ? '' : pourquoi}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: ok ? 'rgba(var(--o-ok-rgb),.12)' : 'var(--o-s1)', color: ok ? 'var(--o-ok)' : 'var(--o-text3)' }}>
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: ok ? 'var(--o-ok)' : 'var(--o-text3)' }} />
-                {nom}
-              </span>
-            ))}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '0 22px 16px', marginTop: -4 }}>
+            {puce('Zigbee2MQTT', sources.z2m, sources.mqtt_present ? tr('MQTT est là, mais l’abonnement a échoué — regarde le journal de Home Assistant') : tr('Pas d’intégration MQTT sur cette installation'))}
+            {puce('ZHA', sources.zha, '')}
+            {puce('deCONZ', sources.deconz, '')}
           </div>
         )}
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column' }}>
-          {journal.length === 0 && !err && (
-            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '8px 0' }}>
-              {tr('Rien encore. Appuie sur un bouton de ta télécommande : il se montrera ici.')}
+        {err && <div style={{ padding: '0 22px 14px', fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
+        <Intertitre>{tr('Derniers appuis')}</Intertitre>
+        {derniers.length === 0 && !err && (
+          <div style={{ fontSize: 12.5, color: 'var(--o-text3)', fontWeight: 600, padding: '4px 22px 16px' }}>
+            {tr('Rien encore. Appuie sur un bouton de ta télécommande : il se montrera ici.')}
+          </div>
+        )}
+        {derniers.slice(0, 8).map(v => (
+          <div key={v.cle} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '9px 22px', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.nom}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{geste(v.action)}</div>
             </div>
-          )}
-          {journal.slice(0, 8).map((v, i) => (
-            <div key={v.cle + v.action + v.ts + i}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '9px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none' }}>
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: 'block', fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.nom}</span>
-                <span style={{ display: 'block', fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{SOURCES[v.source] || v.source} · {depuis(v.ts)}</span>
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <code style={{ fontSize: 12, fontWeight: 700, padding: '4px 9px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>{v.action}</code>
-                <button onClick={() => setCible({ cle: v.cle, nom: v.nom, action: v.action })} style={btnDoux}>
-                  {((affectations[v.cle] || {}).actions || {})[v.action] ? tr('Modifier') : tr('Affecter')}
-                </button>
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', marginLeft: 'auto' }}>{depuis(v.ts)}</span>
+            <button onClick={() => setCible({ cle: v.cle, nom: v.nom, action: v.action })} style={btnDiscret}>
+              {((affectations[v.cle] || {}).actions || {})[v.action] ? tr('Modifier') : tr('Affecter')}
+            </button>
+          </div>
+        ))}
+        {derniers.length > 0 && (
+          <div style={{ padding: '8px 22px 18px', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Un même bouton n’apparaît qu’une fois, à son dernier appui.')}</div>
+        )}
+      </Panneau>
 
       {/* Les appareils connus : ceux qu'on a entendus, et ceux qu'on a réglés. */}
       {appareils.map(ap => {
         const posees = (affectations[ap.cle] || {}).actions || {};
         const boutons = Array.from(new Set([...(ap.affectees || []), ...(ap.vues || [])])).sort();
+        const regles = boutons.filter(b => (posees[b] || []).length > 0).length;
+        const gTxt = regles === 0 ? tr('aucun geste') : regles > 1 ? tr('{n} gestes', { n: regles }) : tr('{n} geste', { n: regles });
+        const bTxt = boutons.length > 1 ? tr('{n} boutons', { n: boutons.length }) : tr('{n} bouton', { n: boutons.length });
         return (
-          <div key={ap.cle} style={cardSt}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ap.nom}</div>
-                <div style={sous}>{SOURCES[ap.source] || ap.source}</div>
-              </div>
-              <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>
-                {tr('{n} boutons', { n: boutons.length })}
-              </span>
-            </div>
-            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column' }}>
-              {boutons.map((btn, i) => {
-                const gestes = posees[btn] || [];
-                return (
-                  <div key={btn}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '10px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none' }}>
-                    <span style={{ minWidth: 0, flex: 1 }}>
-                      <code style={{ fontSize: 12, fontWeight: 700 }}>{btn}</code>
-                      <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginTop: 3, color: gestes.length ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>
-                        {gestes.length ? resume(gestes, hass) : tr('rien pour l’instant')}
-                      </span>
-                    </span>
-                    <span style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                      {gestes.length > 0 && (
-                        <button onClick={() => affecter(ap.cle, btn, [], ap.nom)}
-                          style={{ ...btnDoux, background: 'rgba(var(--o-bad-rgb),.14)', color: 'var(--o-bad)' }}>
-                          {tr('Retirer')}
-                        </button>
-                      )}
-                      <button onClick={() => setCible({ cle: ap.cle, nom: ap.nom, action: btn })} style={btnDoux}>
-                        {gestes.length ? tr('Modifier') : tr('Affecter')}
-                      </button>
-                    </span>
+          <Panneau key={ap.cle} titre={ap.nom} desc={SOURCES[ap.source] || ap.source}
+            titreStyle={{ fontFamily: 'var(--o-font)', fontStyle: 'normal', fontSize: 15, fontWeight: 800, letterSpacing: 0 }}
+            droite={<span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('{a} sur {n}', { a: gTxt, n: bTxt })}</span>}>
+            {boutons.map(btn => {
+              const gestes = posees[btn] || [];
+              return (
+                <div key={btn} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 22px', borderTop: FILET, flexWrap: 'wrap' }}>
+                  <div style={{ width: 160, flexShrink: 0, minWidth: 0 }}>{geste(btn, true)}</div>
+                  <div style={{ flex: '1 1 160px', minWidth: 0, fontSize: 12.5, fontWeight: 800, color: gestes.length ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>
+                    {gestes.length ? resume(gestes, hass) : tr('libre')}
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                  <span style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
+                    <button onClick={() => setCible({ cle: ap.cle, nom: ap.nom, action: btn })} style={btnDiscret}>
+                      {gestes.length ? tr('Modifier') : tr('Affecter')}
+                    </button>
+                    {gestes.length > 0 && (
+                      <button onClick={() => affecter(ap.cle, btn, [], ap.nom)} style={{ ...btnDiscret, color: 'var(--o-text3)' }}>
+                        {tr('Retirer')}
+                      </button>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </Panneau>
         );
       })}
 

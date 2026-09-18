@@ -377,6 +377,11 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
   .o-bar > button:last-child::before { content: ''; position: absolute; top: -11px; bottom: -11px; left: -8px; right: -13px; z-index: -1; background: linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg); }
   /* seconde ligne d'un libellé de groupe : elle doublait la hauteur du bandeau */
   .o-bar-sub { display: none; }
+  /* les onglets d'une page (Règles) : une rangée qui glisse, comme un bandeau —
+   * sans le bouton collé à droite, qui n'a rien à ranger ici */
+  .o-onglets { flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; -ms-overflow-style: none; }
+  .o-onglets::-webkit-scrollbar { display: none; }
+  .o-onglets > * { flex-shrink: 0 !important; }
   /* barre des pièces : déjà en une rangée, on masque juste l'ascenseur */
   .o-room-scroll { scrollbar-width: none; -ms-overflow-style: none; }
   .o-room-scroll::-webkit-scrollbar { display: none; }
@@ -648,7 +653,6 @@ html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) 
 }
 
 /* grille des thèmes (Apparence) : 3 colonnes PC, 2 tablette, 1 mobile */
-@media (max-width: 1280px) { .grid-par-pal { grid-template-columns: repeat(2,1fr) !important; } }
 @media (max-width: 620px) { .grid-par-pal { grid-template-columns: 1fr !important; } }
 
 /* Paramètres : listes en lignes denses façon Atrium (filets entre les lignes, pas de carte par ligne) */

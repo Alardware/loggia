@@ -204,7 +204,11 @@ test('la relation disparaît avec la région', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 test('on peut observer sans agir, et l’écran le dit', () => {
-  assert.ok(src.includes('enregistrer({ simulation: { actif: !simu.actif } })'), 'plus d’interrupteur de simulation');
+  /* Un seul interrupteur depuis le 18/09, au-dessus des onglets des Règles :
+   * il pose le drapeau des quatre modules qui commandent, volets compris. */
+  const par = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
+  assert.ok(par.includes("h.callWS({ type: 'loggia/volets/config', patch: { simulation: { actif: cible } } })"), 'plus d’interrupteur de simulation pour les volets');
+  assert.ok(par.includes("<Tgl on={actifs.length > 0} cb={basculerObserve} off={!observe} label={tr('Observer sans agir')} />"), 'l’interrupteur commun a disparu');
   // Tant qu'elle tourne, un bandeau en haut : sinon on cherche pourquoi les
   // volets ne bougent plus.
   assert.ok(src.includes('{simu.actif && ('), 'plus de bandeau de simulation');
@@ -248,8 +252,11 @@ test('le journal des veilles lit les champs communs', () => {
   // Les veilles écrivent dans le journal du socle : `quoi`, `regle`, `motif`,
   // `detail` — plus `entite` ni `valeur`, qui n'existent plus.
   assert.ok(!vei.includes('nomDe(j.entite)'), 'le journal lit encore un champ qui n’existe plus');
-  assert.ok(vei.includes("{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}"));
-  assert.ok(vei.includes('{j.simule && <span'), 'une ligne simulée se lirait comme un vrai signalement');
+  // Depuis le 18/09, chaque règle montre SES derniers signalements, dans sa
+  // carte : la règle filtre, le motif porte la valeur, le détail le capteur.
+  assert.ok(vei.includes("j.regle === regle && (j.quoi === 'prevenir' || j.quoi === 'alerter')"), 'les signalements ne se rangent plus par règle');
+  assert.ok(vei.includes('parseInt(j.motif, 10)'), 'la valeur d’une pile ne vient plus du motif');
+  assert.ok(vei.includes("String(j.detail || '')"), 'le nom du capteur ne vient plus du détail');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -259,16 +266,32 @@ test('le journal des veilles lit les champs communs', () => {
 // promet plus de « confort » : le retour remet les consignes d'avant (ADR 0011).
 // ─────────────────────────────────────────────────────────────────────────────
 
+/* Depuis le 18/09 (maquettes des Paramètres) : les manœuvres de chaque module
+ * se lisent dans l'onglet Journal — la liste recopiée dans chaque onglet était
+ * un doublon —, et « Observer sans agir » est UN interrupteur, au-dessus des
+ * onglets. Chaque onglet garde son bandeau : c'est là qu'on se demande
+ * pourquoi rien ne bouge. */
+const PAR = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
+const JOURNAL = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
+const PATCH_OBSERVER = {
+  fenetres: "h.callWS({ type: 'loggia/fenetres/config', patch: { simulation: cible } })",
+  presence: "h.callWS({ type: 'loggia/presence/config', patch: { simulation: { actif: cible } } })",
+  nuit: "h.callWS({ type: 'loggia/nuit/config', patch: { simulation: { actif: cible } } })",
+};
 for (const v of ['fenetres', 'presence', 'nuit']) {
-  test(`${v} : le journal commun, et observer sans agir`, () => {
+  test(`${v} : ses manœuvres au journal, et l’observation au-dessus des onglets`, () => {
     const src = readFileSync(join(RACINE, 'src', 'views', v + '.jsx'), 'utf8');
-    assert.ok(src.includes("{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}"),
-      `${v}.jsx : le journal lit encore des champs qui n’existent plus`);
-    assert.ok(src.includes('{j.simule && <span'), `${v}.jsx : une ligne simulée se lirait comme une vraie manœuvre`);
-    assert.ok(src.includes("{tr('Observer sans agir')}"), `${v}.jsx : plus d’interrupteur de simulation`);
+    assert.ok(!src.includes("{tr('Observer sans agir')}"), `${v}.jsx : un second interrupteur d’observation est revenu`);
+    assert.ok(PAR.includes(PATCH_OBSERVER[v]), `${v} : l’interrupteur commun ne pose plus son drapeau`);
     assert.ok(src.includes("{tr('Simulation : rien ne bouge, tout est noté.')}"), `${v}.jsx : plus de bandeau de simulation`);
+    assert.ok(!src.includes("{j.regle}{j.motif ? ' · ' + j.motif : ''}"), `${v}.jsx : la liste des manœuvres est revenue en double`);
   });
 }
+
+test('le journal commun lit les champs du socle, et marque le simulé', () => {
+  assert.ok(JOURNAL.includes("[j.regle, j.motif, j.detail].filter(Boolean).join(' · ')"), 'le journal lit encore des champs qui n’existent plus');
+  assert.ok(JOURNAL.includes("{j.simule && <span style={badge('var(--o-warn)')}>{tr('simulé')}</span>}"), 'une ligne simulée se lirait comme une vraie manœuvre');
+});
 
 test('présence ne promet plus de consigne de confort', () => {
   const src = readFileSync(join(RACINE, 'src', 'views', 'presence.jsx'), 'utf8');
@@ -305,10 +328,13 @@ test('rendre la main est un geste d’administrateur, et passe par le serveur', 
   assert.ok(vue.includes('{admin && ('), 'le bouton s’afficherait à un compte qui ne peut que le voir échouer');
 });
 
-test('le journal se filtre par module et par simulé / réel, rien d’autre', () => {
+test('le journal montre tout, du plus récent au plus ancien, sans filtre', () => {
+  /* Les puces de filtre (module, simulé / réel) sont parties avec la maquette
+   * du 18/09 : chaque ligne dit son module en capitales, et une ligne simulée
+   * porte sa marque — le tri se fait à l'œil, sur une liste courte. */
   const vue = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
-  assert.ok(vue.includes("(!module || j.module === module) && (simulees || !j.simule)"));
-  assert.equal((vue.match(/useState\(/g) || []).length, 2, 'un filtre de plus : la vue devait rester à deux');
+  assert.ok(!vue.includes('useState('), 'un filtre est revenu');
+  assert.ok(!vue.includes('(!module || j.module === module)'), 'le filtre par module est revenu');
 });
 
 test('les derniers envois des alertes ne vivent plus qu’au journal', () => {
@@ -397,9 +423,12 @@ test('sur un danger, la maison réagit — et cela se règle à côté du télé
   const par = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
   assert.ok(par.includes("actions: { actif: true, lumieres: true, volets: true, vanne: { actif: true, entite: '' } }"), 'plus de défaut pour les actions');
   assert.ok(par.includes("save({ actions: { ...cfg.actions, actif: !cfg.actions.actif } })"), 'plus d’interrupteur général');
-  for (const k of ['lumieres', 'volets']) assert.ok(par.includes(`['${k}',`), `plus d’interrupteur pour ${k}`);
+  for (const k of ['lumieres', 'volets']) assert.ok(par.includes(`save({ actions: { ...cfg.actions, ${k}: !cfg.actions.${k} } })`), `plus d’interrupteur pour ${k}`);
   assert.ok(par.includes("vanne: { ...cfg.actions.vanne, actif: !cfg.actions.vanne.actif }"), 'plus d’interrupteur pour la vanne');
-  assert.ok(par.includes('list="loggia-vannes"'), 'la vanne ne se désigne plus');
+  // La vanne se choisit dans une liste ; vide, c'est la regle du composant :
+  // la premiere vanne d'EAU (alertes.py, _vanne) — l'ecran dit laquelle.
+  assert.ok(par.includes("label={tr('Entité de la vanne d’eau')} value={vanne}"), 'la vanne ne se désigne plus');
+  assert.ok(par.includes("vannes.find(id => (S[id].attributes || {}).device_class === 'water')"), 'le choix automatique ne suit plus celui du composant');
   // Une configuration écrite avant les actions garde ses défauts.
   assert.ok(par.includes("actions: { ...d.actions, ...(c.actions || {}), vanne: { ...d.actions.vanne, ...((c.actions || {}).vanne || {}) } }"));
 });

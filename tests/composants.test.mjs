@@ -161,7 +161,7 @@ const PAR = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8')
 const VOL = readFileSync(join(RACINE, 'src', 'views', 'volets.jsx'), 'utf8');
 
 test('les briques des Paramètres sont au niveau du module', () => {
-  for (const nom of ['SecBar', 'SecGroup', 'SecTgl', 'AppCard', 'OptRow', 'Tgl', 'Seg', 'MarginRow', 'Row']) {
+  for (const nom of ['AppCard', 'OptRow', 'Tgl', 'Seg', 'MarginRow', 'Row']) {
     assert.match(PAR, new RegExp('^const ' + nom + ' = \\(', 'm'), nom + ' doit être défini au niveau du module');
   }
 });

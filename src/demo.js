@@ -24,6 +24,7 @@
 
 const maintenant = () => new Date().toISOString();
 const s = (state, attributes = {}) => ({ state: String(state), attributes, last_updated: maintenant(), last_changed: maintenant() });
+const ilYaMin = (min) => new Date(Date.now() - min * 60000).toISOString();
 
 const PIECES = [
   ['salon', 'Salon', 21.4, 47, 612],
@@ -87,6 +88,25 @@ function etatsInitiaux() {
     'update.home_assistant_core_update': s('on', { friendly_name: 'Home Assistant Core Update', title: 'Home Assistant Core', installed_version: '2026.3.4', latest_version: '2026.4.0' }),
     'update.home_assistant_supervisor_update': s('off', { friendly_name: 'Home Assistant Supervisor Update', title: 'Home Assistant Supervisor', installed_version: '2026.03.2', latest_version: '2026.03.2' }),
     'update.home_assistant_operating_system_update': s('off', { friendly_name: 'Home Assistant Operating System Update', title: 'Home Assistant Operating System', installed_version: '16.2', latest_version: '16.2' }),
+    // Des firmwares Zigbee et un module HACS en attente : la section des mises
+    // a jour les range par integration (maquettes du 18/09).
+    'update.interrupteur_couloir_firmware': s('on', { friendly_name: 'Interrupteur Couloir', installed_version: '1124102917', latest_version: '1124103169' }),
+    'update.interrupteur_chambre_firmware': s('on', { friendly_name: 'Interrupteur Chambre', installed_version: '1107324829', latest_version: '1124103169' }),
+    'update.carte_meteo_animee_update': s('on', { friendly_name: 'Carte météo animée', installed_version: 'v2.0.1', latest_version: 'v2.0.2' }),
+    // Des automatisations Home Assistant : Loggia les liste, les allume, les
+    // lance — il ne les ecrit pas. Sans elles, leur section serait vide ici.
+    'automation.lumiere_couloir_la_nuit': s('on', { friendly_name: 'Lumière couloir la nuit', last_triggered: ilYaMin(420) }),
+    'automation.veilleuse_chambre_au_coucher': s('on', { friendly_name: 'Veilleuse chambre au coucher', last_triggered: ilYaMin(900) }),
+    'automation.eclairage_terrasse_au_crepuscule': s('off', { friendly_name: 'Éclairage terrasse au crépuscule', last_triggered: ilYaMin(8600) }),
+    'automation.volets_ouverture_du_matin': s('on', { friendly_name: 'Volets : ouverture du matin', last_triggered: ilYaMin(560) }),
+    'automation.volets_fermeture_au_coucher_du_soleil': s('on', { friendly_name: 'Volets : fermeture au coucher du soleil', last_triggered: ilYaMin(80) }),
+    'automation.chauffage_consigne_de_nuit': s('on', { friendly_name: 'Chauffage : consigne de nuit', last_triggered: ilYaMin(1000) }),
+    'automation.radiateur_bureau_hors_gel': s('off', { friendly_name: 'Radiateur bureau hors gel' }),
+    'automation.alarme_armement_en_partant': s('on', { friendly_name: 'Alarme : armement en partant', last_triggered: ilYaMin(2900) }),
+    'automation.sonnette_vers_le_telephone': s('on', { friendly_name: 'Sonnette vers le téléphone', last_triggered: ilYaMin(190) }),
+    'automation.delestage_du_chauffe_eau': s('on', { friendly_name: 'Délestage du chauffe-eau', last_triggered: ilYaMin(1300) }),
+    'automation.arrosage_du_potager': s('on', { friendly_name: 'Arrosage du potager', last_triggered: ilYaMin(700) }),
+    'automation.lave_linge_termine': s('on', { friendly_name: 'Lave-linge terminé', last_triggered: ilYaMin(1500) }),
     // Le distributeur de croquettes et une plante : ce que la vue Objets et
     // leurs fiches ont a montrer.
     'input_number.croquettes_reservoir': s(760, { friendly_name: 'Réservoir de croquettes', min: 0, max: 2000, step: 10, unit_of_measurement: 'g' }),
@@ -168,6 +188,14 @@ function etatsInitiaux() {
     'switch.radiateur_chambre': s('on', { friendly_name: 'Radiateur chambre' }),
     'switch.radiateur_salon': s('on', { friendly_name: 'Radiateur salon' }),
     'binary_sensor.detecteur_fumee': s('off', { friendly_name: 'Détecteur de fumée cuisine', device_class: 'smoke' }),
+    // Les autres familles que la section Alertes compte, et la vanne qu'elle
+    // coupe sur une fuite : une maison equipee, pas une liste vide.
+    'binary_sensor.detecteur_fumee_entree': s('off', { friendly_name: 'Détecteur de fumée entrée', device_class: 'smoke' }),
+    'binary_sensor.detecteur_co_salon': s('off', { friendly_name: 'Détecteur de monoxyde salon', device_class: 'carbon_monoxide' }),
+    'binary_sensor.fuite_evier': s('off', { friendly_name: 'Fuite sous l’évier', device_class: 'moisture' }),
+    'valve.arrivee_eau': s('open', { friendly_name: 'Arrivée d’eau', device_class: 'water' }),
+    // Le telephone de l'app compagnon : son traceur donne son nom au service notify.
+    'device_tracker.telephone_de_camille': s('home', { friendly_name: 'Téléphone de Camille', source_type: 'gps' }),
     'climate.salon': s('heat', { friendly_name: 'Thermostat salon', current_temperature: 21.4, temperature: 22, hvac_action: 'heating', hvac_modes: ['off', 'heat'], min_temp: 7, max_temp: 30, target_temp_step: .5 }),
     'climate.chambre': s('off', { friendly_name: 'Thermostat chambre', current_temperature: 19.6, temperature: 19, hvac_action: 'off', hvac_modes: ['off', 'heat'], min_temp: 7, max_temp: 30, target_temp_step: .5 }),
     'cover.volet_salon': s('open', { friendly_name: 'Volet salon', current_position: 100, supported_features: 15 }),
@@ -200,6 +228,12 @@ function configDemo() {
      * la popup ait quelque chose a raconter. Le nom vaut ce qu'il dit : c'est
      * un reglage, chacun met le sien. */
     loggia_assistant: 'demo',
+    // Les alertes de surete : un telephone choisi, les familles de danger
+    // allumees. La demo n'envoie rien — il n'y a pas de composant.
+    loggia_alertes: { actif: true, service: 'mobile_app_telephone_de_camille', cooldown_min: 5,
+      categories: { fumee: true, gaz: true, co: true, fuite: true, alarme: true, portes: true },
+      calme: { actif: false, debut: '22:00', fin: '07:00' },
+      actions: { actif: true, lumieres: true, volets: true, vanne: { actif: true, entite: '' } } },
     loggia_rooms: PIECES.map(([cle, nom, , , co2]) => ({
       room: nom,
       haid: { temp: 'sensor.' + cle + '_temperature', humidity: 'sensor.' + cle + '_humidite', co2: co2 != null ? 'sensor.' + cle + '_co2' : null },
@@ -647,12 +681,12 @@ function indexDemo(states) {
   ];
   const ZONE_DE = {
     salon: ['light.salon', 'media_player.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_co2', 'sensor.salon_bruit', 'cover.salon', 'cover.volet_salon',
-            'binary_sensor.fenetre_salon', 'switch.radiateur_salon', 'media_player.enceinte_salon'],
-    cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine', 'cover.volet_cuisine', 'binary_sensor.detecteur_fumee'],
+            'binary_sensor.fenetre_salon', 'switch.radiateur_salon', 'media_player.enceinte_salon', 'binary_sensor.detecteur_co_salon'],
+    cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine', 'cover.volet_cuisine', 'binary_sensor.detecteur_fumee', 'binary_sensor.fuite_evier', 'valve.arrivee_eau'],
     chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'sensor.chambre_co2', 'cover.chambre', 'cover.volet_chambre',
               'binary_sensor.fenetre_chambre', 'switch.radiateur_chambre'],
     bureau: ['light.bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite', 'sensor.bureau_co2'],
-    entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree', 'siren.interieure',
+    entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.detecteur_fumee_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree', 'siren.interieure',
              'camera.entree', 'switch.camera_entree_detection_mouvement', 'switch.camera_entree_suivi', 'switch.camera_entree_pleurs',
              'switch.camera_entree_prive', 'switch.camera_entree_voyant', 'binary_sensor.camera_entree_mouvement', 'binary_sensor.camera_entree_personne'],
     sdb: ['light.sdb', 'sensor.sdb_temperature'],
@@ -709,6 +743,15 @@ function indexDemo(states) {
     entities.push({ id, name: at.friendly_name || id, device: 'sysmon', area: null,
       platform: 'systemmonitor', category: 'diagnostic', device_class: at.device_class || null,
       unit: at.unit_of_measurement || null, hidden: false });
+  });
+  // Les mises a jour : chacune publiee par son integration — c'est elle qui
+  // fait le groupe dans la section des mises a jour.
+  [['update.interrupteur_couloir_firmware', 'mqtt'], ['update.interrupteur_chambre_firmware', 'mqtt'], ['update.carte_meteo_animee_update', 'hacs'],
+    ['update.home_assistant_core_update', 'hassio'], ['update.home_assistant_supervisor_update', 'hassio'], ['update.home_assistant_operating_system_update', 'hassio']].forEach(([id, plateforme]) => {
+    if (!states[id]) return;
+    const at = states[id].attributes || {};
+    entities.push({ id, name: at.friendly_name || id, device: null, area: null, platform: plateforme, category: 'config',
+      device_class: null, unit: null, hidden: false });
   });
   return {
     version: 1,
@@ -997,7 +1040,16 @@ export function installerDemo() {
   const callService = (domaine, service, data, target) => {
     const id = (data && data.entity_id) || (target && target.entity_id);
     // La sirene aussi (ADR 0034) : sa bascule et son test sonore passent par turn_on / turn_off.
-    if (domaine === 'homeassistant' || domaine === 'light' || domaine === 'switch' || domaine === 'fan' || domaine === 'siren') {
+    if (domaine === 'automation' && service === 'trigger') {
+      toucher(id, null, { last_triggered: maintenant() });
+    } else if (domaine === 'update') {
+      // Une installation prend du temps : la section montre sa progression.
+      const at = (states[id] && states[id].attributes) || {};
+      if (service === 'install') {
+        toucher(id, null, { in_progress: true });
+        setTimeout(() => toucher(id, 'off', { in_progress: false, installed_version: at.latest_version }), 3500);
+      } else if (service === 'skip') toucher(id, 'off', { skipped_version: at.latest_version });
+    } else if (domaine === 'homeassistant' || domaine === 'light' || domaine === 'switch' || domaine === 'fan' || domaine === 'siren' || domaine === 'automation') {
       if (service === 'turn_on') toucher(id, 'on');
       else if (service === 'turn_off') toucher(id, 'off');
       else if (service === 'toggle') toucher(id, states[id] && states[id].state === 'on' ? 'off' : 'on');
@@ -1077,6 +1129,8 @@ export function installerDemo() {
       if (msg && msg.type === 'loggia/volets/config') {
         return Promise.resolve({ config: voletsPatch(msg.patch) });
       }
+      // Les services notify : ceux que la section Alertes propose comme cible.
+      if (msg && msg.type === 'get_services') return Promise.resolve({ notify: { mobile_app_telephone_de_camille: {}, notify: {}, persistent_notification: {} } });
       if (msg && msg.type === 'loggia/fenetres/etat') return Promise.resolve(fenetresDemo());
       if (msg && msg.type === 'loggia/fenetres/config') {
         return Promise.resolve({ config: fenetresPatch(msg.patch) });

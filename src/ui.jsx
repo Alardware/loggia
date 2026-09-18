@@ -68,7 +68,7 @@ export const cl_hexRgb = (c) => HX_TOKENS[c] ? `var(${HX_TOKENS[c]})` : (typeof 
  * langue. Appelee au rendu, elle se dit dans la langue du moment. */
 export const HIDDEN_VIEWS = () => [
   { label: tr('Lumières'), vid: 'lumieres', icon: 'bulb', c: 'var(--o-lampe)' },
-  { label: tr('Climat'), vid: 'climat', icon: 'thermometer-half', c: '#ff8a4c' },
+  { label: tr('Climat'), vid: 'climat', icon: 'thermometer-half', c: 'var(--o-orange)' },
   /* Volets a quitté la liste le 30/08/2026 : l'Ouverture vit DANS la vue
    * Climatisation (ClimatView rend VoletsContent). La route reste. */
   /* Aspirateur et Croquettes ont quitté la liste le 30/08/2026 : la FICHE
@@ -547,9 +547,10 @@ export function useEtatServeur(hass, type, ms, siErreur) {
   return { etat, setEtat, err, setErr, vivant };
 }
 
-export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, zone = null }) {
-  const titre = { fontSize: 15, fontWeight: 700 };
-  const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };
+export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, zone = null, note = null }) {
+  // Le titre d'une regle parle comme celui d'un panneau de reglages (maquettes du 18/09).
+  const titre = { fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 20, fontWeight: 500, lineHeight: 1.2 };
+  const sous = { fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 3, lineHeight: 1.45 };
   const pliable = !!(on && onPlier);
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -574,6 +575,7 @@ export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, z
           {pliable && <Fi i={plie ? 'angle-small-down' : 'angle-small-up'} size={13} />}
         </div>
         <div style={sous}>{desc}</div>
+        {note && <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-warn)', marginTop: 7 }}>{note}</div>}
       </button>
       <Bascule nom={nom} on={!!on} cb={cb} />
     </div>

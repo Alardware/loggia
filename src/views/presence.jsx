@@ -12,6 +12,7 @@ import {
   useMemo
 } from 'react';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
+import { ZONE_REGLAGES, CAPITALES, TITRE_PANNEAU } from './parcommun.jsx';
 import { tr, locale } from '../i18n.js';
 
 /* Au niveau du module, et non dans le composant.
@@ -113,7 +114,6 @@ export function PresenceReglages({ hass, cardSt }) {
   const suivies = cfg.personnes || [];
   const ind = cfg.indices || {};
 
-  const titre = { fontSize: 15, fontWeight: 700 };
   const simu = cfg.simulation || {};
   const label = { fontSize: 12, fontWeight: 700 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
@@ -143,7 +143,7 @@ export function PresenceReglages({ hass, cardSt }) {
           <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--o-warn2)' }}>{tr('Décompte de départ en cours.')}</div>
         )}
         {cfg.actif && !pliPres && (
-          <div id="presence-pres-1">
+          <div id="presence-pres-1" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 88 }}>{tr('Attendre')}</span>
               <input aria-label={tr('Attendre avant la mise en veille, en minutes')} type="number" value={cfg.delai_depart != null ? cfg.delai_depart : 5} min={0} max={60}
@@ -174,9 +174,9 @@ export function PresenceReglages({ hass, cardSt }) {
         )}
       </div>
 
-      {cfg.actif && !pliPres && (
+      {cfg.actif && !pliPres && (<div className="grid-pres-dep" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16, alignItems: 'stretch' }}>
         <div id="presence-pres-2" style={cardSt}>
-          <div style={titre}>{tr('En partant')}</div>
+          <div style={CAPITALES}>{tr('En partant')}</div>
           <div style={{ marginTop: 8 }}>
             <Rangee nom={tr('Éteindre les lumières')} desc={tr('Celles qui étaient déjà éteintes ne se rallumeront pas au retour.')}
               on={!!dep.lumieres} cb={() => enregistrer({ depart: { lumieres: !dep.lumieres } })} />
@@ -208,11 +208,9 @@ export function PresenceReglages({ hass, cardSt }) {
             )}
           </div>
         </div>
-      )}
 
-      {cfg.actif && !pliPres && (
         <div id="presence-pres-3" style={cardSt}>
-          <div style={titre}>{tr('Au retour')}</div>
+          <div style={CAPITALES}>{tr('Au retour')}</div>
           <div style={{ marginTop: 8 }}>
             <Rangee nom={tr('Rallumer les lumières')} desc={tr('Seulement celles que Loggia a éteintes en partant.')}
               on={!!ret.lumieres} cb={() => enregistrer({ retour: { lumieres: !ret.lumieres } })} />
@@ -239,7 +237,7 @@ export function PresenceReglages({ hass, cardSt }) {
             </div>
           )}
         </div>
-      )}
+      </div>)}
 
       {/* ── Un seul indice suffit (§10) ── */}
       {/* Le téléphone dit qui est parti ; il ne dit pas qui est resté. Un
@@ -247,7 +245,7 @@ export function PresenceReglages({ hass, cardSt }) {
         * est là, le décompte repart de zéro. */}
       {cfg.actif && !pliPres && (
         <div id="presence-pres-4" style={cardSt}>
-          <div style={titre}>{tr('Un seul indice suffit')}</div>
+          <div style={TITRE_PANNEAU}>{tr('Un seul indice suffit')}</div>
           <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>
             {tr('Pendant le décompte, un mouvement, une porte qui s’ouvre ou une lampe touchée à la main veut dire que quelqu’un est là : le décompte repart de zéro.')}
           </div>
@@ -263,37 +261,6 @@ export function PresenceReglages({ hass, cardSt }) {
               {tr('Dernier indice')} : {etat.indices.dernier.genre} · {etat.indices.dernier.nom} · {new Date(etat.indices.dernier.ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── Observer sans agir ── */}
-      {/* Un MODE, pas une règle : il ne commande rien et n'a rien à replier. */}
-      <div style={cardSt}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={titre}>{tr('Observer sans agir')}</div>
-            <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{tr('La règle note ce qu’elle aurait fait, sans toucher à la maison.')}</div>
-          </div>
-          <Bascule nom={tr('Observer sans agir')} on={!!simu.actif} cb={() => enregistrer({ simulation: { actif: !simu.actif } })} />
-        </div>
-      </div>
-
-      {etat.journal && etat.journal.length > 0 && (
-        <div style={cardSt}>
-          <div style={titre}>{tr('Derniers passages')}</div>
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
-            {etat.journal.slice(0, 8).map((j, i) => (
-              <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
-                {/* Les champs du journal COMMUN : ce qui a été fait, par quelle
-                  * règle, pourquoi — et ce qui a manqué. */}
-                <span style={{ minWidth: 0 }}>
-                  {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
-                  {j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
-                </span>
-                <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 

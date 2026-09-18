@@ -63,9 +63,11 @@ test('la gestion des profils et le code admin ne sont jamais accordables', () =>
       `« ${interdit} » est entré dans le catalogue : un profil pourrait se promouvoir lui-même`);
   }
   // Les trois gardes qui tiennent cette promesse, relues dans la source : le
-  // bouton d'ajout, le crayon de chaque ligne, et l'éditeur du code.
+  // bouton d'ajout (dans l'en-tête), le crayon de chaque ligne, l'éditeur du
+  // code et celui des profils.
   const par = lire('src', 'views', 'parametres.jsx');
-  for (const garde of ['{isAdmin && <SecGroup label="Profils">',
+  for (const garde of ["droite: isAdmin ? <button onClick={() => setEditing({ i: null })}",
+    "{isAdmin && <button type=\"button\" aria-label={tr('Modifier ce profil')}",
     '{isAdmin && <AdminPinEditor hass={hass} />}',
     '{editing && isAdmin && <UserEditor']) {
     assert.ok(par.indexOf(garde) >= 0,

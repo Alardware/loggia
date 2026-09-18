@@ -11,8 +11,9 @@
 import {
   useState, useMemo
 } from 'react';
-import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur, Bascule } from '../ui.jsx';
-import { tr, locale } from '../i18n.js';
+import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
+import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt, majuscule } from './parcommun.jsx';
+import { tr } from '../i18n.js';
 
 /* `champ` et `Nombre` vivent ici, et non dans le composant.
  *
@@ -133,7 +134,6 @@ export function VoletsReglages({ hass, cardSt }) {
   const vent = cfg.vent || {};
   const baies = cfg.baies || {};
   const simu = cfg.simulation || {};
-  const titre = { fontSize: 15, fontWeight: 700 };
   const label = { fontSize: 12, fontWeight: 700, marginBottom: 6 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
   const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
@@ -157,7 +157,7 @@ export function VoletsReglages({ hass, cardSt }) {
           desc={tr('Ouvrir le matin, fermer le soir, aux heures réelles du soleil chez toi.')}
           on={plan.actif} cb={() => enregistrer({ planning: { actif: !plan.actif } })} plie={pliPlan} onPlier={plierPlan} zone="volets-plan" />
         {plan.actif && !pliPlan && (
-          <div id="volets-plan">
+          <div id="volets-plan" style={ZONE_REGLAGES}>
             {/* Ce que la règle fait AUJOURD'HUI. Le même choix se retrouve en
               * haut de la vue Volets : c'est celui qu'on change au quotidien,
               * quand l'interrupteur ci-dessus se règle une fois. */}
@@ -307,13 +307,16 @@ export function VoletsReglages({ hass, cardSt }) {
           desc={tr('Quand le soleil frappe une façade et qu’il fait chaud, baisser ses volets — puis les rouvrir quand il est passé.')}
           on={sol.actif} cb={() => enregistrer({ soleil: { actif: !sol.actif } })} plie={pliSol} onPlier={plierSol} zone="volets-sol" />
         {etat.soleil && etat.soleil.azimut != null && (
-          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
-            {tr('En ce moment : soleil à {a}°, hauteur {e}°', { a: Math.round(etat.soleil.azimut), e: Math.round(etat.soleil.elevation) })}
-            {etat.abaisses && etat.abaisses.length ? ' · ' + (etat.abaisses.length > 1 ? tr('{n} volets abaissés', { n: etat.abaisses.length }) : tr('{n} volet abaissé', { n: 1 })) : ''}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '14px -22px 0', padding: '12px 22px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: 'var(--o-lampe)' }} />
+            <span>
+              {tr('En ce moment : soleil à {a}°, hauteur {e}°', { a: Math.round(etat.soleil.azimut), e: Math.round(etat.soleil.elevation) })}
+              {' — '}{etat.abaisses && etat.abaisses.length ? (etat.abaisses.length > 1 ? tr('{n} volets abaissés', { n: etat.abaisses.length }) : tr('{n} volet abaissé', { n: 1 })) : tr('aucun volet abaissé')}
+            </span>
           </div>
         )}
         {sol.actif && !pliSol && (
-          <div id="volets-sol">
+          <div id="volets-sol" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Descendre à')}</span>
               <Nombre v={sol.position != null ? sol.position : 30} nom={tr('Position des volets sous le soleil, en pourcentage')} min={0} max={100} pas={5} unite="%"
@@ -371,13 +374,14 @@ export function VoletsReglages({ hass, cardSt }) {
       {/* ── La mise à l'abri ── */}
       <div style={cardSt}>
         <RegleEntete nom={tr('Vent fort')}
-          desc={tr('Au-delà d’un seuil, tout remonter. Un volet baissé dans une rafale est un volet plié — cette règle passe avant les deux autres.')}
+          desc={tr('Au-delà d’un seuil, tout remonter — un volet baissé dans une rafale est un volet plié.')}
+          note={tr('Passe avant les deux règles ci-dessus')}
           on={vent.actif} cb={() => enregistrer({ vent: { actif: !vent.actif } })} plie={pliVent} onPlier={plierVent} zone="volets-vent" />
         {etat.a_l_abri && (
           <div style={{ marginTop: 9, fontSize: 12, fontWeight: 800, color: 'var(--o-warn2)' }}>{tr('Volets à l’abri en ce moment.')}</div>
         )}
         {vent.actif && !pliVent && (
-          <div id="volets-vent">
+          <div id="volets-vent" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Anémomètre')}</span>
               <button onClick={() => choisirEntite('vent', 'entite', ['sensor'])}
@@ -403,7 +407,7 @@ export function VoletsReglages({ hass, cardSt }) {
           desc={tr('Ne pas fermer un volet tant que la porte ou la fenêtre devant lui est ouverte : la fermeture attend qu’elle se referme.')}
           on={baies.actif} cb={() => enregistrer({ baies: { actif: !baies.actif } })} plie={pliBaies} onPlier={plierBaies} zone="volets-baies" />
         {baies.actif && !pliBaies && (
-          <div id="volets-baies">
+          <div id="volets-baies" style={ZONE_REGLAGES}>
             <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8, marginBottom: 4 }}>
               {tr('Un volet sans porte ni fenêtre désignée ferme comme avant. Un capteur muet ne retient rien : le volet ferme, et le journal le dit.')}
             </div>
@@ -431,27 +435,10 @@ export function VoletsReglages({ hass, cardSt }) {
         )}
       </div>
 
-      {/* ── Observer sans agir ── */}
-      {/* Un MODE, pas une règle : il ne commande rien et n'a rien à replier.
-        * D'où la bascule seule, et non l'en-tête des règles — dont chacun
-        * pilote un pli. */}
-      <div style={cardSt}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={titre}>{tr('Observer sans agir')}</div>
-            <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>
-              {tr('Les règles notent ce qu’elles auraient fait, sans toucher aux volets.')}
-            </div>
-          </div>
-          <Bascule nom={tr('Observer sans agir')} on={!!simu.actif}
-            cb={() => enregistrer({ simulation: { actif: !simu.actif } })} />
-        </div>
-      </div>
-
       {/* ── Ce qui s'est passé ── */}
       {etat.journal && etat.journal.length > 0 && (
         <div style={cardSt}>
-          <div style={titre}>{tr('Dernières manœuvres')}</div>
+          <div style={CAPITALES}>{tr('Dernières manœuvres')}</div>
           {/* Qui l'emporte quand deux règles visent le même volet : le dire,
             * plutôt que laisser deviner pourquoi l'une a cédé. */}
           {Array.isArray(etat.priorites) && etat.priorites.length > 1 && (
@@ -464,9 +451,9 @@ export function VoletsReglages({ hass, cardSt }) {
               <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
                 <span>
                   {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
-                  {j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
+                  {majuscule(j.quoi)} · <span style={{ color: 'var(--o-text2)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
                 </span>
-                <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
+                <span style={{ ...MONO, fontSize: 11.5, color: 'var(--o-text3)', flexShrink: 0 }}>{quandCourt(j.ts)}</span>
               </div>
             ))}
           </div>

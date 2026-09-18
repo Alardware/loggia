@@ -14,10 +14,10 @@
  * n'est visible par défaut : une manœuvre précise se retrouve en lisant,
  * pas en réglant trois filtres.
  */
-import { useState } from 'react';
 import { cvName, useEtatServeur } from '../ui.jsx';
-import { tr, locale } from '../i18n.js';
+import { tr } from '../i18n.js';
 import { puce } from '../styles.js';
+import { TITRE_PANNEAU, DESC_PANNEAU, CAPITALES, MONO, quandCourt } from './parcommun.jsx';
 
 /* Le nom d'un module tel qu'on le lit à l'écran — les mêmes que les onglets. */
 const NOM_MODULE = () => ({
@@ -26,31 +26,18 @@ const NOM_MODULE = () => ({
   interrupteurs: tr('Interrupteurs'), regles: tr('Journal'),
 });
 
-/* L'heure seule aujourd'hui, la date avant : une ligne d'avant-hier ne doit
- * pas se lire comme une ligne de ce matin. */
-function quand(ts) {
-  const d = new Date(ts * 1000);
-  const heure = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
-  return d.toDateString() === new Date().toDateString()
-    ? heure
-    : d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' ' + heure;
-}
-
-
 export function JournalReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const { etat, setEtat, err, setErr } =
     useEtatServeur(hass, 'loggia/regles/etat', 5000, tr('Journal indisponible.'));
-  const [module, setModule] = useState('');
-  const [simulees, setSimulees] = useState(true);
   /* Rendre la main est un geste d'administrateur : c'est défaire ce que
    * quelqu'un a fait à la main. Le serveur le refuse de toute façon ; ne pas
    * montrer un bouton qui ne peut qu'échouer. */
   const admin = !!(hass && hass.user && hass.user.is_admin);
   const nom = (id) => (hass && hass.states && hass.states[id]) ? cvName(hass.states[id], id) : id;
 
-  const titre = { fontSize: 15, fontWeight: 700 };
-  const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };
+  const titre = TITRE_PANNEAU;
+  const sous = DESC_PANNEAU;
   const ligne = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', fontSize: 12, fontWeight: 600 };
   const etiquette = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
   const badge = (couleur) => ({ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: couleur });
@@ -70,8 +57,8 @@ export function JournalReglages({ hass, cardSt }) {
   const attentes = etat.attentes || {};
   const retenu = Object.keys(gels).length + Object.keys(tenues).length + Object.keys(attentes).length;
   const noms = NOM_MODULE();
-  const presents = [...new Set(journal.map(j => j.module))].filter(Boolean);
-  const lignes = journal.filter(j => (!module || j.module === module) && (simulees || !j.simule));
+  // Plus de puces de filtre (maquette du 18/09) : le journal se lit d'un bloc.
+  const lignes = journal;
 
   const rendre = async (id) => {
     if (!h) return;
@@ -99,7 +86,7 @@ export function JournalReglages({ hass, cardSt }) {
           )}
         </div>
         {retenu === 0 && (
-          <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Rien ne retient quoi que ce soit.')}</div>
+          <div style={{ marginTop: 12, fontSize: 13, fontWeight: 800, color: 'var(--o-ok)' }}>{tr('Rien ne retient quoi que ce soit.')}</div>
         )}
         {retenu > 0 && (
           <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column' }}>
@@ -126,7 +113,7 @@ export function JournalReglages({ hass, cardSt }) {
               <div key={'attente-' + id} style={ligne}>
                 <span style={{ minWidth: 0 }}>
                   <span style={etiquette}>{nom(id)}</span>
-                  <span style={{ color: 'var(--o-text3)' }}>{tr('en attente')} · {attentes[id].sens}{attentes[id].motif ? ' · ' + attentes[id].motif : ''}{attentes[id].expire ? ' · ' + tr('jusqu’à') + ' ' + quand(attentes[id].expire) : ''}</span>
+                  <span style={{ color: 'var(--o-text3)' }}>{tr('en attente')} · {attentes[id].sens}{attentes[id].motif ? ' · ' + attentes[id].motif : ''}{attentes[id].expire ? ' · ' + tr('jusqu’à') + ' ' + quandCourt(attentes[id].expire) : ''}</span>
                 </span>
               </div>
             ))}
@@ -138,29 +125,16 @@ export function JournalReglages({ hass, cardSt }) {
       <div style={cardSt}>
         <div style={titre}>{tr('Journal')}</div>
         <div style={sous}>{tr('Toutes les règles, la plus récente en premier.')}</div>
-        {presents.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12, alignItems: 'center' }}>
-            <button onClick={() => setModule('')} style={puce(!module)}>{tr('Tout')}</button>
-            {presents.map(m => (
-              <button key={m} onClick={() => setModule(module === m ? '' : m)} style={puce(module === m)}>{noms[m] || m}</button>
-            ))}
-            <span style={{ flex: 1 }} />
-            <button onClick={() => setSimulees(s => !s)} aria-pressed={simulees}
-              style={{ ...puce(simulees), color: simulees ? '#fff' : 'var(--o-warn2)' }}>{tr('simulées')}</button>
-          </div>
-        )}
         {lignes.length === 0 && (
           <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Aucune manœuvre.')}</div>
         )}
-        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ margin: '12px -22px -4px', display: 'flex', flexDirection: 'column' }}>
           {lignes.map((j, i) => (
-            <div key={j.ts + '' + i} style={{ ...ligne, borderTop: i ? ligne.borderTop : 'none' }}>
-              <span style={{ minWidth: 0 }}>
-                {j.simule && <span style={badge('var(--o-warn2)')}>{tr('simulé')}</span>}
-                {!module && <span style={badge('var(--o-text2)')}>{noms[j.module] || j.module}</span>}
-                {j.quoi}{j.n > 1 ? ' ' + j.n : ''} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
-              </span>
-              <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{quand(j.ts)}</span>
+            <div key={j.ts + '' + i} className="o-journal-ligne" style={{ display: 'grid', gridTemplateColumns: 'minmax(64px,120px) minmax(56px,96px) minmax(0,1fr) auto', alignItems: 'center', gap: 12, padding: '10px 22px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', fontSize: 12.5, fontWeight: 600 }}>
+              <span style={{ ...CAPITALES, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{noms[j.module] || j.module}</span>
+              <span style={{ fontWeight: 800, color: 'var(--o-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{j.simule && <span style={badge('var(--o-warn)')}>{tr('simulé')}</span>}{j.quoi}{j.n > 1 ? ' ' + j.n : ''}</span>
+              <span style={{ color: 'var(--o-text2)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[j.regle, j.motif, j.detail].filter(Boolean).join(' · ')}</span>
+              <span style={{ ...MONO, fontSize: 11.5, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{quandCourt(j.ts)}</span>
             </div>
           ))}
         </div>
