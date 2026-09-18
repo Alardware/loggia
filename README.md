@@ -6,8 +6,6 @@
 
 ![Loggia sur ordinateur, portable, tablette et téléphone](docs/loggia-presentation.webp)
 
-**[Essayer la démo en ligne →](https://alardware.github.io/loggia/)** — rien à installer, aucune adresse à saisir.
-
 Un tableau de bord Home Assistant qui se remplit tout seul.
 
 Loggia lit les registres de votre installation — zones, appareils, entités — et
@@ -29,9 +27,6 @@ deux profils dont un administrateur pour tout essayer. Elle tourne entièrement
 dans le navigateur, sans Home Assistant derrière : rien n'est envoyé nulle
 part, et tout s'évapore à la fermeture de l'onglet. Un badge « Démonstration »
 reste à l'écran.
-
-Quelques entrées directes : [en anglais](https://alardware.github.io/loggia/?lang=en),
-[en mode clair](https://alardware.github.io/loggia/?mode=light), [la vue Énergie](https://alardware.github.io/loggia/?vue=energie).
 
 Sur une installation, la même démo s'ouvre avec `?demo` sur la page directe
 du dashboard — `http://<votre-ha>:8123/loggia-static/index.html?demo` — sans

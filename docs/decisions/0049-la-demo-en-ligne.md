@@ -41,3 +41,13 @@ La démo en ligne ne contient que les données factices de `src/demo.js`, déjà
 publiques dans le dépôt, et l'audit anti-données personnelles les couvre. Elle
 tourne entièrement dans le navigateur. Tests : tests/demo_en_ligne.test.mjs
 (5). Pas de changement côté serveur.
+
+## Amendement (18/09/2026) — le lien une seule fois
+
+Demande : « supprime ceux-ci, pour la démo tu mets 2 fois le lien ». Le lien
+sous le bandeau répétait mot pour mot celui de la section « Essayer sans rien
+installer » : il est retiré, comme la ligne « Quelques entrées directes »
+(`?lang=en`, `?mode=light`, `?vue=energie` marchent toujours, le README ne les
+liste plus). Le README ne mène plus à la démo qu'une fois, dans cette section ;
+le site du dépôt (« Website ») y mène aussi. Le test du README compte les
+occurrences du lien.

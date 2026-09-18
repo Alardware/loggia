@@ -47,9 +47,12 @@ test('la démo ne nomme pas un serveur qu’elle n’a pas', () => {
   assert.ok(lire('src', 'langues', 'en.js').includes("'maison de démonstration': 'demo home',"));
 });
 
-test('le README mène à la démo en ligne, sans captures par appareil', () => {
+test('le README mène à la démo en ligne une seule fois, sans captures par appareil', () => {
   const r = lire('README.md');
-  assert.ok(r.includes('**[Essayer la démo en ligne →](https://alardware.github.io/loggia/)**'));
+  // Un seul lien, dans « Essayer sans rien installer » : ni doublon sous le
+  // bandeau, ni liste d'entrées directes (retirés le 18/09 à la demande).
+  assert.ok(r.includes('**[La démo en ligne](https://alardware.github.io/loggia/)**'));
+  assert.equal(r.split('alardware.github.io/loggia').length - 1, 1, 'le lien de la démo, une seule fois');
   assert.ok(!r.includes('docs/captures/'), 'les captures ordinateur / tablette / téléphone sont retirées');
   assert.ok(!existsSync(join(RACINE, 'docs', 'captures')));
   assert.ok(r.includes('## Essayer sans rien installer'));
