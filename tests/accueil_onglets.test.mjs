@@ -17,7 +17,7 @@ const home = bloc('function Dashboard(', NL + 'function ');
 test('les sections : Securite en tete de la colonne, En ce moment en tete du rail, et les anciens noms migrent', () => {
   assert.ok(src.includes("const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];"), 'la colonne principale');
   // « A surveiller » (ADR 0028) ouvre le rail depuis le 16/09 (retour user) : la carte n'existe que quand il y a des points.
-  assert.ok(src.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier'];"), 'le rail');
+  assert.ok(src.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier', 'co2'];"), 'le rail');
   assert.ok(src.includes("const ACC_RENOMME = { etats: 'moment' };"), 'En cours devient En ce moment');
   assert.ok(!src.includes("'heros'") && !src.includes('function HeroSlider(') && !src.includes('heroIds'), 'la glissiere du heros a disparu');
   const o = bloc('  const ordreDe = (zone) => {', NL + '  };');

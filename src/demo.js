@@ -400,6 +400,8 @@ function historiqueDemo(chemin, states) {
   // la même forme, et le graphe de consommation lit bien des différences.
   const attrs = (states[id] && states[id].attributes) || {};
   const cumul = attrs.device_class === 'energy' || /kwh/i.test(attrs.unit_of_measurement || '');
+  // Le CO2 ne descend jamais sous l'air du dehors : une journee plausible, la nuit qui charge.
+  const co2 = attrs.device_class === 'carbon_dioxide';
   const pas = (t1 - t0) / 48;
   const pts = [];
   let acc = 0;
@@ -417,7 +419,8 @@ function historiqueDemo(chemin, states) {
     else {
       const heure = new Date(t).getHours() + new Date(t).getMinutes() / 60;
       const jour = Math.max(0, Math.sin((heure - 6) / 12 * Math.PI));
-      v = solaire ? cur * jour * (0.8 + 0.4 * Math.sin(i)) : cur * (0.7 + 0.6 * Math.sin(i / 3.7) + 0.15 * Math.sin(i));
+      v = co2 ? 430 + (cur - 430) * (0.45 + 0.55 * Math.max(0, Math.sin((heure - 18) / 14 * Math.PI))) * (0.9 + 0.1 * Math.sin(i))
+        : solaire ? cur * jour * (0.8 + 0.4 * Math.sin(i)) : cur * (0.7 + 0.6 * Math.sin(i / 3.7) + 0.15 * Math.sin(i));
     }
     pts.push({ state: String(Math.round(v * 100) / 100), last_changed: new Date(t).toISOString() });
   }
@@ -643,12 +646,12 @@ function indexDemo(states) {
     ['bureau', 'Bureau'], ['entree', 'Entrée'], ['sdb', 'Salle de bain'],
   ];
   const ZONE_DE = {
-    salon: ['light.salon', 'media_player.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_bruit', 'cover.salon',
+    salon: ['light.salon', 'media_player.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_co2', 'sensor.salon_bruit', 'cover.salon', 'cover.volet_salon',
             'binary_sensor.fenetre_salon', 'switch.radiateur_salon', 'media_player.enceinte_salon'],
-    cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine', 'binary_sensor.detecteur_fumee'],
-    chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'cover.chambre',
+    cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine', 'cover.volet_cuisine', 'binary_sensor.detecteur_fumee'],
+    chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'sensor.chambre_co2', 'cover.chambre', 'cover.volet_chambre',
               'binary_sensor.fenetre_chambre', 'switch.radiateur_chambre'],
-    bureau: ['light.bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite'],
+    bureau: ['light.bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite', 'sensor.bureau_co2'],
     entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree', 'siren.interieure',
              'camera.entree', 'switch.camera_entree_detection_mouvement', 'switch.camera_entree_suivi', 'switch.camera_entree_pleurs',
              'switch.camera_entree_prive', 'switch.camera_entree_voyant', 'binary_sensor.camera_entree_mouvement', 'binary_sensor.camera_entree_personne'],

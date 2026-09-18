@@ -2235,4 +2235,9 @@ export default {
   'Tout le jardin': 'The whole garden',
   'Tout le logement': 'The whole home',
   'Ce robot ne répond plus.': 'This robot no longer answers.',
+  // La carte CO2 du rail (v3.46.0)
+  'Aérer au-dessus de {n} ppm': 'Air out above {n} ppm',
+  'CO₂ sur 24 heures': 'CO₂ over 24 hours',
+  'Ventiler': 'Ventilate',
+  'Ouvrir les volets · aérer': 'Open the shutters · air out',
 };

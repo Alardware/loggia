@@ -28,7 +28,7 @@ const bloc = (src, debut, fin) => { const d = src.indexOf(debut); assert.ok(d >=
 const jours = (liste) => liste.map(c => c.date.getDate());
 
 test('deux widgets en option, deux styles chacun ; un style inconnu retombe sur le premier', () => {
-  assert.deepEqual(WIDGETS_OPTION, ['heure', 'calendrier']);
+  assert.deepEqual(WIDGETS_OPTION, ['heure', 'calendrier', 'co2'], 'le CO₂ les a rejoints en v3.46.0 (ADR 0044)');
   assert.deepEqual(STYLES_WIDGETS, { heure: ['aiguilles', 'tuiles'], calendrier: ['semaine', 'mois'] });
   assert.equal(styleDe({ heure: 'tuiles' }, 'heure'), 'tuiles');
   assert.equal(styleDe({ heure: 'tuiles' }, 'calendrier'), 'semaine', 'le style d’un widget ne vaut pas pour l’autre');
@@ -133,8 +133,8 @@ test('la tuile Agenda : rien, ou le prochain d’aujourd’hui et combien d’au
 });
 
 test('l’Accueil : deux sections qui ferment le rail, montrées seulement si on les AJOUTE', () => {
-  assert.ok(app.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier'];"), 'elles ferment le rail');
-  assert.ok(app.includes("heure: tr('Heure'), calendrier: tr('Calendrier') });"), 'leurs noms en édition');
+  assert.ok(app.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier', 'co2'];"), 'elles ferment le rail (le CO₂ avec elles depuis v3.46.0)');
+  assert.ok(app.includes("heure: tr('Heure'), calendrier: tr('Calendrier'), co2: 'CO₂' });"), 'leurs noms en édition');
   const d = bloc(app, 'function Dashboard(', NL + 'function ');
   assert.ok(d.includes("ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [], styles: (v.styles && typeof v.styles === 'object') ? v.styles : {}, villes: Array.isArray(v.villes) ? v.villes : null,"), 'l’agencement relu garde les ajouts, les styles et les villes — sinon ils se perdaient au rechargement');
   assert.ok(d.includes('const estOption = (id) => WIDGETS_OPTION.indexOf(id) >= 0;'));

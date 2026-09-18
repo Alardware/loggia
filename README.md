@@ -153,6 +153,9 @@ sont masquées, avec le motif.
 - **Journal d'activité par pièce** — sous les appareils d'une pièce, les
   dernières 24 heures : qui s'est allumé, ouvert, verrouillé, à quelle heure.
   Alimenté par le logbook de Home Assistant, poussé en direct.
+- **La carte CO₂** — en option sur le côté de l'Accueil : la pièce la plus
+  chargée, une barre par heure sur vingt-quatre heures, le seuil d'aération,
+  et le geste pour aérer quand il y a quelque chose à commander.
 - **Vignette météo animée** — la condition se voit dans la vignette de
   l'accueil : pluie qui tombe, étoiles, halo de soleil, éclair d'orage.
 - **Mode ambiant** — pour une tablette murale : après un délai sans toucher,

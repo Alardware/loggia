@@ -15,7 +15,7 @@
 import { tr } from './i18n.js';
 
 /** Les sections du rail qui ne se montrent que si on les AJOUTE (mode édition). */
-export const WIDGETS_OPTION = ['heure', 'calendrier'];
+export const WIDGETS_OPTION = ['heure', 'calendrier', 'co2'];
 
 /** Les styles de chaque widget ; le premier est celui d'un widget qu'on vient d'ajouter. */
 export const STYLES_WIDGETS = { heure: ['aiguilles', 'tuiles'], calendrier: ['semaine', 'mois'] };

@@ -92,9 +92,9 @@ test('les evenements d’un jour, dans l’ordre', () => {
 });
 
 test('le rail : une carte Agenda a la place de deux — la date, la bande, ce qui vient', () => {
-  assert.ok(src.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier'];"), 'le mini-mois d’avant n’est pas revenu : « calendrier » est un widget EN OPTION (ADR 0041), absent tant qu’on ne l’ajoute pas');
+  assert.ok(src.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier', 'co2'];"), 'le mini-mois d’avant n’est pas revenu : « calendrier » est un widget EN OPTION (ADR 0041), absent tant qu’on ne l’ajoute pas');
   // La meteo a rejoint le rail (ADR 0038), puis deux widgets en option (ADR 0041) ferment la liste des noms.
-  assert.ok(src.includes("moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo'), heure: tr('Heure'), calendrier: tr('Calendrier') });"), 'les noms en edition');
+  assert.ok(src.includes("moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo'), heure: tr('Heure'), calendrier: tr('Calendrier'), co2: 'CO₂' });"), 'les noms en edition');
   assert.ok(src.includes("import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, villesDe } from './horloge.js';"), 'par defaut le rail reste celui de l’ADR 0032 : UNE carte agenda');
   const d = bloc('function Dashboard(', NL + '}');
   assert.ok(d.includes('const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda);') && d.includes('const plageAgenda = useMemo(() => plageSemaine(new Date(jourAuj)), [jourAuj]);'), 'tous les evenements de la semaine, d’aujourd’hui minuit');

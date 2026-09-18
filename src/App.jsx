@@ -32,7 +32,8 @@ import {
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
 import { BarreConfort } from './barreconfort.jsx';
-import { HorlogeRail, CalendrierRail, FeuilleVilles } from './widgetsrail.jsx';
+import { HorlogeRail, CalendrierRail, FeuilleVilles, Co2Rail } from './widgetsrail.jsx';
+import { pireCapteur, seuilCo2, ventilationVeille, voletsDeLaZone, actionAerer } from './air.js';
 import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, villesDe } from './horloge.js';
 import { indiceConfort, verdictMesure, capteurBruit } from './confort.js';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
@@ -6273,8 +6274,8 @@ function CarteAttention({ points, onNav = null }) {
 const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];
 /* « heure » et « calendrier » sont EN OPTION (`WIDGETS_OPTION`, ADR 0041) : ils
  * ferment le rail, et ne se montrent que si on les ajoute en mode edition. */
-const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier'];
-const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo'), heure: tr('Heure'), calendrier: tr('Calendrier') });
+const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier', 'co2'];
+const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo'), heure: tr('Heure'), calendrier: tr('Calendrier'), co2: 'CO₂' });
 /* Les identifiants d'un accueil enregistre avant le 15/09 : la glissiere du
  * heros a disparu (son contenu vit dans « En ce moment »), « En cours » est
  * devenu « En ce moment ». Un identifiant inconnu est simplement ignore. */
@@ -7530,6 +7531,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             const st = id && dashHass && dashHass.states ? dashHass.states[id] : null;
             return st && st.state !== 'unavailable' && st.state !== 'unknown' ? id : null;
           })();
+          // Le CO2 (ADR 0044) : la piece la plus chargee ; le seuil et la
+          // ventilation viennent de la veille du serveur, les volets de la zone
+          // du capteur. Sans capteur, pas de section — meme en option.
+          const co2Pire = pireCapteur((a && a.rooms) ? a.rooms.filter(r => r.co2Id).map(r => ({ id: r.co2Id, piece: r.name, valeur: r.co2 })) : []);
+          const co2Action = co2Pire ? actionAerer({ ventilation: ventilationVeille(veillesEtat, etatsAcc), volets: voletsDeLaZone(LOGGIA_INDEX, etatsAcc, co2Pire.id) }) : null;
+          const aerer = (act) => commanderService(dashHass, act.ids, act.domaine, act.service, { entity_id: act.ids });
           const secsRail = {
             attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,
             meteo: meteoRailId ? <CarteMeteo hass={dashHass} onOpen={dc.ouvrir} /> : null,
@@ -7537,6 +7544,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             // En option (ADR 0041) : `Sec` ne les monte que si on les a ajoutes.
             heure: <HorlogeRail style={styleDe(grille.styles, 'heure')} hass={dashHass} />,
             calendrier: <CalendrierRail style={styleDe(grille.styles, 'calendrier')} hass={dashHass} calId={calRailId} evenementsJour={evenementsDuJour(aVenir, maintenantAg)} villes={grille.villes} onOpen={dc.ouvrir} />,
+            co2: co2Pire ? <Co2Rail hass={dashHass} capteur={co2Pire} seuil={seuilCo2(veillesEtat)} action={co2Action} onAgir={aerer} /> : null,
           };
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
           const renduRail = ordreDe('rail').map(id => secsRail[id] ? Sec('rail', id, secsRail[id]) : null).filter(Boolean);
