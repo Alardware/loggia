@@ -118,3 +118,6 @@ au clavier), Présence, Veilles, « Collection », l'éditeur d'un scénario dan
 sa feuille, et au téléphone émulé. Le choix de l'agenda ne paraît pas en démo
 (un seul agenda modifiable) : son remplacement n'est vérifié que par la
 lecture du code et le garde-fou.
+
+Suite en v3.55.0 (ADR 0054) : la `<datalist>` remplacée elle aussi, et une
+seule taille pour toutes les listes.

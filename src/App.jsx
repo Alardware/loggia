@@ -28,7 +28,7 @@ import { isViewAvailable, viewReason } from './views.js';
 import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
-  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix
+  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
@@ -1444,7 +1444,7 @@ function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
   }, [piece.name]);
 
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -1553,7 +1553,7 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
   const hd = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' };
 
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -2449,7 +2449,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
   const R = 54, ARC = 2 * Math.PI * R * 0.75;
   const col = off ? 'var(--o-text3)' : 'var(--o-warn)';
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -2709,7 +2709,7 @@ function NavigateurMedias({ id, hass, onClose }) {
   const btnRond = { width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
   const message = { fontSize: 13, fontWeight: 600, color: 'var(--o-text1)', opacity: .82, padding: '22px 4px', textAlign: 'center' };
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
           <button onClick={pile.length > 1 ? remonter : close}
@@ -2799,7 +2799,7 @@ function RoomMediaSheet({ id, hass, onClose }) {
   };
   return (
     <>
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <div style={{ position: 'relative', margin: '-10px -22px 0', borderRadius: '20px 20px 0 0', overflow: 'hidden' }}>
           {onArt && <>
@@ -3064,7 +3064,7 @@ function RoomCoverSheet({ id, hass, onClose }) {
   const chips = [{ id: 'ferme', nom: tr('Fermé') }, { id: 'mi', nom: tr('Mi-course') }, { id: 'ouvert', nom: tr('Ouvert') }];
   const chip = pos === 0 ? 'ferme' : pos === 100 ? 'ouvert' : pos === 50 ? 'mi' : null;
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <FicheEntete titre={nom} sous={[zone, etatTxt].filter(Boolean).join(' · ')} close={close} id={id} />
         <FicheLibelle droite={<span style={{ fontSize: 18, fontWeight: 800, color: pos ? 'var(--o-purple)' : 'var(--o-text3)' }}>{pos} %</span>}>{tr('POSITION')}</FicheLibelle>
@@ -3125,7 +3125,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
     : [];
   const rond = { width: 44, height: 44, borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 20, fontWeight: 700, cursor: 'pointer', flexShrink: 0 };
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <FicheEntete titre={nom} sous={[zone, etatTxt, tr('consigne {t} °C', { t: Number(target).toFixed(1).replace('.', ',') })].filter(Boolean).join(' · ')} close={close} id={id} />
         <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, background: 'var(--o-s1)', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -3183,7 +3183,7 @@ function RoomLightSheet({ light, hass, onClose }) {
   const swatch = (bg, sel, onClick, label) => <button key={label} aria-label={label} title={label} onClick={onClick} style={{ height: 34, borderRadius: 10, cursor: 'pointer', background: bg, border: sel ? '2px solid #fff' : '2px solid transparent', boxShadow: sel ? `0 0 0 2px ${bg}` : 'inset 0 0 0 1px rgba(0,0,0,.18)', padding: 0 }} />;
   const blancs = light.ct && (onglet === 'blancs' || !light.rgb);
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <FicheEntete titre={nom} sous={sous} close={close} id={light.id} />
         {light.dimmable !== false && (<>
@@ -3228,7 +3228,7 @@ function RoomSwitchSheet({ id, hass, onClose }) {
   const energie = capteur('energy');
   const fmt = (c) => (Math.round(c.n * 10) / 10).toString().replace('.', ',') + (c.u ? ' ' + c.u : '');
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <FicheEntete titre={nom} sous={[zone, on ? tr('Allumée') : tr('Éteinte'), puissance ? fmt(puissance) : null].filter(Boolean).join(' · ')} close={close} id={id} />
         <div style={{ marginTop: 14 }}>
@@ -3255,7 +3255,7 @@ function RoomBinarySheet({ id, hass, onClose }) {
   const releve = !st || st.state === 'unavailable' ? tr('Indisponible') : e ? (on ? e[0] : e[1]) : (on ? tr('Détecté') : 'RAS');
   const danger = on && !!(e && e[2]);
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <FicheEntete titre={nom} sous={[zone, releve].filter(Boolean).join(' · ')} close={close} id={id} />
         <div style={{ marginTop: 14 }}>
@@ -3284,7 +3284,7 @@ function RoomLockSheet({ id, hass, onClose }) {
   const zone = zoneDe(id);
   const etat = s2 === 'locked' ? tr('Verrouillée') : s2 === 'unlocked' ? tr('Déverrouillée') : s2 === 'locking' ? tr('Verrouillage…') : s2 === 'unlocking' ? tr('Déverrouillage…') : s2 === 'jammed' ? tr('Bloquée') : tr('Indisponible');
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <FicheEntete titre={nom} sous={[zone, etat].filter(Boolean).join(' · ')} close={close} id={id} />
         <div style={{ marginTop: 14 }}>
@@ -3700,7 +3700,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   const domaineChoisi = estPrise ? (lumiere ? 'lumiere' : 'prise') : domaine;
 
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (
         <div style={{ padding: '4px 2px 8px' }}>
           <div style={{ fontSize: 15, fontWeight: 800 }}>{estSection ? tr('Modifier le titre') : tr('Modifier l’entité')}</div>
@@ -4450,7 +4450,7 @@ function FicheRobot({ id, hass, onClose }) {
   // par-dessus, depuis les reglages du robot.
   const [fiche, setFiche] = useState(null);
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <Suspense fallback={<div style={{ minHeight: 260 }} />}>
           <FicheRobotContent hass={H} idRobot={id} domaine={domaine} onClose={close} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />
@@ -4522,7 +4522,7 @@ function FicheAppareil({ id, hass, onClose }) {
     );
   };
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -4648,7 +4648,7 @@ function SensorSheet({ id, hass, onClose }) {
   const n = st ? parseFloat(st.state) : NaN;
   const unite = a.unit_of_measurement || '';
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -5182,7 +5182,7 @@ function CamSheet({ haid, nom, hass, onClose, onNav = null, evenement = null }) 
     commanderService(hass, id, 'switch', on ? 'turn_off' : 'turn_on', { entity_id: id });
   };
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <FicheEntete titre={nom} sous={[zoneDe(haid), etatTxt].filter(Boolean).join(' · ')} close={close} id={haid} />
         {/* La tuile de l'Accueil, sans son bouton d'agrandissement : on y est deja. */}
@@ -5317,7 +5317,7 @@ function FichePlante({ pl, onClose }) {
   const ligne = (premiere, titre, cle, valeur) => { const [desc, couleur] = mot(cle); return <FicheRangee premiere={premiere} titre={titre} desc={desc} droite={<FicheValeur couleur={couleur}>{valeur}</FicheValeur>} />; };
   const pile = couleurPile(pl.bat);
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <FicheEntete titre={pl.name} sous={sous} close={close} />
         <div style={{ marginTop: 4 }}>
@@ -5349,7 +5349,7 @@ function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, port
   const sous = [tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
   const orange = 'var(--o-orange)';
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
         <FicheEntete titre={nom} sous={sous} close={close} id={ficheId || null} />
         <div style={{ marginTop: 4 }}>
@@ -6063,7 +6063,7 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
   const entites = [['o-piece-temp', tr('Température'), temp, setTemp, 'temperature'], ['o-piece-hum', tr('Humidité'), hum, setHum, 'humidity'], ['o-piece-co2', tr('CO₂'), co2, setCo2, 'carbon_dioxide']];
 
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (
         <div style={{ padding: '4px 2px 8px' }}>
           <div style={{ fontSize: 15, fontWeight: 800 }}>{existante ? tr('Modifier la pièce') : tr('Ajouter une pièce')}</div>
@@ -6114,9 +6114,8 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
           {entites.map(([id, lbl, v, set, classe]) => (
             <div key={id} style={{ marginBottom: 8 }}>
               <label htmlFor={id} style={{ ...etiquette, margin: '0 2px 5px', letterSpacing: 0, fontSize: 12 }}>{lbl}</label>
-              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
-              <input id={id} list={id + '-liste'} value={v} onChange={(e) => set(e.target.value)} placeholder="sensor.…" spellCheck={false} style={mono} />
-              <datalist id={id + '-liste'}>{capteurs(classe).map(x => <option key={x} value={x} />)}</datalist>
+              <ChampSuggere id={id} label={lbl} value={v} onChange={set} placeholder="sensor.…" style={mono}
+                suggestions={capteurs(classe).map(x => ({ id: x, label: S[x].attributes.friendly_name || x, sub: x }))} />
             </div>
           ))}
           <label htmlFor="o-piece-lum" style={{ ...etiquette, margin: '0 2px 5px', letterSpacing: 0, fontSize: 12 }}>{tr('Lumières')}</label>
@@ -8089,7 +8088,7 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
   const optionsPieces = [{ id: '', label: tr('Pièce de la TV ou de l’enceinte') }, ...pieces.map(p => ({ id: p, label: p }))];
   const famillesNoms = NOMS_FAMILLES(), gestesNoms = NOMS_GESTES(), porteesNoms = NOMS_PORTEES(), conditionsNoms = NOMS_CONDITIONS();
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (
         <div style={{ padding: '4px 2px 8px' }}>
           <div style={{ fontSize: 15, fontWeight: 800 }}>{existant ? tr('Modifier le scénario') : tr('Ajouter un scénario')}</div>
@@ -8136,7 +8135,7 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
           </div>
           {nature === 'lie' ? (
             <div style={{ marginTop: 10 }}>
-              <ListeChoix value={s.lien || ''} options={optionsLiens} onChange={(v) => maj({ lien: v || null })} label={tr('Scène ou script')} largeur={260} />
+              <ListeChoix value={s.lien || ''} options={optionsLiens} onChange={(v) => maj({ lien: v || null })} label={tr('Scène ou script')} />
               {existant && scenario.suggestion && !s.lien && <div style={{ marginTop: 8 }}><button onClick={() => maj({ lien: scenario.suggestion })} style={puce(false, t)}><Fi i="sparkles" size={12} />{tr('Suggestion : {x}', { x: scenario.suggestion })}</button></div>}
               <div style={note}>{tr('Loggia lance cette scène ou ce script, et rien d’autre.')}</div>
             </div>
@@ -8157,7 +8156,7 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
                   {a.famille !== 'alarme' && (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
                       {PORTEES_SCN.map(p => <button key={p} aria-pressed={(a.portee || 'maison') === p} onClick={() => majAction(i, { portee: p })} style={puce((a.portee || 'maison') === p, t)}>{porteesNoms[p]}</button>)}
-                      {a.portee === 'piece' && <ListeChoix value={a.piece || ''} options={optionsPieces} onChange={(v) => majAction(i, { piece: v || null })} label={tr('Pièce')} largeur={200} />}
+                      {a.portee === 'piece' && <ListeChoix value={a.piece || ''} options={optionsPieces} onChange={(v) => majAction(i, { piece: v || null })} label={tr('Pièce')} />}
                     </div>
                   )}
                   {((a.famille === 'lumieres' && a.geste === 'allumer') || a.famille === 'chauffage') && (
@@ -9663,25 +9662,23 @@ const FAN_FR = () => ({ quiet: tr('Silencieux'), normal: 'Normal', max: 'Max', m
  * un menu dépoli qui liste les autres. Partagé : vitesse d'aspiration,
  * préréglages de thermostat — partout où des chips feraient brouillon. */
 function MenuDeroulant({ icone = null, etiquette, valeur, options, surChoix, rendre = (v) => v }) {
-  const [ouvert, setOuvert] = useState(false);
+  /* La liste est celle de tous les menus (`ListeChoix`) : même panneau, même
+   * taille, même clavier (retour du 18/09). Le bouton reste celui de la
+   * fiche — l'étiquette au-dessus de la valeur. */
   return (
     <div role="presentation" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-      <button onClick={() => setOuvert(o => !o)} aria-haspopup="listbox" aria-expanded={ouvert}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 13px', borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', textAlign: 'left' }}>
-        {icone && <Fi i={icone} size={14} color="var(--o-text2)" />}
-        <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{etiquette}</span>
-          <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{valeur != null ? rendre(valeur) : '—'}</span>
-        </span>
-      </button>
-      {ouvert && (
-        <div role="listbox" style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 30, minWidth: 158, padding: 6, borderRadius: 14, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: '0 12px 30px rgba(0,0,0,.45)' }}>
-          {options.map(v => { const act = valeur === v; return (
-            <button key={v} role="option" aria-selected={act} onClick={() => { surChoix(v); setOuvert(false); }}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: act ? 'var(--o-accent-fond)' : 'transparent', color: act ? '#fff' : 'var(--o-text1)' }}>{rendre(v)}</button>
-          ); })}
-        </div>
-      )}
+      <ListeChoix value={valeur} onChange={surChoix} label={etiquette} options={(options || []).map(v => ({ id: v, label: String(rendre(v)) }))}
+        style={{ padding: '7px 13px', borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>
+        {() => (
+          <>
+            {icone && <Fi i={icone} size={14} color="var(--o-text2)" />}
+            <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{etiquette}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{valeur != null ? rendre(valeur) : '—'}</span>
+            </span>
+          </>
+        )}
+      </ListeChoix>
     </div>
   );
 }
@@ -10969,7 +10966,7 @@ function NouvelEvenement({ hass, cals, jour, evenement = null, onFait, onClose }
       {!edition && cals.length > 1 && (
         <div>
           <div style={legende}>{tr('AGENDA')}</div>
-          <ListeChoix value={cal} onChange={setCal} label={tr('Agenda')} options={cals.map(k => ({ id: k, label: nomCal(k) }))} style={champ} largeur={220} />
+          <ListeChoix value={cal} onChange={setCal} label={tr('Agenda')} options={cals.map(k => ({ id: k, label: nomCal(k) }))} style={champ} />
         </div>
       )}
 
@@ -11110,7 +11107,7 @@ function FeuilleCalendrier({ hass, onClose }) {
 
   const btnRond = { width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (<>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <button onClick={close} aria-label={tr('Fermer')} style={btnRond}><Fi i="cross" size={14} /></button>

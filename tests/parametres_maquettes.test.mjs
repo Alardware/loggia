@@ -246,7 +246,8 @@ test('les puces de navigation choisies sont en bleu plein, texte blanc', () => {
   sites.push(
     [APP, "border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>{o.nom}</button>", 'modes d’une fiche'],
     [APP, "background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>{zoneModeLabel(zone, opt)}</button>", 'modes du fil pilote'],
-    [APP, "background: act ? 'var(--o-accent-fond)' : 'transparent', color: act ? '#fff' : 'var(--o-text1)' }}>{rendre(v)}</button>", 'options d’un menu déroulant'],
+    // Le sélecteur des fiches passe par la liste commune depuis la 3.55.0.
+    [lire('src', 'ui.jsx'), "background: on ? 'var(--o-accent-fond)' : survol ? 'var(--o-s2)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)',", 'options d’un menu déroulant'],
     [ROBOT, "border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd2)'),", 'zones d’un robot'],
     [ROBOT, "background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text3)' }}>{nomJour(j, locale(), 'narrow')}</button>", 'jours du planning'],
   );
@@ -272,7 +273,7 @@ test('le menu déroulant s’ouvre sous son bouton, et son bouton est en bleu pl
   // Depuis la 3.54.1, c'est la liste commune (`ListeChoix`, ui.jsx) : tous les
   // menus de Loggia, plus seulement « Collection ».
   const UI = lire('src', 'ui.jsx');
-  const dd = entre(UI, 'export function ListeChoix(', '\nexport const CV_DOM_ICON');
+  const dd = entre(UI, "// La largeur utile de l'écran", '\nexport const CV_DOM_ICON');
   assert.ok(UI.includes("import { createPortal } from 'react-dom';"));
   assert.ok(dd.includes('{open && pos && createPortal(') && dd.includes(', document.body)}'), 'le menu est revenu à côté de son bouton');
   assert.ok(dd.includes('if (menuRef.current && menuRef.current.contains(e.target)) return;'), 'un appui dans le menu le fermerait avant le choix');

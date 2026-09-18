@@ -74,7 +74,8 @@ test('les étiquettes de la feuille d’édition désignent un champ existant', 
   for (const c of cibles) {
     // Une étiquette qui désigne un identifiant que personne ne porte ne relie
     // rien : elle a l'air correcte et se comporte comme le `<div>` d'avant.
-    assert.match(src, new RegExp('<input id=\\{' + c + '\\}'),
+    // `ChampSuggere` pose son `id` sur son propre <input> (ui.jsx).
+    assert.match(src, new RegExp('<(input|ChampSuggere) id=\\{' + c + '\\}'),
       `aucun champ ne porte l’identifiant « ${c} » : l’étiquette ne désigne rien`);
   }
 });

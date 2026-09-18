@@ -456,7 +456,7 @@ function FeuillePlanning({ depart, neuf, zones, domaine, aDesAires, onEnregistre
   const basculerZone = (z) => setP(x => ({ ...x, zones: x.zones.some(y => y.id === z.id) ? x.zones.filter(y => y.id !== z.id) : [...x.zones, zonePlanning(z)] }));
   const valide = heureValide(p.heure) && p.jours.length > 0;
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} fiche>
       {close => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div style={{ fontSize: 19, fontWeight: 700 }}>{neuf ? tr('Nouveau passage') : tr('Modifier le passage')}</div>

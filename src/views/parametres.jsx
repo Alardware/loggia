@@ -7,7 +7,7 @@
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, ListeChoix
+  Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, ListeChoix, ChampSuggere
 } from '../ui.jsx';
 import {
   cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, medCompanion,
@@ -229,7 +229,7 @@ function nomTelephone(hass, service) {
  *  maintenant celle de Loggia (`ListeChoix`), au clavier comme au doigt. */
 function ChoixEntite({ icone, nom, ident, label, value, onChange, options }) {
   return (
-    <ListeChoix label={label} value={value} onChange={onChange} options={options} largeur={340}
+    <ListeChoix label={label} value={value} onChange={onChange} options={options}
       style={{ gap: 12, minWidth: 0, width: 268, maxWidth: '100%', padding: '9px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)' }}>
       {(courant, ouvert) => (
         <>
@@ -728,11 +728,11 @@ function CvEditor({ cv, hass, onSave, onClose }) {
 }
 
 /* ── Onglet Entités : éditeur générique de listes (Paramètres, admin) ──
-   cols: [{k, label, ph, domain?, flex?}] — domain remplit un <datalist> d'autocomplétion depuis hass. */
+   cols: [{k, label, ph, domain?, flex?}] — domain propose, sous le champ, les entités de ce domaine (ChampSuggere). */
 
 const entInp = { width: '100%', padding: '9px 11px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 12, fontWeight: 600, boxSizing: 'border-box', fontFamily: 'inherit' };
 
-function EntSection({ title, desc, cols, rows, onRows, addable = true, check = null }) {
+function EntSection({ title, desc, cols, rows, onRows, addable = true, check = null, sugg = null }) {
   const set = (i, k, v) => onRows(rows.map((r, j) => j === i ? { ...r, [k]: v } : r));
   const del = (i) => onRows(rows.filter((_, j) => j !== i));
   const add = () => onRows([...rows, { ...Object.fromEntries(cols.map(c => [c.k, ''])), _k: 'r' + Date.now() + Math.random().toString(36).slice(2, 6) }]);
@@ -761,7 +761,7 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
             {cols.map(c => { const v = r[c.k] || ''; const st = check && c.domain && v ? (check(v) ? 'ok' : 'bad') : null; return (
               <span key={c.k} style={{ position: 'relative', flex: c.flex || 1, minWidth: 0, display: 'flex' }}>
                 <span className="o-entlabel">{c.label}</span>
-                <input aria-label={c.label} value={v} onChange={e => set(i, c.k, e.target.value)} placeholder={c.ph || ''} list={c.domain ? 'o-dl-' + c.domain : undefined} spellCheck={false} style={{ ...entInp, width: '100%', minWidth: 0, paddingRight: st ? 24 : undefined, border: st === 'bad' ? 'var(--o-bw,1px) solid rgba(var(--o-bad-rgb),.55)' : entInp.border }} />
+                <ChampSuggere label={c.label} value={v} onChange={val => set(i, c.k, val)} placeholder={c.ph || ''} suggestions={c.domain && sugg ? sugg(c.domain) : []} style={{ ...entInp, width: '100%', minWidth: 0, paddingRight: st ? 24 : undefined, border: st === 'bad' ? 'var(--o-bw,1px) solid rgba(var(--o-bad-rgb),.55)' : entInp.border }} />
                 {st && <span title={st === 'ok' ? 'Entité trouvée' : 'Introuvable dans Home Assistant'} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 7, height: 7, borderRadius: '50%', background: st === 'ok' ? 'var(--o-ok)' : 'var(--o-bad)', pointerEvents: 'none' }} />}
               </span>
             ); })}
@@ -863,6 +863,8 @@ function useEntConfig(hass) {
 function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) {
   const has = (k) => !only || only.indexOf(k) >= 0;
   const check = hass && hass.states ? (id) => !!hass.states[id] : null;
+  // Les suggestions d'un domaine, sous chaque champ : le nom lu, l'identifiant dessous.
+  const sugg = (d) => (dlists[d] || []).map(id => ({ id, label: (hass && hass.states && hass.states[id] && hass.states[id].attributes && hass.states[id].attributes.friendly_name) || id, sub: id }));
   const detecter = () => {
     const r0 = LOGGIA_RESOLVED && LOGGIA_RESOLVED.rooms;
     const r = detecterCapteursPieces(ent.rooms, {
@@ -878,16 +880,12 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
   };
   return (
     <>
-      {/* Meme raison que plus haut : ces listes de suggestions ne se saisissent
-        * pas, et les champs qui les referencent portent deja leur etiquette. */}
-      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
-      {Object.keys(dlists).map(d => <datalist key={d} id={'o-dl-' + d}>{dlists[d].map(id => <option key={id} value={id} />)}</datalist>)}
       {has('rooms') && hass && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
           <button onClick={detecter} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(var(--o-ok-rgb),.13)', border: '1px solid rgba(var(--o-ok-rgb),.3)', color: 'var(--o-ok)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}><Fi i="magic-wand" size={13} />{tr('Détecter automatiquement')}</button>
         </div>
       )}
-      {has('rooms') && <EntSection title={tr('Pièces (Accueil)')} desc={tr("Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce.")} cols={[{ k: 'room', label: tr('Pièce'), ph: tr('Séjour'), flex: .8 }, { k: 'temp', label: tr('Température'), ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: tr('Humidité'), ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }, { k: 'lights', label: tr('Lampes du bouton'), ph: tr('toutes (light.a, light.b)'), domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
+      {has('rooms') && <EntSection sugg={sugg} title={tr('Pièces (Accueil)')} desc={tr("Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce.")} cols={[{ k: 'room', label: tr('Pièce'), ph: tr('Séjour'), flex: .8 }, { k: 'temp', label: tr('Température'), ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: tr('Humidité'), ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }, { k: 'lights', label: tr('Lampes du bouton'), ph: tr('toutes (light.a, light.b)'), domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
       {has('energy') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Énergie')}</div>
@@ -897,7 +895,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
           <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
             {[['consoNow', tr('Consommation')], ['surplusNow', 'Surplus'], ['solarOutput', 'Production solaire'],
               ['evNow', 'Véhicule · charge'], ['batNow', 'Batterie · puissance'], ['batSoc', 'Batterie · niveau']].map(([k, l]) => (
-              <div key={k}><div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)', marginBottom: 4 }}>{l.toUpperCase()}</div><input aria-label={l} value={ent.energy[k] || ''} onChange={e => setEnt(o => ({ ...o, energy: { ...o.energy, [k]: e.target.value } }))} placeholder="sensor.…" list="o-dl-sensor" spellCheck={false} style={entInp} /></div>
+              <div key={k}><div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)', marginBottom: 4 }}>{l.toUpperCase()}</div><ChampSuggere label={l} value={ent.energy[k] || ''} onChange={val => setEnt(o => ({ ...o, energy: { ...o.energy, [k]: val } }))} placeholder="sensor.…" suggestions={sugg('sensor')} style={entInp} /></div>
             ))}
           </div>
         </div>
@@ -906,21 +904,21 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>Alarme</div>
           <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Panneau d'alarme (vue Sécurité, bannière, notifications).")}</div>
-          <input aria-label={tr('Panneau d’alarme')} value={ent.alarm} onChange={e => setEnt(o => ({ ...o, alarm: e.target.value }))} placeholder="alarm_control_panel.…" list="o-dl-alarm_control_panel" spellCheck={false} style={entInp} />
+          <ChampSuggere label={tr('Panneau d’alarme')} value={ent.alarm} onChange={val => setEnt(o => ({ ...o, alarm: val }))} placeholder="alarm_control_panel.…" suggestions={sugg('alarm_control_panel')} style={entInp} />
         </div>
       )}
       {has('weather') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Météo')}</div>
           <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Entité météo : la carte météo sur le côté de l'Accueil, le fond de la bannière, la veille et les conseils d'extérieur.")}</div>
-          <input aria-label={tr('Entité météo')} value={ent.weather} onChange={e => setEnt(o => ({ ...o, weather: e.target.value }))} placeholder="weather.…" list="o-dl-weather" spellCheck={false} style={entInp} />
+          <ChampSuggere label={tr('Entité météo')} value={ent.weather} onChange={val => setEnt(o => ({ ...o, weather: val }))} placeholder="weather.…" suggestions={sugg('weather')} style={entInp} />
         </div>
       )}
-      {has('people') && <EntSection title={tr('Présence')} desc={tr('Personnes affichées sur l’Accueil (avatars).')} cols={[{ k: 'name', label: tr('Prénom'), ph: tr('Prénom'), flex: .7 }, { k: 'haid', label: tr('Entité person'), ph: 'person.…', domain: 'person' }]} rows={ent.people} onRows={entSet('people')} check={check} />}
-      {has('switches') && <EntSection title={tr('Interrupteurs traités comme lumières')} desc={tr('Entités switch affichées dans la vue Lumières.')} cols={[{ k: 'haid', label: tr('Entité switch'), ph: 'switch.…', domain: 'switch' }]} rows={ent.switches} onRows={entSet('switches')} />}
-      {has('cams') && <EntSection title={tr('Caméras (Accueil)')} desc={tr("Tuiles caméras de l'Accueil (flux live).")} cols={[{ k: 'name', label: 'Nom', ph: tr('Entrée'), flex: .7 }, { k: 'haid', label: tr('Entité camera'), ph: 'camera.…', domain: 'camera' }]} rows={ent.cams} onRows={entSet('cams')} />}
-      {has('medias') && <EntSection title={tr('Lecteurs médias')} desc={tr("Vue Médias. « Compagnon MA » optionnel : entité Music Assistant qui porte titre/pochette (métadonnées + transport).")} cols={[{ k: 'name', label: 'Nom', ph: 'Echo Salon', flex: .8 }, { k: 'haid', label: tr('Entité native'), ph: 'media_player.…', domain: 'media_player' }, { k: 'ma', label: tr('Compagnon MA'), ph: 'media_player.… (optionnel)', domain: 'media_player' }]} rows={ent.medias} onRows={entSet('medias')} />}
-      {has('climate') && <EntSection title={tr('Chauffage')}
+      {has('people') && <EntSection sugg={sugg} title={tr('Présence')} desc={tr('Personnes affichées sur l’Accueil (avatars).')} cols={[{ k: 'name', label: tr('Prénom'), ph: tr('Prénom'), flex: .7 }, { k: 'haid', label: tr('Entité person'), ph: 'person.…', domain: 'person' }]} rows={ent.people} onRows={entSet('people')} check={check} />}
+      {has('switches') && <EntSection sugg={sugg} title={tr('Interrupteurs traités comme lumières')} desc={tr('Entités switch affichées dans la vue Lumières.')} cols={[{ k: 'haid', label: tr('Entité switch'), ph: 'switch.…', domain: 'switch' }]} rows={ent.switches} onRows={entSet('switches')} />}
+      {has('cams') && <EntSection sugg={sugg} title={tr('Caméras (Accueil)')} desc={tr("Tuiles caméras de l'Accueil (flux live).")} cols={[{ k: 'name', label: 'Nom', ph: tr('Entrée'), flex: .7 }, { k: 'haid', label: tr('Entité camera'), ph: 'camera.…', domain: 'camera' }]} rows={ent.cams} onRows={entSet('cams')} />}
+      {has('medias') && <EntSection sugg={sugg} title={tr('Lecteurs médias')} desc={tr("Vue Médias. « Compagnon MA » optionnel : entité Music Assistant qui porte titre/pochette (métadonnées + transport).")} cols={[{ k: 'name', label: 'Nom', ph: 'Echo Salon', flex: .8 }, { k: 'haid', label: tr('Entité native'), ph: 'media_player.…', domain: 'media_player' }, { k: 'ma', label: tr('Compagnon MA'), ph: 'media_player.… (optionnel)', domain: 'media_player' }]} rows={ent.medias} onRows={entSet('medias')} />}
+      {has('climate') && <EntSection sugg={sugg} title={tr('Chauffage')}
         desc={tr('Un thermostat (climate.…) est trouvé tout seul : rien à saisir. Cette liste sert aux radiateurs fil pilote — un interrupteur entouré de ses aides, que rien ne permet de deviner.')}
         cols={[
           { k: 'name', label: tr('Nom affiché'), ph: tr('Chambre'), flex: .8 },

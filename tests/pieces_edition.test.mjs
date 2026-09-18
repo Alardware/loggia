@@ -77,7 +77,7 @@ test('la fiche : nom, icone, teinte, tuile compacte, entites — et un nom deja 
   assert.ok(src.includes('const ICONES_PAR_PAGE = 10;'), 'deux lignes de cinq par page');
   assert.ok(f.includes("const doublon = !!propre && propre !== nom && pieces.some(r => r.room === propre);") && f.includes('disabled={!valide}'), 'pas deux pieces du meme nom');
   ['temperature', 'humidity', 'carbon_dioxide'].forEach(c => assert.ok(f.includes("'" + c + "'"), 'les capteurs proposes par device_class ' + c));
-  assert.ok(f.includes("<datalist id={id + '-liste'}>"), 'une liste de choix par capteur');
+  assert.ok(f.includes('<ChampSuggere id={id} label={lbl} value={v} onChange={set}') && f.includes('suggestions={capteurs(classe).map('), 'une liste de suggestions par capteur, aux couleurs du thème');
   assert.ok(f.includes('{existante && <button onClick={() => { onSupprimer(nom); close(); }}'), 'Supprimer seulement pour une piece existante');
   assert.ok(f.includes("haid: { temp: temp.trim() || null, humidity: hum.trim() || null, co2: co2.trim() || null, lights: lumieres.split(',').map(s => s.trim()).filter(Boolean) }"), 'les capteurs sous haid, comme Parametres');
 });

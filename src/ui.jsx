@@ -8,7 +8,7 @@
  * Le contenu est repris a l'identique : ce module deplace du code, il n'en
  * change pas le comportement.
  */
-import { useState, useEffect, useLayoutEffect, useRef, useMemo, useId, Fragment } from 'react';
+import { useState, useEffect, useRef, useMemo, useId, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { getHass } from './state.js';
 import { filtrerChoix, blocsChoix, placerMenu, SEUIL_RECHERCHE } from './choix.js';
@@ -333,7 +333,11 @@ export function FlipText({ text, style, live = false }) {
 
 // Bottom sheet réutilisable : monte du bas (courbe drawer iOS), scrim fondu, poignée, fermeture animée.
 // children peut être une fonction (close) => JSX pour brancher la croix sur la fermeture ANIMÉE.
-export function BottomSheet({ onClose, children, opaque = false }) {
+/* `fiche` : la feuille qu'ouvre une carte. Toutes ont la même taille (retour
+ * du 18/09 : « selon la carte, la popup est petite ou grande ») — voir
+ * `.o-sheet-fiche` dans index.css. Les autres feuilles (recherche, éditeurs,
+ * choix d'une entité) gardent la hauteur de leur contenu. */
+export function BottomSheet({ onClose, children, opaque = false, fiche = false }) {
   const [closing, setClosing] = useState(false);
   // Le filet (si l'animation ne se declenche pas) est ANNULE quand elle se
   // termine : sinon `onClose` partait deux fois a chaque fermeture (audit 18/09).
@@ -385,7 +389,7 @@ export function BottomSheet({ onClose, children, opaque = false }) {
         * comme le motif attendu ailleurs. Elle voit ici un role passif a qui
         * on aurait rajoute des gestes. */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-      <div ref={sheetRef} className={opaque ? 'o-sheet o-sheet-opaque' : 'o-sheet'} role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
+      <div ref={sheetRef} className={'o-sheet' + (opaque ? ' o-sheet-opaque' : '') + (fiche ? ' o-sheet-fiche' : '')} role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
           // Piège de focus : Tab boucle dans la feuille — derrière, la page vit
@@ -415,31 +419,92 @@ export function BottomSheet({ onClose, children, opaque = false }) {
 // et le menu venait s'y coller.
 const largeurEcran = () => (document.documentElement && document.documentElement.clientWidth) || window.innerWidth;
 
-/* ── Une liste de choix aux couleurs du thème ─────────────────────────────────
+/* ── Les listes de Loggia : les choix et les suggestions ──────────────────────
  *
- * Le menu d'un <select> natif est dessiné par le système : blanc sous Windows,
- * quel que soit le thème, et rien ne le stylise (retour du 18/09, menus des
- * Alertes). Celui-ci dessine le sien — le menu « Collection » des Scénarios,
- * devenu commun. La logique pure (filtrer, grouper, placer) : `choix.js`.
+ * Le menu d'un <select> natif, comme celui d'une <datalist>, est dessiné par
+ * le système : blanc sous Windows, quel que soit le thème, et rien ne le
+ * stylise (retour du 18/09, menus des Alertes). Loggia dessine les siens — le
+ * menu « Collection » des Scénarios, devenu commun —, TOUS à la même taille
+ * (`LARGEUR_MENU` × `HAUTEUR_MENU` : « même largeur et même hauteur »). La
+ * logique pure (filtrer, grouper, placer) : `choix.js`.
  *
- * Le menu est rendu dans <body>, pas à côté de son bouton : un ancêtre flou
+ * Le panneau est rendu dans <body>, pas à côté de son ancre : un ancêtre flou
  * (`backdrop-filter` de `.o-bar`), transformé ou animé devient le repère d'un
  * `position: fixed`, et le menu tombait alors en bas de page, loin du bouton
  * (retour du 18/09). Dans <body>, le repère est toujours l'écran. Il s'ouvre
- * sous le bouton, au-dessus quand la place manque en bas.
- *
- * `options` : `{ id, label, sub?, groupe? }` — `sub`, un identifiant, se lit
- * en petit sous le nom ; les options qui se suivent sous un même `groupe`
- * passent sous son intitulé. Au-delà de douze, un champ filtre la liste.
- * Clavier : flèches, Début, Fin, Entrée ; Échap et Tab referment et rendent
- * la main au bouton.
- *
- * Sans `style`, le bouton est la pastille bleu plein des barres d'outils ;
- * avec, il prend celui de l'appelant — un champ de formulaire.
- * `children(courant, ouvert)`, s'il est donné, en dessine l'intérieur. */
-export function ListeChoix({ value, options, onChange, label, largeur = 150, style = null, children = null, recherche = null, vide = '—' }) {
-  const [open, setOpen] = useState(false);
+ * sous son ancre, au-dessus quand la place manque en bas. */
+
+/* Le panneau suit son ancre : mesuré à l'ouverture, puis au défilement et au
+ * redimensionnement. La liste qui défile ne déplace pas son ancre. */
+function usePanneau(ouvert, ancreRef, panneauRef) {
   const [pos, setPos] = useState(null);
+  useEffect(() => {
+    if (!ouvert) { setPos(null); return undefined; }
+    const place = (e) => {
+      if (e && e.type === 'scroll' && panneauRef.current && panneauRef.current.contains(e.target)) return;
+      const el = ancreRef.current; if (!el) return;
+      setPos(placerMenu(el.getBoundingClientRect(), largeurEcran(), window.innerHeight));
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+  }, [ouvert, ancreRef, panneauRef]);
+  return pos;
+}
+
+// Le cadre : partout la même taille, au-dessus des feuilles (z-index 200).
+const cadrePanneau = (pos) => ({ position: 'fixed', left: pos.left, top: pos.dessous ? pos.top : undefined, bottom: pos.dessous ? undefined : pos.bottom, zIndex: 9000, width: pos.w, height: pos.h, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', padding: 6, borderRadius: 14, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: '0 18px 44px rgba(0,0,0,.4)' });
+
+// La zone qui défile : toute la hauteur que le filtre laisse.
+const ZONE_LISTE = { flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', outline: 'none' };
+
+/* Les options : groupes en capitales, coche du choix, identifiant en petit
+ * dessous. `onPointe` suit la souris ; le liseré de l'option visée ne sert
+ * qu'au clavier — à la souris, le survol suffit. */
+function OptionsPanneau({ base, options, value, actif, auClavier, onPointe, onChoisir, vide = null }) {
+  const ligne = ({ o, i }) => {
+    const on = o.id === value;
+    const survol = i === actif;
+    return (
+      <button key={'o:' + o.id} id={base + '-o' + i} type="button" role="option" aria-selected={on} tabIndex={-1}
+        onMouseMove={() => onPointe(i)} onClick={() => onChoisir(o)} title={o.sub ? o.label + ' — ' + o.sub : undefined}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: o.sub ? '6px 10px' : '8px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', fontSize: 12, fontWeight: on ? 700 : 600,
+          background: on ? 'var(--o-accent-fond)' : survol ? 'var(--o-s2)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)',
+          boxShadow: on && survol && auClavier ? 'inset 0 0 0 2px rgba(255,255,255,.45)' : 'none' }}>
+        <span style={{ width: 13, display: 'inline-flex', flexShrink: 0 }}>{on ? <Fi i="check" size={12} color="#fff" /> : null}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</span>
+          {o.sub ? <span style={{ display: 'block', marginTop: 1, fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: on ? 'rgba(255,255,255,.78)' : 'var(--o-text3)' }}>{o.sub}</span> : null}
+        </span>
+      </button>
+    );
+  };
+  return (
+    <>
+      {options.length === 0 && vide && <div style={{ padding: '10px 12px', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{vide}</div>}
+      {blocsChoix(options).map((b, k) => (b.groupe
+        ? (
+          <div key={'g' + k} role="group" aria-labelledby={base + '-g' + k}>
+            <div id={base + '-g' + k} style={{ padding: '8px 10px 4px', fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)' }}>{b.groupe}</div>
+            {b.items.map(ligne)}
+          </div>
+        )
+        : <Fragment key={'g' + k}>{b.items.map(ligne)}</Fragment>))}
+    </>
+  );
+}
+
+/* La liste de choix. Sans `style`, son bouton est la pastille bleu plein des
+ * barres d'outils ; avec, il prend celui de l'appelant — un champ de
+ * formulaire. `children(courant, ouvert)`, s'il est donné, en dessine
+ * l'intérieur. `options` : `{ id, label, sub?, groupe? }` — `sub`, un
+ * identifiant, se lit en petit sous le nom ; les options qui se suivent sous
+ * un même `groupe` passent sous son intitulé. Au-delà de douze, un champ
+ * filtre la liste. Clavier : flèches, Début, Fin, Entrée ; Échap et Tab
+ * referment et rendent la main au bouton. */
+export function ListeChoix({ value, options, onChange, label, style = null, children = null, recherche = null, vide = '—' }) {
+  const [open, setOpen] = useState(false);
   const [filtre, setFiltre] = useState('');
   const [actif, setActif] = useState(-1);
   // Le liseré de l'option visée ne sert qu'au clavier : à la souris, le
@@ -452,12 +517,12 @@ export function ListeChoix({ value, options, onChange, label, largeur = 150, sty
   const listeRef = useRef(null);
   const focalise = useRef(false);
   const base = useId();
+  const pos = usePanneau(open, wrapRef, menuRef);
   const liste = Array.isArray(options) ? options : [];
   const cur = liste.find(o => o.id === value) || null;
   const avecRecherche = recherche != null ? !!recherche : liste.length > SEUIL_RECHERCHE;
   const visibles = open ? filtrerChoix(liste, filtre) : liste;
-  const idOption = (i) => base + '-o' + i;
-  const vise = actif >= 0 && actif < visibles.length ? idOption(actif) : undefined;
+  const vise = actif >= 0 && actif < visibles.length ? base + '-o' + actif : undefined;
 
   const fermer = (rendre) => {
     setOpen(false); setFiltre(''); setActif(-1);
@@ -465,30 +530,6 @@ export function ListeChoix({ value, options, onChange, label, largeur = 150, sty
   };
   const ouvrir = (clavier) => { setFiltre(''); setAuClavier(!!clavier); setActif(Math.max(0, liste.findIndex(o => o.id === value))); setOpen(true); };
   const choisir = (o) => { if (o) onChange(o.id); fermer(true); };
-
-  // Position mesurée à l'ouverture, puis suivie au défilement et au redimensionnement.
-  useEffect(() => {
-    if (!open) { setPos(null); return undefined; }
-    const place = (e) => {
-      // Le menu qui défile ne déplace pas son bouton.
-      if (e && e.type === 'scroll' && menuRef.current && menuRef.current.contains(e.target)) return;
-      const el = wrapRef.current; if (!el) return;
-      setPos(placerMenu(el.getBoundingClientRect(), largeurEcran(), window.innerHeight, largeur));
-    };
-    place();
-    window.addEventListener('resize', place);
-    window.addEventListener('scroll', place, true);
-    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
-  }, [open, largeur]);
-
-  // Plus large que prévu (un long identifiant) : il rentre dans l'écran.
-  useLayoutEffect(() => {
-    const m = menuRef.current;
-    if (!m) return;
-    const r = m.getBoundingClientRect();
-    const vw = largeurEcran();
-    if (r.right > vw - 8) m.style.left = Math.max(8, vw - 8 - r.width) + 'px';
-  });
 
   // Un appui dehors referme. Échap aussi, et avant la feuille qui contient le
   // choix : écouté en capture sur le document, il ne ferme que le menu.
@@ -544,23 +585,6 @@ export function ListeChoix({ value, options, onChange, label, largeur = 150, sty
 
   const pastille = { display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: 'none', background: 'var(--o-accent-fond)', color: '#fff' };
   const plein = !!(style && style.width === '100%');
-  const option = ({ o, i }) => {
-    const on = o.id === value;
-    const survol = i === actif;
-    return (
-      <button key={'o:' + o.id} id={idOption(i)} type="button" role="option" aria-selected={on} tabIndex={-1}
-        onMouseMove={() => { if (actif !== i) setActif(i); if (auClavier) setAuClavier(false); }} onClick={() => choisir(o)} title={o.sub ? o.label + ' — ' + o.sub : undefined}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: o.sub ? '6px 10px' : '8px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', fontSize: 12, fontWeight: on ? 700 : 600,
-          background: on ? 'var(--o-accent-fond)' : survol ? 'var(--o-s2)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)',
-          boxShadow: on && survol && auClavier ? 'inset 0 0 0 2px rgba(255,255,255,.45)' : 'none' }}>
-        <span style={{ width: 13, display: 'inline-flex', flexShrink: 0 }}>{on ? <Fi i="check" size={12} color="#fff" /> : null}</span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</span>
-          {o.sub ? <span style={{ display: 'block', marginTop: 1, fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: on ? 'rgba(255,255,255,.78)' : 'var(--o-text3)' }}>{o.sub}</span> : null}
-        </span>
-      </button>
-    );
-  };
   return (
     <span ref={wrapRef} style={{ position: 'relative', display: plein ? 'flex' : 'inline-flex', width: plein ? '100%' : undefined, maxWidth: '100%', minWidth: 0 }}>
       <button ref={btnRef} type="button" onClick={(e) => (open ? fermer(false) : ouvrir(e.detail === 0))}
@@ -576,7 +600,7 @@ export function ListeChoix({ value, options, onChange, label, largeur = 150, sty
         )}
       </button>
       {open && pos && createPortal(
-        <div ref={menuRef} style={{ position: 'fixed', left: pos.left, top: pos.dessous ? pos.top : undefined, bottom: pos.dessous ? undefined : pos.bottom, zIndex: 9000, minWidth: pos.w, maxWidth: 'min(460px, calc(100vw - 16px))', maxHeight: pos.max, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', padding: 6, borderRadius: 14, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: '0 18px 44px rgba(0,0,0,.4)' }}>
+        <div ref={menuRef} style={cadrePanneau(pos)}>
           {avecRecherche && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, margin: '0 0 6px', padding: '7px 10px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
               <Fi i="search" size={12} color="var(--o-text3)" />
@@ -586,21 +610,76 @@ export function ListeChoix({ value, options, onChange, label, largeur = 150, sty
                 style={{ flex: 1, minWidth: 0, padding: 0, border: 'none', outline: 'none', background: 'transparent', color: 'var(--o-text)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600 }} />
             </span>
           )}
-          <div ref={listeRef} id={base + '-l'} role="listbox" tabIndex={-1} aria-label={label} aria-activedescendant={vise} onKeyDown={surTouche}
-            style={{ minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', outline: 'none' }}>
-            {visibles.length === 0 && <div style={{ padding: '10px 12px', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Aucun résultat')}</div>}
-            {blocsChoix(visibles).map((b, k) => (b.groupe
-              ? (
-                <div key={'g' + k} role="group" aria-labelledby={base + '-g' + k}>
-                  <div id={base + '-g' + k} style={{ padding: '8px 10px 4px', fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)' }}>{b.groupe}</div>
-                  {b.items.map(option)}
-                </div>
-              )
-              : <Fragment key={'g' + k}>{b.items.map(option)}</Fragment>))}
+          <div ref={listeRef} id={base + '-l'} role="listbox" tabIndex={-1} aria-label={label} aria-activedescendant={vise} onKeyDown={surTouche} style={ZONE_LISTE}>
+            <OptionsPanneau base={base} options={visibles} value={value} actif={actif} auClavier={auClavier}
+              onPointe={(i) => { if (actif !== i) setActif(i); if (auClavier) setAuClavier(false); }} onChoisir={choisir} vide={tr('Aucun résultat')} />
           </div>
         </div>
       , document.body)}
     </span>
+  );
+}
+
+/* Un champ libre et ses suggestions — il remplace la <datalist>, dont la
+ * liste native s'ouvrait blanche elle aussi (retour du 18/09 : « fais aussi
+ * les suggestions sous le champ »). On tape ce qu'on veut ; le panneau des
+ * menus, à leur taille, propose ce qui y ressemble. Rien ne ressemble, ou la
+ * valeur est déjà la seule suggestion : pas de panneau. */
+export function ChampSuggere({ value, onChange, suggestions, label, id = null, placeholder = '', style = null }) {
+  const [open, setOpen] = useState(false);
+  const [actif, setActif] = useState(-1);
+  const [auClavier, setAuClavier] = useState(false);
+  const champRef = useRef(null);
+  const menuRef = useRef(null);
+  const base = useId();
+  const liste = Array.isArray(suggestions) ? suggestions : [];
+  const texte = value == null ? '' : String(value);
+  const visibles = open ? filtrerChoix(liste, texte) : [];
+  const montre = visibles.length > 0 && !(visibles.length === 1 && visibles[0].id === texte);
+  const pos = usePanneau(montre, champRef, menuRef);
+  const vise = montre && actif >= 0 && actif < visibles.length ? base + '-o' + actif : undefined;
+  const fermer = () => { setOpen(false); setActif(-1); };
+  const choisir = (o) => { if (o) onChange(o.id); fermer(); };
+
+  // Échap referme la liste, pas la feuille qui contient le champ.
+  useEffect(() => {
+    if (!montre) return undefined;
+    const onKey = (e) => { if (e.key !== 'Escape') return; e.stopPropagation(); setOpen(false); setActif(-1); };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [montre]);
+
+  // La suggestion visée reste en vue.
+  useEffect(() => {
+    if (!vise) return;
+    const el = document.getElementById(vise);
+    if (el) el.scrollIntoView({ block: 'nearest' });
+  }, [vise]);
+
+  const surTouche = (e) => {
+    const n = visibles.length;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setAuClavier(true); if (!open) setOpen(true); else if (n) setActif(i => (i + 1 >= n ? 0 : i + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setAuClavier(true); if (n) setActif(i => (i <= 0 ? n - 1 : i - 1)); }
+    else if (e.key === 'Enter' && montre && actif >= 0 && actif < n) { e.preventDefault(); choisir(visibles[actif]); }
+    else if (e.key === 'Tab') fermer();
+  };
+  return (
+    <>
+      <input ref={champRef} id={id || undefined} value={texte} placeholder={placeholder} spellCheck={false} autoComplete="off"
+        role="combobox" aria-expanded={montre} aria-controls={base + '-l'} aria-autocomplete="list" aria-activedescendant={vise}
+        aria-label={id ? undefined : label}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); setActif(-1); }}
+        onFocus={() => setOpen(true)} onBlur={fermer} onKeyDown={surTouche} style={style || undefined} />
+      {montre && pos && createPortal(
+        <div ref={menuRef} style={cadrePanneau(pos)}>
+          {/* Un appui dans la liste ne retire pas le focus au champ : la suggestion s'inscrit, on continue de taper. */}
+          <div id={base + '-l'} role="listbox" aria-label={label} onMouseDown={(e) => e.preventDefault()} style={ZONE_LISTE}>
+            <OptionsPanneau base={base} options={visibles} value={texte} actif={actif} auClavier={auClavier}
+              onPointe={(i) => { if (actif !== i) setActif(i); if (auClavier) setAuClavier(false); }} onChoisir={choisir} />
+          </div>
+        </div>
+      , document.body)}
+    </>
   );
 }
 

@@ -196,6 +196,12 @@ html.loggia-tactile .loggia-content:has(~ .loggia-content),
 /* Les feuilles du bas s'arrêtent AU-DESSUS de la barre de navigation : sans
  * cela, leurs derniers boutons se cachaient derrière elle. */
 html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) !important; max-height: calc(94vh - var(--o-navh, 60px)) !important; }
+/* Les fiches qu'ouvre une carte ont TOUTES la même taille (retour du 18/09 :
+ * « selon la carte, la popup est petite ou grande ») : la hauteur ne suit plus
+ * le contenu. 760 px tiennent les plus longues (caméra, robots) sans défiler
+ * sur un écran de bureau ; c'est aussi la hauteur de l'assistant. */
+.o-sheet-fiche { height: min(760px, 88vh); }
+html.loggia-tactile .o-sheet-fiche { height: min(760px, calc(94vh - var(--o-navh, 60px))); }
 
 /* Grille DENSE des vues intégrées : une carte riche occupe deux rangées, une
  * COMPACTE une seule — deux compactes s'empilent à côté d'une grande, comme

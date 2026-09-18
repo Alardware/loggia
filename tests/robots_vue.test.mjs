@@ -298,7 +298,7 @@ test('la fiche : une feuille pour les deux robots, ouverte depuis leur carte —
   assert.ok(app.includes("const FicheRobotContent = lazy(() => import('./ficherobot.jsx'));"), 'chargée à la demande');
   assert.ok(!existsSync(join(RACINE, 'src', 'views', 'robot.jsx')) && !existsSync(join(RACINE, 'src', 'views', 'aspirateur.jsx')), 'plus de vue : une fiche, comme les autres appareils (18/09)');
   const f = bloc(app, 'function FicheRobot(', NL + '}');
-  assert.ok(f.includes('<BottomSheet onClose={onClose}>') && f.includes('<Suspense fallback=') && f.includes('<FicheRobotContent hass={H} idRobot={id} domaine={domaine} onClose={close} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />'),
+  assert.ok(f.includes('<BottomSheet onClose={onClose} fiche>') && f.includes('<Suspense fallback=') && f.includes('<FicheRobotContent hass={H} idRobot={id} domaine={domaine} onClose={close} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />'),
     'une feuille, le contenu chargé DANS une frontière, l’épingle dans l’en-tête');
   assert.ok(f.includes('useHass([id, ...siblingsOf(LOGGIA_INDEX, id)])'), 'la fiche suit en direct les sœurs du robot : le poll de la vue derrière ne les connaît pas');
   assert.ok(f.includes('{fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}'), 'la fiche universelle (Stop, Localiser, entités) s’ouvre par-dessus');

@@ -16,7 +16,7 @@
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { tr, locale } from './i18n.js';
-import { BottomSheet, Fi } from './ui.jsx';
+import { BottomSheet, Fi, ChampSuggere } from './ui.jsx';
 import { weatherEntity, WeatherIco } from './wxutil.jsx';
 import { degres, estNuit, modeMeteo } from './meteo.js';
 import {
@@ -229,17 +229,14 @@ export function FeuilleVilles({ villes, onEnregistrer, onClose }) {
       {close => (<>
         <div style={{ fontSize: 19, fontWeight: 700 }}>{tr('Heures d’ailleurs')}</div>
         <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '4px 0 14px' }}>{tr('Jusqu’à quatre villes, à côté du mois. Le fuseau s’écrit comme « Europe/Paris » ; sans ville, le panneau montre la date.')}</div>
-        {/* Une liste de suggestions ne se saisit pas : le champ qui la référence porte déjà son étiquette. */}
-        {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
-        <datalist id="o-dl-fuseaux">{fuseaux.map(f => <option key={f} value={f} />)}</datalist>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {lignes.map(x => {
             const ok = fuseauValide(x.fuseau);
             return (
               <div key={x._k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input aria-label={tr('Nom affiché')} value={x.nom || ''} onChange={e => poser(x._k, { nom: e.target.value })} placeholder={tr('Nom affiché')} style={{ ...champ, flex: '0 1 34%' }} />
-                <input aria-label={tr('Fuseau horaire')} value={x.fuseau || ''} onChange={e => poser(x._k, { fuseau: e.target.value.trim() })} placeholder="Europe/Paris" list="o-dl-fuseaux" spellCheck={false}
-                  style={{ ...champ, flex: 1, borderColor: x.fuseau && !ok ? 'var(--o-bad)' : undefined }} />
+                <ChampSuggere label={tr('Fuseau horaire')} value={x.fuseau || ''} onChange={v => poser(x._k, { fuseau: v.trim() })} placeholder="Europe/Paris"
+                  suggestions={fuseaux.map(f => ({ id: f, label: f }))} style={{ ...champ, flex: 1, borderColor: x.fuseau && !ok ? 'var(--o-bad)' : undefined }} />
                 <button type="button" onClick={() => setLignes(l => l.filter(y => y._k !== x._k))} aria-label={tr('Retirer') + ' ' + (x.nom || x.fuseau || '')} title={tr('Retirer')}
                   style={{ width: 38, height: 38, flexShrink: 0, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-bad)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="cross-small" size={14} /></button>
               </div>

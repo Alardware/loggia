@@ -1,13 +1,20 @@
-/* La logique d'une liste de choix (`ListeChoix`, ui.jsx), à part pour se tester
- * sans navigateur : filtrer, grouper, placer.
+/* La logique des listes de Loggia (`ListeChoix` et `ChampSuggere`, ui.jsx),
+ * à part pour se tester sans navigateur : filtrer, grouper, placer.
  *
  * Retour du 18/09 (« pourquoi sont-ils blancs comme ça », captures des
- * Alertes) : le menu d'un <select> natif est dessiné par le système — blanc
- * sous Windows, quel que soit le thème. Loggia dessine donc le sien, partout.
+ * Alertes) : le menu d'un <select> natif, comme celui d'une <datalist>, est
+ * dessiné par le système — blanc sous Windows, quel que soit le thème.
+ * Loggia dessine donc les siens, partout, et tous à la même taille.
  */
 
 /** Au-delà de douze options, un champ filtre la liste. */
 export const SEUIL_RECHERCHE = 12;
+
+/** La taille de TOUTES les listes (retour du 18/09 : « même largeur et même
+ *  hauteur ») : un menu de deux choix s'ouvre comme un menu de cent — la
+ *  liste courte laisse du vide, la longue défile. */
+export const LARGEUR_MENU = 320;
+export const HAUTEUR_MENU = 320;
 
 /** Minuscules sans accents : « Éclairage » se trouve en tapant « eclai ». */
 export function sansAccents(s) {
@@ -37,21 +44,21 @@ export function blocsChoix(options) {
   return blocs;
 }
 
-/** Où poser le menu, d'après le rectangle de son bouton et la taille de
- *  l'écran : sous le bouton ; au-dessus quand la place manque en bas et qu'il
- *  y en a davantage en haut — un choix posé en bas de page ne s'ouvre plus
- *  hors de l'écran. Jamais plus large que l'écran, ni collé à ses bords. */
-export function placerMenu(r, vw, vh, largeur) {
-  const w = Math.min(Math.max(largeur || 0, r.width || 0), vw - 16);
+/** Où poser la liste, d'après le rectangle de son ancre et la taille de
+ *  l'écran : sous l'ancre ; au-dessus quand la place manque en bas et qu'il y
+ *  en a davantage en haut — un choix posé en bas de page ne s'ouvre plus hors
+ *  de l'écran. Toujours la même taille, plus petite seulement si l'écran ne
+ *  la tient pas ; jamais collée à ses bords. */
+export function placerMenu(r, vw, vh) {
+  const w = Math.min(LARGEUR_MENU, vw - 16);
   const left = Math.max(8, Math.min(r.left, vw - w - 8));
   const bas = vh - r.bottom - 14;
   const haut = r.top - 14;
-  const voulu = Math.min(340, Math.round(vh * 0.5));
-  const dessous = bas >= Math.min(voulu, 200) || bas >= haut;
+  const dessous = bas >= HAUTEUR_MENU || bas >= haut;
   return {
     left, w, dessous,
+    h: Math.max(120, Math.min(HAUTEUR_MENU, dessous ? bas : haut)),
     top: r.bottom + 6,
     bottom: vh - r.top + 6,
-    max: Math.max(120, Math.min(voulu, dessous ? bas : haut)),
   };
 }

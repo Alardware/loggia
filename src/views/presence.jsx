@@ -196,7 +196,7 @@ export function PresenceReglages({ hass, cardSt }) {
             {alarme.actif && alarmes.length > 0 && (
               <div style={{ ...ligne, marginTop: 4, paddingBottom: 8 }}>
                 <ListeChoix value={alarme.entite || ''} onChange={v => enregistrer({ depart: { alarme: { entite: v } } })} label={tr('Alarme à armer')}
-                  options={alarmes.map(a => ({ id: a.id, label: a.nom }))} style={{ ...champ, minWidth: 200 }} largeur={220} />
+                  options={alarmes.map(a => ({ id: a.id, label: a.nom }))} style={{ ...champ, minWidth: 200 }} />
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {[['away', tr('Absent')], ['home', tr('Présent')], ['night', tr('Nuit')]].map(([id, nom]) => (
                     <button key={id} onClick={() => enregistrer({ depart: { alarme: { mode: id } } })}

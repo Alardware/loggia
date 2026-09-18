@@ -219,7 +219,7 @@ export function VeillesReglages({ hass, cardSt }) {
               <span style={{ ...label, minWidth: 68 }}>{tr('L’entité')}</span>
               <ListeChoix value={cr.entite || ''} onChange={v => enregistrer({ creuses: { entite: v } })} label={tr('Entité du tarif heures creuses')}
                 options={[{ id: '', label: tr('Choisir…') }, ...tarifs.map(t => ({ id: t.id, label: t.nom }))]}
-                style={{ ...champ, minWidth: 200, maxWidth: 300 }} largeur={240} />
+                style={{ ...champ, minWidth: 200, maxWidth: 300 }} />
             </div>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('Vaut')}</span>
