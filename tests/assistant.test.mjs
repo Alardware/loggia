@@ -167,6 +167,17 @@ test('l’en-tête reçoit de quoi ouvrir l’assistant', () => {
   assert.match(APP, /\{onAssistant && <BoutonAssistant onAssistant=\{onAssistant\} onDictee=\{onDictee\} hass=\{hassCtx\} sens="bas" variante="entete" \/>\}/);
 });
 
+test('la barre du bas reçoit aussi de quoi dicter', () => {
+  // Elle recevait `onDictee` et `hass` sans les lire : sur téléphone, le
+  // maintien faisait paraître l'orbe mais n'écoutait rien. Le bouton porte un
+  // micro depuis la 3.54 : il doit dicter là aussi.
+  assert.match(APP, /function MobileNav\(\{ view, onNav, onMenu, onAssistant = null, onDictee = null, hass = null \}\)/,
+    'la barre du bas laisse tomber ce qu’il faut pour dicter');
+  assert.match(APP, /<BoutonAssistant onAssistant=\{onAssistant\} onDictee=\{onDictee\} hass=\{hass\} \/>/,
+    'le bouton du bas ne reçoit pas de quoi dicter');
+  assert.match(APP, /<MobileNav [^\n]*onDictee=\{assistantNs \? poserQuestion : null\} hass=\{hass\} \/>/);
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // La voix.
 //
@@ -368,4 +379,15 @@ test('un seul bouton d’assistant par écran', () => {
   const tactileAssist = CSS.indexOf('html.loggia-tactile .o-hdr-assist');
   assert.ok(tactile !== -1 && tactileAssist > tactile,
     'la règle tactile de l’en-tête doit accompagner celle de la barre du bas');
+});
+
+test('le bouton de l’assistant : un micro, rond en haut, carré rose-violet en bas', () => {
+  // Retour du 18/09 (« modifie l’icône de chat aussi », deux captures) : le
+  // disque bleu à point blanc devient un micro. En haut, le bouton des voisins
+  // de l'en-tête ; en bas, un carré arrondi en dégradé, aux teintes du thème.
+  assert.equal((BOUTON.match(/<Fi i="microphone"/g) || []).length, 2, 'un micro dans chaque variante');
+  assert.match(BOUTON, /background: 'var\(--o-s1\)', border: 'var\(--o-bw,1px\) solid var\(--o-bd2\)', color: 'var\(--o-text1\)'/, 'en haut, le style des boutons voisins');
+  assert.match(BOUTON, /const degrade = 'linear-gradient\(135deg, var\(--o-rose\), var\(--o-purple\)\)';/, 'en bas, le dégradé rose → violet des jetons');
+  assert.match(BOUTON, /width: 48, height: 48, borderRadius: 15, marginTop: -14,/, 'un carré arrondi, posé au-dessus de la barre');
+  assert.doesNotMatch(BOUTON, /radial-gradient\(circle at 38% 32%/, 'l’ancien disque est revenu');
 });

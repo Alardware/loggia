@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { formatEcran, vueFormat, patchFormat, echangerPartout, CLES_DISPOSITION } from '../src/disposition.js';
+import { formatEcran, vueFormat, patchFormat, echangerPartout, CLES_DISPOSITION, ordonnerSelon, ordreDuFormat } from '../src/disposition.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
@@ -101,4 +101,31 @@ test('l’éditeur des vues passe par ces règles, et l’Accueil par le même f
   for (const cle of ['ROOM_LAYOUT_KEY, room', "OBJ_LAYOUT_KEY, 'objets'", "'loggia_coverlayout', 'volets'", "EN_LAYOUT_KEY, 'energie'", "'loggia_seclayout', 'securite'"]) {
     assert.ok(app.includes('useLayoutEditor(' + cle), cle);
   }
+});
+
+// ── L'ordre des scénarios (« oui fais pareil pour l'ordre des scénarios ») ──
+
+const SCN = [{ id: 'reveil' }, { id: 'je_pars' }, { id: 'bonne_nuit' }, { id: 'cinema' }];
+
+test('les scénarios : l’ordinateur suit le composant, le téléphone son propre ordre', () => {
+  const ordres = { mobile: ['cinema', 'reveil'] };
+  assert.equal(ordreDuFormat(ordres, 'pc'), null, 'l’ordinateur garde l’ordre du composant');
+  assert.equal(ordreDuFormat(ordres, 'tablette'), null, 'la tablette qui n’a rien rangé suit l’ordinateur');
+  assert.deepEqual(ordreDuFormat(ordres, 'mobile'), ['cinema', 'reveil']);
+  assert.equal(ordreDuFormat(null, 'mobile'), null);
+  // Rangés sur le téléphone ; ceux qu'il n'a pas rangés suivent, dans l'ordre du composant.
+  assert.deepEqual(ordonnerSelon(SCN, ordreDuFormat(ordres, 'mobile')).map(s => s.id), ['cinema', 'reveil', 'je_pars', 'bonne_nuit']);
+  assert.deepEqual(ordonnerSelon(SCN, null).map(s => s.id), SCN.map(s => s.id), 'sans ordre propre, rien ne bouge');
+  // Un scénario supprimé depuis n'est qu'un nom de trop dans l'ordre : rien ne casse.
+  assert.deepEqual(ordonnerSelon(SCN, ['disparu', 'bonne_nuit']).map(s => s.id), ['bonne_nuit', 'reveil', 'je_pars', 'cinema']);
+});
+
+test('la vue et l’Accueil rangent les scénarios par type d’écran', () => {
+  const h = app.slice(app.indexOf('function useScenarios('), app.indexOf('\n}\n', app.indexOf('function useScenarios(')));
+  assert.ok(h.includes('const format = formatEcran(useCoarse(), useWide(1180));'));
+  assert.ok(h.includes("const tous = ordonnerSelon((etat && etat.scenarios) || [], ordreDuFormat(ordres, format));"));
+  assert.ok(h.includes("if (format === 'pc') return enregistrer({ ordre: ids });") && h.includes('cfgSet({ loggia_scnordre: n });'), 'ranger sur le téléphone réécrirait l’ordre de l’ordinateur');
+  assert.ok(h.includes('SCN_ETAT = { ...etat, scenarios: tous }'), 'la veille et la recherche garderaient l’ordre du composant');
+  assert.ok(app.includes('const liste = scenariosAccueil(sc.tous);'), 'la rangée de l’Accueil');
+  assert.ok(app.includes('sc.ordonner(ids).catch(() => {});') && !app.includes('sc.enregistrer({ ordre: ids })'), 'les flèches de la vue');
 });

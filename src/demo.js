@@ -1322,8 +1322,12 @@ export function installerDemo() {
   states['conversation.home_assistant'] = s('unknown', { friendly_name: 'Home Assistant' });
 
   // ── 3. Le badge ───────────────────────────────────────────────────────────
+  /* Au-dessus de la barre du bas quand elle est là (`--o-navh`, sa hauteur
+   * mesurée), plus la marge du bouton de l'assistant qui en dépasse au
+   * milieu : posé à 10 px du bas, le badge le couvrait sur téléphone. Sans
+   * barre, `--o-navh` vaut 0 et le badge reste à 10 px du bas. */
   const badge = document.createElement('div');
   badge.textContent = 'Démonstration — données factices';
-  badge.style.cssText = 'position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:99999;padding:6px 14px;border-radius:999px;background:rgba(77,163,255,.16);border:1px solid rgba(77,163,255,.4);color:#8fc2ff;font:700 11.5px/1.4 system-ui,sans-serif;pointer-events:none;';
+  badge.style.cssText = 'position:fixed;left:50%;bottom:calc(10px + var(--o-navh, 0px) + min(var(--o-navh, 0px), 18px));transform:translateX(-50%);z-index:99999;padding:6px 14px;border-radius:999px;background:rgba(77,163,255,.16);border:1px solid rgba(77,163,255,.4);color:#8fc2ff;font:700 11.5px/1.4 system-ui,sans-serif;white-space:nowrap;pointer-events:none;';
   document.documentElement.appendChild(badge);
 }

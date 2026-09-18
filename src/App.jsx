@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext, cloneElement, lazy, Suspense, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { formatEcran, vueFormat, patchFormat, echangerPartout } from './disposition.js';
+import { formatEcran, vueFormat, patchFormat, echangerPartout, ordonnerSelon, ordreDuFormat } from './disposition.js';
 // Les deux fonds animes tirent three.js : 448 Ko a analyser, pour un decor. En
 // import direct, ce cout etait paye a CHAQUE ouverture, meme par quelqu'un qui
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
@@ -4971,7 +4971,14 @@ function lancerScenario(h, id) {
 }
 function useScenarios(hass) {
   const { etat, setEtat, err } = useEtatServeur(hass, 'loggia/scenarios/etat', 5000, tr('Scénarios indisponibles.'));
-  useEffect(() => { if (etat) SCN_ETAT = etat; }, [etat]);
+  /* L'ordre suit le TYPE d'écran (ADR 0052) : celui du composant sur
+   * l'ordinateur ; sur la tablette et le téléphone, le leur — tant qu'on n'y
+   * a rien rangé, celui de l'ordinateur. `tous` est la liste dans cet ordre ;
+   * la veille et la recherche la lisent par SCN_ETAT. */
+  const format = formatEcran(useCoarse(), useWide(1180));
+  const [ordres, setOrdres] = useState(() => { const v = cfgVal('loggia_scnordre', null); return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; });
+  const tous = ordonnerSelon((etat && etat.scenarios) || [], ordreDuFormat(ordres, format));
+  useEffect(() => { if (etat) SCN_ETAT = { ...etat, scenarios: tous }; }, [etat, ordres, format]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [enCours, setEnCours] = useState(null); // retour visuel immédiat, le temps que le serveur réponde
   const fRef = useRef(null);
   useEffect(() => () => clearTimeout(fRef.current), []);
@@ -4987,9 +4994,18 @@ function useScenarios(hass) {
     if (r && r.etat) { SCN_ETAT = r.etat; setEtat(r.etat); }
     return r;
   };
+  /* Ranger les scénarios : l'ordinateur écrit l'ordre du composant, les
+   * autres formats le leur. */
+  const ordonner = async (ids) => {
+    if (format === 'pc') return enregistrer({ ordre: ids });
+    const n = { ...ordres, [format]: ids };
+    setOrdres(n);
+    cfgSet({ loggia_scnordre: n });
+    return null;
+  };
   const noms = {};
   ((etat && etat.liens) || []).forEach(l => { noms[l.haid] = l.nom; });
-  return { etat, err, lancer, enCours, enregistrer, noms, liste: scenariosVisibles(etat && etat.scenarios) };
+  return { etat, err, lancer, enCours, enregistrer, ordonner, noms, tous, liste: scenariosVisibles(tous) };
 }
 
 const PUCE_SCN = { fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 9, background: 'var(--o-s1)', color: 'var(--o-text1)', whiteSpace: 'nowrap' };
@@ -5036,7 +5052,7 @@ function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLanc
  * édition, l'en-tête porte « Gérer les scénarios ». */
 function ScenariosAccueil({ hass, edit = false, onNav = null }) {
   const sc = useScenarios(hass);
-  const liste = scenariosAccueil(sc.etat && sc.etat.scenarios);
+  const liste = scenariosAccueil(sc.tous);
   const nScenarios = liste.length;
   // Les flèches : seulement quand la rangée déborde, actives du côté où il
   // reste quelque chose. La mesure suit le défilement et la largeur.
@@ -8046,13 +8062,14 @@ function ScenesContent({ hass }) {
 function ScenariosView({ hass, edit = false }) {
   const sc = useScenarios(hass);
   // En édition, les scénarios masqués se montrent, estompés : c'est là qu'on les remontre.
-  const liste = edit ? ((sc.etat && sc.etat.scenarios) || []).filter(s => s && s.id) : sc.liste;
+  const liste = edit ? sc.tous.filter(s => s && s.id) : sc.liste;
   const [fiche, setFiche] = useState(null); // un scénario, ou 'nouveau'
   const deplacer = (id, delta) => {
     const ids = liste.map(s => s.id); const i = ids.indexOf(id); const j = i + delta;
     if (i < 0 || j < 0 || j >= ids.length) return;
     ids.splice(j, 0, ids.splice(i, 1)[0]);
-    sc.enregistrer({ ordre: ids }).catch(() => {});
+    // Sur ce type d'écran seulement : l'ordinateur au composant, les autres chez eux.
+    sc.ordonner(ids).catch(() => {});
   };
   const pieces = (sc.etat && sc.etat.pieces) || [];
   const liens = (sc.etat && sc.etat.liens) || [];
@@ -12507,7 +12524,9 @@ function BoutonAssistant({ onAssistant, onDictee = null, hass = null, sens = 'ha
     onKeyDown: () => { long.current = false; },
   };
   const tenue = { touchAction: 'manipulation', WebkitTouchCallout: 'none', userSelect: 'none' };
-  const halo = 'radial-gradient(circle at 38% 32%, rgba(var(--o-accent-soft-rgb),.95), var(--o-accent-fond) 62%)';
+  /* Un micro (retour du 18/09, deux captures) : en haut, le bouton rond des
+   * voisins de l'en-tete ; en bas, un carre arrondi rose -> violet. */
+  const degrade = 'linear-gradient(135deg, var(--o-rose), var(--o-purple))';
 
   /* Hors du <button> : un bouton n'accepte que du contenu de phrase, et l'orbe
    * pose un <div>. Le cadre positionne les deux l'un par rapport a l'autre. */
@@ -12527,12 +12546,12 @@ function BoutonAssistant({ onAssistant, onDictee = null, hass = null, sens = 'ha
     return (
       <span className="o-hdr-assist" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         <button {...gestes} aria-label={tr('Parler à l’assistant')} title={tr('Parler à l’assistant')}
-          style={{ ...tenue, width: 42, height: 42, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', background: halo,
-            boxShadow: voix ? '0 0 0 4px rgba(var(--o-accent-rgb),.30)' : '0 3px 12px rgba(var(--o-accent-rgb),.38)',
+          style={{ ...tenue, width: 42, height: 42, borderRadius: '50%', padding: 0, cursor: 'pointer', flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)',
+            boxShadow: voix ? '0 0 0 4px rgba(var(--o-purple-rgb),.35)' : 'none',
             transition: REDUCE_MOTION ? 'none' : 'box-shadow .2s' }}>
-          <span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(255,255,255,.92)',
-            boxShadow: '0 0 9px 2px rgba(255,255,255,.55)' }} />
+          <Fi i="microphone" size={18} />
         </button>
         {miniature}
       </span>
@@ -12544,15 +12563,14 @@ function BoutonAssistant({ onAssistant, onDictee = null, hass = null, sens = 'ha
         style={{ ...tenue, width: 62, border: 'none', background: 'transparent', cursor: 'pointer',
           padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span aria-hidden="true" style={{
-          width: 46, height: 46, borderRadius: '50%', marginTop: -14,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', background: halo,
+          width: 48, height: 48, borderRadius: 15, marginTop: -14,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', background: degrade, color: '#fff',
           boxShadow: voix
-            ? '0 0 0 5px var(--o-header), 0 0 0 9px rgba(var(--o-accent-rgb),.28), 0 6px 18px rgba(var(--o-accent-rgb),.45)'
-            : '0 0 0 5px var(--o-header), 0 6px 18px rgba(var(--o-accent-rgb),.45)',
+            ? '0 0 0 5px var(--o-header), 0 0 0 9px rgba(var(--o-purple-rgb),.30), 0 6px 18px rgba(var(--o-purple-rgb),.45)'
+            : '0 0 0 5px var(--o-header), 0 6px 18px rgba(var(--o-purple-rgb),.40)',
           transition: REDUCE_MOTION ? 'none' : 'box-shadow .2s',
         }}>
-          <span style={{ width: 13, height: 13, borderRadius: '50%', background: 'rgba(255,255,255,.92)',
-            boxShadow: '0 0 10px 2px rgba(255,255,255,.55)' }} />
+          <Fi i="microphone" size={21} color="#fff" />
         </span>
       </button>
       {miniature}
@@ -12560,7 +12578,7 @@ function BoutonAssistant({ onAssistant, onDictee = null, hass = null, sens = 'ha
   );
 }
 
-function MobileNav({ view, onNav, onMenu, onAssistant = null }) {
+function MobileNav({ view, onNav, onMenu, onAssistant = null, onDictee = null, hass = null }) {
   const { views: avail } = useLoggia();
   // Le safe-area du bas est géré par le dashboard (card_mod padding-bottom) → l'iframe s'arrête au-dessus du home indicator.
   // Alignée sur la sidebar épurée — sans Pièces (accessibles via cartes Accueil), avec Énergie + Sécurité (demande user).
@@ -12594,7 +12612,9 @@ function MobileNav({ view, onNav, onMenu, onAssistant = null }) {
         * Au centre, sous le pouce, il se distingue de lui-meme. */}
       {items.map((it, i) => { const on = view === it.id; return (
         <Fragment key={it.id}>
-        {onAssistant && i === Math.ceil(items.length / 2) && <BoutonAssistant onAssistant={onAssistant} />}
+        {/* Avec de quoi dicter : sans `onDictee` ni `hass`, le maintien ferait
+          * paraitre l'orbe sans rien ecouter -- c'etait le cas jusqu'a la 3.54. */}
+        {onAssistant && i === Math.ceil(items.length / 2) && <BoutonAssistant onAssistant={onAssistant} onDictee={onDictee} hass={hass} />}
         <button onClick={() => onNav(it.id)} style={cell(on)}>
           {on && <span style={{ position: 'absolute', top: 0, width: 28, height: 3, borderRadius: '0 0 3px 3px', background: 'var(--o-accent-fond)' }} />}
           <Fi i={it.icon} size={20} color={on ? 'var(--o-accent)' : 'var(--o-text2)'} />

@@ -138,7 +138,8 @@ test('les bords d’une rangee qui defile : ce qui montre et active les fleches'
 
 test('l’Accueil : la rangee des scenarios, et « Gerer » cliquable malgre le contenu inerte de l’edition', () => {
   const a = bloc('function ScenariosAccueil(', NL + '}');
-  assert.ok(a.includes('const liste = scenariosAccueil(sc.etat && sc.etat.scenarios);'), 'seuls les scenarios cochés « Sur l’Accueil »');
+  // Dans l'ordre de CE type d'ecran (ADR 0052) : `sc.tous`.
+  assert.ok(a.includes('const liste = scenariosAccueil(sc.tous);'), 'seuls les scenarios cochés « Sur l’Accueil »');
   assert.ok(a.includes('<CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />'), 'des cartes compactes');
   // En edition, `Sec` pose pointer-events none sur le contenu d'une section :
   // le bouton doit se remettre en auto, sinon le clic tombe sur la section
@@ -160,7 +161,8 @@ test('la vue Scenarios : cartes standard, edition avec fleches et crayon, la bib
   const v = bloc('function ScenariosView(', NL + '}');
   assert.ok(v.includes("sansDernier={edit}") && v.includes("position: 'absolute', right: 12, top: 12"), 'les outils prennent la place du repère');
   assert.ok(v.includes("<ScenesContent hass={hass} />"), 'les ambiances Hue restent, dessous');
-  assert.ok(v.includes("sc.enregistrer({ ordre: ids })"), 'l’ordre se range par les flèches');
+  // Les fleches rangent sur CE type d'ecran : l'ordinateur au composant, les autres chez eux (ADR 0052).
+  assert.ok(v.includes("sc.ordonner(ids).catch(() => {});"), 'l’ordre se range par les flèches');
   assert.ok(app.includes("view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} />"), 'la route `scenes` mène à la vue');
   assert.ok(app.includes("<div style={sectionTitle}>{tr('Ambiances lumineuses')}</div>"), 'la bibliothèque Hue devient une section');
   const f = bloc('function FicheScenario(', NL + '}');

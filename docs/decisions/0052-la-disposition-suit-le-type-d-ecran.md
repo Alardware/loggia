@@ -46,6 +46,33 @@ Ranger une vue sur le téléphone rangeait l'ordinateur.
 
 Après la mise à jour, la disposition enregistrée devient celle de
 l'ordinateur ; le téléphone la suit jusqu'à ce qu'on y range quelque chose.
-L'ordre des scénarios, tenu par le composant, reste commun : il n'est pas
-passé par cet éditeur. Tests : tests/disposition.test.mjs (7), vérifié en
+L'ordre des scénarios, tenu par le composant, restait commun : il n'est pas
+passé par cet éditeur (voir l'amendement ci-dessous, v3.54.0). Tests : tests/disposition.test.mjs (7), vérifié en
 démo sur ordinateur et en téléphone émulé. Pas de changement côté serveur.
+
+## Amendement (18/09/2026, v3.54.0) — l'ordre des scénarios aussi
+
+Demande : « oui fais pareil pour l'ordre des scénarios ». L'ordre des
+scénarios suit le type d'écran, comme la disposition des cartes.
+
+- **L'ordinateur garde l'ordre du composant** (`ordre`, écrit par
+  `loggia/scenarios/config`) : une installation existante le retrouve tel
+  quel.
+- **La tablette et le téléphone ont le leur**, dans la configuration de la
+  maison (`loggia_scnordre` = `{ tablette?, mobile? }`, des listes
+  d'identifiants), et suivent l'ordinateur tant qu'on n'y a rien rangé
+  (`ordreDuFormat`).
+- **Un scénario absent de l'ordre** — créé depuis — passe après ceux qu'on a
+  rangés, dans l'ordre du composant ; un scénario supprimé n'est plus qu'un
+  nom de trop dans la liste, sans effet (`ordonnerSelon`).
+- **Une seule liste ordonnée** (`useScenarios` → `tous`) nourrit la vue, la
+  rangée de l'Accueil et, par `SCN_ETAT`, la veille et la recherche. Les
+  flèches du mode édition passent par `ordonner` : le composant sur
+  l'ordinateur, `loggia_scnordre` ailleurs.
+- **Créer, modifier, supprimer un scénario reste commun** : c'est le
+  composant qui les tient.
+
+Tests : tests/disposition.test.mjs (+2). Vérifié en démo : sur téléphone
+émulé, « Avancer Cinéma » écrit `loggia_scnordre.mobile` ; sur ordinateur, la
+même flèche passe par le composant, laisse `loggia_scnordre` vide, et la
+rangée de l'Accueil suit.

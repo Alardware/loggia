@@ -75,3 +75,25 @@ export function echangerPartout(L, id, cible) {
   }
   return out;
 }
+
+/* ── L'ordre des scénarios (ADR 0052, amendement) ──────────────────────────
+ * Tenu par le composant pour l'ordinateur ; la tablette et le téléphone ont
+ * le leur, dans la configuration de la maison (`loggia_scnordre`). */
+
+/** Trie des éléments `{ id }` selon un ordre enregistré. Ceux qui n'y figurent
+ *  pas passent après, dans leur ordre d'arrivée : un scénario créé depuis ne
+ *  vient pas se glisser au milieu. */
+export function ordonnerSelon(elements, ordre) {
+  const l = Array.isArray(elements) ? elements : [];
+  if (!Array.isArray(ordre) || !ordre.length) return l;
+  const rang = (x, i) => { const r = ordre.indexOf(x && x.id); return r < 0 ? ordre.length + i : r; };
+  return l.map((x, i) => [x, rang(x, i)]).sort((a, b) => a[1] - b[1]).map(p => p[0]);
+}
+
+/** L'ordre propre d'un format, ou `null` : l'ordinateur suit le composant, et
+ *  un format qui n'a rien rangé suit l'ordinateur. */
+export function ordreDuFormat(ordres, format) {
+  if (format === 'pc' || !ordres || typeof ordres !== 'object') return null;
+  const o = ordres[format];
+  return Array.isArray(o) && o.length ? o : null;
+}
