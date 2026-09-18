@@ -98,6 +98,9 @@ def creer(module, store_module):
         ecouteur.regles._depot = FauxStore(None)
         ecouteur._dernier = {}
         ecouteur._defait = []
+        # Les tests d'apprentissage appuient ecoute ouverte ; ceux de l'ecoute
+        # coupee la ferment eux-memes.
+        ecouteur.ecouter(module.ECOUTE_S)
         ecouteur.sources = {'mqtt_present': True, 'z2m': True, 'zha': True, 'deconz': True}
         faits.append(ecouteur)
         return ecouteur
@@ -365,3 +368,57 @@ def test_les_entites_d_un_appel(module):
     assert module._entites_de({"entity_id": ["light.a", 3]}) == ["light.a"]
     assert module._entites_de({}) == []
     assert module._entites_de(None) == []
+
+
+# ── L'ecoute d'apprentissage (retour du 18/09) ──────────────────────────────
+
+def test_l_ecoute_est_coupee_au_demarrage(module):
+    """Sans quoi chaque telecommande de la maison s'inscrit dans la page."""
+    assert module.LoggiaInterrupteurs.ecoute_fin == 0.0
+
+
+def test_ecoute_coupee_rien_ne_s_inscrit(creer):
+    ecouteur = creer()
+    ecouteur.ecouter(0)
+    ecouteur._sur_mqtt(FauxMessage("zigbee2mqtt/Voisin", {"action": "on_press"}))
+    assert ecouteur.journal == []
+    assert ecouteur.vus == {}
+    assert ecouteur.ecoute_etat() == {"active": False, "reste": 0}
+
+
+def test_ecoute_coupee_un_bouton_regle_marche_toujours(creer):
+    """L'ecoute ne commande que ce qui s'inscrit, jamais ce qui s'execute."""
+    ecouteur = creer(AFFECTATION)
+    ecouteur.ecouter(0)
+    ecouteur._sur_mqtt(FauxMessage(
+        "zigbee2mqtt/Interrupteur Exemple", {"action": "on_press_release"}
+    ))
+    ecouteur.hass.vider()
+    assert ecouteur.hass.services.appels == [
+        ("light", "turn_on", {"entity_id": "light.exemple"})
+    ]
+    assert ecouteur.journal == []
+
+
+def test_l_ecoute_s_ouvre_pour_un_temps_borne(creer, module):
+    ecouteur = creer()
+    etat = ecouteur.ecouter(300)
+    assert etat["active"] is True and 295 <= etat["reste"] <= 300
+    assert ecouteur.ecouter(99999)["reste"] <= module.ECOUTE_MAX_S
+    assert ecouteur.ecouter("n'importe quoi") == {"active": False, "reste": 0}
+
+
+def test_l_ecoute_se_referme_d_elle_meme(creer, module):
+    ecouteur = creer()
+    ecouteur.ecoute_fin = module.time.monotonic() - 1
+    ecouteur._sur_mqtt(FauxMessage("zigbee2mqtt/Exemple", {"action": "on_press"}))
+    assert ecouteur.journal == []
+    assert ecouteur.ecoute_etat()["active"] is False
+
+
+def test_l_etat_dit_l_ecoute(creer):
+    ecouteur = creer()
+    etat = lancer(ecouteur.async_etat())
+    assert etat["ecoute"]["active"] is True
+    ecouteur.ecouter(0)
+    assert lancer(ecouteur.async_etat())["ecoute"] == {"active": False, "reste": 0}

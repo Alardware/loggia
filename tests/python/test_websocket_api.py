@@ -14,7 +14,7 @@ SOURCE = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_tex
 
 # Ce qui ECRIT la maison : administrateurs seulement.
 ADMIN_SEULEMENT = [
-    "WS_STATS", "WS_INT_AFFECTER", "WS_VOL_CONFIG", "WS_FEN_CONFIG", "WS_PRE_CONFIG",
+    "WS_STATS", "WS_INT_AFFECTER", "WS_INT_ECOUTER", "WS_VOL_CONFIG", "WS_FEN_CONFIG", "WS_PRE_CONFIG",
     "WS_NUI_CONFIG", "WS_VEI_CONFIG", "WS_SCN_CONFIG", "WS_ROB_CONFIG", "WS_REG_DEGELER",
     "WS_PIN_DEFINIR",
 ]

@@ -14,11 +14,22 @@
 import {
   useState, useMemo, useEffect
 } from 'react';
-import { BottomSheet, EntPicker, cvName , useEtatServeur } from '../ui.jsx';
+import { BottomSheet, EntPicker, cvName, useEtatServeur, Fi } from '../ui.jsx';
 import { tr } from '../i18n.js';
 import { entityCaps } from '../capabilities.js';
 import { libelleGeste } from '../gestes.js';
-import { Panneau, Pastille, Intertitre, MONO, FILET, btnDiscret } from './parcommun.jsx';
+import { Panneau, Pastille, Intertitre, MONO, FILET, btnDiscret, btnPrimaire, btnSecondaire } from './parcommun.jsx';
+
+/* L'ecoute d'apprentissage s'ouvre pour ce temps, comme l'appairage de
+ * zigbee2mqtt, puis se referme d'elle-meme (interrupteurs.py, ECOUTE_S). */
+const ECOUTE_S = 300;
+
+/* Les telecommandes que la page montre : toutes pendant l'ecoute, seulement
+ * celles qui sont reglees sinon — coupee, l'ecoute ne doit pas laisser la page
+ * se remplir de chaque telecommande de la maison. */
+export function appareilsVisibles(appareils, ecoute) {
+  return (appareils || []).filter(a => ecoute || ((a && a.affectees) || []).length > 0);
+}
 
 /* Les gestes proposés. `homeassistant.turn_on` et ses voisins marchent sur
  * TOUS les domaines — une lampe, une prise, un volet — là où `light.turn_on`
@@ -125,10 +136,38 @@ export function InterrupteursSection({ hass, onCompte = null }) {
     }
   };
 
-  const appareils = (etat && etat.appareils) || [];
   const affectations = (etat && etat.affectations) || {};
   const journal = (etat && etat.journal) || [];
   const sources = (etat && etat.sources) || null;
+  const admin = !!(hass && hass.user && hass.user.is_admin);
+
+  /* L'ecoute : le serveur dit combien de secondes il reste, la page compte à
+   * rebours seconde par seconde entre deux lectures (toutes les 1,5 s). */
+  const ecouteServeur = (etat && etat.ecoute) || null;
+  const resteServeur = ecouteServeur ? ecouteServeur.reste : 0;
+  const ouverteServeur = !!(ecouteServeur && ecouteServeur.active);
+  const [finEcoute, setFinEcoute] = useState(0);
+  useEffect(() => { setFinEcoute(ouverteServeur ? Date.now() + resteServeur * 1000 : 0); }, [resteServeur, ouverteServeur]);
+  const [, setTic] = useState(0);
+  useEffect(() => {
+    if (!finEcoute) return undefined;
+    const t = setInterval(() => setTic(x => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [finEcoute]);
+  const reste = finEcoute ? Math.max(0, Math.round((finEcoute - Date.now()) / 1000)) : 0;
+  const ecoute = reste > 0;
+  const mmss = (n) => String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');
+  const ecouter = async (duree) => {
+    if (!h) return;
+    try {
+      const r = await h.callWS({ type: 'loggia/interrupteurs/ecouter', duree });
+      const e = (r && r.ecoute) || { active: false, reste: 0 };
+      setEtat(x => (x ? { ...x, ecoute: e } : x));
+    } catch (e) {
+      setErr((e && (e.message || e.code)) || tr('L’écoute ne répond pas.'));
+    }
+  };
+  const appareils = appareilsVisibles((etat && etat.appareils) || [], ecoute);
 
   // L'en-tete de la page compte les telecommandes et les gestes regles.
   // `onCompte` reste hors des dependances : recree a chaque rendu du parent,
@@ -167,8 +206,15 @@ export function InterrupteursSection({ hass, onCompte = null }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Apprentissage : la page ne sait rien tant qu'on n'a pas appuyé. */}
-      <Panneau titre={tr('Apprendre un bouton')} desc={tr('Appuie sur un bouton : il apparaît ici, avec son nom. C’est ce nom qu’on affecte.')}
-        droite={<Pastille niveau={err ? 'danger' : 'ok'} point>{err ? tr('hors d’écoute') : tr('à l’écoute')}</Pastille>}>
+      <Panneau titre={tr('Apprendre un bouton')}
+        desc={ecoute ? tr('Appuie sur un bouton : il apparaît ici, avec son nom. C’est ce nom qu’on affecte.') : tr('L’écoute est coupée : aucun nouvel appui n’apparaît. Les boutons déjà réglés marchent toujours.')}
+        droite={err ? <Pastille niveau="danger" point>{tr('hors d’écoute')}</Pastille>
+          : !admin ? <Pastille niveau={ecoute ? 'ok' : 'neutre'} point>{ecoute ? tr('à l’écoute') + ' · ' + mmss(reste) : tr('écoute coupée')}</Pastille>
+            : ecoute
+              ? <button onClick={() => ecouter(0)} style={{ ...btnSecondaire, border: '1px solid rgba(var(--o-accent-rgb),.55)', color: 'var(--o-accent-soft)' }}>
+                  <Fi i="signal-stream" size={14} />{tr('Arrêter l’écoute')}<span style={{ ...MONO, fontWeight: 700 }}>{mmss(reste)}</span>
+                </button>
+              : <button onClick={() => ecouter(ECOUTE_S)} style={btnPrimaire}><Fi i="signal-stream" size={14} />{tr('Écouter 5 min')}</button>}>
         {/* Ce qui est reellement branche. Une page muette ne disait pas si
           * personne n'appuyait ou si personne n'ecoutait (retour 03/09). */}
         {sources && (
@@ -179,6 +225,7 @@ export function InterrupteursSection({ hass, onCompte = null }) {
           </div>
         )}
         {err && <div style={{ padding: '0 22px 14px', fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
+        {ecoute && <>
         <Intertitre>{tr('Derniers appuis')}</Intertitre>
         {derniers.length === 0 && !err && (
           <div style={{ fontSize: 12.5, color: 'var(--o-text3)', fontWeight: 600, padding: '4px 22px 16px' }}>
@@ -200,6 +247,7 @@ export function InterrupteursSection({ hass, onCompte = null }) {
         {derniers.length > 0 && (
           <div style={{ padding: '8px 22px 18px', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Un même bouton n’apparaît qu’une fois, à son dernier appui.')}</div>
         )}
+        </>}
       </Panneau>
 
       {/* Les appareils connus : ceux qu'on a entendus, et ceux qu'on a réglés. */}

@@ -52,6 +52,7 @@ WS_STATS = "loggia/config/stats"
 WS_DISCOVERY = "loggia/discovery"
 WS_INT_ETAT = "loggia/interrupteurs/etat"
 WS_INT_AFFECTER = "loggia/interrupteurs/affecter"
+WS_INT_ECOUTER = "loggia/interrupteurs/ecouter"
 WS_VOL_ETAT = "loggia/volets/etat"
 WS_VOL_CONFIG = "loggia/volets/config"
 WS_FEN_ETAT = "loggia/fenetres/etat"
@@ -232,6 +233,25 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             connection.send_error(msg["id"], "payload_too_large", str(err))
             return
         connection.send_result(msg["id"], {"affectations": table})
+
+    # L'ecoute d'apprentissage : l'ouvrir pour un temps compte, ou la couper.
+    # Reservee comme l'affectation — c'est un reglage de la maison.
+    @websocket_api.websocket_command(
+        {
+            vol.Required("type"): WS_INT_ECOUTER,
+            vol.Required("duree"): vol.All(vol.Coerce(int), vol.Range(min=0, max=900)),
+        }
+    )
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_int_ecouter(hass, connection, msg):
+        interrupteurs = acces_interrupteurs() if acces_interrupteurs else None
+        if interrupteurs is None:
+            connection.send_error(
+                msg["id"], "not_available", "ecoute des interrupteurs indisponible"
+            )
+            return
+        connection.send_result(msg["id"], {"ecoute": interrupteurs.ecouter(msg["duree"])})
 
     # ── Regles de volets ──────────────────────────────────────────────────
     # Meme partage que les interrupteurs : lecture ouverte, ecriture reservee
@@ -579,6 +599,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_vol_config)
     websocket_api.async_register_command(hass, handle_int_etat)
     websocket_api.async_register_command(hass, handle_int_affecter)
+    websocket_api.async_register_command(hass, handle_int_ecouter)
     websocket_api.async_register_command(hass, handle_discovery)
     websocket_api.async_register_command(hass, handle_get)
     websocket_api.async_register_command(hass, handle_set)

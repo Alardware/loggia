@@ -25,7 +25,7 @@ import { commanderService } from '../actions.js';
 import { viewReason } from '../views.js';
 import { detecterCapteursPieces } from '../resolve.js';
 import { autoFamille } from '../autos.js';
-import { InterrupteursSection, gestesRegles } from './interrupteurs.jsx';
+import { InterrupteursSection, gestesRegles, appareilsVisibles } from './interrupteurs.jsx';
 import { VoletsReglages } from './volets.jsx';
 import { FenetresReglages } from './fenetres.jsx';
 import { PresenceReglages } from './presence.jsx';
@@ -597,7 +597,7 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
   const basculeDroit = (did) => setDroits(d => d.indexOf(did) >= 0 ? d.filter(x => x !== did) : [...d, did]);
   const inp = { width: '100%', padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' };
   const save = () => { const n = name.trim(); if (!n) return; onSave({ name: n, role, c, sub: role + ' · ' + n.toLowerCase().replace(/\s+/g, '.'), vues: role === 'Admin' ? [] : vues, droits: role === 'Admin' ? [] : droits }); };
-  const roleBtn = (on) => ({ flex: 1, padding: 11, borderRadius: 10, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' });
+  const roleBtn = (on) => ({ flex: 1, padding: 11, borderRadius: 10, border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd1)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' });
   return (
     <div role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div role="presentation" onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
@@ -622,7 +622,7 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
             {VUES_CHOIX.map(([vid, lb]) => { const on = vues.indexOf(vid) >= 0; return (
               <button key={vid} onClick={() => basculeVue(vid)} aria-pressed={on}
-                style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{lb}</button>
+                style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd1)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>{lb}</button>
             ); })}
           </div>
         </>)}
@@ -632,7 +632,7 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
             {DROITS.map(([did, lb]) => { const on = droits.indexOf(did) >= 0; return (
               <button key={did} onClick={() => basculeDroit(did)} aria-pressed={on}
-                style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-ok)' : 'var(--o-bd1)'), background: on ? 'rgba(52,211,153,.16)' : 'var(--o-s2)', color: on ? 'var(--o-ok)' : 'var(--o-text1)' }}>{tr(lb)}</button>
+                style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd1)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>{tr(lb)}</button>
             ); })}
           </div>
         </>)}
@@ -1190,7 +1190,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     h.callWS({ type: 'loggia/interrupteurs/etat' })
       .then(r => {
         setNbInter(gestesRegles(r && r.affectations));
-        setCompteInter({ telecommandes: ((r && r.appareils) || []).length, gestes: gestesRegles(r && r.affectations) });
+        setCompteInter({ telecommandes: appareilsVisibles(r && r.appareils, !!(r && r.ecoute && r.ecoute.active)).length, gestes: gestesRegles(r && r.affectations) });
       })
       .catch(() => { /* composant trop ancien, ou ecoute absente */ });
   }, [connecte, peutInter]);
@@ -1906,19 +1906,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             ].map(tuile)}
           </div>
 
-          {/* Ko-fi : meme regle que les liens ci-dessus, rien n'est charge
-            * depuis ko-fi.com tant qu'on ne tape pas — la tasse est dessinee
-            * ici plutot que servie par leur CDN. */}
-          <a href="https://ko-fi.com/alardware" target="_blank" rel="noopener noreferrer"
-            style={{ display: 'inline-flex', alignSelf: 'center', alignItems: 'center', gap: 10, padding: '13px 26px', borderRadius: 999, background: '#72a4f2', color: '#152744', fontSize: 14, fontWeight: 800, textDecoration: 'none', boxShadow: '0 10px 26px rgba(114,164,242,.26)' }}>
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
-              <path d="M3 6.6h13v6.6a6.5 6.5 0 0 1-13 0z" fill="#fff" />
-              <path d="M16.4 8.2h1.9a2.9 2.9 0 0 1 0 5.8h-1.9" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-              <path d="M9.5 16.5C6.4 14.3 5.1 13 5.1 11.6A2.4 2.4 0 0 1 9.5 10.6 2.4 2.4 0 0 1 13.9 11.6C13.9 13 12.6 14.3 9.5 16.5Z" fill="#ff5f5f" />
-            </svg>
-            {tr('Me soutenir sur Ko-fi')}
-          </a>
-
           {/* La remise a zero vide la configuration de la MAISON — vues,
             * profils, regles, scenarios — et non ce seul appareil. */}
           {isAdmin && (
@@ -1933,6 +1920,19 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               </div>
             </Panneau>
           )}
+
+          {/* Ko-fi : meme regle que les liens ci-dessus, rien n'est charge
+            * depuis ko-fi.com tant qu'on ne tape pas — la tasse est dessinee
+            * ici plutot que servie par leur CDN. */}
+          <a href="https://ko-fi.com/alardware" target="_blank" rel="noopener noreferrer"
+            style={{ display: 'inline-flex', alignSelf: 'center', alignItems: 'center', gap: 10, padding: '13px 26px', borderRadius: 999, background: '#72a4f2', color: '#152744', fontSize: 14, fontWeight: 800, textDecoration: 'none', boxShadow: '0 10px 26px rgba(114,164,242,.26)' }}>
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+              <path d="M3 6.6h13v6.6a6.5 6.5 0 0 1-13 0z" fill="#fff" />
+              <path d="M16.4 8.2h1.9a2.9 2.9 0 0 1 0 5.8h-1.9" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+              <path d="M9.5 16.5C6.4 14.3 5.1 13 5.1 11.6A2.4 2.4 0 0 1 9.5 10.6 2.4 2.4 0 0 1 13.9 11.6C13.9 13 12.6 14.3 9.5 16.5Z" fill="#ff5f5f" />
+            </svg>
+            {tr('Me soutenir sur Ko-fi')}
+          </a>
         </>
         );
       })()}

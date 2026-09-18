@@ -70,6 +70,12 @@ JOURNAL_MAX = 40
 # delai comptent pour une.
 ANTI_REBOND_S = 0.6
 
+# L'ecoute d'apprentissage : ouverte pour un temps compte, comme l'appairage
+# de zigbee2mqtt, puis refermee d'elle-meme. Sans elle, chaque telecommande de
+# la maison venait s'inscrire dans la page, reglee ou non (retour du 18/09).
+ECOUTE_S = 300
+ECOUTE_MAX_S = 900
+
 
 def _cle_appareil(source: str, identifiant: str) -> str:
     """Identifie un interrupteur, toutes sources confondues."""
@@ -90,6 +96,12 @@ def _entites_de(data) -> list:
 
 class LoggiaInterrupteurs:
     """Ecoute les interrupteurs sans fil et execute leurs affectations."""
+
+    # La fin de l'ecoute d'apprentissage, sur l'horloge monotone ; 0 = coupee.
+    # Coupee au demarrage : on l'ouvre quand on veut apprendre un bouton.
+    # Elle ne commande que ce qui s'INSCRIT — un bouton deja regle marche
+    # toujours, ecoute ouverte ou non.
+    ecoute_fin: float = 0.0
 
     def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
@@ -208,23 +220,44 @@ class LoggiaInterrupteurs:
             return
         self._dernier[empreinte] = maintenant
 
-        appareil = self.vus.setdefault(
-            cle, {"cle": cle, "source": source, "nom": nom, "actions": []}
-        )
-        appareil["nom"] = nom
-        if action not in appareil["actions"]:
-            appareil["actions"].append(action)
+        # Ecoute coupee : rien ne s'inscrit, et la page ne se remplit pas de
+        # toutes les telecommandes de la maison. L'affectation, elle, part.
+        if self.ecoute_active():
+            appareil = self.vus.setdefault(
+                cle, {"cle": cle, "source": source, "nom": nom, "actions": []}
+            )
+            appareil["nom"] = nom
+            if action not in appareil["actions"]:
+                appareil["actions"].append(action)
 
-        self.journal.insert(0, {
-            "cle": cle,
-            "source": source,
-            "nom": nom,
-            "action": action,
-            "ts": time.time(),
-        })
-        del self.journal[JOURNAL_MAX:]
+            self.journal.insert(0, {
+                "cle": cle,
+                "source": source,
+                "nom": nom,
+                "action": action,
+                "ts": time.time(),
+            })
+            del self.journal[JOURNAL_MAX:]
 
         self.hass.async_create_task(self._async_executer(cle, action))
+
+    # ── L'ecoute d'apprentissage ──────────────────────────────────────────
+    def ecoute_active(self) -> bool:
+        return time.monotonic() < self.ecoute_fin
+
+    def ecoute_etat(self) -> dict[str, Any]:
+        """Ouverte ou non, et pour combien de secondes encore."""
+        reste = max(0, int(round(self.ecoute_fin - time.monotonic())))
+        return {"active": reste > 0, "reste": reste}
+
+    def ecouter(self, duree_s: int) -> dict[str, Any]:
+        """Ouvre l'ecoute pour `duree_s` secondes (bornee), ou la coupe (0)."""
+        try:
+            duree = max(0, min(int(duree_s), ECOUTE_MAX_S))
+        except (TypeError, ValueError):
+            duree = 0
+        self.ecoute_fin = time.monotonic() + duree if duree else 0.0
+        return self.ecoute_etat()
 
     async def _async_executer(self, cle: str, action: str) -> None:
         """Appelle ce qui a ete affecte a ce bouton, s'il y a quelque chose."""
@@ -304,6 +337,7 @@ class LoggiaInterrupteurs:
             "affectations": table,
             "journal": list(self.journal),
             "sources": dict(self.sources),
+            "ecoute": self.ecoute_etat(),
         }
 
     async def async_affecter(

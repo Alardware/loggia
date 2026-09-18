@@ -732,7 +732,7 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
         <div role="tablist" aria-label={robot.nom} className="rb-onglets" style={{ '--rb-n': onglets.length }}>
           {onglets.map(([id, nom, icone]) => (
             <button key={id} type="button" role="tab" aria-selected={actuel === id} onClick={() => setOnglet(id)} className="rb-onglet"
-              style={{ background: actuel === id ? 'rgba(var(--rb-rgb),.14)' : 'transparent', color: actuel === id ? 'var(--rb-doux)' : 'var(--o-text2)' }}>
+              style={{ background: actuel === id ? 'var(--o-accent-fond)' : 'transparent', color: actuel === id ? '#fff' : 'var(--o-text2)' }}>
               <Fi i={icone} size={15} /><span>{nom}</span>
             </button>
           ))}

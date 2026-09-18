@@ -191,7 +191,7 @@ function PanneauCharge({ series, releve }) {
     <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
       {series.map(x => (
         <button key={x.cle} type="button" onClick={() => setMode(x.cle)} aria-pressed={x.cle === s.cle}
-          style={{ padding: '5px 10px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: x.cle === s.cle ? 'rgba(' + x.rgb + ',.18)' : 'transparent', color: x.cle === s.cle ? x.couleur : 'var(--o-text2)' }}>{x.nom}</button>
+          style={{ padding: '5px 10px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: x.cle === s.cle ? 'var(--o-accent-fond)' : 'transparent', color: x.cle === s.cle ? '#fff' : 'var(--o-text2)' }}>{x.nom}</button>
       ))}
     </div>
   );

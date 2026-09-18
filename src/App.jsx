@@ -2292,8 +2292,9 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
   // Nom SOUS l'icône, état en sous-titre (maquettes du 14/09) : « Chauffe ·
   // consigne 19,0 °C ». Le gros chiffre vit dans la fiche.
-  const consigne = tr('consigne {t} °C', { t: Number(target).toFixed(1).replace('.', ',') });
-  const sub = mort ? tr('Indisponible') : !marche ? tr('Éteint') : heating ? tr('Chauffe') + ' · ' + consigne : cooling ? tr('Refroidit') + ' · ' + consigne : tr('Au repos') + ' · ' + consigne;
+  // La consigne, entre les deux boutons qui la bougent : « 19 °C », « 19,5 °C ».
+  const consigne = (Number.isInteger(Number(target)) ? String(Number(target)) : Number(target).toFixed(1).replace('.', ',')) + ' °C';
+  const sub = mort ? tr('Indisponible') : !marche ? tr('Éteint') : heating ? tr('Chauffe') : cooling ? tr('Refroidit') : tr('Au repos');
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
@@ -2312,6 +2313,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
         <div style={{ ...RM_SUB, color: (heating || cooling) && !mort ? 'var(--o-bad)' : 'var(--o-text3)' }}>{sub}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
           <button aria-label={tr('Baisser la consigne')} onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>−</button>
+          <span aria-label={tr('Consigne')} style={{ flex: '0 0 auto', minWidth: 58, alignSelf: 'center', textAlign: 'center', fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', color: marche ? 'var(--o-text)' : 'var(--o-text2)' }}>{consigne}</span>
           <button aria-label={tr('Monter la consigne')} onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>+</button>
         </div>
       </div>
@@ -2399,8 +2401,9 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const basculer = () => { const nv = !marche; setOvOn(nv); const m = nv ? modeMarche : modeArret; if (m) poserMode(m); };
   const nom = titre || zone.name;
   const mort = !!(estClimate(zone) && (!S || !S[zone.haid] || S[zone.haid].state === 'unavailable'));
-  const consigne = tr('consigne {t} °C', { t: Number(target).toFixed(1).replace('.', ',') });
-  const sub = !marche ? tr('Éteint') : heating ? tr('Chauffe') + ' · ' + consigne : tr('Au repos') + ' · ' + consigne;
+  // La consigne, entre les deux boutons qui la bougent : « 19 °C », « 19,5 °C ».
+  const consigne = (Number.isInteger(Number(target)) ? String(Number(target)) : Number(target).toFixed(1).replace('.', ',')) + ' °C';
+  const sub = !marche ? tr('Éteint') : heating ? tr('Chauffe') : tr('Au repos');
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(zone.id); } }} onClick={() => onOpen && onOpen(zone.id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       ...(heating && marche && LAVIS ? {
@@ -2420,6 +2423,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
         <div style={{ ...RM_SUB, color: heating && marche ? 'var(--o-bad)' : 'var(--o-text3)' }}>{sub}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
           <button aria-label={tr('Baisser la consigne')} onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>−</button>
+          <span aria-label={tr('Consigne')} style={{ flex: '0 0 auto', minWidth: 58, alignSelf: 'center', textAlign: 'center', fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', color: marche ? 'var(--o-text)' : 'var(--o-text2)' }}>{consigne}</span>
           <button aria-label={tr('Monter la consigne')} onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>+</button>
         </div>
       </div>
@@ -3335,10 +3339,10 @@ function RoomNav({ room, onNav, hass }) {
       {list.map(r => {
         const on = r.name === room;
         return (
-          <button key={r.name} data-room-active={on ? '1' : undefined} onClick={() => onNav('room:' + r.name)} style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background .18s, border-color .18s', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.5)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
-            {r.icon ? <span style={{ display: 'flex', width: 15, height: 15, alignItems: 'center', justifyContent: 'center' }}>{cloneElement(r.icon, { size: 15, color: on ? r.col : 'var(--o-text3)' })}</span> : <Fi i="home" size={14} color={on ? r.col : 'var(--o-text3)'} />}
+          <button key={r.name} data-room-active={on ? '1' : undefined} onClick={() => onNav('room:' + r.name)} style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background .18s, border-color .18s', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>
+            {r.icon ? <span style={{ display: 'flex', width: 15, height: 15, alignItems: 'center', justifyContent: 'center' }}>{cloneElement(r.icon, { size: 15, color: on ? '#fff' : 'var(--o-text3)' })}</span> : <Fi i="home" size={14} color={on ? '#fff' : 'var(--o-text3)'} />}
             <span style={{ fontSize: 12, fontWeight: on ? 800 : 700 }}>{r.name}</span>
-            {r.temp != null && <span style={{ fontSize: 12, fontWeight: 600, color: on ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>{r.temp.toFixed(1).replace('.', ',')}°</span>}
+            {r.temp != null && <span style={{ fontSize: 12, fontWeight: 600, color: on ? 'rgba(255,255,255,.8)' : 'var(--o-text3)' }}>{r.temp.toFixed(1).replace('.', ',')}°</span>}
           </button>
         );
       })}
@@ -4034,7 +4038,7 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
   };
   const ligneAppareil = (a) => <LigneComposeur key={a.id} icone={iconeDe(a)} nom={a.nom} sous={[a.piece, a.id].filter(Boolean).join(' · ')} on={present.indexOf(a.id) >= 0} onToggle={() => onToggle(a.id)} />;
   const titre = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 8px' };
-  const puce = (on) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap', padding: '7px 11px', borderRadius: 9, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.5)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' });
+  const puce = (on) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap', padding: '7px 11px', borderRadius: 9, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
   const colonne = { display: 'flex', flexDirection: 'column', gap: 8 };
 
   return (
@@ -4177,7 +4181,7 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '70%' }}>
         {opts.slice(0, 8).map(o => { const on = cur === o; return (
           <button key={o} onClick={() => { poserOpt(o); call(dom, 'select_option', { option: o }); }} aria-pressed={on}
-            style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd1)'), background: on ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{o}</button>
+            style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd1)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>{o}</button>
         ); })}
       </div>
     );
@@ -5512,7 +5516,7 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
           * largeur (17/09) ; le titre juste dessous dit le filtre choisi. */}
         <div className="o-favrow o-objfiltres" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}>
           {filtres.map(f => { const on = f.id === actuel; return (
-            <button key={f.id} className="o-objfiltre" onClick={() => setChoix(f.id)} aria-pressed={on} aria-label={f.label} title={f.label} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.45)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
+            <button key={f.id} className="o-objfiltre" onClick={() => setChoix(f.id)} aria-pressed={on} aria-label={f.label} title={f.label} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>
               {f.prise ? <PlugIcon size={13} /> : f.ico ? <Ico name={f.ico} size={14} /> : <Fi i={f.fi} size={13} />}<span className="o-objfiltre-mot">{f.label}</span>
             </button>); })}
         </div>
@@ -5785,8 +5789,8 @@ function BarGroup({ label, sous, children }) {
     </div>
   );
 }
-const barBtn = (actif) => ({ padding: '5px 11px', borderRadius: 10, border: actif ? '1px solid rgba(var(--o-accent-rgb),.5)' : '1px solid var(--o-bd1)', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-  background: actif ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: actif ? 'var(--o-accent-soft)' : 'var(--o-text2)' });
+const barBtn = (actif) => ({ padding: '5px 11px', borderRadius: 10, border: actif ? '1px solid transparent' : '1px solid var(--o-bd1)', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+  background: actif ? 'var(--o-accent-fond)' : 'transparent', color: actif ? '#fff' : 'var(--o-text2)' });
 
 /**
  * Habillage d'une piece : icone, couleur, teinte de fond.
@@ -6798,7 +6802,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               {editMode && STYLES_WIDGETS[id] && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
                   {STYLES_WIDGETS[id].map(st => { const on = styleDe(grille.styles, id) === st; return (
-                    <button key={st} onClick={() => choisirStyle(id, st)} aria-pressed={on} style={{ padding: '6px 11px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, flexShrink: 0, background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>{NOMS_STYLES()[st]}</button>); })}
+                    <button key={st} onClick={() => choisirStyle(id, st)} aria-pressed={on} style={{ padding: '6px 11px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, flexShrink: 0, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>{NOMS_STYLES()[st]}</button>); })}
                   <span style={{ flex: 1 }} />
                   {id === 'calendrier' && styleDe(grille.styles, id) === 'mois' && (
                     <button onClick={() => setVillesOuvertes(true)} title={tr('Heures d’ailleurs')} aria-label={tr('Heures d’ailleurs')} style={EDIT_BTN}><Fi i="globe" size={12} /></button>)}
@@ -7947,7 +7951,7 @@ function ScenesContent({ hass }) {
     else { const ids = dimmableLights(hass); if (ids.length) call('light', 'turn_on', { entity_id: ids, brightness_pct: v }); }
   };
   const totalScenes = Object.values(HUE_SCENES).reduce((n, c) => n + c.scenes.length, 0);
-  const miniBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' });
+  const miniBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)' });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 8 }}>
@@ -9119,7 +9123,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
                       <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
                         {onglets.map(([id, lb]) => (
                           <button key={id} onClick={() => setOngletEn(id)} aria-pressed={actif === id}
-                            style={{ padding: '5px 11px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: actif === id ? 'rgba(var(--o-accent-rgb),.18)' : 'transparent', color: actif === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lb}</button>
+                            style={{ padding: '5px 11px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: actif === id ? 'var(--o-accent-fond)' : 'transparent', color: actif === id ? '#fff' : 'var(--o-text2)' }}>{lb}</button>
                         ))}
                       </div>
                     )}
@@ -11763,7 +11767,7 @@ function CarteAjoutSheet({ hass, onClose, onPose, remplace = null }) {
   const hb = useMemo(() => ({ states: Sb, connected: true, callService: () => {}, callApi: () => Promise.resolve([]), callWS: () => Promise.resolve(null) }), [Sb]);
   const dcb = useDomainCards(hb);
   const tab = (id, lbl) => (
-    <button onClick={() => { setOnglet(id); setPick(null); setCarteAttente(null); }} style={{ flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 800, background: onglet === id ? 'rgba(var(--o-accent-rgb),.14)' : 'transparent', color: onglet === id ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{lbl}</button>
+    <button onClick={() => { setOnglet(id); setPick(null); setCarteAttente(null); }} style={{ flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 800, background: onglet === id ? 'var(--o-accent-fond)' : 'transparent', color: onglet === id ? '#fff' : 'var(--o-text2)' }}>{lbl}</button>
   );
   const grille = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: 10 };
   return (

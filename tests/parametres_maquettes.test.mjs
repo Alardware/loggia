@@ -6,8 +6,9 @@
 // portaient ne disaient pas ce que fait Loggia : elles ont été corrigées, et
 // ce fichier relit chacune contre le code qui la rend vraie.
 //
-// La pastille Ko-fi d'« À propos » n'a pas bougé : « soutenir le projet ne
-// change pas, il reste tel quel ».
+// La pastille Ko-fi d'« À propos » garde son dessin : « soutenir le projet ne
+// change pas, il reste tel quel ». Depuis le retour suivant (« me soutenir en
+// dessous »), elle ferme la page, sous la zone rouge.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from 'node:test';
@@ -200,4 +201,54 @@ test('la démo a de quoi montrer ces pages, sans composant serveur', () => {
   // et le bouton d'essai ne prétend pas avoir envoyé quoi que ce soit.
   assert.ok(ALERTES.includes('if (typeof window !== \'undefined\' && window.__loggiaDemo) { setLocal(true);'));
   assert.ok(ALERTES.includes("if (local) { setMsg(tr('Démonstration : rien ne part vers un vrai téléphone.')); return; }"));
+});
+
+// ── Retour du 18/09, après la v3.51.0 ───────────────────────────────────────
+
+test('la pastille Ko-fi passe sous la zone rouge, sans changer de dessin', () => {
+  // « me soutenir en dessous » : la fin de la page, sous « Réinitialiser Loggia ».
+  const danger = APROPOS.indexOf('<Panneau niveau="danger">');
+  const kofi = APROPOS.indexOf('<a href="https://ko-fi.com/alardware"');
+  assert.ok(danger > 0 && kofi > danger, 'la pastille est remontée au-dessus de la zone rouge');
+});
+
+test('l’écoute des interrupteurs se coupe, et s’ouvre pour un temps compté', () => {
+  // Comme l'appairage de zigbee2mqtt : un bouton, puis un compte à rebours.
+  const serveur = lire('custom_components', 'loggia', 'interrupteurs.py');
+  const s = Number((serveur.match(/^ECOUTE_S = (\d+)$/m) || [])[1]);
+  assert.ok(INTER.includes('const ECOUTE_S = ' + s + ';'), 'la page et le serveur ne comptent plus la même durée');
+  assert.ok(INTER.includes("h.callWS({ type: 'loggia/interrupteurs/ecouter', duree })"));
+  assert.ok(INTER.includes("<button onClick={() => ecouter(ECOUTE_S)} style={btnPrimaire}>") && INTER.includes("{tr('Écouter 5 min')}"));
+  assert.ok(INTER.includes("<button onClick={() => ecouter(0)}") && INTER.includes("{tr('Arrêter l’écoute')}<span style={{ ...MONO, fontWeight: 700 }}>{mmss(reste)}</span>"));
+  // Coupée : ni derniers appuis, ni télécommandes qui n'ont rien de réglé.
+  assert.ok(INTER.includes('{ecoute && <>'), 'les derniers appuis restent affichés écoute coupée');
+  assert.ok(INTER.includes('return (appareils || []).filter(a => ecoute || ((a && a.affectees) || []).length > 0);'));
+  // Seul un administrateur ouvre l'écoute — le serveur le vérifie aussi.
+  assert.ok(INTER.includes('const admin = !!(hass && hass.user && hass.user.is_admin);'));
+  assert.ok(DEMO.includes("if (msg && msg.type === 'loggia/interrupteurs/ecouter')"), 'la démo ne sait pas ouvrir l’écoute');
+});
+
+test('les puces de navigation choisies sont en bleu plein, texte blanc', () => {
+  // La référence : les puces des règles (« Séjour »). Les teintes pâles des
+  // filtres, pièces et onglets sont parties.
+  const sites = [
+    [APP, "border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>", 'filtres d’Objets'],
+    [APP, "background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>", 'pièces'],
+    [APP, "const miniBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'var(--o-accent-fond)'", 'pièces Hue'],
+    [APP, "background: actif ? 'var(--o-accent-fond)' : 'transparent', color: actif ? '#fff' : 'var(--o-text2)' });", 'modes des volets'],
+    [APP, "background: actif === id ? 'var(--o-accent-fond)' : 'transparent', color: actif === id ? '#fff' : 'var(--o-text2)' }}>{lb}</button>", 'Puissance / Consommation'],
+    [APP, "background: onglet === id ? 'var(--o-accent-fond)' : 'transparent', color: onglet === id ? '#fff' : 'var(--o-text2)' }}>{lbl}</button>", 'onglets de la bibliothèque'],
+    [lire('src', 'ficherobot.jsx'), "style={{ background: actuel === id ? 'var(--o-accent-fond)' : 'transparent', color: actuel === id ? '#fff' : 'var(--o-text2)' }}>", 'onglets d’un robot'],
+    [lire('src', 'views', 'systeme.jsx'), "background: x.cle === s.cle ? 'var(--o-accent-fond)' : 'transparent', color: x.cle === s.cle ? '#fff' : 'var(--o-text2)' }}>{x.nom}</button>", 'séries du Système'],
+  ];
+  for (const [src, bout, nom] of sites) assert.ok(src.includes(bout), nom + ' : la puce choisie n’est plus en bleu plein');
+  assert.ok(!APP.includes("background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>"), 'un filtre pâle est revenu');
+});
+
+test('la consigne se lit entre les deux boutons des cartes climat', () => {
+  // Carte du thermostat et carte du fil pilote : « − 19 °C + ».
+  assert.equal((APP.match(/<span aria-label=\{tr\('Consigne'\)\}/g) || []).length, 2);
+  assert.equal((APP.match(/const consigne = \(Number\.isInteger\(Number\(target\)\)/g) || []).length, 2);
+  // Le sous-titre dit l'état ; il ne répète plus la valeur.
+  assert.ok(!APP.includes("tr('Chauffe') + ' · ' + consigne"), 'la consigne est dite deux fois');
 });

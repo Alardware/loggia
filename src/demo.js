@@ -501,6 +501,12 @@ const INTER_AFF = {
   },
 };
 const INTER_DEPART = Date.now() / 1000;
+// L'ecoute d'apprentissage de la demo : coupee au depart, comme le serveur.
+const INTER_ECOUTE = { fin: 0 };
+const interEcoute = () => {
+  const reste = Math.max(0, Math.round((INTER_ECOUTE.fin - Date.now()) / 1000));
+  return { active: reste > 0, reste };
+};
 
 function interDemo() {
   return {
@@ -516,6 +522,7 @@ function interDemo() {
       },
     ],
     sources: { mqtt_present: true, z2m: true, zha: false, deconz: false },
+    ecoute: interEcoute(),
     affectations: INTER_AFF,
     journal: [
       { cle: 'z2m/Bouton Cuisine', source: 'z2m', nom: 'Bouton Cuisine', action: 'on', ts: INTER_DEPART - 4 },
@@ -1122,6 +1129,11 @@ export function installerDemo() {
       if (msg && msg.type === 'loggia/scenarios/config') return Promise.resolve({ config: scenariosPatch(msg.patch), etat: scenariosDemo(states) });
       if (msg && msg.type === 'loggia/scenarios/lancer') return Promise.resolve(scenariosLancer(msg.id, states));
       if (msg && msg.type === 'loggia/interrupteurs/etat') return Promise.resolve(interDemo());
+      if (msg && msg.type === 'loggia/interrupteurs/ecouter') {
+        const duree = Math.max(0, Math.min(900, Number(msg.duree) || 0));
+        INTER_ECOUTE.fin = duree ? Date.now() + duree * 1000 : 0;
+        return Promise.resolve({ ecoute: interEcoute() });
+      }
       if (msg && msg.type === 'loggia/interrupteurs/affecter') {
         return Promise.resolve({ affectations: interAffecter(msg) });
       }

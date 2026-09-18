@@ -2476,4 +2476,9 @@ export default {
   'aucun volet abaissé': 'no blind lowered',
   'Au-delà d’un seuil, tout remonter — un volet baissé dans une rafale est un volet plié.': 'Beyond a threshold, raise everything — a blind lowered in a gust is a bent blind.',
   'Passe avant les deux règles ci-dessus': 'Takes precedence over the two rules above',
+  // Interrupteurs : l'ecoute d'apprentissage (retour du 18/09).
+  'L’écoute ne répond pas.': 'Listening isn’t answering.',
+  'L’écoute est coupée : aucun nouvel appui n’apparaît. Les boutons déjà réglés marchent toujours.': 'Listening is off: no new press shows up. Buttons already set keep working.',
+  'écoute coupée': 'not listening',
+  'Écouter 5 min': 'Listen for 5 min',
 };
