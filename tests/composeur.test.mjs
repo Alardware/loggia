@@ -17,7 +17,7 @@ const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, d
 test('la fabrique rend toute cle : entite, zone, distributeur, plante — et porte leurs fiches', () => {
   const dc = bloc('function useDomainCards(', NL + '}');
   assert.ok(dc.includes("if (zone || k.indexOf('zone:') === 0) {") && dc.includes("if (k === 'obj:feeder') {") && dc.includes("if (k.indexOf('plant:') === 0) {"), 'les trois cles composees');
-  assert.ok(dc.includes("<RoomFeederCard chip={chip} nom={label || tr('Distributeur')}") && dc.includes('<RoomPlantCard chip={chip} nom={label || pl.name}'), 'les cartes du distributeur et de la plante, compactes ou non');
+  assert.ok(dc.includes("<RoomFeederCard chip={chip} mort={d.mort} nom={label || tr('Distributeur')}") && dc.includes('<RoomPlantCard chip={chip} mort={pl.mort} nom={label || pl.name}'), 'les cartes du distributeur et de la plante, compactes ou non');
   assert.ok(dc.includes('{feederPop && (() => { const d = distributeur(); return <FicheDistributeur') && dc.includes('{plantPop && <FichePlante pl={plantPop}'), 'leurs fiches voyagent avec la fabrique');
   assert.ok(dc.includes('setFeederPop(false); setPlantPop(null); };'), 'fermer les ferme aussi');
   assert.ok(dc.includes('const nom = (k) => nomDeCle(S, k);'), 'et elle sait nommer une cle');

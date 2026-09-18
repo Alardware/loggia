@@ -206,7 +206,7 @@ function haHost() {
 const NAV = [
   { group: 'MAISON', items: [
     { label: 'Accueil', active: true, svg: <Fi i="home" color="var(--o-accent)" /> },
-    { label: 'Pièces', svg: <Fi i="door-open" color="#ff8a4c" /> },
+    { label: 'Pièces', svg: <Fi i="door-open" color="var(--o-orange)" /> },
     { label: 'Scénarios', svg: <Fi i="sparkles" color="var(--o-purple)" /> },
     { label: 'Objets', svg: <Fi i="apps" color="var(--o-cyan)" /> },
     { label: 'Énergie', svg: <Fi i="bolt" color="var(--o-ok)" /> },
@@ -320,7 +320,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
             <Fi i="pencil" size={13} /><span className="o-side-text">{editMode ? tr('Quitter l’édition') : tr('Mode édition')}</span>
           </button>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 10, background: `rgba(${ha ? ha.alarmRgb : '140,152,180'},.1)`, border: `1px solid rgba(${ha ? ha.alarmRgb : '140,152,180'},.22)` }}><svg width="16" height="16" viewBox="0 0 24 24" fill={`rgb(${ha ? ha.alarmRgb : '140,152,180'})`}><path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5z" /></svg><span className="o-side-text" style={{ fontSize: 12, fontWeight: 700, color: `rgb(${ha ? ha.alarmRgb : '140,152,180'})` }}><FlipText text={ha ? ha.alarmTxt : 'Alarme · …'} /></span></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 10, background: `rgba(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'},.1)`, border: `1px solid rgba(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'},.22)` }}><svg width="16" height="16" viewBox="0 0 24 24" fill={`rgb(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'})`}><path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5z" /></svg><span className="o-side-text" style={{ fontSize: 12, fontWeight: 700, color: `rgb(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'})` }}><FlipText text={ha ? ha.alarmTxt : 'Alarme · …'} /></span></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 0' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: ha && !ha.online ? '0 0 7px var(--o-bad)' : '0 0 7px var(--o-ok)', animation: ha && !ha.online ? 'pulse 1.2s infinite' : 'none' }} /><div className="o-side-text" style={{ lineHeight: 1.2 }}><div style={{ fontSize: 12, fontWeight: 700, color: ha && !ha.online ? 'var(--o-bad)' : undefined }}>{ha && !ha.online ? tr('Home Assistant · Hors ligne') : tr('Home Assistant · En ligne')}</div><div style={{ fontSize: 10, color: 'var(--o-text3)', fontWeight: 600 }}>{haHost()}</div></div></div>
       </div>
     </aside>
@@ -564,7 +564,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
 function Header() {
   const ctx = useContext(HeaderCtx) || {};
   const { onToggleTheme, onToggleNav, onNav, editMode, onToggleEdit, users = [], userIdx = 0, onSwitchUser, peutEditer = false, droits = [], notifs = [], customViews = [], rooms = [], onAssistant = null, onDictee = null, hass: hassCtx = null } = ctx;
-  const cur = users[userIdx] || { name: 'Administrateur', role: 'Admin', grad: 'linear-gradient(135deg,#ffb347,#f87171)' };
+  const cur = users[userIdx] || { name: 'Administrateur', role: 'Admin', grad: 'linear-gradient(135deg,var(--o-lampe-b),var(--o-bad))' };
   const curBg = userBg(cur);
   const hbtn = { width: 42, height: 42, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 };
   /* `border` et non `borderColor` : `hbtn` pose deja le raccourci, et React
@@ -926,7 +926,7 @@ const LOGGIA_PRESETS = {
         '--o-s4': 'rgba(5,31,45,.022)', '--o-s5': 'rgba(5,31,45,.022)',
         '--o-sky': 'rgba(2,96,147,.22)',
         // Assombris pour rester lisibles sur blanc, comme le veut le thème clair.
-        '--o-ok': '#0f7a5a', '--o-ok-rgb': '52,211,153',
+        '--o-ok': '#0f7a5a', '--o-ok-rgb': 'var(--o-ok-rgb)',
         '--o-warn2': '#a85b0b', '--o-warn2-rgb': '245,158,11',
         '--o-bad': '#b4231a', '--o-bad-rgb': '239,68,68',
         // Mêmes rôles, retournés : sur blanc c'est le plus SOMBRE qui
@@ -1219,7 +1219,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
           <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
             onClick={e => { e.stopPropagation(); doToggle(); }}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-            style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-bd1)', transition: 'background .25s' }}>
+            style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-bd1)', transition: 'background .25s' }}>
             <span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
           </span>
         )}
@@ -1289,7 +1289,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
             <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
               onClick={e => { e.stopPropagation(); doToggle(); }}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-              style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, marginLeft: 'auto', background: on ? 'linear-gradient(135deg,#ffce73,#f59e0b)' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
+              style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, marginLeft: 'auto', background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
               <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
             </span>
           )}
@@ -1490,8 +1490,8 @@ function outdoorTips(mode, temp, wind, isNight, rainProb) {
   if (temp != null) {
     if (temp <= 2) T.push(['snowflake', 'var(--o-cold)', 'Risque de gel, couvre-toi bien']);
     else if (temp < 10) T.push(['thermometer-half', '#38bdf8', 'Frais dehors, prends une veste']);
-    else if (temp >= 30) T.push(['humidity', '#ff8a4c', 'Forte chaleur, pense à t’hydrater']);
-    else if (temp >= 25) T.push(['sun', '#ffce73', 'Il fait chaud, vêtements légers conseillés']);
+    else if (temp >= 30) T.push(['humidity', 'var(--o-orange)', 'Forte chaleur, pense à t’hydrater']);
+    else if (temp >= 25) T.push(['sun', 'var(--o-lampe)', 'Il fait chaud, vêtements légers conseillés']);
   }
   if ((mode === 'sun' || mode === 'partly') && !isNight && temp != null && temp >= 22) T.push(['sun', 'var(--o-gold)', 'Grand soleil, crème solaire et lunettes']);
   if (wind != null && wind >= 30) T.push(['wind', '#9fb4d6', 'Vent fort (' + Math.round(wind) + ' km/h), sois prudent']);
@@ -1727,7 +1727,7 @@ const RM_SUB = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginT
  * 14/09 les dessinent partout pareil : une bascule rose en haut a droite, une
  * glissiere fine dont le remplissage EST la valeur, un curseur court juste
  * apres, un point au bout du rail. Une seule ecriture, donc. */
-const RM_ROSE = '#FF2D78';
+const RM_ROSE = 'var(--o-rose)';
 function RmBascule({ on, nom, onToggle, couleur = RM_ROSE }) {
   return (
     <span role="switch" aria-checked={!!on} tabIndex={0} aria-label={(on ? tr('Éteindre') : tr('Allumer')) + ' ' + nom}
@@ -2000,7 +2000,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
     else commander(hass, id, 'turn_off');
   };
   const briAff = ovBri != null ? ovBri : (on ? bri : 0);
-  const grade = (rgb && color) ? color : 'linear-gradient(90deg,#ffce73,#f59e0b)';
+  const grade = (rgb && color) ? color : 'linear-gradient(90deg,var(--o-lampe),var(--o-lampe-b))';
   // Une entité qui n'existe plus le dit en clair : « Éteint » ferait chercher l'interrupteur.
   const sub = mort ? tr('Entité absente · vérifie l’appairage') : on ? (adjustable ? tr('{n} % de luminosité', { n: briAff }) : tr('Allumé')) : tr('Éteint');
   return (
@@ -2065,7 +2065,7 @@ function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
       onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }}
       onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(actif ? 'rgba(52,211,153,.16)' : 'var(--o-s1)', actif ? 'var(--o-ok)' : 'var(--o-text3)')}><Ico name={dom === 'vacuum' ? 'vacuum' : 'mower'} size={17} color={actif ? 'var(--o-ok)' : 'var(--o-text3)'} /></span>
+        <span style={RM_ICO(actif ? 'rgba(var(--o-ok-rgb),.16)' : 'var(--o-s1)', actif ? 'var(--o-ok)' : 'var(--o-text3)')}><Ico name={dom === 'vacuum' ? 'vacuum' : 'mower'} size={17} color={actif ? 'var(--o-ok)' : 'var(--o-text3)'} /></span>
         {bat != null && <span style={{ fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: bat < 20 ? 'var(--o-bad)' : bat < 50 ? 'var(--o-warn)' : 'var(--o-text2)' }}>{Math.round(bat)}%</span>}
       </div>
       <div>
@@ -2087,7 +2087,7 @@ function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
 
 /* Distributeur de croquettes, même gabarit : patte en haut à gauche, RÉSERVOIR
  * en haut à droite, nom et prochaine ration sous l'icône, Distribuer en bas. */
-function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onOpen, extra = null, chip = false }) {
+function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onOpen, extra = null, chip = false, mort = false }) {
   // Deux appuis rapprochés — un doigt qui hésite, un double-clic — faisaient
   // deux rations : le geste se verrouille le temps que le distributeur parte
   // (audit 18/09). Le service, lui, n'a pas de garde-fou.
@@ -2096,11 +2096,11 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onO
   // Compacte 1×1 : gabarit CvCard dense — réservoir à droite, ration en mini.
   if (chip) {
     return (
-      <div className="o-piece o-cvdense" role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
+      <div className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
         onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,206,115,.14)', color: '#ffce73' }}><Fi i="paw" size={15} /></span>
+          <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-lampe-rgb),.14)', color: 'var(--o-lampe)' }}><Fi i="paw" size={15} /></span>
           <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prochaine || sub || '—'}</div>
@@ -2118,14 +2118,14 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onO
   }
   // Standard (maquettes du 14/09) : patte orange, RESERVOIR en repere, le bac
   // et le dernier repas en sous-titre, Distribuer et Rempli au pied.
-  const orange = '#ff8a4c';
+  const orange = 'var(--o-orange)';
   return (
-    <div className="o-rmcard" role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
       onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', border: 'none',
-        ...(LAVIS ? { background: 'linear-gradient(180deg,transparent 28%,rgba(255,138,76,' + lav(.14) + ')), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))' } : null) }}>
+        ...(LAVIS ? { background: 'linear-gradient(180deg,transparent 28%,rgba(var(--o-orange-rgb),' + lav(.14) + ')), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))' } : null) }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO('rgba(255,138,76,.16)', orange)}><Fi i="paw" size={17} /></span>
+        <span style={RM_ICO('rgba(var(--o-orange-rgb),.16)', orange)}><Fi i="paw" size={17} /></span>
         {pct != null && <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: pct < 25 ? 'var(--o-bad)' : orange, marginTop: 4 }}>{pct} %</span>}
       </div>
       <div style={{ marginTop: 14 }}>
@@ -2145,11 +2145,11 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onO
 
 /* Capteur de plante, même gabarit : pousse en haut à gauche, HUMIDITÉ en haut
  * à droite (à la couleur du verdict), nom et verdict sous l'icône. */
-function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, temp, img = null, onOpen, chip = false, rgb = 'var(--o-ok-rgb)' }) {
+function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, cond, temp, img = null, onOpen, chip = false, rgb = 'var(--o-ok-rgb)' }) {
   // L'icône pousse du gabarit maison ; l'illustration de la plante vit en
   // FILIGRANE au fond de la carte, comme sur la vue Objets.
   const portrait = (taille) => (
-    <span style={{ width: taille, height: taille, borderRadius: taille > 40 ? 13 : 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(52,211,153,.14)', color: 'var(--o-ok)' }}><Fi i="seedling" size={taille > 40 ? 17 : 15} /></span>
+    <span style={{ width: taille, height: taille, borderRadius: taille > 40 ? 13 : 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-ok-rgb),.14)', color: 'var(--o-ok)' }}><Fi i="seedling" size={taille > 40 ? 17 : 15} /></span>
   );
   const filigrane = img && PLANT_ART[img] && (
     <span aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -10, width: 120, height: 120, backgroundImage: `url("${PLANT_ART[img]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.14, pointerEvents: 'none' }} />
@@ -2157,7 +2157,7 @@ function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, temp, im
   // Compacte 1×1 : gabarit CvCard dense — l'humidité à la couleur du verdict.
   if (chip) {
     return (
-      <div className="o-piece o-cvdense" role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
+      <div className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
         onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2182,7 +2182,7 @@ function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, temp, im
     </div>
   );
   return (
-    <div className="o-rmcard" role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
       onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', position: 'relative', overflow: 'hidden', border: 'none',
         ...(LAVIS ? { background: 'linear-gradient(180deg,transparent 28%,rgba(' + rgb + ',' + lav(.14) + ')), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))' } : null) }}>
@@ -2197,7 +2197,7 @@ function RoomPlantCard({ nom, sub, hum, verdict, verdictCol, lux, cond, temp, im
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px 14px', marginTop: 10 }}>
           {hum != null && jauge('raindrops', verdictCol || 'var(--o-ok)', hum, tr('Humidité') + ' ' + Math.round(hum) + ' %')}
           {lux != null && jauge('brightness', 'var(--o-warn)', lux / 10, tr('Luminosité') + ' ' + Math.round(lux) + ' lx')}
-          {temp != null && jauge('thermometer-half', '#ff8a4c', temp / 0.35, Math.round(temp) + ' °C')}
+          {temp != null && jauge('thermometer-half', 'var(--o-orange)', temp / 0.35, Math.round(temp) + ' °C')}
           {cond != null && jauge('leaf', 'var(--o-ok)', cond / 20, Math.round(cond) + ' µS/cm')}
         </div>
       </div>
@@ -2394,10 +2394,11 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const modeMarche = options.find(o => pilotFamille(o) === 'confort') || options.find(o => pilotFamille(o) !== 'off') || null;
   const basculer = () => { const nv = !marche; setOvOn(nv); const m = nv ? modeMarche : modeArret; if (m) poserMode(m); };
   const nom = titre || zone.name;
+  const mort = !!(estClimate(zone) && (!S || !S[zone.haid] || S[zone.haid].state === 'unavailable'));
   const consigne = tr('consigne {t} °C', { t: Number(target).toFixed(1).replace('.', ',') });
   const sub = !marche ? tr('Éteint') : heating ? tr('Chauffe') + ' · ' + consigne : tr('Au repos') + ' · ' + consigne;
   return (
-    <div className="o-rmcard" role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(zone.id); } }} onClick={() => onOpen && onOpen(zone.id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(zone.id); } }} onClick={() => onOpen && onOpen(zone.id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       ...(heating && marche && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-bad-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
       } : null),
@@ -2443,7 +2444,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-          <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={13} color="#ff8a4c" />{zone.name.toUpperCase()}</span>
+          <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={13} color="var(--o-orange)" />{zone.name.toUpperCase()}</span>
           {estClimate(zone) && <BoutonEpingle id={zone.haid} />}
           {zone.autoEnt && <span onClick={() => call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt })} role="switch" tabIndex={0} aria-label={(z.auto ? 'Désactiver' : 'Activer') + ' la programmation automatique'} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt }); } }} aria-checked={!!z.auto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><span style={{ fontSize: 12, fontWeight: 700, color: z.auto ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>Auto</span><span style={{ width: 42, height: 24, borderRadius: 14, background: z.auto ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: z.auto ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span></span>}
         </div>
@@ -2478,7 +2479,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
         ); })()}
         {(zone.tempSensor || estClimate(zone)) && (<>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '18px 0 9px' }}>{tr('TEMPÉRATURE · 24 H')}</div>
-          <Courbe24 points={ptsTemp} couleur="#ff8a4c" unite="°" />
+          <Courbe24 points={ptsTemp} couleur="var(--o-orange)" unite="°" />
         </>)}
       </>)}
     </BottomSheet>
@@ -3138,7 +3139,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
           <RangeeDernier st={st} />
         </div>
         <FicheLibelle>{tr('TEMPÉRATURE · 24 H')}</FicheLibelle>
-        <Courbe24 points={ptsTemp} couleur="#ff8a4c" unite="°" />
+        <Courbe24 points={ptsTemp} couleur="var(--o-orange)" unite="°" />
       </>)}
     </BottomSheet>
   );
@@ -3158,7 +3159,7 @@ function RoomLightSheet({ light, hass, onClose }) {
   const on = ovOn != null ? ovOn : realOn;
   const bri = ovBri != null ? ovBri : realBri;
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : light.color;
-  const acc = (light.rgb && color) ? color : '#ffce73';
+  const acc = (light.rgb && color) ? color : 'var(--o-lampe)';
   const toggle = () => { const v = !on; setOvOn(v); commander(hass, light.id, v ? 'turn_on' : 'turn_off'); };
   const poser = (v) => { setOvBri(v); setOvOn(v > 0); if (v > 0) commander(hass, light.id, 'set_brightness', v); else commander(hass, light.id, 'turn_off'); };
   const [onglet, setOnglet] = useState(light.ct ? 'blancs' : 'couleurs');
@@ -3177,7 +3178,7 @@ function RoomLightSheet({ light, hass, onClose }) {
         <FicheEntete titre={nom} sous={sous} close={close} id={light.id} />
         {light.dimmable !== false && (<>
           <FicheLibelle droite={<span style={{ fontSize: 18, fontWeight: 800, color: on ? 'var(--o-warn)' : 'var(--o-text3)' }}>{shown} %</span>}>{tr('LUMINOSITÉ')}</FicheLibelle>
-          <RmJauge v={shown} couleur={acc} grade={(light.rgb && color) ? color : 'linear-gradient(90deg,#ffce73,#f59e0b)'} label={tr('Luminosité') + ' ' + nom} onCommit={poser} marge={0} />
+          <RmJauge v={shown} couleur={acc} grade={(light.rgb && color) ? color : 'linear-gradient(90deg,var(--o-lampe),var(--o-lampe-b))'} label={tr('Luminosité') + ' ' + nom} onCommit={poser} marge={0} />
         </>)}
         {(light.ct || light.rgb) && (
           <div style={{ marginTop: 16 }}>
@@ -3575,7 +3576,7 @@ const DOMAINES_EDITION = () => [
   { id: 'volet', label: tr('Volet'), fi: 'blinds', rgb: 'var(--o-purple-rgb)' },
   { id: 'chauffage', label: tr('Chauffage'), fi: 'flame', rgb: 'var(--o-bad-rgb)' },
   { id: 'prise', label: tr('Prise'), prise: true, rgb: 'var(--o-accent-rgb)' },
-  { id: 'multimedia', label: tr('Multimédia'), fi: 'tv-music', rgb: '255,45,120' },
+  { id: 'multimedia', label: tr('Multimédia'), fi: 'tv-music', rgb: 'var(--o-rose-rgb)' },
   { id: 'capteur', label: tr('Capteur'), fi: 'sensor', rgb: '255,204,68' },
   { id: 'camera', label: tr('Caméra'), fi: 'camera', rgb: 'var(--o-accent-rgb)' },
   { id: 'serrure', label: tr('Serrure'), fi: 'lock', rgb: 'var(--o-ok-rgb)' },
@@ -3997,7 +3998,7 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
     if (!composites) return [];
     const out = [];
     const croq = croqHaids();
-    if (croq.reservoir || croq.portionWeight) out.push({ cle: 'obj:feeder', nom: tr('Distributeur de croquettes'), sous: dc ? dc.distributeur().sous : tr('Distributeur'), fi: 'paw', rgb: '255,138,76', piece: null });
+    if (croq.reservoir || croq.portionWeight) out.push({ cle: 'obj:feeder', nom: tr('Distributeur de croquettes'), sous: dc ? dc.distributeur().sous : tr('Distributeur'), fi: 'paw', rgb: 'var(--o-orange-rgb)', piece: null });
     plantsCfg().forEach(p => {
       const pl = dc ? dc.plante(p.base) : null;
       const v = pl ? verdictCartePlante(pl) : null;
@@ -4362,7 +4363,7 @@ function FicheMachineHero({ id, hass }) {
             : 'var(--o-accent-soft)';
   const vitesses = (dom === 'vacuum' && Array.isArray(a.fan_speed_list)) ? a.fan_speed_list : [];
   return (
-    <div style={{ ...CV_CADRE, opacity: mort ? .55 : 1 }}>
+    <div className={mort ? 'o-panne' : undefined} style={{ ...CV_CADRE, opacity: mort ? .55 : 1 }}>
       {/* L'objet a gauche, sa mesure a droite : on reconnait l'appareil avant
         * de lire son chiffre, comme sur une etagere. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
@@ -4704,6 +4705,7 @@ function useDomainCards(hass, { onNav = null } = {}) {
    * maison ne reste qu'en repli. Le bac en grammes, les repas du jour, les
    * jours de reserve ; le dernier repas d'apres le compteur du jour ; la
    * portion, un nombre de l'appareil. */
+  const muet = (id) => !!id && (!S[id] || S[id].state === 'unavailable');
   const distributeur = () => {
     const croq = croqHaids();
     const pct = Math.max(0, Math.min(100, Math.round((numDe(croq.reservoir, 0) || 0) / croqMax(S) * 100)));
@@ -4721,10 +4723,10 @@ function useDomainCards(hass, { onNav = null } = {}) {
     const portion = (() => { const id = croq.portionWeight; const e = id && S[id]; if (!e) return null; const a = e.attributes || {}; return { id, valeur: numDe(id, 0), min: Number(a.min) || 0, max: Number(a.max) || 100, pas: Number(a.step) || 1 }; })();
     const onRempli = (croq.reservoir && String(croq.reservoir).indexOf('input_number.') === 0) ? () => appel('input_number', 'set_value', { entity_id: croq.reservoir, value: croqMax(S) }) : null;
     const sous = [tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
-    return { pct, ration, feed, ficheId, repas, jours, dernier, portion, onRempli, sous };
+    return { pct, ration, feed, ficheId, repas, jours, dernier, portion, onRempli, sous, mort: muet(croq.reservoir) };
   };
   // Les plantes : leurs capteurs, reconnus a leur classe, et leur verdict.
-  const plante = (base) => { const p = plantsCfg().find(x => x.base === base); if (!p) return null; return { base, name: p.name || p.base, img: p.img || null, room: plantPiece(S, p.base, p.room), hum: numDe(plantCapteur(S, p.base, 'moisture')), cond: numDe(plantCapteur(S, p.base, 'conductivity', 'µS/cm')), lux: numDe(plantCapteur(S, p.base, 'illuminance', 'lx')), temp: numDe(plantCapteur(S, p.base, 'temperature')), bat: numDe(plantCapteur(S, p.base, 'battery', '%')) }; };
+  const plante = (base) => { const p = plantsCfg().find(x => x.base === base); if (!p) return null; return { base, name: p.name || p.base, mort: muet(plantCapteur(S, p.base, 'moisture')), img: p.img || null, room: plantPiece(S, p.base, p.room), hum: numDe(plantCapteur(S, p.base, 'moisture')), cond: numDe(plantCapteur(S, p.base, 'conductivity', 'µS/cm')), lux: numDe(plantCapteur(S, p.base, 'illuminance', 'lx')), temp: numDe(plantCapteur(S, p.base, 'temperature')), bat: numDe(plantCapteur(S, p.base, 'battery', '%')) }; };
   const nom = (k) => nomDeCle(S, k);
   /* Toute cle rend sa carte : une entite, une zone (`zone:`), le distributeur
    * (`obj:feeder`), une plante (`plant:`) — dans n'importe quelle vue.
@@ -4737,13 +4739,13 @@ function useDomainCards(hass, { onNav = null } = {}) {
     }
     if (k === 'obj:feeder') {
       const d = distributeur();
-      return <RoomFeederCard chip={chip} nom={label || tr('Distributeur')} pct={d.pct} sub={d.sous} onFeed={d.feed} onRempli={d.onRempli} onOpen={() => setFeederPop(true)} />;
+      return <RoomFeederCard chip={chip} mort={d.mort} nom={label || tr('Distributeur')} pct={d.pct} sub={d.sous} onFeed={d.feed} onRempli={d.onRempli} onOpen={() => setFeederPop(true)} />;
     }
     if (k.indexOf('plant:') === 0) {
       const pl = plante(k.slice(6));
       if (!pl) return null;
       const v = verdictCartePlante(pl);
-      return <RoomPlantCard chip={chip} nom={label || pl.name} sub={pl.room} hum={pl.hum} verdict={v.texte} verdictCol={v.couleur} rgb={v.rgb} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setPlantPop(pl)} />;
+      return <RoomPlantCard chip={chip} mort={pl.mort} nom={label || pl.name} sub={pl.room} hum={pl.hum} verdict={v.texte} verdictCol={v.couleur} rgb={v.rgb} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setPlantPop(pl)} />;
     }
     if (chip) return <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense />;
     const d = k.split('.')[0];
@@ -5089,7 +5091,7 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
  * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
  * langue. Appelee au rendu, elle se dit dans la langue du moment. */
 const CAMERAS = () => [
-  { cle: 'demo-entree', label: tr('Entrée'), tag: 'LIVE · ENTRÉE', grad: 'linear-gradient(180deg,#6ba8d8 0%,#9cc4e0 42%,#7a8a5c 60%,#56683f 100%)', glow: 'radial-gradient(120% 80% at 50% 18%,rgba(255,255,255,.18),transparent 55%)', sub: <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffce73" strokeWidth="2.4" strokeLinecap="round"><path d="M13 2L3 14h7l-1 8 11-13h-7z" /></svg>Mouvement il y a 3 min</> },
+  { cle: 'demo-entree', label: tr('Entrée'), tag: 'LIVE · ENTRÉE', grad: 'linear-gradient(180deg,#6ba8d8 0%,#9cc4e0 42%,#7a8a5c 60%,#56683f 100%)', glow: 'radial-gradient(120% 80% at 50% 18%,rgba(255,255,255,.18),transparent 55%)', sub: <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--o-lampe)" strokeWidth="2.4" strokeLinecap="round"><path d="M13 2L3 14h7l-1 8 11-13h-7z" /></svg>Mouvement il y a 3 min</> },
   { cle: 'demo-facade', label: tr('Façade'), tag: 'LIVE · FAÇADE', grad: 'linear-gradient(180deg,#5e94c4 0%,#86b06f 38%,#6f7e4a 62%,#4a5a36 100%)', glow: 'radial-gradient(120% 80% at 60% 22%,rgba(255,255,255,.16),transparent 55%)', sub: <><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('RAS · véhicule présent')}</> },
 ];
 
@@ -5108,7 +5110,7 @@ function sousCamera(online, ev) {
   if (!online) return <><span style={POINT_CAMERA('var(--o-bad)')} />{tr('Hors ligne')}</>;
   if (!ev) return <><span style={POINT_CAMERA('var(--o-ok)')} />{tr('Direct')}</>;
   if (ev.enCours) return <><span style={POINT_CAMERA(ev.genre === 'sonnette' ? 'var(--o-bad)' : ev.genre === 'colis' ? 'var(--o-accent)' : 'var(--o-warn)')} />{ev.libelle}</>;
-  return <><Fi i={ev.icone} size={11} color="#ffce73" />{ev.libelle + ' · ' + depuis(ev.quand)}</>;
+  return <><Fi i={ev.icone} size={11} color="var(--o-lampe)" />{ev.libelle + ' · ' + depuis(ev.quand)}</>;
 }
 function tuileCamera(cam, i, hass) {
   const teinte = CAMERAS()[i % CAMERAS().length];
@@ -5176,7 +5178,7 @@ function CameraTile({ c, agrandir = true }) {
   const [grand, setGrand] = useState(false);
   const ctrl = { width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer', padding: 0 };
   return (
-    <div style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', aspectRatio: '16/9', background: c.grad, border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
+    <div className={'o-sombre o-cam-tuile' + (c.online === false ? ' o-panne' : '')} style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', aspectRatio: '16/9', background: c.grad, border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
       {live && <CamLive hass={c.hass} haid={c.haid} online={c.online} />}
       {!live && <div style={{ position: 'absolute', inset: 0, background: c.glow }} />}
       <div className="o-livebadge" style={{ position: 'absolute', top: 13, left: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 11px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: '#fff' }}><span className="o-livedot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-bad)' }} />{c.tag}</div>
@@ -5263,7 +5265,7 @@ function verdictCartePlante(pl) {
   const presse = v.presse.map(p => M.presse[p]).join(', ');
   const texte = presse ? presse.charAt(0).toUpperCase() + presse.slice(1) : (v.hum ? M.hum[v.hum][0] : tr('Mesure absente'));
   const couleur = v.presse.length ? 'var(--o-warn2)' : v.hum === 'humide' ? 'var(--o-cold)' : v.hum ? 'var(--o-ok)' : 'var(--o-text3)';
-  const rgb = v.presse.length ? '255,138,76' : v.hum === 'humide' ? '34,211,238' : 'var(--o-ok-rgb)';
+  const rgb = v.presse.length ? 'var(--o-orange-rgb)' : v.hum === 'humide' ? '34,211,238' : 'var(--o-ok-rgb)';
   return { texte, couleur, rgb };
 }
 
@@ -5311,7 +5313,7 @@ function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, port
   const poserPortion = (v) => { if (!portion) return; const nv = Math.max(portion.min, Math.min(portion.max, v)); setOvPortion(nv); call('number', 'set_value', { entity_id: portion.id, value: nv }); };
   const [appareil, setAppareil] = useState(false);
   const sous = [tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
-  const orange = '#ff8a4c';
+  const orange = 'var(--o-orange)';
   return (
     <BottomSheet onClose={onClose}>
       {close => (<>
@@ -5676,7 +5678,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
   const chip = { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)', fontSize: 14, fontWeight: 700, color: '#aeb9cc' };
   const pt = (c) => <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: c, boxShadow: '0 0 8px ' + c }} />;
   return (
-    <div role="button" aria-label={tr('Toucher pour réveiller')} style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070b', color: '#e8edf5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', animation: REDUCE_MOTION ? 'none' : 'o-ambient-in 1s ease', userSelect: 'none' }}>
+    <div className="o-sombre" role="button" aria-label={tr('Toucher pour réveiller')} style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070b', color: '#e8edf5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', animation: REDUCE_MOTION ? 'none' : 'o-ambient-in 1s ease', userSelect: 'none' }}>
     {/* Diaporama : la photo courante en fondu, la suivante préchargée invisible,
         un voile pour que l'horloge reste lisible — plus opaque la nuit. */}
     {photos.length > 0 && (
@@ -5700,7 +5702,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16, maxWidth: '84vw' }}>
         {inTemp != null && <span style={chip}>{pt('#54c8f0')}{inTemp.toFixed(1).replace('.', ',')} °C {tr('intérieur')}</span>}
-        {lightsOn > 0 && <span style={{ ...chip, color: '#ffce73' }}>{pt('#ffce73')}{lightsOn > 1 ? tr('{n} allumées', { n: lightsOn }) : tr('{n} allumée', { n: lightsOn })}</span>}
+        {lightsOn > 0 && <span style={{ ...chip, color: 'var(--o-lampe)' }}>{pt('var(--o-lampe)')}{lightsOn > 1 ? tr('{n} allumées', { n: lightsOn }) : tr('{n} allumée', { n: lightsOn })}</span>}
         {ast != null && <span style={{ ...chip, color: ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)' }}>{pt(ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)')}{ast === 'triggered' ? tr('Alarme') : ast === 'disarmed' ? tr('Alarme désarmée') : tr('Alarme armée')}</span>}
       </div>
       {rouges.length > 0 && (
@@ -5738,7 +5740,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
  * d'etat, puis des lignes « libelle / contexte / valeur ». Jamais d'onglets
  * sur une vue metier.
  */
-function ViewHead({ titre, sous, badge, rgb = '52,211,153' }) {
+function ViewHead({ titre, sous, badge, rgb = 'var(--o-ok-rgb)' }) {
   return (
     <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
       <div style={{ minWidth: 0 }}>
@@ -5812,7 +5814,7 @@ const PARENTE = [
  * du 15/09) : les memes jetons que les modeles, rien d'autre — une couleur
  * libre ne suivrait aucun theme. */
 const TEINTES_PIECE = [
-  { id: 'accent', label: 'Accent', col: 'var(--o-accent)', rgb: 'var(--o-accent-rgb)' },
+  { id: 'accent', label: 'Accent', col: 'var(--o-accent-soft)', rgb: 'var(--o-accent-soft-rgb)' },
   { id: 'ambre', label: 'Ambre', col: 'var(--o-piece-ambre)', rgb: 'var(--o-piece-ambre-rgb)' },
   { id: 'tendre', label: 'Tendre', col: 'var(--o-piece-tendre)', rgb: 'var(--o-piece-tendre-rgb)' },
   { id: 'chambre', label: 'Chambre', col: 'var(--o-piece-chambre)', rgb: 'var(--o-piece-chambre-rgb)' },
@@ -6851,7 +6853,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     out.live = r; // valeurs brutes + entity ids → popup confort
     return out;
   });
-  const avatars = (a && a.people) ? a.people.map(p => ({ img: p.img, title: `${p.name} · ${p.home ? tr('Présent') : 'Absent'}`, dim: !p.home })) : [{ grad: 'linear-gradient(135deg,#f472b6,var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,#ffb347,#f87171)' }];
+  const avatars = (a && a.people) ? a.people.map(p => ({ img: p.img, title: `${p.name} · ${p.home ? tr('Présent') : 'Absent'}`, dim: !p.home })) : [{ grad: 'linear-gradient(135deg,var(--o-rose),var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,var(--o-lampe-b),var(--o-bad))' }];
   // ── Salutation contextuelle ──────────────────────────────────────────────
   // L'heure donne le bonjour ; la maison donne les faits — lumières allumées,
   // ouvrants ouverts, état de l'alarme. Sans HA, des faits d'exemple gardent
@@ -7272,8 +7274,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                     const present = !u.dim;
                     return (
                       <span key={i + (present ? '-p' : '-a')} className="o-avatarin" title={u.title} style={{ position: 'relative', width: 34, height: 34, flexShrink: 0, display: 'inline-block' }}>
-                        <span style={{ display: 'block', width: '100%', height: '100%', borderRadius: '50%', background: u.img ? `url(${u.img}) center/cover` : u.grad, boxShadow: present ? '0 0 0 2.5px var(--o-ok), 0 0 9px rgba(52,211,153,.5)' : '0 0 0 2px var(--o-bd1)', opacity: present ? 1 : 0.45 }} />
-                        <span style={{ position: 'absolute', right: -1, bottom: -1, width: 12, height: 12, borderRadius: '50%', background: present ? 'var(--o-ok)' : 'var(--o-text3)', border: '2.5px solid var(--o-bg2)', boxShadow: present ? '0 0 6px rgba(52,211,153,.7)' : 'none' }} />
+                        <span style={{ display: 'block', width: '100%', height: '100%', borderRadius: '50%', background: u.img ? `url(${u.img}) center/cover` : u.grad, boxShadow: present ? '0 0 0 2.5px var(--o-ok), 0 0 9px rgba(var(--o-ok-rgb),.5)' : '0 0 0 2px var(--o-bd1)', opacity: present ? 1 : 0.45 }} />
+                        <span style={{ position: 'absolute', right: -1, bottom: -1, width: 12, height: 12, borderRadius: '50%', background: present ? 'var(--o-ok)' : 'var(--o-text3)', border: '2.5px solid var(--o-bg2)', boxShadow: present ? '0 0 6px rgba(var(--o-ok-rgb),.7)' : 'none' }} />
                       </span>
                     );
                   })}
@@ -7467,7 +7469,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               {rows}
             </div>
           ) : null;
-          const OKRGB = '52,211,153', AMBRGB = '251,191,36';
+          const OKRGB = 'var(--o-ok-rgb)', AMBRGB = 'var(--o-warn-rgb)';
           const momentVisibles = nEnCours > 8
             ? [...momentRows.slice(0, 8), railRow('plus', tr('{n} autres', { n: nEnCours - 8 }), tr('Tout est dans Objets'), '', 'var(--o-text3)', 'objets')]
             : momentRows;
@@ -7602,7 +7604,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
 
 // Formateur puissance UNIQUE (harmonisation 20/08) : virgule FR, kW à 2 décimales, « — » si valeur absente
 const fmtWatts = (w) => w == null || isNaN(w) ? '—' : Math.abs(w) >= 1000 ? (w / 1000).toFixed(2).replace('.', ',') + ' kW' : Math.round(w) + ' W';
-const hx = (hex, a) => { if (HX_TOKENS[hex]) return `rgba(var(${HX_TOKENS[hex]}),${a})`; if (typeof hex !== 'string' || hex[0] !== '#') return `rgba(140,152,180,${a})`; const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+const hx = (hex, a) => { if (HX_TOKENS[hex]) return `rgba(var(${HX_TOKENS[hex]}),${a})`; if (typeof hex !== 'string' || hex[0] !== '#') return `rgba(var(--o-text3-rgb),${a})`; const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
 
 // ── Acces des fonctions pures a la decouverte et a la configuration ──
 // App les alimente a chaque rendu ; avant la premiere reponse elles valent
@@ -7678,7 +7680,7 @@ const LightIcon = ({ type, color = 'currentColor', size = 24 }) => (
   </svg>
 );
 // Palette popup (design "Light Cards Styles" — 8 teintes, blanc inclus).
-const LIGHT_PALETTE = ['#ffce73', '#ff8a4c', '#f472b6', 'var(--o-purple)', 'var(--o-accent)', 'var(--o-cyan)', 'var(--o-ok)', '#ffffff'];
+const LIGHT_PALETTE = ['var(--o-lampe)', 'var(--o-orange)', '#f472b6', 'var(--o-purple)', 'var(--o-accent)', 'var(--o-cyan)', 'var(--o-ok)', '#ffffff'];
 /* Une FONCTION, pas une table.
  *
  * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
@@ -8483,7 +8485,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
         : <ViewHead titre={tr('Volets')}
             sous={(covers.length > 1 ? tr('{n} volets', { n: covers.length }) : tr('{n} volet', { n: covers.length })) + (mode ? ' · ' + String(mode).toLowerCase() : '')}
             badge={openCount ? (openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })) : tr('tous fermés')}
-            rgb={openCount ? '52,211,153' : '140,152,180'} />}
+            rgb={openCount ? 'var(--o-ok-rgb)' : 'var(--o-text3-rgb)'} />}
 
       {!embarque && <ViewBar>
         <BarGroup label={tr('Volets')}>
@@ -8617,7 +8619,7 @@ function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, 
   const netGridW = surplusW > 0 ? -surplusW : (homeW - solarW);
   const gridImporting = netGridW > 0, gridFlowW = Math.abs(netGridW);
   // Palette calquée sur la vidéo de réf : solaire=jaune, maison=rose, réseau=violet.
-  const C = { solar: '#fbbf24', home: '#ec4899', grid: '#a855f7', ev: '#38bdf8', bat: '#4ade80' };
+  const C = { solar: 'var(--o-flux-solaire)', home: 'var(--o-flux-maison)', grid: 'var(--o-flux-reseau)', ev: 'var(--o-flux-ve)', bat: 'var(--o-flux-batterie)' };
   // Une batterie se charge ET se decharge. Le trace va de la batterie vers le
   // montant : direct = decharge, inverse = charge.
   const batCharge = batW > 0, batFlowW = Math.abs(batW || 0);
@@ -8660,7 +8662,7 @@ function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, 
 /* ════════════ VUE ÉNERGIE (package energie.yaml v3 + arc solaire type Helios) ════════════ */
 const enKeys = () => [...Object.values(enHaids()), ...enDevices(null).flatMap(d => [d.power, d.kwh])].filter(Boolean);
 const EN_ART = ['pc', 'nas', 'radiator', 'dishwasher'];
-const EN_LOOK = [['briefcase', 'var(--o-cyan)'], ['microchip', 'var(--o-purple)'], ['thermometer-half', '#ff8a4c'], ['utensils', 'var(--o-accent-soft)'], ['bolt', '#f472b6']]; // 'plug' n'existe pas dans la fonte UICons
+const EN_LOOK = [['briefcase', 'var(--o-cyan)'], ['microchip', 'var(--o-purple)'], ['thermometer-half', 'var(--o-orange)'], ['utensils', 'var(--o-accent-soft)'], ['bolt', 'var(--o-rose)']]; // 'plug' n'existe pas dans la fonte UICons
 function enDevices(S) {
   const cfg = loggiaEnt('energyDevices', null);
   if (Array.isArray(cfg) && cfg.length) return cfg.filter(d => d && (!S || S[d.power] || S[d.kwh]));
@@ -9073,7 +9075,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
         <Anim i={0}><div style={{ position: 'relative', overflow: 'hidden', height: '100%', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
             <div><div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Maison · Temps réel')}</div><div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 25, fontWeight: 500, marginTop: 2 }}>{solarActive ? tr('Production solaire active') : tr('Consommation réseau')}</div></div>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 13px', borderRadius: 999, border: '1px solid ' + (solarActive ? 'rgba(52,211,153,.3)' : 'var(--o-bd2)'), color: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', fontSize: 12, fontWeight: 700, flexShrink: 0 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', animation: 'none' }} /><Shiny on={solarActive}>{solarActive ? 'Solaire actif' : 'Solaire inactif'}</Shiny></span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 13px', borderRadius: 999, border: '1px solid ' + (solarActive ? 'rgba(var(--o-ok-rgb),.3)' : 'var(--o-bd2)'), color: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', fontSize: 12, fontWeight: 700, flexShrink: 0 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', animation: 'none' }} /><Shiny on={solarActive}>{solarActive ? 'Solaire actif' : 'Solaire inactif'}</Shiny></span>
           </div>
           <div className="o-en-well" style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 30%,var(--o-well0),var(--o-well2))', border: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10 }}>
             {/* Scène type Helios : arc du jour (géoloc domicile), soleil + irradiance, chips de flux */}
@@ -9489,10 +9491,10 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   // ── État global ──
   const unknownState = alarm === 'unknown';
   const heroTitle = unknownState ? tr('État inconnu') : triggered ? tr('Alarme déclenchée') : anyMotion ? tr('Mouvement détecté') : tr('Tout est calme');
-  const statusCol = unknownState ? [140, 152, 180] : triggered ? [248, 113, 113] : alarm !== 'off' ? [255, 179, 71] : [52, 211, 153];
+  const statusCol = unknownState ? 'var(--o-text3-rgb)' : triggered ? 'var(--o-bad-rgb)' : alarm !== 'off' ? 'var(--o-warn-rgb)' : 'var(--o-ok-rgb)';
 
-  const cs = a => `rgb(${a.join(',')})`;
-  const ca = (a, al) => `rgba(${a.join(',')},${al})`;
+  const cs = a => `rgb(${a})`;
+  const ca = (a, al) => `rgba(${a},${al})`;
   // Décompte d'armement : le temps qui reste pour sortir, battu à la seconde.
   const cptAlarme = armCompte(alarmId ? S[alarmId] : null);
   useSeconde(!!cptAlarme);
@@ -10089,7 +10091,7 @@ function CvPerson({ id, hass }) {
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150, alignItems: 'center', justifyContent: 'center', gap: 10 }}>
       <span style={{ position: 'relative', width: 58, height: 58, flexShrink: 0 }}>
-        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', background: img ? `url("${img}") center/cover` : 'var(--o-s1)', color: 'var(--o-text2)', fontSize: 19, fontWeight: 800, boxShadow: home ? '0 0 0 2.5px var(--o-ok), 0 0 12px rgba(52,211,153,.5)' : '0 0 0 2px var(--o-bd1)', opacity: home ? 1 : .55 }}>{!img && nom.charAt(0).toUpperCase()}</span>
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', background: img ? `url("${img}") center/cover` : 'var(--o-s1)', color: 'var(--o-text2)', fontSize: 19, fontWeight: 800, boxShadow: home ? '0 0 0 2.5px var(--o-ok), 0 0 12px rgba(var(--o-ok-rgb),.5)' : '0 0 0 2px var(--o-bd1)', opacity: home ? 1 : .55 }}>{!img && nom.charAt(0).toUpperCase()}</span>
         <span style={{ position: 'absolute', right: -1, bottom: -1, width: 14, height: 14, borderRadius: '50%', background: home ? 'var(--o-ok)' : 'var(--o-text3)', border: '2.5px solid var(--o-surfA)' }} />
       </span>
       <span style={{ fontSize: 14, fontWeight: 800 }}>{nom}</span>
@@ -10739,7 +10741,7 @@ function CvPresence({ hass, gens = null }) {
     <div className="o-piece o-carte-presence" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       {/* Gabarit maison : icône hg, compteur hd, TITRE SOUS L'ICÔNE. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(maison ? 'rgba(52,211,153,.14)' : 'var(--o-s1)', maison ? 'var(--o-ok)' : 'var(--o-text3)')}><Fi i="users" size={16} /></span>
+        <span style={RM_ICO(maison ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s1)', maison ? 'var(--o-ok)' : 'var(--o-text3)')}><Fi i="users" size={16} /></span>
         {liste.length > 0 && <span style={{ fontSize: 11, fontWeight: 800, color: maison ? 'var(--o-ok)' : 'var(--o-text3)' }}>{maison + ' / ' + liste.length}</span>}
       </div>
       <div style={{ marginTop: 8 }}>
@@ -10751,7 +10753,7 @@ function CvPresence({ hass, gens = null }) {
           <div key={p.haid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', marginTop: 2 }}>
             <span style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 10, fontWeight: 800, color: 'var(--o-text2)', opacity: p.home ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
             <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<span className="o-presence-ou" style={{ fontWeight: 600, color: 'var(--o-text3)' }}> · {p.home ? tr('À la maison') : 'Absent'}</span></span>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', boxShadow: p.home ? '0 0 6px rgba(52,211,153,.6)' : 'none' }} />
+            <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', boxShadow: p.home ? '0 0 6px rgba(var(--o-ok-rgb),.6)' : 'none' }} />
           </div>
         ))}
       </div>
@@ -10809,7 +10811,7 @@ function CvEnergie({ hass, roles = null }) {
       {/* Gabarit maison : icône hg, part solaire hd, TITRE SOUS L'ICÔNE. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO('rgba(var(--o-accent-rgb),.14)', 'var(--o-accent-soft)')}><Fi i="bolt" size={16} /></span>
-        {part != null && <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: 'rgba(52,211,153,.14)', color: 'var(--o-ok)' }}>{tr('Solaire')} {part} %</span>}
+        {part != null && <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 999, background: 'rgba(var(--o-ok-rgb),.14)', color: 'var(--o-ok)' }}>{tr('Solaire')} {part} %</span>}
       </div>
       <div style={{ marginTop: 8 }}>
         <div style={RM_NAME}>{tr('Énergie maison')}</div>
@@ -11525,7 +11527,7 @@ function BiblioView() {
         <Item l={tr('Prise')} h={88}><CvCard id="switch.biblio_prise" hass={hb} onOpen={dc.ouvrir} dense /></Item>
       </Rangee>
 
-      <Titre i="thermometer-half" c="#ff8a4c" t={tr('Climat')} />
+      <Titre i="thermometer-half" c="var(--o-orange)" t={tr('Climat')} />
       <Rangee>
         <Item l={tr('Compacte (étroite)')} h={88}><CvCard id="climate.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Compacte (large)')} w={340} h={88}><CvCard id="climate.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
@@ -13473,7 +13475,7 @@ export default function App() {
         const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null;
         const aid = (secAlarm() && ok && hass.states[secAlarm()]) ? secAlarm() : rAl;
         const ast = (ok && aid && hass.states[aid]) ? hass.states[aid].state : null;
-        const al = ast == null ? { t: tr('Alarme · état inconnu'), c: '140,152,180' }
+        const al = ast == null ? { t: tr('Alarme · état inconnu'), c: 'var(--o-text3-rgb)' }
           : ast === 'disarmed' ? { t: tr('Alarme désarmée'), c: 'var(--o-ok-rgb)' }
             : ast === 'triggered' ? { t: tr('ALARME DÉCLENCHÉE'), c: 'var(--o-bad-rgb)' }
               : (ast === 'arming' || ast === 'pending') ? { t: tr('Alarme · activation…'), c: 'var(--o-warn-rgb)' }

@@ -57,7 +57,7 @@ export function Anim({ i = 0, base = 0, children, style, className = '' }) {
   );
 }
 
-export const HX_TOKENS = { 'var(--o-accent)': '--o-accent-rgb', 'var(--o-accent-soft)': '--o-accent-soft-rgb', 'var(--o-ok)': '--o-ok-rgb', 'var(--o-warn)': '--o-warn-rgb', 'var(--o-warn2)': '--o-warn2-rgb', 'var(--o-bad)': '--o-bad-rgb', 'var(--o-cold)': '--o-cold-rgb', 'var(--o-gold)': '--o-gold-rgb', 'var(--o-purple)': '--o-purple-rgb', 'var(--o-cyan)': '--o-cyan-rgb' };
+export const HX_TOKENS = { 'var(--o-orange)': '--o-orange-rgb', 'var(--o-rose)': '--o-rose-rgb', 'var(--o-lampe)': '--o-lampe-rgb', 'var(--o-accent)': '--o-accent-rgb', 'var(--o-accent-soft)': '--o-accent-soft-rgb', 'var(--o-ok)': '--o-ok-rgb', 'var(--o-warn)': '--o-warn-rgb', 'var(--o-warn2)': '--o-warn2-rgb', 'var(--o-bad)': '--o-bad-rgb', 'var(--o-cold)': '--o-cold-rgb', 'var(--o-gold)': '--o-gold-rgb', 'var(--o-purple)': '--o-purple-rgb', 'var(--o-cyan)': '--o-cyan-rgb' };
 
 export const cl_hexRgb = (c) => HX_TOKENS[c] ? `var(${HX_TOKENS[c]})` : (typeof c !== 'string' || c[0] !== '#') ? '140,152,180' : `${parseInt(c.slice(1, 3), 16)},${parseInt(c.slice(3, 5), 16)},${parseInt(c.slice(5, 7), 16)}`;
 
@@ -67,7 +67,7 @@ export const cl_hexRgb = (c) => HX_TOKENS[c] ? `var(${HX_TOKENS[c]})` : (typeof 
  * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
  * langue. Appelee au rendu, elle se dit dans la langue du moment. */
 export const HIDDEN_VIEWS = () => [
-  { label: tr('Lumières'), vid: 'lumieres', icon: 'bulb', c: '#ffce73' },
+  { label: tr('Lumières'), vid: 'lumieres', icon: 'bulb', c: 'var(--o-lampe)' },
   { label: tr('Climat'), vid: 'climat', icon: 'thermometer-half', c: '#ff8a4c' },
   /* Volets a quitté la liste le 30/08/2026 : l'Ouverture vit DANS la vue
    * Climatisation (ClimatView rend VoletsContent). La route reste. */

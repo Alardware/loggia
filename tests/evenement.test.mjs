@@ -112,7 +112,7 @@ test('la tuile : hors ligne, en cours, dernier evenement, sinon Direct — le me
   assert.ok(s.includes("if (!online) return <><span style={POINT_CAMERA('var(--o-bad)')} />{tr('Hors ligne')}</>;"), 'hors ligne d’abord');
   assert.ok(s.includes("if (!ev) return <><span style={POINT_CAMERA('var(--o-ok)')} />{tr('Direct')}</>;"), 'sans evenement : Direct, rien d’invente');
   assert.ok(s.includes("if (ev.enCours) return <><span style={POINT_CAMERA(ev.genre === 'sonnette' ? 'var(--o-bad)' : ev.genre === 'colis' ? 'var(--o-accent)' : 'var(--o-warn)')} />{ev.libelle}</>;"), 'en cours : le point de la vue Securite');
-  assert.ok(s.includes("return <><Fi i={ev.icone} size={11} color=\"#ffce73\" />{ev.libelle + ' · ' + depuis(ev.quand)}</>;"), 'le dernier evenement, et depuis quand');
+  assert.ok(s.includes("return <><Fi i={ev.icone} size={11} color=\"var(--o-lampe)\" />{ev.libelle + ' · ' + depuis(ev.quand)}</>;"), 'le dernier evenement, et depuis quand');
   const t = bloc('function tuileCamera(', NL + '}');
   assert.ok(t.includes('sub: sousCamera(cam.online, cam.evenement || null),') && t.includes('evenement: cam.evenement || null,'), 'la tuile de l’Accueil passe par la meme sous-ligne');
   assert.ok(src.includes("{grand && <CamSheet haid={c.haid} nom={c.label} hass={c.hass} evenement={c.evenement} onClose={() => setGrand(false)} />}"), 'la fiche recoit l’evenement');

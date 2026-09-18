@@ -416,7 +416,7 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr("l'aperçu suit le thème choisi")}</div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 9 }}>
-          {tile(temp, rooms[0] ? rooms[0].room : tr('Pièce'), '#ffb347')}
+          {tile(temp, rooms[0] ? rooms[0].room : tr('Pièce'), 'var(--o-orange)')}
           {tile(lightsOn + ' on', tr('Lumières'), 'var(--o-gold)')}
           {tile(conso, tr('Consommation'), 'var(--o-ok)')}
           {tile(alTxt, tr('Alarme'), 'var(--o-accent)')}

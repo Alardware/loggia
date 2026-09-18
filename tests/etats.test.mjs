@@ -65,9 +65,10 @@ test('les piles de l’écran passent par la même table', () => {
 test('plus de couleur d’état en dur : les jetons du thème, lisibles en clair', () => {
   // Les hex qui disaient un état (rouge, ambre, jaune, orange, bleu, gris)
   // ne restent que là où ils sont une identité : dégradés, palettes, LIVE.
-  // Ce qui reste : la palette du flux d'énergie (#fbbf24), celle du thème
-  // « dark » (#94a3b8), le bleu de la vignette Pièces (#60a5fa) — des identités.
-  for (const [hex, n] of [['#fbbf24', 1], ['#ef4444', 0], ['#fb923c', 0], ['#94a3b8', 1], ['#60a5fa', 1]]) {
+  // Ce qui reste : la palette du thème « dark » (#94a3b8) et le bleu de la
+  // vignette Pièces (#60a5fa) — des identités ; le flux d'énergie a ses
+  // jetons depuis la v3.50.0.
+  for (const [hex, n] of [['#fbbf24', 0], ['#ef4444', 0], ['#fb923c', 0], ['#94a3b8', 1], ['#60a5fa', 1]]) {
     assert.equal(compter(app, "'" + hex + "'"), n, hex);
   }
   assert.equal(compter(app, "'#ffb347'"), 0, '#ffb347');

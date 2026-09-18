@@ -218,7 +218,7 @@ test('les cartes du distributeur et de la plante : la maquette, au gabarit', () 
   const f = src.indexOf('function RoomFeederCard(');
   const carte = src.slice(f, src.indexOf('function RoomPlantCard(', f));
   assert.ok(carte.includes("{tr('Distribuer')}") && carte.includes("{tr('Rempli')}"), 'Distribuer et Rempli au pied');
-  assert.ok(carte.includes("RM_ICO('rgba(255,138,76,.16)', orange)"), 'la patte orange');
+  assert.ok(carte.includes("RM_ICO('rgba(var(--o-orange-rgb),.16)', orange)"), 'la patte orange');
   assert.ok(!carte.includes("style={{ ...RM_BTN, background: 'var(--o-accent-fond)'"), 'plus le bouton plein d’avant');
   // Depuis le composeur (15/09), c'est la fabrique commune qui dessine ces cartes, pour toute vue.
   const v = src.indexOf('function useDomainCards(');
