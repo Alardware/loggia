@@ -8,7 +8,7 @@
 import {
   useMemo
 } from 'react';
-import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
+import { cvName, RegleEntete, usePli , useEtatServeur, ListeChoix } from '../ui.jsx';
 import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt } from './parcommun.jsx';
 import { niveauPile, couleurNiveau } from '../attention.js';
 import { tr } from '../i18n.js';
@@ -217,11 +217,9 @@ export function VeillesReglages({ hass, cardSt }) {
           <div id="veilles-cr" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('L’entité')}</span>
-              <select value={cr.entite || ''} onChange={e => enregistrer({ creuses: { entite: e.target.value } })}
-                style={{ ...champ, maxWidth: 300 }}>
-                <option value="">{tr('Choisir…')}</option>
-                {tarifs.map(t => <option key={t.id} value={t.id}>{t.nom}</option>)}
-              </select>
+              <ListeChoix value={cr.entite || ''} onChange={v => enregistrer({ creuses: { entite: v } })} label={tr('Entité du tarif heures creuses')}
+                options={[{ id: '', label: tr('Choisir…') }, ...tarifs.map(t => ({ id: t.id, label: t.nom }))]}
+                style={{ ...champ, minWidth: 200, maxWidth: 300 }} largeur={240} />
             </div>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('Vaut')}</span>

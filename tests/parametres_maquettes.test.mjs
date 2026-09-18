@@ -269,10 +269,14 @@ test('le menu déroulant s’ouvre sous son bouton, et son bouton est en bleu pl
   // Le flou de `.o-bar` (backdrop-filter) faisait de la barre le repère du
   // `position: fixed` : le menu « Collection » tombait en bas de page. Rendu
   // dans <body>, son repère est l'écran ; un appui dedans ne le ferme pas.
-  const dd = entre(APP, 'function Dropdown({ value, options, onChange, label, width = 150 }) {', '\nfunction ScenesContent(');
-  assert.ok(APP.includes("import { createPortal } from 'react-dom';"));
+  // Depuis la 3.54.1, c'est la liste commune (`ListeChoix`, ui.jsx) : tous les
+  // menus de Loggia, plus seulement « Collection ».
+  const UI = lire('src', 'ui.jsx');
+  const dd = entre(UI, 'export function ListeChoix(', '\nexport const CV_DOM_ICON');
+  assert.ok(UI.includes("import { createPortal } from 'react-dom';"));
   assert.ok(dd.includes('{open && pos && createPortal(') && dd.includes(', document.body)}'), 'le menu est revenu à côté de son bouton');
   assert.ok(dd.includes('if (menuRef.current && menuRef.current.contains(e.target)) return;'), 'un appui dans le menu le fermerait avant le choix');
   assert.ok(dd.includes("zIndex: 9000"), 'le menu passerait sous une feuille (z-index 200)');
-  assert.ok(dd.includes("border: 'none', background: 'var(--o-accent-fond)', color: '#fff' }}>"), 'le bouton du menu n’est plus en bleu plein');
+  assert.ok(dd.includes("border: 'none', background: 'var(--o-accent-fond)', color: '#fff' };"), 'le bouton du menu n’est plus en bleu plein');
+  assert.ok(APP.includes("<ListeChoix value={cat} options={HUE_CATS} onChange={setCat} label={tr('Collection de scènes')} />"), '« Collection » a quitté la liste commune');
 });

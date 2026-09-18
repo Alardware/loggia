@@ -2305,7 +2305,7 @@ export default {
   'rien à couper': 'nothing to shut',
   'Automatique': 'Automatic',
   'Vannes': 'Valves',
-  'Prises commandées': 'Switched plugs',
+  'Prises et interrupteurs': 'Plugs and switches',
   'Sauvegarde…': 'Backing up…',
   'Réinitialiser…': 'Reset…',
   'Requis pour basculer vers un profil Admin. Haché, jamais affiché — le même sur tous les appareils.': 'Required to switch to an Admin profile. Hashed, never shown — the same on every device.',
@@ -2483,4 +2483,9 @@ export default {
   'Écouter 5 min': 'Listen for 5 min',
   // La disposition par type d'ecran (retour du 18/09).
   'Rétablit la liste automatique : les cartes et leurs noms reviennent partout, l’ordre et les tailles sur ce type d’écran.': 'Restores the automatic list: cards and their names come back everywhere, order and sizes on this type of screen.',
+  // La liste de choix aux couleurs du theme (retour du 18/09, menus des Alertes).
+  'Rechercher…': 'Search…',
+  'Aucun résultat': 'No results',
+  'Alarme à armer': 'Alarm to arm',
+  'Entité du tarif heures creuses': 'Off-peak tariff entity',
 };

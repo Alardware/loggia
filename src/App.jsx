@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext, cloneElement, lazy, Suspense, Fragment } from 'react';
-import { createPortal } from 'react-dom';
 import { formatEcran, vueFormat, patchFormat, echangerPartout, ordonnerSelon, ordreDuFormat } from './disposition.js';
 // Les deux fonds animes tirent three.js : 448 Ko a analyser, pour un decor. En
 // import direct, ce cout etait paye a CHAQUE ouverture, meme par quelqu'un qui
@@ -29,7 +28,7 @@ import { isViewAvailable, viewReason } from './views.js';
 import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
-  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur
+  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
@@ -7870,73 +7869,6 @@ const sceneGradient = (colors) => {
 const sceneBackground = (scene) => { const g = sceneGradient(scene.colors); return scene.uuid ? `url('${HUE_SCENE_IMG_BASE}${scene.uuid}.jpeg') center/cover no-repeat, ${g}` : g; };
 const sceneByName = (name) => { for (const c of Object.values(HUE_SCENES)) { const s = c.scenes.find(x => x.name === name); if (s) return s; } return null; };
 
-// Liste déroulante aux couleurs du thème (le menu d'un <select> natif est rendu par
-// l'OS : impossible à styler, illisible en thème sombre). Fermeture au clic extérieur
-// et à Échap.
-/* Le menu est rendu dans <body>, pas a cote de son bouton : un ancetre flou
- * (`backdrop-filter` de `.o-bar`), transforme ou anime devient le repere d'un
- * `position: fixed`, et le menu tombait alors en bas de page, loin du bouton
- * (retour du 18/09). Dans <body>, le repere est toujours l'ecran. */
-function Dropdown({ value, options, onChange, label, width = 150 }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState(null);
-  const wrapRef = useRef(null);
-  const menuRef = useRef(null);
-  const cur = options.find(o => o.id === value);
-  // Position mesuree a l'ouverture puis suivie au scroll/resize.
-  useEffect(() => {
-    if (!open) { setPos(null); return undefined; }
-    const place = () => {
-      const el = wrapRef.current; if (!el) return;
-      const r = el.getBoundingClientRect();
-      const w = Math.max(width, r.width);
-      // reste dans l'ecran : on decale si le panneau deborde a droite
-      const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
-      setPos({ left, top: r.bottom + 6, w });
-    };
-    place();
-    window.addEventListener('resize', place);
-    window.addEventListener('scroll', place, true);
-    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
-  }, [open, width]);
-  useEffect(() => {
-    if (!open) return undefined;
-    // Le menu n'est plus DANS le bouton : un appui dedans n'est pas un appui dehors.
-    const onDoc = (e) => {
-      if (wrapRef.current && wrapRef.current.contains(e.target)) return;
-      if (menuRef.current && menuRef.current.contains(e.target)) return;
-      setOpen(false);
-    };
-    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
-    document.addEventListener('pointerdown', onDoc, true);
-    document.addEventListener('keydown', onKey, true);
-    return () => { document.removeEventListener('pointerdown', onDoc, true); document.removeEventListener('keydown', onKey, true); };
-  }, [open]);
-  return (
-    <span ref={wrapRef} style={{ position: 'relative', display: 'inline-flex' }}>
-      <button onClick={() => setOpen(o => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={label}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: 'none', background: 'var(--o-accent-fond)', color: '#fff' }}>
-        {cur ? cur.label : '—'}
-        <span style={{ display: 'inline-flex', transition: 'transform .18s', transform: open ? 'rotate(180deg)' : 'none' }}><Fi i="angle-small-down" size={13} color="#fff" /></span>
-      </button>
-      {open && pos && createPortal(
-        <div ref={menuRef} role="listbox" aria-label={label} style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9000, minWidth: pos.w, maxHeight: 'min(50vh, 340px)', overflowY: 'auto', padding: 6, borderRadius: 14, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: '0 18px 44px rgba(0,0,0,.4)' }}>
-          {options.map(o => {
-            const on = o.id === value;
-            return (
-              <button key={o.id} role="option" aria-selected={on} onClick={() => { onChange(o.id); setOpen(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', fontSize: 12, fontWeight: on ? 700 : 600, background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)' }}>
-                <span style={{ width: 13, display: 'inline-flex', flexShrink: 0 }}>{on ? <Fi i="check" size={12} color="#fff" /> : null}</span>
-                {o.label}
-              </button>
-            );
-          })}
-        </div>
-      , document.body)}
-    </span>
-  );
-}
-
 function ScenesContent({ hass }) {
   const S = (hass && hass.states) || null;
   const haActive = (S && S[hueScripts().active] && S[hueScripts().active].state) || '';
@@ -8015,7 +7947,7 @@ function ScenesContent({ hass }) {
           </div>
         </QuickBox>
         <QuickBox label="Collection">
-          <Dropdown value={cat} options={HUE_CATS} onChange={setCat} label={tr('Collection de scènes')} />
+          <ListeChoix value={cat} options={HUE_CATS} onChange={setCat} label={tr('Collection de scènes')} />
         </QuickBox>
         <QuickBox label={tr('Luminosité')}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider('Luminosité des scènes', bri, setBri, { min: 5, max: 100, step: 5 })}>
@@ -8153,7 +8085,7 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
     if (nature === 'lie' && !doc.lien) { setErr(tr('Choisis une scène ou un script.')); return; }
     envoyer(close, { enregistrer: doc });
   };
-  const optionsLiens = [{ id: '', label: tr('— choisir —') }, ...liens.map(l => ({ id: l.haid, label: l.nom + ' · ' + l.haid }))];
+  const optionsLiens = [{ id: '', label: tr('— choisir —') }, ...liens.map(l => ({ id: l.haid, label: l.nom, sub: l.haid }))];
   const optionsPieces = [{ id: '', label: tr('Pièce de la TV ou de l’enceinte') }, ...pieces.map(p => ({ id: p, label: p }))];
   const famillesNoms = NOMS_FAMILLES(), gestesNoms = NOMS_GESTES(), porteesNoms = NOMS_PORTEES(), conditionsNoms = NOMS_CONDITIONS();
   return (
@@ -8204,7 +8136,7 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
           </div>
           {nature === 'lie' ? (
             <div style={{ marginTop: 10 }}>
-              <Dropdown value={s.lien || ''} options={optionsLiens} onChange={(v) => maj({ lien: v || null })} label={tr('Scène ou script')} width={260} />
+              <ListeChoix value={s.lien || ''} options={optionsLiens} onChange={(v) => maj({ lien: v || null })} label={tr('Scène ou script')} largeur={260} />
               {existant && scenario.suggestion && !s.lien && <div style={{ marginTop: 8 }}><button onClick={() => maj({ lien: scenario.suggestion })} style={puce(false, t)}><Fi i="sparkles" size={12} />{tr('Suggestion : {x}', { x: scenario.suggestion })}</button></div>}
               <div style={note}>{tr('Loggia lance cette scène ou ce script, et rien d’autre.')}</div>
             </div>
@@ -8225,7 +8157,7 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
                   {a.famille !== 'alarme' && (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
                       {PORTEES_SCN.map(p => <button key={p} aria-pressed={(a.portee || 'maison') === p} onClick={() => majAction(i, { portee: p })} style={puce((a.portee || 'maison') === p, t)}>{porteesNoms[p]}</button>)}
-                      {a.portee === 'piece' && <Dropdown value={a.piece || ''} options={optionsPieces} onChange={(v) => majAction(i, { piece: v || null })} label={tr('Pièce')} width={200} />}
+                      {a.portee === 'piece' && <ListeChoix value={a.piece || ''} options={optionsPieces} onChange={(v) => majAction(i, { piece: v || null })} label={tr('Pièce')} largeur={200} />}
                     </div>
                   )}
                   {((a.famille === 'lumieres' && a.geste === 'allumer') || a.famille === 'chauffage') && (
@@ -11037,9 +10969,7 @@ function NouvelEvenement({ hass, cals, jour, evenement = null, onFait, onClose }
       {!edition && cals.length > 1 && (
         <div>
           <div style={legende}>{tr('AGENDA')}</div>
-          <select value={cal} onChange={e => setCal(e.target.value)} aria-label={tr('Agenda')} style={champ}>
-            {cals.map(k => <option key={k} value={k}>{nomCal(k)}</option>)}
-          </select>
+          <ListeChoix value={cal} onChange={setCal} label={tr('Agenda')} options={cals.map(k => ({ id: k, label: nomCal(k) }))} style={champ} largeur={220} />
         </div>
       )}
 

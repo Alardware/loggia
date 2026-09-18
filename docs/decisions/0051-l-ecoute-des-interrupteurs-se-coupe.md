@@ -80,3 +80,41 @@ que dans Scénario ».
   10 px de marge, anneau de 34 px, pastilles de 36 px. Le nom de la mesure
   reste au-dessus de sa valeur, en plus petit — à côté, quatre mesures
   passaient sur deux rangées. Au téléphone, rien ne change.
+
+## Amendement (18/09/2026, v3.54.1) — une seule liste de choix, aux couleurs du thème
+
+Demande : « il y a un souci avec les menus dans Alertes, pourquoi sont-ils
+blancs comme ça », trois captures — le choix du téléphone et celui de la
+vanne s'ouvraient en liste blanche ; le menu « Collection » servait de
+modèle.
+
+- Le menu d'un `<select>` natif est dessiné par le système : blanc sous
+  Windows, quel que soit le thème, et rien ne le stylise. Les Alertes en
+  avaient deux ; Présence (l'alarme à armer), Veilles (le tarif des heures
+  creuses) et le formulaire d'un événement (l'agenda), un chacun.
+- Le menu de « Collection » devient la liste commune, `ListeChoix`
+  (`ui.jsx`, logique pure dans `choix.js`), et remplace les cinq : rendu
+  dans `<body>`, au-dessus des feuilles, sous son bouton — au-dessus quand la
+  place manque en bas. Le bouton garde l'allure de son écran : pastille bleu
+  plein dans les barres d'outils, champ dans les formulaires.
+- Une option peut porter un identifiant, lu en petit sous son nom, et un
+  groupe, lu en capitales au-dessus de sa suite. Au-delà de douze options, un
+  champ filtre la liste — nom ou identifiant, accents ignorés : la vanne
+  proposait tous les `switch.*` de la maison.
+- Clavier : flèches, Début, Fin, Entrée ; Échap et Tab referment et rendent
+  la main au bouton. Échap ne ferme que le menu, pas la feuille qui le
+  contient. Sur un écran tactile, le filtre n'est pas focalisé d'office : le
+  clavier du téléphone ne surgit pas à l'ouverture.
+- Le groupe « Prises commandées » devient « Prises et interrupteurs » : il
+  listait tout `switch.*`, pas seulement des prises. Les deux groupes sont
+  triés par nom affiché, plus par identifiant.
+- Reste une `<datalist>` (la feuille des entités d'une vue, en mode
+  édition) : des suggestions de saisie sous un champ, pas un menu. Elle n'a
+  pas été touchée.
+
+Tests : tests/choix.test.mjs (7), dont un garde-fou — plus aucun `<select>`
+dans `src/`. Vérifié en démo : Alertes (téléphone ; vanne filtrée et choisie
+au clavier), Présence, Veilles, « Collection », l'éditeur d'un scénario dans
+sa feuille, et au téléphone émulé. Le choix de l'agenda ne paraît pas en démo
+(un seul agenda modifiable) : son remplacement n'est vérifié que par la
+lecture du code et le garde-fou.

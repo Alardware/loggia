@@ -7,7 +7,7 @@
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg
+  Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, ListeChoix
 } from '../ui.jsx';
 import {
   cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, medCompanion,
@@ -223,21 +223,25 @@ function nomTelephone(hass, service) {
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
 }
 
-/** Un choix qui se lit comme la maquette — un nom, l'identifiant dessous —,
- *  porte par un vrai <select> pose invisible par-dessus : le clavier, le
- *  lecteur d'ecran et la liste du telephone restent ceux du systeme. */
-function ChoixEntite({ icone, nom, ident, label, value, onChange, children }) {
+/** Un choix qui se lit comme la maquette — un nom, l'identifiant dessous.
+ *  Il portait un vrai <select> posé invisible par-dessus ; sa liste, dessinée
+ *  par le système, s'ouvrait blanche sous Windows (retour du 18/09). Il ouvre
+ *  maintenant celle de Loggia (`ListeChoix`), au clavier comme au doigt. */
+function ChoixEntite({ icone, nom, ident, label, value, onChange, options }) {
   return (
-    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 12, minWidth: 0, width: 268, maxWidth: '100%', padding: '9px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-      <Fi i={icone} size={15} color="var(--o-text2)" />
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800, color: 'var(--o-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom}</span>
-        <span style={{ display: 'block', ...MONO, fontSize: 11, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{ident}</span>
-      </span>
-      <Fi i="angle-small-down" size={14} color="var(--o-text3)" />
-      <select aria-label={label} value={value} onChange={e => onChange(e.target.value)}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', font: 'inherit' }}>{children}</select>
-    </span>
+    <ListeChoix label={label} value={value} onChange={onChange} options={options} largeur={340}
+      style={{ gap: 12, minWidth: 0, width: 268, maxWidth: '100%', padding: '9px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)' }}>
+      {(courant, ouvert) => (
+        <>
+          <Fi i={icone} size={15} color="var(--o-text2)" />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800, color: 'var(--o-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom}</span>
+            <span style={{ display: 'block', ...MONO, fontSize: 11, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{ident}</span>
+          </span>
+          <span style={{ display: 'inline-flex', transition: 'transform .18s', transform: ouvert ? 'rotate(180deg)' : 'none' }}><Fi i="angle-small-down" size={14} color="var(--o-text3)" /></span>
+        </>
+      )}
+    </ListeChoix>
   );
 }
 
@@ -318,6 +322,8 @@ function AlertesTele({ hass }) {
   // Sans choix, le composant prend la premiere vanne d'EAU qu'il connait (alertes.py, _vanne).
   const vanneAuto = vannes.find(id => (S[id].attributes || {}).device_class === 'water') || null;
   const nomDe = (id) => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id;
+  // Par nom affiché, pas par identifiant : la liste se lit comme elle s'écrit.
+  const parNom = (ids) => ids.slice().sort((a, b) => nomDe(a).localeCompare(nomDe(b), locale()));
   const vanne = cfg.actions.vanne.entite || '';
   const svcs = cfg.service && services.indexOf(cfg.service) < 0 ? [cfg.service, ...services] : services;
   const actOff = !cfg.actions.actif;
@@ -333,10 +339,8 @@ function AlertesTele({ hass }) {
         droite={<Tgl on={!!cfg.actif} cb={() => save({ actif: !cfg.actif })} label={tr('Activer les alertes')} />}>
         <Ligne titre={tr('Téléphone cible')} desc={tr('Le service notify de l’app compagnon')}>
           <ChoixEntite icone="mobile-button" label={tr('Téléphone cible')} value={cfg.service || ''} onChange={v => save({ service: v })}
-            nom={cfg.service ? nomTelephone(hass, cfg.service) : tr('Aucun téléphone')} ident={cfg.service ? 'notify.' + cfg.service : tr('à choisir')}>
-            <option value="">{tr('Aucun téléphone')}</option>
-            {svcs.map(x => <option key={x} value={x}>{nomTelephone(hass, x) + ' — notify.' + x}</option>)}
-          </ChoixEntite>
+            nom={cfg.service ? nomTelephone(hass, cfg.service) : tr('Aucun téléphone')} ident={cfg.service ? 'notify.' + cfg.service : tr('à choisir')}
+            options={[{ id: '', label: tr('Aucun téléphone') }, ...svcs.map(x => ({ id: x, label: nomTelephone(hass, x), sub: 'notify.' + x }))]} />
         </Ligne>
         {/* Entre ces heures, les notifications arrivent en silence — on les lit
           * au réveil. Une seule chose passe quand même, et par-dessus le mode
@@ -397,11 +401,13 @@ function AlertesTele({ hass }) {
         </Ligne>
         <Ligne retrait eteint={actOff || !cfg.actions.vanne.actif} titre={tr('Quelle vanne')} desc={tr('Vide : la première vanne d’eau que Home Assistant connaît. Une prise commandée vaut aussi.')}>
           <ChoixEntite icone="water" label={tr('Entité de la vanne d’eau')} value={vanne} onChange={v => save({ actions: { ...cfg.actions, vanne: { ...cfg.actions.vanne, entite: v } } })}
-            nom={vanne ? nomDe(vanne) : vanneAuto ? nomDe(vanneAuto) : tr('Aucune vanne d’eau')} ident={vanne || (vanneAuto ? vanneAuto + ' · ' + tr('auto') : tr('rien à couper'))}>
-            <option value="">{tr('Automatique')}{vanneAuto ? ' — ' + nomDe(vanneAuto) : ''}</option>
-            {vannes.length > 0 && <optgroup label={tr('Vannes')}>{vannes.map(x => <option key={x} value={x}>{nomDe(x) + ' — ' + x}</option>)}</optgroup>}
-            {prises.length > 0 && <optgroup label={tr('Prises commandées')}>{prises.map(x => <option key={x} value={x}>{nomDe(x) + ' — ' + x}</option>)}</optgroup>}
-          </ChoixEntite>
+            nom={vanne ? nomDe(vanne) : vanneAuto ? nomDe(vanneAuto) : tr('Aucune vanne d’eau')} ident={vanne || (vanneAuto ? vanneAuto + ' · ' + tr('auto') : tr('rien à couper'))}
+            options={[
+              { id: '', label: tr('Automatique') + (vanneAuto ? ' — ' + nomDe(vanneAuto) : ''), sub: vanneAuto },
+              ...parNom(vannes).map(x => ({ id: x, label: nomDe(x), sub: x, groupe: tr('Vannes') })),
+              // Tout `switch.*` : une prise, mais aussi un interrupteur — le groupe le dit.
+              ...parNom(prises).map(x => ({ id: x, label: nomDe(x), sub: x, groupe: tr('Prises et interrupteurs') })),
+            ]} />
         </Ligne>
       </Panneau>
     </>

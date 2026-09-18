@@ -8,8 +8,10 @@
  * Le contenu est repris a l'identique : ce module deplace du code, il n'en
  * change pas le comportement.
  */
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useId, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import { getHass } from './state.js';
+import { filtrerChoix, blocsChoix, placerMenu, SEUIL_RECHERCHE } from './choix.js';
 import { tr } from './i18n.js';
 
 // Suit un min-width en live (layout PC : rail Accueil ≥ 1180 px)
@@ -408,6 +410,199 @@ export function BottomSheet({ onClose, children, opaque = false }) {
   );
 }
 
+
+// La largeur utile de l'écran : `innerWidth` compte la barre de défilement,
+// et le menu venait s'y coller.
+const largeurEcran = () => (document.documentElement && document.documentElement.clientWidth) || window.innerWidth;
+
+/* ── Une liste de choix aux couleurs du thème ─────────────────────────────────
+ *
+ * Le menu d'un <select> natif est dessiné par le système : blanc sous Windows,
+ * quel que soit le thème, et rien ne le stylise (retour du 18/09, menus des
+ * Alertes). Celui-ci dessine le sien — le menu « Collection » des Scénarios,
+ * devenu commun. La logique pure (filtrer, grouper, placer) : `choix.js`.
+ *
+ * Le menu est rendu dans <body>, pas à côté de son bouton : un ancêtre flou
+ * (`backdrop-filter` de `.o-bar`), transformé ou animé devient le repère d'un
+ * `position: fixed`, et le menu tombait alors en bas de page, loin du bouton
+ * (retour du 18/09). Dans <body>, le repère est toujours l'écran. Il s'ouvre
+ * sous le bouton, au-dessus quand la place manque en bas.
+ *
+ * `options` : `{ id, label, sub?, groupe? }` — `sub`, un identifiant, se lit
+ * en petit sous le nom ; les options qui se suivent sous un même `groupe`
+ * passent sous son intitulé. Au-delà de douze, un champ filtre la liste.
+ * Clavier : flèches, Début, Fin, Entrée ; Échap et Tab referment et rendent
+ * la main au bouton.
+ *
+ * Sans `style`, le bouton est la pastille bleu plein des barres d'outils ;
+ * avec, il prend celui de l'appelant — un champ de formulaire.
+ * `children(courant, ouvert)`, s'il est donné, en dessine l'intérieur. */
+export function ListeChoix({ value, options, onChange, label, largeur = 150, style = null, children = null, recherche = null, vide = '—' }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const [filtre, setFiltre] = useState('');
+  const [actif, setActif] = useState(-1);
+  // Le liseré de l'option visée ne sert qu'au clavier : à la souris, le
+  // survol suffit, et le menu reste celui de « Collection ».
+  const [auClavier, setAuClavier] = useState(false);
+  const wrapRef = useRef(null);
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+  const champRef = useRef(null);
+  const listeRef = useRef(null);
+  const focalise = useRef(false);
+  const base = useId();
+  const liste = Array.isArray(options) ? options : [];
+  const cur = liste.find(o => o.id === value) || null;
+  const avecRecherche = recherche != null ? !!recherche : liste.length > SEUIL_RECHERCHE;
+  const visibles = open ? filtrerChoix(liste, filtre) : liste;
+  const idOption = (i) => base + '-o' + i;
+  const vise = actif >= 0 && actif < visibles.length ? idOption(actif) : undefined;
+
+  const fermer = (rendre) => {
+    setOpen(false); setFiltre(''); setActif(-1);
+    if (rendre) { try { if (btnRef.current) btnRef.current.focus({ preventScroll: true }); } catch { /* bouton parti */ } }
+  };
+  const ouvrir = (clavier) => { setFiltre(''); setAuClavier(!!clavier); setActif(Math.max(0, liste.findIndex(o => o.id === value))); setOpen(true); };
+  const choisir = (o) => { if (o) onChange(o.id); fermer(true); };
+
+  // Position mesurée à l'ouverture, puis suivie au défilement et au redimensionnement.
+  useEffect(() => {
+    if (!open) { setPos(null); return undefined; }
+    const place = (e) => {
+      // Le menu qui défile ne déplace pas son bouton.
+      if (e && e.type === 'scroll' && menuRef.current && menuRef.current.contains(e.target)) return;
+      const el = wrapRef.current; if (!el) return;
+      setPos(placerMenu(el.getBoundingClientRect(), largeurEcran(), window.innerHeight, largeur));
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+  }, [open, largeur]);
+
+  // Plus large que prévu (un long identifiant) : il rentre dans l'écran.
+  useLayoutEffect(() => {
+    const m = menuRef.current;
+    if (!m) return;
+    const r = m.getBoundingClientRect();
+    const vw = largeurEcran();
+    if (r.right > vw - 8) m.style.left = Math.max(8, vw - 8 - r.width) + 'px';
+  });
+
+  // Un appui dehors referme. Échap aussi, et avant la feuille qui contient le
+  // choix : écouté en capture sur le document, il ne ferme que le menu.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => {
+      if (wrapRef.current && wrapRef.current.contains(e.target)) return;
+      // Le menu n'est pas DANS le bouton : un appui dedans n'est pas un appui dehors.
+      if (menuRef.current && menuRef.current.contains(e.target)) return;
+      setOpen(false); setFiltre(''); setActif(-1);
+    };
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false); setFiltre(''); setActif(-1);
+      try { if (btnRef.current) btnRef.current.focus({ preventScroll: true }); } catch { /* bouton parti */ }
+    };
+    document.addEventListener('pointerdown', onDoc, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => { document.removeEventListener('pointerdown', onDoc, true); document.removeEventListener('keydown', onKey, true); };
+  }, [open]);
+
+  // Le focus, une fois par ouverture : le filtre sur un poste à souris ;
+  // ailleurs la liste elle-même, sans faire surgir le clavier du téléphone.
+  useEffect(() => {
+    if (!open) { focalise.current = false; return; }
+    if (!pos || focalise.current) return;
+    focalise.current = true;
+    let tactile = false;
+    try { tactile = window.matchMedia('(pointer: coarse)').matches; } catch { /* sans matchMedia : un poste à souris */ }
+    const cible = avecRecherche && !tactile ? champRef.current : listeRef.current;
+    try { if (cible) cible.focus({ preventScroll: true }); } catch { /* menu parti */ }
+  }, [open, pos, avecRecherche]);
+
+  // L'option visée reste en vue — la choisie aussi, dès l'ouverture.
+  const pret = !!pos;
+  useEffect(() => {
+    if (!open || !pret || actif < 0) return;
+    const el = document.getElementById(base + '-o' + actif);
+    if (el) el.scrollIntoView({ block: 'nearest' });
+  }, [open, pret, actif, base]);
+
+  const surTouche = (e) => {
+    const n = visibles.length;
+    const surListe = e.currentTarget === listeRef.current;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setAuClavier(true); if (n) setActif(i => (i + 1 >= n ? 0 : i + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setAuClavier(true); if (n) setActif(i => (i <= 0 ? n - 1 : i - 1)); }
+    else if (surListe && (e.key === 'Home' || e.key === 'End')) { e.preventDefault(); setAuClavier(true); if (n) setActif(e.key === 'Home' ? 0 : n - 1); }
+    else if (e.key === 'Enter' || (surListe && e.key === ' ')) { e.preventDefault(); if (actif >= 0 && actif < n) choisir(visibles[actif]); }
+    // Tab referme et rend la main au bouton : la tabulation repart de lui.
+    else if (e.key === 'Tab') fermer(true);
+  };
+
+  const pastille = { display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: 'none', background: 'var(--o-accent-fond)', color: '#fff' };
+  const plein = !!(style && style.width === '100%');
+  const option = ({ o, i }) => {
+    const on = o.id === value;
+    const survol = i === actif;
+    return (
+      <button key={'o:' + o.id} id={idOption(i)} type="button" role="option" aria-selected={on} tabIndex={-1}
+        onMouseMove={() => { if (actif !== i) setActif(i); if (auClavier) setAuClavier(false); }} onClick={() => choisir(o)} title={o.sub ? o.label + ' — ' + o.sub : undefined}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: o.sub ? '6px 10px' : '8px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', fontSize: 12, fontWeight: on ? 700 : 600,
+          background: on ? 'var(--o-accent-fond)' : survol ? 'var(--o-s2)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)',
+          boxShadow: on && survol && auClavier ? 'inset 0 0 0 2px rgba(255,255,255,.45)' : 'none' }}>
+        <span style={{ width: 13, display: 'inline-flex', flexShrink: 0 }}>{on ? <Fi i="check" size={12} color="#fff" /> : null}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</span>
+          {o.sub ? <span style={{ display: 'block', marginTop: 1, fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: on ? 'rgba(255,255,255,.78)' : 'var(--o-text3)' }}>{o.sub}</span> : null}
+        </span>
+      </button>
+    );
+  };
+  return (
+    <span ref={wrapRef} style={{ position: 'relative', display: plein ? 'flex' : 'inline-flex', width: plein ? '100%' : undefined, maxWidth: '100%', minWidth: 0 }}>
+      <button ref={btnRef} type="button" onClick={(e) => (open ? fermer(false) : ouvrir(e.detail === 0))}
+        onKeyDown={(e) => { if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); ouvrir(true); } }}
+        aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? base + '-l' : undefined}
+        aria-label={label + (cur ? ' : ' + cur.label : '')}
+        style={style ? { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', ...style } : pastille}>
+        {children ? children(cur, open) : (
+          <>
+            <span style={{ flex: style ? 1 : 'none', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cur ? cur.label : vide}</span>
+            <span style={{ display: 'inline-flex', flexShrink: 0, transition: 'transform .18s', transform: open ? 'rotate(180deg)' : 'none' }}><Fi i="angle-small-down" size={13} color={style ? 'var(--o-text3)' : '#fff'} /></span>
+          </>
+        )}
+      </button>
+      {open && pos && createPortal(
+        <div ref={menuRef} style={{ position: 'fixed', left: pos.left, top: pos.dessous ? pos.top : undefined, bottom: pos.dessous ? undefined : pos.bottom, zIndex: 9000, minWidth: pos.w, maxWidth: 'min(460px, calc(100vw - 16px))', maxHeight: pos.max, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', padding: 6, borderRadius: 14, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: '0 18px 44px rgba(0,0,0,.4)' }}>
+          {avecRecherche && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, margin: '0 0 6px', padding: '7px 10px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+              <Fi i="search" size={12} color="var(--o-text3)" />
+              <input ref={champRef} type="text" value={filtre} onChange={(e) => { setFiltre(e.target.value); setActif(0); }} onKeyDown={surTouche}
+                role="combobox" aria-expanded="true" aria-controls={base + '-l'} aria-autocomplete="list" aria-activedescendant={vise}
+                aria-label={tr('Rechercher…')} placeholder={tr('Rechercher…')} autoComplete="off" spellCheck={false}
+                style={{ flex: 1, minWidth: 0, padding: 0, border: 'none', outline: 'none', background: 'transparent', color: 'var(--o-text)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600 }} />
+            </span>
+          )}
+          <div ref={listeRef} id={base + '-l'} role="listbox" tabIndex={-1} aria-label={label} aria-activedescendant={vise} onKeyDown={surTouche}
+            style={{ minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', outline: 'none' }}>
+            {visibles.length === 0 && <div style={{ padding: '10px 12px', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Aucun résultat')}</div>}
+            {blocsChoix(visibles).map((b, k) => (b.groupe
+              ? (
+                <div key={'g' + k} role="group" aria-labelledby={base + '-g' + k}>
+                  <div id={base + '-g' + k} style={{ padding: '8px 10px 4px', fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)' }}>{b.groupe}</div>
+                  {b.items.map(option)}
+                </div>
+              )
+              : <Fragment key={'g' + k}>{b.items.map(option)}</Fragment>))}
+          </div>
+        </div>
+      , document.body)}
+    </span>
+  );
+}
 
 export const CV_DOM_ICON = { light: 'bulb', switch: 'bolt', input_boolean: 'bolt', fan: 'wind', sensor: 'chart-line-up', binary_sensor: 'radar', climate: 'thermometer-half', cover: 'blinds', media_player: 'tv-music', scene: 'sparkles', script: 'play', button: 'power', input_button: 'power', lock: 'shield-check', person: 'users', weather: 'cloud-sun', vacuum: 'broom', camera: 'video-camera', automation: 'bolt' };
 
