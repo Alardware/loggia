@@ -658,6 +658,7 @@ class LoggiaScenarios:
         fait: list[dict[str, Any]] = []
         touchees: list[str] = []
         refusees: list[str] = []
+        erreurs = 0
         if s.get("lien"):
             lien = s["lien"]
             domaine = lien.split(".", 1)[0]
@@ -665,8 +666,8 @@ class LoggiaScenarios:
                 refusees.append(lien)
                 fait.append({"famille": "lien", "geste": domaine, "n": 0})
                 self._derniers[s["id"]] = time.time()
-                await self._noter_lancement(s, nom, touchees, refusees, fait)
-                return {"id": s["id"], "fait": fait, "n": 0, "refusees": len(refusees)}
+                await self._noter_lancement(s, nom, touchees, refusees, fait, erreurs)
+                return {"id": s["id"], "fait": fait, "n": 0, "refusees": len(refusees), "erreurs": 0}
             try:
                 await self.hass.services.async_call(domaine, "turn_on", {"entity_id": [lien]},
                                                     blocking=False, context=ctx)
@@ -674,6 +675,7 @@ class LoggiaScenarios:
                 touchees.append(lien)
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Loggia scenarios : %s a echoue", lien)
+                erreurs += 1
         else:
             c = await self._contexte()
             piece = piece_de(s, c["maison"])
@@ -690,21 +692,26 @@ class LoggiaScenarios:
                                                             blocking=False, context=ctx)
                     except Exception:  # noqa: BLE001
                         _LOGGER.exception("Loggia scenarios : %s.%s a echoue", domaine, service)
+                        erreurs += 1
                         continue
                     n += len(cibles_)
                     touchees.extend(cibles_)
                 fait.append({"famille": a["famille"], "geste": a["geste"], "n": n,
                              "piece": a.get("piece") or (piece if a.get("portee") == "piece" else None)})
         self._derniers[s["id"]] = time.time()
-        await self._noter_lancement(s, nom, touchees, refusees, fait)
-        return {"id": s["id"], "fait": fait, "n": len(touchees), "refusees": len(refusees)}
+        await self._noter_lancement(s, nom, touchees, refusees, fait, erreurs)
+        # `erreurs` : des commandes que Home Assistant a refusees — l'ecran doit
+        # le dire au lieu de feindre un succes (audit 18/09).
+        return {"id": s["id"], "fait": fait, "n": len(touchees), "refusees": len(refusees), "erreurs": erreurs}
 
-    async def _noter_lancement(self, s, nom, touchees, refusees, fait) -> None:
+    async def _noter_lancement(self, s, nom, touchees, refusees, fait, erreurs=0) -> None:
         if self.regles is None:
             return
         detail = ", ".join(f"{f['famille']} {f['n']}" for f in fait)
         if refusees:
             detail += f" · {len(refusees)} cible(s) refusee(s) par les permissions du compte"
+        if erreurs:
+            detail += f" · {erreurs} commande(s) refusee(s) par Home Assistant"
         try:
             await self.regles.noter(MODULE, s["id"], nom, cibles=touchees,
                                     motif="lie" if s.get("lien") else "compose", detail=detail)

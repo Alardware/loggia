@@ -2087,6 +2087,11 @@ function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
 /* Distributeur de croquettes, même gabarit : patte en haut à gauche, RÉSERVOIR
  * en haut à droite, nom et prochaine ration sous l'icône, Distribuer en bas. */
 function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onOpen, extra = null, chip = false }) {
+  // Deux appuis rapprochés — un doigt qui hésite, un double-clic — faisaient
+  // deux rations : le geste se verrouille le temps que le distributeur parte
+  // (audit 18/09). Le service, lui, n'a pas de garde-fou.
+  const verrou = useRef(0);
+  const distribuer = () => { const t = Date.now(); if (t < verrou.current) return; verrou.current = t + 2500; onFeed(); };
   // Compacte 1×1 : gabarit CvCard dense — réservoir à droite, ration en mini.
   if (chip) {
     return (
@@ -2101,7 +2106,7 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onO
           </div>
           {pct != null && <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: pct < 25 ? 'var(--o-bad)' : 'var(--o-text2)' }}>{pct}%</span>}
           {onFeed && (
-            <button aria-label={tr('Distribuer une ration')} onClick={(e) => { e.stopPropagation(); onFeed(); }}
+            <button aria-label={tr('Distribuer une ration')} onClick={(e) => { e.stopPropagation(); distribuer(); }}
               style={{ width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Ico name="bowl-rice" color="#fff" size={14} />
             </button>
@@ -2127,7 +2132,7 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onO
         <div style={{ ...RM_SUB, color: orange }}>{sub || prochaine || '—'}</div>
         {(onFeed || onRempli) && (
           <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-            {onFeed && <button className="o-rmbtn" onClick={(e) => { e.stopPropagation(); onFeed(); }} style={RM_BTN}>{tr('Distribuer')}</button>}
+            {onFeed && <button className="o-rmbtn" onClick={(e) => { e.stopPropagation(); distribuer(); }} style={RM_BTN}>{tr('Distribuer')}</button>}
             {onRempli && <button className="o-rmbtn" onClick={(e) => { e.stopPropagation(); onRempli(); }} style={RM_BTN}>{tr('Rempli')}</button>}
           </div>
         )}
@@ -2972,8 +2977,8 @@ const heureDe = (iso) => {
   if (!iso) return '—';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '—';
-  const h = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return d.toDateString() === new Date().toDateString() ? h : d.toLocaleDateString([], { day: '2-digit', month: 'short' }) + ' ' + h;
+  const h = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? h : d.toLocaleDateString(locale(), { day: '2-digit', month: 'short' }) + ' ' + h;
 };
 /* La zone Home Assistant d'une entite, par son nom — celle de la grille. */
 const zoneDe = (id) => { const z = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).find(a => (a.entities || []).indexOf(id) >= 0); return z ? z.name : null; };
@@ -3041,7 +3046,8 @@ function RoomCoverSheet({ id, hass, onClose }) {
     const patch = !plan.actif ? { planning: { actif: true } }
       : (reglage && reglage.exclu) ? { planning: { volets: Object.fromEntries(Object.entries(plan.volets || {}).filter(([k]) => k !== id)) } }
         : { planning: { volets: { ...(plan.volets || {}), [id]: { exclu: true } } } };
-    hass.callWS({ type: 'loggia/volets/config', patch }).catch(() => {});
+    // Un refus (compte non administrateur) remonte à l'écoute globale.
+    hass.callWS({ type: 'loggia/volets/config', patch });
   };
   const chips = [{ id: 'ferme', nom: tr('Fermé') }, { id: 'mi', nom: tr('Mi-course') }, { id: 'ouvert', nom: tr('Ouvert') }];
   const chip = pos === 0 ? 'ferme' : pos === 100 ? 'ouvert' : pos === 50 ? 'mi' : null;
@@ -4567,7 +4573,7 @@ function useHistorique24(hass, id, attribut = null) {
             .filter(p => !isNaN(p.v));
           HISTO_CACHE.set(cle, { t: Date.now(), serie });
           setPoints(serie);
-        }).catch(() => { if (!mort) setPoints([]); });
+        }).catch(() => { if (!mort) setPoints('erreur'); });
     };
     if (!frais || Date.now() - frais.t >= 5 * 60000) lire();
     const iv = setInterval(lire, 5 * 60000);
@@ -4580,7 +4586,7 @@ function useHistorique24(hass, id, attribut = null) {
  * avec ses bornes et son axe du temps. */
 function Courbe24({ points, couleur = 'var(--o-accent)', unite = '' }) {
   let chemin = '', aire = '', vmin = null, vmax = null;
-  if (points && points.length > 1) {
+  if (Array.isArray(points) && points.length > 1) {
     const t0 = points[0].t, t1 = points[points.length - 1].t || t0 + 1;
     vmin = Math.min(...points.map(p => p.v)); vmax = Math.max(...points.map(p => p.v));
     const plat = vmax === vmin; // une valeur constante se trace au milieu, pas collée en bas
@@ -4601,7 +4607,7 @@ function Courbe24({ points, couleur = 'var(--o-accent)', unite = '' }) {
           </svg>
         ) : (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>
-            {points === null ? tr('Chargement…') : tr("Pas d'historique sur 24 h")}
+            {points === null ? tr('Chargement…') : points === 'erreur' ? tr('Historique indisponible pour le moment') : tr("Pas d'historique sur 24 h")}
           </div>
         )}
       </div>
@@ -4924,7 +4930,19 @@ const qsKeys = () => scenarios().map(s => s.lien).filter(Boolean);
  * service standard ; un scénario composé, lui, ne peut rien sans lui. */
 function lancerScenario(h, id) {
   if (!h) return Promise.resolve(null);
-  if (typeof h.callWS === 'function') return h.callWS({ type: 'loggia/scenarios/lancer', id }).catch(() => null);
+  if (typeof h.callWS === 'function') {
+    // Le composant dit ce qu'il a refusé ou raté ; le geste ne doit pas
+    // avoir l'air d'avoir marché. Le rejet remonte à l'écoute globale
+    // (toast) — aucun appelant ne l'attrape (audit 18/09).
+    return h.callWS({ type: 'loggia/scenarios/lancer', id }).then(r => {
+      if (r && (r.erreurs > 0 || (r.refusees > 0 && !r.n))) {
+        const e = new Error(r.n ? tr('Scénario en partie exécuté — {n} commande(s) refusée(s)', { n: (r.erreurs || 0) + (r.refusees || 0) }) : tr('Scénario refusé — aucune cible autorisée ou joignable'));
+        e.code = 'scenario_incomplet'; e.resultat = r;
+        throw e;
+      }
+      return r;
+    });
+  }
   const s = scenarios().find(x => x.id === id);
   if (s && s.lien && h.callService) commander(h, s.lien, 'turn_on');
   return Promise.resolve(null);
@@ -4937,6 +4955,7 @@ function useScenarios(hass) {
   useEffect(() => () => clearTimeout(fRef.current), []);
   const lancer = (id) => {
     setEnCours(id); clearTimeout(fRef.current); fRef.current = setTimeout(() => setEnCours(null), 2500);
+    // Le refus remonte à l'écoute globale : pas de `catch` ici non plus.
     lancerScenario(hass, id).then(r => { if (r) setEtat(e => e ? { ...e, scenarios: e.scenarios.map(s => s.id === id ? { ...s, dernier: Date.now() / 1000 } : s) } : e); });
   };
   const enregistrer = async (patch) => {
@@ -5681,7 +5700,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16, maxWidth: '84vw' }}>
         {inTemp != null && <span style={chip}>{pt('#54c8f0')}{inTemp.toFixed(1).replace('.', ',')} °C {tr('intérieur')}</span>}
         {lightsOn > 0 && <span style={{ ...chip, color: '#ffce73' }}>{pt('#ffce73')}{lightsOn > 1 ? tr('{n} allumées', { n: lightsOn }) : tr('{n} allumée', { n: lightsOn })}</span>}
-        {ast != null && <span style={{ ...chip, color: ast === 'triggered' ? '#f87171' : ast === 'disarmed' ? '#34d399' : '#ffb347' }}>{pt(ast === 'triggered' ? '#f87171' : ast === 'disarmed' ? '#34d399' : '#ffb347')}{ast === 'triggered' ? tr('Alarme') : ast === 'disarmed' ? tr('Alarme désarmée') : 'Alarme armée'}</span>}
+        {ast != null && <span style={{ ...chip, color: ast === 'triggered' ? '#f87171' : ast === 'disarmed' ? '#34d399' : '#ffb347' }}>{pt(ast === 'triggered' ? '#f87171' : ast === 'disarmed' ? '#34d399' : '#ffb347')}{ast === 'triggered' ? tr('Alarme') : ast === 'disarmed' ? tr('Alarme désarmée') : tr('Alarme armée')}</span>}
       </div>
       {rouges.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14, alignItems: 'center' }}>
@@ -10576,7 +10595,7 @@ function CvHistory({ id, hass, demoPoints = null }) {
   // chaque barre est le delta du compteur sur l'heure. Le reste en courbe.
   const estEnergie = a.device_class === 'energy' || /Wh$/.test(a.unit_of_measurement || '');
   let chemin = '', aire = '', vmin = null, vmax = null, barres = null, totalJour = null;
-  if (points && points.length > 1) {
+  if (Array.isArray(points) && points.length > 1) {
     if (estEnergie) {
       const seaux = new Map();
       points.forEach(p => { const h = Math.floor(p.t / 3600000); const b = seaux.get(h) || { min: p.v, max: p.v }; b.min = Math.min(b.min, p.v); b.max = Math.max(b.max, p.v); seaux.set(h, b); });
@@ -10619,7 +10638,7 @@ function CvHistory({ id, hass, demoPoints = null }) {
       <div style={{ position: 'relative', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
       <div style={{ position: 'relative', fontSize: 25, fontWeight: 800, marginTop: 2 }}>{isNaN(cur) ? '—' : Math.round(cur * 10) / 10}<span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 4 }}>{a.unit_of_measurement || ''}</span></div>
       <div style={{ position: 'relative', marginTop: 'auto', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>
-        {points === null ? tr('Chargement…') : points.length < 2 ? tr("Pas d'historique sur 24 h")
+        {points === null ? tr('Chargement…') : points === 'erreur' ? tr('Historique indisponible pour le moment') : points.length < 2 ? tr("Pas d'historique sur 24 h")
           : estEnergie ? tr('{n} sur 24 h', { n: Math.round(totalJour * 10) / 10 + ' ' + (a.unit_of_measurement || 'kWh') })
             : (tr('min {a} · max {b}', { a: Math.round(vmin * 10) / 10, b: Math.round(vmax * 10) / 10 }))}
       </div>
@@ -13128,13 +13147,16 @@ export default function App() {
       // Le message generique laissait croire a un incident, et l'on cherchait
       // du cote de Home Assistant une explication qui etait ici.
       setToast(r && r.code === 'not_admin'
-        ? 'Réglage non enregistré — il appartient à la maison, et seul un administrateur Home Assistant peut le changer'
-        : 'Commande non exécutée — Home Assistant a refusé ou n’a pas répondu');
+        ? tr('Réglage non enregistré — il appartient à la maison, et seul un administrateur Home Assistant peut le changer')
+        : r && r.code === 'scenario_incomplet' ? String(r.message)
+          : tr('Commande non exécutée — Home Assistant a refusé ou n’a pas répondu'));
       clearTimeout(toastTRef.current); toastTRef.current = setTimeout(() => setToast(null), 4000);
     };
+    // Cette fenêtre seulement : le panneau n'est pas une iframe, et écouter la
+    // fenêtre parente aurait affiché ici les rejets de Home Assistant même
+    // (audit 18/09).
     window.addEventListener('unhandledrejection', h);
-    let topW = null; try { if (window.top && window.top !== window) { topW = window.top; topW.addEventListener('unhandledrejection', h); } } catch {}
-    return () => { window.removeEventListener('unhandledrejection', h); try { if (topW) topW.removeEventListener('unhandledrejection', h); } catch {} clearTimeout(toastTRef.current); };
+    return () => { window.removeEventListener('unhandledrejection', h); clearTimeout(toastTRef.current); };
   }, []);
   const wEnt = (hass && hass.states) ? hass.states[weatherEntity(hass)] : null;
   const isNight = (hass && hass.states && hass.states['sun.sun'] && hass.states['sun.sun'].state === 'below_horizon') || (wEnt && wEnt.state === 'clear-night');
@@ -13435,6 +13457,7 @@ export default function App() {
       {idle && ambient > 0 && plageOk && <AmbientOverlay wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} lightsOn={lightsOn} notifs={notifs}
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
       {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
+      {!haLost && discovery.echec && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('La découverte de la maison a été interrompue — recharge la page')}</div>}
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 14, padding: '10px 16px', fontSize: 12, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
       <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={peutEditer ? () => setEditMode(e => !e) : null} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={(() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
@@ -13443,11 +13466,11 @@ export default function App() {
         const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null;
         const aid = (secAlarm() && ok && hass.states[secAlarm()]) ? secAlarm() : rAl;
         const ast = (ok && aid && hass.states[aid]) ? hass.states[aid].state : null;
-        const al = ast == null ? { t: 'Alarme · état inconnu', c: '140,152,180' }
+        const al = ast == null ? { t: tr('Alarme · état inconnu'), c: '140,152,180' }
           : ast === 'disarmed' ? { t: tr('Alarme désarmée'), c: '52,211,153' }
-            : ast === 'triggered' ? { t: 'ALARME DÉCLENCHÉE', c: '248,113,113' }
-              : (ast === 'arming' || ast === 'pending') ? { t: 'Alarme · activation…', c: '255,179,71' }
-                : { t: ast === 'armed_away' || ast === 'armed_vacation' ? 'Alarme armée · Absent' : 'Alarme armée · Présent', c: '255,179,71' };
+            : ast === 'triggered' ? { t: tr('ALARME DÉCLENCHÉE'), c: '248,113,113' }
+              : (ast === 'arming' || ast === 'pending') ? { t: tr('Alarme · activation…'), c: '255,179,71' }
+                : { t: ast === 'armed_away' || ast === 'armed_vacation' ? tr('Alarme armée · Absent') : tr('Alarme armée · Présent'), c: '255,179,71' };
         return { online: ok, devCount, alarmTxt: al.t, alarmRgb: al.c };
       })()} />
       {navOpen && <div className="loggia-backdrop" role="presentation" onClick={() => setNavOpen(false)} />}

@@ -366,3 +366,30 @@ def test_un_radiateur_sous_la_main_n_est_ni_coupe_ni_retenu(creer):
     lancer(f._async_couper("Chambre"))
     assert f.hass.services.appels == []
     assert f.coupes == {}
+
+
+def test_un_chauffage_partage_attend_la_derniere_fenetre(creer, module):
+    """Audit 18/09 : deux pieces sur le meme radiateur. La premiere fenetre
+    refermee ne doit pas rallumer tant que l'autre reste ouverte ; c'est la
+    seconde piece qui rend, quand SA fenetre se referme."""
+    config = {"actif": True, "delai": 0, "pieces": {
+        "Sejour": {"actif": True, "ouvrants": ["binary_sensor.fen_sejour"], "chauffages": ["switch.rad"]},
+        "Cuisine": {"actif": True, "ouvrants": ["binary_sensor.fen_cuisine"], "chauffages": ["switch.rad"]},
+    }}
+    etats = {"binary_sensor.fen_sejour": FauxEtat("on"), "binary_sensor.fen_cuisine": FauxEtat("on"), "switch.rad": FauxEtat("on")}
+    f = creer(config=config, etats=etats)
+    lancer(f._async_couper("Sejour"))
+    assert f.coupes == {"Sejour": {"switch.rad": "on"}}
+    f.hass.states.table["switch.rad"] = FauxEtat("off")
+    lancer(f._async_couper("Cuisine"))
+    assert "Cuisine" not in f.coupes, "deja eteint : rien a noter pour la cuisine"
+    f.hass.services.appels.clear()
+    # La fenetre du sejour se referme : la cuisine est encore ouverte.
+    f.hass.states.table["binary_sensor.fen_sejour"] = FauxEtat("off")
+    lancer(f._async_rendre("Sejour"))
+    assert f.hass.services.appels == [], "le radiateur reste coupe tant que la cuisine est ouverte"
+    assert f.coupes == {"Cuisine": {"switch.rad": "on"}}, "la cuisine herite de ce qu'il faudra rendre"
+    f.hass.states.table["binary_sensor.fen_cuisine"] = FauxEtat("off")
+    lancer(f._async_rendre("Cuisine"))
+    assert [(d, s, data["entity_id"]) for d, s, data in f.hass.services.appels] == [("switch", "turn_on", ["switch.rad"])]
+    assert f.coupes == {}

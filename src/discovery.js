@@ -482,7 +482,14 @@ export function useDiscovery(hass) {
         index, caps, devices, abilities, knowledge, health, raw: reg };
       if (aliveRef.current) setData(next);
       return next;
-    }).catch(() => null);
+    }).catch((e) => {
+      // Une decouverte interrompue laissait l'ecran a « chargement » sans un
+      // mot (audit 18/09) : on le dit, et l'ecran sait qu'il n'y a rien a
+      // attendre.
+      console.error('Loggia : découverte interrompue', e);
+      if (aliveRef.current) setData(d => (d && d.ready) ? d : { ...(d || {}), ready: false, echec: true, errors: [{ type: 'decouverte', message: String((e && e.message) || e) }] });
+      return null;
+    });
   }, [hass]);
 
   useEffect(() => {

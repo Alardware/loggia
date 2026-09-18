@@ -12,7 +12,7 @@ import {
   useMemo
 } from 'react';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
-import { tr } from '../i18n.js';
+import { tr, locale } from '../i18n.js';
 
 /* Au niveau du module, et non dans le composant.
  *
@@ -260,7 +260,7 @@ export function PresenceReglages({ hass, cardSt }) {
           </div>
           {etat.indices && etat.indices.dernier && (
             <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
-              {tr('Dernier indice')} : {etat.indices.dernier.genre} · {etat.indices.dernier.nom} · {new Date(etat.indices.dernier.ts * 1000).toLocaleTimeString()}
+              {tr('Dernier indice')} : {etat.indices.dernier.genre} · {etat.indices.dernier.nom} · {new Date(etat.indices.dernier.ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
         </div>
@@ -290,7 +290,7 @@ export function PresenceReglages({ hass, cardSt }) {
                   {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
                   {j.quoi} · <span style={{ color: 'var(--o-text3)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
                 </span>
-                <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString()}</span>
+                <span style={{ color: 'var(--o-text3)', flexShrink: 0 }}>{new Date(j.ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
             ))}
           </div>

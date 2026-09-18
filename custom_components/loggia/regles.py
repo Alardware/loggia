@@ -152,6 +152,25 @@ class Regles:
         self.derniere_main: float = 0.0
         self._ecriture = None
         self._depot = None
+        # A l'arret de Home Assistant, ce que l'ecriture differee retient
+        # encore doit partir : sinon les dernieres lignes disparaissaient (audit 18/09).
+        bus = getattr(hass, "bus", None)
+        if bus is not None and hasattr(bus, "async_listen_once"):
+            try:
+                bus.async_listen_once("homeassistant_stop", self._sur_arret)
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia regles : pas d'ecoute de l'arret")
+
+    async def _sur_arret(self, _event) -> None:
+        """L'arret : ecrire tout de suite ce que le differe retient."""
+        if self._ecriture is not None:
+            try:
+                self._ecriture()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia regles : ecriture deja annulee")
+            self._ecriture = None
+        if self._entrees:
+            await self._ecrire()
 
     # ── Le journal ─────────────────────────────────────────────────────────
     def _store_journal(self):
@@ -524,12 +543,16 @@ class Regles:
                 continue
             retenues.append(h)
 
+        echec = False
         if retenues and not simuler:
             # Un contexte a NOUS : les changements d'etat qui en decouleront
             # seront reconnus comme les notres, et non pris pour une main.
             ctx = Context()
             self._miens.append(ctx.id)
-            del self._miens[:-64]
+            # Une rafale — coucher du soleil : volets, nuit, presence — depasse
+            # vite soixante-quatre ordres avant que Home Assistant ne renvoie
+            # leurs echos ; evinces, ils passaient pour des mains (audit 18/09).
+            del self._miens[:-1024]
             charge: dict[str, Any] = {"entity_id": retenues}
             if data:
                 charge.update(data)
@@ -539,6 +562,7 @@ class Regles:
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Loggia regles : %s.%s a echoue", domaine, service)
                 retenues = []
+                echec = True
 
         for h in retenues:
             if tenir:
@@ -548,6 +572,10 @@ class Regles:
                 self._tenues.pop(h, None)
 
         details = []
+        if echec:
+            # Au journal aussi : « ferme 0 » sans motif se lisait comme un
+            # volet gele, pas comme une commande refusee.
+            details.append("commande refusee par Home Assistant")
         if geles:
             details.append("%d sous la main de quelqu'un" % len(geles))
         for autre, nb in tenus_par.items():

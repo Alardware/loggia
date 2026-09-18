@@ -26,6 +26,7 @@ appareil.
 """
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
 import logging
@@ -440,31 +441,35 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     # profil sur une tablette de famille) ; les essais rates sont comptes par
     # compte et bloquent. Le definir reste aux administrateurs.
     limiteur = Limiteur()
+    # Un compte a la fois : sans ce verrou, des tentatives envoyees en rafale
+    # passaient toutes avant que le blocage ne tombe (audit 18/09).
+    verrous_pin: dict[str, asyncio.Lock] = {}
 
     @websocket_api.websocket_command({vol.Required("type"): WS_PIN_VERIFIER, vol.Required("pin"): str})
     @websocket_api.async_response
     async def handle_pin_verifier(hass, connection, msg):
         uid = connection.user.id
-        attente = limiteur.bloque_pendant(uid)
-        if attente:
-            connection.send_result(msg["id"], {"ok": False, "bloque": attente})
-            return
-        pin = msg["pin"]
-        enregistrement = await store.async_get_code_admin()
-        if enregistrement is None:
-            # Jamais defini : le code par defaut, compare a temps constant.
-            ok = code_valide(pin) and hmac.compare_digest(pin.encode("utf-8"), CODE_DEFAUT.encode("utf-8"))
-        else:
-            # PBKDF2 pese quelques dizaines de millisecondes : hors de la boucle.
-            ok = await hass.async_add_executor_job(verifier, pin, enregistrement)
-        if ok:
-            limiteur.reussi(uid)
-            connection.send_result(msg["id"], {"ok": True})
-            return
-        duree = limiteur.rate(uid)
-        if duree:
-            _LOGGER.warning("Loggia : code administrateur — trop d'essais rates, compte bloque %d s", duree)
-        connection.send_result(msg["id"], {"ok": False, "bloque": duree})
+        async with verrous_pin.setdefault(uid, asyncio.Lock()):
+            attente = limiteur.bloque_pendant(uid)
+            if attente:
+                connection.send_result(msg["id"], {"ok": False, "bloque": attente})
+                return
+            pin = msg["pin"]
+            enregistrement = await store.async_get_code_admin()
+            if enregistrement is None:
+                # Jamais defini : le code par defaut, compare a temps constant.
+                ok = code_valide(pin) and hmac.compare_digest(pin.encode("utf-8"), CODE_DEFAUT.encode("utf-8"))
+            else:
+                # PBKDF2 pese quelques dizaines de millisecondes : hors de la boucle.
+                ok = await hass.async_add_executor_job(verifier, pin, enregistrement)
+            if ok:
+                limiteur.reussi(uid)
+                connection.send_result(msg["id"], {"ok": True})
+                return
+            duree = limiteur.rate(uid)
+            if duree:
+                _LOGGER.warning("Loggia : code administrateur — trop d'essais rates, compte bloque %d s", duree)
+            connection.send_result(msg["id"], {"ok": False, "bloque": duree})
 
     @websocket_api.websocket_command({vol.Required("type"): WS_PIN_DEFINIR, vol.Required("pin"): str})
     @websocket_api.require_admin

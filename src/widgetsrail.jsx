@@ -279,7 +279,7 @@ function useHistoriqueJour(hass, id, pas = 300000) {
     const debut = new Date(fin.getTime() - 86400000).toISOString();
     hRef.current.callApi('GET', 'history/period/' + debut + '?filter_entity_id=' + encodeURIComponent(id) + '&end_time=' + encodeURIComponent(fin.toISOString()) + '&minimal_response&no_attributes')
       .then(r => { if (vivant) setPoints(pointsHistorique(r)); })
-      .catch(() => { if (vivant) setPoints([]); });
+      .catch(() => { if (vivant) setPoints('erreur'); });
     return () => { vivant = false; };
   }, [connecte, id, tic]);
   return points;
@@ -290,7 +290,9 @@ function useHistoriqueJour(hass, id, pas = 300000) {
  * pleine ; celles qui passent le seuil disent l'état, en ambre — et le geste
  * pour aérer quand il y a quelque chose à commander. */
 export function Co2Rail({ hass, capteur, seuil, action = null, onAgir = null }) {
-  const points = useHistoriqueJour(hass, capteur ? capteur.id : null);
+  const reponse = useHistoriqueJour(hass, capteur ? capteur.id : null);
+  const histoErreur = reponse === 'erreur';
+  const points = histoErreur ? null : reponse;
   const barres = useMemo(() => barresJournee(points || [], Date.now()), [points]);
   const actuel = capteur && capteur.valeur != null ? Math.round(capteur.valeur) : null;
   const { min, max } = etendue(barres, actuel);
@@ -305,7 +307,7 @@ export function Co2Rail({ hass, capteur, seuil, action = null, onAgir = null }) 
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ ...PETITES_CAPITALES, textTransform: 'none' }}>24 h</div>
-          <div style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', marginTop: 2, whiteSpace: 'nowrap' }}>{min != null ? min + ' – ' + max + ' ppm' : '—'}</div>
+          <div style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', marginTop: 2, whiteSpace: 'nowrap' }}>{histoErreur ? tr('indisponible') : min != null ? min + ' – ' + max + ' ppm' : '—'}</div>
         </div>
       </div>
       <div role="img" aria-label={tr('CO₂ sur 24 heures')} style={{ display: 'grid', gridTemplateColumns: 'repeat(24, minmax(0, 1fr))', gap: 3, alignItems: 'end', height: 64, marginTop: 12 }}>

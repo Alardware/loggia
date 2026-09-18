@@ -228,6 +228,15 @@ class LoggiaFenetres:
         if avant:
             self.coupes[nom] = avant
 
+    def _autre_piece_ouverte(self, nom: str, haid: str, etats: dict):
+        """Une AUTRE piece active, fenetre encore ouverte, qui partage ce chauffage."""
+        for autre, piece in (self.cfg.get("pieces") or {}).items():
+            if autre == nom or not isinstance(piece, dict) or not piece.get("actif"):
+                continue
+            if haid in (piece.get("chauffages") or []) and ouvrants_ouverts(etats, piece.get("ouvrants")):
+                return autre
+        return None
+
     async def _async_rendre(self, nom: str) -> None:
         avant = self.coupes.pop(nom, None)
         if not avant:
@@ -235,6 +244,13 @@ class LoggiaFenetres:
         etats = self._etats()
         groupes: dict[tuple, list] = {}
         for haid, valeur in avant.items():
+            # Un chauffage partage avec une autre piece dont la fenetre est
+            # encore ouverte ne se rend pas : c'est a elle de le rendre, quand
+            # SA fenetre se refermera — elle recoit la valeur d'avant (audit 18/09).
+            autre = self._autre_piece_ouverte(nom, haid, etats)
+            if autre:
+                self.coupes.setdefault(autre, {})[haid] = valeur
+                continue
             st = etats.get(haid)
             actuel = str(getattr(st, "state", "")).lower() if st else ""
             # On ne rend que ce qu'on a pris : si quelqu'un a rallume entre

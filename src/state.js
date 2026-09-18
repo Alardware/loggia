@@ -315,10 +315,10 @@ export async function exportConfigComplete() {
   const h = pont();
   let serveur = {};
   if (h) {
-    try {
-      const r = await h.callWS({ type: 'loggia/config/get' });
-      serveur = (r && r.config) || {};
-    } catch { serveur = {}; }
+    // Le serveur injoignable : pas de sauvegarde du tout, plutot qu'un fichier
+    // presque vide qui aurait l'air d'une sauvegarde (audit 18/09).
+    const r = await h.callWS({ type: 'loggia/config/get' });
+    serveur = (r && r.config) || {};
   }
   /* Le stockage local complete : une cle jamais synchronisee n'existe que la.
    *
@@ -369,7 +369,9 @@ export async function importConfigComplete(txt) {
   if (h) {
     // On efface d'abord ce qui existe, sinon une cle absente de l'export
     // survivrait a la restauration — l'import doit etre un MIROIR.
-    const actuelle = await h.callWS({ type: 'loggia/config/get' }).catch(() => null);
+    // Sans lecture, pas de miroir : on ecrirait par-dessus sans avoir efface
+    // (audit 18/09). L'appelant affiche l'erreur.
+    const actuelle = await h.callWS({ type: 'loggia/config/get' });
     const purge = {};
     Object.keys((actuelle && actuelle.config) || {}).forEach(k => { purge[k] = null; });
     if (Object.keys(purge).length) await h.callWS({ type: 'loggia/config/set', config: purge });
@@ -408,15 +410,16 @@ export async function importConfigComplete(txt) {
 export async function resetLoggiaComplet() {
   const h = pont();
   if (h) {
-    try {
-      const r = await h.callWS({ type: 'loggia/config/get' });
-      const patch = {};
-      Object.keys((r && r.config) || {}).forEach(k => { patch[k] = null; });
-      if (Object.keys(patch).length) await h.callWS({ type: 'loggia/config/set', config: patch });
-      // Les reglages personnels de ce compte, que le patch ci-dessus ne couvre
-      // que si l'utilisateur est administrateur.
-      await h.callWS({ type: 'loggia/config/delete' }).catch(() => null);
-    } catch { /* on vide au moins l'appareil */ }
+    // Un refus ou un serveur muet remonte a l'appelant : vider l'appareil
+    // seul puis recharger aurait resynchronise la configuration de la maison
+    // comme si de rien n'etait (audit 18/09).
+    const r = await h.callWS({ type: 'loggia/config/get' });
+    const patch = {};
+    Object.keys((r && r.config) || {}).forEach(k => { patch[k] = null; });
+    if (Object.keys(patch).length) await h.callWS({ type: 'loggia/config/set', config: patch });
+    // Les reglages personnels de ce compte, que le patch ci-dessus ne couvre
+    // que si l'utilisateur est administrateur.
+    await h.callWS({ type: 'loggia/config/delete' });
   }
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {

@@ -333,7 +333,10 @@ export function FlipText({ text, style, live = false }) {
 // children peut être une fonction (close) => JSX pour brancher la croix sur la fermeture ANIMÉE.
 export function BottomSheet({ onClose, children, opaque = false }) {
   const [closing, setClosing] = useState(false);
-  const close = () => { if (closing) return; setClosing(true); setTimeout(onClose, 420); }; // timeout filet si l'anim ne fire pas
+  // Le filet (si l'animation ne se declenche pas) est ANNULE quand elle se
+  // termine : sinon `onClose` partait deux fois a chaque fermeture (audit 18/09).
+  const filet = useRef(null);
+  const close = () => { if (closing) return; setClosing(true); filet.current = setTimeout(onClose, 420); };
   const sheetRef = useRef(null);
   // Un `click` est emis sur l'ANCETRE COMMUN du mousedown et du mouseup. Une
   // selection de texte commencee dans un champ et relachee dehors le fait donc
@@ -394,7 +397,7 @@ export function BottomSheet({ onClose, children, opaque = false }) {
             else if (!e.shiftKey && document.activeElement === dernier) { e.preventDefault(); premier.focus(); }
           }
         }}
-        onAnimationEnd={(e) => { if (closing && e.target === e.currentTarget) onClose(); }}
+        onAnimationEnd={(e) => { if (closing && e.target === e.currentTarget) { clearTimeout(filet.current); onClose(); } }}
         style={{ position: 'fixed', left: '50%', bottom: 0, transform: 'translate(-50%,0)', width: 'min(480px,100%)', maxHeight: '88vh', overflowY: 'auto', background: opaque ? 'linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg)' : 'var(--o-surfA)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', borderLeft: 'var(--o-bw,1px) solid var(--o-bd1)', borderRight: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: '26px 26px 0 0', padding: '10px 22px calc(24px + var(--o-safe-bottom,0px))', boxShadow: '0 -10px 50px rgba(0,0,0,.35)', animation: closing ? 'o-sheetOut .3s cubic-bezier(.32,.72,.25,1) forwards' : 'o-sheetIn .46s cubic-bezier(.22,1.28,.36,1)' }}>
         <div onPointerDown={dragClose} style={{ touchAction: 'none', cursor: 'grab', padding: '8px 60px 12px', margin: '-10px auto 2px', width: 'fit-content' }}>
           <div style={{ width: 38, height: 5, borderRadius: 4, background: 'var(--o-bd1)', margin: '0 auto' }} />
@@ -412,10 +415,17 @@ export const cvDomain = (id) => id.slice(0, id.indexOf('.'));
 
 export function EntPicker({ hass, exclude = [], onPick, autoFocus = false, domaines = null }) {
   const [q, setQ] = useState('');
+  // `hass` est remplace a chaque etat de la maison : trier toutes les entites a
+  // ce rythme saccadait la frappe. La liste ne se refait que si les
+  // identifiants changent ; le reste se lit par une reference vivante.
+  const hRef = useRef(hass);
+  hRef.current = hass;
+  const ids = hass && hass.states ? Object.keys(hass.states).join('|') : '';
   const all = useMemo(() => {
-    if (!hass || !hass.states) return [];
-    return Object.keys(hass.states).map(id => ({ id, name: cvName(hass.states[id], id), dom: cvDomain(id) })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [hass]);
+    const st = (hRef.current && hRef.current.states) || null;
+    if (!st) return [];
+    return ids.split('|').filter(Boolean).map(id => ({ id, name: cvName(st[id], id), dom: cvDomain(id) })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [ids]);
   const ql = q.trim().toLowerCase();
   /* `domaines` : une carte choisie d'abord (galerie) ne va qu'avec certains
    * domaines — inutile de proposer une lampe à une carte de calendrier. Sans

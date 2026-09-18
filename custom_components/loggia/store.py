@@ -113,9 +113,10 @@ def _taille(contenu: dict) -> int:
     """
     try:
         return len(json.dumps(contenu, ensure_ascii=False).encode("utf-8"))
-    except (TypeError, ValueError):
-        # Non serialisable : la sauvegarde echouera de toute facon plus loin.
-        return 0
+    except (TypeError, ValueError) as err:
+        # Non serialisable : refuse ICI, clairement. Rendre 0 contournait les
+        # plafonds et laissait la sauvegarde echouer plus loin (audit 18/09).
+        raise ValueError("valeur non serialisable") from err
 
 
 class MaisonReserveeError(PermissionError):
@@ -143,6 +144,17 @@ class LoggiaStore:
 
     async def _load(self) -> dict[str, Any]:
         if self._data is None:
+            # Un seul chargement, meme quand lecteurs et ecrivains arrivent
+            # ensemble au demarrage : sans ce verrou, le dernier arrive
+            # ecrasait le cache avec une version d'avant l'ecriture de l'autre.
+            verrou = self.__dict__.setdefault("_chargement", asyncio.Lock())
+            async with verrou:
+                if self._data is None:
+                    await self._charger_une_fois()
+        return self._data
+
+    async def _charger_une_fois(self) -> None:
+        if True:
             raw = await self._store.async_load()
             renomme = False
             if not isinstance(raw, dict) or not raw:
@@ -165,7 +177,6 @@ class LoggiaStore:
             if remontee or menage or renomme or code:
                 await self._store.async_save(raw)
             self._data = raw
-        return self._data
 
     async def _reprendre_ancien(self) -> tuple[dict[str, Any], bool]:
         """Reprend la configuration ecrite sous l'ancien nom du projet.
@@ -372,8 +383,9 @@ class LoggiaStore:
                 raise ValueError(
                     f"stockage commun trop volumineux ({taille} > {MAX_TOTAL_BYTES} octets)"
                 )
-            data["shared"] = commun
-            await self._store.async_save(data)
+            nouveau = {**data, "shared": commun}
+            await self._store.async_save(nouveau)
+            self._data = nouveau
 
     async def async_get_user(self, user_id: str) -> dict[str, Any]:
         """Configuration vue par un utilisateur : le commun, puis ses cles d'appareil.
@@ -422,8 +434,9 @@ class LoggiaStore:
             raise ValueError("enregistrement de code invalide")
         async with self._lock:
             data = await self._load()
-            data["shared"][CLE_HACHE] = dict(enregistrement)
-            await self._store.async_save(data)
+            nouveau = {**data, "shared": {**data["shared"], CLE_HACHE: dict(enregistrement)}}
+            await self._store.async_save(nouveau)
+            self._data = nouveau
 
     async def async_set_user(
         self,
@@ -533,9 +546,13 @@ class LoggiaStore:
                     f"stockage {nom} trop volumineux ({taille} > {MAX_TOTAL_BYTES} octets)"
                 )
 
-        data["users"][user_id] = perso
-        data["shared"] = commun
-        await self._store.async_save(data)
+        # Copie avant ecriture : le cache n'est remplace qu'une fois le disque
+        # d'accord. Sans cela, une ecriture refusee laissait en memoire une
+        # configuration jamais enregistree, que TOUTE ecriture suivante
+        # retentait en vain (audit 18/09).
+        nouveau = {**data, "users": {**data["users"], user_id: perso}, "shared": commun}
+        await self._store.async_save(nouveau)
+        self._data = nouveau
         return {**commun, **perso}
 
     async def async_delete_user(self, user_id: str) -> None:
@@ -547,8 +564,10 @@ class LoggiaStore:
         """
         async with self._lock:
             data = await self._load()
-            if data["users"].pop(user_id, None) is not None:
-                await self._store.async_save(data)
+            if user_id in data["users"]:
+                nouveau = {**data, "users": {k: v for k, v in data["users"].items() if k != user_id}}
+                await self._store.async_save(nouveau)
+                self._data = nouveau
 
     async def async_stats(self) -> dict[str, Any]:
         """Chiffres utiles au diagnostic, sans exposer le contenu."""

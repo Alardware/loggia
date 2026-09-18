@@ -239,7 +239,12 @@ function AlertesTele({ hass, cardSt }) {
       const d = ALERTES_DEF();
       setCfg({ ...d, ...c, categories: { ...d.categories, ...(c.categories || {}) }, calme: { ...d.calme, ...(c.calme || {}) },
         actions: { ...d.actions, ...(c.actions || {}), vanne: { ...d.actions.vanne, ...((c.actions || {}).vanne || {}) } } });
-    }).catch(() => setCfg(ALERTES_DEF()));
+    }).catch(() => {
+      // Lecture ratee : on ne montre PAS les valeurs par defaut — un reglage
+      // touche ensuite aurait ecrase la vraie configuration de surete (audit 18/09).
+      setCfg(null);
+      setMsg(tr('Réglages de sûreté indisponibles pour le moment — rien n’a été chargé, ne modifie rien ici avant de réessayer.'));
+    });
     // La liste des cibles possibles : les services notify de l'installation.
     h.callWS({ type: 'get_services' }).then(r => {
       const n = (r && r.notify) || {};
@@ -247,6 +252,7 @@ function AlertesTele({ hass, cardSt }) {
     }).catch(() => {});
   }, [connecte]);
   const save = (patch) => {
+    if (!cfg) return;
     const n = { ...cfg, ...patch };
     setCfg(n); setMsg('');
     if (h) h.callWS({ type: 'loggia/config/set', config: { loggia_alertes: n } })
@@ -469,8 +475,18 @@ function ResetLoggiaBtn({ compact = false }) {
     try {
       const j = await exportConfigComplete();
       telechargerConfig(j, 'loggia-avant-remise-a-zero');
-    } catch { /* une sauvegarde impossible ne doit pas bloquer la remise a zero demandee */ }
-    try { await resetLoggiaComplet(); } catch { /* on recharge quand meme */ }
+    } catch {
+      // Sans sauvegarde, pas de remise a zero : l'operation ne se rattrape
+      // pas, et un fichier vide aurait l'air d'une sauvegarde (audit 18/09).
+      setEnCours(false); setArm(false);
+      window.alert(tr('Sauvegarde impossible : la remise à zéro est annulée. Réessaie quand Home Assistant répond.'));
+      return;
+    }
+    try { await resetLoggiaComplet(); } catch {
+      setEnCours(false); setArm(false);
+      window.alert(tr('Remise à zéro incomplète : Home Assistant a refusé ou n’a pas répondu. La configuration de la maison est inchangée.'));
+      return;
+    }
     window.location.reload();
   };
   return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ padding: compact ? '5px 10px' : '9px 16px', borderRadius: compact ? 8 : 11, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: arm ? '#fff' : 'var(--o-bad)', fontWeight: 700, fontSize: compact ? 11.5 : 12.5, cursor: 'pointer', transition: 'all .2s' }}>{arm ? 'Confirmer ?' : (compact ? 'Réinitialiser Loggia' : 'Réinitialiser')}</button>;
@@ -1138,9 +1154,12 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const [ongletRegle, setOngletRegle] = useState('volets');
   useEffect(() => {
     const h = hass;
-    if (!peutRegles || !h || typeof h.callWS !== 'function') return;
+    if (!peutRegles || !h || typeof h.callWS !== 'function') return undefined;
+    // Cinq reponses en vol : une relance de l'effet ne doit pas laisser les
+    // anciennes ecraser le nouveau total (audit 18/09).
+    let vivant = true;
     let n = 0;
-    const compter = () => setNbVolRegles(n);
+    const compter = () => { if (vivant) setNbVolRegles(n); };
     h.callWS({ type: 'loggia/volets/etat' })
       .then(r => {
         const c = (r && r.config) || {};
@@ -1168,6 +1187,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         compter();
       })
       .catch(() => { /* idem */ });
+    return () => { vivant = false; };
   }, [connecte, peutRegles]);
 
   // Sections du sommaire : chiffre mis en avant + accroche.

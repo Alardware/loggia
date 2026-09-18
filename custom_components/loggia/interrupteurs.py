@@ -136,10 +136,19 @@ class LoggiaInterrupteurs:
             else:
                 _LOGGER.debug("Loggia : pas d'integration MQTT, rien a ecouter de ce cote")
 
+        # L'ecoute ne coute rien et ne dit rien : un abonnement a un nom
+        # d'evenement reussit meme si personne ne l'emettra jamais. La source
+        # n'est annoncee « a l'ecoute » que si l'integration est chargee (audit 18/09).
         self._defait.append(self.hass.bus.async_listen("zha_event", self._sur_zha))
-        self.sources["zha"] = True
+        self.sources["zha"] = self._composant("zha")
         self._defait.append(self.hass.bus.async_listen("deconz_event", self._sur_deconz))
-        self.sources["deconz"] = True
+        self.sources["deconz"] = self._composant("deconz")
+
+    def _composant(self, nom: str) -> bool:
+        try:
+            return nom in self.hass.config.components
+        except Exception:  # noqa: BLE001
+            return False
 
     # ── Les sources ───────────────────────────────────────────────────────
     @callback

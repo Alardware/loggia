@@ -432,3 +432,31 @@ def test_une_vanne_de_gaz_n_est_pas_une_vanne_d_eau(creer):
     b = creer(etats=etats)
     lancer(b._reagir(FUITE, "fuite"))
     assert appels(b) == [("valve", "close_valve", ["valve.eau"], {})]
+
+
+class FauxEvenement:
+    def __init__(self, new, old):
+        self.data = {"new_state": new, "old_state": old}
+
+
+def test_un_capteur_qui_se_tait_pendant_le_danger_rend_la_maison_et_le_dit(creer):
+    """Audit 18/09 : un detecteur qui perdait sa pile PENDANT la fumee laissait
+    lumieres et volets forces jusqu'a une main. La fin est incertaine : on
+    rend quand meme, et le journal le marque."""
+    a = creer(etats=maison())
+    lancer(a._reagir(FUMEE, "fumee"))
+    a._hass.services.appels.clear()
+    muet = FauxEtat(FUMEE.entity_id, "unavailable", dict(FUMEE.attributes))
+    a._on_state(FauxEvenement(muet, FUMEE))
+    lancer(a._hass.taches[-1])
+    assert len(a._hass.services.appels) == 3, "la maison est rendue"
+    assert a._dangers == {}
+    journal = lancer(a._regles.journal())
+    assert any(e["quoi"] == "capteur muet" and "a verifier" in e["detail"] for e in journal)
+
+
+def test_un_capteur_muet_sans_danger_ne_fait_rien(creer):
+    a = creer(etats=maison())
+    muet = FauxEtat(FUMEE.entity_id, "unavailable", dict(FUMEE.attributes))
+    a._on_state(FauxEvenement(muet, FauxEtat(FUMEE.entity_id, "off", dict(FUMEE.attributes))))
+    assert a._hass.taches == [] and a._hass.services.appels == []

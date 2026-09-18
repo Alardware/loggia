@@ -214,7 +214,7 @@ class LoggiaNuit:
             try:
                 pilotes += list(self.hass.states.async_entity_ids("light"))
             except Exception:  # noqa: BLE001
-                pass
+                _LOGGER.warning("Loggia nuit : lampes illisibles, l'extinction ne les suivra pas", exc_info=True)
         self.regles.suivre("nuit", pilotes)
 
     # ── La veilleuse ───────────────────────────────────────────────────────
@@ -415,6 +415,7 @@ class LoggiaNuit:
         try:
             ids = self.hass.states.async_entity_ids("light")
         except Exception:  # noqa: BLE001
+            _LOGGER.warning("Loggia nuit : lampes illisibles ce soir, extinction du coucher ignoree", exc_info=True)
             return
         etats = {i: self.hass.states.get(i) for i in ids}
         self._declarer()

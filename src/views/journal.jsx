@@ -16,7 +16,7 @@
  */
 import { useState } from 'react';
 import { cvName, useEtatServeur } from '../ui.jsx';
-import { tr } from '../i18n.js';
+import { tr, locale } from '../i18n.js';
 
 /* Le nom d'un module tel qu'on le lit à l'écran — les mêmes que les onglets. */
 const NOM_MODULE = () => ({
@@ -29,7 +29,7 @@ const NOM_MODULE = () => ({
  * pas se lire comme une ligne de ce matin. */
 function quand(ts) {
   const d = new Date(ts * 1000);
-  const heure = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const heure = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   return d.toDateString() === new Date().toDateString()
     ? heure
     : d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' ' + heure;

@@ -244,7 +244,7 @@ class LoggiaPresence:
             try:
                 pilotes += list(self.hass.states.async_entity_ids("light"))
             except Exception:  # noqa: BLE001
-                pass
+                _LOGGER.warning("Loggia presence : lampes illisibles, le depart ne les suivra pas", exc_info=True)
             pilotes += self._climats()
             entite = ((self.cfg.get("depart") or {}).get("alarme") or {}).get("entite")
             if entite:
@@ -353,6 +353,7 @@ class LoggiaPresence:
         try:
             ids = self.hass.states.async_entity_ids("light")
         except Exception:  # noqa: BLE001
+            _LOGGER.warning("Loggia presence : lampes illisibles, rien ne sera eteint au depart", exc_info=True)
             return []
         return [i for i in sorted(ids)
                 if str(getattr(self.hass.states.get(i), "state", "")).lower() == "on"]
@@ -362,6 +363,7 @@ class LoggiaPresence:
         try:
             ids = self.hass.states.async_entity_ids("binary_sensor")
         except Exception:  # noqa: BLE001
+            _LOGGER.warning("Loggia presence : capteurs illisibles", exc_info=True)
             return []
         return [i for i in sorted(ids) if genre_indice(self.hass.states.get(i))]
 
@@ -375,6 +377,7 @@ class LoggiaPresence:
         try:
             return sorted(self.hass.states.async_entity_ids("climate"))
         except Exception:  # noqa: BLE001
+            _LOGGER.warning("Loggia presence : thermostats illisibles", exc_info=True)
             return []
 
     # ── Le retour ──────────────────────────────────────────────────────────

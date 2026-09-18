@@ -42,11 +42,11 @@ def _version_du_composant() -> str | None:
     installe etait en 2.1.0. La seule source qui ne mente pas est le manifeste
     du composant qui tourne — c'est lui que HACS met a jour.
     """
+    # Lu UNE fois, a l'import de `const.py` : relire le manifeste a chaque
+    # decouverte etait un appel de fichier bloquant dans la boucle (audit 18/09).
     try:
-        import json
-        from pathlib import Path as _P
-        m = json.loads((_P(__file__).parent / "manifest.json").read_text(encoding="utf-8"))
-        return m.get("version")
+        from .const import VERSION
+        return VERSION or None
     except Exception:  # noqa: BLE001 — un manifeste illisible ne prive de rien
         return None
 
@@ -55,7 +55,9 @@ def _valeur(x: Any) -> Any:
     """Rend une valeur transportable : les registres melent enums et objets."""
     if x is None or isinstance(x, (str, int, float, bool)):
         return x
-    return getattr(x, "value", None) or str(x)
+    v = getattr(x, "value", None)
+    # `or` prenait une valeur d'enum fausse (0, "") pour une absence.
+    return v if v is not None else str(x)
 
 
 @callback

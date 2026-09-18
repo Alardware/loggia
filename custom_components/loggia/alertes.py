@@ -104,7 +104,14 @@ class LoggiaAlertes:
         old = event.data.get("old_state")
         if new is None or old is None:
             return  # apparition/disparition d'entite : pas un evenement de surete
-        if new.state in ("unknown", "unavailable") or new.state == old.state:
+        if new.state in ("unknown", "unavailable"):
+            # Un capteur de danger qui se tait PENDANT un danger : sa fin est
+            # incertaine, mais laisser la maison forcee jusqu'a une main serait
+            # pire (audit 18/09). On rend, et le journal le dit.
+            if new.entity_id in self._dangers:
+                self._hass.async_create_task(self._danger_passe(new.entity_id, muet=True))
+            return
+        if new.state == old.state:
             return
         domaine = new.entity_id.split(".")[0]
         if domaine == "binary_sensor" and new.state == "on":
@@ -143,6 +150,8 @@ class LoggiaAlertes:
         try:
             etats = self._hass.states.async_all(domaine)
         except Exception:  # noqa: BLE001
+            # Sans cette trace, la reaction de surete manquait en silence.
+            _LOGGER.warning("Loggia alertes : lecture des %s impossible pendant l'alerte", domaine, exc_info=True)
             return []
         return sorted(s.entity_id for s in etats
                       if s.state not in ("unavailable", "unknown")
@@ -208,9 +217,13 @@ class LoggiaAlertes:
                 await self._regles.noter("alertes", "danger", "couper", n=0, motif=motif,
                                          detail="aucune vanne d'eau : rien à couper")
 
-    async def _danger_passe(self, haid: str) -> None:
+    async def _danger_passe(self, haid: str, muet: bool = False) -> None:
         """Un capteur retombe. Tant qu'un autre danger dure, on ne rend rien."""
         self._dangers.pop(haid, None)
+        if muet:
+            _LOGGER.warning("Loggia alertes : %s s'est tu pendant un danger — la maison est rendue", haid)
+            await self._regles.noter("alertes", "danger", "capteur muet", cibles=[haid], motif="danger",
+                                     detail="le capteur s'est tu pendant le danger : la maison est rendue, a verifier")
         if self._dangers:
             return
         await self._async_rendre()

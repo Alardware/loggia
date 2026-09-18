@@ -33,6 +33,8 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
+from .regles import niveau
+
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
 
@@ -47,6 +49,12 @@ MUETS = {"unavailable", "unknown", "none", ""}
 # oscille de quelques dizaines de ppm : sans elle, il sonnerait a chaque
 # souffle.
 HYSTERESE = 0.90
+
+# Ce que les veilles commandent a sa place dans l'echelle de la maison : la
+# ventilation (l'air qu'on respire) passe devant le confort ; les prises des
+# heures creuses sont du confort. Sans rang declare, tout partait a 0 — sous
+# tout le monde, et une prise tenue ailleurs restait froide (audit 18/09).
+PRIORITES = {"co2": niveau("nuit", 10), "creuses": niveau("confort", 5)}
 
 DEFAUT: dict[str, Any] = {
     "co2": {"actif": False, "seuil": 1200, "capteurs": [], "ventilation": []},
@@ -172,6 +180,8 @@ class LoggiaVeilles:
             ids = list(self.hass.states.async_entity_ids("sensor"))
             ids += list(self.hass.states.async_entity_ids("binary_sensor"))
         except Exception:  # noqa: BLE001
+            # Le module qui empeche les pannes silencieuses ne doit pas en avoir une.
+            _LOGGER.warning("Loggia veilles : capteurs illisibles, aucune veille ce tour", exc_info=True)
             return {}
         return {i: self.hass.states.get(i) for i in ids}
 
@@ -275,7 +285,8 @@ class LoggiaVeilles:
                              regle: str = "", quoi: str = "", motif: str = "") -> list:
         """Commande par le socle : il ecarte ce qu'une main tient, et note."""
         return await self.regles.agir("veilles", regle, domaine, service, cibles,
-                                      quoi=quoi or service, motif=motif)
+                                      quoi=quoi or service, motif=motif,
+                                      priorite=PRIORITES.get(regle, 0))
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     async def async_config(self) -> dict[str, Any]:

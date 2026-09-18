@@ -308,12 +308,14 @@ class LoggiaRobots:
         try:
             choisie = await self.store.async_get_shared(CLE_METEO, None)
         except Exception:  # noqa: BLE001
+            _LOGGER.warning("Loggia robots : meteo de la maison illisible, la pluie ne retiendra rien", exc_info=True)
             choisie = None
         if isinstance(choisie, str) and choisie.startswith("weather.") and self.hass.states.get(choisie) is not None:
             return choisie
         try:
             toutes = sorted(self.hass.states.async_entity_ids("weather"))
         except Exception:  # noqa: BLE001
+            _LOGGER.warning("Loggia robots : entites meteo illisibles, la pluie ne retiendra rien", exc_info=True)
             toutes = []
         return toutes[0] if toutes else None
 

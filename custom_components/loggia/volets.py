@@ -669,6 +669,9 @@ class LoggiaVolets:
         try:
             return sorted(self.hass.states.async_entity_ids("cover"))
         except Exception:  # noqa: BLE001
+            # Un garde-fou muet ne garde rien : sans cette ligne, « aucun
+            # decalage arme » se lisait comme un jour sans rien a faire.
+            _LOGGER.warning("Loggia volets : volets illisibles pour le moment", exc_info=True)
             return []
 
     # ── Les ordres qui attendent leur volet ────────────────────────────────
@@ -752,7 +755,10 @@ class LoggiaVolets:
         maintenant = time.time()
         for haid, ordre in list(self.attente.items()):
             if maintenant > ordre.get("expire", 0):
-                del self.attente[haid]
+                # `pop` : deux rattrapages peuvent courir ensemble — deux
+                # volets revenus au meme instant — et l'autre a pu passer avant.
+                if self.attente.pop(haid, None) is None:
+                    continue
                 await self._noter(ordre.get("sens", "?"), "attente expiree", 0,
                                   detail=haid, motif="ordre perime")
                 continue
@@ -767,7 +773,8 @@ class LoggiaVolets:
                 pourquoi = "capteur indisponible" if baie == "muette" else "baie refermee"
             else:
                 pourquoi = "volet revenu"
-            del self.attente[haid]
+            if self.attente.pop(haid, None) is None:
+                continue
             await self._async_service(
                 "open_cover" if ordre.get("sens") == "ouvrir" else "close_cover", [haid],
                 regle="rattrapage", quoi=ordre.get("sens", "?"),

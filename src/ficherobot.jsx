@@ -74,7 +74,7 @@ function useHistoriqueRobot(hass, idRobot, idSurface, etat, jours = 14) {
     const ids = [idRobot, idSurface].filter(Boolean).join(',');
     hRef.current.callApi('GET', 'history/period/' + debut + '?filter_entity_id=' + encodeURIComponent(ids) + '&end_time=' + encodeURIComponent(new Date().toISOString()) + '&minimal_response&no_attributes')
       .then(r => { if (vivant) setReponse(Array.isArray(r) ? r : []); })
-      .catch(() => { if (vivant) setReponse([]); });
+      .catch(() => { if (vivant) setReponse('erreur'); });
     return () => { vivant = false; };
   }, [connecte, idRobot, idSurface, etat, jours]);
   return reponse;
@@ -239,7 +239,9 @@ function OngletZones({ domaine, robot, zones, nChoisies, basculerZone, peutChois
 
 /* ════════════ L'historique ════════════ */
 
-function OngletHistorique({ domaine, sessions, resume, chargee }) {
+function OngletHistorique({ domaine, sessions, resume, chargee, erreur = false }) {
+  // Un historique qui ne se lit pas n'est pas un historique vide (audit 18/09).
+  if (erreur) return <div role="alert" style={{ ...PANNEAU, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Historique indisponible pour le moment')}</div>;
   if (!chargee) return <div style={{ ...PANNEAU, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Lecture de l’historique…')}</div>;
   const parSurface = resume.surface != null;
   const max = Math.max(1, ...resume.jours.map(j => (parSurface ? j.surface : j.dureeMin)));
@@ -650,7 +652,9 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
   const rentrer = () => scriptOu('retour_base', serviceRetour(domaine));
 
   // L'historique, l'entretien, les réglages.
-  const brut = useHistoriqueRobot(hass, idRobot, idSurface, robot.etat);
+  const reponse = useHistoriqueRobot(hass, idRobot, idSurface, robot.etat);
+  const histoErreur = reponse === 'erreur';
+  const brut = histoErreur ? null : reponse;
   // Le planning : tenu par le composant. Sans réponse de sa part, ni onglet ni tuile.
   const planning = useEtatServeur(hass, 'loggia/robots/etat', 15000, '');
   const sessions = useMemo(() => {
@@ -738,7 +742,7 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
         resume={brut ? resume : null} derniere={derniere} prochain={prochain} alerte={alerteEntretien(usure)} aUneCarte={!!idCarte} allerA={setOnglet} />}
       {actuel === 'zones' && <OngletZones domaine={domaine} robot={robot} zones={zones} nChoisies={nChoisies} basculerZone={basculerZone} peutChoisir={peutChoisir} lancer={lancer} carte={idCarte ? planDe() : null} camera={camera} />}
       {actuel === 'planning' && <OngletPlanning hass={hass} domaine={domaine} robot={robot} zones={zonesPlanifiables} planning={planning} />}
-      {actuel === 'historique' && <OngletHistorique domaine={domaine} sessions={sessions} resume={resume} chargee={!!brut} />}
+      {actuel === 'historique' && <OngletHistorique domaine={domaine} sessions={sessions} resume={resume} chargee={!!brut} erreur={histoErreur} />}
       {actuel === 'entretien' && <OngletEntretien hass={hass} pieces={usure} compteurs={compteurs} />}
       {actuel === 'reglages' && <PageReglages hass={hass} domaine={domaine} robot={robot} reglages={reglages} fiche={fiche} retour={() => setOnglet('accueil')} onFiche={onFiche ? () => onFiche(idRobot) : null} />}
     </div>
