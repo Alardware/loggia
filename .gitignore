@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# La demo en ligne (npm run build:demo) : construite par la CI, jamais versionnee.
+dist-demo/
 backups/
 __pycache__/
 *.pyc

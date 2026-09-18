@@ -6,6 +6,8 @@
 
 ![Loggia sur ordinateur, portable, tablette et téléphone](docs/loggia-presentation.webp)
 
+**[Essayer la démo en ligne →](https://alardware.github.io/loggia/)** — rien à installer, aucune adresse à saisir.
+
 Un tableau de bord Home Assistant qui se remplit tout seul.
 
 Loggia lit les registres de votre installation — zones, appareils, entités — et
@@ -16,94 +18,25 @@ tard apparaît sans rien toucher.
 Le même dashboard s'adapte à l'écran qui le regarde : sur tablette comme sur
 téléphone, le bandeau du haut disparaît, la navigation passe en bas et la
 barre latérale devient un tiroir. C'est le TYPE d'appareil qui décide, jamais
-la largeur. Dépliez le format qui est le vôtre :
-
-<details>
-<summary><b>Ordinateur</b> — 1600 × 950</summary>
-
-**L'accueil** — les pièces, l’énergie, l’agenda et ce qui joue
-
-![L'accueil — les pièces, l’énergie, l’agenda et ce qui joue, en ordinateur](docs/captures/pc-accueil.webp)
-
-**Une pièce** — le salon : ses appareils, son volet, son historique de confort
-
-![Une pièce — le salon : ses appareils, son volet, son historique de confort, en ordinateur](docs/captures/pc-piece.webp)
-
-**L'énergie** — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance
-
-![L'énergie — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance, en ordinateur](docs/captures/pc-energie.webp)
-
-**Les réglages** — chaque section dit ce qu’elle a trouvé et ce qui manque
-
-![Les réglages — chaque section dit ce qu’elle a trouvé et ce qui manque, en ordinateur](docs/captures/pc-parametres.webp)
-
-</details>
-
-<details>
-<summary><b>Tablette</b> — 1366 × 1024, en paysage</summary>
-
-**L'accueil** — les pièces, l’énergie, l’agenda et ce qui joue
-
-![L'accueil — les pièces, l’énergie, l’agenda et ce qui joue, en tablette](docs/captures/tablette-accueil.webp)
-
-**Une pièce** — le salon : ses appareils, son volet, son historique de confort
-
-![Une pièce — le salon : ses appareils, son volet, son historique de confort, en tablette](docs/captures/tablette-piece.webp)
-
-**L'énergie** — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance
-
-![L'énergie — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance, en tablette](docs/captures/tablette-energie.webp)
-
-**Les réglages** — chaque section dit ce qu’elle a trouvé et ce qui manque
-
-![Les réglages — chaque section dit ce qu’elle a trouvé et ce qui manque, en tablette](docs/captures/tablette-parametres.webp)
-
-</details>
-
-<details>
-<summary><b>Téléphone</b> — 390 × 844</summary>
-
-**L'accueil** — les pièces, l’énergie, l’agenda et ce qui joue
-
-![L'accueil — les pièces, l’énergie, l’agenda et ce qui joue, en téléphone](docs/captures/mobile-accueil.webp)
-
-**Une pièce** — le salon : ses appareils, son volet, son historique de confort
-
-![Une pièce — le salon : ses appareils, son volet, son historique de confort, en téléphone](docs/captures/mobile-piece.webp)
-
-**L'énergie** — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance
-
-![L'énergie — le flux en temps réel, la puissance des dernières 24 h, l’autosuffisance, en téléphone](docs/captures/mobile-energie.webp)
-
-**Les réglages** — chaque section dit ce qu’elle a trouvé et ce qui manque
-
-![Les réglages — chaque section dit ce qu’elle a trouvé et ce qui manque, en téléphone](docs/captures/mobile-parametres.webp)
-
-</details>
-
-> Ces captures viennent d'une maison de démonstration, pas d'une installation
-> réelle : six pièces, quelques capteurs, aucune caméra — de quoi montrer le
-> rendu sans exposer le domicile de qui que ce soit. Le bandeau « données
-> factices » qu'affiche la démo a été écarté du cadre.
+la largeur.
 
 ## Essayer sans rien installer
 
-Ouvrez la page directe du dashboard avec `?demo` :
+**[La démo en ligne](https://alardware.github.io/loggia/)** : rien à installer, aucune adresse à saisir. Une
+maison de démonstration se monte — pièces, lumières, volets, thermostats,
+agenda, scénarios, robots, **jouables** (une lampe basculée bascule) — avec
+deux profils dont un administrateur pour tout essayer. Elle tourne entièrement
+dans le navigateur, sans Home Assistant derrière : rien n'est envoyé nulle
+part, et tout s'évapore à la fermeture de l'onglet. Un badge « Démonstration »
+reste à l'écran.
 
-```
-http://<votre-ha>:8123/loggia-static/index.html?demo
-```
+Quelques entrées directes : [en anglais](https://alardware.github.io/loggia/?lang=en),
+[en mode clair](https://alardware.github.io/loggia/?mode=light), [la vue Énergie](https://alardware.github.io/loggia/?vue=energie).
 
-La maison de démonstration se monte : pièces, lumières, volets, thermostats,
-agenda, scénarios — **jouables** (une lampe basculée bascule), deux profils dont
-un administrateur pour tout essayer. Aucune trace : le stockage du navigateur
-est remplacé par un magasin en mémoire, votre configuration n'est ni lue ni
-écrite, et tout s'évapore à la fermeture de l'onglet. Un badge
-« Démonstration » reste à l'écran.
-
-C'est aussi le banc d'essai du projet : les branches que l'installation de
-l'auteur n'exerce pas — un compte administrateur, une maison sans caméras —
-se testent là.
+Sur une installation, la même démo s'ouvre avec `?demo` sur la page directe
+du dashboard — `http://<votre-ha>:8123/loggia-static/index.html?demo` — sans
+lire ni écrire votre configuration. C'est aussi le banc d'essai du projet : les
+branches que l'installation de l'auteur n'exerce pas se testent là.
 
 ## Installation
 

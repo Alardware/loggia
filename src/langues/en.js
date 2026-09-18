@@ -2252,6 +2252,7 @@ export default {
   // Robustesse : ce qui echouait en silence se dit (v3.48.0)
   'Historique indisponible pour le moment': 'History unavailable for now',
   'indisponible': 'unavailable',
+  'maison de démonstration': 'demo home',
   'Remise à zéro incomplète : Home Assistant a refusé ou n’a pas répondu. La configuration de la maison est inchangée.': 'Reset incomplete: Home Assistant refused or did not answer. The home configuration is unchanged.',
   'La découverte de la maison a été interrompue — recharge la page': 'Discovering the home was interrupted — reload the page',
   'Scénario en partie exécuté — {n} commande(s) refusée(s)': 'Scenario partly run — {n} command(s) refused',

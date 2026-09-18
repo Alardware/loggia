@@ -200,6 +200,9 @@ function WeatherFx({ weather }) {
 // Adresse du serveur telle que le navigateur la voit : rien a configurer, et
 // rien qui vienne de l'installation de quelqu'un d'autre.
 function haHost() {
+  // La démo n'a pas de serveur : nommer l'hôte de la page (github.io,
+  // localhost) ferait croire à un Home Assistant derrière.
+  if (typeof window !== 'undefined' && window.__loggiaDemo) return tr('maison de démonstration');
   try { return ((window.top || window).location || {}).host || 'Home Assistant'; } catch { return 'Home Assistant'; }
 }
 

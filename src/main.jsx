@@ -16,7 +16,16 @@
 // dans index.html pour l'inline du paquet (pack_frontend l'exige).
 import './index.css';
 
+/* La démo EN LIGNE (GitHub Pages) est une construction à part : `npm run
+ * build:demo`, mode Vite « demo ». Il n'y a pas de Home Assistant derrière :
+ * elle démarre TOUJOURS dans la maison de démonstration, sans `?demo`, et
+ * n'attend aucune adresse. Dans la construction normale, MODE vaut
+ * 'production' : la condition disparaît à la compilation, le panneau servi
+ * par Home Assistant ne peut pas s'y retrouver. */
+const DEMO_SEULE = import.meta.env.MODE === 'demo';
+
 const demo = (() => {
+  if (DEMO_SEULE) return true;
   try { return new URLSearchParams(window.location.search).has('demo') && window === window.top; }
   catch { return false; }
 })();
@@ -44,6 +53,9 @@ function langueProbable() {
 
 (async () => {
   if (demo) {
+    // Lu par la barre latérale : la démo n'a pas de serveur à nommer.
+    window.__loggiaDemo = true;
+    if (DEMO_SEULE) document.title = 'Loggia — démonstration';
     try { (await import('./demo.js')).installerDemo(); }
     catch (e) { console.error('demo indisponible', e); }
     /* `?mode=auto|light|dark` et `?lang=fr|en` : réglages d'aperçu dans la
