@@ -264,3 +264,15 @@ test('la consigne se lit entre les deux boutons des cartes climat', () => {
   // Le sous-titre dit l'état ; il ne répète plus la valeur.
   assert.ok(!APP.includes("tr('Chauffe') + ' · ' + consigne"), 'la consigne est dite deux fois');
 });
+
+test('le menu déroulant s’ouvre sous son bouton, et son bouton est en bleu plein', () => {
+  // Le flou de `.o-bar` (backdrop-filter) faisait de la barre le repère du
+  // `position: fixed` : le menu « Collection » tombait en bas de page. Rendu
+  // dans <body>, son repère est l'écran ; un appui dedans ne le ferme pas.
+  const dd = entre(APP, 'function Dropdown({ value, options, onChange, label, width = 150 }) {', '\nfunction ScenesContent(');
+  assert.ok(APP.includes("import { createPortal } from 'react-dom';"));
+  assert.ok(dd.includes('{open && pos && createPortal(') && dd.includes(', document.body)}'), 'le menu est revenu à côté de son bouton');
+  assert.ok(dd.includes('if (menuRef.current && menuRef.current.contains(e.target)) return;'), 'un appui dans le menu le fermerait avant le choix');
+  assert.ok(dd.includes("zIndex: 9000"), 'le menu passerait sous une feuille (z-index 200)');
+  assert.ok(dd.includes("border: 'none', background: 'var(--o-accent-fond)', color: '#fff' }}>"), 'le bouton du menu n’est plus en bleu plein');
+});

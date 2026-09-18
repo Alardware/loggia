@@ -61,3 +61,22 @@ du fil pilote, options des menus déroulants, zones et jours des robots, cases
 des zones. Une zone garde un petit carré à sa couleur, dans la puce comme dans
 la liste : c'est lui qui la relie à la carte. Les icônes d'état des cartes
 (RM_ICO) ne sont pas des puces et gardent leurs teintes.
+
+## Amendement (18/09/2026, v3.52.2) — le menu sous son bouton, la barre de confort à la norme
+
+Demande : dans les Scénarios, le sélecteur « Collection » « n'apparaît pas en
+bleu comme les autres sélecteurs, et la sélection apparaît en bas de page au
+lieu de se dérouler au niveau du bouton » ; dans les Pièces, la barre de
+l'indice de confort est « trop épaisse […] qu'elle respecte les mêmes normes
+que dans Scénario ».
+
+- Le bouton du menu déroulant passe au bleu plein, texte blanc.
+- Le menu est rendu dans `<body>` (`createPortal`). Le flou de `.o-bar`
+  (`backdrop-filter`) faisait de la barre le repère de son `position: fixed` :
+  le menu se plaçait 450 px trop bas. Un appui dans le menu ne compte plus
+  comme un appui dehors ; z-index 9000, au-dessus des feuilles (200) ; il
+  porte son propre flou.
+- La barre de confort prend la hauteur de la barre des scénarios, 59 px :
+  10 px de marge, anneau de 34 px, pastilles de 36 px. Le nom de la mesure
+  reste au-dessus de sa valeur, en plus petit — à côté, quatre mesures
+  passaient sur deux rangées. Au téléphone, rien ne change.

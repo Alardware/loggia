@@ -151,7 +151,7 @@ test('la barre : l’indice et son anneau, un filet, une pastille par mesure', (
 });
 
 test('au telephone la rangee de mesures reste sur UNE ligne', () => {
-  assert.ok(css.includes('.o-confort { display: flex; align-items: center; gap: 18px; padding: 12px 16px; border-radius: var(--o-radius,18px); background: var(--o-surfA); border: var(--o-bw,1px) solid var(--o-bd2);'), 'la surface des autres barres et cartes');
+  assert.ok(css.includes('.o-confort { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--o-radius,18px); background: var(--o-surfA); border: var(--o-bw,1px) solid var(--o-bd2);'), 'la surface et la marge de la barre des scenarios');
   const tablette = css.slice(css.indexOf('@media (max-width: 900px) {' + NL + '  .o-confort {'));
   assert.ok(tablette.includes('.o-confort-mesures { display: grid; grid-template-columns: repeat(var(--conf-n, 4), minmax(0, 1fr)); gap: 8px; }'), 'autant de colonnes que de mesures');
   const tel = css.slice(css.indexOf('@media (max-width: 560px) {' + NL + '  .o-confort {'));
@@ -167,4 +167,15 @@ test('les icones existent, la demo a un sonometre, et l’anglais suit', () => {
     'Trop sec', 'Bon', 'Humide', 'Trop humide', 'Excellent', 'Moyen', 'Élevé', 'Confiné', 'Calme', 'Animé', 'Bruyant', 'Très bruyant', 'Bruit', 'Température', 'Humidité', 'Historique du confort', 'Niveau sonore élevé dans la pièce.']) {
     assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
   }
+});
+
+test('la barre a la hauteur de celle des scenarios (retour du 18/09)', () => {
+  // La barre des scenarios : 10 px de marge, des groupes de 37 px sur une
+  // rangee. La barre de confort suit : anneau de 34 px, pastilles de 36 px —
+  // le nom reste au-dessus de la valeur, sinon quatre mesures debordent.
+  assert.ok(css.includes('.o-confort-anneau { position: relative; width: 34px; height: 34px;'), 'l’anneau grossit de nouveau');
+  assert.ok(css.includes('.o-confort-anneau svg { position: absolute; inset: 0; width: 100%; height: 100%; }'), 'le dessin de l’anneau ne suit plus sa boite');
+  assert.ok(css.includes('.o-confort-mesure { display: flex; align-items: center; gap: 9px; padding: 4px 12px 4px 5px; border-radius: 10px;'));
+  assert.ok(css.includes('.o-confort-ico { width: 27px; height: 27px;'));
+  assert.ok(css.includes('.o-confort-nom { font-size: 10.5px; line-height: 1.15;') && css.includes('.o-confort-val { display: flex; align-items: center; gap: 6px; margin-top: 1px; font-size: 12.5px; line-height: 1.2;'), 'le nom au-dessus de la valeur, en petit');
 });

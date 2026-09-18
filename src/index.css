@@ -906,26 +906,32 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
  * l'indice passe au-dessus et les pastilles se partagent la largeur ; au
  * téléphone la rangée reste sur UNE ligne — l'icône au-dessus, la valeur, le
  * verdict, le nom de la mesure s'efface (la règle des rangées de tuiles). */
-.o-confort { display: flex; align-items: center; gap: 18px; padding: 12px 16px; border-radius: var(--o-radius,18px); background: var(--o-surfA); border: var(--o-bw,1px) solid var(--o-bd2); box-sizing: border-box; min-width: 0; cursor: pointer; }
-.o-confort-indice { display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-width: 0; }
-.o-confort-anneau { position: relative; width: 46px; height: 46px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
-.o-confort-anneau svg { position: absolute; inset: 0; }
+/* La hauteur de la barre des scenarios (retour du 18/09) : 10 px de marge,
+ * des groupes de 36 px sur UNE rangee, 59 px au total. Le nom de la mesure
+ * reste AU-DESSUS de sa valeur, en petit : a cote, la pastille s'elargissait
+ * et quatre mesures passaient sur deux rangees. */
+.o-confort { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--o-radius,18px); background: var(--o-surfA); border: var(--o-bw,1px) solid var(--o-bd2); box-sizing: border-box; min-width: 0; cursor: pointer; }
+.o-confort-indice { display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0; padding-left: 2px; }
+.o-confort-anneau { position: relative; width: 34px; height: 34px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+.o-confort-anneau svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.o-confort-anneau .fi { font-size: 12px !important; }
 .o-confort-anneau circle { transition: stroke-dashoffset .6s cubic-bezier(.22,.61,.36,1), stroke .3s ease; }
-.o-confort-titre { font-size: 10.5px; font-weight: 800; letter-spacing: .09em; color: var(--o-text3); white-space: nowrap; }
-.o-confort-note { display: flex; align-items: baseline; gap: 6px; margin-top: 3px; white-space: nowrap; }
-.o-confort-note .n { font-size: 22px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
-.o-confort-note .sur { font-size: 12px; font-weight: 700; color: var(--o-text3); }
-.o-confort-note .mot { font-size: 13px; font-weight: 700; margin-left: 4px; }
-.o-confort-sep { width: 1px; align-self: stretch; margin: 4px 0; background: var(--o-bd2); flex-shrink: 0; }
-.o-confort-mesures { display: flex; flex-wrap: wrap; gap: 10px; flex: 1; min-width: 0; }
-.o-confort-mesure { display: flex; align-items: center; gap: 10px; padding: 7px 14px 7px 8px; border-radius: 12px; background: var(--o-s2); min-width: 0; }
-.o-confort-ico { width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+.o-confort-titre { font-size: 9.5px; font-weight: 800; letter-spacing: .09em; color: var(--o-text3); white-space: nowrap; }
+.o-confort-note { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; white-space: nowrap; }
+.o-confort-note .n { font-size: 17px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.o-confort-note .sur { font-size: 11px; font-weight: 700; color: var(--o-text3); }
+.o-confort-note .mot { font-size: 12.5px; font-weight: 700; margin-left: 4px; }
+.o-confort-sep { width: 1px; align-self: stretch; margin: 2px 0; background: var(--o-bd2); flex-shrink: 0; }
+.o-confort-mesures { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; min-width: 0; }
+.o-confort-mesure { display: flex; align-items: center; gap: 9px; padding: 4px 12px 4px 5px; border-radius: 10px; background: var(--o-s2); min-width: 0; }
+.o-confort-ico { width: 27px; height: 27px; border-radius: 8px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+.o-confort-ico .fi { font-size: 13px !important; }
 .o-confort-txt { min-width: 0; }
-.o-confort-nom { font-size: 11.5px; font-weight: 600; color: var(--o-text2); white-space: nowrap; }
-.o-confort-val { display: flex; align-items: center; gap: 6px; margin-top: 1px; font-size: 13px; white-space: nowrap; min-width: 0; }
+.o-confort-nom { font-size: 10.5px; line-height: 1.15; font-weight: 600; color: var(--o-text2); white-space: nowrap; }
+.o-confort-val { display: flex; align-items: center; gap: 6px; margin-top: 1px; font-size: 12.5px; line-height: 1.2; white-space: nowrap; min-width: 0; }
 .o-confort-val .v { font-weight: 800; font-variant-numeric: tabular-nums; }
 .o-confort-val .pt { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.o-confort-val .mot { font-size: 12px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.o-confort-val .mot { font-size: 11.5px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 @media (hover: hover) and (pointer: fine) { .o-confort:hover { filter: brightness(1.06); } }
 @media (max-width: 900px) {
   .o-confort { flex-direction: column; align-items: stretch; gap: 12px; }

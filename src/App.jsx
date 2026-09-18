@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext, cloneElement, lazy, Suspense, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 // Les deux fonds animes tirent three.js : 448 Ko a analyser, pour un decor. En
 // import direct, ce cout etait paye a CHAQUE ouverture, meme par quelqu'un qui
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
@@ -7847,10 +7848,15 @@ const sceneByName = (name) => { for (const c of Object.values(HUE_SCENES)) { con
 // Liste déroulante aux couleurs du thème (le menu d'un <select> natif est rendu par
 // l'OS : impossible à styler, illisible en thème sombre). Fermeture au clic extérieur
 // et à Échap.
+/* Le menu est rendu dans <body>, pas a cote de son bouton : un ancetre flou
+ * (`backdrop-filter` de `.o-bar`), transforme ou anime devient le repere d'un
+ * `position: fixed`, et le menu tombait alors en bas de page, loin du bouton
+ * (retour du 18/09). Dans <body>, le repere est toujours l'ecran. */
 function Dropdown({ value, options, onChange, label, width = 150 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const wrapRef = useRef(null);
+  const menuRef = useRef(null);
   const cur = options.find(o => o.id === value);
   // Position mesuree a l'ouverture puis suivie au scroll/resize.
   useEffect(() => {
@@ -7870,7 +7876,12 @@ function Dropdown({ value, options, onChange, label, width = 150 }) {
   }, [open, width]);
   useEffect(() => {
     if (!open) return undefined;
-    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    // Le menu n'est plus DANS le bouton : un appui dedans n'est pas un appui dehors.
+    const onDoc = (e) => {
+      if (wrapRef.current && wrapRef.current.contains(e.target)) return;
+      if (menuRef.current && menuRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
     const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
     document.addEventListener('pointerdown', onDoc, true);
     document.addEventListener('keydown', onKey, true);
@@ -7879,12 +7890,12 @@ function Dropdown({ value, options, onChange, label, width = 150 }) {
   return (
     <span ref={wrapRef} style={{ position: 'relative', display: 'inline-flex' }}>
       <button onClick={() => setOpen(o => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={label}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: 'none', background: 'rgba(var(--o-accent-rgb),.18)', color: 'var(--o-accent-soft)' }}>
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, border: 'none', background: 'var(--o-accent-fond)', color: '#fff' }}>
         {cur ? cur.label : '—'}
-        <span style={{ display: 'inline-flex', transition: 'transform .18s', transform: open ? 'rotate(180deg)' : 'none' }}><Fi i="angle-small-down" size={13} color="var(--o-accent-soft)" /></span>
+        <span style={{ display: 'inline-flex', transition: 'transform .18s', transform: open ? 'rotate(180deg)' : 'none' }}><Fi i="angle-small-down" size={13} color="#fff" /></span>
       </button>
-      {open && pos && (
-        <div role="listbox" aria-label={label} style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 80, minWidth: pos.w, maxHeight: 'min(50vh, 340px)', overflowY: 'auto', padding: 6, borderRadius: 14, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: '0 18px 44px rgba(0,0,0,.4)' }}>
+      {open && pos && createPortal(
+        <div ref={menuRef} role="listbox" aria-label={label} style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9000, minWidth: pos.w, maxHeight: 'min(50vh, 340px)', overflowY: 'auto', padding: 6, borderRadius: 14, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: '0 18px 44px rgba(0,0,0,.4)' }}>
           {options.map(o => {
             const on = o.id === value;
             return (
@@ -7896,7 +7907,7 @@ function Dropdown({ value, options, onChange, label, width = 150 }) {
             );
           })}
         </div>
-      )}
+      , document.body)}
     </span>
   );
 }
