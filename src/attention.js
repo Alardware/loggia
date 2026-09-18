@@ -33,7 +33,14 @@ export const CLASSES_SURETE = ['smoke', 'carbon_monoxide', 'gas', 'moisture', 's
  * par défaut de la veille CO₂ du serveur. Un seul chiffre pour toute la
  * maison, sinon l'Accueil et la pièce se contrediraient à 1 150 ppm. */
 export const SEUIL_CO2 = 1200;
-/* Du plus grave au plus doux : c'est aussi l'ordre de tri des points. */
+/* Une pile : visible (ambre) à 20 %, rouge à 5 % — les mêmes chiffres pour la
+ * plante, le robot et le point d'attention (v3.49.0). */
+export const SEUILS_PILE = { alerte: 20, danger: 5 };
+/* Du plus grave au plus doux : c'est aussi l'ordre de tri des points.
+ * C'est le vocabulaire de TOUT l'écran : `danger` = action nécessaire (rouge,
+ * lavis, point qui bat), `alerte` = attention (ambre, visible, sans battre),
+ * `info` = la maison a agi (accent). Le normal n'a pas de niveau : il reste
+ * discret, dans la couleur du texte. */
 export const NIVEAUX = ['danger', 'alerte', 'info'];
 
 /* Les mots de `deriveNotifs`, à l'identique : [le danger, ce qui s'est passé].
@@ -327,10 +334,11 @@ export function pointsAttention(ctx) {
     if (!estObjet(p)) return;
     const nom = p.nom != null ? String(p.nom) : (p.name != null ? String(p.name) : '');
     const co2 = nombre(p.co2);
-    if (!nom || co2 == null || co2 < SEUIL_CO2) return;
+    const niv = niveauCo2(co2);
+    if (!nom || !niv) return;
     const haid = typeof p.haid === 'string' ? p.haid : null;
     if (haid) co2Haids.add(haid);
-    ajouter('co2:' + nom, 'alerte', tr('CO₂ élevé'), nom + ' · ' + Math.round(co2) + ' ppm', 'room:' + nom, haid);
+    ajouter('co2:' + nom, niv, tr('CO₂ élevé'), nom + ' · ' + Math.round(co2) + ' ppm', 'room:' + nom, haid);
   });
 
   /* 5. Une caméra injoignable : on ne voit plus, c'est une alerte. */
@@ -364,7 +372,9 @@ export function pointsAttention(ctx) {
     const nom = nomDe(haid, st);
     const val = estObjet(st) ? nombre(st.state) : null;
     if (genre === 'bat') {
-      ajouter('pile:' + haid, 'info', tr('Pile faible'), val != null ? nom + ' · ' + Math.round(val) + ' %' : nom, 'objets', haid);
+      // Le serveur signale au seuil réglé ; la couleur suit la charge réelle :
+      // une pile à 4 % est une action, pas une information.
+      ajouter('pile:' + haid, niveauPile(val) || 'info', tr('Pile faible'), val != null ? nom + ' · ' + Math.round(val) + ' %' : nom, 'objets', haid);
     } else if (genre === 'co2') {
       if (co2Haids.has(haid) || cles.has('co2:' + haid)) return;
       ajouter('co2:' + haid, 'alerte', tr('CO₂ élevé'), val != null ? nom + ' · ' + Math.round(val) + ' ppm' : nom, null, haid);
@@ -397,6 +407,27 @@ export function pointsAttention(ctx) {
   const cmp = (a, b) => String(a).localeCompare(String(b), 'fr');
   out.sort((a, b) => (rang(a.niveau) - rang(b.niveau)) || cmp(a.titre, b.titre) || cmp(a.sous, b.sous) || cmp(a.cle, b.cle));
   return out;
+}
+
+/** Le niveau d'une pile d'après sa charge, ou null si elle tient. */
+export function niveauPile(pct) {
+  const n = nombre(pct);
+  if (n == null) return null;
+  if (n <= SEUILS_PILE.danger) return 'danger';
+  if (n <= SEUILS_PILE.alerte) return 'alerte';
+  return null;
+}
+
+/** Le niveau d'un CO₂ : une alerte au palier « chargé », sinon rien. */
+export function niveauCo2(ppm) {
+  const n = nombre(ppm);
+  return n != null && n >= SEUIL_CO2 ? 'alerte' : null;
+}
+
+/** Le point qui bat est réservé à l'action : ailleurs, l'œil n'a rien à
+ * rattraper. `pulse` est défini dans index.css. */
+export function animationNiveau(niveau) {
+  return niveau === 'danger' ? 'pulse 1.2s infinite' : 'none';
 }
 
 export function niveauMax(points) {

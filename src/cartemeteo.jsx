@@ -17,11 +17,11 @@ import { useState, useEffect, useRef } from 'react';
 import { tr } from './i18n.js';
 import { weatherEntity, WeatherIco, haWeatherLabel } from './wxutil.jsx';
 import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour } from './meteo.js';
+import { CARTE_RAIL } from './styles.js';
 
 /* La surface, le filet et l'ombre de `railPanel` (App.jsx) — « En ce moment »,
  * « Rappels », « Agenda » : la météo est une carte du rail parmi les autres, et
  * ses textes prennent les couleurs du thème, clair comme sombre. */
-const CARTE_RAIL = { background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', boxShadow: 'var(--o-shadow)', color: 'var(--o-text)' };
 const DOUX = 'var(--o-text2)';
 
 /* Home Assistant REMPLACE son objet `hass` à chaque changement d'état :

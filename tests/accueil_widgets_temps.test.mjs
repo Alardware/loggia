@@ -155,7 +155,7 @@ test('le style se choisit en édition, sur sa propre ligne ; les villes par le g
 });
 
 test('le dessin : les surfaces du rail, rien sans source, l’heure calée sur la seconde', () => {
-  assert.ok(vue.includes("background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', boxShadow: 'var(--o-shadow)'"), 'la surface des autres cartes du rail');
+  assert.ok(lire('src', 'styles.js').includes("background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', boxShadow: 'var(--o-shadow)'") && vue.includes("import { CARTE_RAIL, petitesCapitales } from './styles.js';"), 'la surface des autres cartes du rail, partagee depuis styles.js');
   assert.ok(!/#[0-9a-fA-F]{6}\b/.test(vue.replace("color: '#06121f'", '')), 'aucune couleur en dur : une capture venue d’ailleurs donne une disposition, pas une palette');
   assert.ok(vue.includes("background: 'rgba(var(--o-accent-rgb),.14)'"), 'le panneau teinté de la capture devient un lavis de l’accent');
   assert.ok(vue.includes('if (calId) tuiles.push(') && vue.includes('if (soleil) tuiles.push('), 'pas de calendrier : pas de tuile Agenda ; pas de soleil : pas de tuile');

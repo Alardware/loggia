@@ -24,12 +24,12 @@ import {
   prochainSoleil, resumeAgendaDuJour, fuseauValide, villesDe, VILLES_MAX,
 } from './horloge.js';
 import { pointsHistorique, barresJournee, etendue, reperesAxe } from './air.js';
+import { CARTE_RAIL, petitesCapitales } from './styles.js';
 
 /* La surface des cartes du rail (voir `railPanel` dans App.jsx et cartemeteo.jsx). */
-const CARTE_RAIL = { background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', boxShadow: 'var(--o-shadow)', color: 'var(--o-text)', minWidth: 0 };
 /* Une tuile DANS un widget : le fond des pastilles de la barre de confort. */
 const TUILE = { background: 'var(--o-s2)', borderRadius: 12, minWidth: 0 };
-const PETITES_CAPITALES = { fontSize: 9.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)' };
+const PETITES_CAPITALES = petitesCapitales(9.5);
 
 /* L'heure qui passe : un rendu par `pas`, calé sur la frontière (la seconde ou
  * la minute ronde) pour que deux widgets voisins changent ensemble. Le widget

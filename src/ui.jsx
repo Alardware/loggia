@@ -262,7 +262,7 @@ export function TplForm({ onAdd, hass = null, initial = null }) {
         <div style={{ padding: '9px 13px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
           <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('APERÇU')}</div>
           {apErr
-            ? <div style={{ fontSize: 12, fontWeight: 600, color: '#f87171', marginTop: 3, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 72, overflow: 'auto' }}>{apErr}</div>
+            ? <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-bad)', marginTop: 3, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 72, overflow: 'auto' }}>{apErr}</div>
             : <div style={{ fontSize: 13, fontWeight: 700, marginTop: 3, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 72, overflowY: 'auto', opacity: apOut == null ? .45 : 1 }}>{apOut == null ? '…' : (apOut === '' ? '—' : apOut)}</div>}
         </div>
       )}

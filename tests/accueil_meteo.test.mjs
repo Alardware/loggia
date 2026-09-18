@@ -150,11 +150,15 @@ test('la carte : la disposition fournie — le lieu et le chiffre a gauche, le c
   // Retour du 17/09 sur le fond bleu de la capture : « applique les memes teintes
   // que pour les autres cartes, c'est ridicule la ». La surface, le filet et
   // l'ombre sont ceux de `railPanel` — la carte voisine, mot pour mot.
+  // Depuis la v3.49.0, cette surface vit une fois, dans styles.js : la carte
+  // voisine (railPanel) et la meteo l'etalent toutes deux.
+  const styles = lire('src', 'styles.js');
   const voisin = app.slice(app.indexOf('const railPanel = (title, sub, tag, tagCol, rows) => rows.length ? ('));
+  assert.ok(voisin.slice(0, 200).includes("<div style={{ ...CARTE_RAIL, padding: '13px 15px' }}>"), 'la carte voisine prend la surface partagee');
   for (const morceau of ["background: 'var(--o-surfA)'", "border: 'var(--o-bw,1px) solid var(--o-bd2)'", "borderRadius: 'var(--o-radius,18px)'", "boxShadow: 'var(--o-shadow)'"]) {
-    assert.ok(voisin.slice(0, 400).includes(morceau) && carte.includes(morceau), morceau + ' : la meme surface que « En ce moment »');
+    assert.ok(styles.includes(morceau), morceau + ' : la meme surface que « En ce moment »');
   }
-  assert.ok(carte.includes("const CARTE_RAIL = { background: 'var(--o-surfA)',") && carte.includes("color: 'var(--o-text)' };") && carte.includes('style={{ ...CARTE_RAIL,'), 'les textes prennent les couleurs du theme');
+  assert.ok(carte.includes("import { CARTE_RAIL } from './styles.js';") && carte.includes('style={{ ...CARTE_RAIL,'), 'les textes prennent les couleurs du theme');
   assert.ok(!/#[0-9a-fA-F]{3,8}/.test(carte) && !carte.includes('linear-gradient') && !carte.includes('FOND_JOUR') && !carte.includes('rgba(255,255,255'), 'plus aucune couleur en dur : ni fond bleu, ni texte blanc');
   assert.ok(rendu.includes("borderTop: 'var(--o-bw,1px) solid var(--o-bd3)'") && carte.includes("const DOUX = 'var(--o-text2)';") && rendu.includes("color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{h.libelle}</span>"), 'le filet et les gris des lignes du rail');
   assert.ok(rendu.includes('role="button" tabIndex={0}') && rendu.includes("if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrir(); }"), 'la carte s’ouvre au clavier comme au doigt');

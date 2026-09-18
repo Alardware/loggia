@@ -41,7 +41,8 @@ import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
-import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
+import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
+import { CARTE_RAIL } from './styles.js';
 import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
 import { evenementCamera, detecteursDe, reduireDerniers, depuis } from './evenement.js';
 import { cleJour, plageSemaine, joursAgenda, comptesParJour, evenementsAVenir, evenementsDuJour } from './agenda.js';
@@ -654,7 +655,7 @@ function Header() {
         {onAssistant && <BoutonAssistant onAssistant={onAssistant} onDictee={onDictee} hass={hassCtx} sens="bas" variante="entete" />}
         {peutEditer && <button onClick={onToggleEdit} title={editMode ? 'Quitter le mode édition' : tr('Mode édition')} style={editBtn}><Ico name="edit" size={17} /></button>}
         <button onClick={onToggleTheme} title={tr('Changer de thème')} style={hbtn}><Ico name="brightness" size={18} /></button>
-        <button onClick={() => { setNotifOpen(o => { const n = !o; if (n) marquerVues(); return n; }); setUserOpen(false); }} title="Notifications" style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{nonVues && <span className="o-livedot" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: '#f87171', border: '2px solid var(--o-bg2)' }} />}</button>
+        <button onClick={() => { setNotifOpen(o => { const n = !o; if (n) marquerVues(); return n; }); setUserOpen(false); }} title="Notifications" style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{nonVues && <span className="o-livedot" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: 'var(--o-bad)', border: '2px solid var(--o-bg2)' }} />}</button>
         <button aria-label="Profil" onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }} title="Profil" style={{ width: 44, height: 44, borderRadius: '50%', marginLeft: 4, background: curBg, border: '2px solid rgba(255,255,255,.15)', cursor: 'pointer', flexShrink: 0 }} />
         {notifOpen && (
           <div style={{ ...menu, right: 52, width: 'min(304px, calc(100vw - 32px))' }}>
@@ -1487,7 +1488,7 @@ function outdoorTips(mode, temp, wind, isNight, rainProb) {
   if (mode === 'storm') T.push(['bolt', 'var(--o-purple)', 'Orage, limite les sorties']);
   if (mode === 'snow') T.push(['snowflake', '#bcd6f0', 'Neige, prudence sur la route']);
   if (temp != null) {
-    if (temp <= 2) T.push(['snowflake', '#60a5fa', 'Risque de gel, couvre-toi bien']);
+    if (temp <= 2) T.push(['snowflake', 'var(--o-cold)', 'Risque de gel, couvre-toi bien']);
     else if (temp < 10) T.push(['thermometer-half', '#38bdf8', 'Frais dehors, prends une veste']);
     else if (temp >= 30) T.push(['humidity', '#ff8a4c', 'Forte chaleur, pense à t’hydrater']);
     else if (temp >= 25) T.push(['sun', '#ffce73', 'Il fait chaud, vêtements légers conseillés']);
@@ -1495,7 +1496,7 @@ function outdoorTips(mode, temp, wind, isNight, rainProb) {
   if ((mode === 'sun' || mode === 'partly') && !isNight && temp != null && temp >= 22) T.push(['sun', 'var(--o-gold)', 'Grand soleil, crème solaire et lunettes']);
   if (wind != null && wind >= 30) T.push(['wind', '#9fb4d6', 'Vent fort (' + Math.round(wind) + ' km/h), sois prudent']);
   if (isNight) T.push(['moon-stars', '#aeb9e0', 'Nuit tombée, pense à l’éclairage extérieur']);
-  if (!T.length) T.push(['sun', '#34d399', 'Conditions agréables, profite du dehors']);
+  if (!T.length) T.push(['sun', 'var(--o-ok)', 'Conditions agréables, profite du dehors']);
   return T;
 }
 
@@ -5104,9 +5105,9 @@ const CAMERAS = () => [
  * la vue Securite, la fiche. `ev` vient d'`evenementCamera`, ou vaut null. */
 const POINT_CAMERA = (fond) => ({ width: 7, height: 7, borderRadius: '50%', background: fond });
 function sousCamera(online, ev) {
-  if (!online) return <><span style={POINT_CAMERA('#f87171')} />{tr('Hors ligne')}</>;
+  if (!online) return <><span style={POINT_CAMERA('var(--o-bad)')} />{tr('Hors ligne')}</>;
   if (!ev) return <><span style={POINT_CAMERA('var(--o-ok)')} />{tr('Direct')}</>;
-  if (ev.enCours) return <><span style={POINT_CAMERA(ev.genre === 'sonnette' ? '#f87171' : ev.genre === 'colis' ? 'var(--o-accent)' : '#ffb347')} />{ev.libelle}</>;
+  if (ev.enCours) return <><span style={POINT_CAMERA(ev.genre === 'sonnette' ? 'var(--o-bad)' : ev.genre === 'colis' ? 'var(--o-accent)' : 'var(--o-warn)')} />{ev.libelle}</>;
   return <><Fi i={ev.icone} size={11} color="#ffce73" />{ev.libelle + ' · ' + depuis(ev.quand)}</>;
 }
 function tuileCamera(cam, i, hass) {
@@ -5178,7 +5179,7 @@ function CameraTile({ c, agrandir = true }) {
     <div style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', aspectRatio: '16/9', background: c.grad, border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
       {live && <CamLive hass={c.hass} haid={c.haid} online={c.online} />}
       {!live && <div style={{ position: 'absolute', inset: 0, background: c.glow }} />}
-      <div className="o-livebadge" style={{ position: 'absolute', top: 13, left: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 11px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: '#fff' }}><span className="o-livedot" style={{ width: 7, height: 7, borderRadius: '50%', background: '#f87171' }} />{c.tag}</div>
+      <div className="o-livebadge" style={{ position: 'absolute', top: 13, left: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 11px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: '#fff' }}><span className="o-livedot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-bad)' }} />{c.tag}</div>
       <div className="o-camheure" style={{ position: 'absolute', top: 13, right: 14, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.85)', textShadow: '0 1px 4px rgba(0,0,0,.5)' }}>{hhmm}</div>
       {/* Les classes portent les règles du téléphone (deux tuiles par ligne). */}
       <div className="o-campied" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '30px 16px 14px', background: 'linear-gradient(to top,rgba(0,0,0,.72),transparent)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
@@ -5204,7 +5205,7 @@ function CvCamera({ id, hass, label = null }) {
       {vivant
         ? <CamLive hass={hass} haid={id} online={online} />
         : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text3)' }}><Fi i="video-camera" size={30} /></div>}
-      <div className="o-livebadge" style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: '#fff' }}><span className="o-livedot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#f87171' }} />LIVE</div>
+      <div className="o-livebadge" style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: '#fff' }}><span className="o-livedot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-bad)' }} />LIVE</div>
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '24px 12px 10px', background: 'linear-gradient(to top,rgba(0,0,0,.72),transparent)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</span>
         <button aria-label={tr('Agrandir')} onClick={() => setGrand(true)} style={{ width: 30, height: 30, borderRadius: 10, background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></button>
@@ -5278,7 +5279,7 @@ function FichePlante({ pl, onClose }) {
   const sous = [pl.room, pl.hum != null ? tr('Sol {n} %', { n: Math.round(pl.hum) }) : null, presse || null].filter(Boolean).join(' · ');
   const fmt = (x, u, d = 0) => x == null ? '—' : (d ? Number(x).toFixed(d).replace('.', ',') : String(Math.round(x))) + u;
   const ligne = (premiere, titre, cle, valeur) => { const [desc, couleur] = mot(cle); return <FicheRangee premiere={premiere} titre={titre} desc={desc} droite={<FicheValeur couleur={couleur}>{valeur}</FicheValeur>} />; };
-  const pile = pl.bat == null ? 'var(--o-text3)' : pl.bat > 40 ? 'var(--o-ok)' : pl.bat > 15 ? '#ffb347' : '#f87171';
+  const pile = couleurPile(pl.bat);
   return (
     <BottomSheet onClose={onClose}>
       {close => (<>
@@ -5671,7 +5672,7 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
   const hm = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const capit = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   const dateStr = capit(clock.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }));
-  const rouges = (notifs || []).filter(n => n && n[0] === '#f87171').slice(0, 3);
+  const rouges = (notifs || []).filter(n => n && n[0] === 'var(--o-bad)').slice(0, 3);
   const chip = { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)', fontSize: 14, fontWeight: 700, color: '#aeb9cc' };
   const pt = (c) => <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: c, boxShadow: '0 0 8px ' + c }} />;
   return (
@@ -5700,11 +5701,11 @@ function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn,
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16, maxWidth: '84vw' }}>
         {inTemp != null && <span style={chip}>{pt('#54c8f0')}{inTemp.toFixed(1).replace('.', ',')} °C {tr('intérieur')}</span>}
         {lightsOn > 0 && <span style={{ ...chip, color: '#ffce73' }}>{pt('#ffce73')}{lightsOn > 1 ? tr('{n} allumées', { n: lightsOn }) : tr('{n} allumée', { n: lightsOn })}</span>}
-        {ast != null && <span style={{ ...chip, color: ast === 'triggered' ? '#f87171' : ast === 'disarmed' ? '#34d399' : '#ffb347' }}>{pt(ast === 'triggered' ? '#f87171' : ast === 'disarmed' ? '#34d399' : '#ffb347')}{ast === 'triggered' ? tr('Alarme') : ast === 'disarmed' ? tr('Alarme désarmée') : tr('Alarme armée')}</span>}
+        {ast != null && <span style={{ ...chip, color: ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)' }}>{pt(ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)')}{ast === 'triggered' ? tr('Alarme') : ast === 'disarmed' ? tr('Alarme désarmée') : tr('Alarme armée')}</span>}
       </div>
       {rouges.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14, alignItems: 'center' }}>
-          {rouges.map((n, i) => <span key={i} style={{ ...chip, color: '#f87171', border: '1px solid rgba(248,113,113,.3)', background: 'rgba(248,113,113,.08)' }}>{pt('#f87171')}{n[1]} · {n[2]}</span>)}
+          {rouges.map((n, i) => <span key={i} style={{ ...chip, color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.3)', background: 'rgba(var(--o-bad-rgb),.08)' }}>{pt('var(--o-bad)')}{n[1]} · {n[2]}</span>)}
         </div>
       )}
       {/* Scènes rapides SANS réveiller : le pointeur est stoppé avant d'atteindre
@@ -6889,8 +6890,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   };
   // HA absent → vitrine de demo ; HA present sans camera → aucune camera, pas d'exemple
   const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => tuileCamera({ ...cam, evenement: evenementDe(cam.haid) }, i, a.hass)) : CAMERAS();
-  const _dLv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase: tr('Éteint'), color: '#94a3b8', active: false, valueIcon: 'timer', valueText: '--:--', bar: null };
-  const _dPb = { label: tr('Poubelles'), iconKey: 'trash', phase: tr('Dans {j}j', { j: 2 }), color: '#fbbf24', active: false, valueText: 'Mer. 16 Juin', dotsFilled: 12, dotsTotal: 14 };
+  const _dLv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase: tr('Éteint'), color: 'var(--o-text3)', active: false, valueIcon: 'timer', valueText: '--:--', bar: null };
+  const _dPb = { label: tr('Poubelles'), iconKey: 'trash', phase: tr('Dans {j}j', { j: 2 }), color: 'var(--o-warn)', active: false, valueText: 'Mer. 16 Juin', dotsFilled: 12, dotsTotal: 14 };
   const M = (a && a.machines) || {};
   const mLv = M.lv || (a ? null : _dLv), mPb = M.poubelles || (a ? null : _dPb);
   const metricDiv = { flexShrink: 0, width: 1, background: 'var(--o-bd2)', margin: '4px 4px' };
@@ -7284,7 +7285,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 * d'elle — un flex ne coupe pas un item, il le renvoie a la
                 * ligne. La pastille s'aligne donc sur la PREMIERE ligne, et le
                 * texte garde sa colonne. */}
-              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}><span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: 'pulse 2.4s infinite' }} /><span style={{ flex: 1, minWidth: 0 }}>{[points.length ? resumeAttention(points) : tr('Tout va bien'), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span></span>
+              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}><span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: animationNiveau(niveauMax(points)) }} /><span style={{ flex: 1, minWidth: 0 }}>{[points.length ? resumeAttention(points) : tr('Tout va bien'), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span></span>
           </div>
           {(() => {
             /* Une metrique a zero ne dit rien : « 0 / 4 ouvrants ouverts »
@@ -7457,7 +7458,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             );
           };
           const railPanel = (title, sub, tag, tagCol, rows) => rows.length ? (
-            <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '13px 15px', boxShadow: 'var(--o-shadow)' }}>
+            <div style={{ ...CARTE_RAIL, padding: '13px 15px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                 <span style={{ fontSize: 13, fontWeight: 700 }}>{title}</span>
                 {tag ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap', fontSize: 10, fontWeight: 800, background: `rgba(${tagCol},.14)`, color: `rgb(${tagCol})` }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: `rgb(${tagCol})` }} />{tag}</span> : null}
@@ -9072,7 +9073,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
         <Anim i={0}><div style={{ position: 'relative', overflow: 'hidden', height: '100%', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
             <div><div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Maison · Temps réel')}</div><div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 25, fontWeight: 500, marginTop: 2 }}>{solarActive ? tr('Production solaire active') : tr('Consommation réseau')}</div></div>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 13px', borderRadius: 999, border: '1px solid ' + (solarActive ? 'rgba(52,211,153,.3)' : 'var(--o-bd2)'), color: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', fontSize: 12, fontWeight: 700, flexShrink: 0 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', animation: solarActive ? 'pulse 2s infinite' : 'none' }} /><Shiny on={solarActive}>{solarActive ? 'Solaire actif' : 'Solaire inactif'}</Shiny></span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 13px', borderRadius: 999, border: '1px solid ' + (solarActive ? 'rgba(52,211,153,.3)' : 'var(--o-bd2)'), color: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', fontSize: 12, fontWeight: 700, flexShrink: 0 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', animation: 'none' }} /><Shiny on={solarActive}>{solarActive ? 'Solaire actif' : 'Solaire inactif'}</Shiny></span>
           </div>
           <div className="o-en-well" style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 30%,var(--o-well0),var(--o-well2))', border: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10 }}>
             {/* Scène type Helios : arc du jour (géoloc domicile), soleil + irradiance, chips de flux */}
@@ -9085,7 +9086,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
             <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{consoAvail ? <Num v={consoW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />Conso maison</div></div>
             <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-gold)' }}>{solarAvail ? <Num v={solarW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-gold)' }} />Production</div></div>
             {ecoJour != null && <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-ok)' }}><Num v={ecoJour} d={2} suffix=" €" /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('Économie du jour')}</div></div>}
-            <div style={{ marginLeft: 'auto', textAlign: 'right' }}><div style={{ fontSize: 25, fontWeight: 800, color: exporting ? 'var(--o-ok)' : '#f87171' }}>{(surplusAvail || consoAvail) ? <Num v={exporting ? surplusW : importW} suffix=" W" /> : '—'}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><FlipText text={exporting ? '↑ ' + tr('Vente réseau') : '↓ ' + tr('Achat réseau')} /></div></div>
+            <div style={{ marginLeft: 'auto', textAlign: 'right' }}><div style={{ fontSize: 25, fontWeight: 800, color: exporting ? 'var(--o-ok)' : 'var(--o-bad)' }}>{(surplusAvail || consoAvail) ? <Num v={exporting ? surplusW : importW} suffix=" W" /> : '—'}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><FlipText text={exporting ? '↑ ' + tr('Vente réseau') : '↓ ' + tr('Achat réseau')} /></div></div>
           </div>
         </div></Anim>
 
@@ -9146,7 +9147,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
               {d.art && VIEW_ART[d.art] && <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 92, height: 92, backgroundImage: `url("${VIEW_ART[d.art]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.16, pointerEvents: 'none' }} />}
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
                 <div style={{ width: 34, height: 34, borderRadius: 10, background: hx(d.c, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={d.icon} size={15} color={d.c} /></div>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: on ? 'var(--o-ok)' : 'var(--o-text3)', animation: on ? 'pulse 2s infinite' : 'none' }} />
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: on ? 'var(--o-ok)' : 'var(--o-text3)' }} />
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
               <div style={{ fontSize: 15, fontWeight: 800, marginTop: 3, color: on ? d.c : 'var(--o-text3)' }}>{avail(d.power) ? <Num v={w} fmt={fmtW} /> : '—'}</div>
@@ -9669,7 +9670,7 @@ function CvTemplateCard({ def, hass }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{def.name || 'Template'}</div>
           {err
-            ? <div style={{ fontSize: 12, fontWeight: 600, color: '#f87171', marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 96, overflow: 'auto' }}>{err}</div>
+            ? <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-bad)', marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 96, overflow: 'auto' }}>{err}</div>
             : <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 132, overflowY: 'auto', lineHeight: 1.45, opacity: attente ? .45 : 1 }}>{attente ? '…' : (out === '' ? '—' : out)}</div>}
         </div>
       </div>
@@ -12131,7 +12132,13 @@ const matchHaUser = (haUser, list) => {
  * cartes capteurs : 0 bon (< 800 ppm), 1 moyen (< 1200), 2 eleve. */
 function airPalier(co2) { return co2 == null || co2 < 800 ? 0 : co2 < 1200 ? 1 : 2; }
 function airLabel(co2) { return [tr('BON'), tr('MOYEN'), tr('ÉLEVÉ')][airPalier(co2)]; }
-function co2Style(co2) { return co2 < 600 ? { bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' } : co2 < 900 ? { bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' } : { bc: 'var(--o-warn2)', bbg: 'rgba(var(--o-warn2-rgb),.14)' }; }
+/* Le badge CO₂ d'une pièce : discret tant que l'air est bon ou moyen, ambre
+ * au palier « chargé » — le même palier que le point d'attention et la veille
+ * du serveur. Une seconde échelle (600 / 900) contredisait la première. */
+function co2Style(co2) { return airPalier(co2) === 2 ? { bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' } : { bc: 'var(--o-text2)', bbg: 'var(--o-s1)' }; }
+/* La couleur d'une pile suit son niveau (attention.js) : rien de visible tant
+ * qu'elle tient, ambre à 20 %, rouge à 5 %. */
+const couleurPile = (pct) => { const n = niveauPile(pct); if (n) return couleurNiveau(n).col; return pct == null ? 'var(--o-text3)' : 'var(--o-text2)'; };
 // Dérive les données live de l'Accueil depuis hass + config. null si pas de hass (→ démo).
 // `resolved` vient de la resolution (App) : cette fonction n'a pas de hooks,
 // on lui passe donc ce qu'elle ne peut pas aller chercher elle-meme.
@@ -12196,13 +12203,13 @@ function deriveAccueil(hass, cfg, resolved) {
     const returning = /retour/.test(low);
     const charging = (vacOnBase || /charge/.test(low)) && bat != null && bat < 100;
     let phase, color, anim = null, spin = false;
-    if (vacCleaning && !paused) { phase = tr('Nettoyage'); color = '#60a5fa'; anim = 'wiggle'; spin = true; }
-    else if (paused) { phase = tr('En pause'); color = '#fb923c'; }
+    if (vacCleaning && !paused) { phase = tr('Nettoyage'); color = 'var(--o-cold)'; anim = 'wiggle'; spin = true; }
+    else if (paused) { phase = tr('En pause'); color = 'var(--o-warn2)'; }
     else if (returning) { phase = tr('Retour base'); color = 'var(--o-purple)'; }
-    else if (/erreur|error/.test(low)) { phase = tr('Erreur'); color = '#ef4444'; }
-    else if (vacOnBase || /station|base|accueil|charge/.test(low)) { if (bat != null && bat < 100) { phase = 'En charge'; color = '#fbbf24'; anim = 'charge'; } else { phase = tr('Sur base'); color = 'var(--o-ok)'; } }
-    else { phase = vacEtat || tr('Inactif'); color = '#94a3b8'; }
-    const batColor = bat == null ? 'var(--o-text3)' : bat < 20 ? '#ef4444' : bat < 50 ? '#fbbf24' : 'var(--o-ok)';
+    else if (/erreur|error/.test(low)) { phase = tr('Erreur'); color = 'var(--o-bad)'; }
+    else if (vacOnBase || /station|base|accueil|charge/.test(low)) { if (bat != null && bat < 100) { phase = 'En charge'; color = 'var(--o-warn)'; anim = 'charge'; } else { phase = tr('Sur base'); color = 'var(--o-ok)'; } }
+    else { phase = vacEtat || tr('Inactif'); color = 'var(--o-text3)'; }
+    const batColor = couleurPile(bat);
     machines.wallE = { label: (rVac && rVac.name) || tr('Aspirateur'), iconKey: 'vacuum', phase, color, active: (vacCleaning && !paused) || returning, anim, spin, valueIcon: charging ? 'battery-charging' : 'battery', valueText: bat != null ? Math.round(bat) + '%' : '—', bar: bat, barColor: batColor };
   }
   { const mid = mowerId(S); const lm = mid ? S[mid] : null; const st = lm ? lm.state : 'unknown';
@@ -12212,20 +12219,20 @@ function deriveAccueil(hass, cfg, resolved) {
     let phase, color, anim = null, spin = false;
     if (st === 'mowing') { phase = 'Tonte'; color = 'var(--o-ok)'; anim = 'wiggle'; spin = true; }
     else if (st === 'returning') { phase = tr('Retour base'); color = 'var(--o-purple)'; }
-    else if (st === 'docked') { if (chg) { phase = 'En charge'; color = '#fbbf24'; anim = 'charge'; } else { phase = tr('Sur base'); color = 'var(--o-ok)'; } }
-    else if (st === 'paused') { phase = tr('En pause'); color = '#fb923c'; }
-    else if (st === 'error') { phase = tr('Erreur'); color = '#ef4444'; }
-    else { phase = tr('Inactif'); color = '#94a3b8'; }
-    const mowing = st === 'mowing'; const batColor = bat < 20 ? '#ef4444' : bat < 50 ? '#fbbf24' : 'var(--o-ok)';
-    machines.luba = { label: 'Luba', iconKey: 'mower', phase, color, active: st === 'mowing' || st === 'returning', anim, spin, valueIcon: chg ? 'battery-charging' : 'battery', valueText: Math.round(bat) + '%', bar: mowing ? prog : bat, barColor: mowing ? color : batColor, extra: mowing ? ('Tonte ' + Math.round(prog) + '%') : null };
+    else if (st === 'docked') { if (chg) { phase = 'En charge'; color = 'var(--o-warn)'; anim = 'charge'; } else { phase = tr('Sur base'); color = 'var(--o-ok)'; } }
+    else if (st === 'paused') { phase = tr('En pause'); color = 'var(--o-warn2)'; }
+    else if (st === 'error') { phase = tr('Erreur'); color = 'var(--o-bad)'; }
+    else { phase = tr('Inactif'); color = 'var(--o-text3)'; }
+    const mowing = st === 'mowing'; const batColor = couleurPile(bat);
+    machines.luba = { label: (lm && lm.attributes && lm.attributes.friendly_name) || tr('Tondeuse'), iconKey: 'mower', phase, color, active: st === 'mowing' || st === 'returning', anim, spin, valueIcon: chg ? 'battery-charging' : 'battery', valueText: Math.round(bat) + '%', bar: mowing ? prog : bat, barColor: mowing ? color : batColor, extra: mowing ? ('Tonte ' + Math.round(prog) + '%') : null };
   }
   { const power = num(notifIds().dishwasher, 0) || 0; const active = power > 100;
     let phase, color, anim = null, spin = false;
-    if (!active) { phase = tr('Éteint'); color = '#94a3b8'; }
-    else if (power > 1500) { phase = tr('Lavage'); color = '#60a5fa'; spin = true; }
+    if (!active) { phase = tr('Éteint'); color = 'var(--o-text3)'; }
+    else if (power > 1500) { phase = tr('Lavage'); color = 'var(--o-cold)'; spin = true; }
     else if (power > 500) { phase = tr('Rinçage'); color = 'var(--o-ok)'; spin = true; }
-    else if (power > 200) { phase = tr('Séchage'); color = '#fbbf24'; anim = 'charge'; }
-    else { phase = tr('En cours'); color = '#60a5fa'; spin = true; }
+    else if (power > 200) { phase = tr('Séchage'); color = 'var(--o-warn)'; anim = 'charge'; }
+    else { phase = tr('En cours'); color = 'var(--o-cold)'; spin = true; }
     const totalMin = 80; const idt = S[notifIds().dishwasherStart];
     const ts = (idt && idt.attributes && idt.attributes.timestamp) ? idt.attributes.timestamp : 0;
     const nowD = new Date(); const todayStart = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime() / 1000;
@@ -12241,9 +12248,9 @@ function deriveAccueil(hass, cfg, resolved) {
       const today = at.est_aujourd_hui === true || at.est_aujourd_hui === 'True';
       const demain = at.est_demain === true || at.est_demain === 'True';
       let phase, color;
-      if (today) { phase = "Aujourd'hui !"; color = '#ef4444'; }
-      else if (demain) { phase = 'Demain soir'; color = '#fb923c'; }
-      else if (jours <= 3) { phase = tr('Dans {j}j', { j: jours }); color = '#fbbf24'; }
+      if (today) { phase = "Aujourd'hui !"; color = 'var(--o-bad)'; }
+      else if (demain) { phase = 'Demain soir'; color = 'var(--o-warn2)'; }
+      else if (jours <= 3) { phase = tr('Dans {j}j', { j: jours }); color = 'var(--o-warn)'; }
       else { phase = tr('Dans {j}j', { j: jours }); color = 'var(--o-ok)'; }
       const dateDisp = at.decale_samedi ? ('Sam. ' + (at.date_formatee || '')) : (((at.jour_semaine || '') + ' ' + (at.date_formatee || '')).trim());
       const mainText = today ? tr('Sortir les poubelles !') : demain ? tr('Préparer ce soir') : (dateDisp || tr('Prochain ramassage'));
@@ -12260,7 +12267,7 @@ function deriveAccueil(hass, cfg, resolved) {
   return {
     flux: { solar: fmtW(solarW), home: fmtW(consoW), grid: (exporting ? '↑ ' : '↓ ') + fmtW(gridVal), exporting },
     autoPct,
-    metricExport: { sign: exporting ? '↑ ' : '↓ ', val: fmtW(exporting ? exp : importW), raw: (exporting ? exp : importW) || 0, label: exporting ? tr('EXPORT RÉSEAU') : tr('IMPORT RÉSEAU'), color: exporting ? 'var(--o-ok)' : '#ffb347' },
+    metricExport: { sign: exporting ? '↑ ' : '↓ ', val: fmtW(exporting ? exp : importW), raw: (exporting ? exp : importW) || 0, label: exporting ? tr('EXPORT RÉSEAU') : tr('IMPORT RÉSEAU'), color: exporting ? 'var(--o-ok)' : 'var(--o-warn)' },
     rooms, inTemp, inHum, maxCo2, lightsOn, lightsTotal: lightIds.length,
     people, cams, hass,
     vacLabel, vacBattery, alarmArmed, camOnline, camTotal, sunsetHM, repasIn, repasLabel, machines, plants,
@@ -12334,7 +12341,7 @@ function PinModal({ hass, onClose, onSuccess }) {
         <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--o-text2)', marginTop: 4 }}>{tr('Requis pour ce profil')}</div>
         {bloque > 0 && <div role="alert" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Trop d’essais. Réessaie dans {n} s.', { n: bloque })}</div>}
         {horsLigne && <div role="alert" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Home Assistant n’est pas joignable : le code ne peut pas être vérifié.')}</div>}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, margin: '22px 0' }}>{[0, 1, 2, 3].map(i => <span key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: i < pin.length ? (error ? '#ef4444' : 'var(--o-accent-soft)') : 'transparent', border: `1px solid ${error ? '#ef4444' : 'var(--o-bd2)'}`, transition: 'background .15s' }} />)}</div>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, margin: '22px 0' }}>{[0, 1, 2, 3].map(i => <span key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: i < pin.length ? (error ? 'var(--o-bad)' : 'var(--o-accent-soft)') : 'transparent', border: `1px solid ${error ? 'var(--o-bad)' : 'var(--o-bd2)'}`, transition: 'background .15s' }} />)}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => <button key={n} onClick={() => add(String(n))} style={padBtn}>{n}</button>)}
           <span />
@@ -12579,7 +12586,7 @@ function deriveNotifs(hass) {
   const rel = (id) => { try { const e = S[id]; const t = e && (e.last_changed || e.last_updated); if (!t) return ''; const m = (now - new Date(t).getTime()) / 60000; if (m < 1) return tr("à l'instant"); if (m < 60) return tr('Il y a {n} min', { n: Math.round(m) }); if (m < 1440) return tr('Il y a {n} h', { n: Math.round(m / 60) }); return tr('Il y a {n} j', { n: Math.round(m / 1440) }); } catch { return ''; } };
   const stOf = (id) => (S[id] && S[id].state) || null;
   const numOf = (id) => { const v = parseFloat(stOf(id)); return isNaN(v) ? null : v; };
-  for (const id in S) { if (id.indexOf('alarm_control_panel.') === 0 && S[id].state === 'triggered') { out.push(['#f87171', tr('Alarme'), tr('Intrusion détectée'), rel(id)]); break; } }
+  for (const id in S) { if (id.indexOf('alarm_control_panel.') === 0 && S[id].state === 'triggered') { out.push(['var(--o-bad)', tr('Alarme'), tr('Intrusion détectée'), rel(id)]); break; } }
   /* Alertes sûreté, sans aucune configuration : tout binary_sensor dont la
    * device_class désigne un danger passe en tête de liste dès qu'il est `on`.
    * La device_class est un standard HA, multilingue par nature — c'est elle
@@ -12615,11 +12622,11 @@ function deriveNotifs(hass) {
     const nom = a.friendly_name || id;
     if (a.device_class === 'safety' && (a.awareness_level != null || /meteoalarm/i.test(id) || /meteoalarm/i.test(a.attribution || ''))) {
       const grave = a.severity === 'Severe' || a.severity === 'Extreme';
-      out.push([grave ? '#f87171' : '#ffb347', tr('Vigilance météo'), a.event || a.headline || tr('Alerte météo en cours'), rel(id)]);
+      out.push([grave ? 'var(--o-bad)' : 'var(--o-warn)', tr('Vigilance météo'), a.event || a.headline || tr('Alerte météo en cours'), rel(id)]);
       continue;
     }
     if (a.device_class === 'moisture' && estPlante(id)) continue;
-    surete.push(['#f87171', tr(duo[0]), tr(duo[1]) + ' · ' + nom, rel(id)]);
+    surete.push(['var(--o-bad)', tr(duo[0]), tr(duo[1]) + ' · ' + nom, rel(id)]);
   }
   out.unshift(...surete.slice(0, 4)); // les dangers d'abord, avant même l'alarme
   const mid = mowerId(S), mchg = mowerSensor(S, 'charging');
@@ -12632,7 +12639,7 @@ function deriveNotifs(hass) {
   const lv = numOf(notifIds().dishwasher);
   if (lv != null && lv > 100) out.push(['var(--o-accent)', tr('Lave-vaisselle'), tr('Cycle en cours'), rel(notifIds().dishwasher)]);
   const bins = stOf(notifIds().bins);
-  if (bins && bins !== 'unknown' && bins !== 'unavailable') out.push(['#ffb347', tr('Poubelles'), tr('Prochain ramassage : {d}', { d: bins }), rel(notifIds().bins)]);
+  if (bins && bins !== 'unknown' && bins !== 'unavailable') out.push(['var(--o-warn)', tr('Poubelles'), tr('Prochain ramassage : {d}', { d: bins }), rel(notifIds().bins)]);
   return out.slice(0, 8);
 }
 
@@ -13467,10 +13474,10 @@ export default function App() {
         const aid = (secAlarm() && ok && hass.states[secAlarm()]) ? secAlarm() : rAl;
         const ast = (ok && aid && hass.states[aid]) ? hass.states[aid].state : null;
         const al = ast == null ? { t: tr('Alarme · état inconnu'), c: '140,152,180' }
-          : ast === 'disarmed' ? { t: tr('Alarme désarmée'), c: '52,211,153' }
-            : ast === 'triggered' ? { t: tr('ALARME DÉCLENCHÉE'), c: '248,113,113' }
-              : (ast === 'arming' || ast === 'pending') ? { t: tr('Alarme · activation…'), c: '255,179,71' }
-                : { t: ast === 'armed_away' || ast === 'armed_vacation' ? tr('Alarme armée · Absent') : tr('Alarme armée · Présent'), c: '255,179,71' };
+          : ast === 'disarmed' ? { t: tr('Alarme désarmée'), c: 'var(--o-ok-rgb)' }
+            : ast === 'triggered' ? { t: tr('ALARME DÉCLENCHÉE'), c: 'var(--o-bad-rgb)' }
+              : (ast === 'arming' || ast === 'pending') ? { t: tr('Alarme · activation…'), c: 'var(--o-warn-rgb)' }
+                : { t: ast === 'armed_away' || ast === 'armed_vacation' ? tr('Alarme armée · Absent') : tr('Alarme armée · Présent'), c: 'var(--o-warn-rgb)' };
         return { online: ok, devCount, alarmTxt: al.t, alarmRgb: al.c };
       })()} />
       {navOpen && <div className="loggia-backdrop" role="presentation" onClick={() => setNavOpen(false)} />}

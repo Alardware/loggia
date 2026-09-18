@@ -32,7 +32,7 @@ test('« A surveiller » est une section du rail, la premiere, et n’existe que
 test('la banniere porte la couleur du pire point et dit « Tout va bien » sinon', () => {
   assert.ok(src.includes("const couleurAcc = points.length ? couleurNiveau(niveauMax(points)).col : 'var(--o-ok)';"), 'la couleur du point');
   assert.ok(src.includes("{[points.length ? resumeAttention(points) : tr('Tout va bien'), ...faits.txt].join(' · ')}"), 'le resume devant les faits');
-  assert.ok(src.includes("background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: 'pulse 2.4s infinite'"), 'la pastille suit');
+  assert.ok(src.includes("background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: animationNiveau(niveauMax(points))"), 'la pastille suit — et ne bat qu’en danger (v3.49.0)');
 });
 
 test('les points viennent des etats, des cameras, du CO2 des pieces, du diagnostic en direct et du serveur', () => {
@@ -67,7 +67,7 @@ test('l’accueil surveille ce que la carte Securite et « A surveiller » lisen
   const k = bloc('const bannerKeys = () => {', NL + '};');
   assert.ok(k.includes("dom === 'camera' || dom === 'alarm_control_panel'"), 'cameras et panneaux');
   assert.ok(k.includes('OUVRANT_DCS.indexOf(dc) >= 0 || CLASSES_MOUVEMENT.indexOf(dc) >= 0 || CLASSES_SURETE.indexOf(dc) >= 0'), 'ouvrants, mouvement, surete — par device_class');
-  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';"), 'une seule source pour les classes');
+  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';"), 'une seule source pour les classes');
 });
 
 test('la demo a de quoi montrer la carte, et les mots ont leur traduction', () => {

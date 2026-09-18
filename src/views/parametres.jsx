@@ -598,7 +598,7 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
           </div>
         </>)}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 14, background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.4)', color: '#f87171', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Supprimer')}</button>}
+          {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: 'var(--o-bad)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Supprimer')}</button>}
           <div style={{ flex: 1 }} />
           <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
           <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
@@ -1547,7 +1547,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 <span style={{ width: 40, height: 40, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, color: '#fff', background: userBg(u) }}>{im ? '' : (u.name[0] || '?').toUpperCase()}</span>
                 <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{u.name}{i === userIdx && <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--o-accent-soft)', background: 'rgba(var(--o-accent-rgb),.14)', padding: '2px 7px', borderRadius: 999, marginLeft: 7, verticalAlign: '1px', letterSpacing: '.04em' }}>{tr('VOUS')}</span>}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}>{u.sub || u.role}</div></div>
                 {(() => { const r = seenRel(u.name, i === userIdx); return r ? <span style={{ fontSize: 11, fontWeight: 600, color: i === userIdx ? 'var(--o-ok)' : 'var(--o-text3)', flexShrink: 0 }}>{r}</span> : null; })()}
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: u.role === 'Admin' ? 'rgba(255,179,71,.16)' : 'rgba(52,211,153,.16)', color: u.role === 'Admin' ? '#ffb347' : 'var(--o-ok)' }}>{u.role}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: u.role === 'Admin' ? 'rgba(var(--o-warn-rgb),.16)' : 'rgba(var(--o-ok-rgb),.16)', color: u.role === 'Admin' ? 'var(--o-warn)' : 'var(--o-ok)' }}>{u.role}</span>
                 {isAdmin && <span role="button" tabIndex={0} aria-label={tr('Modifier ce profil')} onClick={() => setEditing({ i, u })} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing({ i, u }); } }} style={{ cursor: 'pointer', color: 'var(--o-text3)', display: 'flex' }}><Fi i="pencil" size={16} /></span>}
               </div>
             ); })}

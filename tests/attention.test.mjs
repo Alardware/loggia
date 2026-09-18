@@ -244,7 +244,8 @@ test('7. les veilles : la pile faible est une info, le CO₂ signalé une alerte
   assert.deepEqual(pts.map(p => [p.cle, p.niveau, p.icone, p.titre, p.sous, p.vue, p.haid]), [
     ['co2:Bureau', 'alerte', 'wind', 'CO₂ élevé', 'Bureau · 1300 ppm', 'room:Bureau', 'sensor.co2_bureau'],
     ['co2:sensor.co2_chambre', 'alerte', 'wind', 'CO₂ élevé', 'CO2 chambre · 1251 ppm', null, 'sensor.co2_chambre'],
-    ['pile:sensor.capteur_porte_batterie', 'info', 'battery-quarter', 'Pile faible', 'Capteur porte · 14 %', 'objets', 'sensor.capteur_porte_batterie'],
+    // 14 % : sous le seuil « attention » (20 %) — visible, en ambre (v3.49.0).
+    ['pile:sensor.capteur_porte_batterie', 'alerte', 'battery-quarter', 'Pile faible', 'Capteur porte · 14 %', 'objets', 'sensor.capteur_porte_batterie'],
     ['pile:sensor.inconnue', 'info', 'battery-quarter', 'Pile faible', 'sensor.inconnue', 'objets', 'sensor.inconnue'],
     ['pile:sensor.telecommande_batterie', 'info', 'battery-quarter', 'Pile faible', 'Télécommande', 'objets', 'sensor.telecommande_batterie'],
   ]);
@@ -299,7 +300,7 @@ test('l’ordre : danger, alerte, info — puis le titre ; les clés sont unique
   assert.deepEqual(pts.map(p => [p.niveau, p.titre]), [
     ['danger', 'Alarme déclenchée'], ['danger', 'Fumée détectée'],
     ['alerte', 'Caméra hors ligne'], ['alerte', 'CO₂ élevé'], ['alerte', 'Fuite détectée'], ['alerte', 'Intégration muette'],
-    ['info', 'Chauffage coupé'], ['info', 'Pile faible'],
+    ['alerte', 'Pile faible'], ['info', 'Chauffage coupé'],
   ]);
   assert.equal(new Set(pts.map(p => p.cle)).size, pts.length, 'clés uniques');
   for (const p of pts) {

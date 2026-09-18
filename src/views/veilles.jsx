@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr, locale } from '../i18n.js';
+import { puce } from '../styles.js';
 
 /* Au niveau du module, et non dans le composant.
  *
@@ -19,7 +20,6 @@ import { tr, locale } from '../i18n.js';
  * travail etait refait pour rien a chaque frappe, et toute transition CSS en
  * cours repartait de zero. Voir `tests/composants.test.mjs`. */
 
-const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
 
 const Choix = ({ liste, retenues, champNom, section, enregistrer }) => (
   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

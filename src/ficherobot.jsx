@@ -27,6 +27,7 @@ import { commanderService } from './actions.js';
 import { useLoggia, useEntities } from './runtime.js';
 import { CamLive } from './camera.jsx';
 import { premierJourSemaine } from './horloge.js';
+import { petitesCapitales } from './styles.js';
 import {
   decrireSoeurs, phaseRobot, motEtatRobot, enCharge, batterieRobot, actionPrincipale, serviceRetour, commandeZones,
   zonesTondeuse, piecesUsure, alerteEntretien, compteursRobot, sessionsRobot, motIssue, resumeSemaine, dureeLisible,
@@ -39,7 +40,7 @@ const VacPlan = lazy(() => import('./vacplan.jsx'));
 const FOND = 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
 const PANNEAU = { background: FOND, border: 'none', borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', minWidth: 0 };
 const TITRE_SECTION = { fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
-const PETITES_CAPITALES = { fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)' };
+const PETITES_CAPITALES = petitesCapitales(10.5);
 const BOUTON_DOUX = { padding: '9px 14px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)', fontFamily: 'inherit' };
 const COULEUR_NIVEAU = { bas: 'var(--o-bad)', moyen: 'var(--o-warn)', bon: 'var(--rb-doux)' };
 

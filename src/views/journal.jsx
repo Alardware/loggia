@@ -17,6 +17,7 @@
 import { useState } from 'react';
 import { cvName, useEtatServeur } from '../ui.jsx';
 import { tr, locale } from '../i18n.js';
+import { puce } from '../styles.js';
 
 /* Le nom d'un module tel qu'on le lit à l'écran — les mêmes que les onglets. */
 const NOM_MODULE = () => ({
@@ -35,7 +36,6 @@ function quand(ts) {
     : d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' ' + heure;
 }
 
-const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
 
 export function JournalReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;

@@ -212,6 +212,16 @@ l'identité vient de la connexion, jamais du navigateur.
 Sans l'intégration, le dashboard retombe sur le `localStorage` du navigateur :
 les réglages restent, mais ne suivent plus d'un appareil à l'autre.
 
+## Trois niveaux, pas dix
+
+Tout ce qui a un état parle la même langue. Normal : discret, dans la couleur
+du texte. Attention : ambre, visible, sans clignoter — une pile à 20 %, un
+CO₂ au palier « chargé », un ouvrant ouvert alarme armée. Action nécessaire :
+rouge, lavis, point qui bat, bandeau — l'alarme déclenchée, la fumée, une pile
+à 5 %, Home Assistant perdu. Les mêmes seuils partout (pièce, rail, point
+d'attention, veille du serveur), et les couleurs viennent du thème : le mode
+clair reste lisible.
+
 ## Sécurité
 
 - Les appels de service passent par l'API standard de Home Assistant, avec
