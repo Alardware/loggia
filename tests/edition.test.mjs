@@ -105,6 +105,8 @@ test('un format sans grille propre suit l’ordinateur', () => {
   // première retouche faite sur grand écran.
   assert.match(src, /const grille = grillePropre \? accL\.formats\[formatGrille\] : accL;/,
     'un format sans grille propre ne retombe plus sur celle de l’ordinateur');
-  assert.match(src, /const formatGrille = !tactile \? 'pc' : \(wide \? 'tablette' : 'mobile'\);/,
+  assert.match(src, /const formatGrille = formatEcran\(tactile, wide\);/,
     'le format n’est plus décidé par le type d’appareil');
+  // La règle elle-même, commune à l'Accueil et aux vues (disposition.js).
+  assert.match(readFileSync(join(RACINE, 'src', 'disposition.js'), 'utf8'), /return !tactile \? 'pc' : \(large \? 'tablette' : 'mobile'\);/);
 });

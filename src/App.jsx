@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext, cloneElement, lazy, Suspense, Fragment } from 'react';
 import { createPortal } from 'react-dom';
+import { formatEcran, vueFormat, patchFormat, echangerPartout } from './disposition.js';
 // Les deux fonds animes tirent three.js : 448 Ko a analyser, pour un decor. En
 // import direct, ce cout etait paye a CHAQUE ouverture, meme par quelqu'un qui
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
@@ -3372,14 +3373,18 @@ function useLayoutEditor(cfgKey, scope, derived) {
   const [ordreTemp, setOrdreTemp] = useState(null);
 
   const sig = derived.join('|');
-  const layout = layoutOf(cfgKey, scope);
-  const ids = useMemo(() => applyLayout(layoutOf(cfgKey, scope), derived), [cfgKey, scope, sig, rev]);
+  /* La disposition suit le TYPE d'ecran, le contenu suit la maison (retour du
+   * 18/09, voir disposition.js) : `layout` est l'agencement tel que CE format
+   * le voit, et `write` range chaque cle a sa place. */
+  const format = formatEcran(useCoarse(), useWide(1180));
+  const layout = vueFormat(layoutOf(cfgKey, scope), format);
+  const ids = useMemo(() => applyLayout(vueFormat(layoutOf(cfgKey, scope), format), derived), [cfgKey, scope, sig, rev, format]);
   const edits = (layout.removed || []).length + (layout.added || []).length
     + ((layout.order || []).length ? 1 : 0) + Object.keys(layout.labels || {}).length
     + (layout.larges || []).length + (layout.compacts || []).length;
 
   const vide = (a) => (a && a.length) ? a : null;
-  const write = (patch) => { setLayout(cfgKey, scope, patch); setRev(v => v + 1); };
+  const write = (patch) => { setLayout(cfgKey, scope, patchFormat(layoutOf(cfgKey, scope), format, patch)); setRev(v => v + 1); };
 
   // Retirer : on inscrit dans `removed`. Un element ajoute a la main quitte
   // simplement `added` — inutile de le retenir deux fois.
@@ -3438,9 +3443,13 @@ function useLayoutEditor(cfgKey, scope, derived) {
     let removed = (layout.removed || []).filter(x => x !== id && x !== cible);
     if (derived.indexOf(id) >= 0) removed = [...removed, id];
     // L'ordre garde la place de la carte. S'il etait vide, on fige l'ordre
-    // affiche : sans lui la carte remplacee sauterait en fin de grille.
+    // affiche : sans lui la carte remplacee sauterait en fin de grille. Les
+    // AUTRES formats la gardent aussi : l'identifiant change partout.
     const base = (layout.order || []).length ? layout.order : ids;
-    write({ added: vide(added), removed: vide(removed), order: vide(base.map(x => (x === id ? cible : x))), labels: patchLabels });
+    const tout = layoutOf(cfgKey, scope);
+    const partout = echangerPartout(tout, id, cible);
+    setLayout(cfgKey, scope, { ...partout, ...patchFormat({ ...tout, ...partout }, format, { added: vide(added), removed: vide(removed), order: vide(base.map(x => (x === id ? cible : x))), labels: patchLabels }) });
+    setRev(v => v + 1);
   };
   const rename = (id, nom) => replace(id, id, nom);
 
@@ -3810,7 +3819,7 @@ function BandeauEdition({ ed = null, onAjouter = null, toutes = null, ajouterLab
       {onAjouter && <button onClick={onAjouter} style={btn(true)}><Fi i="plus" size={12} />{ajouterLabel || tr('Ajouter une carte')}</button>}
       {extra}
       {onEnt && <button onClick={onEnt} style={btn(false)}><Fi i="list" size={12} />{entLabel || tr('Entités de la vue')}</button>}
-      {montreTout && <button onClick={toutes || (() => ed.reset())} disabled={!peutTout} title={tr('Rétablit la liste automatique : tout revient, l’ordre et les noms aussi.')} style={{ ...btn(false), opacity: peutTout ? 1 : .5 }}><Fi i="apps" size={12} />{tr('Toutes les cartes')}</button>}
+      {montreTout && <button onClick={toutes || (() => ed.reset())} disabled={!peutTout} title={tr('Rétablit la liste automatique : les cartes et leurs noms reviennent partout, l’ordre et les tailles sur ce type d’écran.')} style={{ ...btn(false), opacity: peutTout ? 1 : .5 }}><Fi i="apps" size={12} />{tr('Toutes les cartes')}</button>}
       {ctx.onToggleEdit && <button onClick={ctx.onToggleEdit} style={btn(false)}><Fi i="cross-small" size={12} />{tr('Terminer')}</button>}
     </div>
   );
@@ -6517,7 +6526,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
    * rien d'avance, sinon la moindre retouche sur grand ecran laisserait le
    * telephone fige sur un vieil etat sans que personne ne le voie.
    */
-  const formatGrille = !tactile ? 'pc' : (wide ? 'tablette' : 'mobile');
+  const formatGrille = formatEcran(tactile, wide);
   const grillePropre = formatGrille !== 'pc' && !!(accL.formats || {})[formatGrille];
   const grille = grillePropre ? accL.formats[formatGrille] : accL;
   const saveGrille = (g) => {

@@ -2481,4 +2481,6 @@ export default {
   'L’écoute est coupée : aucun nouvel appui n’apparaît. Les boutons déjà réglés marchent toujours.': 'Listening is off: no new press shows up. Buttons already set keep working.',
   'écoute coupée': 'not listening',
   'Écouter 5 min': 'Listen for 5 min',
+  // La disposition par type d'ecran (retour du 18/09).
+  'Rétablit la liste automatique : les cartes et leurs noms reviennent partout, l’ordre et les tailles sur ce type d’écran.': 'Restores the automatic list: cards and their names come back everywhere, order and sizes on this type of screen.',
 };
