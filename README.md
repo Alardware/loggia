@@ -81,9 +81,17 @@ sont masquées, avec le motif.
 - **Journal d'activité par pièce** — sous les appareils d'une pièce, les
   dernières 24 heures : qui s'est allumé, ouvert, verrouillé, à quelle heure.
   Alimenté par le logbook de Home Assistant, poussé en direct.
-- **La carte CO₂** — en option sur le côté de l'Accueil : la pièce la plus
+- **Le côté de l'Accueil, prêt à l'emploi** — « À surveiller » en tête quand
+  quelque chose le mérite, l'heure, la météo, la carte CO₂ (la pièce la plus
   chargée, une barre par heure sur vingt-quatre heures, le seuil d'aération,
-  et le geste pour aérer quand il y a quelque chose à commander.
+  et le geste pour aérer quand il y a quelque chose à commander), En ce
+  moment, le calendrier. Chaque bloc se retire, se range ou revient en mode
+  édition.
+- **Des capteurs lisibles d'un coup d'œil** — la carte d'un capteur de CO₂,
+  de température, d'humidité ou de bruit porte une jauge à paliers, du bleu
+  (l'idéal) au rouge, et un trait à la valeur ; une pile, cinq barres. Toutes
+  les piles de la maison se retrouvent dans la vue Énergie, la plus basse
+  d'abord.
 - **Vignette météo animée** — la condition se voit dans la vignette de
   l'accueil : pluie qui tombe, étoiles, halo de soleil, éclair d'orage.
 - **Mode ambiant** — pour une tablette murale : après un délai sans toucher,
@@ -144,11 +152,13 @@ les réglages restent, mais ne suivent plus d'un appareil à l'autre.
 
 Tout ce qui a un état parle la même langue. Normal : discret, dans la couleur
 du texte. Attention : ambre, visible, sans clignoter — une pile à 20 %, un
-CO₂ au palier « chargé », un ouvrant ouvert alarme armée. Action nécessaire :
+CO₂ « élevé » (1 400 ppm), un ouvrant ouvert alarme armée. Action nécessaire :
 rouge, lavis, point qui bat, bandeau — l'alarme déclenchée, la fumée, une pile
 à 5 %, Home Assistant perdu. Les mêmes seuils partout (pièce, rail, point
 d'attention, veille du serveur), et les couleurs viennent du thème : le mode
-clair reste lisible.
+clair reste lisible. Les jauges des capteurs montrent, elles, l'échelle
+entière — cinq couleurs, de l'idéal au trop —, tirées de la même table de
+seuils que la barre de confort des pièces.
 
 ## Sécurité
 
