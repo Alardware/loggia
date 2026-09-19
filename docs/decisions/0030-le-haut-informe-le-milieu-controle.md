@@ -72,3 +72,10 @@ autres apparaissent avec un clic / scroll horizontal. »
 
 Garde-fous : `bordsDefilement` (src/scenarios.js, pur, 8 mutations tuées),
 tests/accueil_hero et tests/scenarios réalignés.
+
+## Ajustement du 19/09 (v3.59.1) — la rangée des scénarios au téléphone
+
+La rangée défile toujours, mais sans ombre, comme les favoris : `overflow-x:
+auto` rognait l'ombre des cartes et traçait un rectangle autour d'elles
+(« le contour ça fait carré »). Le ciel qui s'arrêtait net juste au-dessus
+est traité dans l'ADR 0059.
