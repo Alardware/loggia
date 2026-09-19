@@ -76,3 +76,21 @@ Chambre 1 480 ppm », « QUALITÉ AIR · ÉLEVÉ ») ; dans le Salon, après ajo
 le bruit, l'humidité, la température, une pile et trois compactes — à
 l'ordinateur et au téléphone (390 px), sans chiffre qui en chevauche un
 autre.
+
+## Amendement (19/09/2026, v3.57.1) — la compacte sans jauge, une barre plus épaisse
+
+Demande, deux captures (la compacte de la maquette, où le chiffre écrasait
+le nom ; la compacte de la bibliothèque, « Température séjour 21,4 °C ») :
+« pourquoi ? laisse comme sur la 2e photo et épaissis légèrement la
+graduation sur les autres ».
+
+- La compacte (`CvCard`) retrouve son dessin d'avant : icône, nom, valeur —
+  plus de jauge fine. La première capture venait de la maquette ; sa jauge
+  fine était aussi passée dans la vraie compacte.
+- La barre de la jauge des cartes standard passe de 6 à 8 px ; le trait,
+  de 16 à 18 px, la dépasse toujours.
+
+Tests : tests/jauges.test.mjs (réaligné : pas de jauge dans la compacte, une
+barre de 8 px). Vérifié en démo : la compacte « Salon CO2 · 612 ppm » sans
+jauge ; une carte standard à 1 330 px et à 360 px — la jauge tient dans la
+carte, les chiffres restent séparés.

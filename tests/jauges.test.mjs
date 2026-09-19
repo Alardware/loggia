@@ -91,14 +91,17 @@ test('les classes Home Assistant qui ont une jauge', () => {
   assert.deepEqual(['temperature', 'humidity', 'carbon_dioxide', 'sound_pressure', 'battery', 'illuminance'].map(cleMesure), ['temp', 'hum', 'co2', 'bruit', null, null]);
 });
 
-test('la jauge : un TRAIT à la valeur, pas un rond ; fine et sans chiffres dans la compacte', () => {
+test('la jauge : un TRAIT à la valeur, pas un rond, sur une barre de 8 px ; pas de jauge dans la compacte', () => {
   const j = fonction('JaugeMesure');
   assert.ok(j.includes('className="o-jauge-trait"') && j.includes('width: 3, height: haut, borderRadius: 2'), 'le repère est un trait');
   assert.ok(!/borderRadius: '50%'/.test(j), 'un rond est revenu');
-  assert.ok(j.includes('{!fine && (') && j.includes("left: 'clamp(' + demi + 'px, ' + r.pos + '%, calc(100% - ' + demi + 'px))'"), 'les chiffres restent dans la barre ; la compacte n’en a pas');
+  // « Épaissis légèrement la graduation » (19/09) : 6 → 8 px, le trait la dépasse encore.
+  assert.ok(j.includes('const h = 8, haut = 18;'), 'la barre a changé d’épaisseur');
+  assert.ok(j.includes("left: 'clamp(' + demi + 'px, ' + r.pos + '%, calc(100% - ' + demi + 'px))'"), 'les chiffres restent dans la barre');
   assert.ok(j.includes('aria-hidden="true"'), 'la valeur et son mot sont déjà écrits : la jauge ne se lit pas');
+  // « Laisse comme sur la 2e photo » : la compacte garde son dessin — icône, nom, valeur.
   const c = fonction('CvCard');
-  assert.ok(c.includes('{jaugeMes && <JaugeMesure jauge={jaugeMes} fine={dense} />}') && c.includes('{barresMes && <JaugePile barres={barresMes} fine={dense} />}'), 'la compacte a sa jauge');
+  assert.ok(!c.includes('JaugeMesure') && !c.includes('JaugePile') && !c.includes('jaugeMesure('), 'une jauge est revenue dans la compacte');
 });
 
 test('une seule table : « Élevé » commence à 1 400 ppm partout', () => {

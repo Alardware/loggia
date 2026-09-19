@@ -1843,42 +1843,41 @@ const MESURES_NOMS = () => ({ temperature: tr('Température'), humidity: tr('Hum
 /* La teinte de carte d'un palier de la table de confort : lavis et icone. */
 const TEINTE_PALIER = { 'var(--o-cold)': 'froid', 'var(--o-ok)': 'ok', 'var(--o-warn)': 'or', 'var(--o-warn2)': 'orange', 'var(--o-bad)': 'bad' };
 
-/* La JAUGE d'une mesure, sous le texte de la carte (retour user du 19/09,
- * captures Netatmo a l'appui : « pour le co2 ajouter une jauge en dessous »,
- * puis « un trait pas un rond ») : les paliers de la table de confort bout a
- * bout, un TRAIT a la valeur, les reperes des captures dessous. `fine` : la
- * compacte — une barre plus mince, sans chiffres. La valeur et son mot sont
- * deja ecrits sur la carte : la jauge ne se lit pas a voix haute. */
-function JaugeMesure({ jauge, fine = false }) {
-  const h = fine ? 4 : 6, haut = fine ? 12 : 16;
+/* La JAUGE d'une mesure, sous le texte de la carte STANDARD (retour user du
+ * 19/09, captures Netatmo a l'appui : « pour le co2 ajouter une jauge en
+ * dessous », puis « un trait pas un rond ») : les paliers de la table de
+ * confort bout a bout, un TRAIT a la valeur, les reperes des captures
+ * dessous. Une barre de 8 px (« epaissis legerement la graduation »). La
+ * compacte n'en a pas : « laisse comme sur la 2e photo ». La valeur et son mot
+ * sont deja ecrits sur la carte : la jauge ne se lit pas a voix haute. */
+function JaugeMesure({ jauge }) {
+  const h = 8, haut = 18;
   const der = jauge.bandes.length - 1;
   return (
-    <div className="o-jauge" aria-hidden="true" style={{ marginTop: fine ? 8 : 12 }}>
+    <div className="o-jauge" aria-hidden="true" style={{ marginTop: 12 }}>
       <div style={{ position: 'relative', height: haut }}>
         {jauge.bandes.map((b, i) => (
-          <span key={i} style={{ position: 'absolute', top: (haut - h) / 2, height: h, left: b.de + '%', width: 'calc(' + (b.a - b.de) + '%' + (i < der ? ' - 2px' : '') + ')', background: b.c, opacity: .9, borderRadius: i === 0 ? '3px 0 0 3px' : i === der ? '0 3px 3px 0' : 0 }} />
+          <span key={i} style={{ position: 'absolute', top: (haut - h) / 2, height: h, left: b.de + '%', width: 'calc(' + (b.a - b.de) + '%' + (i < der ? ' - 2px' : '') + ')', background: b.c, opacity: .9, borderRadius: i === 0 ? '4px 0 0 4px' : i === der ? '0 4px 4px 0' : 0 }} />
         ))}
         <span className="o-jauge-trait" style={{ position: 'absolute', top: 0, left: 'calc(' + jauge.pos + '% - 1.5px)', width: 3, height: haut, borderRadius: 2, background: 'var(--o-text)', boxShadow: '0 0 0 2px var(--o-surfB)' }} />
       </div>
-      {!fine && (
-        <div style={{ position: 'relative', height: 13, marginTop: 4, fontSize: 10, fontWeight: 700, lineHeight: 1, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>
-          {jauge.reperes.map(r => {
-            const demi = String(r.v).length * 3;
-            return <span key={r.v} style={{ position: 'absolute', left: 'clamp(' + demi + 'px, ' + r.pos + '%, calc(100% - ' + demi + 'px))', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>{r.v}</span>;
-          })}
-        </div>
-      )}
+      <div style={{ position: 'relative', height: 13, marginTop: 4, fontSize: 10, fontWeight: 700, lineHeight: 1, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>
+        {jauge.reperes.map(r => {
+          const demi = String(r.v).length * 3;
+          return <span key={r.v} style={{ position: 'absolute', left: 'clamp(' + demi + 'px, ' + r.pos + '%, calc(100% - ' + demi + 'px))', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>{r.v}</span>;
+        })}
+      </div>
     </div>
   );
 }
 
 /* La PILE en cinq barres, comme la capture du 19/09 : une barre par 20 %, la
  * couleur au nombre de barres (confort.js, `barresPile`). */
-function JaugePile({ barres, fine = false }) {
+function JaugePile({ barres }) {
   return (
-    <div className="o-jauge-pile" aria-hidden="true" style={{ marginTop: fine ? 8 : 12, marginRight: 5, position: 'relative', height: fine ? 14 : 20, display: 'flex', gap: 2, padding: 2, boxSizing: 'border-box', border: '1.5px solid var(--o-text3)', borderRadius: fine ? 4 : 6 }}>
+    <div className="o-jauge-pile" aria-hidden="true" style={{ marginTop: 12, marginRight: 5, position: 'relative', height: 20, display: 'flex', gap: 2, padding: 2, boxSizing: 'border-box', border: '1.5px solid var(--o-text3)', borderRadius: 6 }}>
       {[0, 1, 2, 3, 4].map(i => <span key={i} style={{ flex: 1, borderRadius: 2, background: i < barres.n ? barres.c : 'var(--o-s1)' }} />)}
-      <span style={{ position: 'absolute', right: -6, top: fine ? 3 : 5, width: 3, height: fine ? 5 : 7, borderRadius: '0 2px 2px 0', background: 'var(--o-text3)' }} />
+      <span style={{ position: 'absolute', right: -6, top: 5, width: 3, height: 7, borderRadius: '0 2px 2px 0', background: 'var(--o-text3)' }} />
     </div>
   );
 }
@@ -9794,12 +9793,6 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   else if (dom === 'sensor') stateTxt = (isNaN(parseFloat(s)) ? s : parseFloat(s)) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
   else if (runnable || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—'; // scene/script/button : état = date de dernière exécution
   else stateTxt = String(s);
-  // La jauge d'un capteur (19/09), comme sur la carte standard : fine et sans
-  // chiffres dans la compacte.
-  const nMes = dom === 'sensor' && !dead ? parseFloat(s) : NaN;
-  const cleMes = isNaN(nMes) ? null : cleMesure(a.device_class);
-  const jaugeMes = cleMes ? jaugeMesure(cleMes, nMes) : null;
-  const barresMes = !isNaN(nMes) && a.device_class === 'battery' ? barresPile(nMes) : null;
   return (
     /* Le role, l'index de tabulation, le clic et la touche sont tous
      * conditionnes par `ouvrable` : ils arrivent ensemble ou pas du tout. La
@@ -9883,8 +9876,6 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           return null;
         })()}
       </div>
-      {jaugeMes && <JaugeMesure jauge={jaugeMes} fine={dense} />}
-      {barresMes && <JaugePile barres={barresMes} fine={dense} />}
       {/* Standard lumière : la luminosité en dessous — commit au relâcher. */}
       {!dense && dom === 'light' && !dead && (a.brightness != null || (a.supported_color_modes || []).indexOf('brightness') >= 0) && (
         <div className="o-cvrange" role="presentation" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
