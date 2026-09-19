@@ -152,3 +152,30 @@ Tests : tests/barre_ambiances.test.mjs (3). Vérifié en démo, téléphone
 glissait) ; à 360, deux rangées ; à 320, trois — la page ne défile plus de
 côté ; la liste des collections s'ouvre sous son bouton. Tablette (768 px) et
 ordinateur (une rangée de 59 px) identiques.
+
+## Amendement (19/09/2026, v3.56.3) — l'Apparence au téléphone : les thèmes par trois, plus de second bleu
+
+Demande : « dans Apparence, sur mobile, je pense qu'il y a moyen d'afficher
+par 3 les thèmes ; les couleurs d'accent, le 2e bleu pas la peine, je sais
+pas ce qu'il fait là ».
+
+- Au téléphone (≤ 620 px), trois cartes de thème par rangée, au lieu d'une :
+  six thèmes descendaient sur 650 px, ils tiennent en 200. La carte
+  s'adapte : le nom sur deux lignes au plus, des pastilles et une
+  description plus petites ; la coche s'efface — le liseré dit déjà le
+  thème choisi, et `aria-pressed` le lecteur d'écran. Sous 350 px, deux par
+  rangée : à trois, « Neumorphix » ne tiendrait plus entier. L'ordinateur et
+  la tablette ne changent pas.
+- « Bleu » (#4f8cff) quitte les couleurs d'accent : c'est l'accent du thème
+  d'origine, que la première pastille, « Couleur du thème », offrait déjà.
+  Un « Bleu » enregistré revient à la couleur du thème (`readLook`) — la même
+  avec le thème d'origine.
+- La pastille « Couleur du thème » montre l'accent DU THÈME
+  (`--o-accent-theme`, relevé par `applyLook` avant qu'un choix ne le
+  remplace). Elle lisait l'accent courant : après avoir choisi Violet, deux
+  pastilles violettes.
+
+Tests : tests/apparence_mobile.test.mjs (3). Vérifié en démo, téléphone
+émulé : 390, 412 et 360 px, trois par rangée, aucun nom coupé (seule la
+description de Lavande finit par « … » à 360) ; 320 px, deux par rangée ;
+Violet choisi, la première pastille reste bleue ; ordinateur inchangé.

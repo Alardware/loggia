@@ -1017,6 +1017,9 @@ function readLook() {
   try {
     const L = { ...LOOK_DEF, ...(cfgVal('loggia_look', null) || {}) };
     if (L.fond !== 'photo') L.fond = 'aucun'; // les degrades retires retombent sur « aucun »
+    // « Bleu », retire des couleurs d'accent le 19/09 : c'etait l'accent du theme
+    // d'origine, deja offert par « Couleur du theme ».
+    if (L.accent === '#4f8cff') L.accent = '';
     return L;
   } catch { return { ...LOOK_DEF }; }
 }
@@ -1081,6 +1084,12 @@ function applyLook(root, L, frostedPreset, light) {
   else if (L.radius === 'rond') root.style.setProperty('--o-radius', '26px');
   if (!L.shadow) { root.style.setProperty('--o-shadow', 'none'); root.style.setProperty('--o-shadow-hover', 'none'); }
   if (!L.hairline) root.style.setProperty('--o-bw', '0px');
+  /* L'accent DU THEME, avant qu'un choix de l'Apparence le remplace : la
+   * pastille « Couleur du theme » le montre. Elle lisait `--o-accent` — apres
+   * un choix, deux pastilles de la meme couleur (19/09). Relu a chaque
+   * application : `--o-accent` vient d'etre purge (THEME_KEYS) puis repose par
+   * le theme. */
+  root.style.setProperty('--o-accent-theme', getComputedStyle(root).getPropertyValue('--o-accent').trim());
   if (L.accent) {
     const rgb = cssToRgb(L.accent);
     root.style.setProperty('--o-accent', L.accent); root.style.setProperty('--o-accent-soft', L.accent);

@@ -696,8 +696,24 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .o-par-nav button { width: auto !important; }
 }
 
-/* grille des thèmes (Apparence) : 3 colonnes PC, 2 tablette, 1 mobile */
-@media (max-width: 620px) { .grid-par-pal { grid-template-columns: 1fr !important; } }
+/* grille des thèmes (Apparence) : 3 colonnes PC, 2 tablette — et 3 au
+ * téléphone aussi (retour du 19/09 : « sur mobile, il y a moyen d'afficher les
+ * thèmes par 3 ») : une par rangée, six thèmes descendaient sur 650 px. La
+ * carte s'adapte : le nom sur deux lignes au plus, pastilles et description
+ * plus petites ; la coche s'efface — le liseré dit déjà le thème choisi, et
+ * `aria-pressed` le lecteur d'écran. */
+@media (max-width: 620px) {
+  .grid-par-pal { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px !important; }
+  .o-theme { padding: 10px 8px !important; }
+  .o-theme-tete { margin-bottom: 7px !important; }
+  .o-theme-nom { white-space: normal !important; font-size: 12px !important; line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .o-theme-ok { display: none !important; }
+  .o-theme-pts { gap: 4px !important; margin-bottom: 7px !important; }
+  .o-theme-pt { width: 14px !important; height: 14px !important; }
+  .o-theme-desc { white-space: normal !important; font-size: 10.5px !important; line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+}
+/* sous 350 px, deux par rangée : à trois, « Neumorphix » ne tiendrait plus entier */
+@media (max-width: 350px) { .grid-par-pal { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
 
 /* Paramètres : listes en lignes denses façon Atrium (filets entre les lignes, pas de carte par ligne) */
 .o-optlist > * { border-top: var(--o-bw,1px) solid var(--o-bd3); }

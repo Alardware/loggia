@@ -1442,7 +1442,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <div className="grid-appar" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 264px', gap: 16, alignItems: 'start' }}>
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>{(() => {
         const notFollow = haTheme !== 'FOLLOW';
-        const ACCENTS = [['', 'Couleur du thème'], ['#4f8cff', 'Bleu'], ['#2dd4bf', 'Turquoise'], ['#a78bfa', 'Violet'], ['#f5a524', 'Ambre'], ['#f87171', 'Rouge']];
+        const ACCENTS = [['', 'Couleur du thème'], ['#2dd4bf', 'Turquoise'], ['#a78bfa', 'Violet'], ['#f5a524', 'Ambre'], ['#f87171', 'Rouge']];
         const NATIFS = ['', 'projekt', 'atrium', 'ios', 'google', 'neumorphix'];
         const COMMU = ['frosted', 'onedark', 'dracula', 'github', 'tokyo', 'nightowl', 'plum', 'material', 'lavande'];
         const ids = themeTab === 'natifs' ? NATIFS : COMMU;
@@ -1456,16 +1456,16 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               {themeList.map(p => {
                 const on = notFollow && (loggiaTheme || '') === p.id, rgb = cl_hexRgb(p.cols[0]);
                 return (
-                  <button key={p.id || 'loggia'} onClick={() => onPickTheme(p.id)} aria-pressed={on} style={{ position: 'relative', textAlign: 'left', padding: '13px 14px', borderRadius: 14, cursor: 'pointer', transition: 'all .25s', fontFamily: 'inherit', color: 'inherit',
+                  <button key={p.id || 'loggia'} className="o-theme" onClick={() => onPickTheme(p.id)} aria-pressed={on} style={{ position: 'relative', textAlign: 'left', padding: '13px 14px', borderRadius: 14, cursor: 'pointer', transition: 'all .25s', fontFamily: 'inherit', color: 'inherit',
                     border: '1px solid ' + (on ? 'rgba(' + rgb + ',.7)' : 'var(--o-bd2)'), background: on ? 'rgba(' + rgb + ',.10)' : 'var(--o-s3)', boxShadow: on ? '0 0 0 1px rgba(' + rgb + ',.35)' : 'none' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-                      {on && <span style={{ flexShrink: 0, marginLeft: 6, display: 'inline-flex' }}><Fi i="check" size={13} color={p.cols[0]} /></span>}
+                    <div className="o-theme-tete" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+                      <div className="o-theme-nom" style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                      {on && <span className="o-theme-ok" style={{ flexShrink: 0, marginLeft: 6, display: 'inline-flex' }}><Fi i="check" size={13} color={p.cols[0]} /></span>}
                     </div>
-                    <div style={{ display: 'flex', gap: 5, marginBottom: 9 }}>
-                      {p.cols.map((c, k) => <div key={k} style={{ width: 18, height: 18, borderRadius: 9, background: c, border: '1px solid var(--o-bd1)' }} />)}
+                    <div className="o-theme-pts" style={{ display: 'flex', gap: 5, marginBottom: 9 }}>
+                      {p.cols.map((c, k) => <div key={k} className="o-theme-pt" style={{ width: 18, height: 18, borderRadius: 9, background: c, border: '1px solid var(--o-bd1)' }} />)}
                     </div>
-                    <div style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
+                    <div className="o-theme-desc" style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
                   </button>
                 );
               })}
@@ -1482,7 +1482,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 const on = (look.accent || '') === c;
                 return (
                   <button key={c || 'auto'} onClick={() => onLook({ accent: c })} title={lb} aria-label={lb} aria-pressed={on}
-                    style={{ width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: c || 'var(--o-accent)', border: on ? '2px solid var(--o-text)' : '2px solid transparent', boxShadow: on ? '0 0 0 2px var(--o-surfA) inset' : 'none' }}>
+                    style={{ width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: c || 'var(--o-accent-theme, var(--o-accent))', border: on ? '2px solid var(--o-text)' : '2px solid transparent', boxShadow: on ? '0 0 0 2px var(--o-surfA) inset' : 'none' }}>
                     {on ? <Fi i="check" size={12} color="#fff" /> : null}
                   </button>
                 );
