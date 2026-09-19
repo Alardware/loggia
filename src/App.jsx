@@ -5,6 +5,9 @@ import { formatEcran, vueFormat, patchFormat, echangerPartout, ordonnerSelon, or
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
 // La table des conditions, elle, est de la donnee pure et reste immediate.
 import { WX_PRESETS } from './wxpresets.js';
+import { garde, JETONS_GARDE, lisibleSurLavis } from './contraste.js';
+// Le mode clair, lu sur la racine : les couleurs d'appareils s'y assombrissent.
+const estClair = () => typeof document !== 'undefined' && document.documentElement.classList.contains('loggia-light');
 const WeatherGL = lazy(() => import('./wx3d.jsx'));
 // Vue chargee a la demande : personne n'atterrit sur Meteo en ouvrant le
 // dashboard, son code n'a donc pas a etre analyse au demarrage.
@@ -712,7 +715,7 @@ function cssToRgb(c) {
 
 const THEME_KEYS = ['--o-bg', '--o-bggrad', '--o-bg2', '--o-side1', '--o-side2', '--o-surfA', '--o-surfB', '--o-header', '--o-text', '--o-text1', '--o-text2', '--o-text3', '--o-bd1', '--o-bd2', '--o-bd3', '--o-s1', '--o-s2', '--o-s3', '--o-s4', '--o-s5', '--o-well', '--o-well2', '--o-well0', '--o-accent', '--o-accent-rgb', '--o-accent-soft', '--o-accent-soft-rgb', '--o-shadow', '--o-bw', '--o-font',
   // tokens fins des presets (Atrium) — purgés au changement de thème comme les autres
-  '--o-ok', '--o-ok-rgb', '--o-warn2', '--o-warn2-rgb', '--o-bad', '--o-bad-rgb', '--o-shadow-hover',
+  '--o-ok', '--o-ok-rgb', '--o-warn2', '--o-warn2-rgb', '--o-bad', '--o-bad-rgb', '--o-shadow-hover', '--o-shadow-rangee',
   // Le voile du bandeau meteo. Un preset qui le teinte sans qu'il figure
   // ici le laisserait au theme suivant : le bleu de l'un sur le fond de
   // l'autre, jusqu'au rechargement.
@@ -793,9 +796,12 @@ const LOGGIA_PRESETS = {
     dark: {
       bg: '#07090d', surface: '#0b0f15', surfaceElevated: '#111620', text: '#e9eef5', muted: '#a8b2c1',
       border: 'rgba(255,255,255,.065)', accent: '#5b8cff', accentText: '#8fb0ff',
-      radius: '16px', borderWidth: '1px', shadow: 'none', bggrad: '', font: "'Manrope', -apple-system, sans-serif",
+      radius: '16px', borderWidth: '1px', shadow: '0 0 0 1px rgba(255,255,255,.085)', bggrad: '', font: "'Manrope', -apple-system, sans-serif",
       fine: {
-        // carte = dégradé c1 → c2 + filet 1px ; aucune ombre au repos
+        // carte = dégradé c1 → c2 + filet 1px ; aucune ombre portée au repos —
+        // le filet EST l'ombre (un anneau), sinon les cartes se confondaient
+        // avec la page, la règle du gabarit leur interdisant une bordure.
+        '--o-shadow-rangee': '0 0 0 1px rgba(255,255,255,.085)',
         '--o-surfA': '#111620', '--o-surfB': '#0b0f15',
         '--o-bg2': '#0a0d12', '--o-side1': '#0a0d12', '--o-side2': '#07090d',
         '--o-header': 'rgba(8,10,14,.88)',
@@ -816,8 +822,9 @@ const LOGGIA_PRESETS = {
     light: {
       bg: '#f2f4f7', surface: '#ffffff', surfaceElevated: '#ffffff', text: '#101828', muted: '#475467',
       border: 'rgba(16,24,40,.1)', accent: '#5b8cff', accentText: '#1d55c9',
-      radius: '16px', borderWidth: '1px', shadow: 'none', bggrad: '', font: "'Manrope', -apple-system, sans-serif",
+      radius: '16px', borderWidth: '1px', shadow: '0 0 0 1px rgba(16,24,40,.14)', bggrad: '', font: "'Manrope', -apple-system, sans-serif",
       fine: {
+        '--o-shadow-rangee': '0 0 0 1px rgba(16,24,40,.14)',
         // en clair, c1 = c2 = blanc : la carte est plate, c'est le filet qui la détache
         '--o-surfA': '#ffffff', '--o-surfB': '#ffffff',
         '--o-bg2': '#ffffff', '--o-side1': '#ffffff', '--o-side2': '#ffffff',
@@ -1062,12 +1069,23 @@ function applyLook(root, L, frostedPreset, light) {
    * tentative ne pouvait pas fonctionner.
    *
    * On garde une base solide : sous 55 % d'opacite, le texte des cartes passe
-   * sous le seuil de contraste sur un fond clair. */
+   * sous le seuil de contraste sur un fond clair.
+   *
+   * La surface lue est celle DU THEME : un preset la pose en inline, et la
+   * retirer d'abord faisait relire celle de Loggia — les quatorze autres
+   * themes dessinaient leurs cartes dans le bleu nuit de Loggia (audit du
+   * 19/09). `applyTheme` a deja purge les jetons : rien ne s'accumule. Un
+   * theme deja plus translucide (Frosted Glass, un verre par conception)
+   * garde son opacite. */
   ['--o-surfA', '--o-surfB'].forEach(token => {
-    root.style.removeProperty(token);
     if (!verre) return;
-    const rgb = cssToRgb(getComputedStyle(root).getPropertyValue(token).trim());
-    if (rgb) root.style.setProperty(token, 'rgba(' + rgb + ',.62)');
+    const brut = getComputedStyle(root).getPropertyValue(token).trim();
+    const rgb = cssToRgb(brut);
+    if (!rgb) return;
+    // L'alpha : la quatrieme composante d'un rgb()/rgba(), s'il y en a une.
+    const parts = ((brut.match(/rgba?\(([^)]*)\)/) || [])[1] || '').split(/[\s,/]+/).filter(Boolean);
+    const alpha = parts.length === 4 ? (parts[3].endsWith('%') ? parseFloat(parts[3]) / 100 : parseFloat(parts[3])) : 1;
+    root.style.setProperty(token, 'rgba(' + rgb + ',' + Math.min(isNaN(alpha) ? 1 : alpha, .62) + ')');
   });
   root.classList.toggle('loggia-contrast', !!L.contrast);
   if (L.contrast) {
@@ -1096,11 +1114,21 @@ function applyLook(root, L, frostedPreset, light) {
     root.style.setProperty('--o-accent', L.accent); root.style.setProperty('--o-accent-soft', L.accent);
     if (rgb) { root.style.setProperty('--o-accent-rgb', rgb); root.style.setProperty('--o-accent-soft-rgb', rgb); }
   }
+  /* La garde de contraste (ADR 0060), en DERNIER : elle relit les couleurs
+   * telles qu'elles sont posées — surfaces comprises — et ne retouche que
+   * celles qui manquent leur seuil. Un theme qui tient les siens n'est pas
+   * touche ; les quatorze palettes venues d'ailleurs, si. */
+  const csFinal = getComputedStyle(root);
+  const corrige = garde(t => csFinal.getPropertyValue(t).trim());
+  Object.keys(corrige).forEach(k => root.style.setProperty(k, corrige[k]));
 }
 
 function applyTheme(opts, hass) {
   const root = document.documentElement;
   THEME_KEYS.forEach(k => root.style.removeProperty(k)); root.style.removeProperty('--o-radius'); root.style.removeProperty('--o-bggrad'); root.style.removeProperty('--o-shadow-hover');
+  // Ce que la garde de contraste a posé la fois d'avant : sinon la correction
+  // d'un thème suivrait au suivant.
+  JETONS_GARDE.forEach(k => root.style.removeProperty(k));
   root.classList.remove('loggia-frosted');
   const L = opts.look || readLook();
   // Suivre HA : miroir du thème actif de HA (valeurs résolues sur le parent).
@@ -1226,7 +1254,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>{cloneElement(p.icon, { size: 24 })}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: amb ? amb.couleur : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: amb ? amb.couleur : 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {/* Chip étroite (mobile 2 col) : la température quitte la droite et
               * revient ici, le nom garde sa place — bascule par container query. */}
             {temp && <span className="o-chip-temp-i"><span style={{ color: p.tc, fontWeight: 800 }}>{temp}</span> · </span>}{amb && amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}{etat}
@@ -1862,7 +1890,7 @@ function JaugeMesure({ jauge }) {
         ))}
         <span className="o-jauge-trait" style={{ position: 'absolute', top: 0, left: 'calc(' + jauge.pos + '% - 1.5px)', width: 3, height: haut, borderRadius: 2, background: 'var(--o-text)', boxShadow: '0 0 0 2px var(--o-surfB)' }} />
       </div>
-      <div style={{ position: 'relative', height: 13, marginTop: 4, fontSize: 10, fontWeight: 700, lineHeight: 1, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ position: 'relative', height: 13, marginTop: 4, fontSize: 10, fontWeight: 700, lineHeight: 1, color: 'var(--o-text2)', fontVariantNumeric: 'tabular-nums' }}>
         {jauge.reperes.map(r => {
           const demi = String(r.v).length * 3;
           return <span key={r.v} style={{ position: 'absolute', left: 'clamp(' + demi + 'px, ' + r.pos + '%, calc(100% - ' + demi + 'px))', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>{r.v}</span>;
@@ -1971,7 +1999,7 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   else if (dom === 'humidifier') { sub = actif ? (a.current_humidity != null ? tr('Humidité {n} %', { n: Math.round(a.current_humidity) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else if (dom === 'valve') { sub = actif ? tr('Ouverte') : tr('Fermée'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else { sub = (actif ? tr('Allumée') : tr('Éteinte')) + (puissance != null ? ' · ' + fmtW(puissance) : ''); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
-  const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('#FFCC44', .16), 'var(--o-warn)', 'rgba(255,204,68,'], froid: ['rgba(var(--o-cold-rgb),.16)', 'var(--o-cold)', 'rgba(var(--o-cold-rgb),'], orange: ['rgba(var(--o-warn2-rgb),.16)', 'var(--o-warn2)', 'rgba(var(--o-warn2-rgb),'] };
+  const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('var(--o-lampe)', .16), 'var(--o-warn)', 'rgba(var(--o-lampe-rgb),'], froid: ['rgba(var(--o-cold-rgb),.16)', 'var(--o-cold)', 'rgba(var(--o-cold-rgb),'], orange: ['rgba(var(--o-warn2-rgb),.16)', 'var(--o-warn2)', 'rgba(var(--o-warn2-rgb),'] };
   const [icoFond, icoTexte, lavisBase] = TEINTES[teinte];
   // Un capteur qui a un verdict est ALLUME au sens de la carte : lavis, icone
   // et repere dans sa teinte.
@@ -2022,7 +2050,9 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const bri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : 100;
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
   const mort = !st || st.state === 'unavailable';
-  const accent = (rgb && color) ? color : '#FFCC44';
+  const accent = (rgb && color) ? color : 'var(--o-lampe)';
+  // L'icone et la jauge : la meme couleur, rendue lisible sur le lavis qu'elle pose.
+  const accentLu = (rgb && color) ? lisibleSurLavis(color, estClair(), .7) : accent;
   const ltype = lightType({ id, name: (a.friendly_name || id), rgb, ct });
   const adjustable = !isSwitch && dimmable && !mort;
   const nom = label || a.friendly_name || id;
@@ -2055,7 +2085,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
         border: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         {/* Sans halo (retour 31/08) : il noyait le carré de l'icône en rond. */}
-        <span style={RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accent : 'var(--o-text3)')}><LightIcon type={ltype} size={19} /></span>
+        <span style={RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accentLu : 'var(--o-text3)')}><LightIcon type={ltype} size={19} /></span>
         {!mort && <RmBascule on={on} nom={nom} onToggle={toggle} />}
       </div>
       <div>
@@ -2064,7 +2094,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
         {/* La glissière, seule : les préréglages Nuit / Doux / Plein ont
           * quitté la carte (maquettes du 14/09), la fiche les garde. Grisée
           * quand la lampe ne se règle pas. */}
-        <RmJauge v={adjustable ? briAff : (on ? 100 : 0)} couleur={accent} grade={grade} actif={adjustable} label={tr('Luminosité') + ' ' + nom} onCommit={poseBri} />
+        <RmJauge v={adjustable ? briAff : (on ? 100 : 0)} couleur={accentLu} grade={grade} actif={adjustable} label={tr('Luminosité') + ' ' + nom} onCommit={poseBri} />
       </div>
     </button>
   );
@@ -3392,7 +3422,7 @@ function RoomNav({ room, onNav, hass }) {
           <button key={r.name} data-room-active={on ? '1' : undefined} onClick={() => onNav('room:' + r.name)} style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background .18s, border-color .18s', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>
             {r.icon ? <span style={{ display: 'flex', width: 15, height: 15, alignItems: 'center', justifyContent: 'center' }}>{cloneElement(r.icon, { size: 15, color: on ? '#fff' : 'var(--o-text3)' })}</span> : <Fi i="home" size={14} color={on ? '#fff' : 'var(--o-text3)'} />}
             <span style={{ fontSize: 12, fontWeight: on ? 800 : 700 }}>{r.name}</span>
-            {r.temp != null && <span style={{ fontSize: 12, fontWeight: 600, color: on ? 'rgba(255,255,255,.8)' : 'var(--o-text3)' }}>{r.temp.toFixed(1).replace('.', ',')}°</span>}
+            {r.temp != null && <span style={{ fontSize: 12, fontWeight: 600, color: on ? '#fff' : 'var(--o-text3)' }}>{r.temp.toFixed(1).replace('.', ',')}°</span>}
           </button>
         );
       })}
@@ -5075,7 +5105,7 @@ function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLanc
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', width: '100%' }}>
         <span aria-hidden="true" style={{ width: compacte ? 34 : 38, height: compacte ? 34 : 38, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: `rgba(${t.rgb},.22)`, color: t.col, flexShrink: 0 }}><Ico name={s.icone || 'sparkles'} size={compacte ? 18 : 20} color={t.col} /></span>
         {/* En édition, la place du repère revient aux outils de la carte (voir ScenariosView). */}
-        {!sansDernier && <span style={{ fontSize: 11, fontWeight: 700, color: enCours ? t.col : 'var(--o-text3)', whiteSpace: 'nowrap', marginLeft: 6 }}>{enCours ? tr('En cours') : libelleDernier(s.dernier, Date.now(), locale())}</span>}
+        {!sansDernier && <span style={{ fontSize: 11, fontWeight: 700, color: enCours ? t.col : 'var(--o-text2)', whiteSpace: 'nowrap', marginLeft: 6 }}>{enCours ? tr('En cours') : libelleDernier(s.dernier, Date.now(), locale())}</span>}
       </div>
       <div style={{ marginTop: compacte ? 8 : 12, fontSize: compacte ? 13 : 15, fontWeight: 700, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
       {!compacte && <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, lineHeight: 1.45, color: 'var(--o-text2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.lien_absent ? tr('Scène introuvable') : resumeScenario(s, noms)}</div>}
@@ -7254,7 +7284,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     medPlayers().forEach(m => {
       const id = m.haid; if (!S0[id]) return;
       const np = mpRead(S0, id); if (!np.playing) return;
-      momentRows.push(<LigneMoment key={id} icone="music-alt" rgb="236,72,153" nom={m.name} sous={[np.title, np.artist].filter(Boolean).join(' · ') || tr('Lecture')}
+      momentRows.push(<LigneMoment key={id} icone="music-alt" rgb="var(--o-rose-rgb)" nom={m.name} sous={[np.title, np.artist].filter(Boolean).join(' · ') || tr('Lecture')}
         onOpen={() => dc.ouvrir(id)} action={tr('Mettre en pause')} actionIcone="pause" onAction={() => commande(id, 'media_player', 'media_play_pause')} />);
     });
     const meta = (a && a.index && a.index.entityMeta) || null;
@@ -7564,7 +7594,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           if (!a || (a.repasIn && a.repasLabel)) rappelsRows.push(railRow('rep', tr('Repas chat'), a ? a.repasLabel : 'Collation après-midi · 18g', a ? a.repasIn.replace('DANS ', '').toLowerCase() : '1h38', 'var(--o-warn)'));
           if (mPb) rappelsRows.push(railRow('pb', tr('Poubelles'), mPb.valueText, mPb.phase, mPb.color));
           const railMoment = railPanel(tr('En ce moment'), tr('Lecture, machines, chauffage, volets en mouvement'),
-            nEnCours ? (nEnCours > 1 ? tr('{n} EN COURS', { n: nEnCours }) : tr('1 EN COURS')) : tr('RIEN EN COURS'), nEnCours ? '79,140,255' : OKRGB,
+            nEnCours ? (nEnCours > 1 ? tr('{n} EN COURS', { n: nEnCours }) : tr('1 EN COURS')) : tr('RIEN EN COURS'), nEnCours ? 'var(--o-accent-soft-rgb)' : OKRGB,
             nEnCours ? momentVisibles : [<div key="rien" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', padding: '6px 0 2px' }}>{tr('Rien ne tourne pour le moment.')}</div>]);
           const railRappels = railPanel(tr('Rappels'), tr('Repas du chat et ramassage'), null, AMBRGB, rappelsRows);
           /* AGENDA : une carte a la place de deux (ADR 0032). La date du jour,
@@ -9798,7 +9828,8 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   // climat = le rouge de la vue Climatisation — l'accent bleu pour le reste.
   const rgbHex = dom === 'light' && a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
   // Climat = ROUGE (retour d'essai 31/08) : l'ambre warn2 rendait jaune.
-  const teinte = cvEstLumiere(id) ? (rgbHex || '#FFCC44') : dom === 'climate' ? 'var(--o-bad)' : dom === 'cover' ? 'var(--o-purple)' : null;
+  const teinte = cvEstLumiere(id) ? (rgbHex || 'var(--o-lampe)') : dom === 'climate' ? 'var(--o-bad)' : dom === 'cover' ? 'var(--o-purple)' : null;
+  const teinteLu = rgbHex ? lisibleSurLavis(rgbHex, estClair(), .28) : teinte;
   const teinteTxt = rgbHex || (cvEstLumiere(id) ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-bad)' : dom === 'cover' ? 'var(--o-purple)' : 'var(--o-accent-soft)');
   const togglable = ['light', 'switch', 'input_boolean', 'fan', 'humidifier', 'siren'].indexOf(dom) >= 0;
   // Presque tout s'ouvre : les domaines à fiche dédiée, et tout appareil du
@@ -9833,7 +9864,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
       style={{ position: 'relative', background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
       <div className="o-cvrow" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: dense ? 9 : 11 }}>
-        <span style={{ width: dense ? 34 : 40, height: dense ? 34 : 40, borderRadius: dense ? 10 : 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinte || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{ico ? <Fi i={ico} size={dense ? 15 : 17} /> : <PlugIcon size={dense ? 15 : 17} />}</span>
+        <span style={{ width: dense ? 34 : 40, height: dense ? 34 : 40, borderRadius: dense ? 10 : 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinteLu || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{ico ? <Fi i={ico} size={dense ? 15 : 17} /> : <PlugIcon size={dense ? 15 : 17} />}</span>
         <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
           <div style={{ fontSize: 12, fontWeight: 600, color: on ? (teinte ? teinteTxt : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -10140,7 +10171,7 @@ function CvPerson({ id, hass }) {
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', minHeight: 150, alignItems: 'center', justifyContent: 'center', gap: 10 }}>
       <span style={{ position: 'relative', width: 58, height: 58, flexShrink: 0 }}>
-        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', background: img ? `url("${img}") center/cover` : 'var(--o-s1)', color: 'var(--o-text2)', fontSize: 19, fontWeight: 800, boxShadow: home ? '0 0 0 2.5px var(--o-ok), 0 0 12px rgba(var(--o-ok-rgb),.5)' : '0 0 0 2px var(--o-bd1)', opacity: home ? 1 : .55 }}>{!img && nom.charAt(0).toUpperCase()}</span>
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', background: img ? `url("${img}") center/cover` : 'var(--o-s1)', color: home ? 'var(--o-text2)' : 'var(--o-text3)', fontSize: 19, fontWeight: 800, boxShadow: home ? '0 0 0 2.5px var(--o-ok), 0 0 12px rgba(var(--o-ok-rgb),.5)' : '0 0 0 2px var(--o-bd1)', opacity: home || !img ? 1 : .55 }}>{!img && nom.charAt(0).toUpperCase()}</span>
         <span style={{ position: 'absolute', right: -1, bottom: -1, width: 14, height: 14, borderRadius: '50%', background: home ? 'var(--o-ok)' : 'var(--o-text3)', border: '2.5px solid var(--o-surfA)' }} />
       </span>
       <span style={{ fontSize: 14, fontWeight: 800 }}>{nom}</span>
@@ -10800,7 +10831,7 @@ function CvPresence({ hass, gens = null }) {
           * une règle dure — une quatrième personne déborderait la carte. */}
         {liste.slice(0, 3).map((p) => (
           <div key={p.haid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', marginTop: 2 }}>
-            <span style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 10, fontWeight: 800, color: 'var(--o-text2)', opacity: p.home ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
+            <span style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 10, fontWeight: 800, color: p.home ? 'var(--o-text2)' : 'var(--o-text3)', opacity: p.home || !p.img ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
             <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<span className="o-presence-ou" style={{ fontWeight: 600, color: 'var(--o-text3)' }}> · {p.home ? tr('À la maison') : 'Absent'}</span></span>
             <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', boxShadow: p.home ? '0 0 6px rgba(var(--o-ok-rgb),.6)' : 'none' }} />
           </div>
@@ -12528,7 +12559,7 @@ function BoutonAssistant({ onAssistant, onDictee = null, hass = null, sens = 'ha
   const tenue = { touchAction: 'manipulation', WebkitTouchCallout: 'none', userSelect: 'none' };
   /* Un micro (retour du 18/09, deux captures) : en haut, le bouton rond des
    * voisins de l'en-tete ; en bas, un carre arrondi rose -> violet. */
-  const degrade = 'linear-gradient(135deg, var(--o-rose), var(--o-purple))';
+  const degrade = 'linear-gradient(135deg, var(--o-rose-fond), var(--o-purple-fond))';
 
   /* Hors du <button> : un bouton n'accepte que du contenu de phrase, et l'orbe
    * pose un <div>. Le cadre positionne les deux l'un par rapport a l'autre. */

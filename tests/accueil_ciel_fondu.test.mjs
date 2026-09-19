@@ -43,7 +43,10 @@ test('au telephone, la rangee des scenarios ne rogne plus d’ombre en rectangle
   const bloc = css.slice(d, css.indexOf('/* Vue Pièce', d));
   assert.ok(bloc.includes('padding: 4px 4px 6px; margin: -4px -4px 0; scroll-padding-inline: 4px;'), 'de l’air pour l’anneau de focus, sans rien deplacer');
   assert.ok(bloc.includes('.grid-qscenes > button { flex: 0 0 150px; scroll-snap-align: start; }'), 'toujours 150 px par carte');
-  assert.ok(bloc.includes('.grid-qscenes > button { box-shadow: none !important; }'), 'sans ombre, comme les favoris');
+  // Depuis l'ADR 0060 : une ombre COURTE, contenue par le rembourrage — sans
+  // elle, la carte se confondait avec la page sur un thème clair (1,01:1).
+  assert.ok(bloc.includes('.grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(0,0,0,.16), 0 3px 8px rgba(0,0,0,.12)) !important; }'), 'une ombre courte, jamais rognée');
+  assert.ok(!bloc.includes('box-shadow: none !important'), 'plus d’ombre coupée en rectangle');
   // Le PC garde ses ombres : la rangee leur laisse la place.
   assert.ok(css.includes('padding: 6px 6px 26px; margin: -6px -6px -26px;'), 'le PC inchange');
 });

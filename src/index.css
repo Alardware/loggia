@@ -75,6 +75,13 @@ button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-sce
   --o-lampe:#ffce73; --o-lampe-rgb:255,206,115; --o-lampe-b:#f59e0b;
   --o-orange:#ff8a4c; --o-orange-rgb:255,138,76;
   --o-rose:#ff2d78; --o-rose-rgb:255,45,120;
+  /* Les deux fonds qui portent une icône BLANCHE (le bouton de l'assistant) :
+     la garde de contraste (contraste.js) les assombrit juste assez selon le
+     thème ; ici, le repli tant qu'elle n'a pas parlé. */
+  --o-rose-fond:#e01f63; --o-purple-fond:#7c5ce0;
+  /* La piste d'une jauge en anneau : toujours visible, même quand le
+     remplissage neutre du thème est clair (Frosted Glass en clair). */
+  --o-piste:var(--o-s1);
   --o-flux-solaire:#fbbf24; --o-flux-maison:#ec4899; --o-flux-reseau:#a855f7; --o-flux-ve:#38bdf8; --o-flux-batterie:#4ade80;
   /* accents décoratifs devenus theme-aware (texte lisible en clair) : or, violet, cyan */
   --o-gold:#ffd166; --o-gold-rgb:255,209,102; --o-purple:#a78bfa; --o-purple-rgb:167,139,250; --o-cyan:#54c8f0; --o-cyan-rgb:84,200,240;
@@ -484,7 +491,12 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
     padding: 4px 4px 6px; margin: -4px -4px 0; scroll-padding-inline: 4px;
   }
   .grid-qscenes > button { flex: 0 0 150px; scroll-snap-align: start; }
-  .grid-qscenes > button { box-shadow: none !important; }
+  /* Une ombre COURTE, qui tient dans le rembourrage : sans elle, sur un thème
+   * clair peu contrasté (Frosted Glass, iOS, Tokyo Night), la carte se
+   * confondait avec la page — 1,01:1 (audit du 19/09). Un thème sans ombre
+   * (Atrium) pose son filet dans `--o-shadow-rangee`. */
+  .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(0,0,0,.16), 0 3px 8px rgba(0,0,0,.12)) !important; }
+  html.loggia-light .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(16,24,40,.10), 0 3px 8px rgba(16,24,40,.10)) !important; }
   /* Vue Pièce : 2 cartes par ligne, compactées pour tenir sans déborder. */
   .grid-roomdev { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
   .grid-roomdev .o-rmcard { min-height: 150px !important; padding: 13px !important; }
@@ -770,8 +782,10 @@ body, button, input, select, textarea { font-variant-numeric: tabular-nums; }
  *
  * 82 % d'accent + 17 % de noir amene le bleu par defaut a 4,6:1. */
 :root { --o-accent-fond: var(--o-accent); }
+:root { --o-piste: var(--o-s1); }
 @supports (color: color-mix(in srgb, red 50%, black)) {
   :root { --o-accent-fond: color-mix(in srgb, var(--o-accent) 82%, #000); }
+  :root { --o-piste: color-mix(in srgb, var(--o-text) 14%, transparent); }
 }
 
 /* Le rendu du texte clair sur fond sombre bave sans lissage : les graisses

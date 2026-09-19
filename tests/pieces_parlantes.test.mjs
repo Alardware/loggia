@@ -22,7 +22,7 @@ test('la carte piece : une ligne d’etat a priorite, dans ses deux variantes, s
   assert.ok(c.includes('idx = 0, ambiance = null })'), 'la carte recoit l’ambiance de sa piece');
   const calcul = "const amb = lights ? ambiancePiece({ lumieres: n, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;";
   assert.equal(c.split(calcul).length - 1, 2, 'compacte et standard calculent la meme ligne (lumieres de la carte + ambiance + CO2 de la piece)');
-  assert.ok(c.includes("const etat = amb ? amb.texte : '—';") && c.includes("color: amb ? amb.couleur : 'var(--o-text3)'"), 'compacte : le texte et sa couleur');
+  assert.ok(c.includes("const etat = amb ? amb.texte : '—';") && c.includes("color: amb ? amb.couleur : 'var(--o-text2)'"), 'compacte : le texte et sa couleur — le gris SECONDAIRE, lisible sur le lavis de la pièce');
   assert.ok(c.includes("{amb && amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}{etat}"), 'compacte : le triangle devant un probleme');
   assert.ok(c.includes("{amb ? <span style={{ color: amb.couleur }}>{amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}<FlipText text={amb.texte} /></span> : <Skel w={92} h={12} />}"), 'standard : le texte anime, colore, l’humidite a cote');
   assert.ok(!c.includes("tr('{n} lampes allumées'"), 'le compteur seul n’existe plus : il vit dans la ligne d’activite');

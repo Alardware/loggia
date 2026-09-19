@@ -387,7 +387,7 @@ test('le bouton de l’assistant : un micro, rond en haut, carré rose-violet en
   // de l'en-tête ; en bas, un carré arrondi en dégradé, aux teintes du thème.
   assert.equal((BOUTON.match(/<Fi i="microphone"/g) || []).length, 2, 'un micro dans chaque variante');
   assert.match(BOUTON, /background: 'var\(--o-s1\)', border: 'var\(--o-bw,1px\) solid var\(--o-bd2\)', color: 'var\(--o-text1\)'/, 'en haut, le style des boutons voisins');
-  assert.match(BOUTON, /const degrade = 'linear-gradient\(135deg, var\(--o-rose\), var\(--o-purple\)\)';/, 'en bas, le dégradé rose → violet des jetons');
+  assert.match(BOUTON, /const degrade = 'linear-gradient\(135deg, var\(--o-rose-fond\), var\(--o-purple-fond\)\)';/, 'en bas, le dégradé rose → violet des jetons (leurs fonds : l’icône est blanche)');
   assert.match(BOUTON, /width: 48, height: 48, borderRadius: 15, marginTop: -14,/, 'un carré arrondi, posé au-dessus de la barre');
   assert.doesNotMatch(BOUTON, /radial-gradient\(circle at 38% 32%/, 'l’ancien disque est revenu');
 });

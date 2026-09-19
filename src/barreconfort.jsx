@@ -27,7 +27,7 @@ export function BarreConfort({ confort, onOpen }) {
       <div className="o-confort-indice">
         <span className="o-confort-anneau" aria-hidden="true">
           <svg width="46" height="46" viewBox="0 0 46 46" focusable="false">
-            <circle cx="23" cy="23" r={RAYON} fill="none" stroke="var(--o-s1)" strokeWidth="5" />
+            <circle cx="23" cy="23" r={RAYON} fill="none" stroke="var(--o-piste)" strokeWidth="5" />
             <circle cx="23" cy="23" r={RAYON} fill="none" stroke={verdict.c} strokeWidth="5" strokeLinecap="round"
               strokeDasharray={TOUR} strokeDashoffset={TOUR * (1 - Math.max(0, Math.min(100, indice)) / 100)} transform="rotate(-90 23 23)" />
           </svg>
