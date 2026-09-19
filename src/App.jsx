@@ -37,6 +37,7 @@ import { HorlogeRail, CalendrierRail, FeuilleVilles, Co2Rail } from './widgetsra
 import { pireCapteur, seuilCo2, ventilationVeille, voletsDeLaZone, actionAerer } from './air.js';
 import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, villesDe } from './horloge.js';
 import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile } from './confort.js';
+import { pilesMaison } from './piles.js';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
@@ -8976,6 +8977,10 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const ed = useLayoutEditor(EN_LAYOUT_KEY, 'energie', derived);
   const [enAdd, setEnAdd] = useState(false);
   const [cardEdit, setCardEdit] = useState(null);
+  // Les piles et batteries de la maison (19/09) : leurs cartes a cinq barres,
+  // apres les postes — la plus basse d'abord (piles.js).
+  const dc = useDomainCards(hass);
+  const piles = pilesMaison(S, (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id)) || {});
   // Un poste ajoute a la main n'a qu'une entite : on lui donne l'habillage par
   // defaut, l'important etant sa puissance.
   const posteDe = (k) => {
@@ -9184,6 +9189,23 @@ function EnergieContent({ hass, edit = false, onEnt }) {
         </div>
         {enAdd && <ComposeurCartes hass={hass} entete={tr('Ajouter un poste')} domaines={['sensor']} composites={false} present={ed.ids.map(k => k.indexOf('dev:') === 0 ? k.slice(4) : k)} onToggle={(id) => ed.toggle('dev:' + id)} onClose={() => setEnAdd(false)} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={posteDe(cardEdit).name} origine={posteOrigine(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
+
+      {/* Les piles et batteries : la carte standard a cinq barres (ADR 0057),
+        * a la suite des postes — retour user du 19/09. Un titre et une grille
+        * sur la page, pas de cadre autour ; la grille des Objets (176 × 184 au
+        * telephone). */}
+      {piles.length > 0 && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Piles et batteries')}</div>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{piles.length > 1 ? tr('{n} capteurs', { n: piles.length }) : tr('{n} capteur', { n: piles.length })}</span>
+          </div>
+          <div className="o-piles grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16 }}>
+            {piles.map((p, i) => <Anim key={p.id} i={i} base={200}>{dc.card(p.id)}</Anim>)}
+          </div>
+        </>
+      )}
+      {dc.sheets}
 
     </div>
   );

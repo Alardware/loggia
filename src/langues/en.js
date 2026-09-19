@@ -1391,6 +1391,7 @@ export default {
   'Adresses du serveur': 'Server addresses',
   'visibilité du menu latéral': 'sidebar visibility',
   'Postes de consommation': 'Consumption by device',
+  'Piles et batteries': 'Batteries',
   'Changer de mode': 'Change mode',
   'Modifier ou déplacer': 'Edit or move',
   'Entités du schéma': 'Diagram entities',
