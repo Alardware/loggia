@@ -47,3 +47,26 @@ Au prochain passage de CodeQL, l'avertissement et les cinq alertes
 qu'elles ne sont pas écartées. Tests : tests/orbe.test.mjs (le garde-fou vit
 dans `vite.config.js`, le module n'a plus d'`import.meta`),
 tests/securite_github.test.mjs (les droits de `validate.yml`).
+
+## Amendement (19/09/2026) — la configuration avancée, prête
+
+« Prépare la config CodeQL avancée pour exclure les assets » :
+
+- `.github/codeql/codeql-config.yml` écarte le seul dossier
+  `custom_components/loggia/frontend/assets` (`paths-ignore`) ; le code source
+  reste analysé en entier.
+- `.github/workflows/codeql.yml` reprend la configuration par défaut : les
+  trois langages (actions, javascript-typescript, python), `build-mode:
+  none`, les mêmes catégories (`/language:…`) — les alertes gardent leur
+  historique, et celles de three.js se ferment d'elles-mêmes au premier
+  passage, faute d'être encore trouvées. Droits : `contents: read`, plus
+  `security-events: write` pour déposer les résultats. `codeql-action@v4`,
+  `checkout@v7`.
+- **Préparée sur la branche `codeql-avance`, pas sur `main`** : tant que la
+  configuration par défaut est active, GitHub refuse les résultats d'un
+  workflow avancé — chaque envoi aurait échoué. Ordre : le propriétaire
+  désactive la configuration par défaut (Settings → Code security → CodeQL
+  analysis ; sans valider le fichier que GitHub propose alors), puis la
+  branche est fusionnée.
+
+Tests : tests/securite_github.test.mjs (+2).

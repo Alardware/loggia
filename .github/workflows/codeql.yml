@@ -1,0 +1,49 @@
+name: CodeQL
+
+# L'analyse de securite du depot, en configuration AVANCEE : la meme que la
+# configuration par defaut de GitHub — trois langages, memes categories, les
+# alertes gardent leur historique —, plus un fichier de configuration qui
+# ecarte le code tiers minifie du build (.github/codeql/codeql-config.yml,
+# ADR 0056).
+#
+# Ne tourne utilement qu'une fois la configuration par defaut DESACTIVEE
+# (Settings > Code security > CodeQL analysis) : tant qu'elle est active,
+# GitHub refuse les resultats d'un workflow avance.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Une fois par semaine : les requetes de CodeQL evoluent, un code inchange
+    # peut reveler une alerte nouvelle.
+    - cron: "17 5 * * 2"
+
+# Le moins de droits possible ; le travail d'analyse recoit en plus le droit
+# d'ecrire ses resultats dans l'onglet Security.
+permissions:
+  contents: read
+
+jobs:
+  analyse:
+    name: Analyse (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript, python]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
