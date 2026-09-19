@@ -1,0 +1,14 @@
+# La configuration de l'analyse CodeQL avancee (workflow codeql.yml).
+#
+# Le build publie la bibliotheque 3D three.js, minifiee, dans
+# custom_components/loggia/frontend/assets/ — gardee en plusieurs versions pour
+# les caches des navigateurs. CodeQL y relevait quinze fausses alertes
+# « insecure randomness » : three.js tire au hasard les identifiants de ses
+# objets 3D, sans role de securite, et ce code n'est pas le notre (ADR 0056).
+#
+# Seul ce dossier est ecarte : le code source reste analyse en entier — src/,
+# le composant Python, scripts/, les workflows.
+name: Loggia
+
+paths-ignore:
+  - custom_components/loggia/frontend/assets
