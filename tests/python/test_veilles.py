@@ -291,7 +291,7 @@ def test_sans_valeur_attendue_on_ne_devine_pas(creer):
 
 def test_les_defauts(creer):
     v = creer()
-    assert v.cfg['co2']['seuil'] == 1200
+    assert v.cfg['co2']['seuil'] == 1400
     assert v.cfg['batterie']['seuil'] == 15
     assert v.cfg['creuses']['actif'] is False
 

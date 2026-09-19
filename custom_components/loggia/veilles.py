@@ -57,7 +57,7 @@ HYSTERESE = 0.90
 PRIORITES = {"co2": niveau("nuit", 10), "creuses": niveau("confort", 5)}
 
 DEFAUT: dict[str, Any] = {
-    "co2": {"actif": False, "seuil": 1200, "capteurs": [], "ventilation": []},
+    "co2": {"actif": False, "seuil": 1400, "capteurs": [], "ventilation": []},
     "batterie": {"actif": False, "seuil": 15},
     "creuses": {"actif": False, "entite": "", "valeur": "", "prises": []},
 }

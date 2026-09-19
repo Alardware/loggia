@@ -36,8 +36,8 @@ test('le probleme passe avant tout : ouvrants ouverts, CO2 charge', () => {
   assert.equal(ambiancePiece({ ouverts: [{ famille: 'porte' }] }).texte, 'Porte ouverte');
   assert.equal(ambiancePiece({ ouverts: [{ famille: 'porte' }, { famille: 'porte' }] }).texte, '2 portes ouvertes');
   assert.equal(ambiancePiece({ ouverts: [{ famille: 'porte' }, { famille: 'fenetre' }] }).texte, '2 ouvrants ouverts');
-  assert.equal(ambiancePiece({ co2: 1200 }).texte, 'CO₂ élevé', 'le palier « charge » de airPalier');
-  assert.equal(ambiancePiece({ co2: 1199, lumieres: 1 }).texte, '1 lumière');
+  assert.equal(ambiancePiece({ co2: 1400 }).texte, 'CO₂ élevé', 'le palier « élevé » de la table (captures du 19/09)');
+  assert.equal(ambiancePiece({ co2: 1399, lumieres: 1 }).texte, '1 lumière');
   assert.equal(ambiancePiece({ co2: 1450, ouverts: [{ famille: 'fenetre' }] }).texte, 'Fenêtre ouverte · CO₂ élevé');
   assert.equal(ambiancePiece({ co2: 'abc', ouverts: [null] }).niveau, 'calme', 'du bruit ne fait pas un probleme');
   assert.ok(police.includes('.fi-rr-triangle-warning:before'), 'l’icone existe dans la police');
@@ -78,7 +78,7 @@ test('une passe sur les etats range lecteurs, chauffage et ouvrants par zone', (
   assert.equal(amb.cave, undefined, 'un thermostat muet non plus, meme avec « heating » dans ses attributs');
   assert.ok(!('perdu' in amb), 'une entite sans zone n’appartient a personne');
   assert.equal(ambiancePiece({ lumieres: 1, ...amb.salon }).texte, '1 lumière · TV · Musique · Chauffe');
-  assert.equal(ambiancePiece({ ...amb.chambre, co2: 1280 }).texte, 'Fenêtre ouverte · CO₂ élevé');
+  assert.equal(ambiancePiece({ ...amb.chambre, co2: 1480 }).texte, 'Fenêtre ouverte · CO₂ élevé');
 });
 
 test('sans etats ni zones : rien, sans erreur', () => {

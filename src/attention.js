@@ -29,10 +29,12 @@ export const CLASSES_MOUVEMENT = ['motion', 'occupancy', 'presence'];
 /* Les clés de la table de sûreté de `deriveNotifs`, dans son ordre : c'est à
  * ces binaires-là que l'Accueil s'abonne. */
 export const CLASSES_SURETE = ['smoke', 'carbon_monoxide', 'gas', 'moisture', 'safety', 'tamper'];
-/* « Chargé » : le palier haut d'`airPalier` (App.jsx), qui est aussi le seuil
- * par défaut de la veille CO₂ du serveur. Un seul chiffre pour toute la
- * maison, sinon l'Accueil et la pièce se contrediraient à 1 150 ppm. */
-export const SEUIL_CO2 = 1200;
+/* « Élevé » : le palier de la table de `confort.js` où le CO₂ passe à
+ * l'orange (captures du 19/09 : 1 400 ppm), et le palier haut d'`airPalier`
+ * (App.jsx). Un seul chiffre pour toute la maison, sinon l'Accueil et la carte
+ * se contrediraient. C'est aussi le défaut de la veille CO₂ du serveur ; un
+ * seuil qu'on y règle reste le sien. */
+export const SEUIL_CO2 = 1400;
 /* Une pile : visible (ambre) à 20 %, rouge à 5 % — les mêmes chiffres pour la
  * plante, le robot et le point d'attention (v3.49.0). */
 export const SEUILS_PILE = { alerte: 20, danger: 5 };

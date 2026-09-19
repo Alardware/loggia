@@ -316,6 +316,8 @@ export default {
   'Confort': 'Comfort',
   'Froid': 'Cool',
   'Sec': 'Dry',
+  'Très sec': 'Very dry',
+  'Très humide': 'Very humid',
   'Ventil': 'Fan',
 
   // Vue Systeme

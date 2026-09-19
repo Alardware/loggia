@@ -27,24 +27,30 @@ const bloc = (debut, fin) => { const d = app.indexOf(debut); assert.ok(d >= 0, d
 const e = (state, attributes = {}) => ({ state: String(state), attributes });
 const mot = (cle, v) => verdictMesure(cle, v).t;
 
-test('les paliers sont CEUX de la fiche de confort, borne par borne', () => {
-  // Temperature : « ≤ 24 : ideal », les bornes hautes sont incluses.
-  assert.deepEqual([15.9, 16, 17.9, 18, 24, 24.1, 26, 26.1, 28, 28.1].map(v => mot('temp', v)),
-    ['Trop froid', 'Frais', 'Frais', 'Idéal', 'Idéal', 'Un peu chaud', 'Un peu chaud', 'Trop chaud', 'Trop chaud', 'Très chaud']);
-  assert.deepEqual([29.9, 30, 39.9, 40, 60, 60.1, 70, 70.1].map(v => mot('hum', v)),
-    ['Trop sec', 'Correct', 'Correct', 'Bon', 'Bon', 'Humide', 'Humide', 'Trop humide']);
-  assert.deepEqual([799, 800, 999, 1000, 1199, 1200, 1399, 1400, 2000].map(v => mot('co2', v)),
+test('les paliers sont CEUX des captures du 19/09, borne par borne', () => {
+  // « Les valeurs sont inscrites sur les photos » : 15 · 17 · 23 · 26 · 29 °C,
+  // 15 · 30 · 40 · 50 · 60 · 70 · 80 %, 900 · 1150 · 1400 · 1600 ppm,
+  // 50 · 65 · 70 · 80 dB. Le bleu est l'ideal ; les bornes hautes de
+  // l'ideal et au-dela sont incluses.
+  assert.deepEqual([14.9, 15, 15.9, 16, 16.9, 17, 17.9, 18, 23, 23.1, 26, 26.1, 27, 27.1, 29, 29.1].map(v => mot('temp', v)),
+    ['Trop froid', 'Froid', 'Froid', 'Frais', 'Frais', 'Bon', 'Bon', 'Idéal', 'Idéal', 'Bon', 'Bon', 'Un peu chaud', 'Un peu chaud', 'Chaud', 'Chaud', 'Trop chaud']);
+  assert.deepEqual([14.9, 15, 19.9, 20, 29.9, 30, 39.9, 40, 50, 50.1, 60, 60.1, 70, 70.1, 80, 80.1].map(v => mot('hum', v)),
+    ['Très sec', 'Trop sec', 'Trop sec', 'Sec', 'Sec', 'Bon', 'Bon', 'Idéal', 'Idéal', 'Bon', 'Bon', 'Humide', 'Humide', 'Trop humide', 'Trop humide', 'Très humide']);
+  assert.deepEqual([899, 900, 1149, 1150, 1399, 1400, 1599, 1600, 2000].map(v => mot('co2', v)),
     ['Excellent', 'Bon', 'Bon', 'Moyen', 'Moyen', 'Élevé', 'Élevé', 'Confiné', 'Confiné']);
-  assert.deepEqual([34, 39.9, 40, 54.9, 55, 69.9, 70, 95].map(v => mot('bruit', v)),
-    ['Calme', 'Calme', 'Animé', 'Animé', 'Bruyant', 'Bruyant', 'Très bruyant', 'Très bruyant']);
-  assert.deepEqual(verdictMesure('temp', 15), { t: 'Trop froid', c: 'var(--o-cold)' });
-  assert.deepEqual(verdictMesure('temp', 17), { t: 'Frais', c: 'var(--o-accent-soft)' });
-  assert.deepEqual(verdictMesure('temp', 21), { t: 'Idéal', c: 'var(--o-ok)' });
-  assert.deepEqual(verdictMesure('hum', 10), { t: 'Trop sec', c: 'var(--o-warn2)' });
-  assert.deepEqual(verdictMesure('hum', 35), { t: 'Correct', c: 'var(--o-warn)' });
+  assert.deepEqual([49.9, 50, 64.9, 65, 69.9, 70, 79.9, 80, 95].map(v => mot('bruit', v)),
+    ['Calme', 'Modéré', 'Modéré', 'Animé', 'Animé', 'Bruyant', 'Bruyant', 'Très bruyant', 'Très bruyant']);
+  // Les couleurs des captures, en jetons du theme : bleu, vert, jaune, orange, rouge.
+  assert.deepEqual(verdictMesure('temp', 14), { t: 'Trop froid', c: 'var(--o-bad)' });
+  assert.deepEqual(verdictMesure('temp', 15.5), { t: 'Froid', c: 'var(--o-warn2)' });
+  assert.deepEqual(verdictMesure('temp', 16.5), { t: 'Frais', c: 'var(--o-warn)' });
+  assert.deepEqual(verdictMesure('temp', 17.5), { t: 'Bon', c: 'var(--o-ok)' });
+  assert.deepEqual(verdictMesure('temp', 21), { t: 'Idéal', c: 'var(--o-cold)' });
+  assert.deepEqual(verdictMesure('hum', 10), { t: 'Très sec', c: 'var(--o-bad)' });
+  assert.deepEqual(verdictMesure('hum', 25), { t: 'Sec', c: 'var(--o-warn)' });
   assert.deepEqual(verdictMesure('co2', 2000), { t: 'Confiné', c: 'var(--o-bad)' });
-  assert.deepEqual(verdictMesure('bruit', 34), { t: 'Calme', c: 'var(--o-ok)' });
-  assert.deepEqual(verdictMesure('co2', '612'), { t: 'Excellent', c: 'var(--o-ok)' }, 'un etat est une chaine');
+  assert.deepEqual(verdictMesure('bruit', 34), { t: 'Calme', c: 'var(--o-cold)' });
+  assert.deepEqual(verdictMesure('co2', '612'), { t: 'Excellent', c: 'var(--o-cold)' }, 'un etat est une chaine');
   assert.equal(verdictMesure('temp', null), null);
   assert.equal(verdictMesure('temp', ''), null);
   assert.equal(verdictMesure('temp', 'unknown'), null);
@@ -53,17 +59,19 @@ test('les paliers sont CEUX de la fiche de confort, borne par borne', () => {
 
 test('la fiche de confort lit la meme table : ses verdicts sont delegues', () => {
   const table = bloc('const COMFORT = {', NL + '};');
-  for (const cle of ['temp', 'hum', 'co2', 'bruit']) assert.ok(table.includes("verdict: v => verdictMesure('" + cle + "', v),"), cle + ' : verdict delegue');
+  for (const cle of ['temp', 'hum', 'co2', 'bruit']) assert.ok(table.includes("verdict: v => verdictMesure('" + cle + "', v) }"), cle + ' : verdict delegue');
   assert.ok(!/verdict: v => v </.test(table), 'plus aucun seuil ecrit dans la fiche : une seule table, confort.js');
-  assert.ok(table.includes("key: 'bruit', label: tr('Bruit'), ico: 'volume', min: 20, max: 80,"), 'le bruit a sa barre dans la fiche');
-  assert.ok(app.includes("import { indiceConfort, verdictMesure, capteurBruit } from './confort.js';"));
+  assert.ok(table.includes("bruit: { key: 'bruit', label: tr('Bruit'), ico: 'volume', ...echelleFiche('bruit'),"), 'le bruit a sa barre dans la fiche');
+  // La barre de la fiche : l'echelle des jauges des cartes (19/09).
+  assert.ok(app.includes('const e = echelleMesure(cle);') && app.includes("return { min: e.de, max: e.a, grad: 'linear-gradient(90deg,' + e.bandes.map(b => b.c + ' ' + b.de + '% ' + b.a + '%').join(',') + ')',"), 'bornes, couleurs et reperes des cartes');
+  assert.ok(app.includes("import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile } from './confort.js';"));
 });
 
-test('la note d’une mesure : 100 sur le plateau du bon, puis une pente entre les ancrages', () => {
-  assert.deepEqual([21, 19.5, 23, 24, 25, 26, 10, 5, 40].map(v => scoreMesure('temp', v)), [100, 100, 100, 90, 75, 60, 0, 0, 0]);
-  assert.deepEqual([50, 45, 55, 40, 10, 0, 100, 65].map(v => scoreMesure('hum', v)), [100, 100, 100, 90, 10, 0, 0, 73]);
-  assert.deepEqual([300, 400, 800, 900, 1280, 2000, 5000].map(v => scoreMesure('co2', v)), [100, 100, 100, 93, 50, 10, 0]);
-  assert.deepEqual([0, 34, 47.5, 70, 200].map(v => scoreMesure('bruit', v)), [100, 100, 75, 25, 0]);
+test('la note d’une mesure : 100 sur le plateau de l’idéal, puis une pente entre les ancrages', () => {
+  assert.deepEqual([21, 18, 23, 24, 26, 10, 15, 29, 40].map(v => scoreMesure('temp', v)), [100, 100, 100, 90, 70, 0, 25, 25, 0]);
+  assert.deepEqual([45, 40, 50, 55, 35, 10, 0, 100, 65].map(v => scoreMesure('hum', v)), [100, 100, 100, 85, 85, 13, 0, 0, 58]);
+  assert.deepEqual([300, 400, 900, 1000, 1280, 1500, 2000, 5000].map(v => scoreMesure('co2', v)), [100, 100, 100, 92, 67, 43, 10, 0]);
+  assert.deepEqual([0, 34, 50, 57.5, 70, 200].map(v => scoreMesure('bruit', v)), [100, 100, 100, 85, 55, 0]);
   assert.equal(scoreMesure('temp', null), null);
   assert.equal(scoreMesure('lumiere', 3), null);
 });
@@ -85,18 +93,18 @@ test('l’indice : la moyenne des notes, tiree vers le bas par la pire', () => {
   assert.equal(tout.indice, 100);
   assert.deepEqual(tout.verdict, { t: 'Confortable', c: 'var(--o-ok)' });
   assert.deepEqual(tout.mesures.map(m => [m.cle, m.nom, m.icone, m.valeur, m.verdict.t, m.score]), [
-    ['temp', 'Température', 'thermometer-half', '21,4 °C', 'Idéal', 100], ['hum', 'Humidité', 'humidity', '47 %', 'Bon', 100],
+    ['temp', 'Température', 'thermometer-half', '21,4 °C', 'Idéal', 100], ['hum', 'Humidité', 'humidity', '47 %', 'Idéal', 100],
     ['co2', 'CO₂', 'wind', '612 ppm', 'Excellent', 100], ['bruit', 'Bruit', 'volume', '34 dB', 'Calme', 100],
   ]);
-  // Une chambre a l'air confine : 100, 100 et 50 → moyenne 83, pire 50 → 67.
+  // Une chambre a l'air moyen : 100, 100 et 67 → moyenne 89, pire 67 → 78.
   const chambre = indiceConfort({ temp: 19.6, hum: 49, co2: 1280 });
-  assert.equal(chambre.indice, 67);
+  assert.equal(chambre.indice, 78);
   assert.deepEqual(chambre.verdict, { t: 'Correct', c: 'var(--o-accent-soft)' });
   assert.deepEqual(chambre.mesures.map(m => m.cle), ['temp', 'hum', 'co2'], 'pas de sonometre : pas de pastille Bruit');
   // 21 °C, mais un air tres sec et confine : la moyenne seule dirait 55.
   assert.equal(indiceConfort({ temp: 21, hum: 10, co2: 2000, bruit: 34 }).indice, 33);
   assert.equal(indiceConfort({ temp: 21, hum: 10, co2: 2000, bruit: 34 }).verdict.t, 'À améliorer');
-  assert.equal(indiceConfort({ co2: 1280 }).indice, 50, 'une seule mesure : sa note');
+  assert.equal(indiceConfort({ co2: 1280 }).indice, 67, 'une seule mesure : sa note');
   assert.deepEqual(indiceConfort({ bruit: 34, temp: 21 }).mesures.map(m => m.cle), ['temp', 'bruit'], 'toujours dans le meme ordre');
   assert.equal(indiceConfort({ temp: null, hum: undefined, co2: '', bruit: NaN }), null, 'sans mesure, pas d’indice');
   assert.equal(indiceConfort({}), null);
@@ -164,7 +172,7 @@ test('les icones existent, la demo a un sonometre, et l’anglais suit', () => {
   assert.ok(police.includes('.fi-rr-leaf:before'));
   assert.ok(demo.includes("'sensor.salon_bruit': s(34, { friendly_name: 'Salon Bruit', unit_of_measurement: 'dB', device_class: 'sound_pressure' }),") && demo.includes("'sensor.salon_humidite', 'sensor.salon_co2', 'sensor.salon_bruit', 'cover.salon',"), 'dans la zone du salon');
   for (const k of ['INDICE DE CONFORT', 'Indice de confort', 'Confortable', 'Correct', 'Acceptable', 'À améliorer', 'Inconfortable', 'Trop froid', 'Frais', 'Idéal', 'Un peu chaud', 'Trop chaud', 'Très chaud',
-    'Trop sec', 'Bon', 'Humide', 'Trop humide', 'Excellent', 'Moyen', 'Élevé', 'Confiné', 'Calme', 'Animé', 'Bruyant', 'Très bruyant', 'Bruit', 'Température', 'Humidité', 'Historique du confort', 'Niveau sonore élevé dans la pièce.']) {
+    'Trop sec', 'Bon', 'Humide', 'Trop humide', 'Excellent', 'Moyen', 'Élevé', 'Confiné', 'Calme', 'Animé', 'Bruyant', 'Très bruyant', 'Froid', 'Chaud', 'Sec', 'Très sec', 'Très humide', 'Modéré', 'Bruit', 'Température', 'Humidité', 'Historique du confort', 'Niveau sonore élevé dans la pièce.']) {
     assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
   }
 });

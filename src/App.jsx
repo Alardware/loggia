@@ -36,7 +36,7 @@ import { BarreConfort } from './barreconfort.jsx';
 import { HorlogeRail, CalendrierRail, FeuilleVilles, Co2Rail } from './widgetsrail.jsx';
 import { pireCapteur, seuilCo2, ventilationVeille, voletsDeLaZone, actionAerer } from './air.js';
 import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, villesDe } from './horloge.js';
-import { indiceConfort, verdictMesure, capteurBruit } from './confort.js';
+import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile } from './confort.js';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
@@ -1338,31 +1338,17 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
 // ════════════ POPUP CONFORT PIÈCE (temp / humidité / CO2 + barres dégradées + courbe 24h) ════════════
 // Échelles de confort : min/max de la barre, dégradé traffic-light, ticks chiffrés, verdict(valeur).
 // Les VERDICTS viennent de `confort.js` (ADR 0039) : la barre de la pièce et cette fiche lisent la même table.
+/* La barre de la fiche : l'échelle de la jauge des cartes (`echelleMesure`) —
+ * mêmes bornes, mêmes couleurs par palier, mêmes repères (captures du 19/09). */
+const echelleFiche = (cle, suffixe = '') => {
+  const e = echelleMesure(cle);
+  return { min: e.de, max: e.a, grad: 'linear-gradient(90deg,' + e.bandes.map(b => b.c + ' ' + b.de + '% ' + b.a + '%').join(',') + ')', ticks: e.reperes.map(r => r.v + suffixe), tickV: e.reperes.map(r => r.v) };
+};
 const COMFORT = {
-  temp: {
-    key: 'temp', label: tr('Température'), ico: 'thermometer-half', min: 14, max: 30,
-    grad: 'linear-gradient(90deg,#ef4444 0%,#f59e0b 11%,#fbbf24 19%,#34d399 33%,#34d399 62%,#fbbf24 75%,#f59e0b 87%,#ef4444 100%)',
-    ticks: ['15°', '19°', '24°', '29°'], tickV: [15, 19, 24, 29],
-    verdict: v => verdictMesure('temp', v),
-  },
-  hum: {
-    key: 'hum', label: tr('Humidité'), ico: 'humidity', min: 20, max: 80,
-    grad: 'linear-gradient(90deg,#ef4444 0%,#f59e0b 12%,#fbbf24 22%,#34d399 33%,#34d399 67%,#fbbf24 78%,#f59e0b 88%,#ef4444 100%)',
-    ticks: ['30%', '40%', '50%', '60%', '70%'], tickV: [30, 40, 50, 60, 70],
-    verdict: v => verdictMesure('hum', v),
-  },
-  co2: {
-    key: 'co2', label: "Qualité de l'air", ico: 'leaf', min: 400, max: 1600,
-    grad: 'linear-gradient(90deg,#34d399 0%,#34d399 33%,#fbbf24 58%,#f59e0b 83%,#ef4444 100%)',
-    ticks: ['600', '900', '1200', '1400'], tickV: [600, 900, 1200, 1400],
-    verdict: v => verdictMesure('co2', v),
-  },
-  bruit: {
-    key: 'bruit', label: tr('Bruit'), ico: 'volume', min: 20, max: 80,
-    grad: 'linear-gradient(90deg,#34d399 0%,#34d399 33%,#fbbf24 58%,#f59e0b 83%,#ef4444 100%)',
-    ticks: ['30', '40', '55', '70'], tickV: [30, 40, 55, 70],
-    verdict: v => verdictMesure('bruit', v),
-  },
+  temp: { key: 'temp', label: tr('Température'), ico: 'thermometer-half', ...echelleFiche('temp', '°'), verdict: v => verdictMesure('temp', v) },
+  hum: { key: 'hum', label: tr('Humidité'), ico: 'humidity', ...echelleFiche('hum', '%'), verdict: v => verdictMesure('hum', v) },
+  co2: { key: 'co2', label: "Qualité de l'air", ico: 'leaf', ...echelleFiche('co2'), verdict: v => verdictMesure('co2', v) },
+  bruit: { key: 'bruit', label: tr('Bruit'), ico: 'volume', ...echelleFiche('bruit'), verdict: v => verdictMesure('bruit', v) },
 };
 const cf_pct = (v, m) => Math.max(0, Math.min(100, (v - m.min) / (m.max - m.min) * 100));
 const cf_big = (v, m) => m.key === 'temp' ? v.toFixed(1).replace('.', ',') + ' °C' : m.key === 'hum' ? Math.round(v) + ' %' : m.key === 'bruit' ? Math.round(v) + ' dB' : Math.round(v) + ' ppm';
@@ -1853,10 +1839,49 @@ function PileRepere({ n }) {
 
 /* Les noms des mesures d'un capteur, par classe Home Assistant : ce que dit
  * le sous-titre quand aucune regle ne donne de verdict. */
-const MESURES_NOMS = () => ({ temperature: tr('Température'), humidity: tr('Humidité'), carbon_dioxide: tr('CO₂'), pm25: tr('Particules fines'), pm10: tr('Particules'), aqi: tr('Qualité d’air'), power: tr('Puissance'), energy: tr('Énergie'), voltage: tr('Tension'), current: tr('Courant'), illuminance: tr('Luminosité'), pressure: tr('Pression'), atmospheric_pressure: tr('Pression'), battery: tr('Pile'), signal_strength: tr('Signal'), volatile_organic_compounds: tr('COV'), moisture: tr('Humidité du sol'), wind_speed: tr('Vent'), precipitation: tr('Précipitations'), gas: tr('Gaz'), water: tr('Eau') });
-/* Une puce de mesure soeur (temperature, humidite, CO2) au pied d'une carte
- * capteur : arrondi 9, jamais une pilule. */
-const PUCE_MESURE = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 9, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', fontSize: 12, fontWeight: 700, color: 'var(--o-text1)', fontVariantNumeric: 'tabular-nums' };
+const MESURES_NOMS = () => ({ temperature: tr('Température'), humidity: tr('Humidité'), carbon_dioxide: tr('CO₂'), pm25: tr('Particules fines'), pm10: tr('Particules'), aqi: tr('Qualité d’air'), power: tr('Puissance'), energy: tr('Énergie'), voltage: tr('Tension'), current: tr('Courant'), illuminance: tr('Luminosité'), pressure: tr('Pression'), atmospheric_pressure: tr('Pression'), battery: tr('Pile'), sound_pressure: tr('Bruit'), signal_strength: tr('Signal'), volatile_organic_compounds: tr('COV'), moisture: tr('Humidité du sol'), wind_speed: tr('Vent'), precipitation: tr('Précipitations'), gas: tr('Gaz'), water: tr('Eau') });
+/* La teinte de carte d'un palier de la table de confort : lavis et icone. */
+const TEINTE_PALIER = { 'var(--o-cold)': 'froid', 'var(--o-ok)': 'ok', 'var(--o-warn)': 'or', 'var(--o-warn2)': 'orange', 'var(--o-bad)': 'bad' };
+
+/* La JAUGE d'une mesure, sous le texte de la carte (retour user du 19/09,
+ * captures Netatmo a l'appui : « pour le co2 ajouter une jauge en dessous »,
+ * puis « un trait pas un rond ») : les paliers de la table de confort bout a
+ * bout, un TRAIT a la valeur, les reperes des captures dessous. `fine` : la
+ * compacte — une barre plus mince, sans chiffres. La valeur et son mot sont
+ * deja ecrits sur la carte : la jauge ne se lit pas a voix haute. */
+function JaugeMesure({ jauge, fine = false }) {
+  const h = fine ? 4 : 6, haut = fine ? 12 : 16;
+  const der = jauge.bandes.length - 1;
+  return (
+    <div className="o-jauge" aria-hidden="true" style={{ marginTop: fine ? 8 : 12 }}>
+      <div style={{ position: 'relative', height: haut }}>
+        {jauge.bandes.map((b, i) => (
+          <span key={i} style={{ position: 'absolute', top: (haut - h) / 2, height: h, left: b.de + '%', width: 'calc(' + (b.a - b.de) + '%' + (i < der ? ' - 2px' : '') + ')', background: b.c, opacity: .9, borderRadius: i === 0 ? '3px 0 0 3px' : i === der ? '0 3px 3px 0' : 0 }} />
+        ))}
+        <span className="o-jauge-trait" style={{ position: 'absolute', top: 0, left: 'calc(' + jauge.pos + '% - 1.5px)', width: 3, height: haut, borderRadius: 2, background: 'var(--o-text)', boxShadow: '0 0 0 2px var(--o-surfB)' }} />
+      </div>
+      {!fine && (
+        <div style={{ position: 'relative', height: 13, marginTop: 4, fontSize: 10, fontWeight: 700, lineHeight: 1, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>
+          {jauge.reperes.map(r => {
+            const demi = String(r.v).length * 3;
+            return <span key={r.v} style={{ position: 'absolute', left: 'clamp(' + demi + 'px, ' + r.pos + '%, calc(100% - ' + demi + 'px))', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>{r.v}</span>;
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* La PILE en cinq barres, comme la capture du 19/09 : une barre par 20 %, la
+ * couleur au nombre de barres (confort.js, `barresPile`). */
+function JaugePile({ barres, fine = false }) {
+  return (
+    <div className="o-jauge-pile" aria-hidden="true" style={{ marginTop: fine ? 8 : 12, marginRight: 5, position: 'relative', height: fine ? 14 : 20, display: 'flex', gap: 2, padding: 2, boxSizing: 'border-box', border: '1.5px solid var(--o-text3)', borderRadius: fine ? 4 : 6 }}>
+      {[0, 1, 2, 3, 4].map(i => <span key={i} style={{ flex: 1, borderRadius: 2, background: i < barres.n ? barres.c : 'var(--o-s1)' }} />)}
+      <span style={{ position: 'absolute', right: -6, top: fine ? 3 : 5, width: 3, height: fine ? 5 : 7, borderRadius: '0 2px 2px 0', background: 'var(--o-text3)' }} />
+    </div>
+  );
+}
 
 /* Les autres appareils d'une piece — prise, capteur, serrure, camera,
  * ventilateur… — au GABARIT MAISON, comme les lampes et les volets : icone en
@@ -1911,39 +1936,42 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   // user du 14/09, deux fois : « pourquoi pas la couleur sur la carte »).
   const direct = dom === 'camera' && !mort && (s === 'streaming' || s === 'recording' || s === 'idle');
   let sub, couleur = 'var(--o-text3)', teinte = 'accent';
-  // Le capteur : sa mesure (en grand, en haut a droite), ses soeurs (en puces),
-  // et le palier d'air quand la regle existe (CO2).
-  let mesure = null, avis = null;
-  const soeurs = [];
+  // Le capteur : sa mesure (en grand, en haut a droite) et, dessous, sa JAUGE
+  // quand la table de confort la connait (CO2, temperature, humidite, bruit)
+  // ou ses cinq barres quand c'est une pile (retour user du 19/09).
+  let mesure = null, avis = null, jauge = null, barres = null;
   if (mort) sub = tr('Indisponible');
   else if (dom === 'lock') { sub = s === 'locked' ? tr('Verrouillée') : s === 'unlocked' ? tr('Déverrouillée') : s === 'locking' ? tr('Verrouillage…') : s === 'unlocking' ? tr('Déverrouillage…') : s === 'jammed' ? tr('Bloquée') : String(s); teinte = 'ok'; couleur = actif ? 'var(--o-ok)' : 'var(--o-warn2)'; }
   else if (dom === 'camera') { sub = direct ? tr('En direct') : String(s); couleur = 'var(--o-accent-soft)'; }
   else if (dom === 'binary_sensor') { sub = etatsBin ? (s === 'on' ? etatsBin[0] : etatsBin[1]) : (s === 'on' ? tr('Détecté') : 'RAS'); couleur = danger ? 'var(--o-bad)' : 'var(--o-warn)'; teinte = danger ? 'bad' : 'or'; }
   else if (dom === 'sensor') {
-    // La mesure en grand en haut a droite (le gabarit) ; le verdict d'air de
-    // la banniere pour le CO2, sinon le nom de la mesure ; les soeurs de la
-    // station (temperature, humidite, CO2) en puces au pied — retour user du
-    // 15/09 sur « 579 ppm · 25,7 °C · 50 % » : « pas tres parlant ».
+    // La mesure en grand en haut a droite (le gabarit) ; dessous, le verdict
+    // de la table de confort et sa jauge. Plus de puces soeurs (retour user du
+    // 19/09 : « revenir a la carte de base ») — la temperature et l'humidite
+    // d'une station vivent dans la barre de confort de la piece.
     const n = parseFloat(s);
     const unite = a.unit_of_measurement || '';
     mesure = isNaN(n) ? { v: String(s), u: '' } : { v: fmtN(n), u: unite };
-    for (const dc of ['temperature', 'humidity', 'carbon_dioxide']) {
-      if (a.device_class === dc || soeurs.length >= 2) continue;
-      const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: dc });
-      const v = sid && S[sid] ? parseFloat(S[sid].state) : NaN;
-      if (!isNaN(v)) soeurs.push({ dc, texte: fmtN(v) + ' ' + ((S[sid].attributes || {}).unit_of_measurement || '') });
-    }
-    if (a.device_class === 'carbon_dioxide' && !isNaN(n)) {
-      avis = airPalier(n);
-      sub = tr('Qualité d’air') + ' · ' + airLabel(n);
-      couleur = ['var(--o-ok)', 'var(--o-warn)', 'var(--o-bad)'][avis]; teinte = ['ok', 'or', 'bad'][avis];
+    const cle = isNaN(n) ? null : cleMesure(a.device_class);
+    if (cle) {
+      jauge = jaugeMesure(cle, n);
+      sub = (cle === 'co2' ? tr('Qualité d’air') : MESURES_NOMS()[a.device_class]) + ' · ' + jauge.verdict.t.toLocaleUpperCase(locale());
+      couleur = jauge.verdict.c;
+      // Le CO2 allume sa carte, comme avant : lavis, icone et valeur dans la
+      // couleur de son palier.
+      if (cle === 'co2') { avis = jauge.verdict; teinte = TEINTE_PALIER[couleur] || 'or'; }
+    } else if (a.device_class === 'battery' && !isNaN(n)) {
+      barres = barresPile(n);
+      const faible = niveauPile(n) != null;
+      sub = faible ? tr('Pile faible') : tr('Pile');
+      couleur = faible ? barres.c : 'var(--o-text3)';
     } else { sub = MESURES_NOMS()[a.device_class] || unite || tr('Mesure'); couleur = 'var(--o-text3)'; teinte = 'or'; }
   }
   else if (dom === 'fan') { sub = actif ? (a.percentage != null ? tr('Vitesse {n} %', { n: Math.round(a.percentage) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else if (dom === 'humidifier') { sub = actif ? (a.current_humidity != null ? tr('Humidité {n} %', { n: Math.round(a.current_humidity) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else if (dom === 'valve') { sub = actif ? tr('Ouverte') : tr('Fermée'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else { sub = (actif ? tr('Allumée') : tr('Éteinte')) + (puissance != null ? ' · ' + fmtW(puissance) : ''); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
-  const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('#FFCC44', .16), 'var(--o-warn)', 'rgba(255,204,68,'] };
+  const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('#FFCC44', .16), 'var(--o-warn)', 'rgba(255,204,68,'], froid: ['rgba(var(--o-cold-rgb),.16)', 'var(--o-cold)', 'rgba(var(--o-cold-rgb),'], orange: ['rgba(var(--o-warn2-rgb),.16)', 'var(--o-warn2)', 'rgba(var(--o-warn2-rgb),'] };
   const [icoFond, icoTexte, lavisBase] = TEINTES[teinte];
   // Un capteur qui a un verdict est ALLUME au sens de la carte : lavis, icone
   // et repere dans sa teinte.
@@ -1969,11 +1997,8 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
       <div style={{ marginTop: 14, position: 'relative' }}>
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>
-        {soeurs.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-            {soeurs.map(x => <span key={x.dc} style={PUCE_MESURE}><Fi i={x.dc === 'temperature' ? 'thermometer-half' : x.dc === 'humidity' ? 'raindrops' : 'smog'} size={11} />{x.texte}</span>)}
-          </div>
-        )}
+        {jauge && !mort && <JaugeMesure jauge={jauge} />}
+        {barres && !mort && <JaugePile barres={barres} />}
         {dom === 'camera' && !mort && (
           <button onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(id); }} className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%' }}>{tr('Voir le flux')}</button>
         )}
@@ -9769,6 +9794,12 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   else if (dom === 'sensor') stateTxt = (isNaN(parseFloat(s)) ? s : parseFloat(s)) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
   else if (runnable || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—'; // scene/script/button : état = date de dernière exécution
   else stateTxt = String(s);
+  // La jauge d'un capteur (19/09), comme sur la carte standard : fine et sans
+  // chiffres dans la compacte.
+  const nMes = dom === 'sensor' && !dead ? parseFloat(s) : NaN;
+  const cleMes = isNaN(nMes) ? null : cleMesure(a.device_class);
+  const jaugeMes = cleMes ? jaugeMesure(cleMes, nMes) : null;
+  const barresMes = !isNaN(nMes) && a.device_class === 'battery' ? barresPile(nMes) : null;
   return (
     /* Le role, l'index de tabulation, le clic et la touche sont tous
      * conditionnes par `ouvrable` : ils arrivent ensemble ou pas du tout. La
@@ -9852,6 +9883,8 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           return null;
         })()}
       </div>
+      {jaugeMes && <JaugeMesure jauge={jaugeMes} fine={dense} />}
+      {barresMes && <JaugePile barres={barresMes} fine={dense} />}
       {/* Standard lumière : la luminosité en dessous — commit au relâcher. */}
       {!dense && dom === 'light' && !dead && (a.brightness != null || (a.supported_color_modes || []).indexOf('brightness') >= 0) && (
         <div className="o-cvrange" role="presentation" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
@@ -10694,9 +10727,9 @@ const airDe = (S) => {
 function CvAir({ hass }) {
   const S = (hass && hass.states) || {};
   const air = airDe(S);
-  const [txt, col] = air.co2V == null ? ['—', 'var(--o-text3)']
-    : air.co2V < 800 ? [tr('Bon'), 'var(--o-ok)']
-      : air.co2V < 1200 ? [tr('Moyen'), 'var(--o-warn)'] : [tr('Mauvais'), 'var(--o-bad)'];
+  // Le verdict de la table de confort, comme les cartes des capteurs.
+  const vAir = air.co2V == null ? null : verdictMesure('co2', air.co2V);
+  const [txt, col] = vAir ? [vAir.t, vAir.c] : ['—', 'var(--o-text3)'];
   const tuile = (l, v) => v != null && (
     <div style={{ flex: 1, minWidth: 0, padding: '5px 9px', borderRadius: 10, background: 'var(--o-s1)' }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{l}</div>
@@ -12124,13 +12157,14 @@ const matchHaUser = (haUser, list) => {
   }
   return -1;
 };
-/* Le palier de qualite d'air — un seul jeu de seuils pour la banniere et les
- * cartes capteurs : 0 bon (< 800 ppm), 1 moyen (< 1200), 2 eleve. */
-function airPalier(co2) { return co2 == null || co2 < 800 ? 0 : co2 < 1200 ? 1 : 2; }
+/* Le palier de qualite d'air de la banniere et du badge d'une piece, sur les
+ * bornes de la table de confort (confort.js, captures du 19/09) : 0 bon
+ * (< 1150 ppm : excellent ou bon), 1 moyen (< 1400), 2 eleve. */
+function airPalier(co2) { return co2 == null || co2 < 1150 ? 0 : co2 < 1400 ? 1 : 2; }
 function airLabel(co2) { return [tr('BON'), tr('MOYEN'), tr('ÉLEVÉ')][airPalier(co2)]; }
 /* Le badge CO₂ d'une pièce : discret tant que l'air est bon ou moyen, ambre
- * au palier « chargé » — le même palier que le point d'attention et la veille
- * du serveur. Une seconde échelle (600 / 900) contredisait la première. */
+ * au palier « élevé » — le même palier que le point d'attention et le défaut
+ * de la veille du serveur. Une seconde échelle (600 / 900) contredisait la première. */
 function co2Style(co2) { return airPalier(co2) === 2 ? { bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' } : { bc: 'var(--o-text2)', bbg: 'var(--o-s1)' }; }
 /* La couleur d'une pile suit son niveau (attention.js) : rien de visible tant
  * qu'elle tient, ambre à 20 %, rouge à 5 %. */

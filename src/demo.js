@@ -29,7 +29,7 @@ const ilYaMin = (min) => new Date(Date.now() - min * 60000).toISOString();
 const PIECES = [
   ['salon', 'Salon', 21.4, 47, 612],
   ['cuisine', 'Cuisine', 22.8, 51, null],
-  ['chambre', 'Chambre', 19.6, 49, 1280],  // charge : la carte « A surveiller » a de quoi montrer
+  ['chambre', 'Chambre', 19.6, 49, 1480],  // « Élevé » (orange) : la carte « A surveiller » a de quoi montrer
   ['bureau', 'Bureau', 20.9, 45, 538],
   ['entree', 'Entrée', 20.1, 46, null],
   ['salle_de_bain', 'Salle de bain', 23.2, 58, null],
@@ -855,7 +855,7 @@ function nuitPatch(patch) {
 /* Les trois veilles : l'air arme, les piles armees, le tarif au repos faute
  * de capteur de tarif dans la maison de demonstration. */
 const VEI_CFG = {
-  co2: { actif: true, seuil: 1200, capteurs: [], ventilation: [] },
+  co2: { actif: true, seuil: 1400, capteurs: [], ventilation: [] },
   batterie: { actif: true, seuil: 15 },
   creuses: { actif: false, entite: '', valeur: '', prises: [] },
 };

@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { cvName, RegleEntete, usePli , useEtatServeur, ListeChoix } from '../ui.jsx';
 import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt } from './parcommun.jsx';
-import { niveauPile, couleurNiveau } from '../attention.js';
+import { niveauPile, couleurNiveau, SEUIL_CO2 } from '../attention.js';
 import { tr } from '../i18n.js';
 import { puce } from '../styles.js';
 
@@ -158,8 +158,8 @@ export function VeillesReglages({ hass, cardSt }) {
           <div id="veilles-co2" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('Au-delà de')}</span>
-              <input aria-label={tr('Seuil de CO₂, en ppm')} type="number" value={co2.seuil != null ? co2.seuil : 1200} min={400} max={3000} step={50}
-                onChange={e => enregistrer({ co2: { seuil: Math.max(400, Math.min(3000, Number(e.target.value) || 1200)) } })}
+              <input aria-label={tr('Seuil de CO₂, en ppm')} type="number" value={co2.seuil != null ? co2.seuil : SEUIL_CO2} min={400} max={3000} step={50}
+                onChange={e => enregistrer({ co2: { seuil: Math.max(400, Math.min(3000, Number(e.target.value) || SEUIL_CO2)) } })}
                 style={{ ...champ, width: 88 }} />
               <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>ppm</span>
             </div>

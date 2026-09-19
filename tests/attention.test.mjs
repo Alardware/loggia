@@ -45,7 +45,7 @@ test('les constantes : classes, seuil et niveaux', () => {
   assert.deepEqual(CLASSES_FENETRE, ['window', 'opening']);
   assert.deepEqual(CLASSES_MOUVEMENT, ['motion', 'occupancy', 'presence']);
   assert.deepEqual(CLASSES_SURETE, ['smoke', 'carbon_monoxide', 'gas', 'moisture', 'safety', 'tamper']);
-  assert.equal(SEUIL_CO2, 1200);
+  assert.equal(SEUIL_CO2, 1400, 'le palier « Élevé » des captures du 19/09');
   assert.deepEqual(NIVEAUX, ['danger', 'alerte', 'info']);
   assert.ok(app.includes('co2 < ' + SEUIL_CO2 + ' ? 1 : 2'), 'le seuil est le palier haut d’airPalier');
 });
@@ -206,13 +206,13 @@ test('3. un ouvrant ouvert pendant que l’alarme est armée — et seulement al
 });
 
 test('4. le CO₂ d’une pièce au palier « chargé », seuil compris', () => {
-  const pieces = [{ nom: 'Chambre', co2: 1310.4 }, { nom: 'Salon', co2: 900 }, { nom: 'Bureau', co2: 1200, haid: 'sensor.co2_bureau' },
-    { nom: 'Cave', co2: 1199.6 }, { nom: 'Vide', co2: null }, { nom: 'Texte', co2: 'abc' }, { co2: 2000 }, null, 'x', { name: 'Grenier', co2: 1500 }];
+  const pieces = [{ nom: 'Chambre', co2: 1510.4 }, { nom: 'Salon', co2: 1100 }, { nom: 'Bureau', co2: 1400, haid: 'sensor.co2_bureau' },
+    { nom: 'Cave', co2: 1399.6 }, { nom: 'Vide', co2: null }, { nom: 'Texte', co2: 'abc' }, { co2: 2000 }, null, 'x', { name: 'Grenier', co2: 1700 }];
   const pts = pointsAttention({ pieces });
   assert.deepEqual(pts.map(p => [p.cle, p.niveau, p.icone, p.titre, p.sous, p.vue, p.haid]), [
-    ['co2:Bureau', 'alerte', 'wind', 'CO₂ élevé', 'Bureau · 1200 ppm', 'room:Bureau', 'sensor.co2_bureau'],
-    ['co2:Chambre', 'alerte', 'wind', 'CO₂ élevé', 'Chambre · 1310 ppm', 'room:Chambre', null],
-    ['co2:Grenier', 'alerte', 'wind', 'CO₂ élevé', 'Grenier · 1500 ppm', 'room:Grenier', null],
+    ['co2:Bureau', 'alerte', 'wind', 'CO₂ élevé', 'Bureau · 1400 ppm', 'room:Bureau', 'sensor.co2_bureau'],
+    ['co2:Chambre', 'alerte', 'wind', 'CO₂ élevé', 'Chambre · 1510 ppm', 'room:Chambre', null],
+    ['co2:Grenier', 'alerte', 'wind', 'CO₂ élevé', 'Grenier · 1700 ppm', 'room:Grenier', null],
   ]);
 });
 
@@ -236,14 +236,14 @@ test('7. les veilles : la pile faible est une info, le CO₂ signalé une alerte
   const S = {
     'sensor.capteur_porte_batterie': et('14', { device_class: 'battery', friendly_name: 'Capteur porte' }),
     'sensor.telecommande_batterie': et('unavailable', { device_class: 'battery', friendly_name: 'Télécommande' }),
-    'sensor.co2_bureau': et('1300', { device_class: 'carbon_dioxide', friendly_name: 'CO2 bureau' }),
-    'sensor.co2_chambre': et('1250.6', { device_class: 'carbon_dioxide', friendly_name: 'CO2 chambre' }),
+    'sensor.co2_bureau': et('1500', { device_class: 'carbon_dioxide', friendly_name: 'CO2 bureau' }),
+    'sensor.co2_chambre': et('1450.6', { device_class: 'carbon_dioxide', friendly_name: 'CO2 chambre' }),
   };
   const veilles = { signales: ['bat:sensor.capteur_porte_batterie', 'bat:sensor.telecommande_batterie', 'bat:sensor.inconnue', 'co2:sensor.co2_bureau', 'co2:sensor.co2_chambre', 'creuses', 'xyz:1', 'bat:', null, 42] };
-  const pts = pointsAttention({ S, veilles, pieces: [{ nom: 'Bureau', co2: 1300, haid: 'sensor.co2_bureau' }] });
+  const pts = pointsAttention({ S, veilles, pieces: [{ nom: 'Bureau', co2: 1500, haid: 'sensor.co2_bureau' }] });
   assert.deepEqual(pts.map(p => [p.cle, p.niveau, p.icone, p.titre, p.sous, p.vue, p.haid]), [
-    ['co2:Bureau', 'alerte', 'wind', 'CO₂ élevé', 'Bureau · 1300 ppm', 'room:Bureau', 'sensor.co2_bureau'],
-    ['co2:sensor.co2_chambre', 'alerte', 'wind', 'CO₂ élevé', 'CO2 chambre · 1251 ppm', null, 'sensor.co2_chambre'],
+    ['co2:Bureau', 'alerte', 'wind', 'CO₂ élevé', 'Bureau · 1500 ppm', 'room:Bureau', 'sensor.co2_bureau'],
+    ['co2:sensor.co2_chambre', 'alerte', 'wind', 'CO₂ élevé', 'CO2 chambre · 1451 ppm', null, 'sensor.co2_chambre'],
     // 14 % : sous le seuil « attention » (20 %) — visible, en ambre (v3.49.0).
     ['pile:sensor.capteur_porte_batterie', 'alerte', 'battery-quarter', 'Pile faible', 'Capteur porte · 14 %', 'objets', 'sensor.capteur_porte_batterie'],
     ['pile:sensor.inconnue', 'info', 'battery-quarter', 'Pile faible', 'sensor.inconnue', 'objets', 'sensor.inconnue'],
@@ -251,9 +251,9 @@ test('7. les veilles : la pile faible est une info, le CO₂ signalé une alerte
   ]);
   // Sans la pièce, la veille parle seule.
   const seule = pointsAttention({ S, veilles: { signales: ['co2:sensor.co2_bureau'] } });
-  assert.deepEqual(seule.map(p => [p.cle, p.sous]), [['co2:sensor.co2_bureau', 'CO2 bureau · 1300 ppm']]);
+  assert.deepEqual(seule.map(p => [p.cle, p.sous]), [['co2:sensor.co2_bureau', 'CO2 bureau · 1500 ppm']]);
   // Même clé (une pièce nommée comme le capteur) : une seule fois.
-  assert.equal(pointsAttention({ S, veilles: { signales: ['co2:sensor.co2_bureau'] }, pieces: [{ nom: 'sensor.co2_bureau', co2: 1300 }] }).length, 1);
+  assert.equal(pointsAttention({ S, veilles: { signales: ['co2:sensor.co2_bureau'] }, pieces: [{ nom: 'sensor.co2_bureau', co2: 1500 }] }).length, 1);
   assert.deepEqual(pointsAttention({ veilles: { signales: 'non' } }), []);
 });
 

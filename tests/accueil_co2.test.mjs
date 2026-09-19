@@ -64,9 +64,10 @@ test('la pièce la plus chargée, la seule qui compte', () => {
 test('le seuil est celui de la veille du serveur, sinon celui de la maison', () => {
   assert.equal(A.seuilCo2({ config: { co2: { seuil: 1000 } } }), 1000);
   assert.equal(A.seuilCo2({ config: { co2: { seuil: '1100.4' } } }), 1100);
-  assert.equal(A.seuilCo2({ config: { co2: { seuil: 0 } } }), 1200);
-  assert.equal(A.seuilCo2({ config: { co2: {} } }), 1200);
-  assert.equal(A.seuilCo2(null), 1200);
+  // Sans seuil au serveur : celui de la maison, le palier « Élevé » (19/09).
+  assert.equal(A.seuilCo2({ config: { co2: { seuil: 0 } } }), 1400);
+  assert.equal(A.seuilCo2({ config: { co2: {} } }), 1400);
+  assert.equal(A.seuilCo2(null), 1400);
 });
 
 test('le geste pour aérer : la ventilation de la veille, sinon les volets de la zone, sinon rien', () => {
