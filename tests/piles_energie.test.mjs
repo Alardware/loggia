@@ -33,15 +33,18 @@ test('les piles : la classe battery, la plus basse d’abord, les muettes à la 
     'sensor.pile_texte': e('low', { device_class: 'battery' }),
   };
   // Le registre : une entité masquée, une désactivée — et une de diagnostic,
-  // la catégorie de presque toutes les piles Zigbee, qui reste.
-  const meta = (id) => ({ 'sensor.cachee_pile': { hidden: true }, 'sensor.desactivee_pile': { disabled: true }, 'sensor.fenetre_pile': { category: 'diagnostic' } })[id] || {};
+  // la catégorie de presque toutes les piles Zigbee, qui reste. Le téléphone
+  // (l'application Home Assistant, `mobile_app`) sort : « retire les
+  // téléphones de la liste des piles » (19/09).
+  const meta = (id) => ({ 'sensor.cachee_pile': { hidden: true }, 'sensor.desactivee_pile': { disabled: true }, 'sensor.fenetre_pile': { category: 'diagnostic' }, 'sensor.telephone_batterie': { platform: 'mobile_app' }, 'sensor.detecteur_fumee_pile': { platform: 'mqtt' } })[id] || {};
   assert.deepEqual(pilesMaison(S, meta), [
     { id: 'sensor.porte_pile', niveau: 9 },
     { id: 'sensor.fenetre_pile', niveau: 30.5 },
     { id: 'sensor.detecteur_fumee_pile', niveau: 64 },
-    { id: 'sensor.telephone_batterie', niveau: 64 },
     { id: 'sensor.telecommande_pile', niveau: null },
   ]);
+  // Égalité de niveau : l'ordre des noms.
+  assert.deepEqual(pilesMaison({ 'sensor.b': pile(50, 'Bureau'), 'sensor.a': pile(50, 'Atelier') }).map(p => p.id), ['sensor.a', 'sensor.b']);
   assert.deepEqual(pilesMaison(null), []);
   assert.deepEqual(pilesMaison({ 'sensor.x': pile(50, 'X') }), [{ id: 'sensor.x', niveau: 50 }], 'sans registre, tout compte');
 });

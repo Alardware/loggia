@@ -114,3 +114,16 @@ Tests : tests/piles_energie.test.mjs (3). Vérifié en démo : la section suit
 les postes, « Pile porte entrée » (9 %, une barre rouge, « Pile faible »)
 puis « Basilic pile » (81 %, quatre barres) ; la fiche s'ouvre au toucher ;
 au téléphone, deux colonnes de 176 px, rien ne déborde.
+
+## Amendement (19/09/2026, v3.58.1) — sans les téléphones
+
+Demande : « retire les téléphones de la liste des piles ».
+
+- Les batteries de l'application Home Assistant (intégration `mobile_app` :
+  téléphones et tablettes) quittent la section « Piles et batteries ».
+  Reconnues à leur intégration, lue dans le registre des entités — jamais à
+  leur nom.
+- Chez l'utilisateur : 27 capteurs de pile, dont 5 de `mobile_app` et 5
+  masqués ou désactivés.
+
+Tests : tests/piles_energie.test.mjs (réaligné).

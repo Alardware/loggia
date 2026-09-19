@@ -7,7 +7,9 @@
  * Un capteur de pile, c'est sa classe Home Assistant (`battery`), jamais son
  * nom. Les entités masquées ou désactivées restent dehors ; celles de
  * DIAGNOSTIC, non : c'est la catégorie de presque toutes les piles Zigbee, et
- * c'est d'elles qu'on parle.
+ * c'est d'elles qu'on parle. Les téléphones non plus (« retire les téléphones
+ * de la liste des piles », même jour) : reconnus à leur intégration,
+ * l'application Home Assistant (`mobile_app`) — tablettes comprises.
  *
  * La plus basse d'abord — c'est celle qu'on change —, puis les capteurs
  * muets : une pile à plat se tait souvent (voir `veilles.py`), elle ne doit
@@ -19,7 +21,7 @@
 const MUETS = ['unavailable', 'unknown'];
 
 /** Les piles : [{ id, niveau }] triées, `niveau` nul pour un capteur muet.
- * `meta(id)` rend { hidden, disabled } (le registre des entités). */
+ * `meta(id)` rend { hidden, disabled, platform } (le registre des entités). */
 export function pilesMaison(S, meta = () => ({})) {
   const etats = S && typeof S === 'object' ? S : {};
   const nomDe = (id) => {
@@ -33,7 +35,7 @@ export function pilesMaison(S, meta = () => ({})) {
     const a = (st && st.attributes) || {};
     if (a.device_class !== 'battery') return;
     const m = meta(id) || {};
-    if (m.hidden || m.disabled) return;
+    if (m.hidden || m.disabled || m.platform === 'mobile_app') return;
     const brut = st.state == null ? '' : String(st.state);
     const n = parseFloat(brut);
     if (MUETS.indexOf(brut) >= 0) out.push({ id, niveau: null });
