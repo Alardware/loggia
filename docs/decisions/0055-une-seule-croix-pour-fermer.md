@@ -68,3 +68,13 @@ ses voisins exactement sur la même ligne et à la même taille — sur ordinate
 et au téléphone émulé ; l'agenda, l'assistant, la recherche, un formulaire
 qui défile ; les six onglets du robot et les deux de la lumière restent à
 760 px.
+
+## Amendement (19/09/2026, v3.56.1) — la lampe sans hauteur fixe
+
+« Pourquoi cette différence entre ces deux lumières ? » : une lampe blancs +
+couleurs s'ouvrait à 760 px (feuille à onglets), une lampe sans couleurs à
+la hauteur de son contenu. La lampe n'a plus de hauteur fixe : ses deux
+palettes (une rangée de blancs, deux de couleurs) partagent la même case, la
+cachée gardant sa place ; la fiche prend la hauteur de la plus grande et ne
+bouge plus d'un onglet à l'autre (519 px en démo, dans les deux onglets).
+Restent à hauteur fixe : la fiche d'un robot et « Ajouter une carte ».

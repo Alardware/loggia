@@ -171,22 +171,27 @@ test('la boucle et ses écoutes se libèrent au démontage', () => {
 // Mesure du 09/09/2026 : un temoin pose sur `window` survivait a l'edition du
 // fichier — donc pas de rechargement. Avec le garde-fou, il disparait.
 //
-// Ce bloc ne part jamais en production : `import.meta.hot` vaut `undefined` au
-// build, et le chunk produit garde exactement le meme condensat qu'avant son
-// ajout. Ce test le garde en place, et surtout garde le rechargement SOUS la
-// condition — un `location.reload()` qui s'echapperait rechargerait le
-// dashboard de la maison.
+// Le garde-fou vivait dans le module (`import.meta.hot.accept(…)`) : l'analyse
+// CodeQL de GitHub ne savait pas lire cette ligne et laissait tout le fichier
+// hors de son examen (19/09/2026). Il vit maintenant dans vite.config.js, un
+// greffon du SEUL serveur de developpement (`apply: 'serve'`) : rien de ceci
+// n'existe au build, et le module ne recharge plus rien lui-meme — un
+// `location.reload()` qui s'echapperait rechargerait le dashboard de la maison.
 // ─────────────────────────────────────────────────────────────────────────────
 
+const VITE = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'vite.config.js'), 'utf8');
+
 test('en developpement, une edition de ce fichier recharge la page', () => {
-  assert.ok(SRC.includes('if (import.meta.hot) {'), 'garde-fou de developpement absent');
-  assert.ok(SRC.includes('import.meta.hot.accept(() => { window.location.reload(); });'),
+  assert.ok(VITE.includes("apply: 'serve',"), 'le garde-fou tournerait aussi au build');
+  assert.ok(VITE.includes("if (file.endsWith('/src/orbe.jsx')) {") && VITE.includes("server.ws.send({ type: 'full-reload' });"),
     'le garde-fou ne recharge plus la page');
+  assert.ok(VITE.includes('plugins: [react(), orbeRechargee],'), 'le garde-fou n’est pas branché');
 });
 
-test('aucun rechargement ne vit hors de cette garde', () => {
-  const nb = SRC.split('location.reload').length - 1;
-  assert.equal(nb, 1, 'un seul rechargement, et seulement sous `import.meta.hot`');
+test('le module ne recharge rien lui-meme, et CodeQL sait le lire', () => {
+  assert.ok(!SRC.includes('location.reload'), 'un rechargement vit dans le code livre');
+  assert.ok(!SRC.includes('import.meta'), '`import.meta` est revenu dans le module');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -147,15 +147,21 @@ test('seules les feuilles à onglets gardent une hauteur fixe', () => {
   const avecOnglets = {
     FicheRobot: '<BottomSheet onClose={onClose} onglets>',
     CarteAjoutSheet: '<BottomSheet onClose={onClose} onglets>',
-    // La lumière n'a d'onglets que si elle fait des blancs ET des couleurs.
-    RoomLightSheet: '<BottomSheet onClose={onClose} onglets={!!(light.ct && light.rgb)}>',
   };
   for (const [nom, feuille] of Object.entries(avecOnglets)) {
     const i = APP.indexOf('\nfunction ' + nom + '(');
     const j = APP.indexOf('\nfunction ', i + 1);
     assert.ok(i >= 0 && APP.slice(i, j < 0 ? undefined : j).includes(feuille), nom + ' : changer d’onglet changerait la hauteur de la feuille');
   }
-  assert.equal((APP.match(/<BottomSheet[^>]* onglets/g) || []).length, 3, 'une feuille sans onglets a pris une hauteur fixe');
+  assert.equal((APP.match(/<BottomSheet[^>]* onglets/g) || []).length, 2, 'une feuille sans onglets a pris une hauteur fixe');
+  // La lampe blancs + couleurs : ses deux palettes partagent la même case — la
+  // fiche prend la hauteur de la plus grande, sans les 760 px (19/09 : « pourquoi
+  // cette différence entre ces deux lumières »).
+  const i = APP.indexOf('\nfunction RoomLightSheet(');
+  const lampe = APP.slice(i, APP.indexOf('\nfunction ', i + 1));
+  assert.ok(lampe.includes('<BottomSheet onClose={onClose}>'), 'la lampe a retrouvé une hauteur fixe');
+  assert.equal((lampe.match(/gridArea: '1 \/ 1'/g) || []).length, 2, 'les deux palettes ne partagent plus leur case');
+  assert.ok(lampe.includes("visibility: blancs ? 'visible' : 'hidden'") && lampe.includes("visibility: blancs ? 'hidden' : 'visible'"));
   const CSS = lire('src', 'index.css');
   assert.ok(CSS.includes('.o-sheet-onglets { height: min(760px, 88vh); }'), 'la hauteur des feuilles à onglets');
   assert.ok(CSS.includes('html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-navh, 60px))); }'), 'au doigt, au-dessus de la barre du bas');

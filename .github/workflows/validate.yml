@@ -19,6 +19,12 @@ on:
     # hier peut ne plus passer demain sans qu'on y ait touche.
     - cron: "0 4 * * 1"
 
+# Le moins de droits possible : ces travaux lisent le depot et ne publient
+# rien. Sans ce bloc, chacun recevait les droits par defaut du jeton — l'alerte
+# CodeQL « actions/missing-workflow-permissions », cinq fois (19/09/2026).
+permissions:
+  contents: read
+
 jobs:
   hassfest:
     name: hassfest (Home Assistant)

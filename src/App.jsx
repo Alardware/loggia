@@ -3187,7 +3187,7 @@ function RoomLightSheet({ light, hass, onClose }) {
   const swatch = (bg, sel, onClick, label) => <button key={label} aria-label={label} title={label} onClick={onClick} style={{ height: 34, borderRadius: 10, cursor: 'pointer', background: bg, border: sel ? '2px solid #fff' : '2px solid transparent', boxShadow: sel ? `0 0 0 2px ${bg}` : 'inset 0 0 0 1px rgba(0,0,0,.18)', padding: 0 }} />;
   const blancs = light.ct && (onglet === 'blancs' || !light.rgb);
   return (
-    <BottomSheet onClose={onClose} onglets={!!(light.ct && light.rgb)}>
+    <BottomSheet onClose={onClose}>
       {() => (<>
         <FicheEntete titre={nom} sous={sous} id={light.id} />
         {light.dimmable !== false && (<>
@@ -3197,10 +3197,20 @@ function RoomLightSheet({ light, hass, onClose }) {
         {(light.ct || light.rgb) && (
           <div style={{ marginTop: 16 }}>
             {light.ct && light.rgb && <FichePuces options={[{ id: 'blancs', nom: tr('Blancs') }, { id: 'couleurs', nom: tr('Couleurs') }]} valeur={onglet} onChoix={setOnglet} />}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginTop: 10 }}>
-              {blancs
-                ? WHITE_TEMPS().map(([n, k, c]) => swatch(c, a.color_mode === 'color_temp' && Math.abs((a.color_temp_kelvin || 0) - k) < 150, () => commander(hass, light.id, 'set_color_temp', k), n + ' · ' + k + ' K'))
-                : LIGHT_PALETTE.map(c => swatch(c, !!color && !!hexDe(c) && hexDe(c).toLowerCase() === String(color).toLowerCase(), () => poserCouleur(c), tr('Couleur') + ' ' + c))}
+            {/* Les deux palettes partagent la même case : la fiche garde la
+              * hauteur de la plus grande d'un onglet à l'autre, sans hauteur
+              * fixe (retour du 19/09 : deux lampes, deux hauteurs de fiche). */}
+            <div style={{ display: 'grid', marginTop: 10 }}>
+              {light.ct && (
+                <div aria-hidden={!blancs} style={{ gridArea: '1 / 1', display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, alignContent: 'start', visibility: blancs ? 'visible' : 'hidden' }}>
+                  {WHITE_TEMPS().map(([n, k, c]) => swatch(c, a.color_mode === 'color_temp' && Math.abs((a.color_temp_kelvin || 0) - k) < 150, () => commander(hass, light.id, 'set_color_temp', k), n + ' · ' + k + ' K'))}
+                </div>
+              )}
+              {light.rgb && (
+                <div aria-hidden={!!blancs} style={{ gridArea: '1 / 1', display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, alignContent: 'start', visibility: blancs ? 'hidden' : 'visible' }}>
+                  {LIGHT_PALETTE.map(c => swatch(c, !!color && !!hexDe(c) && hexDe(c).toLowerCase() === String(color).toLowerCase(), () => poserCouleur(c), tr('Couleur') + ' ' + c))}
+                </div>
+              )}
             </div>
           </div>
         )}
