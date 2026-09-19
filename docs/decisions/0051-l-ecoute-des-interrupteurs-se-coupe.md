@@ -121,3 +121,34 @@ lecture du code et le garde-fou.
 
 Suite en v3.55.0 (ADR 0054) : la `<datalist>` remplacée elle aussi, et une
 seule taille pour toutes les listes.
+
+## Amendement (19/09/2026, v3.56.2) — la barre des ambiances tient l'écran du téléphone
+
+Demande : « dans Scènes, ceux-ci sur mobile c'est pas terrible, sur PC et
+tablette très bien, mais sur mobile je suis obligé de scroller, on voit
+mal » (capture de la barre Direct · Pièce · Collection · Luminosité).
+
+- Sous 760 px, un bandeau devient une rangée qui glisse ; la barre des
+  ambiances fait exception (`o-bar-scenes`) et tient l'écran en deux
+  rangées, sans défiler : les pièces se partagent la première ; la
+  collection (la place qui reste), la luminosité et les deux gestes directs,
+  la seconde.
+- Au téléphone, les libellés de groupe (« Direct », « Pièce »…) s'effacent :
+  chaque contrôle se lit seul. « Blanc chaud » et « Éteindre » passent en
+  icônes (ampoule, marche-arrêt) et gardent leur nom pour le lecteur d'écran
+  (`aria-label`).
+- Le nom de la collection garde le plus de place possible : tous les noms
+  tiennent dès 375 px de large ; à 360, seul « Ambiance fête » se réduit, et
+  la section qui suit la barre porte le nom en entier. Sous 330 px environ,
+  les deux icônes passent sur une troisième rangée plutôt que d'écraser la
+  collection.
+- L'ordinateur et la tablette ne changent pas : toutes les règles de la barre
+  vivent dans le bloc du téléphone (`@media (max-width: 760px)`) ; ailleurs
+  ne s'ajoutent que les classes (`o-qb`, `o-qb-lbl`, `o-qb-*`) et l'icône,
+  cachée.
+
+Tests : tests/barre_ambiances.test.mjs (3). Vérifié en démo, téléphone
+émulé : à 390, 375 et 412 px, deux rangées (100 px de haut, là où une rangée
+glissait) ; à 360, deux rangées ; à 320, trois — la page ne défile plus de
+côté ; la liste des collections s'ouvre sous son bouton. Tablette (768 px) et
+ordinateur (une rangée de 59 px) identiques.

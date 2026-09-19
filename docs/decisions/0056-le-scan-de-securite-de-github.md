@@ -70,3 +70,12 @@ tests/securite_github.test.mjs (les droits de `validate.yml`).
   branche est fusionnée.
 
 Tests : tests/securite_github.test.mjs (+2).
+
+## Suite (19/09/2026) — fusionnée
+
+Le propriétaire a désactivé la configuration par défaut, puis la branche a
+été fusionnée (3e32224). Le modèle « CodeQL Advanced » que GitHub avait fait
+valider entre-temps sur `main` a cédé la place au workflow ci-dessus.
+Premier passage : aucun résultat, aucune alerte ouverte — les quinze de
+three.js, écartées par le propriétaire comme faux positifs, ne sont plus
+trouvées.

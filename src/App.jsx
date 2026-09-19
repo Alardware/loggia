@@ -96,9 +96,9 @@ import { tr, trHA, preparerLangue, locale } from './i18n.js';
  */
 
 // Bloc du bandeau : libellé + contrôle, comme la vue Pièce
-const QuickBox = ({ label, children }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{label}</span>
+const QuickBox = ({ label, children, className = null }) => (
+  <div className={'o-qb' + (className ? ' ' + className : '')} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
+    <span className="o-qb-lbl" style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{label}</span>
     {children}
   </div>
 );
@@ -7946,22 +7946,22 @@ function ScenesContent({ hass }) {
       </div>
 
       {/* réglages rapides : direct, pièce, collection, luminosité */}
-      <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-        <QuickBox label="Direct">
+      <div className="o-bar o-bar-scenes" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+        <QuickBox label="Direct" className="o-qb-direct">
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={warmWhite} style={miniBtn(false)}>Blanc chaud</button>
-            <button onClick={allOff} style={miniBtn(false)}>{tr('Éteindre')}</button>
+            <button onClick={warmWhite} aria-label="Blanc chaud" style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="bulb" size={15} color="var(--o-lampe)" /></span><span className="o-qb-txt">Blanc chaud</span></button>
+            <button onClick={allOff} aria-label={tr('Éteindre')} style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="power" size={15} /></span><span className="o-qb-txt">{tr('Éteindre')}</span></button>
           </div>
         </QuickBox>
-        <QuickBox label={tr('Pièce')}>
+        <QuickBox label={tr('Pièce')} className="o-qb-piece">
           <div style={{ display: 'flex', gap: 4 }}>
             {HUE_ROOMS().map(r => <button key={r.id} onClick={() => pickRoom(r.id)} style={miniBtn(room === r.id)}>{r.label}</button>)}
           </div>
         </QuickBox>
-        <QuickBox label="Collection">
+        <QuickBox label="Collection" className="o-qb-collection">
           <ListeChoix value={cat} options={HUE_CATS} onChange={setCat} label={tr('Collection de scènes')} />
         </QuickBox>
-        <QuickBox label={tr('Luminosité')}>
+        <QuickBox label={tr('Luminosité')} className="o-qb-lumi">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider('Luminosité des scènes', bri, setBri, { min: 5, max: 100, step: 5 })}>
             <button onClick={() => setBri(bri - 5)} aria-label="Baisser" style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
             <span style={{ minWidth: 44, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--o-warn)' }}>{bri} %</span>

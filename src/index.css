@@ -374,9 +374,12 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
+/* L'icône d'un geste direct ne sert qu'au téléphone (barre des ambiances). */
+.o-qb-ico { display: none; }
 /* ── Bandeaux de réglages sur mobile (≤760 px) ────────────────────────────────
-   En wrap, un bandeau à 5 groupes (Scènes) empile 5 rangées et mange l'écran.
-   Sous 760 px il devient UNE rangée qui glisse horizontalement : les groupes
+   En wrap, un bandeau à 5 groupes empile 5 rangées et mange l'écran.
+   Sous 760 px il devient UNE rangée qui glisse horizontalement (sauf la barre
+   des ambiances de Scènes, qui tient en deux rangées — plus bas) : les groupes
    gardent leur largeur naturelle, la barre de défilement est masquée, et le
    bouton de repli reste collé à droite (sticky) — sinon il partirait hors champ,
    or c'est justement lui qui sert à ranger le bandeau.
@@ -390,6 +393,34 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .o-bar > button:last-child::before { content: ''; position: absolute; top: -11px; bottom: -11px; left: -8px; right: -13px; z-index: -1; background: linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg); }
   /* seconde ligne d'un libellé de groupe : elle doublait la hauteur du bandeau */
   .o-bar-sub { display: none; }
+  /* La barre des ambiances (Scènes) ne glisse pas : elle tient l'écran en deux
+   * rangées (retour du 19/09 : « sur mobile je suis obligé de scroller, on voit
+   * mal »). Les pièces se partagent la première ; collection, luminosité et
+   * les deux gestes directs, en icônes, la seconde — qui passe sur deux lignes
+   * d'elle-même sur un écran plus étroit, sans jamais défiler. Les libellés de
+   * groupe s'effacent : le contrôle se lit seul. */
+  .o-bar.o-bar-scenes { flex-wrap: wrap !important; overflow: visible; gap: 8px !important; padding: 10px !important; align-items: stretch !important; }
+  .o-bar-scenes > * { flex-shrink: 1 !important; }
+  .o-bar-scenes > span:last-child { display: none; }
+  .o-bar-scenes > .o-qb-piece { order: -1; flex: 1 1 100%; }
+  /* la collection prend la place qui reste ; sous 96 px, les gestes directs
+   * passent à la ligne plutôt que de la réduire à rien */
+  .o-bar-scenes > .o-qb-collection { flex: 1 1 0; min-width: 96px; }
+  .o-bar-scenes > .o-qb-direct { order: 1; }
+  .o-bar-scenes .o-qb { padding: 4px 5px !important; }
+  .o-bar-scenes .o-qb-lbl { display: none; }
+  .o-bar-scenes .o-qb-piece > div { flex: 1; }
+  .o-bar-scenes .o-qb-piece > div > button { flex: 1; }
+  /* le nom de la collection garde le plus de place possible : « Fêtes d'hiver »
+   * tient dès 360 px de large, tous les noms dès 375 */
+  .o-bar-scenes .o-qb-collection > span { flex: 1; }
+  .o-bar-scenes .o-qb-collection button { flex: 1; min-width: 0; justify-content: space-between; padding: 5px 8px !important; gap: 6px !important; }
+  .o-bar-scenes .o-qb-collection button > span:first-child { flex: 1 1 auto !important; }
+  .o-bar-scenes .o-qb-lumi > div { gap: 4px !important; }
+  .o-bar-scenes .o-qb-lumi > div > span { min-width: 36px !important; }
+  .o-bar-scenes .o-qb-direct button { padding: 5px 7px !important; }
+  .o-bar-scenes .o-qb-ico { display: flex; }
+  .o-bar-scenes .o-qb-txt { display: none; }
   /* les onglets d'une page (Règles) : une rangée qui glisse, comme un bandeau —
    * sans le bouton collé à droite, qui n'a rien à ranger ici */
   .o-onglets { flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; -ms-overflow-style: none; }
