@@ -54,3 +54,10 @@ démo : les 28 fiches d'Objets à 480 × 760 sur ordinateur et à 390 × 731 au
 téléphone émulé ; « Collection » et les suggestions d'une pièce à
 320 × 320. Le sélecteur des fiches ne paraît pas en démo : vérifié par le
 code et les tests seulement.
+
+## Amendement (19/09/2026, v3.56.0) — la hauteur unique retirée
+
+« Non en fait la hauteur identique partout, c'est pas terrible » : les fiches
+suivent de nouveau leur contenu ; seules les feuilles à onglets gardent une
+hauteur fixe (ADR 0055). Les listes restent à 320 × 320, et les suggestions
+passent toujours par `ChampSuggere`.

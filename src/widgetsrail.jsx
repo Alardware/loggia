@@ -16,7 +16,7 @@
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { tr, locale } from './i18n.js';
-import { BottomSheet, Fi, ChampSuggere } from './ui.jsx';
+import { BottomSheet, Fi, ChampSuggere, TitreFeuille } from './ui.jsx';
 import { weatherEntity, WeatherIco } from './wxutil.jsx';
 import { degres, estNuit, modeMeteo } from './meteo.js';
 import {
@@ -227,7 +227,7 @@ export function FeuilleVilles({ villes, onEnregistrer, onClose }) {
   return (
     <BottomSheet onClose={onClose}>
       {close => (<>
-        <div style={{ fontSize: 19, fontWeight: 700 }}>{tr('Heures d’ailleurs')}</div>
+        <TitreFeuille style={{ fontSize: 19, fontWeight: 700 }}>{tr('Heures d’ailleurs')}</TitreFeuille>
         <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '4px 0 14px' }}>{tr('Jusqu’à quatre villes, à côté du mois. Le fuseau s’écrit comme « Europe/Paris » ; sans ville, le panneau montre la date.')}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {lignes.map(x => {
@@ -248,7 +248,6 @@ export function FeuilleVilles({ villes, onEnregistrer, onClose }) {
           )}
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
-          <button type="button" onClick={close} style={{ padding: '10px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Annuler')}</button>
           <button type="button" onClick={() => { onEnregistrer(valides.map(x => ({ nom: String(x.nom || '').trim(), fuseau: x.fuseau }))); close(); }}
             style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#06121f', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
         </div>

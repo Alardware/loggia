@@ -44,7 +44,7 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { tr, locale } from '../i18n.js';
 import { cfgSet } from '../state.js';
-import { Fi, BottomSheet, REDUCE_MOTION } from '../ui.jsx';
+import { Fi, BottomSheet, REDUCE_MOTION, CroixFeuille } from '../ui.jsx';
 import { conversationsDe, entiteChoisie } from '../assistant.js';
 import { ecouter, voixDisponible, raisonLisible, preparerLecture, jouer, couperLecture, positionLecture, synthese } from '../voix.js';
 import { teinteDe, mots, poidsDesMots, motAuTemps, phraseAutour } from '../parole.js';
@@ -588,7 +588,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
     /* `opaque` : la feuille renonce au verre depoli, et il y a une raison.
      * Voir `.o-sheet-opaque` dans index.css. */
     <BottomSheet onClose={onClose} opaque>
-      {close => (
+      {() => (
         <div className="o-assist" style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
           {/* L'en-tête : le point d'état, le nom, ce qu'elle fait. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 8 }}>
@@ -622,7 +622,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
             <button ref={basculeRef} onClick={() => (ouvert ? fermerFil() : ouvrirFil())}
               aria-label={ouvert ? tr('Refermer la conversation') : tr('Ouvrir la conversation')}
               aria-expanded={ouvert} style={carre(ouvert)}><Fi i="comment" size={15} /></button>
-            <button onClick={close} aria-label={tr('Fermer')} style={carre(false)}><Fi i="cross" size={13} /></button>
+            <CroixFeuille />
           </div>
 
           {/* Les entités de conversation de la maison. */}

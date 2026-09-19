@@ -16,7 +16,7 @@
  *
  * `SystemeContent` est l'export par defaut, comme `views/meteo.jsx`. */
 import { useState, useEffect, useRef } from 'react';
-import { Fi, Gauge, Bascule, BottomSheet } from '../ui.jsx';
+import { Fi, Gauge, Bascule, BottomSheet, TitreFeuille } from '../ui.jsx';
 import { tr } from '../i18n.js';
 import { useSysHist } from '../historique.jsx';
 import { sysSensors, sysNames } from '../sysconf.js';
@@ -374,7 +374,7 @@ function FeuilleAlimentation({ onAction, onClose }) {
     <BottomSheet onClose={onClose}>
       {(close) => (
         <div>
-          <div style={{ fontSize: 17, fontWeight: 800 }}>{tr('Alimentation')}</div>
+          <TitreFeuille style={{ fontSize: 17, fontWeight: 800 }}>{tr('Alimentation')}</TitreFeuille>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3, marginBottom: 14 }}>{tr('Deux gestes : le premier arme, le second confirme.')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {actions.map(ac => (

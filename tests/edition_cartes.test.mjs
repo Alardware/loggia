@@ -52,7 +52,8 @@ test('la fiche « Modifier l’entite » : nom, domaine, piece, identifiant, epi
   assert.ok(f.includes("tr('Modifier l’entité')") && f.includes("tr('Épinglée sur l’accueil')"));
   assert.ok(f.includes('declarerLumiere(brut, lumiere)'), 'une prise peut se declarer lumiere');
   assert.ok(f.includes('deplacerDansPiece(hass, brut, choixPiece)'), 'changer de piece deplace l’entite');
-  assert.ok(f.includes("tr('Supprimer')") && f.includes("tr('Annuler')") && f.includes("tr('Enregistrer')"), 'les trois boutons de la maquette');
+  // Deux boutons : fermer, c'est la croix de la feuille, la même partout (19/09).
+  assert.ok(f.includes("tr('Supprimer')") && f.includes("tr('Enregistrer')") && !f.includes("tr('Annuler')"), 'Supprimer et Enregistrer ; plus d’« Annuler » à côté de la croix');
   assert.ok(!f.includes('État de départ') && !f.includes('Niveau'), 'Loggia n’invente pas ce que Home Assistant n’a pas dit');
   const m = bloc('function deplacerDansPiece(', NL + '}');
   assert.equal((m.match(/cfgSet\(/g) || []).length, 1, 'une seule ecriture pour toutes les pieces');

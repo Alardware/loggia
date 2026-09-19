@@ -196,12 +196,19 @@ html.loggia-tactile .loggia-content:has(~ .loggia-content),
 /* Les feuilles du bas s'arrêtent AU-DESSUS de la barre de navigation : sans
  * cela, leurs derniers boutons se cachaient derrière elle. */
 html.loggia-tactile .o-sheet { padding-bottom: calc(24px + var(--o-navh, 60px)) !important; max-height: calc(94vh - var(--o-navh, 60px)) !important; }
-/* Les fiches qu'ouvre une carte ont TOUTES la même taille (retour du 18/09 :
- * « selon la carte, la popup est petite ou grande ») : la hauteur ne suit plus
- * le contenu. 760 px tiennent les plus longues (caméra, robots) sans défiler
- * sur un écran de bureau ; c'est aussi la hauteur de l'assistant. */
-.o-sheet-fiche { height: min(760px, 88vh); }
-html.loggia-tactile .o-sheet-fiche { height: min(760px, calc(94vh - var(--o-navh, 60px))); }
+/* Une feuille défile sans barre visible (molette, doigt, clavier) : une feuille
+ * qui défile et une qui ne défile pas posent leur croix au même endroit
+ * (retour du 19/09 : « pourquoi ils ne sont pas alignés ? »), et la pochette
+ * d'un média garde ses bords. */
+.o-sheet { scrollbar-width: none; }
+.o-sheet::-webkit-scrollbar { display: none; }
+/* Une feuille à ONGLETS garde la même hauteur d'un onglet à l'autre (retour du
+ * 19/09 : « là où il faut que ce soit identique, c'est quand une popup a
+ * plusieurs onglets ») : changer d'onglet ne la fait plus grandir ni
+ * rétrécir. Les autres suivent leur contenu — une seule hauteur partout
+ * n'allait pas. 760 px tiennent le plus long des onglets (le robot). */
+.o-sheet-onglets { height: min(760px, 88vh); }
+html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-navh, 60px))); }
 
 /* Grille DENSE des vues intégrées : une carte riche occupe deux rangées, une
  * COMPACTE une seule — deux compactes s'empilent à côté d'une grande, comme

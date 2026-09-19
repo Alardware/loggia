@@ -8,7 +8,9 @@
 // `ChampSuggere` (ui.jsx), leur logique dans choix.js.
 //
 // Puis : « j'aimerais que les popups respectent une même taille » — les
-// listes (« même largeur et même hauteur ») et les fiches qu'ouvre une carte.
+// listes (« même largeur et même hauteur ») ; pour les feuilles, seulement
+// celles qui ont des onglets (19/09 : « la hauteur identique partout, c'est
+// pas terrible »).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from 'node:test';
@@ -137,22 +139,28 @@ test('le sélecteur des fiches passe par la liste commune', () => {
   assert.ok(!m.includes('role="listbox"'), 'une deuxième liste, d’une autre taille');
 });
 
-test('les fiches qu’ouvre une carte ont toutes la même taille', () => {
-  const fiches = ['RoomComfortModal', 'OutdoorModal', 'RoomPilotSheet', 'NavigateurMedias', 'RoomMediaSheet', 'RoomCoverSheet',
-    'RoomClimateSheet', 'RoomLightSheet', 'RoomSwitchSheet', 'RoomBinarySheet', 'RoomLockSheet', 'CardEditSheet',
-    'FicheRobot', 'FicheAppareil', 'SensorSheet', 'CamSheet', 'FichePlante', 'FicheDistributeur', 'FichePiece',
-    'FicheScenario', 'FeuilleCalendrier'];
-  for (const nom of fiches) {
+test('seules les feuilles à onglets gardent une hauteur fixe', () => {
+  // « La hauteur identique partout, c'est pas terrible ; là où il faut que ce
+  // soit identique, c'est quand une popup a plusieurs onglets » (19/09).
+  const ROBOT = lire('src', 'ficherobot.jsx');
+  assert.ok(!/<BottomSheet[^>]* fiche[ >]/.test(APP) && !/<BottomSheet[^>]* fiche[ >]/.test(ROBOT), 'une feuille sans onglets a retrouvé une hauteur fixe');
+  const avecOnglets = {
+    FicheRobot: '<BottomSheet onClose={onClose} onglets>',
+    CarteAjoutSheet: '<BottomSheet onClose={onClose} onglets>',
+    // La lumière n'a d'onglets que si elle fait des blancs ET des couleurs.
+    RoomLightSheet: '<BottomSheet onClose={onClose} onglets={!!(light.ct && light.rgb)}>',
+  };
+  for (const [nom, feuille] of Object.entries(avecOnglets)) {
     const i = APP.indexOf('\nfunction ' + nom + '(');
-    assert.ok(i >= 0, nom + ' a disparu');
     const j = APP.indexOf('\nfunction ', i + 1);
-    assert.ok(APP.slice(i, j < 0 ? undefined : j).includes('<BottomSheet onClose={onClose} fiche>'), nom + ' : sa feuille suit encore son contenu');
+    assert.ok(i >= 0 && APP.slice(i, j < 0 ? undefined : j).includes(feuille), nom + ' : changer d’onglet changerait la hauteur de la feuille');
   }
-  assert.ok(lire('src', 'ficherobot.jsx').includes('<BottomSheet onClose={onClose} fiche>'), 'le planning du robot');
+  assert.equal((APP.match(/<BottomSheet[^>]* onglets/g) || []).length, 3, 'une feuille sans onglets a pris une hauteur fixe');
   const CSS = lire('src', 'index.css');
-  assert.ok(CSS.includes('.o-sheet-fiche { height: min(760px, 88vh); }'), 'la hauteur commune');
-  assert.ok(CSS.includes('html.loggia-tactile .o-sheet-fiche { height: min(760px, calc(94vh - var(--o-navh, 60px))); }'), 'au doigt, au-dessus de la barre du bas');
-  assert.ok(UI.includes("className={'o-sheet' + (opaque ? ' o-sheet-opaque' : '') + (fiche ? ' o-sheet-fiche' : '')}"));
+  assert.ok(CSS.includes('.o-sheet-onglets { height: min(760px, 88vh); }'), 'la hauteur des feuilles à onglets');
+  assert.ok(CSS.includes('html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-navh, 60px))); }'), 'au doigt, au-dessus de la barre du bas');
+  assert.ok(!CSS.includes('.o-sheet-fiche'), 'la hauteur unique de toutes les fiches est revenue');
+  assert.ok(UI.includes("className={'o-sheet' + (opaque ? ' o-sheet-opaque' : '') + (onglets ? ' o-sheet-onglets' : '')}"));
 });
 
 test('les mots de la liste existent en anglais', () => {

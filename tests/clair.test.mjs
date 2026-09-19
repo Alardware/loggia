@@ -87,6 +87,7 @@ test('« ne répond plus » se dit d’une seule façon : le liseré', () => {
   assert.ok(app.includes("mort: muet(croq.reservoir) };") && app.includes("mort={d.mort}"), 'le distributeur');
   assert.ok(app.includes("mort: muet(plantCapteur(S, p.base, 'moisture'))") && app.includes("mort={pl.mort}"), 'la plante');
   assert.ok(app.includes("<div className={mort ? 'o-panne' : undefined} style={{ ...CV_CADRE, opacity: mort ? .55 : 1 }}>"), 'le hero d’une machine');
-  assert.ok(lire('src', 'ficherobot.jsx').includes("<div className=\"o-panne\" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 14px 6px 6px', borderRadius: 30 }}>"), 'la fiche du robot');
+  // La croix, en dernier sur la ligne (19/09) : le rembourrage passe à gauche.
+  assert.ok(lire('src', 'ficherobot.jsx').includes("<div className=\"o-panne\" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 6px 6px 14px', borderRadius: 30 }}>"), 'la fiche du robot');
   assert.ok(css.includes('.o-cam-tuile.o-panne::before { inset: 0; }'), 'le liseré de la caméra reste dans ses coins');
 });

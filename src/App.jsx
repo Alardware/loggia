@@ -28,7 +28,7 @@ import { isViewAvailable, viewReason } from './views.js';
 import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
-  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere
+  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere, CroixFeuille, TitreFeuille
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
@@ -523,7 +523,8 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
     <BottomSheet onClose={onClose}>
       {(close) => (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, padding: '11px 14px', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, padding: '11px 14px' }}>
             <Ico name="search" size={16} color="var(--o-text2)" />
             <input
               autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Pièce, vue, scène…')} aria-label="Rechercher"
@@ -535,6 +536,8 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
               }}
               style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', color: 'var(--o-text)', fontSize: 15, fontWeight: 500, fontFamily: 'var(--o-font)' }} />
             {q && <span role="button" tabIndex={0} aria-label="Effacer" onClick={() => setQ('')} onKeyDown={(e) => { if (e.key === 'Enter') setQ(''); }} style={{ cursor: 'pointer', display: 'inline-flex', padding: 12, margin: -12 }}><Fi i="cross-circle" size={16} color="var(--o-text3)" /></span>}
+          </div>
+          <CroixFeuille />
           </div>
           <div ref={listRef} style={{ maxHeight: '52vh', overflowY: 'auto', margin: '0 -8px', padding: '0 8px' }}>
             {!results.length && <div style={{ padding: '26px 8px', textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>Aucun résultat pour « {q} »</div>}
@@ -1444,12 +1447,12 @@ function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
   }, [piece.name]);
 
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
+    <BottomSheet onClose={onClose}>
+      {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ width: 38, height: 38, borderRadius: 14, background: piece.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{piece.icon}</span>
           <span style={{ flex: 1, fontSize: 19, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{piece.name}</span>
+          <CroixFeuille />
         </div>
         <div style={{ textAlign: 'center', margin: '16px 0 2px' }}>
           <div style={{ fontSize: 30, fontWeight: 800, color: overall.c, letterSpacing: '-.01em' }}>{overall.t}</div>
@@ -1553,12 +1556,12 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
   const hd = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' };
 
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
+    <BottomSheet onClose={onClose}>
+      {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ width: 38, height: 38, borderRadius: 14, background: piece.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{piece.icon}</span>
           <span style={{ flex: 1, fontSize: 19, fontWeight: 700, color: 'var(--o-text)' }}>{tr('Extérieur')}</span>
+          <CroixFeuille />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '8px 0 2px' }}>
           <WeatherIco wx={mode || 'clouds'} size={64} />
@@ -2449,13 +2452,13 @@ function RoomPilotSheet({ zone, hass, onClose }) {
   const R = 54, ARC = 2 * Math.PI * R * 0.75;
   const col = off ? 'var(--o-text3)' : 'var(--o-warn)';
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
+    <BottomSheet onClose={onClose}>
+      {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={13} color="var(--o-orange)" />{zone.name.toUpperCase()}</span>
           {estClimate(zone) && <BoutonEpingle id={zone.haid} />}
           {zone.autoEnt && <span onClick={() => call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt })} role="switch" tabIndex={0} aria-label={(z.auto ? 'Désactiver' : 'Activer') + ' la programmation automatique'} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt }); } }} aria-checked={!!z.auto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><span style={{ fontSize: 12, fontWeight: 700, color: z.auto ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>Auto</span><span style={{ width: 42, height: 24, borderRadius: 14, background: z.auto ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: z.auto ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span></span>}
+          <CroixFeuille />
         </div>
         <div style={{ position: 'relative', width: 230, height: 230, margin: '10px auto 0' }}>
           <svg width="230" height="230" viewBox="0 0 130 130" style={{ position: 'absolute', inset: 0, transform: 'rotate(135deg)' }}>
@@ -2598,17 +2601,16 @@ function resumeVersion(g) {
 }
 
 function FeuilleHistorique({ entrees, onRestaurer, onOublier, onClose }) {
-  const btnRond = { width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
   return (
     <BottomSheet onClose={onClose}>
       {(close) => (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <button onClick={close} aria-label={tr('Fermer')} style={btnRond}><Fi i="cross" size={14} /></button>
             <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 800, letterSpacing: '-.01em' }}>{tr('Historique des mises en page')}</span>
             {entrees.length > 0 && (
               <button onClick={() => { onOublier(); close(); }} style={editBtn(false)}>{tr('Tout oublier')}</button>
             )}
+            <CroixFeuille />
           </div>
           {entrees.length === 0
             ? <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text1)', padding: '26px 4px', textAlign: 'center' }}>
@@ -2709,17 +2711,19 @@ function NavigateurMedias({ id, hass, onClose }) {
   const btnRond = { width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
   const message = { fontSize: 13, fontWeight: 600, color: 'var(--o-text1)', opacity: .82, padding: '22px 4px', textAlign: 'center' };
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
+    <BottomSheet onClose={onClose}>
+      {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <button onClick={pile.length > 1 ? remonter : close}
-            aria-label={pile.length > 1 ? tr('Revenir') : tr('Fermer')} style={btnRond}>
-            <Fi i={pile.length > 1 ? 'angle-left' : 'cross'} size={14} />
-          </button>
+          {pile.length > 1 && (
+            <button onClick={remonter} aria-label={tr('Revenir')} style={btnRond}>
+              <Fi i="angle-left" size={14} />
+            </button>
+          )}
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: 'block', fontSize: 15, fontWeight: 800, letterSpacing: '-.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niveau.titre}</span>
             {pile.length > 1 && <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--o-text1)', opacity: .82, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pile.slice(0, -1).map(x => x.titre).join(' · ')}</span>}
           </span>
+          <CroixFeuille />
         </div>
 
         {etat === 'charge' && <div style={message}>{tr('Chargement…')}</div>}
@@ -2799,20 +2803,20 @@ function RoomMediaSheet({ id, hass, onClose }) {
   };
   return (
     <>
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
+    <BottomSheet onClose={onClose}>
+      {() => (<>
         <div style={{ position: 'relative', margin: '-10px -22px 0', borderRadius: '20px 20px 0 0', overflow: 'hidden' }}>
           {onArt && <>
             <img src={np.art} alt="" aria-hidden onError={() => setArtErr(np.art)} style={{ position: 'absolute', inset: -30, width: 'calc(100% + 60px)', height: 'calc(100% + 60px)', objectFit: 'cover', filter: 'blur(30px) saturate(1.08)', transform: 'scale(1.08)', opacity: .9 }} />
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(9,12,19,.2), rgba(9,12,19,.8) 45%, rgba(9,12,19,.95))' }} />
             <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 85%, ${AA(.22)}, transparent 36%)`, mixBlendMode: 'screen' }} />
           </>}
-          <div style={{ position: 'relative', padding: '14px 22px 20px' }}>
+          <div style={{ position: 'relative', padding: '10px 22px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-              <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: onArt ? 'rgba(255,255,255,.16)' : 'var(--o-s1)', border: 'none', color: tMain, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
               <span style={{ flex: 1, fontSize: 12, fontWeight: 800, color: tSub, letterSpacing: '.03em' }}>{(medPlayers().find(p => p.haid === id) || {}).name || id}</span>
               <BoutonEpingle id={id} />
               {np.source && <span style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(255,255,255,.94)', color: '#15181f', fontSize: 11, fontWeight: 800 }}>{np.source}</span>}
+              <CroixFeuille style={onArt ? { background: 'rgba(255,255,255,.16)', color: tMain } : null} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <div style={{ position: 'relative', width: 96, height: 96, flexShrink: 0, borderRadius: 18, overflow: 'hidden', background: 'linear-gradient(135deg,var(--o-purple),var(--o-accent) 65%,var(--o-ok))', boxShadow: '0 14px 32px rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2934,11 +2938,11 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
 // Détail volet : visuel + rail + boutons, mode auto global, et programmation nocturne (chambre uniquement).
 /* ── Le squelette des fiches (maquettes du 14/09) ─────────────────────────
  *
- * Un titre en italique, une ligne d'etat dessous, la croix a droite ; puis
+ * Un titre en italique, une ligne d'etat dessous, la croix a droite (la
+ * meme dans toutes les feuilles : CroixFeuille) ; puis
  * une commande principale, des puces, et des RANGEES : un titre, une phrase
  * qui dit ce que ca fait, et a droite la valeur, la bascule ou le bouton. */
-const FICHE_X = <svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>;
-function FicheEntete({ titre, sous, close, id = null, droite = null }) {
+function FicheEntete({ titre, sous, id = null, droite = null }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -2947,7 +2951,7 @@ function FicheEntete({ titre, sous, close, id = null, droite = null }) {
       </div>
       {droite}
       {id && <BoutonEpingle id={id} />}
-      <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{FICHE_X}</button>
+      <CroixFeuille />
     </div>
   );
 }
@@ -3064,9 +3068,9 @@ function RoomCoverSheet({ id, hass, onClose }) {
   const chips = [{ id: 'ferme', nom: tr('Fermé') }, { id: 'mi', nom: tr('Mi-course') }, { id: 'ouvert', nom: tr('Ouvert') }];
   const chip = pos === 0 ? 'ferme' : pos === 100 ? 'ouvert' : pos === 50 ? 'mi' : null;
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
-        <FicheEntete titre={nom} sous={[zone, etatTxt].filter(Boolean).join(' · ')} close={close} id={id} />
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <FicheEntete titre={nom} sous={[zone, etatTxt].filter(Boolean).join(' · ')} id={id} />
         <FicheLibelle droite={<span style={{ fontSize: 18, fontWeight: 800, color: pos ? 'var(--o-purple)' : 'var(--o-text3)' }}>{pos} %</span>}>{tr('POSITION')}</FicheLibelle>
         <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" label={tr('Position') + ' ' + nom} onCommit={poser} marge={0} />
         <div style={{ marginTop: 12 }}>
@@ -3125,9 +3129,9 @@ function RoomClimateSheet({ id, hass, onClose }) {
     : [];
   const rond = { width: 44, height: 44, borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 20, fontWeight: 700, cursor: 'pointer', flexShrink: 0 };
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
-        <FicheEntete titre={nom} sous={[zone, etatTxt, tr('consigne {t} °C', { t: Number(target).toFixed(1).replace('.', ',') })].filter(Boolean).join(' · ')} close={close} id={id} />
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <FicheEntete titre={nom} sous={[zone, etatTxt, tr('consigne {t} °C', { t: Number(target).toFixed(1).replace('.', ',') })].filter(Boolean).join(' · ')} id={id} />
         <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, background: 'var(--o-s1)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('CONSIGNE')}</div>
@@ -3183,9 +3187,9 @@ function RoomLightSheet({ light, hass, onClose }) {
   const swatch = (bg, sel, onClick, label) => <button key={label} aria-label={label} title={label} onClick={onClick} style={{ height: 34, borderRadius: 10, cursor: 'pointer', background: bg, border: sel ? '2px solid #fff' : '2px solid transparent', boxShadow: sel ? `0 0 0 2px ${bg}` : 'inset 0 0 0 1px rgba(0,0,0,.18)', padding: 0 }} />;
   const blancs = light.ct && (onglet === 'blancs' || !light.rgb);
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
-        <FicheEntete titre={nom} sous={sous} close={close} id={light.id} />
+    <BottomSheet onClose={onClose} onglets={!!(light.ct && light.rgb)}>
+      {() => (<>
+        <FicheEntete titre={nom} sous={sous} id={light.id} />
         {light.dimmable !== false && (<>
           <FicheLibelle droite={<span style={{ fontSize: 18, fontWeight: 800, color: on ? 'var(--o-warn)' : 'var(--o-text3)' }}>{shown} %</span>}>{tr('LUMINOSITÉ')}</FicheLibelle>
           <RmJauge v={shown} couleur={acc} grade={(light.rgb && color) ? color : 'linear-gradient(90deg,var(--o-lampe),var(--o-lampe-b))'} label={tr('Luminosité') + ' ' + nom} onCommit={poser} marge={0} />
@@ -3228,9 +3232,9 @@ function RoomSwitchSheet({ id, hass, onClose }) {
   const energie = capteur('energy');
   const fmt = (c) => (Math.round(c.n * 10) / 10).toString().replace('.', ',') + (c.u ? ' ' + c.u : '');
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
-        <FicheEntete titre={nom} sous={[zone, on ? tr('Allumée') : tr('Éteinte'), puissance ? fmt(puissance) : null].filter(Boolean).join(' · ')} close={close} id={id} />
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <FicheEntete titre={nom} sous={[zone, on ? tr('Allumée') : tr('Éteinte'), puissance ? fmt(puissance) : null].filter(Boolean).join(' · ')} id={id} />
         <div style={{ marginTop: 14 }}>
           <FicheRangee premiere titre={tr('Alimentée')} desc={tr('Coupe la prise, pas l’appareil derrière')} droite={<RmBascule on={on} nom={nom} onToggle={basculer} />} />
           {puissance && <FicheRangee titre={tr('Puissance instantanée')} desc={tr('Mesurée par la prise')} droite={<FicheValeur couleur="var(--o-accent-soft)">{fmt(puissance)}</FicheValeur>} />}
@@ -3255,9 +3259,9 @@ function RoomBinarySheet({ id, hass, onClose }) {
   const releve = !st || st.state === 'unavailable' ? tr('Indisponible') : e ? (on ? e[0] : e[1]) : (on ? tr('Détecté') : 'RAS');
   const danger = on && !!(e && e[2]);
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
-        <FicheEntete titre={nom} sous={[zone, releve].filter(Boolean).join(' · ')} close={close} id={id} />
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <FicheEntete titre={nom} sous={[zone, releve].filter(Boolean).join(' · ')} id={id} />
         <div style={{ marginTop: 14 }}>
           <FicheRangee premiere titre={tr('Relevé')} desc={tr('Dernière valeur reçue')} droite={<FicheValeur couleur={danger ? 'var(--o-bad)' : 'var(--o-text)'}>{releve}</FicheValeur>} />
           {zone && <FicheRangee titre={tr('Pièce')} desc={tr('Zone déclarée dans Home Assistant')} droite={<FicheValeur couleur="var(--o-text2)">{zone}</FicheValeur>} />}
@@ -3284,9 +3288,9 @@ function RoomLockSheet({ id, hass, onClose }) {
   const zone = zoneDe(id);
   const etat = s2 === 'locked' ? tr('Verrouillée') : s2 === 'unlocked' ? tr('Déverrouillée') : s2 === 'locking' ? tr('Verrouillage…') : s2 === 'unlocking' ? tr('Déverrouillage…') : s2 === 'jammed' ? tr('Bloquée') : tr('Indisponible');
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
-        <FicheEntete titre={nom} sous={[zone, etat].filter(Boolean).join(' · ')} close={close} id={id} />
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <FicheEntete titre={nom} sous={[zone, etat].filter(Boolean).join(' · ')} id={id} />
         <div style={{ marginTop: 14 }}>
           <FicheRangee premiere titre={tr('Verrouillée')} desc={tr('Le pêne bouge tout de suite ; l’état revient du moteur')} droite={<RmBascule on={locked} nom={nom} onToggle={basculer} />} />
           <RangeePile n={pileDe(S, id)} />
@@ -3700,10 +3704,10 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   const domaineChoisi = estPrise ? (lumiere ? 'lumiere' : 'prise') : domaine;
 
   return (
-    <BottomSheet onClose={onClose} fiche>
+    <BottomSheet onClose={onClose}>
       {close => (
-        <div style={{ padding: '4px 2px 8px' }}>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>{estSection ? tr('Modifier le titre') : tr('Modifier l’entité')}</div>
+        <div style={{ padding: '0 0 8px' }}>
+          <TitreFeuille style={{ fontSize: 15, fontWeight: 800 }}>{estSection ? tr('Modifier le titre') : tr('Modifier l’entité')}</TitreFeuille>
 
           <label htmlFor={nomId} style={etiquette}>{tr('NOM')}</label>
           {/* `control-has-associated-label` ne suit pas `htmlFor` : l'etiquette
@@ -3787,7 +3791,6 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
           <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center' }}>
             <button onClick={() => { ed.remove(id); close(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>
             <span style={{ flex: 1 }} />
-            <button onClick={close} style={{ padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>{tr('Annuler')}</button>
             <button onClick={() => valider(close)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f' }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
           </div>
         </div>
@@ -4053,11 +4056,13 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
 
   return (
     <BottomSheet onClose={onClose}>
-      {close => (
-        <div style={{ padding: '4px 2px 8px' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
+      {() => (
+        <div style={{ padding: '0 0 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
             <div style={{ fontSize: 15, fontWeight: 800 }}>{entete || tr('Ajouter une carte')}</div>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{present.length > 1 ? tr('{n} cartes', { n: present.length }) : tr('{n} carte', { n: present.length })}</div>
+            <span style={{ flex: 1 }} />
+            <CroixFeuille />
           </div>
           <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 12 }}>{tr('Coche pour ajouter, décoche pour retirer. Tout s’applique tout de suite.')}</div>
 
@@ -4102,7 +4107,6 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
           })}
 
           {pied && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>{pied}</div>}
-          <button onClick={close} style={{ marginTop: 18, width: '100%', padding: '11px 0', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f' }}>{tr('Terminé')}</button>
         </div>
       )}
     </BottomSheet>
@@ -4450,10 +4454,10 @@ function FicheRobot({ id, hass, onClose }) {
   // par-dessus, depuis les reglages du robot.
   const [fiche, setFiche] = useState(null);
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
+    <BottomSheet onClose={onClose} onglets>
+      {() => (<>
         <Suspense fallback={<div style={{ minHeight: 260 }} />}>
-          <FicheRobotContent hass={H} idRobot={id} domaine={domaine} onClose={close} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />
+          <FicheRobotContent hass={H} idRobot={id} domaine={domaine} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />
         </Suspense>
         {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
       </>)}
@@ -4522,10 +4526,9 @@ function FicheAppareil({ id, hass, onClose }) {
     );
   };
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
+    <BottomSheet onClose={onClose}>
+      {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nomApp}</div>
             {dm && (dm.manufacturer || dm.model) && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[dm.manufacturer, dm.model].filter(Boolean).join(' · ')}</div>}
@@ -4533,6 +4536,7 @@ function FicheAppareil({ id, hass, onClose }) {
           {/* Épingler l'entité TAPÉE : elle vit en carte de tête, hors des
             * lignes — sans ce bouton, l'entité principale était inépinglable. */}
           <BoutonEpingle id={id} />
+          <CroixFeuille />
         </div>
         {pilotables.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
@@ -4648,12 +4652,12 @@ function SensorSheet({ id, hass, onClose }) {
   const n = st ? parseFloat(st.state) : NaN;
   const unite = a.unit_of_measurement || '';
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
+    <BottomSheet onClose={onClose}>
+      {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
           <span style={{ flex: 1, fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</span>
           <BoutonEpingle id={id} />
+          <CroixFeuille />
         </div>
         <div style={{ textAlign: 'center', margin: '16px 0 18px' }}>
           <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>{isNaN(n) ? (st ? st.state : '—') : Math.round(n * 10) / 10}</span>
@@ -5182,9 +5186,9 @@ function CamSheet({ haid, nom, hass, onClose, onNav = null, evenement = null }) 
     commanderService(hass, id, 'switch', on ? 'turn_off' : 'turn_on', { entity_id: id });
   };
   return (
-    <BottomSheet onClose={onClose} fiche>
+    <BottomSheet onClose={onClose}>
       {close => (<>
-        <FicheEntete titre={nom} sous={[zoneDe(haid), etatTxt].filter(Boolean).join(' · ')} close={close} id={haid} />
+        <FicheEntete titre={nom} sous={[zoneDe(haid), etatTxt].filter(Boolean).join(' · ')} id={haid} />
         {/* La tuile de l'Accueil, sans son bouton d'agrandissement : on y est deja. */}
         <CameraTile c={tuileCamera({ name: nom, haid, online, evenement }, 0, hass)} agrandir={false} />
         {(modes.length > 0 || onNav) && (
@@ -5317,9 +5321,9 @@ function FichePlante({ pl, onClose }) {
   const ligne = (premiere, titre, cle, valeur) => { const [desc, couleur] = mot(cle); return <FicheRangee premiere={premiere} titre={titre} desc={desc} droite={<FicheValeur couleur={couleur}>{valeur}</FicheValeur>} />; };
   const pile = couleurPile(pl.bat);
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
-        <FicheEntete titre={pl.name} sous={sous} close={close} />
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <FicheEntete titre={pl.name} sous={sous} />
         <div style={{ marginTop: 4 }}>
           {ligne(true, tr('Humidité du sol'), 'hum', fmt(pl.hum, ' %'))}
           {ligne(false, tr('Température'), 'temp', fmt(pl.temp, ' °C', 1))}
@@ -5349,9 +5353,9 @@ function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, port
   const sous = [tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
   const orange = 'var(--o-orange)';
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
-        <FicheEntete titre={nom} sous={sous} close={close} id={ficheId || null} />
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <FicheEntete titre={nom} sous={sous} id={ficheId || null} />
         <div style={{ marginTop: 4 }}>
           <FicheRangee premiere titre={tr('Réservoir')} desc={jours == null ? tr('Ce qu’il reste dans le bac') : jours > 1 ? tr('Environ {n} jours de réserve', { n: jours }) : tr('Moins de deux jours de réserve')}
             droite={<FicheValeur couleur={pct < 25 ? 'var(--o-bad)' : orange}>{pct} %</FicheValeur>} />
@@ -6063,10 +6067,10 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
   const entites = [['o-piece-temp', tr('Température'), temp, setTemp, 'temperature'], ['o-piece-hum', tr('Humidité'), hum, setHum, 'humidity'], ['o-piece-co2', tr('CO₂'), co2, setCo2, 'carbon_dioxide']];
 
   return (
-    <BottomSheet onClose={onClose} fiche>
+    <BottomSheet onClose={onClose}>
       {close => (
-        <div style={{ padding: '4px 2px 8px' }}>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>{existante ? tr('Modifier la pièce') : tr('Ajouter une pièce')}</div>
+        <div style={{ padding: '0 0 8px' }}>
+          <TitreFeuille style={{ fontSize: 15, fontWeight: 800 }}>{existante ? tr('Modifier la pièce') : tr('Ajouter une pièce')}</TitreFeuille>
           <div style={{ ...note, marginTop: 4 }}>{tr('La pièce apparaîtra sur l’accueil et dans le sélecteur de pièces.')}</div>
 
           <label htmlFor="o-piece-nom" style={etiquette}>{tr('NOM')}</label>
@@ -6126,7 +6130,6 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
           <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center' }}>
             {existante && <button onClick={() => { onSupprimer(nom); close(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>}
             <span style={{ flex: 1 }} />
-            <button onClick={close} style={{ padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>{tr('Annuler')}</button>
             <button onClick={() => valider(close)} disabled={!valide} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f', opacity: valide ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
           </div>
         </div>
@@ -8088,10 +8091,10 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
   const optionsPieces = [{ id: '', label: tr('Pièce de la TV ou de l’enceinte') }, ...pieces.map(p => ({ id: p, label: p }))];
   const famillesNoms = NOMS_FAMILLES(), gestesNoms = NOMS_GESTES(), porteesNoms = NOMS_PORTEES(), conditionsNoms = NOMS_CONDITIONS();
   return (
-    <BottomSheet onClose={onClose} fiche>
+    <BottomSheet onClose={onClose}>
       {close => (
-        <div style={{ padding: '4px 2px 8px' }}>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>{existant ? tr('Modifier le scénario') : tr('Ajouter un scénario')}</div>
+        <div style={{ padding: '0 0 8px' }}>
+          <TitreFeuille style={{ fontSize: 15, fontWeight: 800 }}>{existant ? tr('Modifier le scénario') : tr('Ajouter un scénario')}</TitreFeuille>
           <div style={{ ...note, marginTop: 4 }}>{existant && scenario.integre ? tr('Un scénario de Loggia : modifie-le, ou remets-le d’origine.') : tr('Compose-le à partir de ce que la maison possède, ou lie une scène ou un script.')}</div>
 
           <label htmlFor="o-scn-nom" style={etiquette}>{tr('NOM')}</label>
@@ -8193,7 +8196,6 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
             {existant && scenario.integre && scenario.modifie && <button onClick={() => envoyer(close, { reinitialiser: scenario.id })} style={secondaire}>{tr('Remettre d’origine')}</button>}
             {existant && !scenario.integre && <button onClick={() => envoyer(close, { supprimer: scenario.id })} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>}
             <span style={{ flex: 1 }} />
-            <button onClick={close} style={secondaire}>{tr('Annuler')}</button>
             <button onClick={() => valider(close)} disabled={!valide || attente} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide && !attente ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f', opacity: valide && !attente ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
           </div>
         </div>
@@ -11107,10 +11109,9 @@ function FeuilleCalendrier({ hass, onClose }) {
 
   const btnRond = { width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
   return (
-    <BottomSheet onClose={onClose} fiche>
-      {close => (<>
+    <BottomSheet onClose={onClose}>
+      {() => (<>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <button onClick={close} aria-label={tr('Fermer')} style={btnRond}><Fi i="cross" size={14} /></button>
         <span style={{ flex: 1, fontSize: 17, fontWeight: 800, textTransform: 'capitalize', letterSpacing: '-.01em' }}>{moisAns}</span>
         <button onClick={() => bougerMois(-1)} aria-label={tr('Mois précédent')} style={btnRond}><Fi i="angle-left" size={14} /></button>
         <button onClick={() => bougerMois(1)} aria-label={tr('Mois suivant')} style={btnRond}><Fi i="angle-right" size={14} /></button>
@@ -11122,6 +11123,7 @@ function FeuilleCalendrier({ hass, onClose }) {
           <button onClick={() => { setReglages(v => !v); setNouveau(false); }} aria-label={tr('Choisir les agendas')} aria-pressed={reglages}
             style={{ ...btnRond, background: reglages ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: reglages ? '#fff' : 'var(--o-text1)' }}><Fi i="settings-sliders" size={14} /></button>
         )}
+        <CroixFeuille />
       </div>
 
       {nouveau && calsEcrivables.length > 0 && (
@@ -11690,10 +11692,10 @@ function ChipsEditSheet({ x, hass, onClose, onSave }) {
   const bouger = (i, d) => { const l = ids.slice(); const j = i + d; if (j < 0 || j >= l.length) return; const t = l[i]; l[i] = l[j]; l[j] = t; poser(l); };
   return (
     <BottomSheet onClose={onClose}>
-      {close => (<>
+      {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-          <span style={{ fontSize: 19, fontWeight: 700 }}>{tr('Composer les pastilles')}</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 700 }}>{tr('Composer les pastilles')}</span>
+          <CroixFeuille />
         </div>
         {ids.length === 0
           ? <div style={{ padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 14 }}>{tr('Sans pastille choisie, la carte résume la maison : lumières, ouvrants, alarme, présence, air.')}</div>
@@ -11736,11 +11738,11 @@ function CarteAjoutSheet({ hass, onClose, onPose, remplace = null }) {
   );
   const grille = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: 10 };
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} onglets>
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <button onClick={close} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-          <span style={{ fontSize: 19, fontWeight: 700 }}>{remplace ? tr('Changer la carte') : tr('Ajouter une carte')}</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 700 }}>{remplace ? tr('Changer la carte') : tr('Ajouter une carte')}</span>
+          <CroixFeuille />
         </div>
         {carteAttente ? (<>
           {/* Carte choisie dans la galerie : reste à dire QUELLE entité. */}
@@ -11933,7 +11935,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
         {tplEdit && (
           <BottomSheet onClose={() => setTplEdit(null)}>
             {close => (<>
-              <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 12 }}>{tr('Modifier la carte template')}</div>
+              <TitreFeuille style={{ fontSize: 19, fontWeight: 700 }} marge={12}>{tr('Modifier la carte template')}</TitreFeuille>
               <TplForm hass={hass} initial={tplEdit} onAdd={(t) => { setEnts(cv.ents.map(y => cvKey(y) === cvKey(tplEdit) ? t : y)); close(); }} />
             </>)}
           </BottomSheet>

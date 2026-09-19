@@ -8,7 +8,7 @@
  * Le contenu est repris a l'identique : ce module deplace du code, il n'en
  * change pas le comportement.
  */
-import { useState, useEffect, useRef, useMemo, useId, Fragment } from 'react';
+import { useState, useEffect, useRef, useMemo, useId, Fragment, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { getHass } from './state.js';
 import { filtrerChoix, blocsChoix, placerMenu, SEUIL_RECHERCHE } from './choix.js';
@@ -333,11 +333,36 @@ export function FlipText({ text, style, live = false }) {
 
 // Bottom sheet réutilisable : monte du bas (courbe drawer iOS), scrim fondu, poignée, fermeture animée.
 // children peut être une fonction (close) => JSX pour brancher la croix sur la fermeture ANIMÉE.
-/* `fiche` : la feuille qu'ouvre une carte. Toutes ont la même taille (retour
- * du 18/09 : « selon la carte, la popup est petite ou grande ») — voir
- * `.o-sheet-fiche` dans index.css. Les autres feuilles (recherche, éditeurs,
- * choix d'une entité) gardent la hauteur de leur contenu. */
-export function BottomSheet({ onClose, children, opaque = false, fiche = false }) {
+/* La croix des feuilles : la même partout, au même endroit (retour du 19/09 :
+ * « toutes les popups n'ont pas le même bouton pour fermer ni au même
+ * endroit »), puis SUR la ligne d'en-tête, en dernier, à la taille de ses
+ * voisins (« pourquoi ils ne sont pas alignés ? et horizontalement ») : 34 px,
+ * rayon 10, le fond de l'épingle. Elle ferme la feuille qui la contient. */
+const CROIX = <svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>;
+const FermerCtx = createContext(null);
+export function CroixFeuille({ style = null }) {
+  const fermer = useContext(FermerCtx);
+  return (
+    <button type="button" data-croix="" onClick={() => { if (fermer) fermer(); }} aria-label={tr('Fermer')} title={tr('Fermer')}
+      style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)', ...style }}>{CROIX}</button>
+  );
+}
+/* Une ligne de titre simple : le titre à gauche, la croix à droite. */
+export function TitreFeuille({ children, style = null, marge = 0 }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: marge }}>
+      <div style={{ flex: 1, minWidth: 0, ...style }}>{children}</div>
+      <CroixFeuille />
+    </div>
+  );
+}
+
+/* `onglets` : une feuille à onglets garde la même hauteur d'un onglet à
+ * l'autre (retour du 19/09 : « là où il faut que ce soit identique, c'est
+ * quand une popup a plusieurs onglets ») — voir `.o-sheet-onglets` dans
+ * index.css. Les autres suivent leur contenu : une hauteur unique partout
+ * n'allait pas. */
+export function BottomSheet({ onClose, children, opaque = false, onglets = false, title = null }) {
   const [closing, setClosing] = useState(false);
   // Le filet (si l'animation ne se declenche pas) est ANNULE quand elle se
   // termine : sinon `onClose` partait deux fois a chaque fermeture (audit 18/09).
@@ -352,7 +377,13 @@ export function BottomSheet({ onClose, children, opaque = false, fiche = false }
   // A11y : focus dans la feuille à l'ouverture (Escape marche alors partout), restauré à la fermeture
   useEffect(() => {
     const prev = document.activeElement;
-    const t = setTimeout(() => { try { const el = sheetRef.current; if (el) (el.querySelector('button, [tabindex="0"], input, [role="switch"]') || el).focus({ preventScroll: true }); } catch {} }, 60);
+    /* Le premier élément du contenu, pas la croix ; et un champ qui a déjà
+     * pris le focus (`autoFocus` de la recherche) le garde. */
+    const t = setTimeout(() => { try {
+      const el = sheetRef.current; if (!el || el.contains(document.activeElement)) return;
+      const cible = [...el.querySelectorAll('button, [tabindex="0"], input, [role="switch"]')].find(n => !n.hasAttribute('data-croix'));
+      (cible || el).focus({ preventScroll: true });
+    } catch {} }, 60);
     return () => { clearTimeout(t); try { if (prev && prev.focus) prev.focus({ preventScroll: true }); } catch {} };
   }, []);
   // Glisser-fermer iOS : la feuille suit le doigt depuis la poignée ; > 120 px = fermeture, sinon rebond spring.
@@ -389,7 +420,7 @@ export function BottomSheet({ onClose, children, opaque = false, fiche = false }
         * comme le motif attendu ailleurs. Elle voit ici un role passif a qui
         * on aurait rajoute des gestes. */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-      <div ref={sheetRef} className={'o-sheet' + (opaque ? ' o-sheet-opaque' : '') + (fiche ? ' o-sheet-fiche' : '')} role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
+      <div ref={sheetRef} className={'o-sheet' + (opaque ? ' o-sheet-opaque' : '') + (onglets ? ' o-sheet-onglets' : '')} role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
           // Piège de focus : Tab boucle dans la feuille — derrière, la page vit
@@ -408,7 +439,13 @@ export function BottomSheet({ onClose, children, opaque = false, fiche = false }
         <div onPointerDown={dragClose} style={{ touchAction: 'none', cursor: 'grab', padding: '8px 60px 12px', margin: '-10px auto 2px', width: 'fit-content' }}>
           <div style={{ width: 38, height: 5, borderRadius: 4, background: 'var(--o-bd1)', margin: '0 auto' }} />
         </div>
-        {typeof children === 'function' ? children(close) : children}
+        {/* La croix vit sur la ligne d'en-tête de chaque feuille (`CroixFeuille`,
+          * `TitreFeuille`, `FicheEntete`) ; elle ferme par ce contexte. Une
+          * feuille qui ne passe qu'un `title` reçoit la ligne toute faite. */}
+        <FermerCtx.Provider value={close}>
+          {title ? <TitreFeuille style={{ fontSize: 17, fontWeight: 800 }} marge={12}>{title}</TitreFeuille> : null}
+          {typeof children === 'function' ? children(close) : children}
+        </FermerCtx.Provider>
       </div>
     </div>
   );

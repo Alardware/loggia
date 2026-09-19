@@ -145,9 +145,9 @@ const FEUILLE = readFileSync(join(SRC, 'views', 'assistant.jsx'), 'utf8');
 test('la feuille qui porte l’orbe est opaque', () => {
   assert.match(FEUILLE, /<BottomSheet onClose=\{onClose\} opaque>/,
     'sans `opaque`, le carre revient sous le theme Frosted Glass');
-  assert.match(UI, /export function BottomSheet\(\{ onClose, children, opaque = false, fiche = false \}\)/);
+  assert.match(UI, /export function BottomSheet\(\{ onClose, children, opaque = false, onglets = false, title = null \}\)/);
   assert.match(UI, /background: opaque \? 'linear-gradient\(var\(--o-surfA\), var\(--o-surfA\)\), var\(--o-bg\)' : 'var\(--o-surfA\)'/);
-  assert.match(UI, /className=\{'o-sheet' \+ \(opaque \? ' o-sheet-opaque' : ''\) \+ \(fiche \? ' o-sheet-fiche' : ''\)\}/);
+  assert.match(UI, /className=\{'o-sheet' \+ \(opaque \? ' o-sheet-opaque' : ''\) \+ \(onglets \? ' o-sheet-onglets' : ''\)\}/);
   // Et la regle qui desarme le flou du theme, sans quoi la classe ne sert a rien.
   assert.match(CSS, /html\.loggia-frosted \.o-sheet-opaque \{ -webkit-backdrop-filter: none; backdrop-filter: none; \}/);
 });

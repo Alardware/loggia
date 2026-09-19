@@ -456,7 +456,6 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
         )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 2 }}>
-          <button onClick={onFermer} style={{ padding: '10px 16px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text2)' }}>{tr('Annuler')}</button>
           <button onClick={valider} disabled={!pret}
             style={{ padding: '10px 18px', borderRadius: 10, border: 'none', cursor: pret ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, background: pret ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: pret ? '#fff' : 'var(--o-text3)' }}>
             {tr('Enregistrer')}

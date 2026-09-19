@@ -298,7 +298,7 @@ test('la fiche : une feuille pour les deux robots, ouverte depuis leur carte —
   assert.ok(app.includes("const FicheRobotContent = lazy(() => import('./ficherobot.jsx'));"), 'chargée à la demande');
   assert.ok(!existsSync(join(RACINE, 'src', 'views', 'robot.jsx')) && !existsSync(join(RACINE, 'src', 'views', 'aspirateur.jsx')), 'plus de vue : une fiche, comme les autres appareils (18/09)');
   const f = bloc(app, 'function FicheRobot(', NL + '}');
-  assert.ok(f.includes('<BottomSheet onClose={onClose} fiche>') && f.includes('<Suspense fallback=') && f.includes('<FicheRobotContent hass={H} idRobot={id} domaine={domaine} onClose={close} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />'),
+  assert.ok(f.includes('<BottomSheet onClose={onClose} onglets>') && f.includes('<Suspense fallback=') && f.includes('<FicheRobotContent hass={H} idRobot={id} domaine={domaine} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />'),
     'une feuille, le contenu chargé DANS une frontière, l’épingle dans l’en-tête');
   assert.ok(f.includes('useHass([id, ...siblingsOf(LOGGIA_INDEX, id)])'), 'la fiche suit en direct les sœurs du robot : le poll de la vue derrière ne les connaît pas');
   assert.ok(f.includes('{fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}'), 'la fiche universelle (Stop, Localiser, entités) s’ouvre par-dessus');
@@ -312,7 +312,7 @@ test('la fiche : une feuille pour les deux robots, ouverte depuis leur carte —
   assert.ok(!ui.includes("vid: 'aspirateur'") && !ui.includes("vid: 'tondeuse'"), 'plus rien à activer dans le menu');
   const fiche = lire('src', 'ficherobot.jsx');
   assert.ok(fiche.includes("onFiche={onFiche ? () => onFiche(idRobot) : null}") && fiche.includes("{tr('Fiche de l’appareil')}"), 'la fiche universelle par les réglages du robot');
-  assert.ok(fiche.includes("export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', onFiche = null, onClose = null, epingle = null }) {"), 'le robot est celui de la carte tapée');
+  assert.ok(fiche.includes("export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', onFiche = null, epingle = null }) {"), 'le robot est celui de la carte tapée');
   assert.ok(!fiche.includes('useLarge') && !fiche.includes('sessionStorage'), 'un seul agencement, celui du téléphone ; plus de robot mémorisé');
   assert.ok(fiche.includes("{actuel !== 'reglages' && epingle}"), 'l’épingle dans l’en-tête, comme sur la fiche universelle');
 });

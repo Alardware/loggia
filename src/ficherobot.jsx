@@ -21,7 +21,7 @@
  */
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { tr, locale } from './i18n.js';
-import { Fi, Bascule, Gauge, BottomSheet, useEtatServeur } from './ui.jsx';
+import { Fi, Bascule, Gauge, BottomSheet, useEtatServeur, CroixFeuille, TitreFeuille } from './ui.jsx';
 import { LOGGIA_INDEX, loggiaEnt, vacRooms, vacOption } from './state.js';
 import { commanderService } from './actions.js';
 import { useLoggia, useEntities } from './runtime.js';
@@ -456,10 +456,10 @@ function FeuillePlanning({ depart, neuf, zones, domaine, aDesAires, onEnregistre
   const basculerZone = (z) => setP(x => ({ ...x, zones: x.zones.some(y => y.id === z.id) ? x.zones.filter(y => y.id !== z.id) : [...x.zones, zonePlanning(z)] }));
   const valide = heureValide(p.heure) && p.jours.length > 0;
   return (
-    <BottomSheet onClose={onClose} fiche>
+    <BottomSheet onClose={onClose}>
       {close => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <div style={{ fontSize: 19, fontWeight: 700 }}>{neuf ? tr('Nouveau passage') : tr('Modifier le passage')}</div>
+          <TitreFeuille style={{ fontSize: 19, fontWeight: 700 }}>{neuf ? tr('Nouveau passage') : tr('Modifier le passage')}</TitreFeuille>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <span style={{ fontSize: 14.5, fontWeight: 700 }}>{tr('Heure')}</span>
             <input type="time" value={p.heure} aria-label={tr('Heure')} onChange={(e) => setP(x => ({ ...x, heure: e.target.value }))} style={CHAMP_HEURE} />
@@ -597,7 +597,7 @@ function OngletPlanning({ hass, domaine, robot, zones, planning }) {
 
 /* ════════════ La vue ════════════ */
 
-export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', onFiche = null, onClose = null, epingle = null }) {
+export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', onFiche = null, epingle = null }) {
   const S = (hass && hass.states) || {};
   const { resolved } = useLoggia();
   const entVac = useEntities('vacuum', null) || {};
@@ -687,9 +687,9 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
 
   if (!idRobot || !robot.st) {
     return (
-      <div className="o-panne" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 14px 6px 6px', borderRadius: 30 }}>
-        <button type="button" onClick={onClose || undefined} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Ce robot ne répond plus.')}</div>
+      <div className="o-panne" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 6px 6px 14px', borderRadius: 30 }}>
+        <div style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Ce robot ne répond plus.')}</div>
+        <CroixFeuille />
       </div>
     );
   }
@@ -720,9 +720,8 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
 
   return (
     <div className={'rb-fiche ' + (domaine === 'lawn_mower' ? 'rb-tondeuse' : 'rb-aspirateur')} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* L'en-tête des fiches : fermer, le nom, l'épingle — et la roue des réglages. */}
+      {/* L'en-tête des fiches : le nom, l'épingle, la roue des réglages — et la croix, la même partout. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button type="button" onClick={onClose || undefined} aria-label={tr('Fermer')} title={tr('Fermer')} style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{actuel === 'reglages' ? tr('Réglages') : robot.nom}</div>
           {actuel === 'reglages' && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{robot.nom}</div>}
@@ -732,6 +731,7 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
           <button type="button" onClick={() => setOnglet('reglages')} aria-label={tr('Réglages')} title={tr('Réglages')}
             style={{ width: 34, height: 34, borderRadius: 10, border: 'none', cursor: 'pointer', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)' }}><Fi i="settings" size={14} /></button>
         )}
+        <CroixFeuille />
       </div>
 
       {actuel !== 'reglages' && onglets.length > 1 && (
