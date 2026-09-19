@@ -19,7 +19,7 @@ const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, d
 test('« A surveiller » est une section du rail, la premiere, et n’existe que quand il y a des points — meme en edition', () => {
   // Dans le rail, avec En ce moment et Rappels (retour user du 16/09) : sur
   // telephone c'est la seconde page, la banniere garde le compte des points.
-  assert.ok(src.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier', 'co2'];"), 'la section, en tete du rail');
+  assert.ok(src.includes("const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'calendrier', 'rappels', 'agenda'];"), 'la section, en tete du rail');
   assert.ok(src.includes("const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];"), 'plus dans la colonne');
   assert.ok(src.includes("const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'),"), 'son nom en edition');
   assert.ok(src.includes('attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,'), 'rien quand tout va bien');

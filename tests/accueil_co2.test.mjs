@@ -88,7 +88,7 @@ test('le geste pour aérer : la ventilation de la veille, sinon les volets de la
 test('le branchement : en option dans le rail, rien sans capteur, la couleur dit l’état', () => {
   assert.deepEqual(WIDGETS_OPTION, ['heure', 'calendrier', 'co2']);
   const app = lire('src', 'App.jsx');
-  assert.ok(app.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier', 'co2'];"));
+  assert.ok(app.includes("const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'calendrier', 'rappels', 'agenda'];"));
   assert.ok(app.includes("co2: co2Pire ? <Co2Rail hass={dashHass} capteur={co2Pire} seuil={seuilCo2(veillesEtat)} action={co2Action} onAgir={aerer} /> : null,"), 'sans capteur, pas de section — même en option');
   assert.ok(app.includes("a.rooms.filter(r => r.co2Id).map(r => ({ id: r.co2Id, piece: r.name, valeur: r.co2 }))"), 'les capteurs sont ceux des pièces');
   assert.ok(app.includes("const aerer = (act) => commanderService(dashHass, act.ids, act.domaine, act.service, { entity_id: act.ids });"));

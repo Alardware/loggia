@@ -6374,9 +6374,16 @@ function CarteAttention({ points, onNav = null }) {
 /* Sections personnalisables de l'accueil : identifiants stables (jamais les
  * libellés traduits) et libellés dits au rendu. */
 const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];
-/* « heure » et « calendrier » sont EN OPTION (`WIDGETS_OPTION`, ADR 0041) : ils
- * ferment le rail, et ne se montrent que si on les ajoute en mode edition. */
-const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier', 'co2'];
+/* Le cote PAR DEFAUT (retour du 19/09, capture a l'appui : « par defaut, avec
+ * bien sur A surveiller tout en haut ») : A surveiller, l'heure, la meteo, le
+ * CO2, En ce moment, le calendrier. « heure », « calendrier » et « co2 »
+ * restent EN OPTION (`WIDGETS_OPTION`, ADR 0041, 0044) — presents d'emblee, la
+ * croix les retire ; Rappels et Agenda (que le calendrier reprend) suivent,
+ * masques. Cela ne vaut que pour un accueil jamais range : un agencement
+ * enregistre reste le sien. */
+const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'calendrier', 'rappels', 'agenda'];
+const ACC_AJOUTEES_DEFAUT = ['heure', 'co2', 'calendrier'];
+const ACC_CACHES_DEFAUT = ['rappels', 'agenda'];
 const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo'), heure: tr('Heure'), calendrier: tr('Calendrier'), co2: 'CO₂' });
 /* Les identifiants d'un accueil enregistre avant le 15/09 : la glissiere du
  * heros a disparu (son contenu vit dans « En ce moment »), « En cours » est
@@ -6534,11 +6541,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     // piecesOrdre et tailles font partie de la sauvegarde : les oublier ici
     // rendait l'ordre et la taille des cartes pièces perdus à chaque
     // rechargement, alors que saveAccL les écrivait bien.
-    return { main: Array.isArray(v.main) ? v.main : null, rail: Array.isArray(v.rail) ? v.rail : null, caches: Array.isArray(v.caches) ? v.caches : [],
+    return { main: Array.isArray(v.main) ? v.main : null, rail: Array.isArray(v.rail) ? v.rail : null, caches: Array.isArray(v.caches) ? v.caches : [...ACC_CACHES_DEFAUT],
       piecesOrdre: Array.isArray(v.piecesOrdre) ? v.piecesOrdre : [], tailles: (v.tailles && typeof v.tailles === 'object') ? v.tailles : {},
       /* Les widgets en option du rail (ADR 0041) : ceux qu'on a ajoutes, leur
        * style, et les villes du calendrier « mois » (`null` = jamais reglees). */
-      ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [], styles: (v.styles && typeof v.styles === 'object') ? v.styles : {}, villes: Array.isArray(v.villes) ? v.villes : null,
+      ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [...ACC_AJOUTEES_DEFAUT], styles: (v.styles && typeof v.styles === 'object') ? v.styles : {}, villes: Array.isArray(v.villes) ? v.villes : null,
       /* Les grilles des autres formats. Les cles ci-dessus restent celles de
        * l'ORDINATEUR : une installation existante retrouve donc son accueil
        * tel qu'elle l'a laisse, et ne decouvre `formats` que le jour ou

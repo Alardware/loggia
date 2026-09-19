@@ -14,11 +14,14 @@
  */
 import { tr } from './i18n.js';
 
-/** Les sections du rail qui ne se montrent que si on les AJOUTE (mode édition). */
+/** Les sections du rail EN OPTION : la croix les retire, « Ajouter » les rend
+ * (mode édition). Depuis le 19/09, elles sont là par défaut (App.jsx,
+ * `ACC_AJOUTEES_DEFAUT`). */
 export const WIDGETS_OPTION = ['heure', 'calendrier', 'co2'];
 
-/** Les styles de chaque widget ; le premier est celui d'un widget qu'on vient d'ajouter. */
-export const STYLES_WIDGETS = { heure: ['aiguilles', 'tuiles'], calendrier: ['semaine', 'mois'] };
+/** Les styles de chaque widget ; le premier est celui d'un widget qu'on vient
+ * d'ajouter, ou jamais réglé — l'heure en tuiles, comme la capture du 19/09. */
+export const STYLES_WIDGETS = { heure: ['tuiles', 'aiguilles'], calendrier: ['semaine', 'mois'] };
 
 /** Le nom d'un style, tel que le bandeau d'outils de la section l'écrit. */
 export const NOMS_STYLES = () => ({ aiguilles: tr('Aiguilles'), tuiles: tr('Tuiles'), semaine: tr('Semaine'), mois: tr('Mois') });

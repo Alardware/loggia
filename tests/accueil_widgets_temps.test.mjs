@@ -29,13 +29,15 @@ const jours = (liste) => liste.map(c => c.date.getDate());
 
 test('deux widgets en option, deux styles chacun ; un style inconnu retombe sur le premier', () => {
   assert.deepEqual(WIDGETS_OPTION, ['heure', 'calendrier', 'co2'], 'le CO₂ les a rejoints en v3.46.0 (ADR 0044)');
-  assert.deepEqual(STYLES_WIDGETS, { heure: ['aiguilles', 'tuiles'], calendrier: ['semaine', 'mois'] });
+  // L'heure en tuiles d'abord : la capture du 19/09 (« par défaut »).
+  assert.deepEqual(STYLES_WIDGETS, { heure: ['tuiles', 'aiguilles'], calendrier: ['semaine', 'mois'] });
   assert.equal(styleDe({ heure: 'tuiles' }, 'heure'), 'tuiles');
   assert.equal(styleDe({ heure: 'tuiles' }, 'calendrier'), 'semaine', 'le style d’un widget ne vaut pas pour l’autre');
   assert.equal(styleDe({ calendrier: 'mois' }, 'calendrier'), 'mois');
-  assert.equal(styleDe({ heure: 'neon' }, 'heure'), 'aiguilles', 'un style d’une version future, ou une faute de frappe');
-  assert.equal(styleDe(null, 'heure'), 'aiguilles');
-  assert.equal(styleDe('tuiles', 'heure'), 'aiguilles', 'pas un objet : pas un choix');
+  assert.equal(styleDe({ heure: 'aiguilles' }, 'heure'), 'aiguilles');
+  assert.equal(styleDe({ heure: 'neon' }, 'heure'), 'tuiles', 'un style d’une version future, ou une faute de frappe');
+  assert.equal(styleDe(null, 'heure'), 'tuiles');
+  assert.equal(styleDe('aiguilles', 'heure'), 'tuiles', 'pas un objet : pas un choix');
   assert.equal(styleDe({}, 'meteo'), null, 'une section sans style n’en a pas');
 });
 
@@ -132,13 +134,13 @@ test('la tuile Agenda : rien, ou le prochain d’aujourd’hui et combien d’au
   assert.deepEqual(resumeAgendaDuJour([a, b, c]), { n: 3, prochain: a, autres: 2 });
 });
 
-test('l’Accueil : deux sections qui ferment le rail, montrées seulement si on les AJOUTE', () => {
-  assert.ok(app.includes("const ACC_RAIL = ['attention', 'meteo', 'moment', 'rappels', 'agenda', 'heure', 'calendrier', 'co2'];"), 'elles ferment le rail (le CO₂ avec elles depuis v3.46.0)');
+test('l’Accueil : des sections en option, présentes par défaut, que la croix retire', () => {
+  assert.ok(app.includes("const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'calendrier', 'rappels', 'agenda'];"), 'l’heure juste sous « À surveiller », le CO₂ après la météo, le calendrier après En ce moment (19/09)');
   assert.ok(app.includes("heure: tr('Heure'), calendrier: tr('Calendrier'), co2: 'CO₂' });"), 'leurs noms en édition');
   const d = bloc(app, 'function Dashboard(', NL + 'function ');
-  assert.ok(d.includes("ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [], styles: (v.styles && typeof v.styles === 'object') ? v.styles : {}, villes: Array.isArray(v.villes) ? v.villes : null,"), 'l’agencement relu garde les ajouts, les styles et les villes — sinon ils se perdaient au rechargement');
+  assert.ok(d.includes("ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [...ACC_AJOUTEES_DEFAUT], styles: (v.styles && typeof v.styles === 'object') ? v.styles : {}, villes: Array.isArray(v.villes) ? v.villes : null,"), 'l’agencement relu garde les ajouts, les styles et les villes — sinon ils se perdaient au rechargement');
   assert.ok(d.includes('const estOption = (id) => WIDGETS_OPTION.indexOf(id) >= 0;'));
-  assert.ok(d.includes("const cache = estOption(id) ? (grille.ajoutees || []).indexOf(id) < 0 : (grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0;"), 'un widget en option est absent tant qu’il n’est pas ajouté ; un vieux masquage « calendrier » ne le concerne pas');
+  assert.ok(d.includes("const cache = estOption(id) ? (grille.ajoutees || []).indexOf(id) < 0 : (grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0;"), 'un widget en option n’est là que s’il est ajouté (par défaut, il l’est) ; un vieux masquage « calendrier » ne le concerne pas');
   assert.ok(d.includes("? saveGrille({ ajoutees: [...(grille.ajoutees || []).filter(x => x !== id), id] })") && d.includes("? saveGrille({ ajoutees: (grille.ajoutees || []).filter(x => x !== id) })"), 'ajouter et retirer passent par la grille du FORMAT en cours');
   assert.ok(d.includes("{estOption(id) ? tr('en option') : tr('masquée')}") && d.includes("{estOption(id) ? tr('Ajouter') : tr('Réafficher')}"), 'la ligne grisée dit « en option », son bouton « Ajouter »');
   assert.ok(d.includes('if (cache && !editMode) return null;'), 'hors édition, rien — pas même une place');
