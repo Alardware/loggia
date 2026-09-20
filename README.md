@@ -92,6 +92,12 @@ sont masquées, avec le motif.
   (l'idéal) au rouge, et un trait à la valeur ; une pile, cinq barres. Toutes
   les piles de la maison se retrouvent dans la vue Énergie, la plus basse
   d'abord.
+- **Caméras en direct** — le flux sur l'Accueil et dans la vue Sécurité.
+  Un clic sur une vignette l'ouvre en grand, avec les modes de la caméra
+  (détection, suivi, mode privé) quand l'appareil en propose. De deux
+  caméras, un menu règle combien s'affichent par ligne — de une à quatre,
+  chacune avec son schéma —, et le choix est propre à l'ordinateur, à la
+  tablette et au téléphone.
 - **Vignette météo animée** — la condition se voit dans la vignette de
   l'accueil : pluie qui tombe, étoiles, halo de soleil, éclair d'orage.
 - **Mode ambiant** — pour une tablette murale : après un délai sans toucher,

@@ -45,6 +45,7 @@ import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbo
 import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
+import { colonnesCam, camDispoDe, poserCamDispo, camDisposDe, camSerre, CAM_AUTO } from './camdispo.js';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
 import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { CARTE_RAIL } from './styles.js';
@@ -5285,21 +5286,28 @@ function CamSheet({ haid, nom, hass, onClose, onNav = null, evenement = null }) 
 function CameraTile({ c, agrandir = true }) {
   const live = !!(c.haid && c.hass);
   const t = new Date(), hhmm = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
-  // Un seul bouton : agrandir en popup — le flux est DÉJÀ en direct, le
-  // bouton caméra ne racontait rien (retour 31/08).
+  // TOUTE la tuile agrandit (retour 20/09 : « un clic pourrait la zoomer,
+  // l'afficher en plus gros ») — viser un bouton de 36 px sur une vignette de
+  // caméra était une corvée. Le ⤢ du coin reste, en repère : il dit ce que le
+  // clic fait, sans être la seule cible. Le flux est DÉJÀ en direct, il n'y a
+  // rien d'autre à commander ici (retour 31/08).
   const [grand, setGrand] = useState(false);
-  const ctrl = { width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer', padding: 0 };
+  const ctrl = { width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' };
   return (
     <div className={'o-sombre o-cam-tuile' + (c.online === false ? ' o-panne' : '')} style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', aspectRatio: '16/9', background: c.grad, border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
       {live && <CamLive hass={c.hass} haid={c.haid} online={c.online} />}
       {!live && <div style={{ position: 'absolute', inset: 0, background: c.glow }} />}
+      {live && agrandir && (
+        <button type="button" aria-label={tr('Agrandir') + ' ' + (c.label || '')} onClick={() => setGrand(true)}
+          style={{ position: 'absolute', inset: 0, zIndex: 2, border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }} />
+      )}
       <div className="o-livebadge" style={{ position: 'absolute', top: 13, left: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 11px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: '#fff' }}><span className="o-livedot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-bad)' }} />{c.tag}</div>
       <div className="o-camheure" style={{ position: 'absolute', top: 13, right: 14, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.85)', textShadow: '0 1px 4px rgba(0,0,0,.5)' }}>{hhmm}</div>
       {/* Les classes portent les règles du téléphone (deux tuiles par ligne). */}
       <div className="o-campied" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '30px 16px 14px', background: 'linear-gradient(to top,rgba(0,0,0,.72),transparent)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div style={{ minWidth: 0 }}><div className="o-camnom" style={{ fontSize: 15, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.label}</div><div className="o-camsous" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,.82)' }}>{c.sub}</div></div>
         {live && agrandir && (
-          <button aria-label={tr('Agrandir')} onClick={() => setGrand(true)} style={ctrl}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></button>
+          <span className="o-camzoom" style={ctrl}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></span>
         )}
       </div>
       {grand && <CamSheet haid={c.haid} nom={c.label} hass={c.hass} evenement={c.evenement} onClose={() => setGrand(false)} />}
@@ -5319,16 +5327,48 @@ function CvCamera({ id, hass, label = null }) {
       {vivant
         ? <CamLive hass={hass} haid={id} online={online} />
         : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text3)' }}><Fi i="video-camera" size={30} /></div>}
+      {/* Toute la carte agrandit, comme la tuile de l'Accueil (20/09). */}
+      <button type="button" aria-label={tr('Agrandir') + ' ' + nom} onClick={() => setGrand(true)}
+        style={{ position: 'absolute', inset: 0, zIndex: 2, border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }} />
       <div className="o-livebadge" style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: '#fff' }}><span className="o-livedot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-bad)' }} />LIVE</div>
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '24px 12px 10px', background: 'linear-gradient(to top,rgba(0,0,0,.72),transparent)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</span>
-        <button aria-label={tr('Agrandir')} onClick={() => setGrand(true)} style={{ width: 30, height: 30, borderRadius: 10, background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></button>
+        <span style={{ width: 30, height: 30, borderRadius: 10, background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></span>
       </div>
       {grand && <CamSheet haid={id} nom={nom} hass={hass} onClose={() => setGrand(false)} />}
     </div>
   );
 }
 
+/* ── Combien de caméras par ligne (20/09) ────────────────────────────────────
+ * « moi j'en ai 2 mais d'autres en ont peut-être plus, on pourrait ajouter un
+ * réglage d'affichage comme ceux-ci » : un menu où chaque ligne porte le
+ * SCHÉMA de sa disposition — la forme se reconnaît avant de se lire. Le menu
+ * passe par `ListeChoix` comme tous les autres (jamais de liste native).
+ * Le choix suit le type d'écran (`src/camdispo.js`). */
+function SchemaCam({ n, size = 18 }) {
+  // Une vignette par colonne, au ratio des tuiles (16/9), dans un carré.
+  const g = 1.6, l = (size - g * (n - 1)) / n, h = Math.max(2.5, l * 9 / 16);
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+      {Array.from({ length: n }, (_, i) => (
+        <rect key={i} x={i * (l + g)} y={(size - h) / 2} width={l} height={h} rx={Math.min(2, l / 3)} fill="currentColor" opacity={.78} />
+      ))}
+    </svg>
+  );
+}
+const CAM_DISPO_NOMS = () => ({ auto: tr('Automatique'), 1: tr('1 par ligne'), 2: tr('2 par ligne'), 3: tr('3 par ligne'), 4: tr('4 par ligne') });
+function ChoixCamDispo({ valeur, format, onChoisir }) {
+  const noms = CAM_DISPO_NOMS();
+  const colsDe = (id) => (id === 'auto' ? (CAM_AUTO[format] || 2) : parseInt(id, 10));
+  const options = camDisposDe(format).map(id => ({ id, label: noms[id], ico: <SchemaCam n={colsDe(id)} /> }));
+  const courant = camDispoDe(valeur, format);
+  return (
+    <ListeChoix value={courant} options={options} onChange={onChoisir} label={tr('Caméras par ligne')} recherche={false}>
+      {(cur) => (<><SchemaCam n={colsDe(courant)} size={15} /><span>{(cur || { label: noms.auto }).label}</span></>)}
+    </ListeChoix>
+  );
+}
 
 /* ════════════ VUE OBJETS — hub des appareils connectés (réf. « Objets connectés ») ════════════ */
 // Illustrations filigrane des appareils médias (même style flat que PLANT_ART, ancrées à droite).
@@ -6635,6 +6675,15 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     const { formats: _ignore, ...base } = grille;
     saveAccL({ ...accL, formats: { ...(accL.formats || {}), [formatGrille]: { ...base, ...g } } });
   };
+  /* COMBIEN DE VIGNETTES DE CAMERA PAR LIGNE (20/09) : le meme raisonnement que la grille
+   * — par type d'ecran, dans la maison (`loggia_camdispo`), pas dans le
+   * navigateur. La vue Securite lit la meme cle : deux endroits, un reglage. */
+  const [camDispo, setCamDispo] = useState(() => cfgVal('loggia_camdispo', null));
+  const poserCam = (id) => {
+    const n = poserCamDispo(camDispo, formatGrille, id);
+    setCamDispo(n);
+    cfgSet({ loggia_camdispo: n });
+  };
   /* Repartir de l'ordinateur : on SUPPRIME la surcharge plutot que d'y recopier
    * la grille de bureau. Recopiee, elle cesserait de suivre au premier
    * changement suivant. */
@@ -7548,7 +7597,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             </div>
           );
           const camsGrid = (
-            <div className="grid-cams" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className={'grid-cams' + (camSerre(colonnesCam(camDispo, formatGrille), formatGrille) ? ' o-cams-serre' : '')} style={{ display: 'grid', gridTemplateColumns: `repeat(${colonnesCam(camDispo, formatGrille)},minmax(0,1fr))`, gap: 16 }}>
               {cams.map(c => <CameraTile key={c.cle} c={c} />)}
             </div>
           );
@@ -7644,9 +7693,14 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           );
           const railAgenda = calRailId ? railPanel(tr('Agenda'), sousAg, nAuj ? (nAuj > 1 ? tr('{n} AUJOURD’HUI', { n: nAuj }) : tr('1 AUJOURD’HUI')) : tr('RIEN AUJOURD’HUI'), nAuj ? '79,140,255' : OKRGB, [bandeAg, ...lignesAg]) : null;
           const camsHeader = (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
               <div style={sectionTitle}>{tr('Caméras')}</div>
+              <span style={{ flex: 1 }} />
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{a ? tr('{n} en ligne', { n: a.camOnline }) : tr('{n} caméras', { n: cams.length })}</span>
+              {/* Le reglage d'affichage la ou l'on regarde les cameras — pas
+                * enterre dans les Parametres (20/09). Une seule camera : rien
+                * a disposer. */}
+              {cams.length > 1 && <ChoixCamDispo valeur={camDispo} format={formatGrille} onChoisir={poserCam} />}
             </div>
           );
           // Sections nommées : l'ordre vient de `loggia_accueil`, le contenu d'ici.
@@ -9565,6 +9619,15 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
     };
   });
   const anyMotion = cams.some(c => c.online && c.active);
+  /* Combien par ligne (20/09) : la cle de la maison, lue par type d'ecran —
+   * exactement celle de l'Accueil, pour que les deux vues se ressemblent. */
+  const formatCam = formatEcran(useCoarse(), useWide(1180));
+  const [camDispo, setCamDispo] = useState(() => cfgVal('loggia_camdispo', null));
+  const poserCam = (id) => {
+    const n = poserCamDispo(camDispo, formatCam, id);
+    setCamDispo(n);
+    cfgSet({ loggia_camdispo: n });
+  };
 
   // ── Présence ──
   const people = secPeople.map(p => ({ name: p.name, home: isOn(p.haid) }));
@@ -9676,8 +9739,14 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
         {edit && !blocs.length && <CarteAjout onClick={() => setAddSheet(true)} />}
       </div>
 
-      <div id="sec-cameras" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Caméras en direct')}</div>
-      <div className="grid-sec-cams" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div id="sec-cameras" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Caméras en direct')}</span>
+        <span style={{ flex: 1 }} />
+        {/* Le meme reglage que l'Accueil, la meme cle : disposer ici dispose
+          * partout, pour ce type d'ecran (20/09). */}
+        {cams.length > 1 && <ChoixCamDispo valeur={camDispo} format={formatCam} onChoisir={poserCam} />}
+      </div>
+      <div className={'grid-sec-cams' + (camSerre(colonnesCam(camDispo, formatCam), formatCam) ? ' o-cams-serre' : '')} style={{ display: 'grid', gridTemplateColumns: `repeat(${colonnesCam(camDispo, formatCam)},minmax(0,1fr))`, gap: 16 }}>
         {cams.map((c, i) => <Anim key={c.haid || c.id} i={i} base={140}><CameraTile c={c} /></Anim>)}
       </div>
 
@@ -11573,8 +11642,26 @@ function biblioStates() {
     'zone.home': s('1', { friendly_name: 'Maison', latitude: 46.98, longitude: 1.92, radius: 100 }),
     'person.biblio_3': s('not_home', { friendly_name: 'Marie', latitude: 47.06, longitude: 2.05 }),
     'sensor.biblio_energie_hist': s(7.4, { friendly_name: 'Énergie maison', unit_of_measurement: 'kWh', device_class: 'energy' }),
+    // Arrivees le 20/09, pour les familles que la bibliotheque ne montrait pas
+    // encore : la sirene (retour du 16/09), la meteo (le ciel se fond dans le
+    // theme depuis l'ADR 0059) et le soleil, qui dit s'il fait nuit.
+    'siren.biblio': s('off', { friendly_name: 'Sirène intérieure' }),
+    'weather.biblio': s('partlycloudy', { friendly_name: 'Maison', temperature: 18.2, humidity: 62, temperature_unit: '°C' }),
+    'sun.sun': s('above_horizon', { friendly_name: 'Soleil' }),
   };
 }
+/* Un scenario fictif, pour la carte des Scenarios : deux actions, lance il y a
+ * un moment — de quoi remplir le resume et le repere sans rien inventer. */
+const SCN_BIBLIO = () => ({
+  id: 'biblio-cinema', nom: 'Cinéma', icone: 'film', teinte: 'chambre',
+  // `dernier` se compte en SECONDES, comme le serveur le donne.
+  dernier: Math.round(Date.now() / 1000) - 95 * 60,
+  actions: [
+    { famille: 'lumieres', geste: 'niveau', valeur: 20, portee: 'piece', piece: 'Séjour' },
+    { famille: 'volets', geste: 'fermer', portee: 'vie' },
+    { famille: 'medias', geste: 'tv' },
+  ],
+});
 function BiblioView() {
   // hass figé au montage : les cartes optimistes bougent toutes seules,
   // aucune confirmation ne viendra (et n'a pas à venir) d'un vrai serveur.
@@ -11595,6 +11682,15 @@ function BiblioView() {
       <Rangee>
         <Item l={tr('Compacte')} h={88}><PieceCard p={pieceDemo} chip lights={[{ on: false }]} mains={[]} onOpen={null} /></Item>
         <Item l={tr('Standard')}><PieceCard p={pieceDemo} compact lights={[{ on: true }, { on: false }]} mains={[{ on: true }]} onToggleLights={() => {}} covers={{ open: true, onToggle: () => {} }} clim={{ on: true, froid: false, onToggle: () => {} }} onOpen={null} /></Item>
+      </Rangee>
+
+      {/* Les scenarios ont leur carte depuis l'ADR 0052 — la bibliotheque ne
+        * la montrait pas (retour du 20/09 : « actualise la bibliotheque »). */}
+      <Titre i="sparkles" c="var(--o-accent-soft)" t={tr('Scénarios')} />
+      <Rangee>
+        <Item l={tr('Standard')} w={200}><CarteScenario s={SCN_BIBLIO()} onLancer={() => {}} /></Item>
+        <Item l={tr('Compacte')} w={200} h={88}><CarteScenario s={SCN_BIBLIO()} compacte onLancer={() => {}} /></Item>
+        <Item l={tr('En cours')} w={200}><CarteScenario s={SCN_BIBLIO()} enCours onLancer={() => {}} /></Item>
       </Rangee>
 
       <Titre i="bulb" c="var(--o-warn)" t={tr('Lumières et prises')} />
@@ -11644,7 +11740,21 @@ function BiblioView() {
         <Item l={tr('Chiffre (lettres)')}><CvBigSensor id="binary_sensor.biblio_mouvement" hass={hb} /></Item>
         <Item l={tr('Graphique (courbe)')}><CvHistory id="sensor.biblio_temp" hass={hb} demoPoints={(() => { const t0 = Date.now() - 86400000; return Array.from({ length: 48 }, (_, i) => ({ t: t0 + i * 1800000, v: Math.round((22 + Math.sin(i / 6.5) * 1.3 - i * 0.01) * 10) / 10 })); })()} /></Item>
         <Item l={tr('Graphique (barres, énergie)')}><CvHistory id="sensor.biblio_energie_hist" hass={hb} demoPoints={(() => { const t0 = Date.now() - 86400000; let v = 0; return Array.from({ length: 48 }, (_, i) => { const h = new Date(t0 + i * 1800000).getHours(); v += h < 7 ? 0.03 : h < 18 ? 0.18 : 0.09; return { t: t0 + i * 1800000, v: Math.round(v * 100) / 100 }; }); })()} /></Item>
+        {/* La STANDARD d'un capteur porte sa jauge depuis l'ADR 0057 — et la
+          * compacte, elle, n'en a pas (v3.57.1). La bibliotheque le montrait
+          * a l'envers : elle n'avait que la compacte. */}
+        <Item l={tr('Standard (jauge)')}>{dc.card('sensor.biblio_co2')}</Item>
+        <Item l={tr('Standard (température)')}>{dc.card('sensor.biblio_temp')}</Item>
         <Item l={tr('Horloge')} h={88}><CvClock /></Item>
+      </Rangee>
+
+      {/* Les widgets du cote de l'Accueil (ADR 0041, 0044) — presents par
+        * defaut depuis la v3.59.0, absents de la bibliotheque jusqu'ici. */}
+      <Titre i="clock" c="var(--o-accent-soft)" t={tr('Widgets du rail')} />
+      <Rangee>
+        <Item l={tr('Heure')} w={280} h={200}><HorlogeRail hass={hb} /></Item>
+        <Item l={tr('Calendrier')} w={280} h={200}><CalendrierRail hass={hb} calId="calendar.biblio" evenementsJour={[]} /></Item>
+        <Item l={tr('CO₂')} w={280} h={200}><Co2Rail hass={hb} capteur={{ id: 'sensor.biblio_co2', nom: 'CO₂ séjour', piece: 'Séjour', valeur: 640 }} seuil={1400} /></Item>
       </Rangee>
 
       <Titre i="apps" c="var(--o-accent-soft)" t={tr('Cartes maison (agrégats)')} />
@@ -11655,6 +11765,10 @@ function BiblioView() {
         <Item l={tr('Énergie maison')} w={280}><CvEnergie hass={hb} roles={{ solarNow: 'sensor.biblio_solaire', gridNow: 'sensor.biblio_reseau', consoJour: 'sensor.biblio_conso_jour' }} /></Item>
         <Item l={tr('Calendrier')} w={280}><CvCalendrier id="calendar.biblio" hass={hb} /></Item>
         <Item l={tr('Localisation')} w={280}><CvCarte hass={hb} gensDemo={[{ name: 'Camille', haid: 'person.biblio', img: null }, { name: 'Marie', haid: 'person.biblio_3', img: null }]} /></Item>
+        <Item l={tr('Météo')} w={280}><CvWeather id="weather.biblio" hass={hb} /></Item>
+        {/* Une carte chips : ses pastilles, chacune cliquable (le resume
+          * automatique a ete retire le 01/09). */}
+        <Item l={tr('Chips (groupe)')} w={280} h={88}><CvChips hass={hb} x={{ ids: ['light.biblio_rgb', 'cover.biblio', 'climate.biblio'] }} /></Item>
         <Item l={tr('Activité récente')} w={280}><CvActivite hass={hb} demoEvents={(() => { const t0 = Date.now(); return [
           { entity_id: 'cover.biblio', state: 'closed', when: t0 - 6 * 60000 },
           { entity_id: 'vacuum.biblio', state: 'docked', when: t0 - 82 * 60000 },
@@ -11672,8 +11786,15 @@ function BiblioView() {
       <Titre i="shield-check" c="var(--o-ok)" t={tr('Sécurité et divers')} />
       <Rangee>
         <Item l={tr('Caméra (standard 1×1)')}><CvCamera id="camera.biblio_entree" hass={hb} /></Item>
+        {/* La tuile 16/9 de l'Accueil et de la vue Securite : ce n'est pas la
+          * meme carte que la 1×1 du catalogue. */}
+        <Item l={tr('Caméra (tuile 16/9)')} w={300} h={169}><CameraTile c={{ label: 'Caméra entrée', tag: 'LIVE · CAMÉRA ENTRÉE', grad: CAMERAS()[0].grad, glow: CAMERAS()[0].glow, sub: tr('Direct'), online: true }} /></Item>
         <Item l={tr('Carte personne')}><CvPerson id="person.biblio" hass={hb} /></Item>
         <Item l={tr('Alarme')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} /></Item>
+        {/* Arrivee le 16/09 (« je n'ai pas la carte sirene ») : beaucoup de
+          * sirenes Zigbee n'arrivent qu'en `switch`, celle-ci est un vrai
+          * `siren`. */}
+        <Item l={tr('Sirène')}><CvSirene id="siren.biblio" hass={hb} /></Item>
         <Item l={tr('Alarme (seule)')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} sans /></Item>
         <Item l={tr('Alarme (compacte)')} h={88}><CvCard id="alarm_control_panel.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Chip')} h={88}><CvChip id="light.biblio_rgb" hass={hb} dc={dc} /></Item>
@@ -11684,8 +11805,20 @@ function BiblioView() {
         <Item l={tr('Ouverture')} h={88}><CvCard id="binary_sensor.biblio_porte" hass={hb} onOpen={dc.ouvrir} dense /></Item>
       </Rangee>
 
+      {/* « A surveiller » (ADR 0028) : la carte de tete de l'Accueil. Elle
+        * n'existe que quand il y a un point — ici, deux, pour la montrer. */}
+      <Titre i="triangle-warning" c="var(--o-warn)" t={tr('À surveiller')} />
+      <Rangee>
+        <Item l={tr('Points d’attention')} w={420} h="auto">
+          <CarteAttention points={[
+            { cle: 'biblio-garage', niveau: 'alerte', icone: 'garage-open', titre: tr('Garage ouvert'), sous: 'Garage · 1 h 49' },
+            { cle: 'biblio-co2', niveau: 'info', icone: 'wind', titre: tr('CO₂ élevé'), sous: 'Séjour · 1480 ppm' },
+          ]} />
+        </Item>
+      </Rangee>
+
       <div style={{ marginTop: 26, fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
-        {tr('Absentes ici : agenda, journal et météo — elles vivent des données du vrai serveur. Graphiques et activité montrent un historique factice ; la caméra son vrai flux.')}
+        {tr('Absentes ici : agenda et journal — elles vivent des données du vrai serveur. Graphiques, activité et widgets du rail montrent un historique factice ; la caméra 1×1 son vrai flux.')}
       </div>
       {dc.sheets}
     </main>
@@ -11767,6 +11900,11 @@ const CV_GALERIE = () => [
   { t: 'activite', lbl: tr('Activité récente'), ex: null, seule: true },
   { t: 'localisation', lbl: tr('Localisation'), ex: null, seule: true },
   { t: 'chip', lbl: tr('Chip'), ex: 'light.biblio_rgb' },
+  /* CHIPS (groupe) revient dans la galerie le 20/09 : la carte se rendait
+   * toujours, ses outils d'édition étaient branchés (crayon → « Composer les
+   * pastilles »), mais plus rien ne permettait de la POSER — on ne pouvait
+   * l'obtenir que par un agencement hérité. */
+  { t: 'chips', lbl: tr('Chips (groupe)'), ex: null, seule: true },
 ];
 
 /* Un APERÇU de carte, au vrai gabarit (88 ou 184) et inerte : on regarde,
@@ -11801,7 +11939,7 @@ function ChipsEditSheet({ x, hass, onClose, onSave }) {
           <CroixFeuille />
         </div>
         {ids.length === 0
-          ? <div style={{ padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 14 }}>{tr('Sans pastille choisie, la carte résume la maison : lumières, ouvrants, alarme, présence, air.')}</div>
+          ? <div style={{ padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 14 }}>{tr('Choisis les pastilles de la rangée : sans elles, la carte reste vide.')}</div>
           : <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
               {ids.map((id, i) => (
                 <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'var(--o-s2)' }}>

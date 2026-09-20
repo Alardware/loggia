@@ -37,16 +37,23 @@ test('le voile et la barre du haut prennent la teinte du theme, pas le bleu nuit
   assert.ok(regle('.o-wx3d-veil').includes('rgba(11,16,27,.10) 0%'), 'le repli');
 });
 
-test('au telephone, la rangee des scenarios ne rogne plus d’ombre en rectangle', () => {
+test('la rangee des scenarios ne rogne plus d’ombre en rectangle, a TOUTES les largeurs', () => {
   const d = css.indexOf('/* Scènes rapides : rangée qui défile (pas d\'empilement)');
   assert.ok(d >= 0, 'la regle du telephone');
   const bloc = css.slice(d, css.indexOf('/* Vue Pièce', d));
   assert.ok(bloc.includes('padding: 4px 4px 6px; margin: -4px -4px 0; scroll-padding-inline: 4px;'), 'de l’air pour l’anneau de focus, sans rien deplacer');
   assert.ok(bloc.includes('.grid-qscenes > button { flex: 0 0 150px; scroll-snap-align: start; }'), 'toujours 150 px par carte');
-  // Depuis l'ADR 0060 : une ombre COURTE, contenue par le rembourrage — sans
-  // elle, la carte se confondait avec la page sur un thème clair (1,01:1).
-  assert.ok(bloc.includes('.grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(0,0,0,.16), 0 3px 8px rgba(0,0,0,.12)) !important; }'), 'une ombre courte, jamais rognée');
-  assert.ok(!bloc.includes('box-shadow: none !important'), 'plus d’ombre coupée en rectangle');
-  // Le PC garde ses ombres : la rangee leur laisse la place.
+  /* Une ombre COURTE (ADR 0060), et desormais HORS du media du telephone
+   * (20/09) : sur l'ordinateur la rangee defile aussi, et l'ombre longue du
+   * theme — 32 px de flou pour 26 px de rembourrage — etait coupee net par
+   * `overflow-x: auto`. On voyait « comme s'il y en avait 2, dont une tres
+   * cubique ». Sans ombre du tout, la carte se confondait avec la page sur un
+   * theme clair (1,01:1) : c'est donc une ombre courte, pas zero. */
+  const regle = '.grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(0,0,0,.16), 0 3px 8px rgba(0,0,0,.12)) !important; }';
+  assert.ok(css.includes(regle), 'une ombre courte, jamais rognée');
+  assert.ok(!bloc.includes(regle), 'elle n’est plus enfermee dans le media du telephone');
+  assert.ok(css.includes('html.loggia-light .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(16,24,40,.10), 0 3px 8px rgba(16,24,40,.10)) !important; }'), 'sa version claire');
+  assert.ok(!css.includes('.grid-qscenes > button { box-shadow: none'), 'plus d’ombre coupée en rectangle');
+  // Le PC garde son rembourrage : la rangee laisse la place a l'ombre courte.
   assert.ok(css.includes('padding: 6px 6px 26px; margin: -6px -6px -26px;'), 'le PC inchange');
 });

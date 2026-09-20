@@ -498,7 +498,10 @@ const ZONE_LISTE = { flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavio
 
 /* Les options : groupes en capitales, coche du choix, identifiant en petit
  * dessous. `onPointe` suit la souris ; le liseré de l'option visée ne sert
- * qu'au clavier — à la souris, le survol suffit. */
+ * qu'au clavier — à la souris, le survol suffit.
+ *
+ * `ico`, facultatif, glisse un dessin entre la coche et le libellé : une
+ * disposition se reconnaît à sa forme avant de se lire (20/09). */
 function OptionsPanneau({ base, options, value, actif, auClavier, onPointe, onChoisir, vide = null }) {
   const ligne = ({ o, i }) => {
     const on = o.id === value;
@@ -510,6 +513,7 @@ function OptionsPanneau({ base, options, value, actif, auClavier, onPointe, onCh
           background: on ? 'var(--o-accent-fond)' : survol ? 'var(--o-s2)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)',
           boxShadow: on && survol && auClavier ? 'inset 0 0 0 2px rgba(255,255,255,.45)' : 'none' }}>
         <span style={{ width: 13, display: 'inline-flex', flexShrink: 0 }}>{on ? <Fi i="check" size={12} color="#fff" /> : null}</span>
+        {o.ico ? <span style={{ display: 'inline-flex', flexShrink: 0, color: on ? '#fff' : 'var(--o-text2)' }}>{o.ico}</span> : null}
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</span>
           {o.sub ? <span style={{ display: 'block', marginTop: 1, fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: on ? 'rgba(255,255,255,.78)' : 'var(--o-text3)' }}>{o.sub}</span> : null}

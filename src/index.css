@@ -349,6 +349,16 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 @media (prefers-reduced-motion: reduce) { .o-panne, .o-panne::before { animation: none; } }
 /* La tuile caméra clippe son image aux coins : le liseré se dessine juste
    dedans, sinon `overflow: visible` laisserait les coins carrés de la vidéo. */
+/* Plusieurs caméras par ligne (20/09, ADR 0061) : sur une vignette étroite, le
+   nom et sa sous-ligne se chevauchaient, l'heure mordait sur le badge LIVE et
+   le repère d'agrandissement passait par-dessus le texte. Le pied se resserre,
+   et le repère s'efface — toute la tuile agrandit, il n'était qu'un indice. */
+.o-cams-serre .o-campied { padding: 22px 10px 9px !important; }
+.o-cams-serre .o-camnom { font-size: 12.5px !important; }
+.o-cams-serre .o-camsous { font-size: 10.5px !important; gap: 4px !important; }
+.o-cams-serre .o-livebadge { top: 8px !important; left: 8px !important; padding: 3px 7px !important; font-size: 9px !important; gap: 5px !important; }
+.o-cams-serre .o-camheure { top: 8px !important; right: 9px !important; font-size: 9.5px !important; }
+.o-cams-serre .o-camzoom { display: none !important; }
 .o-cam-tuile.o-panne { overflow: hidden !important; }
 .o-cam-tuile.o-panne::before { inset: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -491,12 +501,6 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
     padding: 4px 4px 6px; margin: -4px -4px 0; scroll-padding-inline: 4px;
   }
   .grid-qscenes > button { flex: 0 0 150px; scroll-snap-align: start; }
-  /* Une ombre COURTE, qui tient dans le rembourrage : sans elle, sur un thème
-   * clair peu contrasté (Frosted Glass, iOS, Tokyo Night), la carte se
-   * confondait avec la page — 1,01:1 (audit du 19/09). Un thème sans ombre
-   * (Atrium) pose son filet dans `--o-shadow-rangee`. */
-  .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(0,0,0,.16), 0 3px 8px rgba(0,0,0,.12)) !important; }
-  html.loggia-light .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(16,24,40,.10), 0 3px 8px rgba(16,24,40,.10)) !important; }
   /* Vue Pièce : 2 cartes par ligne, compactées pour tenir sans déborder. */
   .grid-roomdev { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
   .grid-roomdev .o-rmcard { min-height: 150px !important; padding: 13px !important; }
@@ -512,9 +516,11 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .loggia-aside.is-open { transform: translateX(0); }
   .loggia-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 90; }
   .loggia-content { padding: 16px 14px 96px !important; }
-  .grid-cams, .grid-rappels, .grid-scenes, .grid-covers, .grid-volcfg, .grid-ehero, .grid-ebilan, .grid-vac-top, .grid-vac-map, .grid-croq, .grid-speakers, .grid-sec-cams, .grid-par-pal, .grid-par-about { grid-template-columns: 1fr !important; }
-  /* Caméras : une par ligne sur téléphone. La grille de deux (v3.24.2) n'a pas
-     plu — retour user du 15/09 : « pas fan finalement ». */
+  .grid-rappels, .grid-scenes, .grid-covers, .grid-volcfg, .grid-ehero, .grid-ebilan, .grid-vac-top, .grid-vac-map, .grid-croq, .grid-speakers, .grid-par-pal, .grid-par-about { grid-template-columns: 1fr !important; }
+  /* Caméras : une par ligne sur téléphone (retour du 15/09 : « pas fan
+     finalement » de la grille de deux). Depuis le 20/09, c'est le RÉGLAGE qui
+     le dit — `camdispo.js`, « Automatique » valant une seule colonne au
+     téléphone : un `!important` ici rendrait le choix sans effet. */
   /* Sécurité mobile : hero compact, jauge circulaire gardée SUR LE CÔTÉ (pas de wrap dessous), 4 tuiles en grille 2-col */
   .o-sec-hero { padding: 18px 16px !important; border-radius: 18px !important; }
   .o-sec-herotop { flex-wrap: nowrap !important; gap: 16px !important; align-items: flex-start !important; }
@@ -1157,6 +1163,16 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
   .grid-qscenes::-webkit-scrollbar { display: none; }
   .grid-qscenes > button { scroll-snap-align: start; min-width: 0; }
 }
+/* ── L'ombre des cartes d'une rangée qui défile, à TOUTES les largeurs ──
+ * `overflow-x: auto` rogne aussi en hauteur : l'ombre du thème (32 px de
+ * flou) coupée net dessinait un halo carré autour de chaque carte, sur
+ * téléphone comme sur grand écran (retours des 19 et 20/09). Une ombre
+ * COURTE tient dans le rembourrage de la rangée — et la carte continue de se
+ * détacher sur un thème clair peu contrasté, où le fond seul ne suffit pas.
+ * Un thème sans ombre (Atrium) pose son filet dans `--o-shadow-rangee`. */
+.grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(0,0,0,.16), 0 3px 8px rgba(0,0,0,.12)) !important; }
+html.loggia-light .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(16,24,40,.10), 0 3px 8px rgba(16,24,40,.10)) !important; }
+
 /* Au doigt on glisse : pas de fleches. */
 @media (pointer: coarse) { .o-qscenes-fleche { display: none !important; } }
 
