@@ -704,7 +704,10 @@ function Header() {
   );
 }
 
-const sectionTitle = { fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
+/* Un VRAI titre (`<h2>`) depuis le 20/09 : un lecteur d'écran saute de section
+ * en section par les titres, et un bloc stylé n'en est pas un. `margin` et
+ * `fontWeight` annulent ce que le navigateur donne à un h2 — rien ne bouge à l'œil. */
+const sectionTitle = { margin: 0, fontWeight: 400, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
 const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none' };
 
 // "couleur CSS (hex/rgb) → 'r,g,b'" pour alimenter les tokens rgba(var(--o-accent-rgb),...)
@@ -1798,7 +1801,9 @@ function RmJauge({ v, couleur, grade = null, actif = true, label = '', onCommit,
   return (
     /* Inactive, la jauge n'est qu'un dessin : la regle voit alors un clic
      * sans clavier, mais ce clic ne sert qu'a ne pas ouvrir la fiche. */
-    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
+    /* Active, le clavier arrive par `{...kb}` (rôle slider, flèches) : la règle
+     * ne sait pas lire ce qu'un étalement apporte. */
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/click-events-have-key-events */
     <span {...kb} onClick={(e) => e.stopPropagation()} onPointerDown={glisse}
       /* 24 px de haut, comme la glissiere d'avant la refonte (retour user du
        * 14/09 : « elargis un petit peu la barre ») — le dessin, lui, reste. */
@@ -2007,7 +2012,12 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const allume = !mort && (danger || direct || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera')) || avis != null;
   const ouvrable = !!onOpen && !mort;
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? tr('Ouvrir') + ' ' + nom : undefined}
+    /* Ouvrable, la carte EST un bouton (rôle, tabulation, Entrée et Espace) ;
+     * sinon elle n'est rien de tout cela. La règle ne sait pas lire un rôle
+     * conditionnel. Non ouvrable, plus de `tabIndex` du tout : -1 n'apportait
+     * rien à un bloc qui ne fait rien. */
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : undefined} aria-label={ouvrable ? tr('Ouvrir') + ' ' + nom : undefined}
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined} onClick={ouvrable ? () => onOpen(id) : undefined}
       style={{ ...RM_CARD, position: 'relative', cursor: ouvrable ? 'pointer' : 'default',
         ...(allume && LAVIS ? { background: `linear-gradient(180deg,transparent 28%,${lavisBase}${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
@@ -5167,7 +5177,7 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
-        <div style={sectionTitle}>{tr('Scénarios')}</div>
+        <h2 style={sectionTitle}>{tr('Scénarios')}</h2>
         {edit && onNav
           /* `pointerEvents: auto` : en édition, `Sec` rend le contenu de la
            * section inerte (pointer-events none) pour qu'elle se saisisse ;
@@ -5295,7 +5305,7 @@ function CameraTile({ c, agrandir = true }) {
   const ctrl = { width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' };
   return (
     <div className={'o-sombre o-cam-tuile' + (c.online === false ? ' o-panne' : '')} style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', aspectRatio: '16/9', background: c.grad, border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
-      {live && <CamLive hass={c.hass} haid={c.haid} online={c.online} />}
+      {live && <CamLive hass={c.hass} haid={c.haid} online={c.online} nom={c.label} />}
       {!live && <div style={{ position: 'absolute', inset: 0, background: c.glow }} />}
       {live && agrandir && (
         <button type="button" aria-label={tr('Agrandir') + ' ' + (c.label || '')} onClick={() => setGrand(true)}
@@ -5325,7 +5335,7 @@ function CvCamera({ id, hass, label = null }) {
   return (
     <div className={'o-piece' + (!online ? ' o-panne' : '')} style={{ position: 'relative', height: '100%', minHeight: 172, borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', background: 'linear-gradient(160deg,#16202e,#0b0f16)', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
       {vivant
-        ? <CamLive hass={hass} haid={id} online={online} />
+        ? <CamLive hass={hass} haid={id} online={online} nom={nom} />
         : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text3)' }}><Fi i="video-camera" size={30} /></div>}
       {/* Toute la carte agrandit, comme la tuile de l'Accueil (20/09). */}
       <button type="button" aria-label={tr('Agrandir') + ' ' + nom} onClick={() => setGrand(true)}
@@ -6486,7 +6496,7 @@ function FavorisAccueil({ hass, edit = false }) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={sectionTitle}>{tr('Favoris')}</div>
+        <h2 style={sectionTitle}>{tr('Favoris')}</h2>
         {!vide
           ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{liste.length}</span>
           /* Un tableau de bord qu'on consulte tous les jours ne doit pas
@@ -7427,6 +7437,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           </div>
           )}
           <div className="o-banner-row" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+              {/* Le titre de la page, pour qui ne la voit pas : toutes les
+                * vues en ont un, l'Accueil n'en avait pas — son en-tête dit
+                * bonjour, pas où l'on est. Hors flux (`.o-vh`), rien ne bouge. */}
+              <h1 className="o-vh">{tr('Accueil')}</h1>
               <span className="o-greet-hi" style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{salut}</span>
               {/* Les avatars SUR la ligne du nom, a droite, sur tous les
                 * ecrans (retour user du 15/09 : « ils sont en dessous du
@@ -7533,7 +7547,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           const inner = pieces;
           const piecesHeader = (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <div style={sectionTitle}>{tr('Pièces')}</div>
+              <h2 style={sectionTitle}>{tr('Pièces')}</h2>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('{n} pièces', { n: inner.length })}</span>
             </div>
           );
@@ -7694,7 +7708,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           const railAgenda = calRailId ? railPanel(tr('Agenda'), sousAg, nAuj ? (nAuj > 1 ? tr('{n} AUJOURD’HUI', { n: nAuj }) : tr('1 AUJOURD’HUI')) : tr('RIEN AUJOURD’HUI'), nAuj ? '79,140,255' : OKRGB, [bandeAg, ...lignesAg]) : null;
           const camsHeader = (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-              <div style={sectionTitle}>{tr('Caméras')}</div>
+              <h2 style={sectionTitle}>{tr('Caméras')}</h2>
               <span style={{ flex: 1 }} />
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{a ? tr('{n} en ligne', { n: a.camOnline }) : tr('{n} caméras', { n: cams.length })}</span>
               {/* Le reglage d'affichage la ou l'on regarde les cameras — pas
@@ -8063,7 +8077,7 @@ function ScenesContent({ hass }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 8 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <div style={sectionTitle}>{tr('Ambiances lumineuses')}</div>
+          <h2 style={sectionTitle}>{tr('Ambiances lumineuses')}</h2>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>Bibliothèque Hue · {HUE_CATS.length} collections · {totalScenes} scènes</div>
         </div>
         <span style={{ flex: 1 }} />

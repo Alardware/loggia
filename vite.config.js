@@ -1,5 +1,5 @@
-import { cpSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { cpSync, readFileSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -28,15 +28,40 @@ const orbeRechargee = {
  * Home Assistant des gens. Elles ne vivent donc pas dans `public/`, que toutes
  * les constructions copient et que HACS livrerait : ce greffon les dépose dans
  * la seule construction « demo », celle que GitHub Pages publie
- * (tests/pages_legales.test.mjs). */
+ * (tests/pages_legales.test.mjs).
+ *
+ * Même greffon, même raison, pour ce qui rend le site LISIBLE SANS JAVASCRIPT
+ * (tests/site_lisible.test.mjs) : un moteur de recherche ou un agent IA qui
+ * ouvre la page ne voyait qu'un `<div id="root">` vide. La page du site reçoit
+ * donc une description, des données structurées et un contenu de repli
+ * (`site/_tete.html`, `site/_sans-script.html`) ; celle du paquet HACS, servie
+ * derrière l'authentification de Home Assistant, n'en a aucun besoin et ne
+ * change pas d'un octet. Un fichier de `site/` dont le nom commence par `_`
+ * est un gabarit : il s'injecte, il ne se copie pas. */
 let racine = '';
 let sortie = '';
+const gabarit = (nom) => readFileSync(join(racine, 'site', nom), 'utf8').trim();
 const siteEnLigne = {
   name: 'loggia-site-en-ligne',
   apply: 'build',
   configResolved(c) { racine = c.root; sortie = resolve(c.root, c.build.outDir); },
+  transformIndexHtml: {
+    order: 'pre',
+    handler(html) {
+      const version = JSON.parse(readFileSync(join(racine, 'package.json'), 'utf8')).version;
+      const avant = html;
+      html = html.replace('<title>Loggia</title>', '<title>Loggia — tableau de bord pour Home Assistant (démonstration)</title>');
+      html = html.replace('</head>', `${gabarit('_tete.html').replace('{{version}}', version)}
+</head>`);
+      html = html.replace('<div id="root"></div>', `<div id="root"></div>
+  ${gabarit('_sans-script.html')}`);
+      // Un repère disparu d'index.html ne doit pas passer inaperçu.
+      if (html.length - avant.length < 500) throw new Error('index.html a changé : le site en ligne ne reçoit plus ses gabarits');
+      return html;
+    },
+  },
   closeBundle() {
-    cpSync(join(racine, 'site'), sortie, { recursive: true });
+    cpSync(join(racine, 'site'), sortie, { recursive: true, filter: (src) => !basename(src).startsWith('_') });
   },
 };
 

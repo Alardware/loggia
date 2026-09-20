@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Le plan du site en ligne. GitHub Pages sert ce dépôt sous /loggia/ : un
+     robots.txt n'y serait pas lu (il doit vivre à la racine du domaine), ce
+     plan se déclare donc à la main dans les outils des moteurs de recherche.
+     tests/site_lisible.test.mjs vérifie que chaque page légale y figure. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://alardware.github.io/loggia/</loc><lastmod>2026-09-20</lastmod></url>
+  <url><loc>https://alardware.github.io/loggia/legal/mentions-legales.html</loc><lastmod>2026-09-20</lastmod></url>
+  <url><loc>https://alardware.github.io/loggia/legal/confidentialite.html</loc><lastmod>2026-09-20</lastmod></url>
+  <url><loc>https://alardware.github.io/loggia/legal/cgu.html</loc><lastmod>2026-09-20</lastmod></url>
+  <url><loc>https://alardware.github.io/loggia/legal/cookies.html</loc><lastmod>2026-09-20</lastmod></url>
+  <url><loc>https://alardware.github.io/loggia/legal/accessibilite.html</loc><lastmod>2026-09-20</lastmod></url>
+</urlset>

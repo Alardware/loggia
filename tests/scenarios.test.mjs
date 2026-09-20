@@ -164,7 +164,7 @@ test('la vue Scenarios : cartes standard, edition avec fleches et crayon, la bib
   // Les fleches rangent sur CE type d'ecran : l'ordinateur au composant, les autres chez eux (ADR 0052).
   assert.ok(v.includes("sc.ordonner(ids).catch(() => {});"), 'l’ordre se range par les flèches');
   assert.ok(app.includes("view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} />"), 'la route `scenes` mène à la vue');
-  assert.ok(app.includes("<div style={sectionTitle}>{tr('Ambiances lumineuses')}</div>"), 'la bibliothèque Hue devient une section');
+  assert.ok(app.includes("<h2 style={sectionTitle}>{tr('Ambiances lumineuses')}</h2>"), 'la bibliothèque Hue devient une section');
   const f = bloc('function FicheScenario(', NL + '}');
   assert.ok(f.includes("{ reinitialiser: scenario.id }") && f.includes("{ supprimer: scenario.id }") && f.includes("{ enregistrer: doc }"), 'les trois gestes de la fiche');
 });

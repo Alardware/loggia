@@ -113,7 +113,7 @@ export function ajusterTous(c, contraintes, sens, sur = null) {
 /* Les seuils. Le texte secondaire vise au-dessus de 4,5:1 : il est aussi
  * posé sur des cartes teintées (le lavis d'un scénario, la couleur d'une
  * pièce), qui lui retirent un peu de contraste. */
-export const SEUILS = { texte: 7, text2: 5.4, text3: 5.0, teinte: 4.6, wcag: 4.5, surLavis: 4.2, accent: 3, surAccent: 4.7, surIcone: 3.4, carte: 1.13, puits: 1.08 };
+export const SEUILS = { texte: 7, text2: 5.4, text3: 5.0, teinte: 4.6, wcag: 4.5, surLavis: 4.5, surLavisVif: 4.2, text2Lavis: 4.85, accent: 3, surAccent: 4.7, surIcone: 3.4, carte: 1.13, puits: 1.08 };
 /* Le lavis d'une carte teintée : un scénario, une pièce, un état. C'est la
  * valeur que les cartes posent (`lav(.22)`), réglage « Douce ». */
 export const LAVIS = 0.2;
@@ -123,8 +123,13 @@ export const TEINTES = ['--o-accent-soft', '--o-ok', '--o-warn', '--o-warn2', '-
 /* Leur compagnon « r,g,b », qui sert aux lavis et aux icônes. */
 const AVEC_RGB = new Set(['--o-accent-soft', '--o-ok', '--o-warn', '--o-warn2', '--o-bad', '--o-cold', '--o-cyan', '--o-purple', '--o-gold',
   '--o-lampe', '--o-orange', '--o-rose', '--o-piece-ambre', '--o-piece-tendre', '--o-piece-chambre', '--o-piece-bain', '--o-piece-vert']);
+/* Deux teintes gardent l'ancien seuil sur leur propre lavis (4,2:1) : le rouge
+ * d'alerte et le rose des médias. Les tenir à 4,5 les délavait (#ef4444 →
+ * #f37373) — or le rouge DIT « action nécessaire », et il ne le dit jamais
+ * seul : une icône et un mot l'accompagnent toujours. */
+const VIFS = new Set(['--o-bad', '--o-rose']);
 /** Tous les jetons que la garde peut poser — à purger au changement de thème. */
-export const JETONS_GARDE = ['--o-text', '--o-text2', '--o-text3', '--o-text3-rgb', '--o-accent', '--o-accent-rgb', '--o-accent-fond',
+export const JETONS_GARDE = ['--o-text', '--o-text2', '--o-text3', '--o-text3-rgb', '--o-text2-lavis', '--o-text3-lavis', '--o-text3-lavis-rgb', '--o-accent', '--o-accent-rgb', '--o-accent-fond',
   '--o-rose-fond', '--o-purple-fond', '--o-surfA', '--o-surfB', '--o-well', '--o-well0',
   ...TEINTES, ...TEINTES.filter(t => AVEC_RGB.has(t)).map(t => t + '-rgb')];
 
@@ -221,19 +226,11 @@ export function garde(lire) {
    * (#abb2bf) — il tombe alors sous 4,5:1 dès qu'une carte est teintée. */
   const txt = lireCouleur(lire('--o-text'));
   if (txt) { const x = ajuster(txt.slice(0, 3), fonds, SEUILS.texte, clair ? -1 : 1); if (versHex(x) !== versHex(txt)) out['--o-text'] = versHex(x); }
-  // Les gris : on les rend plus lisibles en gardant leur teinte froide ou chaude.
-  for (const [jeton, cible] of [['--o-text2', SEUILS.text2], ['--o-text3', SEUILS.text3]]) {
-    const c = lireCouleur(lire(jeton)); if (!c) continue;
-    const opaque = composer(fonds[fonds.length - 1], c);
-    const x = ajusterTous(opaque, [[fonds, cible], [remplis, SEUILS.wcag]], sens);
-    poser(jeton, opaque, x);
-    if (jeton === '--o-text3' && out['--o-text3']) out['--o-text3-rgb'] = versRgb(x);
-  }
   // Les teintes qui écrivent — y compris sur LEUR PROPRE lavis : l'icône d'un
   // scénario sur son disque, l'état d'un volet sur sa carte violette.
   for (const jeton of TEINTES) {
     const c = lireCouleur(lire(jeton)); if (!c) continue;
-    const surSoi = { cible: SEUILS.surLavis, fonds: (x) => { const out2 = []; for (const p of page) for (const s of surfaces) out2.push(composer(composer(p, s), [x[0], x[1], x[2], LAVIS])); return out2; } };
+    const surSoi = { cible: VIFS.has(jeton) ? SEUILS.surLavisVif : SEUILS.surLavis, fonds: (x) => { const out2 = []; for (const p of page) for (const s of surfaces) out2.push(composer(composer(p, s), [x[0], x[1], x[2], LAVIS])); return out2; } };
     const x = ajusterTous(c.slice(0, 3), [[fonds, SEUILS.teinte], [remplis, SEUILS.wcag]], sens, surSoi);
     poser(jeton, c, x);
     /* Leur compagnon « r,g,b » écrit aussi (`rgb(var(--o-ok-rgb))` : un badge,
@@ -242,6 +239,37 @@ export function garde(lire) {
      * n'est pas lisible en texte, il rejoint la teinte ajustée. */
     const rc = lireCouleur('rgb(' + lire(jeton + '-rgb') + ')');
     if (AVEC_RGB.has(jeton) && !out[jeton + '-rgb'] && (!rc || fonds.some(f => contraste(rc, f) < SEUILS.teinte))) out[jeton + '-rgb'] = versRgb(x);
+  }
+  /* Les gris, APRÈS les teintes : ils s'écrivent aussi sur les cartes teintées
+   * — « 612 ppm » sur la pièce bleue, « Tout est éteint » sur la carte ambrée.
+   * L'audit du 20/09 (13 528 textes, 15 thèmes × clair et sombre) n'a trouvé
+   * QUE cela sous 4,5:1 : 303 textes sur 306, entre 3,3 et 4,4, tous au pied
+   * d'une carte teintée, là où le lavis est le plus dense.
+   *
+   * Tenir 4,5:1 sur la carte la plus teintée demande un gris nettement plus
+   * clair (#8c98b2 → #a9b2c5 en Loggia sombre) : posé PARTOUT, il changerait le
+   * visage du thème. Il ne vaut donc que LÀ : deux jetons « sur lavis », que
+   * les cartes teintées substituent aux gris ordinaires (index.css). Ailleurs,
+   * rien ne bouge. Le secondaire garde une marche d'avance sur le tertiaire,
+   * pour que la hiérarchie se lise encore. */
+  const fondsTeintes = [];
+  for (const jeton of TEINTES) {
+    const t = lireCouleur('rgb(' + (out[jeton + '-rgb'] || lire(jeton + '-rgb')) + ')') || lireCouleur(out[jeton] || lire(jeton));
+    if (!t) continue;
+    for (const p of page) for (const s of surfaces) fondsTeintes.push(composer(composer(p, s), [t[0], t[1], t[2], LAVIS]));
+  }
+  // On les rend plus lisibles en gardant leur teinte froide ou chaude.
+  for (const [jeton, cible, surTeinte] of [['--o-text2', SEUILS.text2, SEUILS.text2Lavis], ['--o-text3', SEUILS.text3, SEUILS.wcag]]) {
+    const c = lireCouleur(lire(jeton)); if (!c) continue;
+    const opaque = composer(fonds[fonds.length - 1], c);
+    const x = ajusterTous(opaque, [[fonds, cible], [remplis, SEUILS.wcag]], sens);
+    poser(jeton, opaque, x);
+    if (jeton === '--o-text3' && out['--o-text3']) out['--o-text3-rgb'] = versRgb(x);
+    // La variante « sur lavis » part du gris déjà ajusté, et ne s'en écarte que
+    // s'il le faut. Toujours posée : un thème qui n'en a pas besoin la purge.
+    const l = ajusterTous(x, [[fondsTeintes, surTeinte]], sens);
+    out[jeton + '-lavis'] = versHex(l);
+    if (jeton === '--o-text3') out['--o-text3-lavis-rgb'] = versRgb(l);
   }
   // L'accent : une icône, un interrupteur, un trait — 3:1.
   const accent = lireCouleur(lire('--o-accent'));

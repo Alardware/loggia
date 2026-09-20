@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Les pages légales du site en ligne (GitHub Pages).
 //
-// Quatre pages statiques, en français, dans `site/legal/` : mentions légales,
-// confidentialité, conditions d'utilisation, cookies. Elles ne valent que si
+// Cinq pages statiques, en français, dans `site/legal/` : mentions légales,
+// confidentialité, conditions d'utilisation, cookies, accessibilité. Elles ne valent que si
 // elles disent VRAI — d'où ces tests, qui tiennent trois choses :
 //
 //   1. ce que la loi demande y est (LCEN art. 1-1 : éditeur, hébergeur) ;
@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 
-const PAGES = ['mentions-legales.html', 'confidentialite.html', 'cgu.html', 'cookies.html'];
+const PAGES = ['mentions-legales.html', 'confidentialite.html', 'cgu.html', 'cookies.html', 'accessibilite.html'];
 const page = (nom) => lire('site', 'legal', nom);
 
 /** Tous les fichiers de code de `src/` (pas les images ni les SVG). */
@@ -39,7 +39,7 @@ function sources(dir = join(RACINE, 'src'), out = []) {
 }
 const SRC = sources().map((p) => ({ p, texte: readFileSync(p, 'utf8') }));
 
-test('les quatre pages existent, en français, lisibles sans JavaScript', () => {
+test('les cinq pages existent, en français, lisibles sans JavaScript', () => {
   for (const nom of PAGES) {
     const h = page(nom);
     assert.ok(h.includes('<html lang="fr">'), nom + ' : langue déclarée');
@@ -83,7 +83,7 @@ test('un contact existe, et aucun repère à compléter ne part en ligne', () =>
     const h = page(nom);
     assert.ok(!/À COMPLÉTER|A COMPLETER|TODO|lorem ipsum/i.test(h), nom + ' porte encore un repère à compléter');
   }
-  for (const nom of ['mentions-legales.html', 'confidentialite.html']) {
+  for (const nom of ['mentions-legales.html', 'confidentialite.html', 'accessibilite.html']) {
     assert.match(page(nom), /href="mailto:[^"@\s]+@[^"@\s]+\.[a-z]{2,}"/, nom + ' : une adresse de contact');
   }
 });
@@ -151,7 +151,7 @@ test('les pages ne partent que sur le site, jamais dans le paquet HACS', () => {
   assert.ok(!existsSync(join(RACINE, 'public', 'legal')), 'public/legal partirait dans le paquet HACS');
   const vite = lire('vite.config.js');
   assert.ok(vite.includes("if (mode === 'demo') config.plugins.push(siteEnLigne);"), 'le site ne se copie qu’en mode demo');
-  assert.ok(vite.includes("cpSync(join(racine, 'site'), sortie, { recursive: true });"));
+  assert.ok(vite.includes("cpSync(join(racine, 'site'), sortie, { recursive: true, filter: (src) => !basename(src).startsWith('_') });"));
   assert.ok(!/\bsite\b/.test(lire('scripts', 'pack_frontend.py')), 'le paquet HACS ne lit jamais site/');
   // Corriger une page légale suffit à republier le site.
   assert.ok(lire('.github', 'workflows', 'demo.yml').includes("- 'site/**'"), 'une page légale corrigée ne se publierait pas');

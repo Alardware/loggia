@@ -706,6 +706,9 @@ export function ChampSuggere({ value, onChange, suggestions, label, id = null, p
   };
   return (
     <>
+      {/* Le champ a TOUJOURS un nom : son `<label htmlFor>` quand on lui donne
+        * un `id`, `aria-label` sinon. La règle ne sait pas lire ce « ou ». */}
+      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
       <input ref={champRef} id={id || undefined} value={texte} placeholder={placeholder} spellCheck={false} autoComplete="off"
         role="combobox" aria-expanded={montre} aria-controls={base + '-l'} aria-autocomplete="list" aria-activedescendant={vise}
         aria-label={id ? undefined : label}
@@ -714,7 +717,7 @@ export function ChampSuggere({ value, onChange, suggestions, label, id = null, p
       {montre && pos && createPortal(
         <div ref={menuRef} style={cadrePanneau(pos)}>
           {/* Un appui dans la liste ne retire pas le focus au champ : la suggestion s'inscrit, on continue de taper. */}
-          <div id={base + '-l'} role="listbox" aria-label={label} onMouseDown={(e) => e.preventDefault()} style={ZONE_LISTE}>
+          <div id={base + '-l'} role="listbox" tabIndex={-1} aria-label={label} onMouseDown={(e) => e.preventDefault()} style={ZONE_LISTE}>
             <OptionsPanneau base={base} options={visibles} value={texte} actif={actif} auClavier={auClavier}
               onPointe={(i) => { if (actif !== i) setActif(i); if (auClavier) setAuClavier(false); }} onChoisir={choisir} />
           </div>

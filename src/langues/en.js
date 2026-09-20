@@ -1293,6 +1293,11 @@ export default {
   'Sortir les poubelles !': 'Take the bins out!',
   'Toute la maison': 'Whole home',
   'Venteux': 'Windy',
+  // Accessibilite (20/09) : le nom des icones meteo et des flux de camera
+  'Tornade': 'Tornado',
+  'Lever du soleil': 'Sunrise',
+  'Coucher du soleil': 'Sunset',
+  'Caméra {x}, en direct': 'Camera {x}, live',
   'Vue': 'View',
   'désactivé': 'disabled',
   'en pause': 'paused',

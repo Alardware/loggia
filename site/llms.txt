@@ -1,0 +1,42 @@
+# Loggia
+
+> Loggia is a free, open-source (MIT) dashboard for Home Assistant that fills itself in: it reads the areas, devices and entities of an installation and works out what it can show. No entity id is hard-coded. This site is its playable demo; it runs entirely in the browser, with a fictional home and no Home Assistant behind it.
+
+Loggia est un tableau de bord libre et gratuit pour Home Assistant. Il lit les zones, les appareils et les entités de l'installation et en déduit ce qu'il peut afficher ; ce qui n'existe pas chez l'utilisateur n'apparaît pas. Ce site en est la démonstration jouable.
+
+Key facts / À savoir :
+
+- Author / auteur : Guillaume Alard, a private individual; a personal, non-commercial project. Nothing is sold; donations are voluntary (Ko-fi).
+- Languages / langues : French and English interface. The legal pages are in French.
+- Installation : through HACS as a custom repository (category "Integration"), or by copying `custom_components/loggia/`. Requires Home Assistant 2024.7 or newer.
+- The demo needs JavaScript. Without it, the page shows a short description and these same links.
+- Privacy : the site sets no cookie, runs no analytics and loads nothing from third parties. The host (GitHub Pages) logs visitor IP addresses for security. Installed, Loggia runs on the user's own Home Assistant, with no telemetry.
+- Loggia is an interface, not a certified security system.
+- Loggia is independent: not affiliated with or endorsed by Home Assistant, the Open Home Foundation or Nabu Casa.
+
+## Demo
+
+- [Démonstration en ligne](https://alardware.github.io/loggia/): the playable demo (French by default)
+- [English demo](https://alardware.github.io/loggia/?lang=en): same demo, English interface
+- [Light mode](https://alardware.github.io/loggia/?mode=light): same demo, light theme
+
+## Source and documentation
+
+- [GitHub repository](https://github.com/Alardware/loggia): README (in French) — what is discovered automatically, installation, security model, development
+- [Releases](https://github.com/Alardware/loggia/releases): versions and change notes
+- [Architecture decisions](https://github.com/Alardware/loggia/tree/main/docs/decisions): one decision per file, with its context (in French)
+- [Glossary](https://github.com/Alardware/loggia/blob/main/docs/GLOSSAIRE.md): vocabulary of the rule engine (in French)
+- [Licence MIT](https://github.com/Alardware/loggia/blob/main/LICENSE)
+- [Issues](https://github.com/Alardware/loggia/issues): bug reports (public — no personal data)
+
+## Legal pages (French)
+
+- [Mentions légales](https://alardware.github.io/loggia/legal/mentions-legales.html): publisher, host, licence, credits, contact
+- [Politique de confidentialité](https://alardware.github.io/loggia/legal/confidentialite.html): no personal data collected; what the host logs; rights
+- [Conditions d'utilisation](https://alardware.github.io/loggia/legal/cgu.html): free site, software provided as is, donations
+- [Politique des cookies](https://alardware.github.io/loggia/legal/cookies.html): no cookies; the session-storage keys, listed
+- [Accessibilité](https://alardware.github.io/loggia/legal/accessibilite.html): what is done, what is not, how to report a problem
+
+## Optional
+
+- [Support the project on Ko-fi](https://ko-fi.com/alardware)

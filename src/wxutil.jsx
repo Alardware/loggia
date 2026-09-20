@@ -61,10 +61,22 @@ const WX_METEO = {
   aube: wxAube, crepuscule: wxCrepuscule,
 };
 
+/* Ce que l'icône MONTRE, pour qui ne la voit pas (20/09). « météo » ne disait
+ * rien : dans la rangée des heures, l'icône est seule à porter la condition —
+ * l'heure et la température sont écrites, le temps qu'il fera ne l'est pas. */
+const WX_NOMS = {
+  sun: 'Ensoleillé', partly: 'Partiellement nuageux', partlynight: 'Partiellement nuageux', clouds: 'Nuageux', wind: 'Venteux',
+  rain: 'Pluie', pluieforte: 'Forte pluie', snow: 'Neige', gresil: 'Neige fondue', grele: 'Grêle',
+  storm: 'Orage', storrain: 'Orage', night: 'Nuit claire', brouillard: 'Brouillard', tornade: 'Tornade',
+  aube: 'Lever du soleil', crepuscule: 'Coucher du soleil',
+};
+// Les mêmes libellés que `haWeatherLabel` : une condition n'a qu'un nom.
+export const nomMeteo = (wx) => tr(WX_NOMS[wx] || 'Nuageux');
+
 /* Une icône FIGÉE : le SVG dessiné une fois dans un canvas. Une image SVG
  * posée sur un canvas rend sa PREMIÈRE image, animations comprises — c'est
  * exactement ce qu'on veut ici, et cela ne coûte plus rien ensuite. */
-function IcoFigee({ src, size }) {
+function IcoFigee({ src, size, nom }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current;
@@ -81,7 +93,10 @@ function IcoFigee({ src, size }) {
     im.src = src;
     return () => { vivant = false; im.onload = null; };
   }, [src, size]);
-  return <canvas ref={ref} role="img" aria-label={tr('météo')} style={{ width: size, height: size, display: 'block' }} />;
+  // Un canvas qui ne fait que montrer une image EST une image : la règle le
+  // croit interactif.
+  // eslint-disable-next-line jsx-a11y/no-interactive-element-to-noninteractive-role
+  return <canvas ref={ref} role="img" aria-label={nom} style={{ width: size, height: size, display: 'block' }} />;
 }
 
 /* L'icône météo.
@@ -99,8 +114,9 @@ function IcoFigee({ src, size }) {
  * sept à l'écran. */
 export function WeatherIco({ wx, size = 42, anime = true }) {
   const src = WX_METEO[wx] || wxCloudy;
-  if (!anime || REDUCE_MOTION) return <IcoFigee src={src} size={size} />;
-  return <img src={src} alt="" aria-label={tr('météo')} width={size} height={size} style={{ pointerEvents: 'none', display: 'block' }} />;
+  const nom = nomMeteo(WX_METEO[wx] ? wx : 'clouds');
+  if (!anime || REDUCE_MOTION) return <IcoFigee src={src} size={size} nom={nom} />;
+  return <img src={src} alt={nom} width={size} height={size} style={{ pointerEvents: 'none', display: 'block' }} />;
 }
 
 // Mappe une condition météo HA → mode d'effet WeatherFx (suit l'entité).

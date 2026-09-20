@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { tr } from './i18n.js';
 
-export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = 'cover' }) {
+export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = 'cover', alt = '' }) {
   const [src, setSrc] = useState(null);
   const token = hass && hass.auth && hass.auth.data ? hass.auth.data.access_token : null;
   useEffect(() => {
@@ -35,7 +35,7 @@ export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = '
     return () => { alive = false; clearInterval(id); if (last) URL.revokeObjectURL(last); };
   }, [haid, token, refreshMs, kind]);
   if (!src) return null;
-  return <img src={src} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit }} />;
+  return <img src={src} alt={alt} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit }} />;
 }
 
 /**
@@ -72,7 +72,7 @@ async function iceServers(conn, haid) {
 }
 
 // ── Lecteur caméra LIVE (porté de V1) : WebRTC → HLS natif → MJPEG signé → snapshot ──
-export function CamLive({ hass, haid, online = true }) {
+export function CamLive({ hass, haid, online = true, nom = '' }) {
   const vidRef = useRef(null);
   const imgRef = useRef(null);
   const [mode, setMode] = useState('loading'); // loading | video | mjpeg | snap | off
@@ -183,11 +183,14 @@ export function CamLive({ hass, haid, online = true }) {
   }, [haid, online, token, conn]);
   const cover = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' };
   if (mode === 'off') return null; // repli sur le fond gradient de la tuile
+  /* Le flux porte le NOM de la caméra (20/09) : une image sans texte ne dit
+   * rien à qui ne la voit pas, et « Flux de la caméra » ne disait pas laquelle. */
+  const dit = nom ? tr('Caméra {x}, en direct', { x: nom }) : tr('Flux de la caméra');
   return (
     <>
-      <video ref={vidRef} aria-label={tr('Flux de la caméra')} autoPlay muted playsInline style={{ ...cover, display: mode === 'video' ? 'block' : 'none' }} />
-      <img ref={imgRef} alt="" style={{ ...cover, display: mode === 'mjpeg' ? 'block' : 'none' }} />
-      {mode === 'snap' && <HaImage hass={hass} haid={haid} refreshMs={2000} kind="camera" />}
+      <video ref={vidRef} aria-label={dit} autoPlay muted playsInline style={{ ...cover, display: mode === 'video' ? 'block' : 'none' }} />
+      <img ref={imgRef} alt={dit} style={{ ...cover, display: mode === 'mjpeg' ? 'block' : 'none' }} />
+      {mode === 'snap' && <HaImage hass={hass} haid={haid} refreshMs={2000} kind="camera" alt={dit} />}
     </>
   );
 }

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { lireCouleur, contraste, composer, ajuster, garde, versHex, SEUILS, JETONS_GARDE } from '../src/contraste.js';
+import { lireCouleur, contraste, composer, ajuster, garde, versHex, SEUILS, JETONS_GARDE, LAVIS } from '../src/contraste.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
@@ -53,6 +53,39 @@ test('Loggia garde ses gris : la garde ne touche que le fond d’accent', () => 
   assert.ok(contraste(lireCouleur(o['--o-accent-fond']), [255, 255, 255]) >= SEUILS.surAccent, 'le blanc y est lisible');
   // Le bouton de l'assistant : son violet s'assombrit pour l'icône blanche.
   assert.ok(contraste(lireCouleur(o['--o-purple-fond']), [255, 255, 255]) >= SEUILS.surIcone);
+});
+
+// Audit du 20/09 (ADR 0063) : 13 528 textes, 15 thèmes × clair et sombre. Les
+// seuls sous 4,5:1 — 303 sur 306 — étaient au pied d'une carte TEINTÉE. Tenir
+// le seuil là demande un gris nettement plus clair ; posé partout, il changeait
+// le visage de Loggia. Il ne vaut donc que sur ces cartes.
+test('sur une carte teintée, les gris ont une variante à 4,5:1 — et Loggia garde les siens ailleurs', () => {
+  const o = garde(lecteur(LOGGIA_SOMBRE));
+  assert.equal(o['--o-text2'], undefined, 'le gris ordinaire ne bouge pas');
+  const carte = composer([11, 16, 27], [22, 29, 42, 0.62]);
+  let ordinaireEchoue = false;
+  for (const teinte of ['--o-warn', '--o-accent-soft', '--o-ok', '--o-cold', '--o-purple', '--o-rose', '--o-bad']) {
+    const t = lireCouleur('rgb(' + (o[teinte + '-rgb'] || LOGGIA_SOMBRE[teinte + '-rgb']) + ')') || lireCouleur(o[teinte] || LOGGIA_SOMBRE[teinte]);
+    const fond = composer(carte, [t[0], t[1], t[2], LAVIS]);
+    assert.ok(contraste(lireCouleur(o['--o-text2-lavis']), fond) >= SEUILS.text2Lavis - 0.01, 'gris secondaire sur ' + teinte);
+    assert.ok(contraste(lireCouleur(o['--o-text3-lavis']), fond) >= SEUILS.wcag - 0.01, 'gris tertiaire sur ' + teinte);
+    if (contraste(lireCouleur(LOGGIA_SOMBRE['--o-text3']), fond) < SEUILS.wcag) ordinaireEchoue = true;
+  }
+  assert.ok(ordinaireEchoue, 'le gris ordinaire tiendrait déjà : la variante ne servirait à rien');
+  // La hiérarchie se lit encore : le secondaire reste plus clair que le tertiaire.
+  assert.ok(contraste(lireCouleur(o['--o-text2-lavis']), carte) > contraste(lireCouleur(o['--o-text3-lavis']), carte));
+  assert.equal(o['--o-text3-lavis-rgb'].split(',').length, 3, 'le compagnon « r,g,b » suit');
+  for (const j of ['--o-text2-lavis', '--o-text3-lavis', '--o-text3-lavis-rgb']) assert.ok(JETONS_GARDE.includes(j), j + ' échapperait à la purge au changement de thème');
+  // Les cartes teintées substituent la variante aux gris, et :root la définit
+  // avant le passage de la garde (sinon `var()` serait invalide).
+  assert.ok(css.includes('[style*="transparent 28%"], [style*="transparent 62%"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {'));
+  assert.ok(css.includes('--o-text2: var(--o-text2-lavis); --o-text3: var(--o-text3-lavis); --o-text3-rgb: var(--o-text3-lavis-rgb);'));
+  assert.equal(css.split('--o-text2-lavis:#').length - 1, 3, 'sombre, clair et îlot sombre');
+  // Les sélecteurs lisent un dégradé que les cartes posent en ligne : s'il change, la règle ne prend plus.
+  assert.ok(src.split('linear-gradient(180deg,transparent 28%,').length - 1 >= 8);
+  // Le rouge d'alerte et le rose gardent leur force : ils ne parlent jamais seuls.
+  assert.equal(SEUILS.surLavis, 4.5);
+  assert.equal(SEUILS.surLavisVif, 4.2);
 });
 
 test('une palette venue d’ailleurs est rattrapée, sans perdre sa couleur', () => {

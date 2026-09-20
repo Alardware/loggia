@@ -3,6 +3,22 @@ html, body, #root { margin: 0; padding: 0; }
 /* clip (pas hidden) : empêche le pan horizontal SANS créer de conteneur de scroll
    qui casserait le position:sticky de la sidebar. */
 html, body { overflow-x: clip; max-width: 100%; }
+/* Sur une carte TEINTÉE, les gris prennent leur variante « sur lavis » (ADR 0063).
+ * Au pied d'une carte teintée le lavis est dense, et un petit gris y tombait
+ * entre 3,3 et 4,4:1 — les seuls textes sous 4,5:1 de l'audit du 20/09. Éclaircir
+ * le gris PARTOUT aurait changé le visage du thème ; il ne change que là où il
+ * en a besoin. La garde (contraste.js) calcule ces variantes pour chaque thème ;
+ * les valeurs de :root ne servent qu'avant son passage. Les sélecteurs lisent le
+ * dégradé que ces cartes posent en ligne : « transparent 28% » (cartes d'appareil
+ * allumées), « transparent 62% » (scénario actif) ; une carte de pièce et une
+ * carte de scénario de l'Accueil portent toujours leur teinte, la tuile d'alarme
+ * de la bannière aussi (celle de son état). */
+[style*="transparent 28%"], [style*="transparent 62%"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {
+  --o-text2: var(--o-text2-lavis); --o-text3: var(--o-text3-lavis); --o-text3-rgb: var(--o-text3-lavis-rgb);
+}
+/* Lu, pas vu : un texte pour les lecteurs d'écran seulement (le titre de
+ * l'Accueil). Hors flux, il ne déplace rien. */
+.o-vh { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 /* iframe plein écran : pas de rubber-band iOS (révélait une bande noire au Dynamic Island au slide),
    fond html = thème (sinon overscroll/safe-area montre du noir), remplit toute la hauteur dynamique. */
 html { background: var(--o-bg); overscroll-behavior: none; min-height: 100vh; min-height: 100dvh; }
@@ -47,6 +63,7 @@ button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-sce
 :root {
   --o-bg:#0b101b; --o-bg2:#0e1524; --o-side1:#0d1422; --o-side2:#0a0f1a;
   --o-text:#eaf0fb; --o-text1:#c2cadb; --o-text2:#8c98b2; --o-text3:#7d8aa6; --o-text3-rgb:125,138,166;
+  --o-text2-lavis:#a9b2c5; --o-text3-lavis:#a2abbf; --o-text3-lavis-rgb:162,171,191; /* les gris SUR une carte teintée (ADR 0063) */
   --o-surfA:rgba(22,29,42,.9); --o-surfB:rgba(16,22,34,.9); --o-header:rgba(11,16,27,.85);
   --o-bd1:rgba(255,255,255,.08); --o-bd2:rgba(255,255,255,.07); --o-bd3:rgba(255,255,255,.06);
   --o-s1:rgba(255,255,255,.05); --o-s2:rgba(255,255,255,.04); --o-s3:rgba(255,255,255,.035);
@@ -92,6 +109,7 @@ button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-sce
 html.loggia-light {
   --o-bg:#eef2f8; --o-bg2:#e3e9f3; --o-side1:#ffffff; --o-side2:#f4f7fb;
   --o-text:#16203a; --o-text1:#27324d; --o-text2:#5a6884; --o-text3:#5d6b86; --o-text3-rgb:93,107,134;
+  --o-text2-lavis:#4b576e; --o-text3-lavis:#4f5b72; --o-text3-lavis-rgb:79,91,114;
   --o-ok:#166534; --o-ok-rgb:22,101,52; /* 4,5:1 sur le fond de page, pas seulement sur blanc */
   --o-accent-soft:#2563eb; --o-accent-soft-rgb:37,99,235; /* lisible en texte sur cartes blanches (le #6ea8ff dark = 2.4:1) */
   --o-warn:#92400e; --o-warn-rgb:146,64,14; --o-warn2:#c2410c; --o-warn2-rgb:194,65,12; /* warn : 4,5:1 sur le fond de page */
@@ -123,6 +141,7 @@ body { background: var(--o-bggrad, var(--o-bg)); font-family: var(--o-font); col
    pour le blanc ne se lit pas sur du noir. */
 .o-sombre {
   --o-text:#eaf0fb; --o-text1:#c2cadb; --o-text2:#8c98b2; --o-text3:#7d8aa6; --o-text3-rgb:125,138,166;
+  --o-text2-lavis:#a9b2c5; --o-text3-lavis:#a2abbf; --o-text3-lavis-rgb:162,171,191; /* les gris SUR une carte teintée (ADR 0063) */
   --o-s1:rgba(255,255,255,.05); --o-s2:rgba(255,255,255,.04); --o-bd1:rgba(255,255,255,.08); --o-bd2:rgba(255,255,255,.07); --o-bd3:rgba(255,255,255,.06);
   --o-accent-soft:#6ea8ff; --o-accent-soft-rgb:110,168,255;
   --o-ok:#34d399; --o-ok-rgb:52,211,153; --o-warn:#ffce73; --o-warn-rgb:255,206,115; --o-warn2:#f59e0b; --o-warn2-rgb:245,158,11;

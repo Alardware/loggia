@@ -69,6 +69,12 @@ function langueProbable() {
       if (md === 'auto' || md === 'light' || md === 'dark') localStorage.setItem('loggia-mode', md);
       const lg = q.get('lang');
       if (lg === 'fr' || lg === 'en') localStorage.setItem('loggia-langue', JSON.stringify(lg));
+      /* `?theme=ios` : le thème, comme le mode — pour REJOUER l'audit de
+       * contraste variante par variante (15 thèmes × clair et sombre) au lieu
+       * de cliquer dans les Paramètres à chaque passe. Un nom inconnu retombe
+       * sur Loggia : `applyLook` ne connaît que ses propres thèmes. */
+      const th = q.get('theme');
+      if (th != null && /^[a-z]{0,20}$/.test(th)) localStorage.setItem('loggia-theme', th);
       /* `?vue=energie` ou `?vue=room:Salon` : ouvrir une vue sans cliquer.
        * La vue courante vit dans `sessionStorage`, que la demo ne remplace
        * pas — on l'y pose avant que l'application ne la lise. Sert aux
