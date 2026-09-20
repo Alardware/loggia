@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { lireCouleur, contraste, composer, ajuster, garde, versHex, SEUILS, JETONS_GARDE, LAVIS } from '../src/contraste.js';
+import { lireCouleur, contraste, composer, ajuster, garde, versHex, SEUILS, JETONS_GARDE, LAVIS, LAVIS_DENSE } from '../src/contraste.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
@@ -66,7 +66,7 @@ test('sur une carte teintée, les gris ont une variante à 4,5:1 — et Loggia g
   let ordinaireEchoue = false;
   for (const teinte of ['--o-warn', '--o-accent-soft', '--o-ok', '--o-cold', '--o-purple', '--o-rose', '--o-bad']) {
     const t = lireCouleur('rgb(' + (o[teinte + '-rgb'] || LOGGIA_SOMBRE[teinte + '-rgb']) + ')') || lireCouleur(o[teinte] || LOGGIA_SOMBRE[teinte]);
-    const fond = composer(carte, [t[0], t[1], t[2], LAVIS]);
+    const fond = composer(carte, [t[0], t[1], t[2], LAVIS_DENSE]);
     assert.ok(contraste(lireCouleur(o['--o-text2-lavis']), fond) >= SEUILS.text2Lavis - 0.01, 'gris secondaire sur ' + teinte);
     assert.ok(contraste(lireCouleur(o['--o-text3-lavis']), fond) >= SEUILS.wcag - 0.01, 'gris tertiaire sur ' + teinte);
     if (contraste(lireCouleur(LOGGIA_SOMBRE['--o-text3']), fond) < SEUILS.wcag) ordinaireEchoue = true;
@@ -78,7 +78,7 @@ test('sur une carte teintée, les gris ont une variante à 4,5:1 — et Loggia g
   for (const j of ['--o-text2-lavis', '--o-text3-lavis', '--o-text3-lavis-rgb']) assert.ok(JETONS_GARDE.includes(j), j + ' échapperait à la purge au changement de thème');
   // Les cartes teintées substituent la variante aux gris, et :root la définit
   // avant le passage de la garde (sinon `var()` serait invalide).
-  assert.ok(css.includes('[style*="transparent 28%"], [style*="transparent 62%"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {'));
+  assert.ok(css.includes('[style*="transparent 28%"], [style*="transparent 62%"], [style*="background: rgba(var(--o-"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {'));
   assert.ok(css.includes('--o-text2: var(--o-text2-lavis); --o-text3: var(--o-text3-lavis); --o-text3-rgb: var(--o-text3-lavis-rgb);'));
   assert.equal(css.split('--o-text2-lavis:#').length - 1, 3, 'sombre, clair et îlot sombre');
   // Les sélecteurs lisent un dégradé que les cartes posent en ligne : s'il change, la règle ne prend plus.
@@ -86,6 +86,45 @@ test('sur une carte teintée, les gris ont une variante à 4,5:1 — et Loggia g
   // Le rouge d'alerte et le rose gardent leur force : ils ne parlent jamais seuls.
   assert.equal(SEUILS.surLavis, 4.5);
   assert.equal(SEUILS.surLavisVif, 4.2);
+  assert.ok(LAVIS_DENSE > LAVIS, 'les variantes visent un lavis plus dense que le nominal');
+});
+
+// Les teintes qui ÉCRIVENT sur une carte teintée : « Ouvert » en violet sur sa
+// carte, « 1480 ppm » ambre sur une pièce rose — les 86 textes qui restaient
+// sous 4,5:1 après les gris. Même remède : une variante qui ne vaut que là.
+test('sur une carte teintée, chaque teinte a sa variante — et la teinte du thème ne bouge pas', () => {
+  const o = garde(lecteur(LOGGIA_SOMBRE));
+  const carte = composer([11, 16, 27], [22, 29, 42, 0.62]);
+  const lavisDe = (j) => { const t = lireCouleur('rgb(' + (o[j + '-rgb'] || LOGGIA_SOMBRE[j + '-rgb']) + ')') || lireCouleur(o[j] || LOGGIA_SOMBRE[j]); return composer(carte, [t[0], t[1], t[2], LAVIS_DENSE]); };
+  const TESTEES = ['--o-warn', '--o-accent-soft', '--o-ok', '--o-cold', '--o-purple'];
+  for (const ecrit of TESTEES) {
+    const v = lireCouleur(o[ecrit + '-lavis']);
+    assert.ok(v, ecrit + '-lavis est posé');
+    // Une teinte peut écrire sur la carte d'une AUTRE teinte.
+    // 0,03 de jeu : la couleur est arrondie à l'hexadécimal après le calcul.
+    for (const fond of TESTEES) assert.ok(contraste(v, lavisDe(fond)) >= SEUILS.wcag - 0.03, ecrit + ' sur la carte ' + fond);
+  }
+  // Le rouge d'alerte et le rose : contre LEUR lavis seulement — tenus contre la
+  // carte ambrée, ils tournaient au pastel.
+  for (const vif of ['--o-bad', '--o-rose']) assert.ok(contraste(lireCouleur(o[vif + '-lavis']), lavisDe(vif)) >= SEUILS.wcag - 0.01, vif + ' sur son lavis');
+  // Le vert d'état de Loggia tient déjà partout : sa variante EST la teinte.
+  assert.equal(o['--o-ok'], undefined, 'la teinte du thème ne bouge pas');
+  for (const j of ['--o-purple-lavis', '--o-bad-lavis', '--o-piece-vert-lavis']) assert.ok(JETONS_GARDE.includes(j), j + ' échapperait à la purge');
+  // La feuille de style : la substitution sur les cartes teintées, et un défaut
+  // qui rend la teinte elle-même tant que la garde n'est pas passée (mode sans
+  // apparence, premier affichage) — sans lui, `var()` serait invalide et la
+  // carte perdrait ses couleurs.
+  assert.ok(css.includes('--o-purple: var(--o-purple-lavis);') && css.includes('--o-bad: var(--o-bad-lavis);'));
+  assert.equal(css.split('--o-purple-lavis: var(--o-purple);').length - 1, 2, 'le défaut, dans :root et dans l’îlot sombre');
+  // Jamais le compagnon « r,g,b » : c'est lui qui teinte la carte elle-même.
+  assert.ok(!/--o-[a-z-]+-rgb: var\(--o-(?!text3)[a-z-]+-lavis/.test(css), 'un compagnon r,g,b est substitué : la carte changerait de teinte');
+  assert.ok(css.includes('[style*="background: rgba(var(--o-"]'), 'les pastilles à fond teinté suivent la règle');
+  // Le texte principal aussi : inchangé dans Loggia, rattrapé dans une palette terne.
+  assert.equal(o['--o-text-lavis'], '#eaf0fb', 'le texte de Loggia tient déjà : sa variante est lui-même');
+  const terne = garde(lecteur({ '--o-bg': '#21252b', '--o-surfA': 'rgba(47,52,62,.62)', '--o-surfB': 'rgba(40,44,52,.62)', '--o-text': '#abb2bf', '--o-text1': '#9da5b4', '--o-text2': '#7f848e', '--o-text3': '#7f848e', '--o-accent': '#61afef', '--o-accent-soft': '#61afef', '--o-lampe': '#e5c07b', '--o-lampe-rgb': '229,192,123' }));
+  const carteTerne = composer(composer([33, 37, 43], [47, 52, 62, 0.62]), [229, 192, 123, LAVIS_DENSE]);
+  for (const j of ['--o-text-lavis', '--o-text1-lavis']) assert.ok(contraste(lireCouleur(terne[j]), carteTerne) >= SEUILS.wcag - 0.03, j + ' sur la carte d’une lampe, One Dark Pro');
+  assert.ok(css.includes('--o-text: var(--o-text-lavis); --o-text1: var(--o-text1-lavis);') && css.includes('--o-text-lavis: var(--o-text); --o-text1-lavis: var(--o-text1);'));
 });
 
 test('une palette venue d’ailleurs est rattrapée, sans perdre sa couleur', () => {

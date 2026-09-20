@@ -12,9 +12,15 @@ html, body { overflow-x: clip; max-width: 100%; }
  * dégradé que ces cartes posent en ligne : « transparent 28% » (cartes d'appareil
  * allumées), « transparent 62% » (scénario actif) ; une carte de pièce et une
  * carte de scénario de l'Accueil portent toujours leur teinte, la tuile d'alarme
- * de la bannière aussi (celle de son état). */
-[style*="transparent 28%"], [style*="transparent 62%"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {
+ * de la bannière aussi (celle de son état). Et toute pastille dont le FOND est
+ * une teinte du thème (`background: rgba(var(--o-…-rgb), α)`) : « 4 MISES À JOUR »
+ * en ambre sur sa pastille ambre. */
+[style*="transparent 28%"], [style*="transparent 62%"], [style*="background: rgba(var(--o-"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {
+  --o-text: var(--o-text-lavis); --o-text1: var(--o-text1-lavis);
   --o-text2: var(--o-text2-lavis); --o-text3: var(--o-text3-lavis); --o-text3-rgb: var(--o-text3-lavis-rgb);
+  /* Les teintes qui ÉCRIVENT, elles aussi — pas leur compagnon « r,g,b », qui
+   * teinte la carte elle-même. */
+  --o-accent-soft: var(--o-accent-soft-lavis); --o-ok: var(--o-ok-lavis); --o-warn: var(--o-warn-lavis); --o-warn2: var(--o-warn2-lavis); --o-bad: var(--o-bad-lavis); --o-cold: var(--o-cold-lavis); --o-cyan: var(--o-cyan-lavis); --o-purple: var(--o-purple-lavis); --o-gold: var(--o-gold-lavis); --o-lampe: var(--o-lampe-lavis); --o-orange: var(--o-orange-lavis); --o-rose: var(--o-rose-lavis); --o-piece-ambre: var(--o-piece-ambre-lavis); --o-piece-tendre: var(--o-piece-tendre-lavis); --o-piece-chambre: var(--o-piece-chambre-lavis); --o-piece-bain: var(--o-piece-bain-lavis); --o-piece-vert: var(--o-piece-vert-lavis);
 }
 /* Lu, pas vu : un texte pour les lecteurs d'écran seulement (le titre de
  * l'Accueil). Hors flux, il ne déplace rien. */
@@ -64,6 +70,9 @@ button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-sce
   --o-bg:#0b101b; --o-bg2:#0e1524; --o-side1:#0d1422; --o-side2:#0a0f1a;
   --o-text:#eaf0fb; --o-text1:#c2cadb; --o-text2:#8c98b2; --o-text3:#7d8aa6; --o-text3-rgb:125,138,166;
   --o-text2-lavis:#a9b2c5; --o-text3-lavis:#a2abbf; --o-text3-lavis-rgb:162,171,191; /* les gris SUR une carte teintée (ADR 0063) */
+  /* Sans la garde (mode sans apparence, premier affichage), la variante « sur
+   * lavis » d'une teinte EST la teinte : rien ne casse. La garde la remplace. */
+  --o-text-lavis: var(--o-text); --o-text1-lavis: var(--o-text1); --o-accent-soft-lavis: var(--o-accent-soft); --o-ok-lavis: var(--o-ok); --o-warn-lavis: var(--o-warn); --o-warn2-lavis: var(--o-warn2); --o-bad-lavis: var(--o-bad); --o-cold-lavis: var(--o-cold); --o-cyan-lavis: var(--o-cyan); --o-purple-lavis: var(--o-purple); --o-gold-lavis: var(--o-gold); --o-lampe-lavis: var(--o-lampe); --o-orange-lavis: var(--o-orange); --o-rose-lavis: var(--o-rose); --o-piece-ambre-lavis: var(--o-piece-ambre); --o-piece-tendre-lavis: var(--o-piece-tendre); --o-piece-chambre-lavis: var(--o-piece-chambre); --o-piece-bain-lavis: var(--o-piece-bain); --o-piece-vert-lavis: var(--o-piece-vert);
   --o-surfA:rgba(22,29,42,.9); --o-surfB:rgba(16,22,34,.9); --o-header:rgba(11,16,27,.85);
   --o-bd1:rgba(255,255,255,.08); --o-bd2:rgba(255,255,255,.07); --o-bd3:rgba(255,255,255,.06);
   --o-s1:rgba(255,255,255,.05); --o-s2:rgba(255,255,255,.04); --o-s3:rgba(255,255,255,.035);
@@ -142,6 +151,7 @@ body { background: var(--o-bggrad, var(--o-bg)); font-family: var(--o-font); col
 .o-sombre {
   --o-text:#eaf0fb; --o-text1:#c2cadb; --o-text2:#8c98b2; --o-text3:#7d8aa6; --o-text3-rgb:125,138,166;
   --o-text2-lavis:#a9b2c5; --o-text3-lavis:#a2abbf; --o-text3-lavis-rgb:162,171,191; /* les gris SUR une carte teintée (ADR 0063) */
+  --o-text-lavis: var(--o-text); --o-text1-lavis: var(--o-text1); --o-accent-soft-lavis: var(--o-accent-soft); --o-ok-lavis: var(--o-ok); --o-warn-lavis: var(--o-warn); --o-warn2-lavis: var(--o-warn2); --o-bad-lavis: var(--o-bad); --o-cold-lavis: var(--o-cold); --o-cyan-lavis: var(--o-cyan); --o-purple-lavis: var(--o-purple); --o-gold-lavis: var(--o-gold); --o-lampe-lavis: var(--o-lampe); --o-orange-lavis: var(--o-orange); --o-rose-lavis: var(--o-rose); --o-piece-ambre-lavis: var(--o-piece-ambre); --o-piece-tendre-lavis: var(--o-piece-tendre); --o-piece-chambre-lavis: var(--o-piece-chambre); --o-piece-bain-lavis: var(--o-piece-bain); --o-piece-vert-lavis: var(--o-piece-vert);
   --o-s1:rgba(255,255,255,.05); --o-s2:rgba(255,255,255,.04); --o-bd1:rgba(255,255,255,.08); --o-bd2:rgba(255,255,255,.07); --o-bd3:rgba(255,255,255,.06);
   --o-accent-soft:#6ea8ff; --o-accent-soft-rgb:110,168,255;
   --o-ok:#34d399; --o-ok-rgb:52,211,153; --o-warn:#ffce73; --o-warn-rgb:255,206,115; --o-warn2:#f59e0b; --o-warn2-rgb:245,158,11;

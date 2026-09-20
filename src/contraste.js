@@ -117,6 +117,12 @@ export const SEUILS = { texte: 7, text2: 5.4, text3: 5.0, teinte: 4.6, wcag: 4.5
 /* Le lavis d'une carte teintée : un scénario, une pièce, un état. C'est la
  * valeur que les cartes posent (`lav(.22)`), réglage « Douce ». */
 export const LAVIS = 0.2;
+/* Les variantes « sur lavis » visent un lavis plus DENSE que celui-là : elles ne
+ * valent que sur les cartes teintées, donc une marge n'y coûte rien à l'allure
+ * du thème — et le pied d'une carte, où deux dégradés se superposent, est plus
+ * teinté que le lavis nominal (audit du 20/09 : 21 mesures de CO₂ restaient à
+ * 4,0–4,4 sur les cartes de pièce avec 0,2). */
+export const LAVIS_DENSE = 0.3;
 /* Les teintes qui servent aussi de TEXTE : ajustées vers la lisibilité. */
 export const TEINTES = ['--o-accent-soft', '--o-ok', '--o-warn', '--o-warn2', '--o-bad', '--o-cold', '--o-cyan', '--o-purple', '--o-gold',
   '--o-lampe', '--o-orange', '--o-rose', '--o-piece-ambre', '--o-piece-tendre', '--o-piece-chambre', '--o-piece-bain', '--o-piece-vert'];
@@ -129,9 +135,9 @@ const AVEC_RGB = new Set(['--o-accent-soft', '--o-ok', '--o-warn', '--o-warn2', 
  * seul : une icône et un mot l'accompagnent toujours. */
 const VIFS = new Set(['--o-bad', '--o-rose']);
 /** Tous les jetons que la garde peut poser — à purger au changement de thème. */
-export const JETONS_GARDE = ['--o-text', '--o-text2', '--o-text3', '--o-text3-rgb', '--o-text2-lavis', '--o-text3-lavis', '--o-text3-lavis-rgb', '--o-accent', '--o-accent-rgb', '--o-accent-fond',
+export const JETONS_GARDE = ['--o-text', '--o-text2', '--o-text3', '--o-text3-rgb', '--o-text-lavis', '--o-text1-lavis', '--o-text2-lavis', '--o-text3-lavis', '--o-text3-lavis-rgb', '--o-accent', '--o-accent-rgb', '--o-accent-fond',
   '--o-rose-fond', '--o-purple-fond', '--o-surfA', '--o-surfB', '--o-well', '--o-well0',
-  ...TEINTES, ...TEINTES.filter(t => AVEC_RGB.has(t)).map(t => t + '-rgb')];
+  ...TEINTES, ...TEINTES.filter(t => AVEC_RGB.has(t)).map(t => t + '-rgb'), ...TEINTES.map(t => t + '-lavis')];
 
 /**
  * La couleur d'un APPAREIL (l'ampoule allumée, sa teinte réelle) rendue
@@ -256,7 +262,7 @@ export function garde(lire) {
   for (const jeton of TEINTES) {
     const t = lireCouleur('rgb(' + (out[jeton + '-rgb'] || lire(jeton + '-rgb')) + ')') || lireCouleur(out[jeton] || lire(jeton));
     if (!t) continue;
-    for (const p of page) for (const s of surfaces) fondsTeintes.push(composer(composer(p, s), [t[0], t[1], t[2], LAVIS]));
+    for (const p of page) for (const s of surfaces) fondsTeintes.push(composer(composer(p, s), [t[0], t[1], t[2], LAVIS_DENSE]));
   }
   // On les rend plus lisibles en gardant leur teinte froide ou chaude.
   for (const [jeton, cible, surTeinte] of [['--o-text2', SEUILS.text2, SEUILS.text2Lavis], ['--o-text3', SEUILS.text3, SEUILS.wcag]]) {
@@ -270,6 +276,31 @@ export function garde(lire) {
     const l = ajusterTous(x, [[fondsTeintes, surTeinte]], sens);
     out[jeton + '-lavis'] = versHex(l);
     if (jeton === '--o-text3') out['--o-text3-lavis-rgb'] = versRgb(l);
+  }
+  /* Le texte principal et son second : ils tiennent partout dans Loggia, mais une
+   * palette d'éditeur de code les donne ternes (One Dark Pro : « Plafonnier
+   * Cuisine » à 4,07:1 sur la carte d'une lampe allumée). Même variante, qui
+   * vaut la couleur elle-même quand elle tient déjà. */
+  for (const jeton of ['--o-text', '--o-text1']) {
+    const c = lireCouleur(out[jeton] || lire(jeton)); if (!c) continue;
+    out[jeton + '-lavis'] = versHex(ajusterTous(composer(fonds[fonds.length - 1], c), [[fondsTeintes, SEUILS.wcag]], sens));
+  }
+  /* Même remède pour les TEINTES qui écrivent sur une carte teintée : « Ouvert »
+   * en violet sur sa carte, « 1480 ppm » ambre sur une pièce rose. C'étaient
+   * les 86 textes qui restaient sous 4,5:1 après les gris (3,7 à 4,4). Une
+   * teinte assombrie ou éclaircie PARTOUT changerait les points, les jauges et
+   * les icônes de tout le thème ; la variante ne vaut que sur ces cartes.
+   * Le rouge d'alerte et le rose ne se mesurent que contre LEUR lavis : tenus
+   * contre la carte ambrée la plus claire, ils tournaient au pastel. */
+  for (const jeton of TEINTES) {
+    const c = lireCouleur(out[jeton] || lire(jeton)); if (!c) continue;
+    let contre = fondsTeintes;
+    if (VIFS.has(jeton)) {
+      const t = lireCouleur('rgb(' + (out[jeton + '-rgb'] || lire(jeton + '-rgb')) + ')') || c;
+      contre = [];
+      for (const p of page) for (const s2 of surfaces) contre.push(composer(composer(p, s2), [t[0], t[1], t[2], LAVIS_DENSE]));
+    }
+    out[jeton + '-lavis'] = versHex(ajusterTous(c.slice(0, 3), [[contre, SEUILS.wcag]], sens));
   }
   // L'accent : une icône, un interrupteur, un trait — 3:1.
   const accent = lireCouleur(lire('--o-accent'));

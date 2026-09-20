@@ -96,9 +96,9 @@ se rejoue variante par variante, sans cliquer dans les Paramètres.
   tuile, pas par une troisième passe complète).
 - Restent sous 4,5:1, entre 3,7 et 4,4 : un mot d'état écrit dans une teinte
   sur une carte teintée — « Ouvert » en violet sur sa carte, « 1480 ppm »
-  ambre sur une pièce, « Désarmée » en vert sur sa tuile. Les corriger
-  demanderait une variante « sur lavis » pour chaque teinte, ou des teintes
-  plus sombres partout : ni l'un ni l'autre ici. Les textes posés sur une
+  ambre sur une pièce, « Désarmée » en vert sur sa tuile. Corrigés le jour
+  même par une variante « sur lavis » pour chaque teinte : voir la suite, en
+  bas de cette décision. Les textes posés sur une
   image (nom d'une caméra sur son flux) ne se mesurent pas d'avance. La page
   Accessibilité dit les deux.
 - L'outil d'audit doit tourner DEPUIS la démo : dans un cadre, l'application
@@ -108,5 +108,38 @@ se rejoue variante par variante, sans cliquer dans les Paramètres.
 - Non fait, et dit : aucun essai avec un vrai lecteur d'écran ; le mode
   édition n'est pas vérifié au clavier.
 
-Tests : tests/site_lisible.test.mjs (7), tests/contraste.test.mjs (+1),
+## Suite, le même jour (v3.63.1) — « ok pour la suite »
+
+Les 86 textes restants étaient des mots d'état écrits dans une TEINTE sur une
+carte teintée. Même remède que pour les gris, étendu :
+
+- **Chaque teinte a sa variante « sur lavis »** (`--o-purple-lavis`…), que les
+  cartes teintées substituent à la teinte. Jamais le compagnon « r,g,b » : c'est
+  lui qui teinte la carte elle-même. Le rouge d'alerte et le rose ne se mesurent
+  que contre LEUR lavis — tenus contre la carte ambrée, ils tournaient au
+  pastel.
+- **Le texte principal et son second aussi** : inchangés dans Loggia (la
+  variante vaut la couleur elle-même), rattrapés dans une palette terne (One
+  Dark Pro : « Plafonnier Cuisine » à 4,07:1 sur la carte d'une lampe).
+- **Les pastilles à fond teinté** (`background: rgba(var(--o-…-rgb), α)`)
+  suivent la même règle : « 4 MISES À JOUR » en ambre sur sa pastille ambre.
+- **Les variantes visent un lavis plus dense que le nominal** (`LAVIS_DENSE`,
+  0,3 contre 0,2) : au pied d'une carte deux dégradés se superposent. Une marge
+  qui ne coûte rien à l'allure du thème, puisqu'elle ne vaut que là.
+- **Sans la garde** (mode sans apparence, premier affichage), chaque variante
+  vaut sa teinte : `--o-ok-lavis: var(--o-ok)` dans `:root` et dans l'îlot
+  sombre. Sans ce défaut, `var()` serait invalide et la carte perdrait ses
+  couleurs.
+
+Audit complet rejoué : **306 → 86 → 6 textes sous 4,5:1** sur 13 378, le pire
+à 3,84. Les six sont dans la vue Sécurité de trois thèmes (un nom de caméra,
+« TOUT EST CALME », les initiales d'une personne). Mesuré sur une carte allumée
+en Loggia clair : gris `#54617b` → `#3f495c`, violet `#6d23eb` → `#5c14d6` ;
+sur une carte éteinte et sur la page, rien ne bouge.
+
+L'outil d'audit vit dans le dossier de travail de la session (éphémère) ; la
+méthode est notée dans cette décision : le charger DEPUIS la démo, attendre un
+nombre de textes stable et un `h1`, ne rien reconstruire pendant qu'il tourne.
+
+Tests : tests/site_lisible.test.mjs (7), tests/contraste.test.mjs (+2),
 tests/pages_legales.test.mjs (cinq pages).
