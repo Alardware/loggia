@@ -11,6 +11,7 @@
  * crepuscule, pluie d'orage, pluie battante). Embarquees dans le bundle
  * plutot que servies depuis  : la demo et une installation neuve les
  * ont aussi. */
+import { useEffect, useRef } from 'react';
 import wxClearDay from './assets/wx/clear-day.svg';
 import wxClearNight from './assets/wx/clear-night.svg';
 import wxPartly from './assets/wx/partly-cloudy-day.svg';
@@ -60,8 +61,46 @@ const WX_METEO = {
   aube: wxAube, crepuscule: wxCrepuscule,
 };
 
-export function WeatherIco({ wx, size = 42 }) {
-  return <object type="image/svg+xml" data={WX_METEO[wx] || wxCloudy} width={size} height={size} tabIndex={-1} aria-label={tr('météo')} style={{ pointerEvents: 'none', display: 'block' }} />;
+/* Une icône FIGÉE : le SVG dessiné une fois dans un canvas. Une image SVG
+ * posée sur un canvas rend sa PREMIÈRE image, animations comprises — c'est
+ * exactement ce qu'on veut ici, et cela ne coûte plus rien ensuite. */
+function IcoFigee({ src, size }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return undefined;
+    let vivant = true;
+    const dpr = (() => { try { return Math.min(3, window.devicePixelRatio || 1); } catch { return 1; } })();
+    const im = new Image();
+    im.onload = () => {
+      if (!vivant) return;
+      cv.width = Math.round(size * dpr);
+      cv.height = Math.round(size * dpr);
+      try { cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); } catch { /* rien à dessiner */ }
+    };
+    im.src = src;
+    return () => { vivant = false; im.onload = null; };
+  }, [src, size]);
+  return <canvas ref={ref} role="img" aria-label={tr('météo')} style={{ width: size, height: size, display: 'block' }} />;
+}
+
+/* L'icône météo.
+ *
+ * `anime` à faux la fige. Retour du 20/09 (« il y a un truc qui clignote ») :
+ * sous 30 px, le soleil à huit rayons qui tourne de 45° en six secondes ne
+ * bouge que d'un pixel à la fois — les rayons apparaissent et disparaissent au
+ * lieu de tourner. Mesuré sur un enregistrement d'écran : 180 images sur 207
+ * identiques à la précédente, entrecoupées de sursauts d'une seule image. La
+ * rangée des heures et le widget du côté sont donc figés ; la grande icône,
+ * elle, tourne pour de bon.
+ *
+ * Le rendu passe par `<img>` et non plus par `<object>` : les animations SMIL
+ * y tournent pareil, mais sans ouvrir UN DOCUMENT par icône — il y en avait
+ * sept à l'écran. */
+export function WeatherIco({ wx, size = 42, anime = true }) {
+  const src = WX_METEO[wx] || wxCloudy;
+  if (!anime || REDUCE_MOTION) return <IcoFigee src={src} size={size} />;
+  return <img src={src} alt="" aria-label={tr('météo')} width={size} height={size} style={{ pointerEvents: 'none', display: 'block' }} />;
 }
 
 // Mappe une condition météo HA → mode d'effet WeatherFx (suit l'entité).

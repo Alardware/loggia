@@ -79,7 +79,7 @@ function HeureAiguilles({ hass }) {
       </div>
       {(mode || temp) && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-          {mode && <WeatherIco wx={mode} size={20} />}{temp}
+          {mode && <WeatherIco wx={mode} size={20} anime={false} />}{temp}
         </div>
       )}
     </div>

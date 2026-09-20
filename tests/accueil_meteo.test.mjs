@@ -144,7 +144,10 @@ test('la carte : les previsions par abonnement, par une reference vivante, et ri
 
 test('la carte : la disposition fournie — le lieu et le chiffre a gauche, le ciel a droite, les heures dessous — aux teintes des autres cartes du rail', () => {
   const rendu = carte.slice(carte.indexOf('<div className="o-carte-meteo"'));
-  const ordre = ['{nom}</div>', 'className="o-meteo-temp"', '<WeatherIco wx={mode} size={44} />', '{ciel}</div>', "tr('Max {n}'", "gridTemplateColumns: 'repeat(' + heures.length", '{h.libelle}</span>', '<WeatherIco wx={h.mode} size={28} />', '{h.temp}</span>'];
+  /* La rangee des heures est FIGEE depuis le 20/09 (« il y a un truc qui
+   * clignote ») : a 28 px, le soleil a huit rayons saute d'un cran au lieu
+   * de tourner. La grande icone, elle, tourne toujours. */
+  const ordre = ['{nom}</div>', 'className="o-meteo-temp"', '<WeatherIco wx={mode} size={44} />', '{ciel}</div>', "tr('Max {n}'", "gridTemplateColumns: 'repeat(' + heures.length", '{h.libelle}</span>', '<WeatherIco wx={h.mode} size={28} anime={false} />', '{h.temp}</span>'];
   let curseur = -1;
   for (const morceau of ordre) { const i = rendu.indexOf(morceau); assert.ok(i > curseur, morceau + ' n’est pas a sa place'); curseur = i; }
   // Retour du 17/09 sur le fond bleu de la capture : « applique les memes teintes
