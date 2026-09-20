@@ -1,3 +1,5 @@
+import { cpSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -20,8 +22,26 @@ const orbeRechargee = {
   },
 };
 
+/* Le site en ligne a des pages que le dashboard n'a pas : mentions légales,
+ * confidentialité, conditions d'utilisation, cookies (`site/legal/`). Elles
+ * parlent du SITE — son éditeur, son hébergeur — et n'ont rien à faire dans le
+ * Home Assistant des gens. Elles ne vivent donc pas dans `public/`, que toutes
+ * les constructions copient et que HACS livrerait : ce greffon les dépose dans
+ * la seule construction « demo », celle que GitHub Pages publie
+ * (tests/pages_legales.test.mjs). */
+let racine = '';
+let sortie = '';
+const siteEnLigne = {
+  name: 'loggia-site-en-ligne',
+  apply: 'build',
+  configResolved(c) { racine = c.root; sortie = resolve(c.root, c.build.outDir); },
+  closeBundle() {
+    cpSync(join(racine, 'site'), sortie, { recursive: true });
+  },
+};
+
 // base relative : le dashboard est servi depuis /local/loggia/ (www de Home Assistant)
-export default defineConfig({
+const config = {
   base: './',
   plugins: [react(), orbeRechargee],
   // Pré-bundler les grosses dépendances dès le démarrage du serveur dev,
@@ -43,4 +63,9 @@ export default defineConfig({
     // vendor séparé : react/react-dom ne changent pas entre deploys → les clients ne re-téléchargent que le code app
     rollupOptions: { output: { manualChunks: { vendor: ['react', 'react-dom'], three: ['three'] } } },
   },
+};
+
+export default defineConfig(({ mode }) => {
+  if (mode === 'demo') config.plugins.push(siteEnLigne);
+  return config;
 });

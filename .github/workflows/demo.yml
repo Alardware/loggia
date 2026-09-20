@@ -13,6 +13,9 @@ on:
     paths:
       - 'src/**'
       - 'public/**'
+      # Les pages légales du site (ADR 0062) : une correction doit se publier
+      # même si rien d'autre ne bouge.
+      - 'site/**'
       - 'index.html'
       - 'vite.config.js'
       - 'package.json'

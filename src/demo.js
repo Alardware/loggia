@@ -1326,8 +1326,48 @@ export function installerDemo() {
    * mesurée), plus la marge du bouton de l'assistant qui en dépasse au
    * milieu : posé à 10 px du bas, le badge le couvrait sur téléphone. Sans
    * barre, `--o-navh` vaut 0 et le badge reste à 10 px du bas. */
+  /* Ses couleurs viennent du thème (20/09/2026) : le bleu clair écrit en dur
+   * donnait 1,4:1 en mode clair, et son fond translucide prenait la teinte de
+   * ce qui passait dessous. Le fond est désormais opaque — l'accent à 16 % sur
+   * le fond de page — et le texte est celui du thème ; les deux premières
+   * déclarations restent pour les navigateurs sans `color-mix`. */
   const badge = document.createElement('div');
   badge.textContent = 'Démonstration — données factices';
-  badge.style.cssText = 'position:fixed;left:50%;bottom:calc(10px + var(--o-navh, 0px) + min(var(--o-navh, 0px), 18px));transform:translateX(-50%);z-index:99999;padding:6px 14px;border-radius:999px;background:rgba(77,163,255,.16);border:1px solid rgba(77,163,255,.4);color:#8fc2ff;font:700 11.5px/1.4 system-ui,sans-serif;white-space:nowrap;pointer-events:none;';
-  document.documentElement.appendChild(badge);
+  badge.style.cssText = 'position:fixed;left:50%;bottom:calc(10px + var(--o-navh, 0px) + min(var(--o-navh, 0px), 18px));transform:translateX(-50%);z-index:99999;padding:6px 14px;border-radius:999px;background:#13233d;background:color-mix(in srgb, var(--o-accent, #4f8cff) 16%, var(--o-bg, #0b101b));border:1px solid rgba(77,163,255,.4);color:#eaf0fb;color:var(--o-text, #eaf0fb);font:700 11.5px/1.4 system-ui,sans-serif;white-space:nowrap;pointer-events:none;';
+  /* Sur le site en ligne seulement, le badge mène aux pages légales
+   * (`site/legal/`, ADR 0062) : la loi veut que l'éditeur et l'hébergeur d'un
+   * site se trouvent depuis ce site. Sur une installation, `?demo` n'a pas ces
+   * pages — le lien ne mènerait nulle part. Le badge laisse passer les clics ;
+   * le lien, lui, les reprend. Trop large pour un petit téléphone, l'ensemble
+   * passe sur deux lignes, chaque moitié restant entière. */
+  if (import.meta.env.MODE === 'demo') {
+    const texte = document.createElement('span');
+    texte.textContent = badge.textContent;
+    texte.style.whiteSpace = 'nowrap';
+    const lien = document.createElement('a');
+    lien.href = './legal/mentions-legales.html';
+    lien.textContent = 'Mentions légales';
+    lien.lang = 'fr';
+    // Le rembourrage rendu par la marge : une cible de 28 px sans grossir le badge.
+    lien.style.cssText = 'pointer-events:auto;color:inherit;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;padding:6px 4px;margin:-6px -4px;';
+    badge.textContent = '';
+    badge.append(texte, lien);
+    // Pas de point entre les deux : à la ligne, il resterait seul en tête.
+    badge.style.display = 'flex';
+    badge.style.flexWrap = 'wrap';
+    badge.style.justifyContent = 'center';
+    badge.style.columnGap = '12px';
+    // `left:50%` ne laisse que la moitié de l'écran à un bloc fixe : sans
+    // largeur dite, il passait sur deux lignes même quand une seule tenait.
+    badge.style.width = 'max-content';
+    badge.style.maxWidth = 'calc(100vw - 20px)';
+    badge.style.boxSizing = 'border-box';
+    /* Dans le CORPS de la page, et nommé comme pied de page : accroché à
+     * `<html>`, le lien restait hors de l'arbre que lisent les lecteurs d'écran
+     * et les agents (mesuré : introuvable). */
+    badge.setAttribute('role', 'contentinfo');
+    document.body.appendChild(badge);
+  } else {
+    document.documentElement.appendChild(badge);
+  }
 }

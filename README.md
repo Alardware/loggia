@@ -219,6 +219,14 @@ le faire vivre :
 
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alardware)
 
+## Crédits
+
+Polices Manrope (Mikhail Sharanda) et Newsreader (Production Type), sous SIL
+Open Font License 1.1. Icônes de l'interface : [UIcons par Flaticon](https://www.flaticon.com/uicons).
+Icônes météo : Meteocons, de Bas Milius (`@bybas/weather-icons`), sous licence
+MIT. React et three.js, sous licence MIT. Tout est embarqué : rien n'est chargé
+depuis ces sites.
+
 ## Licence
 
 MIT — voir [LICENSE](LICENSE).
