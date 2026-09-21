@@ -70,6 +70,9 @@ WS_SCN_CONFIG = "loggia/scenarios/config"
 WS_SCN_LANCER = "loggia/scenarios/lancer"
 WS_ROB_ETAT = "loggia/robots/etat"
 WS_ROB_CONFIG = "loggia/robots/config"
+WS_MIN_ETAT = "loggia/minuteurs/etat"
+WS_MIN_POSER = "loggia/minuteurs/poser"
+WS_MIN_ANNULER = "loggia/minuteurs/annuler"
 WS_PIN_VERIFIER = "loggia/pin/verifier"
 WS_PIN_DEFINIR = "loggia/pin/definir"
 
@@ -106,7 +109,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                    acces_interrupteurs=None, acces_volets=None, acces_fenetres=None,
                    acces_presence=None, acces_nuit=None,
                    acces_veilles=None, acces_regles=None, acces_scenarios=None,
-                   acces_robots=None) -> None:
+                   acces_robots=None, acces_minuteurs=None) -> None:
     """Declare les commandes aupres du serveur WebSocket.
 
     `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
@@ -531,6 +534,60 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             return
         connection.send_result(msg["id"], {"config": config})
 
+    # ── Les minuteurs d'extinction (21/09) ─────────────────────────────────
+    # Ouverts a tout compte connecte — c'est le geste d'une fiche de lampe —,
+    # mais seulement sur ce que ce compte a le droit de PILOTER : le composant
+    # eteint lui-meme, la verification de Home Assistant n'aurait pas lieu
+    # (audit 18/09). Qui pose le minuteur vient de la session, jamais du message.
+    def _minuteurs(connection, msg):
+        minuteurs = acces_minuteurs() if acces_minuteurs else None
+        if minuteurs is None:
+            connection.send_error(msg["id"], "not_available", "minuteurs indisponibles")
+        return minuteurs
+
+    @websocket_api.websocket_command({vol.Required("type"): WS_MIN_ETAT})
+    @websocket_api.async_response
+    async def handle_min_etat(hass, connection, msg):
+        minuteurs = _minuteurs(connection, msg)
+        if minuteurs is None:
+            return
+        connection.send_result(msg["id"], minuteurs.async_etat(controle_de(connection.user)))
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_MIN_POSER, vol.Required("entity_id"): str,
+         vol.Required("minutes"): int}
+    )
+    @websocket_api.async_response
+    async def handle_min_poser(hass, connection, msg):
+        minuteurs = _minuteurs(connection, msg)
+        if minuteurs is None:
+            return
+        try:
+            etat = await minuteurs.async_poser(msg["entity_id"], msg["minutes"], par=connection.user.id,
+                                               controle=controle_de(connection.user))
+        except PermissionError as err:
+            connection.send_error(msg["id"], "unauthorized", str(err))
+            return
+        except ValueError as err:
+            connection.send_error(msg["id"], "invalid_format", str(err))
+            return
+        connection.send_result(msg["id"], etat)
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_MIN_ANNULER, vol.Required("entity_id"): str}
+    )
+    @websocket_api.async_response
+    async def handle_min_annuler(hass, connection, msg):
+        minuteurs = _minuteurs(connection, msg)
+        if minuteurs is None:
+            return
+        try:
+            etat = await minuteurs.async_annuler(msg["entity_id"], controle=controle_de(connection.user))
+        except PermissionError as err:
+            connection.send_error(msg["id"], "unauthorized", str(err))
+            return
+        connection.send_result(msg["id"], etat)
+
     # Toutes les regles melees, dans l'ordre du temps — le seul outil de
     # debogage d'un non-technicien. Et le PRESENT : quand rien ne bouge, la
     # question n'est pas ce qui s'est passe mais ce qui retient — une main,
@@ -585,6 +642,9 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_scn_lancer)
     websocket_api.async_register_command(hass, handle_rob_etat)
     websocket_api.async_register_command(hass, handle_rob_config)
+    websocket_api.async_register_command(hass, handle_min_etat)
+    websocket_api.async_register_command(hass, handle_min_poser)
+    websocket_api.async_register_command(hass, handle_min_annuler)
     websocket_api.async_register_command(hass, handle_pin_verifier)
     websocket_api.async_register_command(hass, handle_pin_definir)
     websocket_api.async_register_command(hass, handle_vei_etat)

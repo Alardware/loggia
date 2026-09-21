@@ -106,7 +106,8 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                               lambda: hass.data.get(DOMAIN, {}).get("veilles"),
                               acces_regles=lambda: hass.data.get(DOMAIN, {}).get("regles"),
                               acces_scenarios=lambda: hass.data.get(DOMAIN, {}).get("scenarios"),
-                              acces_robots=lambda: hass.data.get(DOMAIN, {}).get("robots"))
+                              acces_robots=lambda: hass.data.get(DOMAIN, {}).get("robots"),
+                              acces_minuteurs=lambda: hass.data.get(DOMAIN, {}).get("minuteurs"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
@@ -202,6 +203,16 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["robots"] = LoggiaRobots(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : planning des robots indisponible")
+
+    # Les minuteurs d'extinction : « eteindre dans 30 min », tenus ICI et non
+    # plus dans l'onglet du navigateur (21/09). Meme regime que les regles.
+    if not data.get("minuteurs") and data.get("store") and data.get("regles"):
+        try:
+            from .minuteurs import LoggiaMinuteurs
+
+            data["minuteurs"] = LoggiaMinuteurs(hass, data["store"], data.get("regles"))
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : minuteurs d'extinction indisponibles")
 
     # Les scenarios : ce que la maison fait d'un seul geste (ADR 0027). Ils
     # ne posent aucun abonnement — seul le magasin leur est necessaire.

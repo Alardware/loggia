@@ -23,6 +23,9 @@ OUVERTES = [
     "WS_GET", "WS_SET", "WS_DELETE", "WS_DISCOVERY", "WS_INT_ETAT", "WS_VOL_ETAT", "WS_FEN_ETAT",
     "WS_PRE_ETAT", "WS_NUI_ETAT", "WS_VEI_ETAT", "WS_REG_ETAT", "WS_SCN_ETAT", "WS_SCN_LANCER",
     "WS_ROB_ETAT", "WS_PIN_VERIFIER",
+    # Le minuteur d'une lampe (21/09) : le geste d'une fiche, comme lancer un
+    # scenario — ouvert a tout compte, mais filtre par ses droits de PILOTAGE.
+    "WS_MIN_ETAT", "WS_MIN_POSER", "WS_MIN_ANNULER",
 ]
 
 

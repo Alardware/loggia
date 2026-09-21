@@ -98,6 +98,10 @@ sont masquées, avec le motif.
   caméras, un menu règle combien s'affichent par ligne — de une à quatre,
   chacune avec son schéma —, et le choix est propre à l'ordinateur, à la
   tablette et au téléphone.
+- **Minuteur d'extinction** — « +30 min » sur la fiche d'une lampe ou d'une
+  prise : Home Assistant l'éteint à l'heure, même si aucun écran n'est
+  ouvert. Le décompte se lit à la seconde, sur tous les appareils ; éteinte
+  à la main avant l'heure, le minuteur s'efface.
 - **Vignette météo animée** — la condition se voit dans la vignette de
   l'accueil : pluie qui tombe, étoiles, halo de soleil, éclair d'orage.
 - **Mode ambiant** — pour une tablette murale : après un délai sans toucher,

@@ -924,6 +924,23 @@ const ROB_CFG = {
  * tenir l'objet que la commande suivante modifiera. */
 const copieRobots = () => JSON.parse(JSON.stringify(ROB_CFG));
 
+/* Les minuteurs de la démo : en mémoire, comme la table du vrai composant —
+ * une heure de fin en secondes, et le temps S'AJOUTE à ce qui reste. */
+const MIN_DEMO = {};
+function minuteursDemo() {
+  const maintenant = Date.now() / 1000;
+  const en_cours = {};
+  Object.keys(MIN_DEMO).forEach(id => { if (MIN_DEMO[id].fin > maintenant) en_cours[id] = { ...MIN_DEMO[id] }; else delete MIN_DEMO[id]; });
+  return { minuteurs: en_cours, maintenant };
+}
+function minuteursPoser(id, minutes) {
+  const maintenant = Date.now() / 1000;
+  const actuel = MIN_DEMO[id] && MIN_DEMO[id].fin > maintenant ? MIN_DEMO[id] : null;
+  const n = Math.max(1, Math.min(24 * 60, Number(minutes) || 30));
+  MIN_DEMO[id] = { fin: Math.min((actuel ? actuel.fin : maintenant) + n * 60, maintenant + 24 * 3600), duree: (actuel ? actuel.duree : 0) + n };
+  return minuteursDemo();
+}
+
 function robotsDemo(states) {
   return { config: copieRobots(), meteo: Object.keys(states).filter(id => id.startsWith('weather.')).sort()[0] || null, journal: [] };
 }
@@ -1163,6 +1180,11 @@ export function installerDemo() {
         return Promise.resolve({ ok: false, bloque: PIN_DEMO.rates >= 5 ? 60 : 0 });
       }
       if (msg && msg.type === 'loggia/pin/definir') { PIN_DEMO.code = String(msg.pin); return Promise.resolve({ defini: true }); }
+      /* Les minuteurs d'extinction, comme le vrai composant (`minuteurs.py`) :
+       * une heure de fin par appareil, et l'heure du serveur pour le décompte. */
+      if (msg && msg.type === 'loggia/minuteurs/etat') return Promise.resolve(minuteursDemo());
+      if (msg && msg.type === 'loggia/minuteurs/poser') return Promise.resolve(minuteursPoser(msg.entity_id, msg.minutes));
+      if (msg && msg.type === 'loggia/minuteurs/annuler') { delete MIN_DEMO[msg.entity_id]; return Promise.resolve(minuteursDemo()); }
       if (msg && msg.type === 'loggia/robots/etat') return Promise.resolve(robotsDemo(states));
       if (msg && msg.type === 'loggia/robots/config') return Promise.resolve({ config: robotsPatch(msg.patch) });
       if (msg && msg.type === 'loggia/veilles/etat') return Promise.resolve(veillesDemo(states));

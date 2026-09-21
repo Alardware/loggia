@@ -46,6 +46,7 @@ import { sysKeys } from './sysconf.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { colonnesCam, camDispoDe, poserCamDispo, camDisposDe, camSerre, CAM_AUTO } from './camdispo.js';
+import { decalageServeur, resteMinuteur, decompte } from './minuteur.js';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
 import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { CARTE_RAIL } from './styles.js';
@@ -3077,28 +3078,38 @@ const pileDe = (S, id) => { const sid = pickSibling(LOGGIA_INDEX, S, id, { domai
 const RangeeDernier = ({ st }) => <FicheRangee titre={tr('Dernier changement')} desc={tr('Depuis le journal de Home Assistant')} droite={<FicheValeur couleur="var(--o-text2)">{heureDe(st && st.last_changed)}</FicheValeur>} />;
 const RangeePile = ({ n }) => (n == null ? null : <FicheRangee titre={tr('Pile')} desc={tr('Capteur sans fil')} droite={<FicheValeur couleur={n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-ok)'}>{n} %</FicheValeur>} />);
 
-/* ── Un minuteur d'extinction, tenu par cet ecran ────────────────────────────
- * « Extinction dans 30 min ». Il vit tant que Loggia reste ouvert — pas dans
- * Home Assistant : on le dit dans la rangee. */
-const MINUTEURS = new Map();
-function minuteurReste(id) { const m = MINUTEURS.get(id); if (!m || m.fin <= Date.now()) return null; return Math.max(1, Math.ceil((m.fin - Date.now()) / 60000)); }
-function minuteurAnnuler(id) { const m = MINUTEURS.get(id); if (m) { clearTimeout(m.timer); MINUTEURS.delete(id); } }
-function minuteurPoser(hass, id, minutes) {
-  const m = MINUTEURS.get(id);
-  const fin = (m && m.fin > Date.now() ? m.fin : Date.now()) + minutes * 60000;
-  if (m) clearTimeout(m.timer);
-  const timer = setTimeout(() => { MINUTEURS.delete(id); commanderService(hass, id, 'homeassistant', 'turn_off', { entity_id: id }); }, fin - Date.now());
-  MINUTEURS.set(id, { fin, timer });
-}
+/* ── Le minuteur d'extinction, tenu par Home Assistant (21/09) ─────────────
+ * « Pourquoi Loggia doit rester ouvert, c'est absurde, et je n'ai pas le
+ * décompte. » Il vivait dans l'onglet — un `setTimeout` : fermer l'écran
+ * l'annulait sans rien dire, un autre appareil ne le voyait pas, et la ligne
+ * se contentait d'un « dans 30 min » arrondi, relu toutes les 15 s. Il vit
+ * maintenant dans le composant (`minuteurs.py`) : il part même quand aucun
+ * écran n'est ouvert. L'écran LIT l'heure de fin et compte à la seconde,
+ * calé sur l'heure du serveur (`src/minuteur.js`).
+ *
+ * Sans réponse du composant — trop ancien, pas encore redémarré —, pas de
+ * rangée : un minuteur qui mourrait avec l'onglet ne se propose plus. */
 function RangeeMinuteur({ hass, id }) {
-  const [, tic] = useState(0);
-  useEffect(() => { const iv = setInterval(() => tic(n => n + 1), 15000); return () => clearInterval(iv); }, []);
-  const reste = minuteurReste(id);
+  const { etat, setEtat } = useEtatServeur(hass, 'loggia/minuteurs/etat', 15000, '');
+  const [decalage, setDecalage] = useState(0);
+  const [erreur, setErreur] = useState('');
+  useEffect(() => { if (etat) setDecalage(decalageServeur(etat, Date.now())); }, [etat]);
+  const reste = resteMinuteur(etat, id, Date.now(), decalage);
+  useSeconde(reste != null);
+  if (!etat) return null;
+  const agir = (msg) => hass.callWS(msg)
+    .then(r => { setEtat(r); setErreur(''); })
+    .catch(e => setErreur((e && e.code === 'unauthorized') ? tr('Ce compte ne pilote pas cet appareil.') : tr('Le minuteur n’a pas pu être enregistré.')));
+  const m = etat.minuteurs && etat.minuteurs[id];
+  const fin = reste != null && m ? new Date(Number(m.fin) * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : null;
   return (
-    <FicheRangee titre={tr('Minuteur')} desc={reste ? tr('Extinction dans {n} min — tant que Loggia reste ouvert.', { n: reste }) : tr('Aucun minuteur en cours')}
-      droite={<div style={{ display: 'flex', gap: 6 }}>
-        <FicheBouton icone="clock" onClick={() => { minuteurPoser(hass, id, 30); tic(n => n + 1); }}>+30 min</FicheBouton>
-        {reste ? <FicheBouton title={tr('Annuler le minuteur')} onClick={() => { minuteurAnnuler(id); tic(n => n + 1); }}><Fi i="cross-small" size={12} /></FicheBouton> : null}
+    <FicheRangee titre={tr('Minuteur')}
+      desc={erreur || (fin ? tr('Extinction à {h}', { h: fin }) : tr('Aucun minuteur en cours'))}
+      droite={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Le décompte, à la seconde, en chiffres qui ne dansent pas. */}
+        {reste != null && <span aria-live="off" aria-label={tr('Temps restant')}><FicheValeur>{decompte(reste)}</FicheValeur></span>}
+        <FicheBouton icone="clock" onClick={() => agir({ type: 'loggia/minuteurs/poser', entity_id: id, minutes: 30 })}>+30 min</FicheBouton>
+        {reste != null ? <FicheBouton title={tr('Annuler le minuteur')} onClick={() => agir({ type: 'loggia/minuteurs/annuler', entity_id: id })}><Fi i="cross-small" size={12} /></FicheBouton> : null}
       </div>} />
   );
 }

@@ -450,7 +450,7 @@ def test_l_etat_dit_la_config_la_meteo_et_le_journal(creer):
 def test_le_module_est_branche_dans_le_composant():
     init = (RACINE / "custom_components" / "loggia" / "__init__.py").read_text(encoding="utf-8")
     assert 'data["robots"] = LoggiaRobots(hass, data["store"], data.get("regles"))' in init
-    assert 'acces_robots=lambda: hass.data.get(DOMAIN, {}).get("robots"))' in init
+    assert 'acces_robots=lambda: hass.data.get(DOMAIN, {}).get("robots")' in init
     ws = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_text(encoding="utf-8")
     assert 'WS_ROB_ETAT = "loggia/robots/etat"' in ws and 'WS_ROB_CONFIG = "loggia/robots/config"' in ws
     ecrire = ws[ws.index('{vol.Required("type"): WS_ROB_CONFIG'):]
