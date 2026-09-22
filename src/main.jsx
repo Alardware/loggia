@@ -68,7 +68,7 @@ function langueProbable() {
       const md = q.get('mode');
       if (md === 'auto' || md === 'light' || md === 'dark') localStorage.setItem('loggia-mode', md);
       const lg = q.get('lang');
-      if (lg === 'fr' || lg === 'en') localStorage.setItem('loggia-langue', JSON.stringify(lg));
+      if (lg === 'fr' || lg === 'en' || lg === 'pl') localStorage.setItem('loggia-langue', JSON.stringify(lg));
       /* `?theme=ios` : le thème, comme le mode — pour REJOUER l'audit de
        * contraste variante par variante (15 thèmes × clair et sombre) au lieu
        * de cliquer dans les Paramètres à chaque passe. Un nom inconnu retombe
@@ -83,9 +83,18 @@ function langueProbable() {
       if (vu && /^[a-z]+(:.{1,40})?$/.test(vu)) sessionStorage.setItem('loggia-vue', vu);
     } catch { /* rien */ }
   }
-  if (langueProbable() === 'en') {
+  /* Prechargement : sans lui la page s'ouvre en francais puis bascule, des
+   * modules appelant tr() des l'import. Une langue non anglaise emporte aussi
+   * l'anglais, qui reste le filet de `tr`. */
+  const _lg = langueProbable();
+  if (_lg === 'en') {
     try { window.__loggiaCatEN = (await import('./langues/en.js')).default; }
     catch { /* reseau : le francais couvre tout */ }
+  } else if (_lg === 'pl') {
+    try { window.__loggiaCatPL = (await import('./langues/pl.js')).default; }
+    catch { /* reseau : le francais couvre tout */ }
+    try { window.__loggiaCatEN = (await import('./langues/en.js')).default; }
+    catch { /* rien : le filet manquera, le francais couvre */ }
   }
   await import('./boot.jsx');
 })();
