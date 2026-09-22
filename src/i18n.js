@@ -45,6 +45,7 @@ export const LANGUES = [
   { code: 'auto', nom: 'Suivre Home Assistant' },
   { code: 'fr', nom: 'Français' },
   { code: 'en', nom: 'English' },
+  { code: 'pl', nom: 'Polski' },
 ];
 
 /* Le catalogue anglais n'est PAS importe ici : 40 Ko que le boot francophone
@@ -53,18 +54,38 @@ export const LANGUES = [
  * l'application. `chargerCatalogueTardif` couvre le cas restant : « auto » qui
  * bascule vers l'anglais a l'arrivee de hass. */
 const CATALOGUES = {};
-try { if (typeof window !== 'undefined' && window.__loggiaCatEN) CATALOGUES.en = window.__loggiaCatEN; } catch { /* rien */ }
+try {
+  if (typeof window !== 'undefined') {
+    if (window.__loggiaCatEN) CATALOGUES.en = window.__loggiaCatEN;
+    if (window.__loggiaCatPL) CATALOGUES.pl = window.__loggiaCatPL;
+  }
+} catch { /* rien */ }
 
-let _chargementEn = null;
+/* Les catalogues chargeables a la demande. Ajouter une langue = une ligne ici,
+ * une entree dans LANGUES, un fichier dans `langues/` — et le prechargement de
+ * `main.jsx`, qui lit la meme table. */
+const TARDIFS = {
+  en: () => import('./langues/en.js'),
+  pl: () => import('./langues/pl.js'),
+};
+
+const _chargements = {};
+function chargerUn(code, demande) {
+  if (CATALOGUES[code] || _chargements[code] || !TARDIFS[code]) return;
+  _chargements[code] = TARDIFS[code]().then(m => {
+    CATALOGUES[code] = m.default;
+    // La demande etait cette langue elle-meme : on bascule — le poll de hass
+    // (2 s) redessine, les libelles suivent au tick d'apres. Sinon on vient
+    // seulement de rendre le FILET anglais disponible.
+    if (demande === code) { _code = code; _cat = m.default; }
+  }).catch(() => { _chargements[code] = null; });
+}
+
 function chargerCatalogueTardif(demande) {
-  if (CATALOGUES.en || _chargementEn) return;
-  _chargementEn = import('./langues/en.js').then(m => {
-    CATALOGUES.en = m.default;
-    // La demande etait l'anglais lui-meme : on bascule — le poll de hass (2 s)
-    // redessine, les libelles suivent au tick d'apres. Pour une langue exotique
-    // le code reste le sien, seul le FILET anglais devient disponible.
-    if (demande === 'en') { _code = 'en'; _cat = m.default; }
-  }).catch(() => { _chargementEn = null; });
+  /* L'anglais reste le FILET de `tr` pour toute langue non francaise : on le
+   * charge toujours, en plus du catalogue demande. */
+  chargerUn('en', demande);
+  if (demande && demande !== 'en') chargerUn(demande, demande);
 }
 
 /** Les langues proposees dans les reglages. */
@@ -504,7 +525,7 @@ export function comparerTextes(a, b) {
  * affichait « Mardi 25 août » au milieu d'une interface anglaise. `Intl` fait
  * tout le travail — noms de jours, ordre jour/mois, 12 h ou 24 h — a condition
  * de lui donner la bonne locale. */
-const LOCALES = { fr: 'fr-FR', en: 'en-GB' };
+const LOCALES = { fr: 'fr-FR', en: 'en-GB', pl: 'pl-PL' };
 
 export function locale() {
   /* Une langue sans entree ici est rendue telle quelle : `Intl` sait quoi faire
