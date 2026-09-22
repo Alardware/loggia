@@ -29,15 +29,18 @@
  */
 import { cfgVal, getHass } from './state.js';
 
-/* Deux langues, traduites en entier — plutot que soixante a moitie.
+/* Deux langues aujourd'hui, traduites en entier — plutot que soixante a moitie.
  *
- * L'espagnol et l'allemand ont vecu jusqu'au 29/08/2026 : deux catalogues de
- * plus a maintenir a chaque phrase ajoutee, pour aucun utilisateur connu.
- * Retires a la demande de l'utilisateur ; ils reviendront si quelqu'un les
- * demande (l'historique git les garde).
+ * L'espagnol et l'allemand ont ete retires le 29/08/2026, TEMPORAIREMENT :
+ * Loggia n'etait pas encore destine a etre public. L'anglais est revenu juste
+ * avant la publication, et d'autres langues sont prevues. L'historique git
+ * garde les deux catalogues retires.
  *
- * Ajouter une langue = un fichier dans `langues/`, une entree ici, une dans
- * CATALOGUES. Rien d'autre a toucher. */
+ * Ajouter une langue, aujourd'hui : un fichier dans `langues/`, une entree
+ * ici — et deux endroits encore ecrits pour l'anglais seul : le prechargement
+ * de `main.jsx` (`window.__loggiaCatEN`) et `chargerCatalogueTardif`,
+ * ci-dessous. Les pluriels, eux, ne connaissent que deux formes (1 /
+ * plusieurs) : une langue qui en a trois, comme le polonais, demandera plus. */
 export const LANGUES = [
   { code: 'auto', nom: 'Suivre Home Assistant' },
   { code: 'fr', nom: 'Français' },
