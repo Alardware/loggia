@@ -133,6 +133,9 @@ export function VoletsReglages({ hass, cardSt }) {
   const sol = cfg.soleil || {};
   const vent = cfg.vent || {};
   const baies = cfg.baies || {};
+  // Ordre non abouti (ADR 0007) : le seul réglage est le nombre de reprises.
+  const verification = cfg.verification || {};
+  const tentatives = [1, 2, 3].indexOf(verification.tentatives) >= 0 ? verification.tentatives : 2;
   const simu = cfg.simulation || {};
   const label = { fontSize: 12, fontWeight: 700, marginBottom: 6 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
@@ -435,6 +438,23 @@ export function VoletsReglages({ hass, cardSt }) {
         )}
       </div>
 
+      {/* ── Ordre non abouti (ADR 0007) ── */}
+      {/* Un volet injoignable attend son retour ; un volet joignable mais
+        * immobile deux minutes après l'ordre se voit redemander, puis le
+        * journal le dit en rouge. Un seul réglage : combien de fois. */}
+      <div style={cardSt}>
+        <div style={CAPITALES}>{tr('Manœuvre non confirmée')}</div>
+        <div style={{ marginTop: 4, fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
+          {tr('Deux minutes après un ordre, un volet joignable qui n’a pas bougé se voit redemander. Après la dernière tentative, la manœuvre est notée en rouge ci-dessous.')}
+        </div>
+        <div style={{ ...ligne, marginTop: 10 }}>
+          <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Tentatives')}</span>
+          {[1, 2, 3].map(n => (
+            <button key={n} type="button" aria-pressed={tentatives === n} onClick={() => enregistrer({ verification: { tentatives: n } })} style={puce(tentatives === n)}>{n}</button>
+          ))}
+        </div>
+      </div>
+
       {/* ── Ce qui s'est passé ── */}
       {etat.journal && etat.journal.length > 0 && (
         <div style={cardSt}>
@@ -449,9 +469,10 @@ export function VoletsReglages({ hass, cardSt }) {
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>
             {etat.journal.slice(0, 8).map((j, i) => (
               <div key={j.ts + '' + i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', fontSize: 12, fontWeight: 600 }}>
-                <span>
+                {/* La ligne rouge : un ordre qui n'a pas abouti (ADR 0007). */}
+                <span style={j.echec ? { color: 'var(--o-bad)' } : undefined}>
                   {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
-                  {majuscule(j.quoi)} · <span style={{ color: 'var(--o-text2)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
+                  {majuscule(j.quoi)} · <span style={{ color: j.echec ? 'var(--o-bad)' : 'var(--o-text2)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
                 </span>
                 <span style={{ ...MONO, fontSize: 11.5, color: 'var(--o-text3)', flexShrink: 0 }}>{quandCourt(j.ts)}</span>
               </div>

@@ -24,7 +24,7 @@ import { planAction as actionsPlan, availableActions as actionsAvailable, runPla
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
 import { deviceCard, presentableDevices, presentationSummary, cleCamera } from './present.js';
 import { healthReport, healthText } from './health.js';
-import { probe as configProbe, reportLive as configReportLive, migrateFromLocalStorage, completerDepuisLocal, collectLocal, createConfig, CONFIG_VERSION } from './config.js';
+import { probe as configProbe, reportLive as configReportLive, migrateFromLocalStorage, completerDepuisLocal, collectLocal, createConfig, brancherVidage, doitRelire, CONFIG_VERSION } from './config.js';
 import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
 import { isViewAvailable, viewReason } from './views.js';
@@ -2862,6 +2862,15 @@ function RoomMediaSheet({ id, hass, onClose }) {
   const seekT = useRef(null);
   useEffect(() => () => clearTimeout(seekT.current), []);
   const showPos = seekOv != null ? seekOv : np.pos;
+  /* Chercher dans le morceau : au pointeur (la barre) comme au clavier (les
+   * fleches, ADR 0068). `v` est en pour cent de la duree. */
+  const chercher = (v) => {
+    const secs = v / 100 * np.dur;
+    setSeekOv(secs);
+    commander(hass, np.ctl, 'seek', Math.round(secs));
+    clearTimeout(seekT.current);
+    seekT.current = setTimeout(() => setSeekOv(null), 3000);
+  };
   const pct = (showPos != null && np.dur) ? Math.min(100, showPos / np.dur * 100) : 0;
   const fmtT = (s) => { if (s == null || isNaN(s)) return '0:00'; const m = Math.floor(s / 60), ss = Math.floor(s % 60); return m + ':' + (ss < 10 ? '0' : '') + ss; };
   const glass = (size, rad) => ({ width: size, height: size, borderRadius: rad, flexShrink: 0, border: onArt ? '1px solid rgba(255,255,255,.14)' : 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', color: onArt ? '#fff' : 'var(--o-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: onArt ? 'linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.06))' : 'var(--o-s1)', backdropFilter: 'blur(14px) saturate(1.38)', WebkitBackdropFilter: 'blur(14px) saturate(1.38)', boxShadow: '0 12px 26px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.08)', position: 'relative' });
@@ -2910,7 +2919,12 @@ function RoomMediaSheet({ id, hass, onClose }) {
             {/* progression */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: tDim, minWidth: 32 }}>{fmtT(showPos)}</span>
-              <div onPointerDown={np.dur ? bar((v) => { const secs = v / 100 * np.dur; setSeekOv(secs); commander(hass, np.ctl, 'seek', Math.round(secs)); clearTimeout(seekT.current); seekT.current = setTimeout(() => setSeekOv(null), 3000); }, pct, 'data-sk') : undefined} style={{ flex: 1, padding: '10px 0', cursor: np.dur ? 'pointer' : 'default', touchAction: 'none' }}>
+              {/* Un curseur pour le clavier aussi (ADR 0068), par l'aide de la
+                * barre de volume : ← → par 5 %, Début / Fin — et la valeur lue
+                * en temps, pas en pour cent. */}
+              <div onPointerDown={np.dur ? bar(chercher, pct, 'data-sk') : undefined}
+                {...(np.dur ? kbSlider(tr('Position dans le morceau'), pct, chercher) : {})} aria-valuetext={np.dur ? fmtT(showPos) : undefined}
+                style={{ flex: 1, padding: '10px 0', cursor: np.dur ? 'pointer' : 'default', touchAction: 'none' }}>
                 <div style={{ height: 8, borderRadius: 999, background: onArt ? 'rgba(255,255,255,.18)' : 'var(--o-bd1)', overflow: 'hidden' }}><div data-sk style={{ height: '100%', width: pct + '%', background: `linear-gradient(90deg, ${A}, ${ALight})`, borderRadius: 999, transition: 'width .5s linear' }} /></div>
               </div>
               <span style={{ fontSize: 12, fontWeight: 700, color: tDim, minWidth: 32, textAlign: 'right' }}>{fmtT(np.dur)}</span>
@@ -2919,7 +2933,7 @@ function RoomMediaSheet({ id, hass, onClose }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 4 }}>
               <button aria-label={tr('Aléatoire')} onClick={() => commander(hass, np.ctl, 'set_shuffle', !np.shuffle)} title={tr('Aléatoire')} style={{ ...glass(40, 14), color: np.shuffle ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg></button>
               <button aria-label={tr('Piste précédente')} onClick={() => commander(hass, np.ctl, 'previous_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8zM7 4v16H5V4z" /></svg></button>
-              <button onClick={() => commander(hass, np.ctl, 'play_pause')} style={{ ...glass(76, '50%'), background: onArt ? 'linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.07))' : 'var(--o-s1)' }}>
+              <button aria-label={np.playing ? tr('Pause') : tr('Lire')} onClick={() => commander(hass, np.ctl, 'play_pause')} style={{ ...glass(76, '50%'), background: onArt ? 'linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.07))' : 'var(--o-s1)' }}>
                 {np.playing && <span aria-hidden style={{ position: 'absolute', inset: -6, borderRadius: 'inherit', border: '1px solid rgba(255,255,255,.22)', animation: 'np-pulse 2.4s ease-out infinite', pointerEvents: 'none' }} />}
                 {np.playing ? <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> : <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 3 }}><path d="M7 5l12 7-12 7z" /></svg>}
               </button>
@@ -3907,13 +3921,17 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
  * la ou l'on ne glisse pas de carte (Scenarios). */
 function BandeauEdition({ ed = null, onAjouter = null, toutes = null, ajouterLabel = null, extra = null, onEnt = null, entLabel = null, texte = null }) {
   const ctx = useContext(HeaderCtx) || {};
+  /* Le geste, dit la ou on en a besoin (retour 22/09) : au doigt on maintient
+   * puis on glisse, au clavier on prend le focus puis les fleches (ADR 0068). */
+  const tactile = useCoarse();
+  const geste = tactile ? tr('Au doigt : maintiens une carte, puis glisse-la.') : tr('Au clavier : Tab jusqu’à une carte, puis les flèches.');
   const btn = (accent) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', flexShrink: 0, background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)', border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
   const peutTout = !!toutes || !!(ed && ed.edits > 0);
   const montreTout = !!toutes || !!ed;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
       <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
-      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{texte || tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une carte.')}</span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{texte || tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une carte.')} <span style={{ color: 'var(--o-text3)' }}>{geste}</span></span>
       {onAjouter && <button onClick={onAjouter} style={btn(true)}><Fi i="plus" size={12} />{ajouterLabel || tr('Ajouter une carte')}</button>}
       {extra}
       {onEnt && <button onClick={onEnt} style={btn(false)}><Fi i="list" size={12} />{entLabel || tr('Entités de la vue')}</button>}
@@ -3985,7 +4003,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
     return (
       /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
       <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)}
-        style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 'var(--o-radius,18px)', outline: '1px dashed rgba(var(--o-accent-rgb),.45)', outlineOffset: 3, opacity: saisie ? .25 : 1, cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none' }}>
+        style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 'var(--o-radius,18px)', outline: '1px dashed rgba(var(--o-accent-rgb),.45)', outlineOffset: 3, opacity: saisie ? .25 : 1, cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}>
         <div style={{ flex: 1, minWidth: 0 }}>{reste.children}</div>
         <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} title={tr('Modifier')} aria-label={tr('Modifier') + ' ' + (nom || id)} style={{ ...bouton(false), ...petit }}><Fi i="pencil" size={12} /></button>
         <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.remove(id)} title={tr('Supprimer')} aria-label={tr('Supprimer') + ' ' + (nom || id)} style={{ ...bouton(true), ...petit, marginRight: 8 }}><Fi i="cross-small" size={12} /></button>
@@ -3997,7 +4015,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
   const icone = (px) => (info.prise ? <PlugIcon size={px} /> : info.ico ? <Ico name={info.ico} size={px} /> : <Fi i={info.fi} size={px} />);
   const sousTitre = info.label + ' · ' + identifiantEdition(brut);
   const titre = tr('Attrape pour déplacer · clique pour modifier (flèches ← →)');
-  const racine = { ...RM_CARD, border: 'none', position: 'relative', cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none', opacity: saisie ? .25 : 1,
+  const racine = { ...RM_CARD, border: 'none', position: 'relative', cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', opacity: saisie ? .25 : 1,
     background: lavis, outline: '1px dashed rgba(var(--o-accent-rgb),.35)', outlineOffset: 3 };
   const coin = peutCompacter ? (
     <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.basculerCompact(id)} aria-pressed={compact}
@@ -4258,7 +4276,16 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
   const [codeSaisi, setCodeSaisi] = useState('');
   const commitRef = useRef(null);
   const filetRef = useRef(null);
-  useEffect(() => () => { clearTimeout(commitRef.current); clearTimeout(filetRef.current); }, []);
+  /* Une consigne qui attend son calme (450 ms) ne meurt ni avec la fiche ni
+   * avec l'onglet : ce qui reste a envoyer part au demontage et des que la
+   * page se cache (ADR 0066). Fermer la fiche juste apres un « + » perdait
+   * la valeur sans un mot. */
+  const attenteRef = useRef(null); // envoie la consigne en attente, ou null
+  const viderAttente = () => { clearTimeout(commitRef.current); const f = attenteRef.current; attenteRef.current = null; if (f) f(); };
+  useEffect(() => {
+    const debrancher = brancherVidage(viderAttente);
+    return () => { debrancher(); viderAttente(); clearTimeout(filetRef.current); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- refs seulement
   const poserOpt = (v) => { setOpt(v); clearTimeout(filetRef.current); filetRef.current = setTimeout(() => setOpt(null), 4000); };
   let controle = null, wrap = false;
   if (dom === 'switch' || dom === 'input_boolean' || dom === 'siren') {
@@ -4275,7 +4302,8 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
       const nv = Math.round(borne(x) * 100) / 100;
       poserOpt(nv);
       clearTimeout(commitRef.current);
-      commitRef.current = setTimeout(() => call(dom, 'set_value', { value: nv }), 450);
+      attenteRef.current = () => call(dom, 'set_value', { value: nv });
+      commitRef.current = setTimeout(viderAttente, 450);
     };
     const btn = { width: 30, height: 30, borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer', flexShrink: 0 };
     controle = (<>
@@ -5443,9 +5471,10 @@ function verdictCartePlante(pl) {
 }
 
 /* Fiche d'une plante (maquettes du 14/09) : chaque mesure avec son mot, la
- * pile du capteur. Pas de seuil d'alerte ni de rappel d'arrosage : rien ne
- * les porte encore — la regle des consommables (§22) n'est pas ecrite, et on
- * ne dessine pas une bascule qui ne ferait rien. */
+ * pile du capteur. Pas de seuil d'alerte ni de rappel d'arrosage dans la
+ * fiche : ce qui previent vit dans les veilles du composant (un capteur
+ * DESIGNE dans Regles > Veilles > Consommables, ADR 0006), et on ne dessine
+ * pas ici une bascule qui ne ferait rien. */
 function FichePlante({ pl, onClose }) {
   const v = verdictsPlante(pl);
   const M = MOTS_PLANTE();
@@ -5474,9 +5503,10 @@ function FichePlante({ pl, onClose }) {
 /* Fiche du distributeur (maquettes du 14/09) : le bac et ses jours de
  * reserve, le dernier repas, les repas du jour, la portion (le nombre que le
  * distributeur expose), une ration hors programme, « bac rempli », et
- * l'appareil entier. Pas de seuil d'alerte ni de rappel : la regle des
- * consommables (§22) n'est pas ecrite — on ne dessine pas une bascule qui ne
- * ferait rien. */
+ * l'appareil entier. Pas de seuil d'alerte ni de rappel dans la fiche : le
+ * capteur du reservoir se DESIGNE dans Regles > Veilles > Consommables (ADR
+ * 0006), et c'est la veille qui previent — on ne dessine pas ici une bascule
+ * qui ne ferait rien. */
 function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, portion, feed, onRempli, ficheId, onClose }) {
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const [ovPortion, setOvPortion] = useState(null);
@@ -6860,6 +6890,23 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     if (secDrag) saveGrille({ [secDrag.zone]: secDrag.ordre });
     setSecDrag(null);
   };
+  /* Au clavier (ADR 0068) : en edition la section prend le focus, et les
+   * fleches la deplacent d'un cran dans sa zone. Seulement quand c'est ELLE
+   * qui a le focus — un bouton de son bandeau garde ses touches. */
+  const deplacerSec = (zone, id, delta) => {
+    const a = [...ordreDe(zone)];
+    const i = a.indexOf(id), j = i + delta;
+    if (i < 0 || j < 0 || j >= a.length) return;
+    a.splice(j, 0, a.splice(i, 1)[0]);
+    saveGrille({ [zone]: a });
+  };
+  const clavierSec = (e, zone, id) => {
+    if (e.target !== e.currentTarget) return;
+    const d = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    deplacerSec(zone, id, d);
+  };
   /* Un widget EN OPTION (l'heure, le calendrier — ADR 0041) ne se montre que si
    * on l'a AJOUTE : sa croix le retire de `ajoutees`, elle ne le « masque » pas,
    * et un vieux masquage de l'ancienne section « calendrier » ne le concerne pas. */
@@ -6927,6 +6974,22 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     if (pieceDrag) saveGrille({ piecesOrdre: pieceDrag.ordre });
     setPieceDrag(null);
   };
+  /* Au clavier (ADR 0068) : la tuile a le focus en edition, les fleches la
+   * deplacent d'un cran — les boutons de sa carte d'edition gardent leurs touches. */
+  const deplacerPiece = (id, noms, delta) => {
+    const a = ordrePieces(noms);
+    const i = a.indexOf(id), j = i + delta;
+    if (i < 0 || j < 0 || j >= a.length) return;
+    a.splice(j, 0, a.splice(i, 1)[0]);
+    saveGrille({ piecesOrdre: a });
+  };
+  const clavierPiece = (e, id, noms) => {
+    if (e.target !== e.currentTarget) return;
+    const d = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    deplacerPiece(id, noms, d);
+  };
   /* La fiche d'une piece ecrit la configuration (`enregistrerPiece`) ; la
    * taille et l'ordre vivent dans la grille de l'accueil, ici. Renommer les
    * emporte ; retirer les efface. Une piece ajoutee prend la taille choisie
@@ -6949,7 +7012,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     if (cache && !editMode) return null;
     const saisie = secDrag && secDrag.id === id;
     return (
+      /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
       <div key={id} data-sec={id} data-zone={zone}
+        tabIndex={editMode ? 0 : undefined}
+        aria-label={editMode ? (ACC_NOMS()[id] || id) + ' · ' + tr('Déplacer avec les flèches') : undefined}
+        onKeyDown={editMode ? (e) => clavierSec(e, zone, id) : undefined}
         onPointerDown={editMode ? (e) => debutSec(e, zone, id) : undefined}
         onPointerMove={editMode ? mouvSec : undefined}
         onPointerUp={editMode ? finSec : undefined}
@@ -6959,7 +7026,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           /* En édition, le cadre est DANS le flux (padding) au lieu de flotter
            * autour : des boutons hors-boîte mordaient la section voisine et le
            * compteur de l'en-tête (retour 01/09). */
-          ...(editMode ? { border: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', padding: saisie ? '9px 11px' : '10px 12px', borderRadius: 18, cursor: 'grab', touchAction: 'pan-y', opacity: saisie ? .35 : 1 } : {}) }}>
+          /* L'appui long qui saisit ne doit pas selectionner le texte ni
+           * ouvrir le menu du telephone (retour 22/09). */
+          ...(editMode ? { border: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', padding: saisie ? '9px 11px' : '10px 12px', borderRadius: 18, cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', opacity: saisie ? .35 : 1 } : {}) }}>
         {cache
           ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
               <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--o-text3)' }}>{ACC_NOMS()[id]} · {estOption(id) ? tr('en option') : tr('masquée')}</span>
@@ -7582,7 +7651,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 const t = (choisi === 's' || choisi === 'c') ? choisi : tailleParDefaut(i, tactile, wide);
                 const saisie = pieceDrag && pieceDrag.id === p.name;
                 return (
+                  /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
                   <div key={p.name} data-piece={p.name} className={t === 'c' ? 'o-chiprow1' : undefined}
+                    tabIndex={editMode ? 0 : undefined}
+                    aria-label={editMode ? p.name + ' · ' + tr('Déplacer avec les flèches') : undefined}
+                    onKeyDown={editMode ? (e) => clavierPiece(e, p.name, inner.map(x => x.name)) : undefined}
                     onPointerDown={editMode ? (e) => debutPiece(e, p.name, inner.map(x => x.name)) : undefined}
                     onPointerMove={editMode ? mouvPiece : undefined}
                     onPointerUp={editMode ? finPiece : undefined}
@@ -7603,7 +7676,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                       * laisse par la puce au-dessus d'elle. */
                     style={{ position: 'relative', minWidth: 0, opacity: saisie ? .35 : 1, transition: 'opacity .15s',
                       ...((tactile && wide) ? { gridColumn: (i % 3) + 1 } : {}),
-                      ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 2, borderRadius: 14, cursor: 'grab', touchAction: 'pan-y' } : {}) }}>
+                      ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 2, borderRadius: 14, cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : {}) }}>
                     {/* En édition, la carte d'édition — le même dessin que
                       * partout (retour user du 15/09) : taille en coin,
                       * Modifier, Supprimer. Sinon la tuile vivante. */}
@@ -10571,9 +10644,10 @@ function armChips(attrs, etat) {
  * en haut a gauche, bascule a droite, nom SOUS l'icone, puis l'etat. Les
  * tuiles ne disent que ce que l'entite expose (`available_tones`,
  * `volume_level`) : ni volume ni delai inventes. « Test sonore » sonne trois
- * secondes — par `duration` quand la sirene le gere, sinon on l'eteint
- * nous-memes. */
-const SIRENE_DUREE = 16; // SirenEntityFeature.DURATION
+ * secondes, TENUES PAR HOME ASSISTANT (`sirene.py`, ADR 0065) : par
+ * `duration` quand la sirene le gere, sinon le composant l'eteint lui-meme.
+ * L'onglet ne compte plus rien — fermer l'ecran pendant le test n'a plus
+ * d'effet — et une sirene qui sonne pour de vrai ne se teste pas. */
 function CvSirene({ id, hass, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const s = st ? st.state : null;
@@ -10585,12 +10659,17 @@ function CvSirene({ id, hass, label = null }) {
   const dom = String(id).split('.')[0];
   const call = (svc, data) => commanderService(hass, id, dom, svc, { entity_id: id, ...(data || {}) });
   const [test, setTest] = useState(false);
+  const [erreur, setErreur] = useState('');
+  // Le bouton se libere a la fin que le serveur annonce : un affichage, rien
+  // de plus — l'extinction, elle, part de Home Assistant.
+  const finTestRef = useRef(0);
+  useEffect(() => () => clearTimeout(finTestRef.current), []);
   const tester = () => {
-    if (mort || test) return;
-    setTest(true);
-    if (dom === 'siren' && ((+a.supported_features || 0) & SIRENE_DUREE)) { call('turn_on', { duration: 3 }); setTimeout(() => setTest(false), 3000); return; }
-    call('turn_on');
-    setTimeout(() => { call('turn_off'); setTest(false); }, 3000);
+    if (mort || test || !hass || typeof hass.callWS !== 'function') return;
+    setTest(true); setErreur('');
+    hass.callWS({ type: 'loggia/sirene/tester', entity_id: id })
+      .then((r) => { finTestRef.current = setTimeout(() => setTest(false), Math.max(1, Number(r && r.duree) || 3) * 1000); })
+      .catch((e) => { setTest(false); setErreur(e && e.code === 'unauthorized' ? tr('Ce compte ne pilote pas cet appareil.') : tr('Le test n’a pas pu partir.')); });
   };
   const col = on ? 'var(--o-bad)' : 'var(--o-text3)';
   const tuiles = [];
@@ -10604,7 +10683,7 @@ function CvSirene({ id, hass, label = null }) {
       </div>
       <div style={{ marginTop: 10, flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: mort ? 'var(--o-text3)' : col }}>{mort ? tr('Indisponible') : on ? tr('Sirène active') : tr('Sirène au repos')}</div>
+        <div style={{ ...RM_SUB, color: erreur ? 'var(--o-bad)' : mort ? 'var(--o-text3)' : col }}>{erreur || (mort ? tr('Indisponible') : on ? tr('Sirène active') : tr('Sirène au repos'))}</div>
         {/* Ce que l'entite expose (sonneries, volume) tient sur UNE ligne : en
           * tuiles, la carte montait a 223 px et entrainait toute sa rangee — le
           * format standard est de 184 px (retour du 17/09). */}
@@ -12135,6 +12214,22 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   };
   const liste = ordreDrag || cv.ents;
   const basculerW = (x) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(x) ? cvAvecW(x) : y));
+  /* Au clavier (ADR 0068) : la carte a le focus en edition, les fleches la
+   * deplacent d'un cran — meme regle que les sections de l'Accueil. */
+  const deplacerCv = (x, delta) => {
+    const a = [...cv.ents];
+    const i = a.findIndex(y => cvKey(y) === cvKey(x)), j = i + delta;
+    if (i < 0 || j < 0 || j >= a.length) return;
+    a.splice(j, 0, a.splice(i, 1)[0]);
+    setEnts(a);
+  };
+  const clavierCv = (e, x) => {
+    if (e.target !== e.currentTarget) return;
+    const d = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    deplacerCv(x, d);
+  };
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
@@ -12164,14 +12259,18 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           {liste.map((x) => {
             const saisie = dragCle === cvKey(x);
             return (
+            /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
             <div key={cvKey(x)} data-cvk={cvKey(x)} className={cvW(x) === 2 ? 'o-cvw2' : undefined}
+              tabIndex={edit ? 0 : undefined}
+              aria-label={edit ? cvKey(x) + ' · ' + tr('Déplacer avec les flèches') : undefined}
+              onKeyDown={edit ? (e) => clavierCv(e, x) : undefined}
               onPointerDown={edit ? (e) => debutDrag(e, x) : undefined}
               onPointerMove={edit ? mouvDrag : undefined}
               onPointerUp={edit ? finDrag : undefined}
               onPointerCancel={edit ? finDrag : undefined}
               style={{ position: 'relative', minWidth: 0, gridRow: 'span ' + cvRowsDe(x),
               opacity: saisie ? .55 : 1, transform: saisie ? 'scale(.97)' : 'none', transition: 'opacity .15s, transform .15s',
-              ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'pan-y' } : {}) }}>
+              ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : {}) }}>
               {/* En édition, la carte est INERTE : la saisir la déplace, ses contrôles ne s'actionnent pas. */}
               <div className="o-cvfit" style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
                 <CvTyped x={x} hass={hass} dc={dc} />
@@ -12898,6 +12997,12 @@ export default function App() {
   const discovery = useDiscovery(getHass());
   // Configuration serveur (etape 2) : alimente le contexte des vues.
   const [serverCfg, setServerCfg] = useState({});
+  /* ADR 0067 : ce qu'un autre ecran ecrit arrive ici sans rechargement.
+   * `relireRef` relit la configuration du serveur ; en edition, la relecture
+   * attend la fin (`enAttenteRef`) pour ne pas bousculer un rangement. */
+  const editRef = useRef(false);
+  const enAttenteRef = useRef(false);
+  const relireRef = useRef(null);
   // Le composant a-t-il repondu ? Distingue « pas de configuration » de
   // « configuration vide », que rien ne separait jusqu'ici.
   const [serverOk, setServerOk] = useState(false);
@@ -13070,6 +13175,8 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     let minuteur = null;
+    let desabonner = null;
+    let relance = null;
     // Combien de fois insister avant d'abandonner, et a quel rythme. Une seule
     // tentative ne suffit pas : dans l'application mobile, l'iframe demarre
     // pendant que Home Assistant construit encore son arbre, et `getHass()`
@@ -13103,6 +13210,27 @@ export default function App() {
       setServerOk(!!state.available);
       setHaAdmin(!!(state.available && state.user && state.user.is_admin));
       setServerCfg(state.available ? (state.config || {}) : {});
+      /* ADR 0067 : un autre ecran ecrit, celui-ci relit. Le serveur ne dit
+       * que le compte et les cles ; la relecture passe par `loggia/config/get`,
+       * sous les droits de CE compte. Groupee (300 ms) : un rangement ecrit
+       * plusieurs fois de suite. En edition, elle attend la fin. Un composant
+       * qui ne connait pas le flux (pas encore redemarre) : tout continue
+       * comme avant, sans suivi. */
+      const monId = (state.user && state.user.id) || null;
+      const relire = () => {
+        if (editRef.current) { enAttenteRef.current = true; return; }
+        clearTimeout(relance);
+        relance = setTimeout(() => {
+          if (!alive) return;
+          configProbe(h).then(frais => { if (alive && frais.available) setServerCfg(frais.config || {}); });
+        }, 300);
+      };
+      relireRef.current = relire;
+      if (state.available && h.connection && typeof h.connection.subscribeMessage === 'function') {
+        h.connection.subscribeMessage((chg) => { if (alive && doitRelire(chg, { userId: monId })) relire(); }, { type: 'loggia/config/suivre' })
+          .then(u => { if (!alive) { try { u(); } catch {} } else desabonner = u; })
+          .catch(() => { /* composant ancien : sans suivi, comme avant */ });
+      }
       // Un reglage fait avant l'arrivee du composant n'existe que dans ce
       // navigateur. On le confie au serveur pour que les autres appareils le
       // voient — depuis un compte administrateur seulement, car lui seul ecrit
@@ -13146,7 +13274,12 @@ export default function App() {
     };
 
     sonder();
-    return () => { alive = false; if (minuteur) clearTimeout(minuteur); };
+    return () => {
+      alive = false;
+      if (minuteur) clearTimeout(minuteur);
+      clearTimeout(relance);
+      if (desabonner) { try { desabonner(); } catch {} }
+    };
   }, []);
 
   /* Lecture PARESSEUSE : l'effet d'application réécrit ces clés — les lire
@@ -13245,6 +13378,11 @@ export default function App() {
   });
   const saveCustomViews = (list) => { cfgSet({ loggia_customviews: list }); setCustomViews(list); };
   const [editMode, setEditMode] = useState(false);
+  /* ADR 0067 : une relecture arrivee pendant l'edition se fait a sa sortie. */
+  useEffect(() => {
+    editRef.current = editMode;
+    if (!editMode && enAttenteRef.current && relireRef.current) { enAttenteRef.current = false; relireRef.current(); }
+  }, [editMode]);
   // L'édition est réservée aux admins : si le profil actif n'est plus admin, on coupe le mode édition.
   // (le bouton crayon du Header est déjà admin-only ; ceci couvre le switch de profil pendant l'édition)
   // Recalculé quand la configuration serveur ou la découverte change. Figer

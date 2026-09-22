@@ -26,6 +26,10 @@ OUVERTES = [
     # Le minuteur d'une lampe (21/09) : le geste d'une fiche, comme lancer un
     # scenario — ouvert a tout compte, mais filtre par ses droits de PILOTAGE.
     "WS_MIN_ETAT", "WS_MIN_POSER", "WS_MIN_ANNULER",
+    # Le test d'une sirene (22/09) : meme geste, meme regime.
+    "WS_SIR_TESTER",
+    # Suivre la configuration (22/09) : des noms de cles, rien de la maison.
+    "WS_CFG_SUIVRE",
 ]
 
 

@@ -85,6 +85,14 @@ HYSTERESE_DEG = 8.0
 PRIORITES = {"vent": niveau("surete", 10), "coucher": niveau("nuit"),
              "soleil": niveau("confort", 5), "lever": niveau("confort")}
 
+# Ordre non abouti (ADR 0007) : deux minutes apres un ordre, un volet joignable
+# doit avoir bouge. Sinon on redemande, `tentatives` fois, puis le journal le
+# dit en rouge. La position se juge a cinq pres : un volet s'arrete rarement
+# au pour cent exact.
+VERIF_DELAI = 120
+VERIF_TOLERANCE = 5
+TENTATIVES_MIN, TENTATIVES_MAX, TENTATIVES_DEFAUT = 1, 3, 2
+
 DEFAUT: dict[str, Any] = {
     "planning": {"actif": False, "mode": "auto", "ouverture": {"decalage": 0},
                  "fermeture": {"decalage": 0}, "jours": [0, 1, 2, 3, 4, 5, 6], "volets": {}},
@@ -93,9 +101,46 @@ DEFAUT: dict[str, Any] = {
     "vent": {"actif": False, "entite": "", "seuil": 50},
     # Volet bloque : la porte ou la fenetre devant chaque volet (ADR 0010).
     "baies": {"actif": False, "volets": {}},
+    # Ordre non abouti : combien de fois redemander avant la ligne rouge (ADR 0007).
+    "verification": {"tentatives": TENTATIVES_DEFAUT},
     # Observer sans agir : les regles notent ce qu'elles auraient fait.
     "simulation": {"actif": False},
 }
+
+
+def cible_de(service: str, extra=None):
+    """Ou l'ordre veut mener le volet : 100 ouvert, 0 ferme, la position
+    demandee — ou None quand l'ordre ne vise aucune position (stop)."""
+    if service == "open_cover":
+        return 100
+    if service == "close_cover":
+        return 0
+    if service == "set_cover_position":
+        try:
+            return int((extra or {}).get("position"))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def atteint(position, cible, tolerance: int = VERIF_TOLERANCE) -> bool:
+    """Le volet est-il la ou l'ordre l'envoyait ? Sans position connue, on
+    ne sait pas — et l'appelant ne conclut rien."""
+    if position is None or cible is None:
+        return False
+    try:
+        return abs(int(position) - int(cible)) <= tolerance
+    except (TypeError, ValueError):
+        return False
+
+
+def tentatives_valides(brut) -> int:
+    """Le seul reglage de la verification : un entier de 1 a 3."""
+    if isinstance(brut, bool) or not isinstance(brut, int):
+        raise ValueError("tentatives : un nombre entier")
+    if brut < TENTATIVES_MIN or brut > TENTATIVES_MAX:
+        raise ValueError("tentatives : entre %d et %d" % (TENTATIVES_MIN, TENTATIVES_MAX))
+    return brut
 
 
 # ── La geometrie, en pur ───────────────────────────────────────────────────
@@ -349,6 +394,9 @@ class LoggiaVolets:
         # {entity_id: {"sens": "ouvrir"|"fermer", "expire": horodatage}}
         self.attente: dict[str, Any] = {}
         self._defait_attente = None
+        # Les ordres partis qu'il reste a VERIFIER (ADR 0007) :
+        # {entity_id: {"service", "extra", "cible", "essais", ..., "annule"}}
+        self._verifs: dict[str, Any] = {}
         hass.async_create_task(self._async_demarrer())
 
     async def _async_demarrer(self) -> None:
@@ -838,21 +886,99 @@ class LoggiaVolets:
 
     async def _async_service(self, service: str, cibles: list, extra=None, *,
                              regle: str = "", quoi: str = "", motif: str = "",
-                             priorite: int = 0, tenir: bool = False) -> list:
+                             priorite: int = 0, tenir: bool = False,
+                             essai: int = 0) -> list:
         """Commande, par le socle commun.
 
         C'est lui qui ecarte ce que quelqu'un tient dans la main et qui tient
         le journal. Avant, chaque module appelait le service directement et
         notait ce qu'il AVAIT DEMANDE : le journal disait « ferme 2 » quand un
         seul volet avait bouge.
+
+        Ce qui est parti sera VERIFIE deux minutes plus tard (ADR 0007) ;
+        `essai` compte les reprises deja faites pour ce meme ordre.
         """
-        return await self.regles.agir("volets", regle, "cover", service, cibles, extra,
-                                      quoi=quoi or service, motif=motif,
-                                      priorite=priorite, tenir=tenir,
-                                      simuler=self._simule())
+        partis = await self.regles.agir("volets", regle, "cover", service, cibles, extra,
+                                        quoi=quoi or service, motif=motif,
+                                        priorite=priorite, tenir=tenir,
+                                        simuler=self._simule())
+        if partis and not self._simule():
+            self._programmer_verif(partis, service, extra, regle=regle, quoi=quoi or service,
+                                   motif=motif, priorite=priorite, tenir=tenir, essai=essai)
+        return partis
+
+    # ── Ordre non abouti (ADR 0007) ────────────────────────────────────────
+    def _tentatives(self) -> int:
+        try:
+            return tentatives_valides((self.cfg.get("verification") or {}).get("tentatives"))
+        except ValueError:
+            return TENTATIVES_DEFAUT
+
+    def _programmer_verif(self, partis: list, service: str, extra, *, regle: str,
+                          quoi: str, motif: str, priorite: int, tenir: bool, essai: int) -> None:
+        """Deux minutes apres un ordre parti, on ira voir si le volet a bouge."""
+        cible = cible_de(service, extra)
+        if cible is None:
+            return
+        from homeassistant.helpers.event import async_call_later
+
+        for haid in partis:
+            self._annuler_verif(haid)
+
+            @callback
+            def echu(_now, haid=haid) -> None:
+                self.hass.async_create_task(self._async_verifier(haid))
+
+            self._verifs[haid] = {
+                "service": service, "extra": dict(extra or {}), "cible": cible,
+                "essais": essai, "regle": regle, "quoi": quoi, "motif": motif,
+                "priorite": priorite, "tenir": tenir,
+                "annule": async_call_later(self.hass, VERIF_DELAI, echu),
+            }
+
+    def _annuler_verif(self, haid: str) -> None:
+        v = self._verifs.pop(haid, None)
+        if v and v.get("annule"):
+            try:
+                v["annule"]()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia volets : verification deja passee")
+
+    async def _async_verifier(self, haid: str) -> None:
+        """Le volet est-il la ou l'ordre l'envoyait ? Sinon : injoignable, on
+        l'attend (l'autre cause du meme defaut) ; joignable mais immobile, on
+        redemande, puis le journal le dit en rouge."""
+        v = self._verifs.pop(haid, None)
+        if v is None:
+            return
+        if not self._joignable(haid):
+            # Un ordre d'ouverture ou de fermeture attend le retour du volet,
+            # comme s'il n'etait jamais parti. Une position (soleil) ne
+            # s'attend pas : la regle reevaluera d'elle-meme.
+            if v["service"] in ("open_cover", "close_cover"):
+                self._mettre_en_attente([haid], "ouvrir" if v["service"] == "open_cover" else "fermer")
+            return
+        position = self._position_actuelle(haid)
+        if position is None:
+            # En mouvement, ou sans position : on ne sait pas, on ne se trompe pas.
+            return
+        if atteint(position, v["cible"]):
+            return
+        n = self._tentatives()
+        if v["essais"] < n:
+            # Par le socle : une main posee entre-temps arrete tout, en silence.
+            await self._async_service(v["service"], [haid], v["extra"] or None,
+                                      regle=v["regle"], quoi=v["quoi"],
+                                      motif="%s · immobile, essai %d/%d" % (v["motif"] or v["regle"], v["essais"] + 1, n),
+                                      priorite=v["priorite"], tenir=v["tenir"],
+                                      essai=v["essais"] + 1)
+            return
+        await self._noter(v["quoi"], "non abouti", 0, detail=haid,
+                          motif="immobile apres %d %s" % (n, "essai" if n == 1 else "essais"),
+                          echec=True)
 
     async def _noter(self, quoi: str, regle: str, combien: int, detail: str = "",
-                     motif: str = "") -> None:
+                     motif: str = "", echec: bool = False) -> None:
         """Une ligne de journal, dans le journal COMMUN.
 
         Il vivait ici, en memoire, et repartait a zero a chaque redemarrage —
@@ -860,7 +986,7 @@ class LoggiaVolets:
         le lendemain.
         """
         await self.regles.noter("volets", regle, quoi, n=combien,
-                                detail=detail, motif=motif)
+                                detail=detail, motif=motif, echec=echec)
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     def _simule(self) -> bool:
@@ -878,6 +1004,8 @@ class LoggiaVolets:
         self.a_l_abri = False
         self.attente.clear()
         self._suivre_attente()
+        for haid in list(self._verifs):
+            self._annuler_verif(haid)
         self.regles.relacher("volets")
 
     async def async_config(self) -> dict[str, Any]:
@@ -951,6 +1079,8 @@ class LoggiaVolets:
         for section, valeurs in (patch or {}).items():
             if section in cfg and isinstance(valeurs, dict):
                 cfg[section].update(valeurs)
+        # Le seul reglage de la verification, borne (ADR 0007).
+        cfg["verification"]["tentatives"] = tentatives_valides(cfg["verification"].get("tentatives"))
         await self.store.async_set_shared(CLE, cfg)
         self.cfg = cfg
         if bool((cfg.get("simulation") or {}).get("actif")) != simulait:
@@ -963,6 +1093,8 @@ class LoggiaVolets:
 
     @callback
     def async_arreter(self) -> None:
+        for haid in list(self._verifs):
+            self._annuler_verif(haid)
         if self._defait_attente is not None:
             try:
                 self._defait_attente()

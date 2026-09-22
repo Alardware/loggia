@@ -125,14 +125,51 @@ export async function probe(hass) {
 }
 
 /**
+ * Ce qui attend ne meurt pas avec l'onglet (ADR 0066, 22/09).
+ *
+ * Une ecriture qui attend son calme n'a de sens que si la page reste la : des
+ * qu'elle se cache — changement d'onglet, application mise en arriere-plan,
+ * fermeture — ce qui attend part tout de suite. `visibilitychange` vient en
+ * premier et laisse le temps a la connexion ; `pagehide` est le dernier filet.
+ * Rend la fonction qui debranche. Sans fenetre (un test, un rendu hors
+ * navigateur), rien n'est branche et rien ne casse.
+ */
+export function brancherVidage(vider, win = globalThis.window, doc = globalThis.document) {
+  if (!win || !doc || typeof win.addEventListener !== 'function' || typeof doc.addEventListener !== 'function') return () => {};
+  const partir = () => { try { vider(); } catch { /* la page part : rien de plus a faire */ } };
+  const cache = () => { if (doc.visibilityState === 'hidden') partir(); };
+  win.addEventListener('pagehide', partir);
+  doc.addEventListener('visibilitychange', cache);
+  return () => {
+    win.removeEventListener('pagehide', partir);
+    doc.removeEventListener('visibilitychange', cache);
+  };
+}
+
+/**
+ * Un ecran doit-il relire la configuration apres ce changement (ADR 0067) ?
+ * Le serveur ne dit que le compte et les cles. Les cles communes concernent
+ * tout le monde ; les personnelles, le seul compte qui les a ecrites — sur un
+ * autre de ses ecrans. Un message mal forme ne vaut rien.
+ */
+export function doitRelire(chg, { userId = null } = {}) {
+  if (!chg || typeof chg !== 'object') return false;
+  const communes = Array.isArray(chg.communes) ? chg.communes : [];
+  const perso = Array.isArray(chg.perso) ? chg.perso : [];
+  if (communes.length) return true;
+  return !!(perso.length && userId && chg.user_id === userId);
+}
+
+/**
  * Cree un accesseur de configuration.
  *
  * En mode serveur, la configuration est chargee une fois puis tenue en cache :
  * les lectures restent synchrones (comme l'etaient les appels localStorage), les
  * ecritures partent en arriere-plan et sont regroupees pour ne pas ecrire a
- * chaque frappe.
+ * chaque frappe — et partent d'un coup si la page se cache avant les 400 ms.
+ * `win` et `doc` ne servent qu'aux tests.
  */
-export function createConfig({ hass, serverConfig = null, user = null }) {
+export function createConfig({ hass, serverConfig = null, user = null, win = undefined, doc = undefined }) {
   const server = serverConfig !== null;
   const cache = server ? { ...serverConfig } : {};
   let pending = {};
@@ -153,6 +190,8 @@ export function createConfig({ hass, serverConfig = null, user = null }) {
       Object.keys(patch).forEach(k => lsWrite(k, patch[k]));
     }
   };
+  const vider = () => { if (timer) { clearTimeout(timer); return flush(); } return undefined; };
+  const debrancher = server ? brancherVidage(vider, win, doc) : () => {};
 
   return {
     mode: server ? 'server' : 'local',
@@ -179,6 +218,9 @@ export function createConfig({ hass, serverConfig = null, user = null }) {
 
     /** Force l'ecriture immediate des reglages en attente. */
     flush() { if (timer) { clearTimeout(timer); } return flush(); },
+
+    /** Ne plus vider au depart de la page (l'accesseur est abandonne). */
+    detacher() { debrancher(); },
 
     /** Liste des cles connues. */
     keys() { return server ? Object.keys(cache) : Object.keys(collectLocal()); },

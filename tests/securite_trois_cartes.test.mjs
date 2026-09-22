@@ -57,10 +57,15 @@ test('la carte Alarme du catalogue porte le message entre le nom et les boutons'
 test('la carte Sirene : gabarit maison, bascule, tuiles d’apres les attributs seulement, test sonore', () => {
   const c = bloc('function CvSirene(', NL + '}');
   assert.ok(c.includes('<span style={RM_ICO(on ? \'rgba(var(--o-bad-rgb),.16)\' : \'var(--o-s1)\', col)}><Fi i="bell-ring" size={16} /></span>') && c.includes("{!mort && <RmBascule on={on} nom={nom} onToggle={() => call(on ? 'turn_off' : 'turn_on')} />}") && c.includes('<div style={RM_NAME}>{nom}</div>'), 'icone en haut a gauche, bascule a droite, nom sous l’icone');
-  assert.ok(c.includes("{mort ? tr('Indisponible') : on ? tr('Sirène active') : tr('Sirène au repos')}"), 'l’etat, rouge quand elle sonne');
+  assert.ok(c.includes("{erreur || (mort ? tr('Indisponible') : on ? tr('Sirène active') : tr('Sirène au repos'))}"), 'l’etat, rouge quand elle sonne — ou ce qui a empeche le test');
   assert.ok(c.includes("if (Array.isArray(a.available_tones) && a.available_tones.length) tuiles.push([tr('Sonneries'), String(a.available_tones.length)]);") && c.includes("if (typeof a.volume_level === 'number') tuiles.push([tr('Volume'), Math.round(a.volume_level * 100) + ' %']);"), 'les tuiles ne disent que ce que l’entite expose');
   assert.ok(!c.includes('dB') && !c.includes('entrée'), 'ni decibels ni delai d’entree inventes');
-  assert.ok(c.includes("if (dom === 'siren' && ((+a.supported_features || 0) & SIRENE_DUREE)) { call('turn_on', { duration: 3 }); setTimeout(() => setTest(false), 3000); return; }") && c.includes("setTimeout(() => { call('turn_off'); setTest(false); }, 3000);") && src.includes('const SIRENE_DUREE = 16;'), 'trois secondes : par duration, sinon a la main');
+  // ADR 0065 : les trois secondes sont tenues par le composant (`sirene.py`),
+  // plus rien ne s'eteint depuis l'onglet — fermer l'ecran n'a plus d'effet.
+  assert.ok(c.includes("hass.callWS({ type: 'loggia/sirene/tester', entity_id: id })"), 'le test part du composant');
+  assert.ok(!c.includes("call('turn_off')") && !c.includes("{ duration: 3 }") && !src.includes('SIRENE_DUREE'), 'plus d’extinction ni de duree comptees dans l’onglet');
+  assert.ok(c.includes("e && e.code === 'unauthorized' ? tr('Ce compte ne pilote pas cet appareil.') : tr('Le test n’a pas pu partir.')"), 'un refus se dit sur la carte');
+  assert.ok(demo.includes("msg.type === 'loggia/sirene/tester'"), 'la demo simule le composant');
   assert.ok(c.includes("{test ? tr('Test en cours…') : tr('Test sonore (3 s)')}"), 'le bouton');
 });
 
@@ -78,7 +83,7 @@ test('la vue : la rangee des trois cartes remplace le bandeau, la presence y des
 
 test('la demo a une sirene, et les mots ont leur traduction', () => {
   assert.ok(demo.includes("'siren.interieure': s('off', { friendly_name: 'Sirène intérieure', supported_features: 7, available_tones: ['alarme', 'carillon'] }),"), 'deux sonneries, pas de duree geree');
-  for (const k of ['Sirène active', 'Sirène au repos', 'Test sonore (3 s)', 'Test en cours…', 'Sonneries', 'Déclenchée par {noms}', '{n} ouvrants ouverts : {noms}', '1 ouvrant ouvert : {noms}', '{n} capteurs contournés', '1 capteur contourné']) {
+  for (const k of ['Sirène active', 'Sirène au repos', 'Test sonore (3 s)', 'Test en cours…', 'Le test n’a pas pu partir.', 'Sonneries', 'Déclenchée par {noms}', '{n} ouvrants ouverts : {noms}', '1 ouvrant ouvert : {noms}', '{n} capteurs contournés', '1 capteur contourné']) {
     assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
   }
 });

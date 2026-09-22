@@ -11,11 +11,18 @@ Commandes :
   loggia/config/set     -> fusionne un patch, renvoie la config resultante
   loggia/config/delete  -> efface la configuration de l'utilisateur
   loggia/config/stats   -> chiffres de diagnostic (admin uniquement)
+  loggia/config/suivre  -> un flux : a chaque ecriture, le compte et les cles
+                           qui ont change (jamais les valeurs), pour relire
   loggia/discovery      -> ce que Home Assistant sait de l'installation
   loggia/regles/etat    -> le journal de la maison, et ce qui retient en ce moment
   loggia/regles/degeler -> rendre la main aux regles sur une entite (admin)
   loggia/pin/verifier   -> le code administrateur, verifie ici (essais limites)
   loggia/pin/definir    -> le definir, hache (admin uniquement)
+  loggia/minuteurs/etat|poser|annuler -> le minuteur d'extinction d'un appareil
+                           (tout compte, borne a ce qu'il pilote)
+  loggia/sirene/tester  -> sonner trois secondes, tenu ici (meme regime)
+  loggia/<module>/etat|config -> chaque module de regles : lecture ouverte,
+                           ecriture reservee aux administrateurs
 
 `loggia/discovery` est ouverte a tout compte authentifie, a dessein. Les
 commandes equivalentes de Home Assistant — `config/area_registry/list` et ses
@@ -41,7 +48,7 @@ from homeassistant.util import dt as dt_util
 from .code_admin import CODE_DEFAUT, Limiteur, code_valide, hacher, verifier
 from .discovery import async_index
 from .scenarios import controle_de
-from .store import MAX_TOTAL_BYTES, MAX_VALUE_BYTES, LoggiaStore, MaisonReserveeError
+from .store import MAX_TOTAL_BYTES, MAX_VALUE_BYTES, SIGNAL_CONFIG, LoggiaStore, MaisonReserveeError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,6 +56,7 @@ WS_GET = "loggia/config/get"
 WS_SET = "loggia/config/set"
 WS_DELETE = "loggia/config/delete"
 WS_STATS = "loggia/config/stats"
+WS_CFG_SUIVRE = "loggia/config/suivre"
 WS_DISCOVERY = "loggia/discovery"
 WS_INT_ETAT = "loggia/interrupteurs/etat"
 WS_INT_AFFECTER = "loggia/interrupteurs/affecter"
@@ -73,6 +81,7 @@ WS_ROB_CONFIG = "loggia/robots/config"
 WS_MIN_ETAT = "loggia/minuteurs/etat"
 WS_MIN_POSER = "loggia/minuteurs/poser"
 WS_MIN_ANNULER = "loggia/minuteurs/annuler"
+WS_SIR_TESTER = "loggia/sirene/tester"
 WS_PIN_VERIFIER = "loggia/pin/verifier"
 WS_PIN_DEFINIR = "loggia/pin/definir"
 
@@ -109,7 +118,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                    acces_interrupteurs=None, acces_volets=None, acces_fenetres=None,
                    acces_presence=None, acces_nuit=None,
                    acces_veilles=None, acces_regles=None, acces_scenarios=None,
-                   acces_robots=None, acces_minuteurs=None) -> None:
+                   acces_robots=None, acces_minuteurs=None, acces_sirene=None) -> None:
     """Declare les commandes aupres du serveur WebSocket.
 
     `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
@@ -534,6 +543,23 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             return
         connection.send_result(msg["id"], {"config": config})
 
+    # ── Suivre la configuration (22/09, ADR 0067) ──────────────────────────
+    # Un ecran s'abonne une fois ; a chaque ecriture du magasin il apprend
+    # QUI a change (le compte) et QUELLES cles — jamais les valeurs : il relit
+    # ensuite par `loggia/config/get`, sous ses propres droits. Ouvert a tout
+    # compte : il n'y transite que des noms de cles.
+    @websocket_api.websocket_command({vol.Required("type"): WS_CFG_SUIVRE})
+    @websocket_api.async_response
+    async def handle_cfg_suivre(hass, connection, msg):
+        from homeassistant.helpers.dispatcher import async_dispatcher_connect
+
+        @callback
+        def transmettre(changement):
+            connection.send_message(websocket_api.event_message(msg["id"], changement))
+
+        connection.subscriptions[msg["id"]] = async_dispatcher_connect(hass, SIGNAL_CONFIG, transmettre)
+        connection.send_result(msg["id"])
+
     # ── Les minuteurs d'extinction (21/09) ─────────────────────────────────
     # Ouverts a tout compte connecte — c'est le geste d'une fiche de lampe —,
     # mais seulement sur ce que ce compte a le droit de PILOTER : le composant
@@ -585,6 +611,30 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             etat = await minuteurs.async_annuler(msg["entity_id"], controle=controle_de(connection.user))
         except PermissionError as err:
             connection.send_error(msg["id"], "unauthorized", str(err))
+            return
+        connection.send_result(msg["id"], etat)
+
+    # ── Le test d'une sirene (22/09) ───────────────────────────────────────
+    # Meme regime que les minuteurs : le geste d'une carte, ouvert a tout
+    # compte connecte, sur ce qu'il a le droit de PILOTER — c'est le composant
+    # qui allume et eteint. Qui teste vient de la session, jamais du message.
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_SIR_TESTER, vol.Required("entity_id"): str}
+    )
+    @websocket_api.async_response
+    async def handle_sir_tester(hass, connection, msg):
+        sirene = acces_sirene() if acces_sirene else None
+        if sirene is None:
+            connection.send_error(msg["id"], "not_available", "test de sirene indisponible")
+            return
+        try:
+            etat = await sirene.async_tester(msg["entity_id"], par=connection.user.id,
+                                             controle=controle_de(connection.user))
+        except PermissionError as err:
+            connection.send_error(msg["id"], "unauthorized", str(err))
+            return
+        except ValueError as err:
+            connection.send_error(msg["id"], "invalid_format", str(err))
             return
         connection.send_result(msg["id"], etat)
 
@@ -645,6 +695,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_min_etat)
     websocket_api.async_register_command(hass, handle_min_poser)
     websocket_api.async_register_command(hass, handle_min_annuler)
+    websocket_api.async_register_command(hass, handle_sir_tester)
     websocket_api.async_register_command(hass, handle_pin_verifier)
     websocket_api.async_register_command(hass, handle_pin_definir)
     websocket_api.async_register_command(hass, handle_vei_etat)
@@ -665,4 +716,5 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_set)
     websocket_api.async_register_command(hass, handle_delete)
     websocket_api.async_register_command(hass, handle_stats)
+    websocket_api.async_register_command(hass, handle_cfg_suivre)
     _LOGGER.info("Loggia : commandes WebSocket de configuration enregistrees")

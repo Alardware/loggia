@@ -54,6 +54,9 @@ def _poser_doublures() -> None:
                                          "async_call_later", "async_track_sunrise",
                                          "async_track_sunset", "async_track_time_change",
                                          "async_track_time_interval")),
+        # `store.py` signale ce qui change aux ecrans abonnes (ADR 0067) ; la
+        # doublure n'envoie rien, un test qui veut le voir la remplace.
+        ("homeassistant.helpers.dispatcher", ("async_dispatcher_send", "async_dispatcher_connect")),
     ):
         module = types.ModuleType(nom)
         for attr in attrs:
@@ -91,6 +94,10 @@ def _poser_doublures() -> None:
                  "async_track_time_change", "async_track_time_interval"):
         setattr(_ev, _nom, lambda *a, **k: (lambda: None))
     sys.modules["homeassistant.helpers"].event = _ev
+    _disp = sys.modules["homeassistant.helpers.dispatcher"]
+    _disp.async_dispatcher_send = lambda *a, **k: None
+    _disp.async_dispatcher_connect = lambda *a, **k: (lambda: None)
+    sys.modules["homeassistant.helpers"].dispatcher = _disp
     sys.modules["homeassistant.util"].dt = sys.modules["homeassistant.util.dt"]
 
 

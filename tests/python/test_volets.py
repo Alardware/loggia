@@ -108,6 +108,8 @@ def creer(module, store_module, regles_module):
         # les recree, sinon la fabrique ment sur l'objet qu'elle rend.
         v.attente = {}
         v._defait_attente = None
+        # Les ordres partis qu'il reste a verifier (ADR 0007).
+        v._verifs = {}
         v.armes = {"ouverture": {}, "fermeture": {}}
         v.raison = ""
         faits.append(v)
@@ -1222,3 +1224,157 @@ def test_la_baie_se_lit_en_pur(module):
 def test_la_section_baies_a_ses_defauts(creer):
     v = creer({"planning": {"actif": True}}, VOLET)
     assert v.cfg["baies"] == {"actif": False, "volets": {}}
+
+
+# ── Ordre non abouti (ADR 0007) ─────────────────────────────────────────────
+# Deux minutes apres un ordre, un volet joignable doit avoir bouge. Sinon on
+# redemande, `tentatives` fois, puis le journal le dit en rouge. Injoignable,
+# il rejoint l'attente : une seule mecanique pour un seul defaut.
+
+class Rendezvous:
+    """Remplace `async_call_later` : garde le delai et le rappel, sans attendre."""
+
+    def __init__(self):
+        self.poses = []
+
+    def __call__(self, hass, delai, rappel):
+        entree = {"delai": delai, "rappel": rappel, "annule": False}
+        self.poses.append(entree)
+
+        def annuler():
+            entree["annule"] = True
+        return annuler
+
+    def verifs(self):
+        """Les verifications encore armees (le journal pose son ecriture a 20 s, pas ici)."""
+        return [p for p in self.poses if p["delai"] == 120 and not p["annule"]]
+
+
+@pytest.fixture
+def rdv(monkeypatch):
+    import sys as _sys
+    r = Rendezvous()
+    monkeypatch.setattr(_sys.modules["homeassistant.helpers.event"], "async_call_later", r, raising=False)
+    return r
+
+
+CFG_PLAN = {"planning": {"actif": True, "mode": "auto"}}
+
+
+def _fermer(v):
+    lancer(v._async_planifie("fermer"))
+
+
+def _echoir(v, rdv):
+    """Les deux minutes passent : le rendez-vous sonne, une fois."""
+    (p,) = rdv.verifs()
+    p["annule"] = True
+    p["rappel"](None)
+    lancer(v.hass.taches.pop())
+
+
+def _rouges(v):
+    return [e for e in lancer(v.regles.journal(module="volets")) if e.get("regle") == "non abouti"]
+
+
+def test_les_cibles_et_les_tentatives_se_lisent_en_pur(module):
+    assert module.cible_de("open_cover") == 100 and module.cible_de("close_cover") == 0
+    assert module.cible_de("set_cover_position", {"position": 30}) == 30
+    assert module.cible_de("set_cover_position", {"position": "haut"}) is None
+    assert module.cible_de("stop_cover") is None
+    assert module.atteint(0, 0) and module.atteint(96, 100) and module.atteint(34, 30)
+    assert not module.atteint(50, 0) and not module.atteint(None, 0) and not module.atteint(0, None)
+    for bon in (1, 2, 3):
+        assert module.tentatives_valides(bon) == bon
+    for mauvais in (0, 4, "2", 2.0, True, None):
+        with pytest.raises(ValueError):
+            module.tentatives_valides(mauvais)
+
+
+def test_un_ordre_parti_se_verifie_deux_minutes_plus_tard_et_se_redemande(creer, rdv):
+    v = creer(CFG_PLAN, {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100})})
+    _fermer(v)
+    assert v.hass.services.appels == [("cover", "close_cover", {"entity_id": ["cover.salon"]})]
+    (p,) = rdv.verifs()
+    assert p["delai"] == 120 and set(v._verifs) == {"cover.salon"}
+    # Deux minutes plus tard, rien n'a bouge : on redemande, et on reverifiera.
+    _echoir(v, rdv)
+    assert v.hass.services.appels[-1] == ("cover", "close_cover", {"entity_id": ["cover.salon"]})
+    assert len(rdv.verifs()) == 1 and v._verifs["cover.salon"]["essais"] == 1
+    j = lancer(v.regles.journal(module="volets"))
+    assert j[0]["motif"] == "coucher · immobile, essai 1/2" and "echec" not in j[0]
+    # Cette fois le volet est ferme : plus rien a redire.
+    v.hass.states.table["cover.salon"] = FauxEtat("closed", {"supported_features": 15, "current_position": 0})
+    _echoir(v, rdv)
+    assert rdv.verifs() == [] and v._verifs == {} and _rouges(v) == []
+
+
+def test_apres_les_tentatives_le_journal_le_dit_en_rouge(creer, rdv):
+    v = creer({**CFG_PLAN, "verification": {"tentatives": 1}},
+              {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100})})
+    _fermer(v)
+    _echoir(v, rdv)   # essai 1/1
+    _echoir(v, rdv)   # toujours immobile : la ligne rouge
+    (rouge,) = _rouges(v)
+    assert rouge["echec"] is True and rouge["detail"] == "cover.salon" and rouge["n"] == 0
+    assert rouge["quoi"] == "fermer" and rouge["motif"] == "immobile apres 1 essai"
+    assert rdv.verifs() == [] and v._verifs == {}
+    assert len([a for a in v.hass.services.appels if a[1] == "close_cover"]) == 2, "l'ordre, une reprise, puis on s'arrete"
+    # Les autres lignes n'ont pas le drapeau : il ne marque que l'echec.
+    assert all("echec" not in e for e in lancer(v.regles.journal(module="volets")) if e.get("regle") != "non abouti")
+
+
+def test_un_volet_sans_position_ni_etat_clair_ne_se_verifie_pas(creer, rdv):
+    v = creer(CFG_PLAN, {"cover.salon": FauxEtat("open", {"supported_features": 15})})
+    _fermer(v)
+    # En mouvement au moment de verifier : on ne sait pas, on ne se trompe pas.
+    v.hass.states.table["cover.salon"] = FauxEtat("closing", {"supported_features": 15})
+    _echoir(v, rdv)
+    assert len(v.hass.services.appels) == 1 and rdv.verifs() == [] and _rouges(v) == []
+    # Un volet sans position se juge par ouvert / ferme : ferme, c'est atteint.
+    w = creer(CFG_PLAN, {"cover.salon": FauxEtat("open", {"supported_features": 3})})
+    _fermer(w)
+    w.hass.states.table["cover.salon"] = FauxEtat("closed", {"supported_features": 3})
+    _echoir(w, rdv)
+    assert len(w.hass.services.appels) == 1 and _rouges(w) == []
+
+
+def test_un_volet_devenu_injoignable_rejoint_l_attente(creer, rdv):
+    v = creer(CFG_PLAN, {"cover.salon": FauxEtat("open", {"supported_features": 15})})
+    _fermer(v)
+    v.hass.states.table["cover.salon"] = FauxEtat("unavailable", {})
+    _echoir(v, rdv)
+    assert v.attente["cover.salon"]["sens"] == "fermer"
+    assert len(v.hass.services.appels) == 1 and _rouges(v) == []
+
+
+def test_une_main_posee_entre_temps_arrete_les_reprises_en_silence(creer, rdv):
+    v = creer(CFG_PLAN, {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100})})
+    _fermer(v)
+    lancer(v.regles.geler("interrupteurs", "bouton", ["cover.salon"]))
+    _echoir(v, rdv)
+    assert len(v.hass.services.appels) == 1, "le socle ecarte ce que quelqu'un tient"
+    assert rdv.verifs() == [] and v._verifs == {} and _rouges(v) == []
+
+
+def test_un_nouvel_ordre_remplace_la_verification_la_simulation_n_en_pose_pas(creer, rdv):
+    v = creer(CFG_PLAN, {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100})})
+    _fermer(v)
+    _fermer(v)
+    assert len(rdv.verifs()) == 1
+    assert len([p for p in rdv.poses if p["delai"] == 120 and p["annule"]]) == 1, "la premiere est annulee"
+    s = creer({**CFG_PLAN, "simulation": {"actif": True}}, {"cover.salon": FauxEtat("open", {"supported_features": 15})})
+    lancer(s._async_planifie("fermer"))
+    assert s._verifs == {} and len(rdv.verifs()) == 1, "en simulation, rien n'est parti : rien a verifier"
+    # Du simule au reel : ce qui restait a verifier s'oublie.
+    v._repartir_de_zero()
+    assert v._verifs == {} and rdv.verifs() == []
+
+
+def test_le_reglage_des_tentatives_a_son_defaut_et_ses_bornes(creer):
+    v = creer(CFG_PLAN, VOLET)
+    assert v.cfg["verification"] == {"tentatives": 2}
+    assert lancer(v.async_enregistrer({"verification": {"tentatives": 3}}))["verification"]["tentatives"] == 3
+    for mauvais in (0, 4, "2"):
+        with pytest.raises(ValueError):
+            lancer(v.async_enregistrer({"verification": {"tentatives": mauvais}}))

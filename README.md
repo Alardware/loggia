@@ -66,7 +66,7 @@ redémarrer, puis ajouter l'intégration depuis l'interface. Le mode historique
 | Sécurité | `alarm_control_panel`, `camera` (flux dédoublonnés), `person` ; détecteurs pris parmi les `binary_sensor` de la même caméra |
 | Énergie | **préférences du tableau de bord Énergie natif** — compteur, injection, production solaire, appareils suivis |
 | Système | capteurs de charge processeur en `%`, puis mémoire, disque, température et disponibilité du même appareil |
-| Scénarios | proposés par Loggia — huit, composés d'après lumières, volets, lecteurs, thermostats, alarme et serrures — plus les vôtres ; une scène ou un script (`scene`, `script`) se lie |
+| Scénarios | proposés par Loggia — huit, composés d'après lumières, volets, lecteurs, thermostats, alarme et serrures — plus les vôtres ; une scène ou un script (`scene`, `script`) se lie. Le service `loggia.scenario` (champ `id` : `nuit`, `depart`, `retour`, `reveil`, `cinema`, `musique`, `invites`, `tout_eteindre`, ou `perso_<nom>` pour l'un des vôtres) en lance un depuis une automatisation, l'assistant vocal ou un bouton sans fil, avec les droits du compte qui appelle |
 
 **Une vue sans rien à montrer disparaît du menu.** Elle réapparaît d'elle-même
 le jour où l'appareil correspondant existe. Paramètres → Vues liste celles qui
@@ -101,7 +101,9 @@ sont masquées, avec le motif.
 - **Minuteur d'extinction** — « +30 min » sur la fiche d'une lampe ou d'une
   prise : Home Assistant l'éteint à l'heure, même si aucun écran n'est
   ouvert. Le décompte se lit à la seconde, sur tous les appareils ; éteinte
-  à la main avant l'heure, le minuteur s'efface.
+  à la main avant l'heure, le minuteur s'efface. Le « Test sonore (3 s) »
+  d'une sirène est tenu de la même façon : Home Assistant l'allume et
+  l'éteint, écran ouvert ou non.
 - **Vignette météo animée** — la condition se voit dans la vignette de
   l'accueil : pluie qui tombe, étoiles, halo de soleil, éclair d'orage.
 - **Mode ambiant** — pour une tablette murale : après un délai sans toucher,
@@ -126,7 +128,10 @@ affichable, sans YAML.
 Thèmes clair et sombre, préréglages (dont un rendu « verre » avec flou
 d'arrière-plan), **teinte d'état** réglable — les cartes actives se lavent de
 leur couleur : lampe allumée dorée, volet ouvert à l'accent, chauffage qui
-rougeoie — et **fonds d'écran** discrets dans la palette du thème. Le mode
+rougeoie — et **fonds d'écran** discrets dans la palette du thème. Les
+ambiances lumineuses de la bibliothèque Hue portent un dégradé de leurs
+couleurs ; une photo se pose par scène dans `config/www/hue_scenes/`,
+nommée par l'identifiant Hue de la scène (`<uuid>.jpeg`). Le mode
 « Suivre Home Assistant » calque le thème actif de HA. Tous ces réglages sont
 propres à l'appareil.
 
@@ -145,13 +150,21 @@ Sécurité) :
   automatique) qu'aucune convention ne permet de deviner ;
 - le **planning des volets** (mode d'automatisme, jours) ;
 - un **distributeur de croquettes** piloté par automations ;
+- les **capteurs de consommable** (filtre, brosse, réservoir) que la veille
+  surveille : Home Assistant n'a pas de classe pour eux, on les désigne dans
+  Règles › Veilles, et un message part quand il faut remplacer ;
+- le **mode invité** : un `input_boolean` de Home Assistant désigné dans
+  Règles › Présence. Allumé, la maison ne se met pas en veille et l'extinction
+  du coucher attend ; il se coupe seul trente minutes après le retour d'un
+  habitant ;
 - les capteurs d'énergie d'un package maison, si vous préférez les vôtres à ceux
   que le tableau de bord Énergie expose.
 
 ## Où sont vos réglages
 
 Dans `.storage/loggia_dashboard_config`, **par utilisateur Home Assistant** :
-chacun garde ses pièces, son thème et ses vues, sur tous ses appareils. C'est
+chacun garde ses pièces, son thème et ses vues, sur tous ses appareils, et ce
+qu'un écran change arrive sur les autres sans rechargement. C'est
 l'intégration qui écrit ce fichier, via des commandes WebSocket authentifiées —
 l'identité vient de la connexion, jamais du navigateur.
 
@@ -177,16 +190,17 @@ seuils que la barre de confort des pièces.
   retire aucun. Un compte ne peut donc rien faire ici qu'il ne puisse déjà
   faire ailleurs dans Home Assistant.
 - Les commandes qui écrivent la configuration de la maison sont **réservées
-  aux administrateurs** (`require_admin`, sur les sept commandes WebSocket
-  concernées). L'identité vient de la connexion authentifiée, jamais d'un
-  champ envoyé par le navigateur.
+  aux administrateurs** (`require_admin`, sur les douze commandes WebSocket
+  concernées — un test verrouille la liste). L'identité vient de la
+  connexion authentifiée, jamais d'un champ envoyé par le navigateur.
 - Les automatisations n'appellent que des services **écrits en dur** dans le
   composant (`cover.open_cover`, `climate.set_hvac_mode`…) : seule la cible
   est configurable. Seuls les boutons sans fil font exception, et leur
   affectation demande d'être administrateur.
-- Le jeton d'accès Home Assistant est lu **à un seul endroit** : pour
-  authentifier les images de caméra auprès du proxy de Home Assistant. Il
-  n'est ni stocké, ni envoyé ailleurs.
+- Le jeton d'accès Home Assistant n'est lu que **pour les images** : les
+  instantanés et le flux d'une caméra, la carte d'un robot aspirateur,
+  auprès du proxy d'images de Home Assistant. Il n'est ni stocké, ni envoyé
+  ailleurs.
 - Le code PIN administrateur suit la maison depuis le 03/09 : il est
   enregistré côté serveur avec le reste de la configuration, et non plus
   seulement sur l'appareil. C'est ce qui permet de le retrouver sur un autre
@@ -206,7 +220,15 @@ python -m pytest tests/python -q   # stockage de la configuration
 ```
 
 Les tests Python posent leurs propres doublures de Home Assistant : ils tournent
-sans l'installer, et la suite ne se fige pas sur une version.
+sans l'installer, et la suite ne se fige pas sur une version. Les tests
+JavaScript qui rendent un composant passent par `tests/rendu.mjs` (le JSX
+compilé par l'esbuild de Vite, le HTML statique de React).
+
+La démo (`?demo` sur le serveur de développement) accepte des paramètres
+d'aperçu, pour vérifier une traduction, un thème ou une vue d'un seul
+chargement : `mode=auto|light|dark`, `lang=fr|en`, `theme=<nom du thème>`
+(c'est par lui que l'audit de contraste rejoue chaque variante), `vue=<identifiant>` ou `vue=room:<pièce>`,
+`fiche=<entity_id>` (ouvre la fiche d'un appareil).
 
 Le frontend est du React + Vite, compilé avec `base: './'` — le dossier
 `custom_components/loggia/frontend/` est donc servable sous n'importe quel

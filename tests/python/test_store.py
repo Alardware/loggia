@@ -481,3 +481,68 @@ def test_les_commandes_de_module_relaient_le_refus():
         assert "except ValueError" in bloc,             "la commande de %s ne relaie pas le refus du plafond" % var
     i = texte.index("await interrupteurs.async_affecter")
     assert "except ValueError" in texte[i - 200:i + 400],         "l'affectation des interrupteurs ne relaie pas le refus"
+
+
+# ── Le signal aux autres ecrans (ADR 0067) ──────────────────────────────────
+
+def _ecouter_signal(monkeypatch):
+    import sys
+    envois = []
+    disp = sys.modules["homeassistant.helpers.dispatcher"]
+    monkeypatch.setattr(disp, "async_dispatcher_send",
+                        lambda hass, signal, charge: envois.append((signal, charge)), raising=False)
+    return envois
+
+
+def test_une_ecriture_signale_le_compte_et_les_cles_qui_ont_vraiment_change(creer_store, store_module, monkeypatch):
+    envois = _ecouter_signal(monkeypatch)
+    perso_cle = sorted(store_module.PERSONAL_KEYS)[0]
+    magasin = creer_store({"users": {"u1": {perso_cle: "avant"}}, "shared": {"loggia_rooms": ["Salon"]}, "migrated": True})
+    magasin.hass = object()
+    lancer(magasin.async_set_user("u1", {"loggia_rooms": ["Salon", "Cuisine"], perso_cle: "apres"}, is_admin=True))
+    assert envois == [(store_module.SIGNAL_CONFIG,
+                       {"user_id": "u1", "perso": [perso_cle], "communes": ["loggia_rooms"]})]
+    # Reecrire la meme chose ne change rien : pas de signal.
+    lancer(magasin.async_set_user("u1", {"loggia_rooms": ["Salon", "Cuisine"], perso_cle: "apres"}, is_admin=True))
+    assert len(envois) == 1
+    # Effacer une cle commune se signale aussi.
+    lancer(magasin.async_set_user("u1", {"loggia_rooms": None}, is_admin=True))
+    assert envois[-1][1] == {"user_id": "u1", "perso": [], "communes": ["loggia_rooms"]}
+
+
+def test_les_valeurs_ne_voyagent_jamais_dans_le_signal(creer_store, store_module, monkeypatch):
+    envois = _ecouter_signal(monkeypatch)
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    magasin.hass = object()
+    lancer(magasin.async_set_user("u1", {"loggia_rooms": ["Salon"]}, is_admin=True))
+    (_, charge), = envois
+    assert set(charge) == {"user_id", "perso", "communes"}
+    assert "Salon" not in repr(charge)
+
+
+def test_effacer_un_compte_signale_ses_cles_et_le_code_admin_signale_le_fait(creer_store, store_module, monkeypatch):
+    envois = _ecouter_signal(monkeypatch)
+    perso_cle = sorted(store_module.PERSONAL_KEYS)[0]
+    magasin = creer_store({"users": {"u1": {perso_cle: 1}}, "shared": {}, "migrated": True})
+    magasin.hass = object()
+    lancer(magasin.async_delete_user("u1"))
+    assert envois[-1][1] == {"user_id": "u1", "perso": [perso_cle], "communes": []}
+    lancer(magasin.async_delete_user("u1"))
+    assert len(envois) == 1, "un compte deja efface ne signale rien"
+    code_admin = charger("code_admin")
+    lancer(magasin.async_set_code_admin(code_admin.hacher("1234")))
+    assert envois[-1][1] == {"user_id": None, "perso": [], "communes": ["loggia_admin_pin_defini"]}
+    assert "1234" not in repr(envois)
+
+
+def test_les_modules_n_alertent_pas_les_ecrans_et_sans_home_assistant_rien_ne_part(creer_store, monkeypatch):
+    envois = _ecouter_signal(monkeypatch)
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    magasin.hass = object()
+    # Les minuteurs, la sirene, le journal : des ecritures de MODULE, pas de configuration.
+    lancer(magasin.async_set_shared("loggia_minuteurs", {"light.a": {"fin": 1.0}}))
+    assert envois == []
+    # Un magasin sans Home Assistant (les tests) : l'ecriture passe, rien ne part.
+    sans = creer_store({"users": {}, "shared": {}, "migrated": True})
+    lancer(sans.async_set_user("u1", {"loggia_rooms": ["Salon"]}, is_admin=True))
+    assert envois == []

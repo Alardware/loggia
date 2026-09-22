@@ -1185,6 +1185,17 @@ export function installerDemo() {
       if (msg && msg.type === 'loggia/minuteurs/etat') return Promise.resolve(minuteursDemo());
       if (msg && msg.type === 'loggia/minuteurs/poser') return Promise.resolve(minuteursPoser(msg.entity_id, msg.minutes));
       if (msg && msg.type === 'loggia/minuteurs/annuler') { delete MIN_DEMO[msg.entity_id]; return Promise.resolve(minuteursDemo()); }
+      /* Le test d'une sirene, comme le vrai composant (`sirene.py`) : le
+       * serveur l'allume et l'eteint trois secondes plus tard, ecran ouvert
+       * ou non. La sirene de la demo ne gere pas la duree : c'est le cas tenu. */
+      if (msg && msg.type === 'loggia/sirene/tester') {
+        const sid = msg.entity_id;
+        if (!states[sid]) return Promise.reject({ code: 'invalid_format', message: 'entite inconnue' });
+        toucher(sid, 'on');
+        setTimeout(() => toucher(sid, 'off'), 3000);
+        const maintenant = Date.now() / 1000;
+        return Promise.resolve({ entity_id: sid, duree: 3, fin: maintenant + 3, maintenant });
+      }
       if (msg && msg.type === 'loggia/robots/etat') return Promise.resolve(robotsDemo(states));
       if (msg && msg.type === 'loggia/robots/config') return Promise.resolve({ config: robotsPatch(msg.patch) });
       if (msg && msg.type === 'loggia/veilles/etat') return Promise.resolve(veillesDemo(states));
@@ -1289,6 +1300,9 @@ export function installerDemo() {
           }, 150);
           return Promise.resolve(() => { mort = true; });
         }
+        /* Le suivi de la configuration (ADR 0067) : un seul ecran en demo,
+         * et rien n'y change d'ailleurs — l'abonnement tient, muet. */
+        if (msg && msg.type === 'loggia/config/suivre') return Promise.resolve(() => {});
         if (!msg || msg.type !== 'demo/chat') return Promise.reject(new Error('démonstration : pas de composant serveur'));
         /* Trois sujets reconnus, pour que la demo montre aussi la teinte de
          * l'orbe : l'alerte en rouge, le chauffage en orange, ce qui est ferme

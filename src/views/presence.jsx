@@ -87,6 +87,14 @@ export function PresenceReglages({ hass, cardSt }) {
       .map(id => ({ id, nom: cvName(hass.states[id], id) }))
       .sort((a, b) => a.nom.localeCompare(b.nom));
   }, [hass]);
+  /* Les interrupteurs de Home Assistant (input_boolean) : le mode invité en
+   * désigne un (ADR 0016). Il appartient à Home Assistant, pas à Loggia. */
+  const interrupteurs = useMemo(() => {
+    if (!hass || !hass.states) return [];
+    return Object.keys(hass.states).filter(id => id.indexOf('input_boolean.') === 0)
+      .map(id => ({ id, nom: cvName(hass.states[id], id) }))
+      .sort((a, b) => a.nom.localeCompare(b.nom));
+  }, [hass]);
   /* Les capteurs qui trahissent une présence : par device_class, jamais par
    * nom — le miroir de `presence.INDICES` côté serveur. */
   const capteurs = useMemo(() => {
@@ -113,6 +121,9 @@ export function PresenceReglages({ hass, cardSt }) {
   const alarme = dep.alarme || {};
   const suivies = cfg.personnes || [];
   const ind = cfg.indices || {};
+  const invite = cfg.invite || {};
+  const inviteSt = invite.entite && hass && hass.states ? hass.states[invite.entite] : null;
+  const inviteOn = !!inviteSt && inviteSt.state === 'on';
 
   const simu = cfg.simulation || {};
   const label = { fontSize: 12, fontWeight: 700 };
@@ -262,6 +273,40 @@ export function PresenceReglages({ hass, cardSt }) {
           )}
         </div>
       )}
+
+      {/* ── Le mode invité (ADR 0016) ── */}
+      {/* Quelqu'un garde la maison sans téléphone suivi. L'interrupteur est
+        * un input_boolean de Home Assistant : la voix, un bouton mural ou une
+        * automatisation peuvent aussi l'allumer. Allumé, la maison ne se met
+        * pas en veille et l'extinction du coucher attend ; il se coupe seul
+        * trente minutes après le retour d'un habitant. Sans désignation, la
+        * carte dit quoi créer. */}
+      <div id="presence-invite" style={cardSt}>
+        <div style={TITRE_PANNEAU}>{tr('Mode invité')}</div>
+        <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>
+          {tr('Quelqu’un garde la maison sans téléphone suivi : allumé, la maison ne se met pas en veille et l’extinction du coucher attend. Il se coupe seul trente minutes après le retour d’un habitant.')}
+        </div>
+        <div style={ligne}>
+          <span style={{ ...label, minWidth: 88 }}>{tr('L’interrupteur')}</span>
+          <ListeChoix value={invite.entite || ''} onChange={v => enregistrer({ invite: { entite: v } })} label={tr('Interrupteur du mode invité')}
+            options={[{ id: '', label: tr('Aucun interrupteur') }, ...interrupteurs.map(a => ({ id: a.id, label: a.nom }))]} style={{ ...champ, minWidth: 200 }} />
+        </div>
+        {!invite.entite && (
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
+            {tr('Aucun interrupteur désigné : crée une entrée « Interrupteur » (input_boolean) nommée Invité dans Home Assistant, puis désigne-la ici.')}
+          </div>
+        )}
+        {invite.entite && (
+          <div style={{ ...ligne, marginTop: 10 }}>
+            <button type="button" aria-pressed={inviteOn}
+              onClick={() => { if (hass && typeof hass.callService === 'function') hass.callService('input_boolean', inviteOn ? 'turn_off' : 'turn_on', { entity_id: invite.entite }); }}
+              style={puce(inviteOn)}>{inviteOn ? tr('Invité en ce moment') : tr('Pas d’invité')}</button>
+            {inviteOn && etat.invite && etat.invite.coupure_prevue && (
+              <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Un habitant est rentré : le mode se coupera dans la demi-heure.')}</span>
+            )}
+          </div>
+        )}
+      </div>
 
       {err && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
     </div>

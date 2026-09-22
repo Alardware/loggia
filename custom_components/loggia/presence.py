@@ -74,9 +74,16 @@ DEFAUT: dict[str, Any] = {
     # Un seul indice suffit (§10) : les capteurs de mouvement et d'ouverture,
     # et les mains. Actif d'emblee — c'est ce qui rend le depart fiable.
     "indices": {"actif": True, "mains": True},
+    # Le mode invite (ADR 0016) : un `input_boolean` DESIGNE, qui appartient a
+    # Home Assistant. Allume, la maison n'est jamais vide.
+    "invite": {"entite": ""},
     # Observer sans agir : la regle note ce qu'elle aurait fait.
     "simulation": {"actif": False},
 }
+
+# Le mode invite se coupe seul, trente minutes apres le retour d'un habitant :
+# l'invite est parti ou n'est plus seul, la maison peut se remettre en veille.
+INVITE_COUPURE = 30 * 60
 
 MODES_ALARME = {"away": "alarm_arm_away", "home": "alarm_arm_home",
                 "night": "alarm_arm_night", "vacation": "alarm_arm_vacation"}
@@ -107,6 +114,15 @@ def tous_absents(etats: dict, personnes) -> bool:
         if valeur == "home":
             return False
     return vus > 0
+
+
+def invite_present(etats, entite) -> bool:
+    """Le mode invite est-il allume ? Seul un `on` franc compte : un
+    interrupteur muet ou absent ne garde personne."""
+    if not entite or not isinstance(entite, str):
+        return False
+    st = etats.get(entite) if etats is not None else None
+    return st is not None and str(getattr(st, "state", "")).lower() == "on"
 
 
 def fait_nuit(etat_soleil) -> bool:
@@ -155,6 +171,11 @@ class LoggiaPresence:
         self.dernier_indice: dict[str, Any] | None = None
         # Une ligne de journal par decompte, pas une par mouvement.
         self._indice_note = False
+        # Le mode invite (ADR 0016) : la coupure programmee, et si la maison
+        # etait vide a l'evaluation precedente — c'est le RETOUR d'un
+        # habitant qui lance la demi-heure, pas sa presence.
+        self._minuteur_invite = None
+        self._absents_avant: bool | None = None
         self._defait: list[Any] = []
         hass.async_create_task(self._async_demarrer())
 
@@ -173,6 +194,11 @@ class LoggiaPresence:
         if not self.cfg.get("actif"):
             return
         suivis = list(self.cfg.get("personnes") or [])
+        # L'interrupteur du mode invite (ADR 0016) : le basculer, d'ou que ce
+        # soit, revalue la maison comme le ferait un telephone.
+        invite = self._invite_entite()
+        if invite:
+            suivis.append(invite)
         if not suivis:
             return
         from homeassistant.helpers.event import async_track_state_change_event
@@ -249,13 +275,22 @@ class LoggiaPresence:
             entite = ((self.cfg.get("depart") or {}).get("alarme") or {}).get("entite")
             if entite:
                 pilotes.append(entite)
+            # L'interrupteur invite aussi : une main qui le rallume le gele,
+            # et la coupure automatique ne se battra pas contre elle.
+            invite = self._invite_entite()
+            if invite:
+                pilotes.append(invite)
         self.regles.suivre("presence", pilotes)
 
     async def _async_evaluer(self) -> None:
         if not self.cfg.get("actif"):
             return
         self._declarer()
-        vide = tous_absents(self._etats(), self.cfg.get("personnes"))
+        absents = tous_absents(self._etats(), self.cfg.get("personnes"))
+        invite = self._invite_present()
+        # Le mode invite (ADR 0016) : quelqu'un garde la maison sans telephone
+        # suivi. Allume, la maison n'est jamais vide.
+        vide = absents and not invite
         if vide and not self.dehors:
             await self._async_armer_depart()
         elif not vide:
@@ -263,6 +298,55 @@ class LoggiaPresence:
             if self.dehors:
                 self.dehors = False
                 await self._async_retour()
+        # Un habitant RENTRE pendant le mode invite : le mode se coupera seul
+        # une demi-heure plus tard. Reparti entre-temps, ou mode eteint : on
+        # n'en parle plus.
+        if invite and not absents and self._absents_avant:
+            self._armer_coupure_invite()
+        elif absents or not invite:
+            self._desarmer_invite()
+        self._absents_avant = absents
+
+    # ── Le mode invite (ADR 0016) ──────────────────────────────────────────
+    def _invite_entite(self) -> str:
+        e = (self.cfg.get("invite") or {}).get("entite")
+        return e if isinstance(e, str) else ""
+
+    def _invite_present(self) -> bool:
+        return invite_present(self.hass.states, self._invite_entite())
+
+    def _armer_coupure_invite(self) -> None:
+        if self._minuteur_invite is not None:
+            return
+        from homeassistant.helpers.event import async_call_later
+
+        @callback
+        def echu(_now):
+            self._minuteur_invite = None
+            self.hass.async_create_task(self._async_couper_invite())
+
+        self._minuteur_invite = async_call_later(self.hass, INVITE_COUPURE, echu)
+
+    def _desarmer_invite(self) -> None:
+        annule, self._minuteur_invite = self._minuteur_invite, None
+        if annule:
+            try:
+                annule()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia presence : coupure invite deja passee")
+
+    async def _async_couper_invite(self) -> None:
+        """La demi-heure est passee : l'habitant est toujours la, l'invite ne
+        garde plus rien. Par le socle : une main qui a rallume l'interrupteur
+        entre-temps le gele, et il reste allume."""
+        entite = self._invite_entite()
+        if not entite or not self._invite_present():
+            return
+        if tous_absents(self._etats(), self.cfg.get("personnes")):
+            return
+        await self._async_service("input_boolean", "turn_off", [entite],
+                                  regle="invite", quoi="couper",
+                                  motif="un habitant est rentre depuis 30 min")
 
     async def _async_armer_depart(self, relance: bool = False) -> None:
         """Le delai avant de vider la maison.
@@ -304,8 +388,8 @@ class LoggiaPresence:
     # ── Le depart ──────────────────────────────────────────────────────────
     async def _async_depart(self) -> None:
         etats = self._etats()
-        # Quelqu'un a pu rentrer pendant le decompte.
-        if not tous_absents(etats, self.cfg.get("personnes")):
+        # Quelqu'un a pu rentrer pendant le decompte — ou allumer le mode invite.
+        if not tous_absents(etats, self.cfg.get("personnes")) or self._invite_present():
             return
         self.dehors = True
         d = self.cfg.get("depart") or {}
@@ -447,6 +531,8 @@ class LoggiaPresence:
         maison EST. Un depart simule laissait `dehors` vrai, et le vrai
         depart suivant n'aurait rien eteint."""
         self._desarmer()
+        self._desarmer_invite()
+        self._absents_avant = None
         self.eteintes = {}
         self.consignes = {}
         self.dehors = False
@@ -488,6 +574,10 @@ class LoggiaPresence:
             # Les indices (§10) : ce que la maison sait voir, et le dernier vu.
             "indices": {"capteurs": self._capteurs_indices(),
                         "dernier": dict(self.dernier_indice) if self.dernier_indice else None},
+            # Le mode invite (ADR 0016) : l'interrupteur, s'il garde la maison
+            # en ce moment, et si sa coupure est programmee.
+            "invite": {"entite": self._invite_entite(), "present": self._invite_present(),
+                       "coupure_prevue": self._minuteur_invite is not None},
             "journal": await self.regles.journal(limite=40, module="presence"),
         }
 
@@ -515,6 +605,7 @@ class LoggiaPresence:
     @callback
     def async_arreter(self) -> None:
         self._desarmer()
+        self._desarmer_invite()
         for defaire in self._defait:
             try:
                 defaire()

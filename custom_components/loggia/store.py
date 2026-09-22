@@ -92,6 +92,12 @@ PERSONAL_SUFFIXES: tuple[str, ...] = ("panel",)
 # donne un role en ecrivant, ce qui etait le vrai danger.
 OUVERTES_A_TOUS: frozenset[str] = frozenset({"loggia_active_user"})
 
+# Le signal aux ecrans abonnes (ADR 0067) : le compte et les cles qui ont
+# change, jamais les valeurs. Par le repartiteur interne, pas par le bus —
+# un evenement de bus finirait dans l'enregistreur, et Home Assistant reserve
+# `subscribe_events` aux administrateurs pour ce qui n'est pas a lui.
+SIGNAL_CONFIG = "loggia_configuration_changee"
+
 
 def est_personnelle(key: str) -> bool:
     """Cette cle reste-t-elle attachee a un seul compte ?"""
@@ -103,6 +109,12 @@ def est_personnelle(key: str) -> bool:
 MAX_KEYS_PER_USER = 128
 MAX_VALUE_BYTES = 256 * 1024
 MAX_TOTAL_BYTES = 1024 * 1024
+
+
+def _cles_changees(avant: dict, apres: dict) -> list[str]:
+    """Les cles dont la valeur differe entre deux etats — ajoutees, retirees
+    ou modifiees. Une ecriture qui ne change rien ne signale rien."""
+    return sorted(k for k in set(avant) | set(apres) if avant.get(k) != apres.get(k))
 
 
 def _taille(contenu: dict) -> int:
@@ -141,6 +153,8 @@ class LoggiaStore:
         # autre onglet, un autre appareil — mute le MEME objet en cours de
         # serialisation. Le cycle charger / fusionner / ecrire est donc exclusif.
         self._lock = asyncio.Lock()
+        # Pour signaler ce qui change aux ecrans abonnes (ADR 0067).
+        self.hass = hass
 
     async def _load(self) -> dict[str, Any]:
         if self._data is None:
@@ -437,6 +451,8 @@ class LoggiaStore:
             nouveau = {**data, "shared": {**data["shared"], CLE_HACHE: dict(enregistrement)}}
             await self._store.async_save(nouveau)
             self._data = nouveau
+            # Les ecrans n'apprennent que le fait, jamais le code (ADR 0067).
+            self._signaler(None, communes=["loggia_admin_pin_defini"])
 
     async def async_set_user(
         self,
@@ -553,7 +569,30 @@ class LoggiaStore:
         nouveau = {**data, "users": {**data["users"], user_id: perso}, "shared": commun}
         await self._store.async_save(nouveau)
         self._data = nouveau
+        # Ce qui a VRAIMENT change, pour les autres ecrans (ADR 0067).
+        avant_perso = data["users"].get(user_id)
+        self._signaler(user_id,
+                       perso=_cles_changees(avant_perso if isinstance(avant_perso, dict) else {}, perso),
+                       communes=_cles_changees(data["shared"], commun))
         return {**commun, **perso}
+
+    def _signaler(self, user_id: str | None, perso=(), communes=()) -> None:
+        """Dit aux ecrans abonnes ce qui vient de changer — les CLES et le
+        compte, jamais les valeurs : chacun relit ensuite sous ses propres
+        droits (ADR 0067). Sans Home Assistant (un test), rien ne part."""
+        perso, communes = list(perso), list(communes)
+        if not perso and not communes:
+            return
+        hass = getattr(self, "hass", None)
+        if hass is None:
+            return
+        try:
+            from homeassistant.helpers.dispatcher import async_dispatcher_send
+
+            async_dispatcher_send(hass, SIGNAL_CONFIG,
+                                  {"user_id": user_id, "perso": perso, "communes": communes})
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : le signal de configuration n'est pas parti")
 
     async def async_delete_user(self, user_id: str) -> None:
         """Efface les reglages propres a un compte.
@@ -565,9 +604,11 @@ class LoggiaStore:
         async with self._lock:
             data = await self._load()
             if user_id in data["users"]:
+                anciennes = data["users"][user_id]
                 nouveau = {**data, "users": {k: v for k, v in data["users"].items() if k != user_id}}
                 await self._store.async_save(nouveau)
                 self._data = nouveau
+                self._signaler(user_id, perso=sorted(anciennes) if isinstance(anciennes, dict) else [])
 
     async def async_stats(self) -> dict[str, Any]:
         """Chiffres utiles au diagnostic, sans exposer le contenu."""

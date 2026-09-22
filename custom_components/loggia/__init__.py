@@ -107,7 +107,8 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                               acces_regles=lambda: hass.data.get(DOMAIN, {}).get("regles"),
                               acces_scenarios=lambda: hass.data.get(DOMAIN, {}).get("scenarios"),
                               acces_robots=lambda: hass.data.get(DOMAIN, {}).get("robots"),
-                              acces_minuteurs=lambda: hass.data.get(DOMAIN, {}).get("minuteurs"))
+                              acces_minuteurs=lambda: hass.data.get(DOMAIN, {}).get("minuteurs"),
+                              acces_sirene=lambda: hass.data.get(DOMAIN, {}).get("sirene"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
@@ -213,6 +214,16 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["minuteurs"] = LoggiaMinuteurs(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : minuteurs d'extinction indisponibles")
+
+    # Le test d'une sirene : « sonner trois secondes », tenu ICI et non plus
+    # dans l'onglet (22/09, ADR 0065). Meme regime que les minuteurs.
+    if not data.get("sirene") and data.get("store") and data.get("regles"):
+        try:
+            from .sirene import LoggiaSirene
+
+            data["sirene"] = LoggiaSirene(hass, data["store"], data.get("regles"))
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : test de sirene indisponible")
 
     # Les scenarios : ce que la maison fait d'un seul geste (ADR 0027). Ils
     # ne posent aucun abonnement — seul le magasin leur est necessaire.

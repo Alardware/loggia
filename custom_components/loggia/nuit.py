@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
+from .presence import CLE as CLE_PRESENCE, invite_present
 from .regles import niveau
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
@@ -411,6 +412,15 @@ class LoggiaNuit:
             return
         jours = c.get("jours")
         if isinstance(jours, list) and jours and dt_util.now().weekday() not in jours:
+            return
+        # Le mode invite (ADR 0016) : quelqu'un garde la maison sans telephone
+        # suivi — on n'eteint pas tout sur sa tete. L'interrupteur est celui
+        # designe dans la regle de presence ; le journal dit que le coucher a
+        # ete retenu, pour qu'on ne cherche pas pourquoi rien n'a bouge.
+        presence = await self.store.async_get_shared(CLE_PRESENCE, None)
+        invite = ((presence or {}).get("invite") or {}).get("entite") if isinstance(presence, dict) else None
+        if invite and invite_present(self.hass.states, invite):
+            await self.regles.noter("nuit", "coucher", "retenir", n=0, motif="mode invite")
             return
         try:
             ids = self.hass.states.async_entity_ids("light")

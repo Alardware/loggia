@@ -214,13 +214,17 @@ class Regles:
 
     async def noter(self, module: str, regle: str, quoi: str, *,
                     cibles=(), n: int | None = None, motif: str = "",
-                    detail: str = "", simule: bool = False) -> dict[str, Any]:
+                    detail: str = "", simule: bool = False,
+                    echec: bool = False) -> dict[str, Any]:
         """Une ligne de journal, commune a toutes les regles.
 
         `motif` est ce qui a declenche — « lever + 30 », « vent 62 km/h »,
         « personne depuis 20 min ». C'est la colonne qui manque partout
         ailleurs : sans elle, on lit qu'un volet s'est ferme sans savoir
         pourquoi, et l'on ne peut ni corriger ni faire confiance.
+
+        `echec` : la ligne rouge — un ordre qui n'a pas abouti (ADR 0007).
+        Le drapeau n'est pose que sur ces lignes-la.
         """
         await self._charger()
         cibles = [h for h in cibles if isinstance(h, str)]
@@ -237,6 +241,8 @@ class Regles:
             # pour qu'on ne cherche pas pourquoi rien n'a bouge.
             "simule": bool(simule),
         }
+        if echec:
+            entree["echec"] = True
         self._entrees.insert(0, entree)
         del self._entrees[MAX_JOURNAL:]
         self._programmer_ecriture()

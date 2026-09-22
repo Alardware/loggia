@@ -372,3 +372,91 @@ def test_le_composant_transmet_le_socle_aux_veilles_et_aux_alertes():
     # Et ni l'un ni l'autre ne naissent sans lui.
     assert 'if not data.get("veilles") and data.get("store") and data.get("regles"):' in texte
     assert 'if not data.get("alertes") and data.get("store") and data.get("regles"):' in texte
+
+
+# ── Les consommables (ADR 0006) ─────────────────────────────────────────────
+# Home Assistant n'a pas de classe pour un filtre ou une brosse, et un nom ne
+# prouve rien : la veille ne lit que ce qui a ete DESIGNE.
+
+CONSOS = {
+    # Nomme « filtre », mais pas designe : la veille l'ignore.
+    'sensor.filtre_aspirateur': FauxEtat('3', {'friendly_name': 'Filtre aspirateur', 'unit_of_measurement': '%'}),
+    'sensor.brosse': FauxEtat('5', {'friendly_name': 'Brosse principale', 'unit_of_measurement': '%'}),
+    'sensor.reservoir': FauxEtat('60', {'friendly_name': 'Réservoir', 'unit_of_measurement': '%'}),
+    'sensor.lames': FauxEtat('12', {'friendly_name': 'Lames', 'unit_of_measurement': 'h'}),
+}
+
+
+def cfg_consos(**extra):
+    c = {'actif': True, 'seuil': 10, 'capteurs': ['sensor.brosse', 'sensor.reservoir']}
+    c.update(extra)
+    return {'consommables': c}
+
+
+def test_les_consommables_ont_leurs_defauts(creer):
+    v = creer({}, {})
+    assert v.cfg['consommables'] == {'actif': False, 'seuil': 10, 'capteurs': []}
+
+
+def test_seul_un_capteur_designe_et_bas_est_signale(creer):
+    v = creer(cfg_consos(), CONSOS)
+    lancer(v._async_consommables())
+    assert len(v.hass.services.appels) == 1
+    message = v.hass.services.appels[0][2]['message']
+    assert 'Brosse principale' in message and '5 %' in message and 'remplacer' in message
+    assert 'Filtre' not in message, "nomme filtre, mais jamais designe : on ne devine pas au nom"
+
+
+def test_le_seuil_se_lit_dans_l_unite_du_capteur(creer):
+    v = creer(cfg_consos(seuil=20, capteurs=['sensor.lames']), CONSOS)
+    lancer(v._async_consommables())
+    assert len(v.hass.services.appels) == 1
+    assert '12 h' in v.hass.services.appels[0][2]['message']
+
+
+def test_un_consommable_bas_n_est_signale_qu_une_fois_puis_de_nouveau_apres_remplacement(creer):
+    v = creer(cfg_consos(), CONSOS)
+    lancer(v._async_consommables())
+    lancer(v._async_consommables())
+    assert len(v.hass.services.appels) == 1
+    v.hass.states.table['sensor.brosse'] = FauxEtat('100', {'unit_of_measurement': '%'})
+    lancer(v._async_consommables())      # remplacee : on oublie
+    v.hass.states.table['sensor.brosse'] = FauxEtat('9', {'unit_of_measurement': '%'})
+    lancer(v._async_consommables())
+    assert len(v.hass.services.appels) == 2
+
+
+def test_un_capteur_muet_ou_absent_ne_dit_rien(creer):
+    etats = dict(CONSOS)
+    etats['sensor.brosse'] = FauxEtat('unavailable', {'unit_of_measurement': '%'})
+    v = creer(cfg_consos(capteurs=['sensor.brosse', 'sensor.disparu']), etats)
+    lancer(v._async_consommables())
+    assert v.hass.services.appels == []
+
+
+def test_l_heure_passe_les_piles_et_les_consommables_ensemble(creer):
+    v = creer({**cfg_consos(), 'batterie': {'actif': True, 'seuil': 15}}, {**CONSOS, **PILES})
+    v._sur_heure(None)
+    lancer(v.hass.taches.pop())
+    regles = sorted(e['regle'] for e in lancer(v.regles.journal(module='veilles')))
+    assert regles == ['batterie', 'consommables']
+
+
+def test_les_consommables_seuls_posent_le_passage_horaire(creer, monkeypatch):
+    import sys as _sys
+    poses = []
+    monkeypatch.setattr(_sys.modules["homeassistant.helpers.event"], "async_track_time_interval",
+                        lambda hass, cb, delai: poses.append(delai) or (lambda: None))
+    v = creer(cfg_consos(), CONSOS)
+    lancer(v._async_reabonner())
+    assert len(poses) == 1
+    w = creer({}, CONSOS)
+    lancer(w._async_reabonner())
+    assert len(poses) == 1, "rien d'actif : pas de passage"
+
+
+def test_les_capteurs_designes_survivent_a_l_enregistrement(creer):
+    v = creer({}, CONSOS)
+    cfg = lancer(v.async_enregistrer({'consommables': {'actif': True, 'capteurs': ['sensor.brosse']}}))
+    assert cfg['consommables'] == {'actif': True, 'seuil': 10, 'capteurs': ['sensor.brosse']}
+    assert lancer(v.async_config())['consommables']['capteurs'] == ['sensor.brosse']

@@ -1,4 +1,4 @@
-/* Trois veilles : l'air, les piles, le tarif.
+/* Quatre veilles : l'air, les piles, le tarif, les consommables.
  *
  * Elles n'ont qu'une chose à dire, et une seule façon de la dire : le service
  * de notification déjà choisi dans Paramètres › Alertes. La page le vérifie et
@@ -6,9 +6,9 @@
  * préviendront personne.
  */
 import {
-  useMemo
+  useMemo, useState
 } from 'react';
-import { cvName, RegleEntete, usePli , useEtatServeur, ListeChoix } from '../ui.jsx';
+import { cvName, RegleEntete, usePli , useEtatServeur, ListeChoix, BottomSheet, EntPicker } from '../ui.jsx';
 import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt } from './parcommun.jsx';
 import { niveauPile, couleurNiveau, SEUIL_CO2 } from '../attention.js';
 import { tr } from '../i18n.js';
@@ -46,6 +46,9 @@ export function VeillesReglages({ hass, cardSt }) {
   const [pliCo2, plierCo2] = usePli('veilles:co2');
   const [pliBat, plierBat] = usePli('veilles:piles');
   const [pliCr, plierCr] = usePli('veilles:creuses');
+  const [pliConso, plierConso] = usePli('veilles:conso');
+  // Le sélecteur d'entités des consommables, en feuille (ADR 0006).
+  const [picker, setPicker] = useState(false);
 
 
   const cfg = (etat && etat.config) || null;
@@ -102,6 +105,8 @@ export function VeillesReglages({ hass, cardSt }) {
   const co2 = cfg.co2 || {};
   const bat = cfg.batterie || {};
   const cr = cfg.creuses || {};
+  const conso = cfg.consommables || {};
+  const designes = (conso.capteurs || []).filter(x => typeof x === 'string');
 
   /* Les derniers signalements d'une regle, dans sa carte (maquette du 18/09) :
    * le message du journal dit « <capteur> : <ce qui se passe> ». La pile se
@@ -208,6 +213,44 @@ export function VeillesReglages({ hass, cardSt }) {
         )}
       </div>
 
+      {/* ── Les consommables (ADR 0006) ── */}
+      {/* Home Assistant n'a pas de classe pour un filtre ou une brosse, et un
+        * nom ne prouve rien : les capteurs se DESIGNENT, la veille ne lit
+        * qu'eux. Vérifiés une fois par heure, comme les piles. */}
+      <div style={cardSt}>
+        <RegleEntete nom={tr('Consommables')}
+          desc={tr('Le filtre d’un aspirateur, la brosse d’un robot, le réservoir d’un distributeur : rien ne les nomme dans Home Assistant. Désigne leurs capteurs, la veille prévient quand il faut remplacer.')}
+          on={conso.actif} cb={() => enregistrer({ consommables: { actif: !conso.actif } })} plie={pliConso} onPlier={plierConso} zone="veilles-conso" />
+        {conso.actif && !pliConso && (
+          <div id="veilles-conso" style={ZONE_REGLAGES}>
+            <div style={ligne}>
+              <span style={{ ...label, minWidth: 68 }}>{tr('En dessous de')}</span>
+              <input aria-label={tr('Seuil des consommables, dans l’unité du capteur')} type="number" value={conso.seuil != null ? conso.seuil : 10} min={1} max={90}
+                onChange={e => enregistrer({ consommables: { seuil: Math.max(1, Math.min(90, Number(e.target.value) || 10)) } })}
+                style={{ ...champ, width: 74 }} />
+              <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('dans l’unité du capteur')}</span>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <div style={{ ...label, marginBottom: 8 }}>{tr('Capteurs désignés')}</div>
+              {designes.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 8 }}>
+                  {tr('Aucun capteur désigné : pointe le capteur d’usure d’un filtre, d’une brosse, ou le niveau d’un réservoir — le plus souvent un pourcentage restant.')}
+                </div>
+              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                {designes.map(id => (
+                  <button key={id} type="button" title={tr('Retirer')} aria-label={tr('Retirer') + ' ' + nomDe(id)}
+                    onClick={() => enregistrer({ consommables: { capteurs: designes.filter(x => x !== id) } })} style={puce(true)}>{nomDe(id)} ×</button>
+                ))}
+                <button type="button" onClick={() => setPicker(true)} style={{ ...champ, cursor: 'pointer', color: 'var(--o-text3)' }}>{tr('Désigner un capteur…')}</button>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Vérifiés une fois par heure.')}</div>
+            </div>
+            {signaux('consommables', valeurBrute)}
+          </div>
+        )}
+      </div>
+
       {/* ── Le tarif ── */}
       <div style={cardSt}>
         <RegleEntete nom={tr('Heures creuses')}
@@ -246,6 +289,15 @@ export function VeillesReglages({ hass, cardSt }) {
       </div>
 
       {err && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
+
+      {picker && (
+        <BottomSheet onClose={() => setPicker(false)} title={tr('Choisir un capteur')}>
+          {/* `autoFocus` délibéré : la feuille s'ouvre en réponse à un clic,
+            * pour saisir tout de suite (même règle que dans Volets). */}
+          <EntPicker hass={hass} domaines={['sensor']} exclude={designes} autoFocus
+            onPick={(id) => { setPicker(false); if (id && designes.indexOf(id) < 0) enregistrer({ consommables: { capteurs: [...designes, id] } }); }} />
+        </BottomSheet>
+      )}
     </div>
   );
 }

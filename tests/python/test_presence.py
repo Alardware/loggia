@@ -90,6 +90,9 @@ def creer(module, store_module, regles_module):
         # Les indices (§10) : le vrai constructeur les pose, la fabrique aussi.
         p.dernier_indice = None
         p._indice_note = False
+        # Le mode invite (ADR 0016) : la coupure programmee, et l'etat d'avant.
+        p._minuteur_invite = None
+        p._absents_avant = None
         p.regles = regles_module.Regles(p.hass, magasin)
         p.regles._depot = FauxStore(None)
         p._defait = []
@@ -564,3 +567,136 @@ def test_l_etat_montre_les_indices(creer):
     etat = lancer(p.async_etat())
     assert etat["indices"] == {"capteurs": ["binary_sensor.couloir"], "dernier": None}
     assert p.cfg["indices"] == {"actif": True, "mains": True}
+
+
+# ── Le mode invite (ADR 0016) ───────────────────────────────────────────────
+# Quelqu'un garde la maison sans telephone suivi. L'interrupteur appartient a
+# Home Assistant ; allume, la maison n'est jamais vide, et il se coupe seul
+# trente minutes apres le RETOUR d'un habitant — par le socle.
+
+INVITE = {"input_boolean.invite": FauxEtat("on")}
+SANS_INVITE = {"input_boolean.invite": FauxEtat("off")}
+
+
+def cfg_invite(**extra):
+    return cfg(invite={"entite": "input_boolean.invite"}, **extra)
+
+
+class Rdv:
+    """Garde chaque rendez-vous (delai, rappel) ; chacun sait s'annuler."""
+
+    def __init__(self):
+        self.poses = []
+
+    def __call__(self, hass, delai, rappel):
+        e = {"delai": delai, "rappel": rappel, "annule": False}
+        self.poses.append(e)
+
+        def annuler():
+            e["annule"] = True
+        return annuler
+
+    def vivants(self, delai):
+        return [p for p in self.poses if p["delai"] == delai and not p["annule"]]
+
+
+@pytest.fixture
+def rdv(monkeypatch):
+    import sys as _sys
+    r = Rdv()
+    monkeypatch.setattr(_sys.modules["homeassistant.helpers.event"], "async_call_later", r)
+    return r
+
+
+def test_l_interrupteur_invite_se_lit_en_pur(module):
+    etats = FauxEtats({"input_boolean.i": FauxEtat("on"), "input_boolean.j": FauxEtat("off"),
+                       "input_boolean.m": FauxEtat("unavailable")})
+    assert module.invite_present(etats, "input_boolean.i")
+    for e in ("input_boolean.j", "input_boolean.m", "input_boolean.absent", "", None):
+        assert not module.invite_present(etats, e), e
+
+
+def test_les_defauts_du_mode_invite(creer):
+    p = creer({}, {})
+    assert p.cfg["invite"] == {"entite": ""}
+
+
+def test_mode_invite_allume_la_maison_n_est_jamais_vide(creer, rdv):
+    p = creer(cfg_invite(delai_depart=5), {**DEHORS, **MAISON, **INVITE})
+    lancer(p._async_evaluer())
+    assert rdv.vivants(300) == [] and p.dehors is False, "aucun decompte de depart"
+    # Meme le decompte, s'il sonnait, se retient.
+    lancer(p._async_depart())
+    assert p.hass.services.appels == [] and p.dehors is False
+
+
+def test_allumer_le_mode_invite_reveille_une_maison_en_veille(creer, rdv):
+    p = creer(cfg_invite(), {**DEHORS, **MAISON, **SANS_INVITE})
+    lancer(p._async_depart())
+    assert p.dehors is True
+    p.hass.states.table["input_boolean.invite"] = FauxEtat("on")
+    lancer(p._async_evaluer())
+    assert p.dehors is False, "l'invite est la : la maison se reveille"
+
+
+def test_le_retour_d_un_habitant_coupe_le_mode_invite_apres_trente_minutes(creer, rdv):
+    p = creer(cfg_invite(), {**DEHORS, **MAISON, **INVITE})
+    lancer(p._async_evaluer())          # maison vide, invite present : rien
+    assert rdv.vivants(1800) == []
+    p.hass.states.table["person.a"] = FauxEtat("home")
+    lancer(p._async_evaluer())          # un habitant rentre : la demi-heure part
+    (r,) = rdv.vivants(1800)
+    assert p.hass.services.appels == []
+    assert lancer(p.async_etat())["invite"]["coupure_prevue"] is True
+    r["annule"] = True
+    r["rappel"](None)
+    lancer(p.hass.taches.pop())
+    assert p.hass.services.appels == [("input_boolean", "turn_off", {"entity_id": ["input_boolean.invite"]})]
+    j = lancer(p.regles.journal(module="presence"))[0]
+    assert (j["regle"], j["quoi"], j["motif"]) == ("invite", "couper", "un habitant est rentre depuis 30 min")
+
+
+def test_reparti_avant_la_demi_heure_le_mode_invite_reste(creer, rdv):
+    p = creer(cfg_invite(), {**DEHORS, **MAISON, **INVITE})
+    lancer(p._async_evaluer())
+    p.hass.states.table["person.a"] = FauxEtat("home")
+    lancer(p._async_evaluer())
+    (r,) = rdv.vivants(1800)
+    p.hass.states.table["person.a"] = FauxEtat("not_home")
+    lancer(p._async_evaluer())
+    assert r["annule"] and rdv.vivants(1800) == []
+    # Et si la demi-heure sonnait quand meme : personne n'est la, on ne coupe pas.
+    r["rappel"](None)
+    lancer(p.hass.taches.pop())
+    assert p.hass.services.appels == []
+
+
+def test_quelqu_un_deja_la_quand_le_mode_s_allume_ne_le_coupe_pas(creer, rdv):
+    p = creer(cfg_invite(), {"person.a": FauxEtat("home"), **MAISON, **INVITE})
+    lancer(p._async_evaluer())
+    lancer(p._async_evaluer())
+    assert rdv.vivants(1800) == [], "c'est le RETOUR qui lance la demi-heure, pas la presence"
+
+
+def test_une_main_qui_rallume_l_interrupteur_le_garde(creer, rdv):
+    p = creer(cfg_invite(), {**DEHORS, **MAISON, **INVITE})
+    lancer(p._async_evaluer())
+    p.hass.states.table["person.a"] = FauxEtat("home")
+    lancer(p._async_evaluer())
+    (r,) = rdv.vivants(1800)
+    lancer(p.regles.geler("interrupteurs", "bouton", ["input_boolean.invite"]))
+    r["rappel"](None)
+    lancer(p.hass.taches.pop())
+    assert p.hass.services.appels == [], "le socle ecarte ce qu'une main tient"
+
+
+def test_l_interrupteur_est_ecoute_et_declare_au_socle(creer, monkeypatch):
+    import sys as _sys
+    suivis = []
+    monkeypatch.setattr(_sys.modules["homeassistant.helpers.event"], "async_track_state_change_event",
+                        lambda hass, ids, cb: suivis.append(sorted(ids)) or (lambda: None))
+    p = creer(cfg_invite(), {**DEHORS, **MAISON, **INVITE})
+    lancer(p._async_reabonner())
+    assert ["input_boolean.invite", "person.a"] in suivis
+    assert "input_boolean.invite" in p.regles._pilotees.get("presence", set())
+    assert lancer(p.async_etat())["invite"] == {"entite": "input_boolean.invite", "present": True, "coupure_prevue": False}

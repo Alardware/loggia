@@ -59,6 +59,9 @@ export const estPersonnelle = (cle) => {
 
 /** Lecture tolerante du stockage local : une valeur illisible ne casse rien. */
 export function readLS(key, fb) {
+  // Sans navigateur (un test qui rend un composant, ADR 0069) : le defaut,
+  // sans crier a la corruption.
+  if (typeof window === 'undefined') return fb;
   try {
     const v = window.localStorage.getItem(key);
     return v ? JSON.parse(v) : fb;

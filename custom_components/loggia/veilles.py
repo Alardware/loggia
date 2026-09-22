@@ -1,8 +1,8 @@
-"""Trois veilles : l'air, les piles, le tarif.
+"""Quatre veilles : l'air, les piles, le tarif, les consommables.
 
 Pourquoi ce module existe
 ─────────────────────────
-Trois surveillances de meme forme — une valeur, un seuil, une alerte — que
+Quatre surveillances de meme forme — une valeur, un seuil, une alerte — que
 chaque installation reecrit separement.
 
   Le CO2. Au-dela de 1000 a 1200 ppm on dort mal et on pense moins bien.
@@ -13,6 +13,13 @@ chaque installation reecrit separement.
   d'une installation domotique.
 
   Les heures creuses. Le lave-vaisselle attend souvent qu'on y pense.
+
+  Les consommables (ADR 0006). Le filtre d'un aspirateur, la brosse d'un
+  robot, le reservoir d'un distributeur : Home Assistant n'a pas de classe
+  pour eux, et un nom (« filter », « brush ») ne prouve rien. On ne devine
+  donc pas : l'utilisateur DESIGNE ses capteurs une fois, et la veille les
+  lit comme des piles — en dessous du seuil, dans l'unite du capteur (le
+  plus souvent un pourcentage restant), une seule alerte.
 
 Le service de notification n'est PAS redemande : c'est celui deja choisi dans
 Parametres > Alertes. Faire choisir son telephone deux fois serait une facon
@@ -60,6 +67,8 @@ DEFAUT: dict[str, Any] = {
     "co2": {"actif": False, "seuil": 1400, "capteurs": [], "ventilation": []},
     "batterie": {"actif": False, "seuil": 15},
     "creuses": {"actif": False, "entite": "", "valeur": "", "prises": []},
+    # Les consommables : des capteurs DESIGNES, jamais devines (ADR 0006).
+    "consommables": {"actif": False, "seuil": 10, "capteurs": []},
 }
 
 
@@ -166,8 +175,10 @@ class LoggiaVeilles:
 
         # Les piles ne se surveillent pas a l'evenement : elles changent
         # lentement, et une entite qui tombe a 14 % ne merite pas qu'on ecoute
-        # toute l'installation. Un passage par heure suffit.
-        if (self.cfg.get("batterie") or {}).get("actif"):
+        # toute l'installation. Un passage par heure suffit — pour les
+        # consommables aussi, qui s'usent encore plus lentement.
+        if ((self.cfg.get("batterie") or {}).get("actif")
+                or (self.cfg.get("consommables") or {}).get("actif")):
             from datetime import timedelta
 
             self._defait.append(
@@ -194,7 +205,12 @@ class LoggiaVeilles:
 
     @callback
     def _sur_heure(self, _now) -> None:
-        self.hass.async_create_task(self._async_batteries())
+        self.hass.async_create_task(self._async_horaire())
+
+    async def _async_horaire(self) -> None:
+        """Ce qui se vide lentement : un passage par heure."""
+        await self._async_batteries()
+        await self._async_consommables()
 
     async def _async_evaluer(self) -> None:
         await self._async_co2()
@@ -243,6 +259,29 @@ class LoggiaVeilles:
                         motif="%d %%" % int(valeur))
             elif deja:
                 # Pile changee : on redevient capable de prevenir.
+                self.signales.discard(cle)
+
+    # ── Les consommables (ADR 0006) ────────────────────────────────────────
+    async def _async_consommables(self) -> None:
+        c = self.cfg.get("consommables") or {}
+        if not c.get("actif"):
+            return
+        # Seulement ce qui a ete DESIGNE : la veille n'inspecte aucun nom.
+        for haid in [h for h in (c.get("capteurs") or []) if isinstance(h, str)]:
+            st = self.hass.states.get(haid)
+            valeur = nombre(st)
+            cle = "conso:" + haid
+            deja = cle in self.signales
+            if en_dessous(valeur, c.get("seuil", 10), deja):
+                if not deja:
+                    self.signales.add(cle)
+                    unite = str((getattr(st, "attributes", None) or {}).get("unit_of_measurement") or "").strip()
+                    reste = ("%g %s" % (valeur, unite)).strip()
+                    await self._async_prevenir(
+                        "consommables", "%s : %s restant, a remplacer" % (self._nom(haid, {haid: st}), reste),
+                        motif=reste)
+            elif deja:
+                # Remplace : on redevient capable de prevenir.
                 self.signales.discard(cle)
 
     # ── Le tarif ───────────────────────────────────────────────────────────
@@ -295,6 +334,7 @@ class LoggiaVeilles:
         cfg["co2"]["capteurs"] = []
         cfg["co2"]["ventilation"] = []
         cfg["creuses"]["prises"] = []
+        cfg["consommables"]["capteurs"] = []
         if isinstance(brut, dict):
             for section, valeurs in brut.items():
                 if section in cfg and isinstance(valeurs, dict):

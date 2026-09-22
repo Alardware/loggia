@@ -598,3 +598,18 @@ def test_sans_rien_d_allume_pas_de_decompte(creer, monkeypatch):
     n._sur_mouvement(Mvt("off", avant="on"))
     assert armes == []
     assert n._minuteurs_pieces == {}
+
+
+# ── Le mode invite (ADR 0016) : le coucher attend ───────────────────────────
+
+def test_le_coucher_attend_quand_un_invite_garde_la_maison(creer):
+    n = creer(cfg_coucher(), {**LAMPES, "input_boolean.invite": FauxEtat("on")})
+    lancer(n.store.async_set_shared("loggia_presence", {"invite": {"entite": "input_boolean.invite"}}))
+    lancer(n._async_coucher())
+    assert n.hass.services.appels == [], "on n'eteint pas tout sur la tete de l'invite"
+    j = lancer(n.regles.journal(module="nuit"))[0]
+    assert (j["regle"], j["quoi"], j["motif"]) == ("coucher", "retenir", "mode invite")
+    # Mode eteint : le coucher reprend.
+    n.hass.states.table["input_boolean.invite"] = FauxEtat("off")
+    lancer(n._async_coucher())
+    assert len(n.hass.services.appels) == 1

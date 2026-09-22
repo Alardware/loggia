@@ -82,7 +82,9 @@ test('la sirene : reconnue meme en interrupteur, choisie si configuree, pilotee 
   const vue = bloc('function SecuriteContent(', NL + '}');
   assert.ok(vue.includes("const sireneChoisie = loggiaEnt('sirene', null);") && vue.includes('...Object.keys(S).filter(id => id !== sireneChoisie && S[id] && estSirene(id, S[id]))'), 'le choix, puis la detection');
   const c = bloc('function CvSirene(', NL + '}');
-  assert.ok(c.includes("const dom = String(id).split('.')[0];") && c.includes('commanderService(hass, id, dom, svc,') && c.includes("if (dom === 'siren' && ((+a.supported_features || 0) & SIRENE_DUREE))"), 'un switch s’allume comme un switch ; la duree n’existe que pour siren');
+  // La bascule passe par le domaine de l'entite ; le test sonore, lui, part
+  // du composant (ADR 0065) : la duree n'est plus comptee dans l'onglet.
+  assert.ok(c.includes("const dom = String(id).split('.')[0];") && c.includes('commanderService(hass, id, dom, svc,') && c.includes("hass.callWS({ type: 'loggia/sirene/tester', entity_id: id })") && !c.includes('SIRENE_DUREE'), 'un switch s’allume comme un switch ; les trois secondes sont tenues par Home Assistant');
   assert.ok(src.includes("securite: [...secBaseKeys(), 'camera.', 'siren.', 'switch.', ...secKeys,"), 'les interrupteurs sont relus sur la vue');
   for (const k of ['ALARME', 'Armée · Maison', 'Armée · Absent', 'Armée · Nuit', 'Armée · Vacances', 'Déclenchée', 'EN CE MOMENT', 'Lecture, machines, chauffage, volets en mouvement']) {
     assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');

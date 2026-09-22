@@ -132,8 +132,9 @@ export function JournalReglages({ hass, cardSt }) {
           {lignes.map((j, i) => (
             <div key={j.ts + '' + i} className="o-journal-ligne" style={{ display: 'grid', gridTemplateColumns: 'minmax(64px,120px) minmax(56px,96px) minmax(0,1fr) auto', alignItems: 'center', gap: 12, padding: '10px 22px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', fontSize: 12.5, fontWeight: 600 }}>
               <span style={{ ...CAPITALES, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{noms[j.module] || j.module}</span>
-              <span style={{ fontWeight: 800, color: 'var(--o-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{j.simule && <span style={badge('var(--o-warn)')}>{tr('simulé')}</span>}{j.quoi}{j.n > 1 ? ' ' + j.n : ''}</span>
-              <span style={{ color: 'var(--o-text2)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[j.regle, j.motif, j.detail].filter(Boolean).join(' · ')}</span>
+              {/* La ligne rouge : un ordre qui n'a pas abouti (ADR 0007). */}
+              <span style={{ fontWeight: 800, color: j.echec ? 'var(--o-bad)' : 'var(--o-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{j.simule && <span style={badge('var(--o-warn)')}>{tr('simulé')}</span>}{j.quoi}{j.n > 1 ? ' ' + j.n : ''}</span>
+              <span style={{ color: j.echec ? 'var(--o-bad)' : 'var(--o-text2)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[j.regle, j.motif, j.detail].filter(Boolean).join(' · ')}</span>
               <span style={{ ...MONO, fontSize: 11.5, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{quandCourt(j.ts)}</span>
             </div>
           ))}

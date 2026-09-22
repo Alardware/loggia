@@ -1,6 +1,8 @@
 # ADR 0017 — Les heures creuses restent dans Veilles jusqu'à l'onglet Énergie
 
-**Statut** : décidé le 2026-09-12.
+**Statut** : décidé le 2026-09-12 ; appliqué tel quel (constat du 22/09/2026 :
+la règle vit dans `veilles.py` et l'onglet Veilles, l'onglet Énergie des Règles
+n'existe pas — rien à faire tant qu'il ne naît pas).
 
 ## Contexte
 
