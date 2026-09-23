@@ -1042,7 +1042,7 @@ export default {
   'Chaud': 'Gorąco',
   'Intact': 'Nienaruszony',
   'La maison réagit': 'Dom reaguje',
-  'Sur un danger, sans attendre personne — puis tout revient comme avant, sauf la vanne.': 'Przy zagrożeniu, bez czekania na kogokolwiek — potem wszystko wraca jak było, poza zaworem.',
+  'Sur un danger, sans attendre personne — puis tout revient comme avant, sauf la vanne.': 'Przy zagrożeniu, nie czekając na nikogo — potem wszystko wraca jak było, poza zaworem.',
   'Lumières à 100 %': 'Światła na 100 %',
   'Fumée, monoxyde, alarme — pas le gaz : un relais qui claque est une étincelle': 'Dym, czad, alarm — nie gaz: przekaźnik, który klika, to iskra',
   'Volets remontés': 'Rolety podniesione',
