@@ -59,7 +59,10 @@ test('l’Accueil : la carte d’edition remplace la tuile, la case d’ajout fe
   assert.ok(home.includes("<CartePieceEdition p={p} compacte={t === 'c'} onModifier={() => setPieceSheet({ nom: p.name, compacte: t === 'c' })} onSupprimer={() => retirerPiece(p.name)}"), 'la carte d’edition');
   assert.ok(home.includes("[p.name]: t === 'c' ? 's' : 'c'"), 'la taille bascule entre une et deux rangees');
   assert.ok(!home.includes("pointerEvents: 'none', height: '100%'") && !home.includes("tr('Taille de la carte')"), 'plus de tuile inerte ni de barre d’outils');
-  assert.ok(home.includes("{editMode && <CarteAjout onClick={() => setPieceSheet({ nom: '', compacte: false })} label={tr('Ajouter une pièce')} />}"), 'la case d’ajout');
+  // La case d'ajout prend la première cellule libre APRÈS tout le monde : elle
+  // ne vient jamais se loger dans un trou qu'on a voulu vide (23/09).
+  assert.ok(home.includes("<CarteAjout onClick={() => setPieceSheet({ nom: '', compacte: false })} label={tr('Ajouter une pièce')} />"), 'la case d’ajout');
+  assert.ok(home.includes("gridColumn: piecesApres.c, gridRow: piecesApres.r + ' / span 1'"), 'et elle ferme la grille');
   assert.ok(home.includes('<FichePiece key={pieceSheet.nom} nom={pieceSheet.nom} compacte={pieceSheet.compacte} hass={dashHass} onEnregistrer={enregistrerPieceIci} onSupprimer={retirerPiece}'), 'la fiche');
   assert.ok(home.includes("tailles[piece.room] = compacte ? 'c' : 's';") && home.includes("piecesOrdre: (grille.piecesOrdre || []).map(n => n === avant ? piece.room : n)"), 'renommer emporte la taille et l’ordre');
   assert.ok(home.includes("piecesOrdre: (grille.piecesOrdre || []).filter(n => n !== nom)"), 'retirer les efface');

@@ -62,28 +62,36 @@ test('la tablette pose sa mosaïque sur trois colonnes', () => {
     'les trois colonnes de la tablette ne sont plus imposées');
 });
 
-test('la mosaïque impose la colonne, jamais la rangée', () => {
-  // `.grid-chips` coule sur des rangées de 88 px : une standard en occupe
-  // deux, une puce une seule.
-  //
-  // Sans colonne imposée, les tuiles se bousculent et la mosaïque part en
-  // escalier. Avec la rangée imposée EN PLUS, chaque colonne s'aligne sur la
-  // plus haute et laisse un trou sous les puces — la grande du milieu restait
-  // clouée en bas au lieu de remonter combler le vide.
-  //
-  // Mesuré à 1180 px tactile : la tuile du milieu démarre à y=546, juste sous
-  // la puce qui finit à 538, et non à 642 comme ses voisines de rangée.
-  assert.match(src, /gridColumn: \(i % 3\) \+ 1/,
-    'la colonne de chaque tuile n’est plus imposée : la mosaïque partira en escalier');
+test('chaque tuile pièce a sa cellule : colonne ET rangée', () => {
+  /* `.grid-chips` coule sur des rangées de 88 px : une standard en occupe
+   * deux, une puce une seule.
+   *
+   * Jusqu'au 23/09, seule la COLONNE était imposée, et sur la tablette
+   * uniquement : le navigateur choisissait la rangée, en rebouchant les trous
+   * (`grid-auto-flow: dense`). « Admettons que je veuille placer une pièce
+   * sous la salle de bain, je ne peux pas » — c'était vrai, un trou n'était
+   * pas un endroit qu'on vise.
+   *
+   * Depuis, la cellule vient de `placement.js` et vaut pour tous les écrans :
+   * un trou voulu reste vide. */
+  assert.match(src, /gridColumn: cell\.c, gridRow: cell\.r \+ ' \/ span ' \+ hauteurCarte\(t\)/,
+    'la tuile n’est plus posée sur une cellule : les trous se reboucheront tout seuls');
+  assert.ok(src.includes('const piecesOu = disposer(piecesNoms, piecesTailles, grille.places, piecesCols);'),
+    'le placement vient de placement.js, d’après ce que l’utilisateur a posé');
+  assert.ok(!src.includes('gridColumn: (i % 3) + 1'), 'l’ancienne colonne imposée de la tablette a disparu');
   const i = src.indexOf('gridColumn: (i % 3) + 1');
   assert.ok(!src.slice(i, i + 160).includes('gridRow'),
     'la rangée est de nouveau imposée : les tuiles cesseront de combler les vides');
 });
 
 test('un choix explicite prime sur l’appareil', () => {
-  const i = src.indexOf('const choisi = (grille.tailles || {})[p.name];');
+  // La taille est résolue une fois pour toutes dans `taillesDe` : le placement
+  // en a besoin lui aussi — une carte standard occupe deux rangées.
+  const i = src.indexOf('const taillesDe = (noms) => {');
   assert.notEqual(i, -1, 'la lecture du choix de taille a disparu (elle passe par la grille du format)');
-  assert.match(src.slice(i, i + 260), /\(choisi === 's' \|\| choisi === 'c'\) \? choisi : tailleParDefaut/,
+  const bloc = src.slice(i, i + 420);
+  assert.ok(bloc.includes('const choisi = (grille.tailles || {})[nom];'), 'le choix explicite se lit toujours dans la grille du format');
+  assert.match(bloc, /\(choisi === 's' \|\| choisi === 'c'\) \? choisi : tailleParDefaut/,
     'le bouton de taille ne prime plus sur le défaut de l’appareil');
 });
 

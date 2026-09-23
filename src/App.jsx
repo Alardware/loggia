@@ -47,6 +47,7 @@ import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { colonnesCam, camDispoDe, poserCamDispo, camDisposDe, camSerre, CAM_AUTO } from './camdispo.js';
 import { decalageServeur, resteMinuteur, decompte } from './minuteur.js';
+import { disposer, poser, premiereLibre, hauteur as hauteurCarte, cellulePointee, colonnesDe, nettoyer } from './placement.js';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
 import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { CARTE_RAIL, CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE } from './styles.js';
@@ -6538,6 +6539,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     // rechargement, alors que saveAccL les écrivait bien.
     return { main: Array.isArray(v.main) ? v.main : null, rail: Array.isArray(v.rail) ? v.rail : null, caches: Array.isArray(v.caches) ? v.caches : [...ACC_CACHES_DEFAUT],
       piecesOrdre: Array.isArray(v.piecesOrdre) ? v.piecesOrdre : [], tailles: (v.tailles && typeof v.tailles === 'object') ? v.tailles : {},
+      /* La CELLULE de chaque carte pièce — colonne et rangée (23/09). L'ordre
+       * ci-dessus reste : il sert de repli tant qu'une carte n'a pas été
+       * posée à la main, et il donne sa taille par défaut. */
+      places: (v.places && typeof v.places === 'object') ? v.places : {},
       /* Les widgets en option du rail (ADR 0041) : ceux qu'on a ajoutes, leur
        * style, et les villes du calendrier « mois » (`null` = jamais reglees). */
       ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [...ACC_AJOUTEES_DEFAUT], styles: (v.styles && typeof v.styles === 'object') ? v.styles : {}, villes: Array.isArray(v.villes) ? v.villes : null,
@@ -6796,7 +6801,34 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   // Drag d'une CARTE pièce (dans la section) : même mécanique que les sections
   // — souris directe, appui long au doigt — mais l'ordre est le sien
   // (accL.piecesOrdre). stopPropagation : sinon la section se saisit avec.
-  const [pieceDrag, setPieceDrag] = useState(null); // { id, ordre }
+  const [pieceDrag, setPieceDrag] = useState(null); // { id, noms, c, r } — la cellule visée
+  /* La grille des pièces, mesurée : `auto-fill` met autant de colonnes que la
+   * largeur permet, et une place n'a de sens que rapportée à ce nombre-là. */
+  const piecesGrille = useRef(null);
+  const [piecesCols, setPiecesCols] = useState(1);
+  useEffect(() => {
+    const el = piecesGrille.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const lire = () => {
+      try { setPiecesCols(colonnesDe(getComputedStyle(el).gridTemplateColumns)); } catch { /* grille partie */ }
+    };
+    lire();
+    const ro = new ResizeObserver(lire);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
+  /* La taille RÉSOLUE de chaque pièce : le choix explicite s'il existe, sinon
+   * celle que l'ordre donne par défaut. Le placement en a besoin — une carte
+   * standard occupe deux rangées. */
+  const taillesDe = (noms) => {
+    const ordre = ordrePieces(noms);
+    const out = {};
+    ordre.forEach((nom, i) => {
+      const choisi = (grille.tailles || {})[nom];
+      out[nom] = (choisi === 's' || choisi === 'c') ? choisi : tailleParDefaut(i, tactile, wide);
+    });
+    return out;
+  };
   const pieceTimer = useRef(null);
   const pieceDebut = useRef(null);
   const pieceFantome = useRef(null);
@@ -6814,13 +6846,13 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
         if (!pieceDebut.current) return;
         try { if (navigator.vibrate) navigator.vibrate(35); } catch {}
         pieceFantome.current = poserFantome(hote, pieceDebut.current.x, pieceDebut.current.y);
-        setPieceDrag({ id: pieceDebut.current.id, ordre: ordrePieces(pieceDebut.current.noms) });
+        setPieceDrag({ id: pieceDebut.current.id, noms: pieceDebut.current.noms, c: 0, r: 0 });
       }, 200);
       return;
     }
     e.preventDefault();
     pieceFantome.current = poserFantome(hote, e.clientX, e.clientY);
-    setPieceDrag({ id, ordre: ordrePieces(noms) });
+    setPieceDrag({ id, noms, c: 0, r: 0 });
   };
   const mouvPiece = (e) => {
     if (!pieceDrag && pieceDebut.current) {
@@ -6831,38 +6863,43 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     }
     if (!pieceDrag) return;
     if (pieceFantome.current) pieceFantome.current.suivre(e.clientX, e.clientY);
-    const sous = document.elementFromPoint(e.clientX, e.clientY);
-    const cible = sous && sous.closest ? sous.closest('[data-piece]') : null;
-    if (!cible) return;
-    const idCible = cible.getAttribute('data-piece');
-    if (idCible === pieceDrag.id) return;
-    const a = [...pieceDrag.ordre];
-    const de = a.indexOf(pieceDrag.id), vers = a.indexOf(idCible);
-    if (de < 0 || vers < 0) return;
-    a.splice(de, 1); a.splice(vers, 0, pieceDrag.id);
-    setPieceDrag({ ...pieceDrag, ordre: a });
+    /* On vise une CELLULE, et rien ne bouge sous le doigt : la grille reste
+     * telle quelle, seule la case visée s'allume. L'échange, s'il y en a un,
+     * se fait au lâcher. */
+    const el = piecesGrille.current;
+    if (!el) return;
+    const { c, r } = cellulePointee(e.clientX, e.clientY, el.getBoundingClientRect(), piecesCols);
+    if (pieceDrag.c === c && pieceDrag.r === r) return;
+    setPieceDrag({ ...pieceDrag, c, r });
   };
   const finPiece = () => {
     clearTimeout(pieceTimer.current); pieceDebut.current = null;
     if (pieceFantome.current) { pieceFantome.current.lever(); pieceFantome.current = null; }
-    if (pieceDrag) saveGrille({ piecesOrdre: pieceDrag.ordre });
+    if (pieceDrag && pieceDrag.c) {
+      const noms = pieceDrag.noms;
+      saveGrille({ places: nettoyer(poser(grille.places, noms, taillesDe(noms), pieceDrag.id, pieceDrag.c, pieceDrag.r, piecesCols), noms) });
+    }
     setPieceDrag(null);
   };
   /* Au clavier (ADR 0068) : la tuile a le focus en edition, les fleches la
    * deplacent d'un cran — les boutons de sa carte d'edition gardent leurs touches. */
-  const deplacerPiece = (id, noms, delta) => {
-    const a = ordrePieces(noms);
-    const i = a.indexOf(id), j = i + delta;
-    if (i < 0 || j < 0 || j >= a.length) return;
-    a.splice(j, 0, a.splice(i, 1)[0]);
-    saveGrille({ piecesOrdre: a });
+  /* Au clavier, une flèche déplace la carte d'UNE CELLULE, dans le sens de la
+   * flèche — pas d'un rang dans une liste. Même geste que le doigt, même
+   * résultat : la case visée se libère, ou les deux cartes s'échangent. */
+  const deplacerPiece = (id, noms, dc, dr) => {
+    const t = taillesDe(noms);
+    const ou = disposer(ordrePieces(noms), t, grille.places, piecesCols)[id];
+    if (!ou) return;
+    const c = ou.c + dc, r = ou.r + dr;
+    if (c < 1 || c > piecesCols || r < 1) return;
+    saveGrille({ places: nettoyer(poser(grille.places, noms, t, id, c, r, piecesCols), noms) });
   };
   const clavierPiece = (e, id, noms) => {
     if (e.target !== e.currentTarget) return;
-    const d = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[e.key];
+    const d = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
     if (!d) return;
     e.preventDefault();
-    deplacerPiece(id, noms, d);
+    deplacerPiece(id, noms, d[0], d[1]);
   };
   /* La fiche d'une piece ecrit la configuration (`enregistrerPiece`) ; la
    * taille et l'ordre vivent dans la grille de l'accueil, ici. Renommer les
@@ -6873,12 +6910,16 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     const tailles = { ...(grille.tailles || {}) };
     if (avant && avant !== piece.room) delete tailles[avant];
     tailles[piece.room] = compacte ? 'c' : 's';
-    saveGrille({ tailles, piecesOrdre: (grille.piecesOrdre || []).map(n => n === avant ? piece.room : n) });
+    // Renommer emporte aussi la CELLULE : la carte ne saute pas ailleurs.
+    const places = { ...(grille.places || {}) };
+    if (avant && avant !== piece.room && places[avant]) { places[piece.room] = places[avant]; delete places[avant]; }
+    saveGrille({ tailles, places, piecesOrdre: (grille.piecesOrdre || []).map(n => n === avant ? piece.room : n) });
   };
   const retirerPiece = (nom) => {
     supprimerPiece(nom);
     const { [nom]: _retiree, ...tailles } = grille.tailles || {};
-    saveGrille({ tailles, piecesOrdre: (grille.piecesOrdre || []).filter(n => n !== nom) });
+    const { [nom]: _place, ...places } = grille.places || {};
+    saveGrille({ tailles, places, piecesOrdre: (grille.piecesOrdre || []).filter(n => n !== nom) });
   };
   /** Enveloppe d'une section : drag + masque en édition, rien sinon. */
   const Sec = (zone, id, contenu) => {
@@ -7505,6 +7546,19 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('{n} pièces', { n: inner.length })}</span>
             </div>
           );
+          /* OÙ chaque carte se pose (23/09) : une cellule, colonne et rangée,
+           * calculée par `placement.js` d'après ce que l'utilisateur a posé.
+           * Un trou voulu reste vide — c'est tout l'objet du changement. */
+          const piecesNoms = ordrePieces(inner.map(p => p.name));
+          const piecesTailles = taillesDe(inner.map(p => p.name));
+          const piecesOu = disposer(piecesNoms, piecesTailles, grille.places, piecesCols);
+          /* La première case libre APRÈS tout le monde : la tuile « Ajouter
+           * une pièce » s'y met, et jamais dans un trou qu'on a voulu vide. */
+          const piecesPrises = new Set();
+          piecesNoms.forEach(nom => {
+            for (let k = 0; k < hauteurCarte(piecesTailles[nom]); k += 1) piecesPrises.add(piecesOu[nom].c + ':' + (piecesOu[nom].r + k));
+          });
+          const piecesApres = premiereLibre(piecesPrises, piecesCols, 1);
           const piecesGrid = (
             // Deux densités comme partout : compacte = une rangée de 88 px
             // (défaut), standard = deux rangées. Choix par pièce en édition
@@ -7512,18 +7566,14 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             /* La mosaique de la tablette compte les colonnes : sans les fixer
               * a trois, `auto-fill` en donnerait quatre ou cinq et les grandes
               * tuiles tomberaient n'importe ou. */
-            <div className="grid-chips" style={{ display: 'grid', gridTemplateColumns: (tactile && wide) ? 'repeat(3,1fr)' : 'repeat(auto-fill,minmax(210px,1fr))', gap: 8 }}>
-              {(() => {
-                const nomsInner = inner.map(p => p.name);
-                const ordre = pieceDrag ? pieceDrag.ordre : ordrePieces(nomsInner);
-                return ordre.map(n => inner.find(p => p.name === n)).filter(Boolean);
-              })().map((p, i) => {
+            <div ref={piecesGrille} className="grid-chips" style={{ display: 'grid', gridTemplateColumns: (tactile && wide) ? 'repeat(3,1fr)' : 'repeat(auto-fill,minmax(210px,1fr))', gap: 8 }}>
+              {ordrePieces(inner.map(p => p.name)).map(n => inner.find(p => p.name === n)).filter(Boolean).map((p, i) => {
                 /* Un choix explicite (bouton de taille en edition) prime sur
                   * tout : il vaut pour l'appareil qui l'a fait comme pour les
                   * autres. Sans choix, l'appareil decide. */
-                const choisi = (grille.tailles || {})[p.name];
-                const t = (choisi === 's' || choisi === 'c') ? choisi : tailleParDefaut(i, tactile, wide);
+                const t = piecesTailles[p.name];
                 const saisie = pieceDrag && pieceDrag.id === p.name;
+                const cell = piecesOu[p.name] || { c: 1, r: 1 };
                 return (
                   /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-static-element-interactions -- même geste que les sections : en édition la tuile se saisit et se déplace aux flèches, et porte son nom. */
                   <div key={p.name} data-piece={p.name} className={t === 'c' ? 'o-chiprow1' : undefined} tabIndex={editMode ? 0 : undefined}
@@ -7549,7 +7599,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                       * permet — la grande du milieu vient donc combler le vide
                       * laisse par la puce au-dessus d'elle. */
                     style={{ position: 'relative', minWidth: 0, opacity: saisie ? .35 : 1, transition: 'opacity .15s',
-                      ...((tactile && wide) ? { gridColumn: (i % 3) + 1 } : {}),
+                      gridColumn: cell.c, gridRow: cell.r + ' / span ' + hauteurCarte(t),
                       ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 2, borderRadius: 14, cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : {}) }}>
                     {/* En édition, la carte d'édition — le même dessin que
                       * partout (retour user du 15/09) : taille en coin,
@@ -7565,7 +7615,17 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                   </div>
                 );
               })}
-              {editMode && <CarteAjout onClick={() => setPieceSheet({ nom: '', compacte: false })} label={tr('Ajouter une pièce')} />}
+              {/* La case visée pendant qu'on déplace : elle se montre, rien
+                * d'autre ne bouge. Au lâcher, la carte s'y pose. */}
+              {editMode && pieceDrag && pieceDrag.c > 0 && (
+                <div aria-hidden="true" style={{ gridColumn: pieceDrag.c, gridRow: pieceDrag.r + ' / span ' + hauteurCarte(piecesTailles[pieceDrag.id]),
+                  borderRadius: 14, border: '2px dashed var(--o-accent)', background: 'rgba(var(--o-accent-rgb),.12)', pointerEvents: 'none' }} />
+              )}
+              {editMode && (
+                <div style={{ gridColumn: piecesApres.c, gridRow: piecesApres.r + ' / span 1', minWidth: 0 }}>
+                  <CarteAjout onClick={() => setPieceSheet({ nom: '', compacte: false })} label={tr('Ajouter une pièce')} />
+                </div>
+              )}
             </div>
           );
           const camsGrid = (
