@@ -2,6 +2,10 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import { migrerAnciennesCles } from './state.js';
+/* L'ecran de secours parle la langue de l'ecran (23/09) : c'est celui qu'on
+ * lit quand plus rien ne marche, et il etait le seul a rester en francais.
+ * `i18n.js` ne depend ni d'App ni du rendu — il repond meme ici. */
+import { tr } from './i18n.js';
 
 // Avant toute lecture, donc avant le rendu : sans cela, une installation qui
 // vient d'Orion demarre sur des reglages vides et les reecrit aussitot.
@@ -47,9 +51,9 @@ class LoggiaErrorBoundary extends React.Component {
     return (
       <div style={box}>
         <div style={{ maxWidth: 640, margin: '0 auto' }}>
-          <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 6 }}>Loggia n'a pas pu s'afficher</div>
+          <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 6 }}>{tr('Loggia n’a pas pu s’afficher')}</div>
           <div style={{ color: '#93a3ba' }}>
-            Une erreur est survenue pendant le rendu. Le détail ci-dessous permet de la corriger.
+            {tr('Une erreur est survenue pendant le rendu. Le détail ci-dessous permet de la corriger.')}
           </div>
           <pre style={pre}>{String((err && err.stack) || (err && err.message) || err)}</pre>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -57,7 +61,7 @@ class LoggiaErrorBoundary extends React.Component {
               onClick={() => window.location.reload()}
               style={{ padding: '10px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: '#4f8cff', color: '#06121f' }}
             >
-              Recharger
+              {tr('Recharger')}
             </button>
             {/* Filet n° 1 : recharger en ignorant les vues custom, seule partie du
                 dashboard dont le contenu est arbitraire. Le drapeau ne vaut que
@@ -66,7 +70,7 @@ class LoggiaErrorBoundary extends React.Component {
               onClick={() => { try { sessionStorage.setItem('loggia_safe_nocv', '1'); } catch {} window.location.reload(); }}
               style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.16)', color: '#e6ecf5' }}
             >
-              Repartir sans les vues custom
+              {tr('Repartir sans les vues custom')}
             </button>
             {/* Filet n° 1 bis : recharger avec le thème et le look d'usine — un
                 preset ou un accent corrompu casse le rendu aussi sûrement
@@ -75,13 +79,13 @@ class LoggiaErrorBoundary extends React.Component {
               onClick={() => { try { sessionStorage.setItem('loggia_safe_nolook', '1'); } catch {} window.location.reload(); }}
               style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.16)', color: '#e6ecf5' }}
             >
-              Repartir sans le thème
+              {tr('Repartir sans le thème')}
             </button>
             {/* Filet n° 2 : tout effacer. Confirmation native — ici, plus rien du
                 dashboard n'est montable, donc pas de BottomSheet. */}
             <button
               onClick={() => {
-                if (!window.confirm('Effacer tous les réglages Loggia de ce navigateur (vues, utilisateurs, thème, entités) et repartir des réglages d’usine ?')) return;
+                if (!window.confirm(tr('Effacer tous les réglages Loggia de ce navigateur (vues, utilisateurs, thème, entités) et repartir des réglages d’usine ?'))) return;
                 try {
                   const ls = window.localStorage;
                   for (let i = ls.length - 1; i >= 0; i--) {
@@ -93,7 +97,7 @@ class LoggiaErrorBoundary extends React.Component {
               }}
               style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(240,100,90,.12)', border: '1px solid rgba(240,100,90,.35)', color: '#f0938c' }}
             >
-              Réglages d'usine
+              {tr("Réglages d'usine")}
             </button>
           </div>
         </div>

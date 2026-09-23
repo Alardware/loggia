@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import HomeAssistant, callback
 
 from .regles import niveau
+from .textes import joindre
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -519,9 +520,10 @@ class LoggiaVolets:
         if sens == "fermer":
             retenus, muets = self._baies_ouvertes(joignables)
             joignables = [h for h in joignables if h not in retenus]
-        motif = "lever" if sens == "ouvrir" else "coucher"
-        if decalage:
-            motif += " %+d min" % int(decalage)
+        # « lever du soleil +30 min » : le mot du soleil, distinct du coucher
+        # de la maison — chaque mot du journal a sa cle traduite (ADR 0070).
+        moment = "lever du soleil" if sens == "ouvrir" else "coucher du soleil"
+        motif = (moment + " {d} min", {"d": "%+d" % int(decalage)}) if decalage else moment
         partis = []
         if joignables:
             partis = await self._async_service(
@@ -539,16 +541,15 @@ class LoggiaVolets:
             self.abaisses.pop(h, None)
         # Une ligne de plus SEULEMENT si quelque chose manque : `agir` a deja
         # note ce qui est parti. Deux lignes pour un meme ordre se liraient mal.
-        manque = []
+        manque: list = []
         if absents:
-            manque.append("%d en attente" % len(absents))
+            manque.append(("{n} en attente", {"n": len(absents)}))
         if retenus:
-            manque.append("%d devant une baie ouverte" % len(retenus))
+            manque.append(("{n} devant une baie ouverte", {"n": len(retenus)}))
         if muets:
-            manque.append("capteur indisponible : %s" % ", ".join(muets))
+            manque.append(("capteur indisponible : {noms}", {"noms": ", ".join(muets)}))
         if manque or not joignables:
-            await self._noter(sens, "planning", len(partis), motif=motif,
-                              detail=" · ".join(manque))
+            await self._noter(sens, "planning", len(partis), motif=motif, detail=manque)
 
     # ── Le soleil et le vent ───────────────────────────────────────────────
     @callback
@@ -587,7 +588,7 @@ class LoggiaVolets:
                 if cibles:
                     await self._async_service("open_cover", cibles, regle="vent",
                                               quoi="ouvrir",
-                                              motif="vent %s" % valeur,
+                                              motif=("vent {v}", {"v": valeur}),
                                               priorite=PRIORITES["vent"], tenir=True)
                 self.a_l_abri = True
                 self.abaisses.clear()
@@ -669,8 +670,8 @@ class LoggiaVolets:
                     continue
                 partis = await self._async_position(haid, position, regle="soleil",
                                                     quoi="proteger",
-                                                    motif="soleil a %s°" % round(azimut)
-                                                    + (" · capteur de baie indisponible" if baie == "muette" else ""),
+                                                    motif=joindre(("soleil a {a}°", {"a": round(azimut)}),
+                                                                  "capteur de baie indisponible" if baie == "muette" else None),
                                                     priorite=PRIORITES["soleil"], tenir=True)
                 # Ne retenir que ce qui est vraiment parti. Un volet sous la
                 # main de quelqu'un, ou tenu par plus fort, n'a pas ete baisse :
@@ -969,12 +970,13 @@ class LoggiaVolets:
             # Par le socle : une main posee entre-temps arrete tout, en silence.
             await self._async_service(v["service"], [haid], v["extra"] or None,
                                       regle=v["regle"], quoi=v["quoi"],
-                                      motif="%s · immobile, essai %d/%d" % (v["motif"] or v["regle"], v["essais"] + 1, n),
+                                      motif=joindre(v["motif"] or v["regle"],
+                                                    ("immobile, essai {k}/{n}", {"k": v["essais"] + 1, "n": n})),
                                       priorite=v["priorite"], tenir=v["tenir"],
                                       essai=v["essais"] + 1)
             return
         await self._noter(v["quoi"], "non abouti", 0, detail=haid,
-                          motif="immobile apres %d %s" % (n, "essai" if n == 1 else "essais"),
+                          motif=("immobile apres {n} essai" if n == 1 else "immobile apres {n} essais", {"n": n}),
                           echec=True)
 
     async def _noter(self, quoi: str, regle: str, combien: int, detail: str = "",

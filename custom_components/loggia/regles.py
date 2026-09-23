@@ -49,6 +49,8 @@ from typing import Any
 
 from homeassistant.core import Context, HomeAssistant, callback
 
+from .textes import joindre, langue_serveur, parties, rendre_fr, traduire
+
 _LOGGER = logging.getLogger(__name__)
 
 # Le journal vit dans SON fichier, pas dans la configuration.
@@ -232,15 +234,23 @@ class Regles:
             "ts": time.time(),
             "module": module,
             "regle": regle,
-            "quoi": quoi,
+            "quoi": rendre_fr(quoi),
             "cibles": cibles,
             "n": len(cibles) if n is None else int(n),
-            "motif": motif,
-            "detail": detail,
+            "motif": rendre_fr(motif),
+            "detail": rendre_fr(detail),
             # Ce qui AURAIT ete fait : le mode simulation. L'ecran le marque,
             # pour qu'on ne cherche pas pourquoi rien n'a bouge.
             "simule": bool(simule),
         }
+        # Un texte compose — un gabarit et ses arguments — garde ses parties
+        # a cote du francais rendu : c'est ce que l'ecran traduit (ADR 0070).
+        # Un mot fixe n'en a pas besoin, sa cle suffit.
+        g = {champ: [[gab, args] for gab, args in p]
+             for champ, p in (("quoi", parties(quoi)), ("motif", parties(motif)),
+                              ("detail", parties(detail))) if p}
+        if g:
+            entree["g"] = g
         if echec:
             entree["echec"] = True
         self._entrees.insert(0, entree)
@@ -480,32 +490,37 @@ class Regles:
         cfg = await self._alertes()
         service = str(cfg.get("service") or "").strip()
         quoi = "alerter" if critique else "prevenir"
+        # Le telephone lit la langue du serveur (ADR 0070) ; le journal, lui,
+        # garde le francais rendu et les parties que l'ecran traduit.
+        langue = langue_serveur(self.hass)
+        texte = traduire(message, langue)
         if not service:
             await self.noter(module, regle, quoi, n=0, motif=motif,
-                             detail="personne a qui parler · " + message)
+                             detail=("personne a qui parler · {message}", {"message": texte}))
             return False
         if not self.hass.services.has_service("notify", service):
             await self.noter(module, regle, quoi, n=0, motif=motif,
-                             detail="notify.%s introuvable · %s" % (service, message))
+                             detail=("notify.{service} introuvable · {message}",
+                                     {"service": service, "message": texte}))
             return False
-        charge: dict[str, Any] = {"title": titre, "message": message}
-        regime = ""
+        charge: dict[str, Any] = {"title": traduire(titre, langue), "message": texte}
+        regime = None
         if critique:
             charge["data"] = copy.deepcopy(CRITIQUE)
-            regime = "critique · "
+            regime = "critique"
         elif self.dans_la_plage(cfg.get("calme"), self._maintenant()):
             charge["data"] = copy.deepcopy(SILENCIEUSE)
-            regime = "silencieuse, heures calmes · "
+            regime = "silencieuse, heures calmes"
         if not simuler:
             try:
                 await self.hass.services.async_call("notify", service, charge, blocking=False)
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Loggia regles : notify.%s a echoue", service)
                 await self.noter(module, regle, quoi, n=0, motif=motif,
-                                 detail="envoi impossible · " + message)
+                                 detail=("envoi impossible · {message}", {"message": texte}))
                 return False
         await self.noter(module, regle, quoi, n=1, motif=motif,
-                         detail=regime + message, simule=simuler)
+                         detail=joindre(regime, message), simule=simuler)
         return True
 
     # ── L'entonnoir ────────────────────────────────────────────────────────
@@ -577,17 +592,18 @@ class Regles:
             else:
                 self._tenues.pop(h, None)
 
-        details = []
+        details: list = []
         if echec:
             # Au journal aussi : « ferme 0 » sans motif se lisait comme un
             # volet gele, pas comme une commande refusee.
             details.append("commande refusee par Home Assistant")
         if geles:
-            details.append("%d sous la main de quelqu'un" % len(geles))
+            details.append(("{n} sous la main de quelqu’un", {"n": len(geles)}))
         for autre, nb in tenus_par.items():
-            details.append("%d tenu%s par %s" % (nb, "s" if nb > 1 else "", autre))
+            details.append(("{n} tenu par {regle}" if nb == 1 else "{n} tenus par {regle}",
+                            {"n": nb, "regle": autre}))
         await self.noter(module, regle, quoi or service, cibles=retenues,
-                         motif=motif, detail=" · ".join(details), simule=simuler)
+                         motif=motif, detail=details, simule=simuler)
         return retenues
 
     @callback

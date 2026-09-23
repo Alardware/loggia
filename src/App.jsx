@@ -49,7 +49,12 @@ import { colonnesCam, camDispoDe, poserCamDispo, camDisposDe, camSerre, CAM_AUTO
 import { decalageServeur, resteMinuteur, decompte } from './minuteur.js';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
 import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
-import { CARTE_RAIL } from './styles.js';
+import { CARTE_RAIL, CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE } from './styles.js';
+import { fmtWatts, relTime } from './format.js';
+import { voletMode, voletDays, croqHaids, croqMeals, hueScripts, notifIds, roomHidden, plantsCfg } from './lectures.js';
+import { PinModal } from './pinmodal.jsx';
+import { AmbientOverlay } from './ecranveille.jsx';
+import { Ico } from './icones.jsx';
 import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
 import { evenementCamera, detecteursDe, reduireDerniers, depuis } from './evenement.js';
 import { cleJour, plageSemaine, joursAgenda, comptesParJour, evenementsAVenir, evenementsDuJour } from './agenda.js';
@@ -80,7 +85,7 @@ import energyHomeImg from './assets/energy/home.webp';
 import energySolarImg from './assets/energy/solar.webp';
 import energyEvImg from './assets/energy/ev-car-home.webp';
 import energyBatImg from './assets/energy/battery.webp';
-import { tr, trHA, preparerLangue, locale } from './i18n.js';
+import { tr, trN, trHA, preparerLangue, locale, nomProfil } from './i18n.js';
 
 /* ── Briques d'affichage, au niveau du module ────────────────────────────────
  *
@@ -234,7 +239,20 @@ const NAV = [
  * groupe Systeme remontait au-dessus des vues secondaires au lieu de rester en
  * bas — l'ordre du menu changeait avec la langue. Un drapeau ne se traduit pas. */
 
-const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scénarios': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Caméras': 'cameras', 'Système': 'systeme', 'Paramètres': 'parametres' };
+/* Le bandeau rouge de tête — connexion perdue, découverte interrompue.
+ *
+ * Il portait ses couleurs en dur (`rgba(239,68,68,.94)` et du blanc), hors du
+ * thème et hors de la garde de contraste : 3,77:1, sous le seuil, pour le seul
+ * message qu'il faut absolument pouvoir lire (plan M7). `--o-bad` est le rouge
+ * d'alerte que `contraste.js` protège dans chaque thème, et l'opacité tombe —
+ * un bandeau d'alerte n'a aucune raison de laisser voir au travers. */
+const BANDEAU_ALERTE = { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'var(--o-bad)', color: '#fff', fontSize: 12, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' };
+
+/* Le libellé d'une entrée de menu → l'identifiant de sa vue. « Caméras » en est
+ * parti le 23/09 (plan, M4) : la vue n'a jamais existé — les caméras vivent sur
+ * l'Accueil et dans Sécurité. La table promettait une route que la recherche
+ * filtrait déjà (`BUILT` ne la connaît pas), donc silencieusement inerte. */
+const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scénarios': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Système': 'systeme', 'Paramètres': 'parametres' };
 const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'croquettes', 'medias', 'objets', 'securite', 'systeme', 'parametres']);
 
 function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAutorisees = null, editMode = false, onToggleEdit = null }) {
@@ -274,7 +292,11 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
         const active = vid === view || (vid === 'pieces' && view.indexOf('room:') === 0);
         const built = BUILT.has(vid);
         return (
-          <div key={it.label} className="o-nav-item" aria-label={tr(it.label)} data-active={active ? '1' : undefined} role="button" tabIndex={built ? 0 : -1} onClick={built ? () => onNav(vid) : undefined} onKeyDown={built ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(vid); } } : undefined} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13, cursor: built ? 'pointer' : 'default', transition: 'color .25s, font-weight .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
+          /* `aria-current="page"` (plan M7) : la vue ouverte se signalait par
+           * une graisse et une pastille qui glisse — rien qu'un lecteur
+           * d'écran puisse dire. Le mode édition portait déjà `aria-pressed` ;
+           * la navigation n'avait rien. */
+          <div key={it.label} className="o-nav-item" aria-label={tr(it.label)} aria-current={active ? 'page' : undefined} data-active={active ? '1' : undefined} role="button" tabIndex={built ? 0 : -1} onClick={built ? () => onNav(vid) : undefined} onKeyDown={built ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(vid); } } : undefined} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13, cursor: built ? 'pointer' : 'default', transition: 'color .25s, font-weight .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
             {it.svg}<span className="o-side-text">{tr(it.label)}</span>
           </div>
         );
@@ -300,7 +322,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
           {secondaires.map(h => {
             const active = h.vid === view;
             return (
-              <div key={h.vid} className="o-nav-item" aria-label={tr(h.label)} data-active={active ? '1' : undefined} role="button" tabIndex={0} onClick={() => onNav(h.vid)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(h.vid); } }} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13, cursor: 'pointer', transition: 'color .25s, font-weight .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
+              <div key={h.vid} className="o-nav-item" aria-label={tr(h.label)} aria-current={active ? 'page' : undefined} data-active={active ? '1' : undefined} role="button" tabIndex={0} onClick={() => onNav(h.vid)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(h.vid); } }} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13, cursor: 'pointer', transition: 'color .25s, font-weight .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
                 <Fi i={h.icon} color={h.c} /><span className="o-side-text">{h.label}</span>
               </div>
             );
@@ -309,12 +331,12 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
       )}
       {customViews.filter(cv => permis('cv:' + cv.id)).length > 0 && (
         <div>
-          <div className="o-side-text" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: '12px 8px 5px' }}>MES VUES</div>
+          <div className="o-side-text" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: '12px 8px 5px' }}>{tr('MES VUES')}</div>
           {customViews.filter(cv => permis('cv:' + cv.id)).map(cv => {
             const vid = 'cv:' + cv.id;
             const active = vid === view;
             return (
-              <div key={cv.id} className="o-nav-item" aria-label={cv.name} data-active={active ? '1' : undefined} role="button" tabIndex={0} onClick={() => onNav(vid)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(vid); } }} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13, cursor: 'pointer', transition: 'color .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
+              <div key={cv.id} className="o-nav-item" aria-label={cv.name} aria-current={active ? 'page' : undefined} data-active={active ? '1' : undefined} role="button" tabIndex={0} onClick={() => onNav(vid)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNav(vid); } }} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px 9px 13px', borderRadius: 10, fontSize: 13, cursor: 'pointer', transition: 'color .25s', ...(active ? { fontWeight: 700 } : { color: 'var(--o-text1)', fontWeight: 600 }) }}>
                 <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" /><span className="o-side-text">{cv.name}</span>
               </div>
             );
@@ -533,7 +555,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
           <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, padding: '11px 14px' }}>
             <Ico name="search" size={16} color="var(--o-text2)" />
             <input
-              autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Pièce, vue, scène…')} aria-label="Rechercher"
+              autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Pièce, vue, scène…')} aria-label={tr('Rechercher')}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') { e.preventDefault(); setSel(i => Math.min(i + 1, results.length - 1)); }
                 else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(i => Math.max(i - 1, 0)); }
@@ -541,7 +563,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
                 else if (e.key === 'Escape') { e.preventDefault(); close(); }
               }}
               style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', color: 'var(--o-text)', fontSize: 15, fontWeight: 500, fontFamily: 'var(--o-font)' }} />
-            {q && <span role="button" tabIndex={0} aria-label="Effacer" onClick={() => setQ('')} onKeyDown={(e) => { if (e.key === 'Enter') setQ(''); }} style={{ cursor: 'pointer', display: 'inline-flex', padding: 12, margin: -12 }}><Fi i="cross-circle" size={16} color="var(--o-text3)" /></span>}
+            {q && <span role="button" tabIndex={0} aria-label={tr('Effacer')} onClick={() => setQ('')} onKeyDown={(e) => { if (e.key === 'Enter') setQ(''); }} style={{ cursor: 'pointer', display: 'inline-flex', padding: 12, margin: -12 }}><Fi i="cross-circle" size={16} color="var(--o-text3)" /></span>}
           </div>
           <CroixFeuille />
           </div>
@@ -649,7 +671,7 @@ function Header() {
     {searchOpen && <SearchSheet onClose={() => setSearchOpen(false)} onNav={onNav} customViews={customViews} rooms={rooms} droits={droits} />}
     <header className="loggia-hdr" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 'calc(14px + var(--o-safe-top,0px)) 28px 14px', borderBottom: '1px solid var(--o-s1)', position: 'sticky', top: 0, background: 'var(--o-header)', backdropFilter: 'blur(12px)', zIndex: 40, transform: hidden ? 'translateY(-100%)' : 'translateY(0)', transition: 'transform .3s ease', willChange: 'transform' }}>
       <button onClick={onToggleNav} title={tr('Afficher / masquer le menu')} style={{ width: 42, height: 42, borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 }}><Ico name="menu-burger" size={20} /></button>
-      <div className="o-hdr-search" role="button" tabIndex={0} aria-label="Rechercher (Ctrl+K)" onClick={() => setSearchOpen(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSearchOpen(true); } }} style={{ flex: 1, maxWidth: 420, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, padding: '10px 14px', cursor: 'pointer' }}>
+      <div className="o-hdr-search" role="button" tabIndex={0} aria-label={tr('Rechercher (Ctrl+K)')} onClick={() => setSearchOpen(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSearchOpen(true); } }} style={{ flex: 1, maxWidth: 420, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, padding: '10px 14px', cursor: 'pointer' }}>
         <Ico name="search" size={16} color="var(--o-text2)" />
         <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--o-text2)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr('Rechercher une pièce, une scène…')}</span>
         <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', background: 'var(--o-bd2)', border: '1px solid var(--o-bd2)', borderRadius: 10, padding: '2px 7px' }}>{IS_MAC ? '⌘K' : 'Ctrl K'}</span>
@@ -667,13 +689,18 @@ function Header() {
             l'assistant n'existerait tout simplement pas. Elle s'efface des que
             la barre du bas parait — voir `.o-hdr-assist` dans index.css. */}
         {onAssistant && <BoutonAssistant onAssistant={onAssistant} onDictee={onDictee} hass={hassCtx} sens="bas" variante="entete" />}
-        {peutEditer && <button onClick={onToggleEdit} title={editMode ? 'Quitter le mode édition' : tr('Mode édition')} style={editBtn}><Ico name="edit" size={17} /></button>}
+        {peutEditer && <button onClick={onToggleEdit} title={editMode ? tr('Quitter le mode édition') : tr('Mode édition')} style={editBtn}><Ico name="edit" size={17} /></button>}
         <button onClick={onToggleTheme} title={tr('Changer de thème')} style={hbtn}><Ico name="brightness" size={18} /></button>
-        <button onClick={() => { setNotifOpen(o => { const n = !o; if (n) marquerVues(); return n; }); setUserOpen(false); }} title="Notifications" style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{nonVues && <span className="o-livedot" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: 'var(--o-bad)', border: '2px solid var(--o-bg2)' }} />}</button>
-        <button aria-label="Profil" onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }} title="Profil" style={{ width: 44, height: 44, borderRadius: '50%', marginLeft: 4, background: curBg, border: '2px solid rgba(255,255,255,.15)', cursor: 'pointer', flexShrink: 0 }} />
+        {/* La cloche annonce ce qu'elle porte (plan M7) : le point rouge des
+          * non-lues ne se voit pas d'un lecteur d'écran, et « Notifications »
+          * seul ne disait pas s'il y avait quelque chose à lire. */}
+        <button onClick={() => { setNotifOpen(o => { const n = !o; if (n) marquerVues(); return n; }); setUserOpen(false); }}
+          aria-label={tr('Notifications') + (nonVues ? ' · ' + trN(notifs.length, tr('{n} non lue'), tr('{n} non lues')) : '')}
+          aria-expanded={notifOpen} title={tr('Notifications')} style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{nonVues && <span className="o-livedot" aria-hidden="true" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: 'var(--o-bad)', border: '2px solid var(--o-bg2)' }} />}</button>
+        <button aria-label={tr('Profil')} onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }} title={tr('Profil')} style={{ width: 44, height: 44, borderRadius: '50%', marginLeft: 4, background: curBg, border: '2px solid rgba(255,255,255,.15)', cursor: 'pointer', flexShrink: 0 }} />
         {notifOpen && (
           <div style={{ ...menu, right: 52, width: 'min(304px, calc(100vw - 32px))' }}>
-            <div style={{ padding: '12px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 14 }}>Notifications</span><span onClick={marquerVues} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); marquerVues(); } }} style={{ fontSize: 12, color: 'var(--o-accent-soft)', cursor: 'pointer', fontWeight: 600 }}>{tr('Tout lire')}</span></div>
+            <div style={{ padding: '12px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 14 }}>{tr('Notifications')}</span><span onClick={marquerVues} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); marquerVues(); } }} style={{ fontSize: 12, color: 'var(--o-accent-soft)', cursor: 'pointer', fontWeight: 600 }}>{tr('Tout lire')}</span></div>
             <div style={{ maxHeight: 300, overflowY: 'auto' }}>
               {hasNotif ? notifs.map((n, i) => (
                 <div key={i} style={{ display: 'flex', gap: 12, padding: '11px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: n[0], marginTop: 5, flexShrink: 0 }} /><div style={{ minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700 }}>{n[1]}</div><div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{n[2]}</div>{n[3] && <div style={{ fontSize: 11, color: 'var(--o-text3)', marginTop: 2 }}>{n[3]}</div>}</div></div>
@@ -683,13 +710,13 @@ function Header() {
         )}
         {userOpen && (
           <div style={{ ...menu, right: 0, width: 252 }}>
-            <div style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 12, borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}><span style={{ width: 40, height: 40, borderRadius: '50%', background: curBg, flexShrink: 0 }} /><div style={{ minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{cur.name}</div><div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{cur.role} · Maison</div></div></div>
+            <div style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 12, borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}><span style={{ width: 40, height: 40, borderRadius: '50%', background: curBg, flexShrink: 0 }} /><div style={{ minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{nomProfil(cur.name)}</div><div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{tr(cur.role)} · {tr('Maison')}</div></div></div>
             <div style={{ padding: '8px 12px 4px', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)' }}>{tr('CHANGER DE PROFIL')}</div>
             <div style={{ padding: '0 6px 6px' }}>
               {users.map((u, i) => (
                 <button key={i} onClick={() => { onSwitchUser && onSwitchUser(i); setUserOpen(false); }} style={{ ...mItem, gap: 12, background: i === userIdx ? 'var(--o-s1)' : 'transparent' }}>
                   <span style={{ width: 30, height: 30, borderRadius: '50%', background: userBg(u), flexShrink: 0 }} />
-                  <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{u.name}</span><span style={{ display: 'block', fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>{u.role}</span></span>
+                  <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{nomProfil(u.name)}</span><span style={{ display: 'block', fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>{tr(u.role)}</span></span>
                   {i === userIdx && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--o-ok)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
                 </button>
               ))}
@@ -1246,16 +1273,23 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
     const amb = lights ? ambiancePiece({ lumieres: n, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
     const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
     const canToggle = !!(mains && mains.length && onToggleLights);
-    const temp = p.live && p.live.temp != null ? (Math.round(p.live.temp * 10) / 10).toLocaleString('fr-FR') + '°' : null;
+    const temp = p.live && p.live.temp != null ? (Math.round(p.live.temp * 10) / 10).toLocaleString(locale()) + '°' : null;
     const etat = amb ? amb.texte : '—';
     return (
-      <div className="o-piece o-piecechip" onClick={onOpen} role="button" tabIndex={0}
-        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-        style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', overflow: 'hidden',
+      /* Comme la carte standard (plan M7) : pas de `role="button"` autour de
+       * l'interrupteur de lumiere, sans quoi il disparait d'un lecteur
+       * d'ecran. La correction avait ete posee sur les deux autres gabarits et
+       * oubliee ici — repere par l'audit du 23/09. */
+      <div className="o-piece o-piecechip"
+        style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden',
           background: `linear-gradient(160deg,${p.bg},rgba(0,0,0,0) 65%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
           border: 'none',
           boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 'var(--o-radius,18px)', pointerEvents: 'none' }} />
+        {/* Le bouton de surface : il couvre la pastille et passe sous
+          * l'interrupteur, qui est positionne et donc peint apres lui. */}
+        <button type="button" onClick={onOpen} aria-label={tr('Ouvrir la pièce {piece}', { piece: p.name })}
+          style={{ position: 'absolute', inset: 0, border: 'none', background: 'transparent', padding: 0, margin: 0, borderRadius: 'var(--o-radius,18px)', cursor: 'pointer' }} />
         <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>{cloneElement(p.icon, { size: 24 })}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
@@ -1270,7 +1304,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
           <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
             onClick={e => { e.stopPropagation(); doToggle(); }}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-            style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-bd1)', transition: 'background .25s' }}>
+            style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', zIndex: 1, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-bd1)', transition: 'background .25s' }}>
             <span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
           </span>
         )}
@@ -1284,7 +1318,16 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
     const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
     const canToggle = !!(mains && mains.length && onToggleLights);
     return (
-      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-piecestd o-stag o-hov ' + (tilt.className || '')} onClick={onOpen} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: 14, padding: '14px 15px 12px', overflow: 'hidden',
+      /* La carte n'est PLUS un `role="button"` qui englobe tout (23/09, plan
+       * M7). Un rôle bouton rend sa descendance présentationnelle : les deux
+       * minis d'action et l'interrupteur de lumière, pourtant de vrais
+       * contrôles nommés, disparaissaient d'un lecteur d'écran — sept
+       * commandes invisibles sur l'Accueil de la démo.
+       *
+       * À la place : un bouton de SURFACE, frère des contrôles, qui porte le
+       * geste « ouvrir la pièce » et se laisse couvrir par eux. Rien ne bouge
+       * à l'œil, et la tabulation passe sur quatre choses distinctes. */
+      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-piecestd o-stag o-hov ' + (tilt.className || '')} style={{ ...card, position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: 14, padding: '14px 15px 12px', overflow: 'hidden',
         // Direction « teinte pièce » (choix 31/08) : le lavis de la pièce
         // baigne la surface en permanence, l'icône est nue, la température en
         // héros. Sans halo doré (retour 01/09) : l'interrupteur allumé dit
@@ -1292,7 +1335,13 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         background: `linear-gradient(160deg,${p.bg},rgba(0,0,0,0) 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
         boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))',
         transition: 'box-shadow .3s ease, background .3s ease',
-        cursor: 'pointer', ...stag(idx) }}>
+        ...stag(idx) }}>
+        {/* Le bouton de surface : il couvre la carte, passe SOUS les contrôles
+          * du pied (positionnés, donc peints après lui) et porte le nom du
+          * geste. `inset: 0` plutôt qu'un `onClick` sur la carte : un bouton
+          * réel se tabule, s'annonce et répond à Entrée comme à l'Espace. */}
+        <button type="button" onClick={onOpen} aria-label={tr('Ouvrir la pièce {piece}', { piece: p.name })}
+          style={{ position: 'absolute', inset: 0, border: 'none', background: 'transparent', padding: 0, margin: 0, borderRadius: 14, cursor: 'pointer' }} />
         {/* calque de flash séparé : ne touche ni au transform du tilt ni au box-shadow de la carte */}
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 14, pointerEvents: 'none' }} />
         {/* En-tête à hauteur RÉSERVÉE (49 = température 26 + 5 + badge 18) :
@@ -1319,7 +1368,9 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
           * passent en `display: none` et sortent du flux — il ne reste alors
           * qu'un item, que `space-between` colle à GAUCHE. La marge, elle,
           * tient quel que soit le nombre de voisins. */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8 }}>
+        {/* `position: relative` : ce pied est peint APRÈS le bouton de surface,
+          * donc au-dessus de lui — ses contrôles reçoivent bien leurs clics. */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8 }}>
           {(covers || clim) ? <div className="o-piece-minis" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {covers && (
               <button type="button" aria-label={tr('Volets') + ' ' + p.name} title={covers.open ? tr('Fermer les volets') : tr('Ouvrir les volets')}
@@ -1354,7 +1405,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         <div style={{ width: p.box, height: p.box, borderRadius: p.rad, background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{p.icon}</div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
           {p.status.kind === 'active' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-warn)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-warn)', boxShadow: '0 0 7px rgba(var(--o-warn-rgb),.8)' }} />{p.status.n > 1 ? tr('{n} actifs', { n: p.status.n }) : tr('{n} actif', { n: p.status.n })}</span>}
-          {p.status.kind === 'repos' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-text3)' }} />Repos</span>}
+          {p.status.kind === 'repos' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-text3)' }} />{tr('Repos')}</span>}
           {p.status.kind === 'ext' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{tr('Extérieur')}</span>}
           {p.badge && <span className="o-piece-badge-top" style={{ fontSize: 11, fontWeight: 700, color: p.bc, background: p.bbg, padding: '3px 9px', borderRadius: 999 }}>{p.badge}</span>}
         </div>
@@ -1447,12 +1498,12 @@ function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
   // Le mot de la fiche est celui de la barre : l'indice de confort (ADR 0039).
   const confort = indiceConfort(vals);
   const overall = confort ? confort.verdict : { t: '—', c: 'var(--o-text2)' };
-  const advice = !verdicts.length ? 'Aucune donnée capteur pour cette pièce.'
-    : (cf_rank[worst.vd.c] <= 1 ? 'Conditions idéales dans cette pièce.'
-      : worst.m.key === 'co2' ? "Niveau de CO2 élevé, pensez à aérer la pièce."
+  const advice = !verdicts.length ? tr('Aucune donnée capteur pour cette pièce.')
+    : (cf_rank[worst.vd.c] <= 1 ? tr('Conditions idéales dans cette pièce.')
+      : worst.m.key === 'co2' ? tr('Niveau de CO2 élevé, pensez à aérer la pièce.')
         : worst.m.key === 'bruit' ? tr('Niveau sonore élevé dans la pièce.')
-        : worst.m.key === 'temp' ? (vals.temp > 24 ? 'Il fait chaud, pensez à ventiler ou rafraîchir.' : 'Il fait frais, un peu de chauffage ?')
-          : (vals.hum > 60 ? 'Air humide, aérez pour assainir.' : 'Air un peu sec, pensez à humidifier.'));
+        : worst.m.key === 'temp' ? (vals.temp > 24 ? tr('Il fait chaud, pensez à ventiler ou rafraîchir.') : tr('Il fait frais, un peu de chauffage ?'))
+          : (vals.hum > 60 ? tr('Air humide, aérez pour assainir.') : tr('Air un peu sec, pensez à humidifier.')));
 
   const [hist, setHist] = useState({});
   const [histState, setHistState] = useState('loading');
@@ -1507,7 +1558,7 @@ function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
                       ? <div style={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr("Chargement de l'historique…")}</div>
                       : hist[m.key]
                         ? <><Sparkline points={hist[m.key]} color={vd.c} /><div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600, marginTop: 3 }}>{tr('24 dernières heures')}</div></>
-                        : <div style={{ height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--o-text3)', fontWeight: 600 }}>Historique indisponible</div>}
+                        : <div style={{ height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Historique indisponible')}</div>}
                   </div>
                 </div>
               ); })}
@@ -1520,20 +1571,20 @@ function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
 // Conseils météo pour la tuile Extérieur (pas de "verdict à surveiller" — on ne contrôle pas le dehors).
 function outdoorTips(mode, temp, wind, isNight, rainProb) {
   const T = [];
-  if (mode === 'rain') T.push(['raindrops', 'var(--o-cyan)', 'Pluie prévue, prends un parapluie']);
-  else if (rainProb != null && rainProb >= 50) T.push(['raindrops', 'var(--o-cyan)', 'Risque de pluie (' + rainProb + ' %), parapluie conseillé']);
-  if (mode === 'storm') T.push(['bolt', 'var(--o-purple)', 'Orage, limite les sorties']);
-  if (mode === 'snow') T.push(['snowflake', '#bcd6f0', 'Neige, prudence sur la route']);
+  if (mode === 'rain') T.push(['raindrops', 'var(--o-cyan)', tr('Pluie prévue, prends un parapluie')]);
+  else if (rainProb != null && rainProb >= 50) T.push(['raindrops', 'var(--o-cyan)', tr('Risque de pluie ({p} %), parapluie conseillé', { p: rainProb })]);
+  if (mode === 'storm') T.push(['bolt', 'var(--o-purple)', tr('Orage, limite les sorties')]);
+  if (mode === 'snow') T.push(['snowflake', '#bcd6f0', tr('Neige, prudence sur la route')]);
   if (temp != null) {
-    if (temp <= 2) T.push(['snowflake', 'var(--o-cold)', 'Risque de gel, couvre-toi bien']);
-    else if (temp < 10) T.push(['thermometer-half', '#38bdf8', 'Frais dehors, prends une veste']);
-    else if (temp >= 30) T.push(['humidity', 'var(--o-orange)', 'Forte chaleur, pense à t’hydrater']);
-    else if (temp >= 25) T.push(['sun', 'var(--o-lampe)', 'Il fait chaud, vêtements légers conseillés']);
+    if (temp <= 2) T.push(['snowflake', 'var(--o-cold)', tr('Risque de gel, couvre-toi bien')]);
+    else if (temp < 10) T.push(['thermometer-half', '#38bdf8', tr('Frais dehors, prends une veste')]);
+    else if (temp >= 30) T.push(['humidity', 'var(--o-orange)', tr('Forte chaleur, pense à t’hydrater')]);
+    else if (temp >= 25) T.push(['sun', 'var(--o-lampe)', tr('Il fait chaud, vêtements légers conseillés')]);
   }
-  if ((mode === 'sun' || mode === 'partly') && !isNight && temp != null && temp >= 22) T.push(['sun', 'var(--o-gold)', 'Grand soleil, crème solaire et lunettes']);
-  if (wind != null && wind >= 30) T.push(['wind', '#9fb4d6', 'Vent fort (' + Math.round(wind) + ' km/h), sois prudent']);
-  if (isNight) T.push(['moon-stars', '#aeb9e0', 'Nuit tombée, pense à l’éclairage extérieur']);
-  if (!T.length) T.push(['sun', 'var(--o-ok)', 'Conditions agréables, profite du dehors']);
+  if ((mode === 'sun' || mode === 'partly') && !isNight && temp != null && temp >= 22) T.push(['sun', 'var(--o-gold)', tr('Grand soleil, crème solaire et lunettes')]);
+  if (wind != null && wind >= 30) T.push(['wind', '#9fb4d6', tr('Vent fort ({v} km/h), sois prudent', { v: Math.round(wind) })]);
+  if (isNight) T.push(['moon-stars', '#aeb9e0', tr('Nuit tombée, pense à l’éclairage extérieur')]);
+  if (!T.length) T.push(['sun', 'var(--o-ok)', tr('Conditions agréables, profite du dehors')]);
   return T;
 }
 
@@ -1602,7 +1653,7 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
           {chip('wind', wind != null ? Math.round(wind) + ' km/h' : null)}
           {chip('sunset', sunset ? 'Coucher ' + sunset : null)}
         </div>
-        <div style={{ ...hd, margin: '18px 0 10px' }}>RECOMMANDATIONS</div>
+        <div style={{ ...hd, margin: '18px 0 10px' }}>{tr('RECOMMANDATIONS')}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {tips.map((t, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--o-s3)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: 14, padding: '13px 15px' }}>
@@ -1627,7 +1678,6 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
    Une pièce plus spécifique gagne : « Chambre enfant » n'atterrit pas dans « Chambre ». */
 const rmNorm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 // Cartes masquées par l'utilisateur (croix en mode édition), persistées.
-const roomHidden = () => { const v = readLS('loggia_roomhidden', []); return Array.isArray(v) ? v : []; };
 
 /**
  * Agencement d'une piece : ce que l'utilisateur a retire, ajoute, reordonne.
@@ -1752,11 +1802,13 @@ const ROOM_SENSOR_CLASSES = ['carbon_dioxide', 'pm25', 'pm10', 'aqi', 'illuminan
 /* Cartes de la vue Pièce — style Loggia, format de la maquette : tuiles de même hauteur,
    une seule grille, actions au pied de carte. Autonomes : pilotent une entité par son id. */
 // SANS BORDURE (retour 31/08, toutes les cartes) : l'ombre et le lavis suffisent.
-const RM_CARD = { display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 172, padding: 16, borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))', transition: 'all .3s' };
-const RM_ICO = (bg, col) => ({ width: 38, height: 38, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: bg, color: col });
+// Le gabarit vit dans `styles.js` (plan M1) ; l'animation, elle, est propre
+// aux cartes de l'Accueil, qui changent d'etat sous les yeux.
+const RM_CARD = { ...CARTE_MAISON, transition: 'all .3s' };
+const RM_ICO = (bg, col) => ({ ...ICONE_CARTE, background: bg, color: col });
 const RM_BTN = { flex: 1, padding: '9px 6px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
-const RM_NAME = { fontSize: 14, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
-const RM_SUB = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+const RM_NAME = NOM_CARTE;
+const RM_SUB = SOUS_CARTE;
 
 /* ── Les pieces d'une carte au gabarit ──────────────────────────────────────
  *
@@ -1804,7 +1856,7 @@ function RmJauge({ v, couleur, grade = null, actif = true, label = '', onCommit,
      * sans clavier, mais ce clic ne sert qu'a ne pas ouvrir la fiche. */
     /* Active, le clavier arrive par `{...kb}` (rôle slider, flèches) : la règle
      * ne sait pas lire ce qu'un étalement apporte. */
-    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/click-events-have-key-events */
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- voir les deux commentaires ci-dessus */
     <span {...kb} onClick={(e) => e.stopPropagation()} onPointerDown={glisse}
       /* 24 px de haut, comme la glissiere d'avant la refonte (retour user du
        * 14/09 : « elargis un petit peu la barre ») — le dessin, lui, reste. */
@@ -2494,7 +2546,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(marche ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche ? 'var(--o-bad)' : 'var(--o-text3)')}><Fi i={heating && marche ? 'flame' : 'thermometer-half'} size={17} /></span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {z.auto && <span style={{ padding: '4px 8px', borderRadius: 9, fontSize: 10, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>AUTO</span>}
+          {z.auto && <span style={{ padding: '4px 8px', borderRadius: 9, fontSize: 10, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>{tr('AUTO')}</span>}
           {(modeMarche || off) && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
         </div>
       </div>
@@ -2533,7 +2585,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={13} color="var(--o-orange)" />{zone.name.toUpperCase()}</span>
           {estClimate(zone) && <BoutonEpingle id={zone.haid} />}
-          {zone.autoEnt && <span onClick={() => call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt })} role="switch" tabIndex={0} aria-label={(z.auto ? 'Désactiver' : 'Activer') + ' la programmation automatique'} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt }); } }} aria-checked={!!z.auto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><span style={{ fontSize: 12, fontWeight: 700, color: z.auto ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>Auto</span><span style={{ width: 42, height: 24, borderRadius: 14, background: z.auto ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: z.auto ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span></span>}
+          {zone.autoEnt && <span onClick={() => call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt })} role="switch" tabIndex={0} aria-label={z.auto ? tr('Désactiver la programmation automatique') : tr('Activer la programmation automatique')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt }); } }} aria-checked={!!z.auto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><span style={{ fontSize: 12, fontWeight: 700, color: z.auto ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>{tr('Auto')}</span><span style={{ width: 42, height: 24, borderRadius: 14, background: z.auto ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: z.auto ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span></span>}
           <CroixFeuille />
         </div>
         <div style={{ position: 'relative', width: 230, height: 230, margin: '10px auto 0' }}>
@@ -2544,7 +2596,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1 }}>{target.toFixed(1)}<span style={{ fontSize: 25 }}>°</span></div>
             {z.current != null && <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 5 }}>actuel {z.current}°</div>}
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', marginTop: 6, color: off ? 'var(--o-text3)' : heating ? 'var(--o-warn2)' : 'var(--o-warn)' }}>{off ? 'ÉTEINT' : heating ? 'CHAUFFE' : tr('AU REPOS')}</div>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', marginTop: 6, color: off ? 'var(--o-text3)' : heating ? 'var(--o-warn2)' : 'var(--o-warn)' }}>{off ? tr('ÉTEINT') : heating ? tr('CHAUFFE') : tr('AU REPOS')}</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, margin: '10px 0 18px' }}>
@@ -2643,9 +2695,9 @@ function elaguerHisto(liste) {
 
 /** Quand une version a ete prise, dans la langue de l'interface.
  *
- * `relTime` plus bas dit « Il y a 2 h » en francais EN DUR : sur un dashboard
- * anglais, l'historique serait la seule liste a parler francais.
- * `Intl.RelativeTimeFormat` traduit lui-meme, dans les 64 langues de HA.
+ * `Intl.RelativeTimeFormat` traduit lui-meme, dans les 64 langues de HA —
+ * la ou `relTime` (format.js) passe par le catalogue. Deux chemins, parce que
+ * l'un dit « il y a deux heures » et l'autre « Il y a 2 h ».
  */
 function quandVersion(ts) {
   const secs = Math.round((ts - Date.now()) / 1000);   // negatif : c'est du passe
@@ -2943,7 +2995,7 @@ function RoomMediaSheet({ id, hass, onClose }) {
             {/* volume */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
               <span style={{ fontSize: 12, fontWeight: 800, color: tSub, minWidth: 38 }}>{vol}%</span>
-              <div onPointerDown={bar((v) => { setVolOv(Math.round(v)); commander(hass, id, 'set_volume', v / 100); }, vol, 'data-vol')} {...kbSlider('Volume', vol, (nv) => { setVolOv(Math.round(nv)); commander(hass, id, 'set_volume', nv / 100); })} style={{ flex: 1, padding: '11px 0', cursor: 'pointer', touchAction: 'none' }}>
+              <div onPointerDown={bar((v) => { setVolOv(Math.round(v)); commander(hass, id, 'set_volume', v / 100); }, vol, 'data-vol')} {...kbSlider(tr('Volume'), vol, (nv) => { setVolOv(Math.round(nv)); commander(hass, id, 'set_volume', nv / 100); })} style={{ flex: 1, padding: '11px 0', cursor: 'pointer', touchAction: 'none' }}>
                 <div style={{ position: 'relative', height: 8, borderRadius: 999, background: onArt ? 'rgba(255,255,255,.18)' : 'var(--o-bd1)' }}>
                   <div data-vol style={{ position: 'absolute', inset: '0 auto 0 0', width: vol + '%', background: `linear-gradient(90deg, ${A}, ${ALight})`, borderRadius: 999, transition: 'width .1s' }} />
                   <span style={{ position: 'absolute', top: '50%', left: `calc(${vol}% - 7px)`, transform: 'translateY(-50%)', width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,.4)', transition: 'left .1s' }} />
@@ -3122,7 +3174,7 @@ function RangeeMinuteur({ hass, id }) {
       droite={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {/* Le décompte, à la seconde, en chiffres qui ne dansent pas. */}
         {reste != null && <span aria-live="off" aria-label={tr('Temps restant')}><FicheValeur>{decompte(reste)}</FicheValeur></span>}
-        <FicheBouton icone="clock" onClick={() => agir({ type: 'loggia/minuteurs/poser', entity_id: id, minutes: 30 })}>+30 min</FicheBouton>
+        <FicheBouton icone="clock" onClick={() => agir({ type: 'loggia/minuteurs/poser', entity_id: id, minutes: 30 })}>{tr('+{n} min', { n: 30 })}</FicheBouton>
         {reste != null ? <FicheBouton title={tr('Annuler le minuteur')} onClick={() => agir({ type: 'loggia/minuteurs/annuler', entity_id: id })}><Fi i="cross-small" size={12} /></FicheBouton> : null}
       </div>} />
   );
@@ -3804,7 +3856,10 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
     }
     close();
   };
-  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600, outline: 'none' };
+  // Sans `outline: none` (23/09, plan M7) : posé en style en ligne, il battait
+  // la règle `:focus-visible` de la feuille et le champ focalisé ne se voyait
+  // plus au clavier. L'anneau d'accent revient, ici comme ailleurs.
+  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 };
   const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
   // Une puce coloree : l'icone porte la teinte du domaine ou de la piece, la
   // puce choisie la reprend en fond et en bord (retour user du 14/09 :
@@ -4001,7 +4056,6 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
   const peutCompacter = taille && !!ed.basculerCompact && brut.indexOf('zone:') !== 0 && brut.indexOf('sect:') !== 0;
   if (plat) {
     return (
-      /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
       <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)}
         style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 'var(--o-radius,18px)', outline: '1px dashed rgba(var(--o-accent-rgb),.45)', outlineOffset: 3, opacity: saisie ? .25 : 1, cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}>
         <div style={{ flex: 1, minWidth: 0 }}>{reste.children}</div>
@@ -4025,7 +4079,6 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
   if (compact) {
     const serre = { padding: '4px 6px', fontSize: 11.5 };
     return (
-      /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
       <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)} className={classes} title={titre}
         style={{ ...racine, minHeight: 0, height: '100%', boxSizing: 'border-box', gap: 6, padding: '8px 10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4044,7 +4097,6 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
     );
   }
   return (
-    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
     <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)} className={classes} title={titre} style={racine}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO('rgba(' + info.rgb + ',.16)', 'rgb(' + info.rgb + ')')}>{icone(17)}</span>
@@ -4285,7 +4337,7 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
   useEffect(() => {
     const debrancher = brancherVidage(viderAttente);
     return () => { debrancher(); viderAttente(); clearTimeout(filetRef.current); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- refs seulement
+  }, []);
   const poserOpt = (v) => { setOpt(v); clearTimeout(filetRef.current); filetRef.current = setTimeout(() => setOpt(null), 4000); };
   let controle = null, wrap = false;
   if (dom === 'switch' || dom === 'input_boolean' || dom === 'siren') {
@@ -4341,7 +4393,7 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
         <input type="password" inputMode="numeric" autoFocus value={codeSaisi} onChange={(e) => setCodeSaisi(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && codeSaisi) { poserOpt(etatApres[demandeCode.svc]); call('alarm_control_panel', demandeCode.svc, { code: codeSaisi }); setDemandeCode(null); setCodeSaisi(''); } if (e.key === 'Escape') setDemandeCode(null); }}
           placeholder={tr('Code')} aria-label={tr('Code')}
-          style={{ flex: 1, minWidth: 0, maxWidth: 130, padding: '6px 10px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
+          style={{ flex: 1, minWidth: 0, maxWidth: 130, padding: '6px 10px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700, letterSpacing: '.2em' }} />
         <button onClick={() => { if (!codeSaisi) return; poserOpt(etatApres[demandeCode.svc]); call('alarm_control_panel', demandeCode.svc, { code: codeSaisi }); setDemandeCode(null); setCodeSaisi(''); }}
           style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
         <button onClick={() => setDemandeCode(null)} aria-label={tr('Annuler')} style={{ width: 28, height: 28, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>✕</button>
@@ -5253,8 +5305,8 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
  * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
  * langue. Appelee au rendu, elle se dit dans la langue du moment. */
 const CAMERAS = () => [
-  { cle: 'demo-entree', label: tr('Entrée'), tag: 'LIVE · ENTRÉE', grad: 'linear-gradient(180deg,#6ba8d8 0%,#9cc4e0 42%,#7a8a5c 60%,#56683f 100%)', glow: 'radial-gradient(120% 80% at 50% 18%,rgba(255,255,255,.18),transparent 55%)', sub: <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--o-lampe)" strokeWidth="2.4" strokeLinecap="round"><path d="M13 2L3 14h7l-1 8 11-13h-7z" /></svg>Mouvement il y a 3 min</> },
-  { cle: 'demo-facade', label: tr('Façade'), tag: 'LIVE · FAÇADE', grad: 'linear-gradient(180deg,#5e94c4 0%,#86b06f 38%,#6f7e4a 62%,#4a5a36 100%)', glow: 'radial-gradient(120% 80% at 60% 22%,rgba(255,255,255,.16),transparent 55%)', sub: <><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('RAS · véhicule présent')}</> },
+  { cle: 'demo-entree', label: tr('Entrée'), tag: 'LIVE · ' + tr('Entrée').toUpperCase(), grad: 'linear-gradient(180deg,#6ba8d8 0%,#9cc4e0 42%,#7a8a5c 60%,#56683f 100%)', glow: 'radial-gradient(120% 80% at 50% 18%,rgba(255,255,255,.18),transparent 55%)', sub: <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--o-lampe)" strokeWidth="2.4" strokeLinecap="round"><path d="M13 2L3 14h7l-1 8 11-13h-7z" /></svg>{tr('Mouvement il y a 3 min')}</> },
+  { cle: 'demo-facade', label: tr('Façade'), tag: 'LIVE · ' + tr('Façade').toUpperCase(), grad: 'linear-gradient(180deg,#5e94c4 0%,#86b06f 38%,#6f7e4a 62%,#4a5a36 100%)', glow: 'radial-gradient(120% 80% at 60% 22%,rgba(255,255,255,.16),transparent 55%)', sub: <><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('RAS · véhicule présent')}</> },
 ];
 
 // ── Snapshot proxy authentifié (repli) ──
@@ -5693,7 +5745,11 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 18 }}>
         {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} onEnt={onEnt} />}
         <div>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Objets')}</h1>
+          {/* Le titre de la PAGE, pas celui du catalogue (plan M7) : ouverte
+            * par « Lumières », « Climat » ou « Médias », cette vue s'annonçait
+            * « Objets » — un lecteur d'écran lisait donc le mauvais nom, et
+            * trois entrées du menu menaient toutes au même titre. */}
+          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{filtre === 'lumieres' ? tr('Lumières') : filtre === 'chauffage' ? tr('Climat') : filtre === 'multimedia' ? tr('Médias') : tr('Objets')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('{n} appareils répartis dans {p} pièces · {a} actifs', { n: stats.appareils, p: stats.pieces, a: stats.actifs })}</div>
         </div>
         <div className="grid-objstats" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
@@ -5716,7 +5772,7 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
             </button>); })}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{titreFiltre}</div>
+          <h2 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{visibles.length > 1 ? tr('{n} appareils', { n: visibles.length }) : tr('{n} appareil', { n: visibles.length })}</span>
         </div>
         {(visibles.length || edit)
@@ -5737,204 +5793,9 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
   );
 }
 
-// SVG custom (Flaticon premium fournis par l'utilisateur, single-path 24×24 fill)
-const CUSTOM_SVG = {
-  vacuum: 'm24,12c0,6.617-5.383,12-12,12S0,18.617,0,12c0-2.9,1.035-5.563,2.754-7.64L.101,1.707,1.515.293l2.644,2.644c.851-.737,1.809-1.351,2.841-1.829v8.892c0,2.757,2.243,5,5,5s5-2.243,5-5V1.103c.993.459,1.916,1.044,2.741,1.743L22.485.101l1.414,1.414-2.745,2.745c1.771,2.092,2.845,4.791,2.845,7.74Zm-15-5.974c.838-.635,1.87-1.026,3-1.026s2.162.391,3,1.026V.389c-.96-.249-1.963-.389-3-.389s-2.04.141-3,.391v5.634Zm0,3.974c0,1.654,1.346,3,3,3s3-1.346,3-3-1.346-3-3-3-3,1.346-3,3Z',
-  dishwasher: 'm15.61 21.985c.873-1.241 1.39-2.976 1.39-4.985s-.517-3.744-1.39-4.985c1.908.082 3.39 2.235 3.39 4.985s-1.482 4.902-3.39 4.985zm-7.61.015c-1.71 0-3-2.149-3-5s1.29-5 3-5 3 2.149 3 5-1.29 5-3 5zm1-5c0-1.936-.751-3-1-3s-1 1.064-1 3 .751 3 1 3 1-1.064 1-3zm.5-13.5c-.828 0-1.5.672-1.5 1.5s.672 1.5 1.5 1.5 1.5-.672 1.5-1.5-.672-1.5-1.5-1.5zm5 0c-.828 0-1.5.672-1.5 1.5s.672 1.5 1.5 1.5 1.5-.672 1.5-1.5-.672-1.5-1.5-1.5zm7.5 1.5v14c0 2.757-2.243 5-5 5h-10c-2.757 0-5-2.243-5-5v-14c0-2.757 2.243-5 5-5h10c2.757 0 5 2.243 5 5zm-2 5h-16v9c0 1.654 1.346 3 3 3h10c1.654 0 3-1.346 3-3zm0-5c0-1.654-1.346-3-3-3h-10c-1.654 0-3 1.346-3 3v3h16zm-5 12c0-2.75-1.482-4.902-3.39-4.985.873 1.241 1.39 2.975 1.39 4.985s-.517 3.744-1.39 4.985c1.908-.082 3.39-2.235 3.39-4.985z',
-  couch: 'm2,8v-1c0-3.314,2.686-6,6-6h8c3.314,0,6,2.686,6,6v1c-2.209,0-4,1.791-4,4v3H6v-3c0-2.209-1.791-4-4-4Zm19.664,2.027c-.983.16-1.664,1.083-1.664,2.08v3.893c0,.552-.448,1-1,1H5c-.552,0-1-.448-1-1v-3.893c0-.996-.681-1.92-1.664-2.08-1.253-.204-2.336.758-2.336,1.973v4c0,1.636.786,3.088,2,4v2c0,.552.448,1,1,1s1-.448,1-1v-1.1c.323.066.658.1,1,.1h14c.342,0,.677-.034,1-.1v1.1c0,.552.448,1,1,1s1-.448,1-1v-2c1.214-.912,2-2.364,2-4v-4c0-1.215-1.083-2.176-2.336-1.973Z',
-  'solar-panel': 'm23.899,16.232l-.862-3.256c-.464-1.753-2.055-2.977-3.867-2.977H4.83c-1.813,0-3.403,1.224-3.867,2.977l-.862,3.256c-.24.907-.05,1.854.523,2.598.572.743,1.438,1.17,2.377,1.17h7.999v2h-4c-.552,0-1,.447-1,1s.448,1,1,1h10c.553,0,1-.447,1-1s-.447-1-1-1h-4v-2h7.999c.938,0,1.805-.427,2.378-1.17.572-.744.763-1.69.522-2.598Zm-2.796-2.744l.135.512h-4.558l-.143-2h2.632c.906,0,1.701.612,1.934,1.488Zm-12.065,4.512l.143-2h5.638l.143,2h-5.924Zm.286-4l.143-2h5.067l.143,2h-5.352Zm-4.495-2h2.632l-.143,2H2.761l.135-.512c.231-.876,1.027-1.488,1.933-1.488Zm-2.621,5.61c-.191-.248-.254-.563-.174-.866l.197-.744h4.944l-.143,2H3.001c-.312,0-.602-.143-.792-.39Zm19.583,0c-.191.248-.48.391-.793.391h-4.033l-.143-2h4.945l.197.744c.08.303.017.618-.174.865ZM4,7c0-.553.448-1,1-1h2.101c.188-.923.64-1.745,1.261-2.408l-1.351-2.04c-.305-.46-.179-1.08.281-1.386.459-.305,1.08-.18,1.386.282l1.318,1.99c.616-.272,1.289-.438,2.004-.438s1.389.166,2.006.439l1.328-1.993c.306-.459.925-.583,1.387-.277.459.306.584.927.277,1.387l-1.359,2.039c.62.662,1.072,1.484,1.26,2.406h2.101c.553,0,1,.447,1,1s-.447,1-1,1h-3c-.553,0-1-.447-1-1,0-1.654-1.346-3-3-3s-3,1.346-3,3c0,.553-.448,1-1,1h-3c-.552,0-1-.447-1-1Z',
-  'house-energy': 'M21.576,5.327L15.077,.941c-1.869-1.262-4.284-1.261-6.153,0L2.423,5.327C.906,6.352,0,8.056,0,9.886v8.614c0,3.032,2.467,5.5,5.5,5.5h13c3.033,0,5.5-2.468,5.5-5.5V9.886c0-1.83-.906-3.534-2.424-4.559Zm-.576,13.173c0,1.379-1.122,2.5-2.5,2.5h-3.42l1.853-5.372c.275-.797-.317-1.628-1.16-1.628h-2.87l1.369-4.497c.228-.748-.332-1.503-1.114-1.503-.392,0-.758,.197-.973,.525l-4.952,7.361c-.592,.91,.061,2.114,1.147,2.114h2.755l-1.152,3H5.5c-1.378,0-2.5-1.121-2.5-2.5V9.886c0-.832,.412-1.606,1.102-2.072L10.602,3.428c.425-.287,.911-.43,1.398-.43s.974,.143,1.398,.43l6.5,4.386c.69,.466,1.102,1.24,1.102,2.072v8.614Z',
-  'utility-pole': 'm13,4h8.5c1.379,0,2.5-1.122,2.5-2.5v-.5c0-.552-.447-1-1-1s-1,.448-1,1v.5c0,.276-.225.5-.5.5h-1.5v-1c0-.552-.447-1-1-1s-1,.448-1,1v1h-5v-1c0-.552-.448-1-1-1s-1,.448-1,1v1h-5v-1c0-.552-.448-1-1-1s-1,.448-1,1v1h-1.5c-.276,0-.5-.224-.5-.5v-.5c0-.552-.448-1-1-1S0,.448,0,1v.5c0,1.378,1.122,2.5,2.5,2.5h8.5v4h-5v-1c0-.552-.448-1-1-1s-1,.448-1,1v1h-1.5c-.276,0-.5-.224-.5-.5v-.5c0-.552-.448-1-1-1s-1,.448-1,1v.5c0,1.378,1.122,2.5,2.5,2.5h2.086l6.414,6.414v6.586c0,.552.448,1,1,1s1-.448,1-1v-6.586l6.414-6.414h2.086c1.379,0,2.5-1.122,2.5-2.5v-.5c0-.552-.447-1-1-1s-1,.448-1,1v.5c0,.276-.225.5-.5.5h-1.5v-1c0-.552-.447-1-1-1s-1,.448-1,1v1h-5v-4Zm-5.586,6h3.586v3.586l-3.586-3.586Zm9.172,0l-3.586,3.586v-3.586h3.586Z',
-  'teddy-bear': 'm6.172,5.189c-.112.42-.172.859-.172,1.311,0,3.038,2.686,5.5,6,5.5s6-2.462,6-5.5c0-.461-.062-.908-.179-1.336.145-.07.297-.193.463-.381,1.05-1.195.933-3.015-.262-4.066-1.195-1.05-3.015-.933-4.066.262-.081.092-.147.179-.2.261-.556-.156-1.145-.24-1.756-.24-.616,0-1.21.085-1.769.243-.067-.123-.169-.256-.313-.399-1.125-1.125-2.949-1.125-4.074,0-1.125,1.125-1.125,2.949,0,4.074.117.117.225.206.328.271Zm5.828,1.811c.828,0,1.5.448,1.5,1s-.672,1-1.5,1-1.5-.448-1.5-1,.672-1,1.5-1Zm-5.629,12.286s1.571,2.095,1.571,4.714h-1.562c-1.978,0-3.841-.932-5.028-2.514l-.775-1.033c-.822-1.096-.782-2.686.226-3.612,1.16-1.066,2.953-.878,3.875.351l1.693,2.095Zm17.053,1.165l-.776,1.035c-1.187,1.583-3.05,2.514-5.028,2.514h-1.583c0-3.667,1.531-4.897,1.531-4.897l1.755-1.912c.922-1.229,2.716-1.416,3.876-.35,1.008.926,1.047,2.515.226,3.609Zm-9.388,3.549h-4.093c0-3.194-1.77-5.646-2.016-5.971l-1.648-2.039c-.782-1.042-1.975-1.708-3.272-1.828-.149-.014-.297-.019-.445-.018l-2.036-2.953c-.868-1.157-.633-2.799.524-3.667.909-.682,2.117-.683,3.014-.091.491,3.697,3.864,6.567,7.938,6.567s7.447-2.87,7.938-6.567c.897-.592,2.105-.59,3.014.091,1.157.868,1.392,2.51.524,3.667l-2.036,2.953c-.148,0-.297.006-.445.02-1.26.115-2.422.747-3.204,1.737l-1.631,1.778c-.583.544-2.124,2.355-2.124,6.321Z',
-  'bed-alt': 'M0,12V6C0,3.243,2.243,1,5,1h14c2.757,0,5,2.243,5,5v6h-3v-1c0-2.206-1.794-4-4-4h-2c-1.2,0-2.266,.542-3,1.382-.734-.84-1.8-1.382-3-1.382h-2c-2.206,0-4,1.794-4,4v1H0Zm9-3h-2c-1.103,0-2,.897-2,2v1h6v-1c0-1.103-.897-2-2-2Zm10,2c0-1.103-.897-2-2-2h-2c-1.103,0-2,.897-2,2v1h6v-1ZM0,14v6c0,.553,.448,1,1,1s1-.447,1-1v-2H22v2c0,.553,.447,1,1,1s1-.447,1-1v-6H0Z',
-};
-// Mappe les clés "machine" vers les noms Flaticon (pour celles dispo en webfont)
-const FI_MAP = { mower: 'tractor', trash: 'trash', 'trash-full': 'trash-clock', battery: 'battery-full', 'battery-charging': 'battery-bolt', timer: 'clock' };
-// Icône universelle : SVG custom si dispo, sinon glyphe Flaticon UICons.
-function Ico({ name, size = 20, color = 'currentColor', style }) {
-  if (CUSTOM_SVG[name]) return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" style={style}><path d={CUSTOM_SVG[name]} fill={color} /></svg>;
-  return <i aria-hidden="true" className={'fi fi-rr-' + (FI_MAP[name] || name)} style={{ fontSize: size, color, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...style }} />;
-}
 
 // Fond adaptatif de la bannière selon la météo : teinte colorée par-dessus la surface du thème (reste lisible en clair ET sombre).
 
-/* Mode ambiant : l'ecran de veille de la tablette murale. Apres un delai sans
- * toucher, le dashboard s'efface derriere l'essentiel — l'heure en grand, la
- * meteo animee, la temperature interieure, et seulement ce qui merite l'oeil
- * (lumieres allumees, alarme, alertes surete). Un toucher le retire, on
- * retrouve l'ecran ou on l'avait laisse : c'est le MEME dashboard qui se met
- * en veille, pas un second a entretenir. Toujours sombre, quel que soit le
- * theme : c'est une veille. Idee reprise des dashboards ambiants de Madelena. */
-function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn, notifs, ast = null }) {
-  // Tant que la veille recouvre l'écran, les fonds GPU (wx3d, ciel 3D) rendent
-  // pour personne : la classe leur dit de souffler — batterie de la tablette.
-  useEffect(() => {
-    document.documentElement.classList.add('loggia-ambient-on');
-    return () => document.documentElement.classList.remove('loggia-ambient-on');
-  }, []);
-  const [clock, setClock] = useState(() => new Date());
-  useEffect(() => { const iv = setInterval(() => setClock(new Date()), 10000); return () => clearInterval(iv); }, []);
-  /* Anti burn-in : le bloc entier derive de quelques pixels chaque minute — un
-   * OLED garde la trace d'une horloge immobile. La derive est lente (6 s) pour
-   * ne pas se voir ; en reduced-motion elle saute sans transition, le burn-in
-   * ne negocie pas. */
-  const [decal, setDecal] = useState({ x: 0, y: 0 });
-  useEffect(() => {
-    const bouge = () => setDecal({ x: Math.round((Math.random() - 0.5) * 48), y: Math.round((Math.random() - 0.5) * 32) });
-    const iv = setInterval(bouge, 60000);
-    return () => clearInterval(iv);
-  }, []);
-  // La nuit, la veille baisse encore d'un ton : personne ne la regarde, et une
-  // chambre n'a pas besoin d'une lanterne.
-  const nuit = clock.getHours() >= 23 || clock.getHours() < 6;
-  /* Économiseur d'écran : un diaporama des images des MÉDIAS LOCAUX de Home
-   * Assistant (le dossier media) — jamais un service externe, le projet se
-   * l'interdit. Sans image trouvée, la veille classique reste. */
-  const photosOn = (() => { try { return localStorage.getItem('loggia-ambphotos') === '1'; } catch { return false; } })();
-  const [photos, setPhotos] = useState([]);
-  const [photoIdx, setPhotoIdx] = useState(0);
-  useEffect(() => {
-    if (!photosOn) return;
-    let mort = false;
-    (async () => {
-      try {
-        const h = getHass(); if (!h || !h.callWS) return;
-        const images = [];
-        const parcourir = async (id, prof) => {
-          if (mort || images.length >= 60 || prof > 2) return;
-          // try PAR SOURCE : une intégration qui refuse le browse (Netatmo…)
-          // ne doit pas emporter les images déjà trouvées ailleurs.
-          let r = null;
-          try { r = await h.callWS({ type: 'media_source/browse_media', ...(id ? { media_content_id: id } : {}) }); } catch { return; }
-          for (const c of (r && r.children) || []) {
-            if (mort || images.length >= 60) return;
-            if (c.media_class === 'image' && c.media_content_id) images.push(c.media_content_id);
-            else if (c.can_expand) await parcourir(c.media_content_id, prof + 1);
-          }
-        };
-        await parcourir(null, 0);
-        if (mort || !images.length) return;
-        const urls = [];
-        for (const mid of images.slice(0, 40)) {
-          if (mort) return;
-          try { const rr = await h.callWS({ type: 'media_source/resolve_media', media_content_id: mid }); if (rr && rr.url) urls.push(rr.url); } catch { /* image illisible */ }
-        }
-        // Mélange : ne pas revoir toujours les mêmes premières photos.
-        for (let i = urls.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t2 = urls[i]; urls[i] = urls[j]; urls[j] = t2; }
-        if (!mort && urls.length) setPhotos(urls);
-      } catch { /* pas de médias : la veille classique */ }
-    })();
-    return () => { mort = true; };
-  }, [photosOn]);
-  useEffect(() => {
-    if (photos.length < 2) return;
-    const iv = setInterval(() => setPhotoIdx(i => (i + 1) % photos.length), 30000);
-    return () => clearInterval(iv);
-  }, [photos.length]);
-  /* Détection de mouvement : la caméra de la TABLETTE réveille l'écran quand
-   * quelqu'un passe. Tout est local — les frames ne quittent jamais l'appareil,
-   * rien n'est enregistré. getUserMedia exige un contexte sécurisé : en HTTP
-   * local la fonction s'éteint d'elle-même, le toucher réveille toujours. */
-  const motionOn = (() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch { return false; } })();
-  useEffect(() => {
-    if (!motionOn) return;
-    let flux = null, iv = 0, mort = false, avant = null;
-    const video = document.createElement('video'); video.muted = true; video.playsInline = true;
-    const canvas = document.createElement('canvas'); canvas.width = 32; canvas.height = 24;
-    const ctx2 = canvas.getContext('2d', { willReadFrequently: true });
-    (async () => {
-      try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-        flux = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' }, audio: false });
-        if (mort) { flux.getTracks().forEach(t => t.stop()); return; }
-        video.srcObject = flux; await video.play();
-        iv = setInterval(() => {
-          try {
-            ctx2.drawImage(video, 0, 0, 32, 24);
-            const d = ctx2.getImageData(0, 0, 32, 24).data;
-            if (avant) {
-              let diff = 0;
-              for (let i = 0; i < d.length; i += 16) { if (Math.abs(d[i] - avant[i]) > 26) diff++; }
-              // ~192 points échantillonnés : une vingtaine qui bougent = une présence, pas du bruit de capteur.
-              if (diff > 18) { try { window.dispatchEvent(new PointerEvent('pointerdown')); } catch { window.dispatchEvent(new Event('pointerdown')); } }
-            }
-            avant = new Uint8ClampedArray(d);
-          } catch { /* frame illisible */ }
-        }, 900);
-      } catch { /* permission refusée : le toucher réveille */ }
-    })();
-    return () => { mort = true; clearInterval(iv); try { if (flux) flux.getTracks().forEach(t => t.stop()); } catch {} try { video.srcObject = null; } catch {} };
-  }, [motionOn]);
-  // Scène lancée depuis la veille : retour visuel bref, sans réveiller l'écran.
-  const [scFlash, setScFlash] = useState(null);
-  const scRef = useRef(0);
-  useEffect(() => () => clearTimeout(scRef.current), []);
-  const lancerScene = (s) => {
-    setScFlash(s.id); clearTimeout(scRef.current); scRef.current = setTimeout(() => setScFlash(null), 1600);
-    // Le refus remonte à l'écoute globale : un `try/catch` ne le verrait pas.
-    lancerScenario(getHass(), s.id);
-  };
-  const hm = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
-  const capit = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-  const dateStr = capit(clock.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }));
-  const rouges = (notifs || []).filter(n => n && n[0] === 'var(--o-bad)').slice(0, 3);
-  const chip = { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)', fontSize: 14, fontWeight: 700, color: '#aeb9cc' };
-  const pt = (c) => <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: c, boxShadow: '0 0 8px ' + c }} />;
-  return (
-    <div className="o-sombre" role="button" aria-label={tr('Toucher pour réveiller')} style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070b', color: '#e8edf5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', animation: REDUCE_MOTION ? 'none' : 'o-ambient-in 1s ease', userSelect: 'none' }}>
-    {/* Diaporama : la photo courante en fondu, la suivante préchargée invisible,
-        un voile pour que l'horloge reste lisible — plus opaque la nuit. */}
-    {photos.length > 0 && (
-      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-        {photos.map((u, i) => (i === photoIdx || i === (photoIdx + 1) % photos.length)
-          ? <img key={u} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: i === photoIdx ? 1 : 0, transition: REDUCE_MOTION ? 'none' : 'opacity 2.5s ease' }} />
-          : null)}
-        <div style={{ position: 'absolute', inset: 0, background: nuit ? 'rgba(5,7,11,.74)' : 'rgba(5,7,11,.48)' }} />
-      </div>
-    )}
-    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transform: `translate(${decal.x}px, ${decal.y}px)`, opacity: nuit ? .55 : 1, transition: REDUCE_MOTION ? 'opacity 2s ease' : 'transform 6s ease, opacity 2s ease' }}>
-      <div style={{ fontSize: 'clamp(72px, 17vw, 170px)', fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{hm}</div>
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 'clamp(17px, 2.6vw, 24px)', color: '#8b95a7' }}>{dateStr}</div>
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 22px', borderRadius: 18, background: 'rgba(255,255,255,.035)', marginTop: 18, overflow: 'hidden' }}>
-        <WxMini wx={wx} on={wxFx} />
-        <WeatherIco wx={wx} size={46} />
-        <div style={{ position: 'relative', lineHeight: 1.15 }}>
-          <div style={{ fontSize: 25, fontWeight: 800 }}>{weatherTemp != null ? Math.round(weatherTemp) : '—'}°</div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#8b95a7' }}>{weatherLabel || ''}</div>
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16, maxWidth: '84vw' }}>
-        {inTemp != null && <span style={chip}>{pt('#54c8f0')}{inTemp.toFixed(1).replace('.', ',')} °C {tr('intérieur')}</span>}
-        {lightsOn > 0 && <span style={{ ...chip, color: 'var(--o-lampe)' }}>{pt('var(--o-lampe)')}{lightsOn > 1 ? tr('{n} allumées', { n: lightsOn }) : tr('{n} allumée', { n: lightsOn })}</span>}
-        {ast != null && <span style={{ ...chip, color: ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)' }}>{pt(ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)')}{ast === 'triggered' ? tr('Alarme') : ast === 'disarmed' ? tr('Alarme désarmée') : tr('Alarme armée')}</span>}
-      </div>
-      {rouges.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14, alignItems: 'center' }}>
-          {rouges.map((n, i) => <span key={i} style={{ ...chip, color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.3)', background: 'rgba(var(--o-bad-rgb),.08)' }}>{pt('var(--o-bad)')}{n[1]} · {n[2]}</span>)}
-        </div>
-      )}
-      {/* Scènes rapides SANS réveiller : le pointeur est stoppé avant d'atteindre
-          la fenêtre (le réveil écoute là) — le geste du soir se fait depuis la
-          veille, l'écran reste en veille. */}
-      {scenariosAccueil(scenarios()).length > 0 && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center', maxWidth: '84vw' }}>
-          {scenariosAccueil(scenarios()).slice(0, 4).map(s => (
-            <button key={s.id}
-              onPointerDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); lancerScene(s); }}
-              style={{ ...chip, cursor: 'pointer', fontSize: 12, padding: '8px 14px', transition: 'background .3s, border-color .3s',
-                background: scFlash === s.id ? 'rgba(var(--o-accent-rgb),.28)' : 'rgba(255,255,255,.05)',
-                border: '1px solid ' + (scFlash === s.id ? 'rgba(var(--o-accent-rgb),.55)' : 'rgba(255,255,255,.09)') }}>
-              <Ico name={s.icone || 'sparkles'} size={13} />{nomScenario(s)}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-    </div>
-  );
-}
 
 /**
  * Presentation des vues metier : en-tete, carte a lignes denses.
@@ -6223,7 +6084,10 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
     close();
   };
   const t = TEINTES_PIECE.find(x => x.id === teinte) || TEINTES_PIECE[0];
-  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600, outline: 'none' };
+  // Sans `outline: none` (23/09, plan M7) : posé en style en ligne, il battait
+  // la règle `:focus-visible` de la feuille et le champ focalisé ne se voyait
+  // plus au clavier. L'anneau d'accent revient, ici comme ailleurs.
+  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 };
   const mono = { ...champ, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12.5 };
   const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
   const note = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' };
@@ -7012,9 +6876,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     if (cache && !editMode) return null;
     const saisie = secDrag && secDrag.id === id;
     return (
-      /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
-      <div key={id} data-sec={id} data-zone={zone}
-        tabIndex={editMode ? 0 : undefined}
+      /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-static-element-interactions -- en édition, cette section est un objet qu'on saisit et déplace aux flèches ; ARIA n'a pas de rôle pour cela, le nom et le contrat clavier sont posés juste en dessous. Hors édition, ni focus ni gestionnaire. */
+      <div key={id} data-sec={id} data-zone={zone} tabIndex={editMode ? 0 : undefined}
+        role={editMode ? 'button' : undefined}
         aria-label={editMode ? (ACC_NOMS()[id] || id) + ' · ' + tr('Déplacer avec les flèches') : undefined}
         onKeyDown={editMode ? (e) => clavierSec(e, zone, id) : undefined}
         onPointerDown={editMode ? (e) => debutSec(e, zone, id) : undefined}
@@ -7079,7 +6943,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     : (weatherRaw && WX_PRESETS[weatherRaw] ? weatherRaw : (WX3D_FROM_MODE[weatherMode] || 'partlycloudy'));
   const [wxHour, setWxHour] = useState(wxHourEq);
   useEffect(() => { const iv = setInterval(() => setWxHour(wxHourEq()), 60000); return () => clearInterval(iv); }, []);
-  const modes = [['sun', '☀️', 'Soleil'], ['partly', '⛅', 'Éclaircies'], ['clouds', '☁️', 'Nuageux'], ['wind', '🌬️', tr('Vent')], ['rain', '🌧️', tr('Pluie')], ['snow', '❄️', 'Neige'], ['storm', '⛈️', 'Orage'], ['night', '🌙', 'Nuit']];
+  const modes = [['sun', '☀️', tr('Soleil')], ['partly', '⛅', tr('Éclaircies')], ['clouds', '☁️', tr('Nuageux')], ['wind', '🌬️', tr('Vent')], ['rain', '🌧️', tr('Pluie')], ['snow', '❄️', tr('Neige')], ['storm', '⛈️', tr('Orage')], ['night', '🌙', 'Nuit']];
   const a = accueil; // données live (null → démo)
   // Les pièces affichées sont CELLES DE LA CONFIGURATION.
   //
@@ -7528,7 +7392,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 * meteo a disparu avec la vue Meteo : le fond de la banniere
                 * dit deja le temps, la piece Exterieur le detaille. */}
               <div className="o-greet-ligne" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 28, fontWeight: 500, lineHeight: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userName}</span>
+                <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 28, fontWeight: 500, lineHeight: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nomProfil(userName)}</span>
                 <div className="o-avatars" style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                   {avatars.map((u, i) => {
                     const present = !u.dim;
@@ -7651,9 +7515,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 const t = (choisi === 's' || choisi === 'c') ? choisi : tailleParDefaut(i, tactile, wide);
                 const saisie = pieceDrag && pieceDrag.id === p.name;
                 return (
-                  /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
-                  <div key={p.name} data-piece={p.name} className={t === 'c' ? 'o-chiprow1' : undefined}
-                    tabIndex={editMode ? 0 : undefined}
+                  /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-static-element-interactions -- même geste que les sections : en édition la tuile se saisit et se déplace aux flèches, et porte son nom. */
+                  <div key={p.name} data-piece={p.name} className={t === 'c' ? 'o-chiprow1' : undefined} tabIndex={editMode ? 0 : undefined}
+                    role={editMode ? 'button' : undefined}
                     aria-label={editMode ? p.name + ' · ' + tr('Déplacer avec les flèches') : undefined}
                     onKeyDown={editMode ? (e) => clavierPiece(e, p.name, inner.map(x => x.name)) : undefined}
                     onPointerDown={editMode ? (e) => debutPiece(e, p.name, inner.map(x => x.name)) : undefined}
@@ -7872,7 +7736,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
 }
 
 // Formateur puissance UNIQUE (harmonisation 20/08) : virgule FR, kW à 2 décimales, « — » si valeur absente
-const fmtWatts = (w) => w == null || isNaN(w) ? '—' : Math.abs(w) >= 1000 ? (w / 1000).toFixed(2).replace('.', ',') + ' kW' : Math.round(w) + ' W';
 const hx = (hex, a) => { if (HX_TOKENS[hex]) return `rgba(var(${HX_TOKENS[hex]}),${a})`; if (typeof hex !== 'string' || hex[0] !== '#') return `rgba(var(--o-text3-rgb),${a})`; const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
 
 // ── Acces des fonctions pures a la decouverte et a la configuration ──
@@ -7956,7 +7819,6 @@ const LIGHT_PALETTE = ['var(--o-lampe)', 'var(--o-orange)', '#f472b6', 'var(--o-
  * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
  * langue. Appelee au rendu, elle se dit dans la langue du moment. */
 const WHITE_TEMPS = () => [['Bougie', 2200, '#ffb46b'], ['Chaud', 2700, '#ffd9a0'], ['Neutre', 4000, '#fff1dd'], [tr('Froid'), 6500, '#eaf2ff']];
-const relTime = (iso) => { if (!iso) return ''; const d = (Date.now() - new Date(iso).getTime()) / 1000; if (d < 60) return "À l'instant"; if (d < 3600) return 'Il y a ' + Math.floor(d / 60) + ' min'; if (d < 86400) return 'Il y a ' + Math.floor(d / 3600) + ' h'; return 'Il y a ' + Math.floor(d / 86400) + ' j'; };
 
 /* La vue Lumieres a disparu le 14/09/2026 : la vue Objets, filtre « Lumieres »,
  * dessine les memes lampes aux cartes de la piece. La route `lumieres` y mene. */
@@ -8041,7 +7903,6 @@ const HUE_SCENE_IMG_BASE = '/local/hue_scenes/';
 // couleurs : rien de standard dans Home Assistant. Il est donc désigné dans la
 // configuration, et à défaut on n'applique que la luminosité — un geste partiel
 // vaut mieux qu'un bouton qui ne fait rien.
-function hueScripts() { const c = loggiaEnt('hueScripts', null); return (c && typeof c === 'object') ? c : {}; }
 const scriptSvc = (id) => (typeof id === 'string' && id.indexOf('script.') === 0) ? id.slice(7) : null;
 
 // Tondeuse : le domaine `lawn_mower` suffit ; la configuration tranche s'il y
@@ -8062,7 +7923,6 @@ function mowerSensor(S, kind) {
 
 // Capteurs qui alimentent les notifications. Rien de standard non plus : un
 // lave-vaisselle sur prise commandée ou un calendrier de collecte se désignent.
-function notifIds() { const c = loggiaEnt('notifications', null); return (c && typeof c === 'object') ? c : {}; }
 
 // Entités de la tondeuse à poller : les siennes, pas celles d'un modèle précis.
 function mowerKeys() {
@@ -8076,10 +7936,10 @@ function mowerKeys() {
  * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
  * langue. Appelee au rendu, elle se dit dans la langue du moment. */
 const HUE_ROOMS = () => [
-  { id: 'Séjour', label: tr('Séjour'), icon: 'couch' }, { id: 'Chambre', label: 'Chambre', icon: 'bed' },
-  { id: 'Chambre enfant', label: 'Enfant', icon: 'teddy-bear' }, { id: 'Toute la maison', label: 'Tout', icon: 'home' },
+  { id: 'Séjour', label: tr('Séjour'), icon: 'couch' }, { id: 'Chambre', label: tr('Chambre'), icon: 'bed' },
+  { id: 'Chambre enfant', label: tr('Enfant'), icon: 'teddy-bear' }, { id: 'Toute la maison', label: tr('Tout'), icon: 'home' },
 ];
-const HUE_CATS = Object.entries(HUE_SCENES).map(([id, c]) => ({ id, label: c.label }));
+const HUE_CATS = () => Object.entries(HUE_SCENES).map(([id, c]) => ({ id, label: tr(c.label) }));
 const rgbHex = (c) => '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
 // Lumières réglables en luminosité : le choix de l'utilisateur s'il en a fait
 // un, sinon toutes celles que Home Assistant déclare variables.
@@ -8162,7 +8022,7 @@ function ScenesContent({ hass }) {
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <h2 style={sectionTitle}>{tr('Ambiances lumineuses')}</h2>
-          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>Bibliothèque Hue · {HUE_CATS.length} collections · {totalScenes} scènes</div>
+          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Bibliothèque Hue · {c} collections · {s} scènes', { c: HUE_CATS().length, s: totalScenes })}</div>
         </div>
         <span style={{ flex: 1 }} />
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: lit ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: lit ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: lit ? selColor : 'var(--o-text3)' }} />{lit ? sel.toUpperCase() : tr('AUCUNE ACTIVE')}</span>
@@ -8170,9 +8030,9 @@ function ScenesContent({ hass }) {
 
       {/* réglages rapides : direct, pièce, collection, luminosité */}
       <div className="o-bar o-bar-scenes" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-        <QuickBox label="Direct" className="o-qb-direct">
+        <QuickBox label={tr('Direct')} className="o-qb-direct">
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={warmWhite} aria-label="Blanc chaud" style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="bulb" size={15} color="var(--o-lampe)" /></span><span className="o-qb-txt">Blanc chaud</span></button>
+            <button onClick={warmWhite} aria-label={tr('Blanc chaud')} style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="bulb" size={15} color="var(--o-lampe)" /></span><span className="o-qb-txt">{tr('Blanc chaud')}</span></button>
             <button onClick={allOff} aria-label={tr('Éteindre')} style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="power" size={15} /></span><span className="o-qb-txt">{tr('Éteindre')}</span></button>
           </div>
         </QuickBox>
@@ -8181,14 +8041,14 @@ function ScenesContent({ hass }) {
             {HUE_ROOMS().map(r => <button key={r.id} onClick={() => pickRoom(r.id)} style={miniBtn(room === r.id)}>{r.label}</button>)}
           </div>
         </QuickBox>
-        <QuickBox label="Collection" className="o-qb-collection">
-          <ListeChoix value={cat} options={HUE_CATS} onChange={setCat} label={tr('Collection de scènes')} />
+        <QuickBox label={tr('Collection')} className="o-qb-collection">
+          <ListeChoix value={cat} options={HUE_CATS()} onChange={setCat} label={tr('Collection de scènes')} />
         </QuickBox>
         <QuickBox label={tr('Luminosité')} className="o-qb-lumi">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider('Luminosité des scènes', bri, setBri, { min: 5, max: 100, step: 5 })}>
-            <button onClick={() => setBri(bri - 5)} aria-label="Baisser" style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider(tr('Luminosité des scènes'), bri, setBri, { min: 5, max: 100, step: 5 })}>
+            <button onClick={() => setBri(bri - 5)} aria-label={tr('Baisser')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
             <span style={{ minWidth: 44, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--o-warn)' }}>{bri} %</span>
-            <button onClick={() => setBri(bri + 5)} aria-label="Monter" style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
+            <button onClick={() => setBri(bri + 5)} aria-label={tr('Monter')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
           </div>
         </QuickBox>
         <span style={{ flex: 1 }} />
@@ -8197,12 +8057,12 @@ function ScenesContent({ hass }) {
       {/* carte Appliquer une scène */}
 
       {/* grille des scènes de la collection : l'IMAGE Hue reste la vignette */}
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{(HUE_CATS.find(c => c.id === cat) || {}).label}</div>
+      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{(HUE_CATS().find(c => c.id === cat) || {}).label}</div>
       <div className="grid-scenecards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(178px,1fr))', gap: 16 }}>
         {scenes.map(sc => {
           const on = sel === sc.name;
           return (
-            <button aria-label={'Appliquer « ' + sc.name + ' »'} key={sc.name} onClick={() => pickScene(sc)} title={'Appliquer « ' + sc.name + ' »'} style={{ position: 'relative', textAlign: 'left', padding: 0, overflow: 'hidden', cursor: 'pointer', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.55)' : 'var(--o-bd2)'), boxShadow: on ? '0 0 0 1px rgba(var(--o-accent-rgb),.3)' : 'none', transition: 'border-color .2s, box-shadow .2s' }}>
+            <button aria-label={tr('Appliquer {nom}', { nom: sc.name })} key={sc.name} onClick={() => pickScene(sc)} title={tr('Appliquer {nom}', { nom: sc.name })} style={{ position: 'relative', textAlign: 'left', padding: 0, overflow: 'hidden', cursor: 'pointer', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.55)' : 'var(--o-bd2)'), boxShadow: on ? '0 0 0 1px rgba(var(--o-accent-rgb),.3)' : 'none', transition: 'border-color .2s, box-shadow .2s' }}>
               <span aria-hidden="true" style={{ display: 'block', height: 96, background: sceneBackground(sc) }} />
               <span style={{ display: 'block', padding: '11px 13px 12px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -8300,7 +8160,10 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
   const t = teinteScenario(s);
   const nomIntegre = existant && scenario.integre ? NOMS_INTEGRES()[scenario.id] : '';
   const valide = existant ? true : !!(s.nom || '').trim();
-  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600, outline: 'none' };
+  // Sans `outline: none` (23/09, plan M7) : posé en style en ligne, il battait
+  // la règle `:focus-visible` de la feuille et le champ focalisé ne se voyait
+  // plus au clavier. L'anneau d'accent revient, ici comme ailleurs.
+  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 };
   const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
   const note = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' };
   const puce = (on, x) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + x.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + x.rgb + ',.14)' : 'var(--o-s1)', color: on ? x.col : 'var(--o-text1)' });
@@ -8594,8 +8457,6 @@ function voletCovers(S) {
 }
 // Aides propres à une installation (mode d'automatisme, planning des nuits).
 // Absentes ⇒ la vue n'affiche pas les réglages correspondants.
-function voletMode() { const c = loggiaEnt('covers', null); return (c && c.mode) || null; }
-function voletDays() { const c = loggiaEnt('covers', null); return (c && Array.isArray(c.days) && c.days.length) ? c.days : []; }
 
 /* `embarque` : rendu comme SECTION de la vue Climatisation — un intertitre
  * « Volets » à la façon des sections de la vue Appareils, la barre d'actions
@@ -9291,7 +9152,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
         <Anim i={0}><div style={{ position: 'relative', overflow: 'hidden', height: '100%', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
             <div><div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Maison · Temps réel')}</div><div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 25, fontWeight: 500, marginTop: 2 }}>{solarActive ? tr('Production solaire active') : tr('Consommation réseau')}</div></div>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 13px', borderRadius: 999, border: '1px solid ' + (solarActive ? 'rgba(var(--o-ok-rgb),.3)' : 'var(--o-bd2)'), color: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', fontSize: 12, fontWeight: 700, flexShrink: 0 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', animation: 'none' }} /><Shiny on={solarActive}>{solarActive ? 'Solaire actif' : 'Solaire inactif'}</Shiny></span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 13px', borderRadius: 999, border: '1px solid ' + (solarActive ? 'rgba(var(--o-ok-rgb),.3)' : 'var(--o-bd2)'), color: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', fontSize: 12, fontWeight: 700, flexShrink: 0 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', animation: 'none' }} /><Shiny on={solarActive}>{solarActive ? tr('Solaire actif') : tr('Solaire inactif')}</Shiny></span>
           </div>
           <div className="o-en-well" style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 30%,var(--o-well0),var(--o-well2))', border: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10 }}>
             {/* Scène type Helios : arc du jour (géoloc domicile), soleil + irradiance, chips de flux */}
@@ -9301,8 +9162,8 @@ function EnergieContent({ hass, edit = false, onEnt }) {
             </div>
           </div>
           <div className="o-en-kpis" style={{ display: 'flex', gap: 24, marginTop: 16, flexWrap: 'wrap' }}>
-            <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{consoAvail ? <Num v={consoW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />Conso maison</div></div>
-            <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-gold)' }}>{solarAvail ? <Num v={solarW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-gold)' }} />Production</div></div>
+            <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{consoAvail ? <Num v={consoW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />{tr('Conso maison')}</div></div>
+            <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-gold)' }}>{solarAvail ? <Num v={solarW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-gold)' }} />{tr('Production')}</div></div>
             {ecoJour != null && <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-ok)' }}><Num v={ecoJour} d={2} suffix=" €" /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('Économie du jour')}</div></div>}
             <div style={{ marginLeft: 'auto', textAlign: 'right' }}><div style={{ fontSize: 25, fontWeight: 800, color: exporting ? 'var(--o-ok)' : 'var(--o-bad)' }}>{(surplusAvail || consoAvail) ? <Num v={exporting ? surplusW : importW} suffix=" W" /> : '—'}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><FlipText text={exporting ? '↑ ' + tr('Vente réseau') : '↓ ' + tr('Achat réseau')} /></div></div>
           </div>
@@ -9434,7 +9295,7 @@ function ViewEmpty({ vid, reason, onNav }) {
             <Fi i="search-alt" size={19} color="var(--o-text3)" />
           </span>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>Cette vue reste vide</div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Cette vue reste vide')}</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 5, maxWidth: 520, lineHeight: 1.5 }}>
               {reason || 'aucune entité correspondante trouvée'}.
               {' '}Ajoute les appareils concernés dans Home Assistant, ou désigne les entités à utiliser dans Paramètres → Entités. La vue réapparaîtra d'elle-même.
@@ -9465,8 +9326,6 @@ const croqKeys = () => [...Object.values(croqHaids()), ...croqMeals().map(m => m
 // Distributeur : purement configuré. Un distributeur de croquettes piloté par
 // automations n'a pas d'équivalent standard dans Home Assistant, il n'y a donc
 // rien à découvrir — sans configuration, la vue se déclare hors ligne.
-function croqHaids() { const c = loggiaEnt('feeder', null); return (c && c.haids) || {}; }
-function croqMeals() { const c = loggiaEnt('feeder', null); return (c && Array.isArray(c.meals) && c.meals.length) ? c.meals : []; }
 
 function CroquettesContent({ hass }) {
   const S = (hass && hass.states) || null;
@@ -9486,7 +9345,10 @@ function CroquettesContent({ hass }) {
   // Sans lui, le geste ne fait rien plutot que d'appeler un script absent.
   const dispense = (n) => { const sc = (loggiaEnt('feeder', null) || {}).script; if (sc) call('script', 'turn_on', { entity_id: sc, variables: { portions: n } }); };
   const refill = () => { setLevelLocal(100); call('input_number', 'set_value', { entity_id: croqHaids().reservoir, value: croqMax(S) }); };
-  const toggleMeal = (m) => { setMeals(ms => ms.map(x => x.id === m.id ? { ...x, on: !x.on } : x)); call('automation', m.on ? 'turn_off' : 'turn_on', { entity_id: m.auto }); };
+  /* `homeassistant.turn_on/off` et non `automation.*` : ce qui active un repas
+   * est au choix une automatisation ou un `input_boolean` — la démo désigne le
+   * second, et le service du domaine `automation` échouait alors en silence. */
+  const toggleMeal = (m) => { setMeals(ms => ms.map(x => x.id === m.id ? { ...x, on: !x.on } : x)); call('homeassistant', m.on ? 'turn_off' : 'turn_on', { entity_id: m.auto }); };
   const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
   const mealMin = (t) => { const [h, mm] = t.split(':').map(Number); return h * 60 + mm; };
   const upcoming = meals.filter(m => m.on && mealMin(m.time) > nowMin).sort((a, b) => mealMin(a.time) - mealMin(b.time))[0];
@@ -9508,7 +9370,7 @@ function CroquettesContent({ hass }) {
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>Croquettes</h1>
+          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Croquettes')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>
             {upcoming ? 'Prochain repas ' + relTo(upcoming.time) : 'Plus de repas aujourd’hui'}
             {reservoirG != null ? ' · réservoir à ' + level + ' %' : ''}
@@ -9522,8 +9384,8 @@ function CroquettesContent({ hass }) {
       <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
           <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15, whiteSpace: 'nowrap' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>Distribuer</span>
-            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)' }}>hors programme</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Distribuer')}</span>
+            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('hors programme')}</span>
           </span>
           <div style={{ display: 'flex', gap: 4 }}>
             {[1, 2, 3].map(n => (
@@ -9532,16 +9394,16 @@ function CroquettesContent({ hass }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>Ration</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider('Poids d’une portion', portionW, setPortionWeight, { min: 2, max: 30, step: 1, unit: 'g' })}>
-            <button onClick={() => setPortionWeight(portionW - 1)} aria-label="Baisser" style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Ration')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider(tr('Poids d’une portion'), portionW, setPortionWeight, { min: 2, max: 30, step: 1, unit: 'g' })}>
+            <button onClick={() => setPortionWeight(portionW - 1)} aria-label={tr('Baisser')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
             <span style={{ minWidth: 40, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--o-warn)' }}>{Math.round(portionW)} g</span>
-            <button onClick={() => setPortionWeight(portionW + 1)} aria-label="Monter" style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
+            <button onClick={() => setPortionWeight(portionW + 1)} aria-label={tr('Monter')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Réservoir')}</span>
-          <button onClick={refill} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: 'var(--o-s1)', color: 'var(--o-text1)' }}>Marquer rempli</button>
+          <button onClick={refill} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: 'var(--o-s1)', color: 'var(--o-text1)' }}>{tr('Marquer rempli')}</button>
         </div>
         <span style={{ flex: 1 }} />
       </div>
@@ -9555,7 +9417,7 @@ function CroquettesContent({ hass }) {
           const passed = mealMin(m.time) <= nowMin;
           const next = upcoming && upcoming.id === m.id;
           return (
-            <button key={m.id} onClick={() => toggleMeal(m)} title={(m.on ? 'Désactiver' : 'Activer') + ' « ' + m.label + ' »'}
+            <button key={m.id} onClick={() => toggleMeal(m)} title={m.on ? tr('Désactiver {nom}', { nom: m.label }) : tr('Activer {nom}', { nom: m.label })}
               style={{ textAlign: 'left', cursor: 'pointer', padding: '13px 15px', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid ' + (next ? 'rgba(var(--o-warn2-rgb),.5)' : 'var(--o-bd2)'), opacity: m.on ? 1 : .55, transition: 'border-color .2s, opacity .2s' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: m.on ? (next ? 'rgba(var(--o-warn2-rgb),.16)' : 'rgba(var(--o-ok-rgb),.14)') : 'var(--o-s1)' }}><Ico name="paw" size={15} color={m.on ? (next ? 'var(--o-warn2)' : 'var(--o-ok)') : 'var(--o-text3)'} /></span>
@@ -10040,7 +9902,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
             {dense && dom === 'climate' && a.current_temperature != null ? tr('actuel {n}°', { n: a.current_temperature }) : stateTxt}
           </div>
         </div>
-        {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={(on ? 'Éteindre ' : 'Allumer ') + name} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={(e) => { e.stopPropagation(); call('homeassistant', on ? 'turn_off' : 'turn_on'); }} style={{ width: 44, height: 25, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
+        {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={on ? tr('Éteindre {nom}', { nom: name }) : tr('Allumer {nom}', { nom: name })} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={(e) => { e.stopPropagation(); call('homeassistant', on ? 'turn_off' : 'turn_on'); }} style={{ width: 44, height: 25, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
         {runnable && !dead && <button onClick={(e) => { e.stopPropagation(); call(runnable[0], runnable[1]); }} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
         {dom === 'lock' && !dead && <button onClick={(e) => { e.stopPropagation(); call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ padding: '7px 12px', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{s === 'locked' ? 'Déverrouiller' : 'Verrouiller'}</button>}
         {/* Alarme : le geste attendu, comme la serrure — armer quand elle
@@ -10123,8 +9985,10 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
       )}
       {!dense && dom === 'cover' && !dead && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          {[['open_cover', 'angle-up'], ['stop_cover', 'square'], ['close_cover', 'angle-down']].map(([svc, gi]) => (
-            <button key={svc} onClick={(e) => { e.stopPropagation(); call('cover', svc); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={gi} size={14} /></button>
+          {/* Trois flèches nues : sans nom, un lecteur d'écran n'annonçait que
+            * « bouton » trois fois de suite (plan M7). */}
+          {[['open_cover', 'angle-up', tr('Ouvrir')], ['stop_cover', 'square', tr('Stop')], ['close_cover', 'angle-down', tr('Fermer')]].map(([svc, gi, nom]) => (
+            <button key={svc} aria-label={nom} title={nom} onClick={(e) => { e.stopPropagation(); call('cover', svc); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={gi} size={14} /></button>
           ))}
         </div>
       )}
@@ -10758,7 +10622,7 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
             <input type="password" inputMode="numeric" autoFocus value={code} onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') valider(); if (e.key === 'Escape') setDemande(null); }}
               placeholder={tr('Code')} aria-label={tr('Code')}
-              style={{ flex: 1, minWidth: 0, padding: '6px 10px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700, letterSpacing: '.2em', outline: 'none' }} />
+              style={{ flex: 1, minWidth: 0, padding: '6px 10px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700, letterSpacing: '.2em' }} />
             <button onClick={valider} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Valider')}</button>
             <button onClick={() => setDemande(null)} aria-label={tr('Annuler')} style={{ width: 30, height: 30, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>✕</button>
           </div>
@@ -11892,7 +11756,7 @@ function BiblioView() {
         <Item l={tr('Caméra (standard 1×1)')}><CvCamera id="camera.biblio_entree" hass={hb} /></Item>
         {/* La tuile 16/9 de l'Accueil et de la vue Securite : ce n'est pas la
           * meme carte que la 1×1 du catalogue. */}
-        <Item l={tr('Caméra (tuile 16/9)')} w={300} h={169}><CameraTile c={{ label: 'Caméra entrée', tag: 'LIVE · CAMÉRA ENTRÉE', grad: CAMERAS()[0].grad, glow: CAMERAS()[0].glow, sub: tr('Direct'), online: true }} /></Item>
+        <Item l={tr('Caméra (tuile 16/9)')} w={300} h={169}><CameraTile c={{ label: tr('Caméra entrée'), tag: 'LIVE · ' + tr('Caméra entrée').toUpperCase(), grad: CAMERAS()[0].grad, glow: CAMERAS()[0].glow, sub: tr('Direct'), online: true }} /></Item>
         <Item l={tr('Carte personne')}><CvPerson id="person.biblio" hass={hb} /></Item>
         <Item l={tr('Alarme')}><CvAlarm id="alarm_control_panel.biblio" hass={hb} /></Item>
         {/* Arrivee le 16/09 (« je n'ai pas la carte sirene ») : beaucoup de
@@ -12137,6 +12001,11 @@ function CarteAjoutSheet({ hass, onClose, onPose, remplace = null }) {
 }
 
 function CustomView({ cv, hass, edit = false, onSave }) {
+  /* Le nom qu'on LIT d'une carte : son entite nommee, ou le titre d'un
+   * template. La cle (`light.salon`, `graph:sensor.x`) est un identifiant, et
+   * un lecteur d'ecran l'epelait (audit du 23/09). */
+  const nomCarte = (x) => (cvEstTpl(x) ? (x.name || tr('Carte template'))
+    : cvName(hass && hass.states && hass.states[cvId(x)], cvId(x) || cvKey(x)));
   // Mode édition en place : la CARTE ENTIÈRE se saisit et se déplace (ses
   // contrôles sont inertes pendant l'édition), la barre d'outils de la carte
   // porte le changement de dessin, la largeur et le retrait. Tuile
@@ -12259,10 +12128,10 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           {liste.map((x) => {
             const saisie = dragCle === cvKey(x);
             return (
-            /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
-            <div key={cvKey(x)} data-cvk={cvKey(x)} className={cvW(x) === 2 ? 'o-cvw2' : undefined}
-              tabIndex={edit ? 0 : undefined}
-              aria-label={edit ? cvKey(x) + ' · ' + tr('Déplacer avec les flèches') : undefined}
+            /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-static-element-interactions -- même geste que les sections : en édition la carte se saisit et se déplace aux flèches, et porte son nom. */
+            <div key={cvKey(x)} data-cvk={cvKey(x)} className={cvW(x) === 2 ? 'o-cvw2' : undefined} tabIndex={edit ? 0 : undefined}
+              role={edit ? 'button' : undefined}
+              aria-label={edit ? nomCarte(x) + ' · ' + tr('Déplacer avec les flèches') : undefined}
               onKeyDown={edit ? (e) => clavierCv(e, x) : undefined}
               onPointerDown={edit ? (e) => debutDrag(e, x) : undefined}
               onPointerMove={edit ? mouvDrag : undefined}
@@ -12291,7 +12160,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           })}
           {edit && (
             <button onClick={() => setAdding(true)} style={{ minHeight: 88, borderRadius: 'var(--o-radius,18px)', border: '2px dashed rgba(var(--o-accent-rgb),.45)', background: 'rgba(var(--o-accent-rgb),.06)', color: 'var(--o-accent-soft)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 700, fontSize: 13 }}>
-              <span style={{ fontSize: 19, lineHeight: 1 }}>+</span>Ajouter une carte
+              <span style={{ fontSize: 19, lineHeight: 1 }}>+</span>{tr('Ajouter une carte')}
             </button>
           )}
         </div>
@@ -12387,7 +12256,6 @@ const PLANT_ART = {
 };
 // Les capteurs de plante (humidité, conductivité, luminosité) n'ont pas de
 // regroupement standard : sans configuration, il n'y a rien à montrer.
-const plantsCfg = () => { const raw = cfgVal('loggia_plants', null); return (Array.isArray(raw) && raw.length) ? raw.filter(p => p && p.base) : []; };
 /* Les entites a suivre : celles que `plantCapteur` retiendra, pas une liste de
  * suffixes ecrite d'avance. */
 const plantKeys = () => {
@@ -12617,84 +12485,6 @@ function deriveAccueil(hass, cfg, resolved) {
   };
 }
 
-// Modale du code administrateur — gate le basculement vers un profil Admin.
-// Le code n'est PLUS dans le navigateur (18/09) : il est vérifié par le
-// composant (`loggia/pin/verifier`), qui compte les essais ratés et bloque.
-// Un seul code pour la maison, le même sur chaque appareil et chaque accès.
-function PinModal({ hass, onClose, onSuccess }) {
-  const [pin, setPin] = useState('');
-  const [error, setError] = useState(false);
-  const [attente, setAttente] = useState(false);
-  const [bloque, setBloque] = useState(0);   // secondes annoncées par le serveur
-  const [horsLigne, setHorsLigne] = useState(false);
-  const timers = useRef([]);
-  // Le compte à rebours du blocage : on l'affiche, on ne le contourne pas.
-  useEffect(() => {
-    if (!bloque) return undefined;
-    const iv = setInterval(() => setBloque(b => (b > 1 ? b - 1 : 0)), 1000);
-    return () => clearInterval(iv);
-  }, [bloque]);
-  const verifier = async (np) => {
-    const h = hass && typeof hass.callWS === 'function' ? hass : null;
-    if (!h) { setHorsLigne(true); setError(true); timers.current.push(setTimeout(() => { setPin(''); setError(false); }, 900)); return; }
-    setAttente(true);
-    try {
-      const r = await h.callWS({ type: 'loggia/pin/verifier', pin: np });
-      if (r && r.ok) { onSuccess(); return; }
-      setBloque(r && r.bloque ? Number(r.bloque) : 0);
-      setError(true);
-      timers.current.push(setTimeout(() => { setPin(''); setError(false); }, 650));
-    } catch {
-      setHorsLigne(true); setError(true);
-      timers.current.push(setTimeout(() => { setPin(''); setError(false); }, 900));
-    } finally { setAttente(false); }
-  };
-  const partiDuVoile = useRef(false);
-  const boiteRef = useRef(null);
-  useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
-  // Focus dans la boite a l'ouverture, rendu a l'element d'origine ensuite —
-  // sans quoi le clavier reste derriere la modale.
-  useEffect(() => {
-    const avant = document.activeElement;
-    const t = setTimeout(() => { try { const el = boiteRef.current; if (el) (el.querySelector('button, [tabindex="0"]') || el).focus({ preventScroll: true }); } catch {} }, 40);
-    return () => { clearTimeout(t); try { if (avant && avant.focus) avant.focus({ preventScroll: true }); } catch {} };
-  }, []);
-  const padBtn = { height: 52, borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 600, cursor: 'pointer' };
-  const add = (d) => {
-    if (attente || bloque) return;
-    setError(false); setHorsLigne(false);
-    setPin(p => {
-      if (p.length >= 4) return p;
-      const np = p + d;
-      if (np.length === 4) timers.current.push(setTimeout(() => { verifier(np); }, 110));
-      return np;
-    });
-  };
-  return (
-    <div role="presentation"
-      onPointerDown={(e) => { partiDuVoile.current = e.target === e.currentTarget; }}
-      onClick={(e) => { if (e.target === e.currentTarget && partiDuVoile.current) onClose(); }}
-      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.62)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      {/* Une boite de dialogue qui ecoute Echap n'est pas une anomalie. */}
-      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-      <div ref={boiteRef} role="dialog" aria-modal="true" aria-label={tr('Code administrateur')} tabIndex={-1}
-        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}
-        onClick={e => e.stopPropagation()} style={{ width: 296, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 'var(--o-radius,18px)', padding: 24, boxShadow: '0 30px 70px rgba(0,0,0,.6)', animation: error ? 'm-shake .45s' : 'none' }}>
-        <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700 }}>Code administrateur</div>
-        <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--o-text2)', marginTop: 4 }}>{tr('Requis pour ce profil')}</div>
-        {bloque > 0 && <div role="alert" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Trop d’essais. Réessaie dans {n} s.', { n: bloque })}</div>}
-        {horsLigne && <div role="alert" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Home Assistant n’est pas joignable : le code ne peut pas être vérifié.')}</div>}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, margin: '22px 0' }}>{[0, 1, 2, 3].map(i => <span key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: i < pin.length ? (error ? 'var(--o-bad)' : 'var(--o-accent-soft)') : 'transparent', border: `1px solid ${error ? 'var(--o-bad)' : 'var(--o-bd2)'}`, transition: 'background .15s' }} />)}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => <button key={n} onClick={() => add(String(n))} style={padBtn}>{n}</button>)}
-          <span />
-          <button onClick={() => add('0')} style={padBtn}>0</button>
-          <button onClick={() => setPin(p => p.slice(0, -1))} style={{ ...padBtn, fontSize: 15 }}>⌫</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // Barre de navigation du bas — mobile uniquement (masquée en CSS au-dessus de 820px), activable/désactivable.
 /* Le bouton de l'assistant : deux gestes, un seul bouton.
@@ -12919,7 +12709,7 @@ function MobileNav({ view, onNav, onMenu, onAssistant = null, onDictee = null, h
       ); })}
       <button onClick={onMenu} style={cell(false)}>
         <Ico name="menu-burger" size={20} color="var(--o-text2)" />
-        <span>Menu</span>
+        <span>{tr('Menu')}</span>
       </button>
     </nav>
   );
@@ -13846,10 +13636,10 @@ export default function App() {
             + `url("${fondPhotoActif}") center center / cover no-repeat var(--o-bg)` }} />
       )}
       {ficheDemo && <FicheAppareil id={ficheDemo} hass={hass} onClose={() => setFicheDemo(null)} />}
-      {idle && ambient > 0 && plageOk && <AmbientOverlay wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} lightsOn={lightsOn} notifs={notifs}
+      {idle && ambient > 0 && plageOk && <AmbientOverlay scenes={scenariosAccueil(scenarios()).map(s => ({ ...s, nom: nomScenario(s) }))} onScene={(s) => lancerScenario(getHass(), s.id)} wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} lightsOn={lightsOn} notifs={notifs}
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
-      {haLost && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
-      {!haLost && discovery.echec && <div role="alert" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'rgba(239,68,68,.94)', color: '#fff', fontSize: 12, fontWeight: 700, textAlign: 'center', padding: '7px 14px calc(7px + var(--o-safe-top,0px))' }}>{tr('La découverte de la maison a été interrompue — recharge la page')}</div>}
+      {haLost && <div role="alert" style={BANDEAU_ALERTE}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
+      {!haLost && discovery.echec && <div role="alert" style={BANDEAU_ALERTE}>{tr('La découverte de la maison a été interrompue — recharge la page')}</div>}
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 14, padding: '10px 16px', fontSize: 12, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
       <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={peutEditer ? () => setEditMode(e => !e) : null} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={(() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));

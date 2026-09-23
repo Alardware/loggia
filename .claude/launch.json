@@ -4,9 +4,26 @@
     {
       "name": "loggia-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "url": "http://localhost:5173",
       "port": 5173
+    },
+    {
+      "name": "loggia-dev-5174",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
+      "url": "http://localhost:5174",
+      "port": 5174
     }
   ]
 }

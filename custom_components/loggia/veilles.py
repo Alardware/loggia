@@ -230,9 +230,10 @@ class LoggiaVeilles:
             if au_dessus(valeur, c.get("seuil", 1200), deja):
                 if not deja:
                     self.signales.add(cle)
-                    motif = "%d ppm" % int(valeur)
+                    motif = ("{v} ppm", {"v": int(valeur)})
                     await self._async_prevenir(
-                        "co2", "%s : %d ppm, il faut aerer" % (self._nom(haid, etats), int(valeur)),
+                        "co2", ("{nom} : {v} ppm, il faut aerer",
+                                {"nom": self._nom(haid, etats), "v": int(valeur)}),
                         motif=motif)
                     ventilation = c.get("ventilation") or []
                     if ventilation:
@@ -255,8 +256,8 @@ class LoggiaVeilles:
                 if not deja:
                     self.signales.add(cle)
                     await self._async_prevenir(
-                        "batterie", "%s : pile a %d %%" % (self._nom(haid, etats), int(valeur)),
-                        motif="%d %%" % int(valeur))
+                        "batterie", ("{nom} : pile a {v} %", {"nom": self._nom(haid, etats), "v": int(valeur)}),
+                        motif=("{v} %", {"v": int(valeur)}))
             elif deja:
                 # Pile changee : on redevient capable de prevenir.
                 self.signales.discard(cle)
@@ -278,7 +279,8 @@ class LoggiaVeilles:
                     unite = str((getattr(st, "attributes", None) or {}).get("unit_of_measurement") or "").strip()
                     reste = ("%g %s" % (valeur, unite)).strip()
                     await self._async_prevenir(
-                        "consommables", "%s : %s restant, a remplacer" % (self._nom(haid, {haid: st}), reste),
+                        "consommables", ("{nom} : {reste} restant, a remplacer",
+                                         {"nom": self._nom(haid, {haid: st}), "reste": reste}),
                         motif=reste)
             elif deja:
                 # Remplace : on redevient capable de prevenir.
@@ -300,7 +302,7 @@ class LoggiaVeilles:
         if dedans and not self.creuses_en_cours:
             self.creuses_en_cours = True
             await self._async_prevenir(
-                "creuses", "Heures creuses : c'est le moment de lancer les machines",
+                "creuses", "Heures creuses : c’est le moment de lancer les machines",
                 motif=attendu)
             prises = c.get("prises") or []
             if prises:
@@ -360,6 +362,26 @@ class LoggiaVeilles:
         for section, valeurs in (patch or {}).items():
             if section in cfg and isinstance(valeurs, dict):
                 cfg[section].update(valeurs)
+        # Les seuils se bornent ICI, pas seulement dans le navigateur (audit du
+        # 23/09) : l'ecran clampait, l'API non. Un seuil illisible ou negatif
+        # passait, et la veille devenait muette pour toujours sans rien dire.
+        # Meme regime que les tentatives des volets.
+        #
+        # Le consommable n'a PAS de borne haute : son seuil est dans l'unite du
+        # capteur, et un reservoir se compte en millilitres autant qu'un filtre
+        # en pour-cent. On refuse seulement ce qui n'est pas un nombre positif.
+        for section, mini, maxi in (("batterie", 1, 100), ("co2", 400, 5000), ("consommables", 1, None)):
+            s = cfg.get(section)
+            if not isinstance(s, dict) or "seuil" not in s:
+                continue
+            try:
+                v = float(s["seuil"])
+                if v != v or v in (float("inf"), float("-inf")):
+                    raise ValueError(s["seuil"])
+                v = max(mini, v if maxi is None else min(maxi, v))
+                s["seuil"] = int(v) if float(v).is_integer() else v
+            except (TypeError, ValueError):
+                s["seuil"] = DEFAUT[section]["seuil"]
         await self.store.async_set_shared(CLE, cfg)
         self.cfg = cfg
         await self._async_reabonner()

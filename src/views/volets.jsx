@@ -14,6 +14,7 @@ import {
 import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt, majuscule } from './parcommun.jsx';
 import { tr } from '../i18n.js';
+import { mot, pourquoi } from '../journalmots.js';
 
 /* `champ` et `Nombre` vivent ici, et non dans le composant.
  *
@@ -472,7 +473,7 @@ export function VoletsReglages({ hass, cardSt }) {
                 {/* La ligne rouge : un ordre qui n'a pas abouti (ADR 0007). */}
                 <span style={j.echec ? { color: 'var(--o-bad)' } : undefined}>
                   {j.simule && <span style={{ marginRight: 6, padding: '1px 6px', borderRadius: 6, fontSize: 10.5, fontWeight: 800, background: 'var(--o-s2)', color: 'var(--o-warn2)' }}>{tr('simulé')}</span>}
-                  {majuscule(j.quoi)} · <span style={{ color: j.echec ? 'var(--o-bad)' : 'var(--o-text2)' }}>{j.regle}{j.motif ? ' · ' + j.motif : ''}{j.detail ? ' · ' + j.detail : ''}</span>
+                  {majuscule(mot(j, 'quoi'))} · <span style={{ color: j.echec ? 'var(--o-bad)' : 'var(--o-text2)' }}>{pourquoi(j)}</span>
                 </span>
                 <span style={{ ...MONO, fontSize: 11.5, color: 'var(--o-text3)', flexShrink: 0 }}>{quandCourt(j.ts)}</span>
               </div>

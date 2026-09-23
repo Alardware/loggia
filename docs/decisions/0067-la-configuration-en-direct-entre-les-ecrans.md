@@ -20,9 +20,14 @@ un événement de bus finit dans l'enregistreur.
 ## Décision
 
 - **Le magasin signale ce qui change** (`store.py`, `_signaler`) : après
-  chaque écriture, le compte et les clés qui ont VRAIMENT changé, séparées en
-  personnelles et communes — jamais les valeurs. Par le répartiteur interne
-  de Home Assistant (`async_dispatcher_send`), pas par le bus.
+  chaque écriture VENUE D'UN ÉCRAN, le compte et les clés qui ont VRAIMENT
+  changé, séparées en personnelles et communes — jamais les valeurs. Par le
+  répartiteur interne de Home Assistant (`async_dispatcher_send`), pas par le
+  bus. Une écriture de module (`async_set_shared` — la table d'un minuteur, le
+  gel d'une règle) ne signale rien : ce que les modules écrivent, les écrans
+  l'apprennent déjà par l'état des entités. Cette décision ne porte donc que
+  sur la configuration qu'un écran vient de changer, pas sur tout ce que le
+  magasin garde.
 - **Un flux ouvert à tout compte** (`loggia/config/suivre`) : l'écran
   s'abonne une fois ; il reçoit les signaux tant qu'il vit. Il n'y transite
   que des noms de clés.

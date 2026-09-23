@@ -8,7 +8,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
+   * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
+   * adresse — on relit donc le monolithe ET ce qui en est sorti. */
+const src = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx'].map(f => readFileSync(join(RACINE, 'src', f), 'utf8')).join(String.fromCharCode(10));
 const ui = readFileSync(join(RACINE, 'src', 'ui.jsx'), 'utf8');
 const views = readFileSync(join(RACINE, 'src', 'views.js'), 'utf8');
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
@@ -38,6 +41,6 @@ test('la banniere : pas de vignette meteo, les avatars sur la ligne du nom', () 
   const ligne = bloc('              <div className="o-greet-ligne"', '              {/* Le resume est un ITEM');
   assert.ok(ligne.includes('<span className="o-greet-name"') && ligne.includes('<div className="o-avatars" style={{ display: \'flex\', gap: 8, flexShrink: 0 }}>') && ligne.includes('{avatars.map((u, i) => {'), 'le nom et les avatars sur la meme ligne');
   assert.ok(ligne.includes("alignItems: 'center', justifyContent: 'space-between'"), 'alignes au centre, le nom a gauche, les avatars a droite');
-  assert.ok(ligne.includes("whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userName}</span>"), 'un nom long se coupe, il ne pousse pas les avatars');
+  assert.ok(ligne.includes("whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nomProfil(userName)}</span>"), 'un nom long se coupe, il ne pousse pas les avatars');
   assert.ok(!css.includes('.o-banner-wx') && !css.includes('.o-banner-row { flex-wrap: wrap !important; }'), 'plus de media qui renvoie les avatars sous le texte');
 });

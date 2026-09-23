@@ -71,8 +71,11 @@ export const cl_hexRgb = (c) => HX_TOKENS[c] ? `var(${HX_TOKENS[c]})` : (typeof 
 export const HIDDEN_VIEWS = () => [
   { label: tr('Lumières'), vid: 'lumieres', icon: 'bulb', c: 'var(--o-lampe)' },
   { label: tr('Climat'), vid: 'climat', icon: 'thermometer-half', c: 'var(--o-orange)' },
-  /* Volets a quitté la liste le 30/08/2026 : l'Ouverture vit DANS la vue
-   * Climatisation (ClimatView rend VoletsContent). La route reste. */
+  /* Volets a quitté la liste le 30/08/2026. Le motif d'alors — « l'Ouverture
+   * vit dans la vue Climatisation » — n'a plus cours : `ClimatView` n'existe
+   * plus, « Climat » ouvre la vue Objets filtrée sur le chauffage, et les
+   * volets ont de nouveau leur vue à eux (`VoletsView`). Elle reste hors de
+   * cette liste, mais la route et les cartes d'Objets y mènent. */
   /* Aspirateur et Croquettes ont quitté la liste le 30/08/2026 : la FICHE
    * APPAREIL UNIVERSELLE (tap sur la carte, vue Objets) montre tout ce que
    * l'appareil expose — la vue dédiée ne racontait rien de plus. Les routes
@@ -494,6 +497,11 @@ function usePanneau(ouvert, ancreRef, panneauRef) {
 const cadrePanneau = (pos) => ({ position: 'fixed', left: pos.left, top: pos.dessous ? pos.top : undefined, bottom: pos.dessous ? undefined : pos.bottom, zIndex: 9000, width: pos.w, height: pos.h, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', padding: 6, borderRadius: 14, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: '0 18px 44px rgba(0,0,0,.4)' });
 
 // La zone qui défile : toute la hauteur que le filtre laisse.
+/* `outline: none` assumé, et le seul qui reste (plan M7) : cette zone ne reçoit
+ * le focus que par programme (`tabIndex={-1}`), pour que les flèches y marchent.
+ * Ce qui doit se voir, c'est l'OPTION visée — elle porte son liseré, et
+ * `aria-activedescendant` l'annonce. Un anneau autour de la liste entière
+ * désignerait la mauvaise chose. */
 const ZONE_LISTE = { flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', outline: 'none' };
 
 /* Les options : groupes en capitales, coche du choix, identifiant en petit
@@ -648,7 +656,7 @@ export function ListeChoix({ value, options, onChange, label, style = null, chil
               <input ref={champRef} type="text" value={filtre} onChange={(e) => { setFiltre(e.target.value); setActif(0); }} onKeyDown={surTouche}
                 role="combobox" aria-expanded="true" aria-controls={base + '-l'} aria-autocomplete="list" aria-activedescendant={vise}
                 aria-label={tr('Rechercher…')} placeholder={tr('Rechercher…')} autoComplete="off" spellCheck={false}
-                style={{ flex: 1, minWidth: 0, padding: 0, border: 'none', outline: 'none', background: 'transparent', color: 'var(--o-text)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600 }} />
+                style={{ flex: 1, minWidth: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--o-text)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600 }} />
             </span>
           )}
           <div ref={listeRef} id={base + '-l'} role="listbox" tabIndex={-1} aria-label={label} aria-activedescendant={vise} onKeyDown={surTouche} style={ZONE_LISTE}>

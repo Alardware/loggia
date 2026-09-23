@@ -26,6 +26,7 @@ import {
   interfaceReseau, debitLisible, baseDeDonnees, etatCloud, journalSysteme, alertesSysteme, nomCarte, dureeLisible,
   depuisDemarrage, dureeCapteur, enOctets, tailleLisible, paireTailles, nombre,
 } from '../systeme.js';
+import { CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE } from '../styles.js';
 
 /* Le gabarit des cartes de la maison, repris de `RM_CARD` (App.jsx) : l'icone
  * en haut a gauche, la metrique ou la bascule en haut a droite, le titre SOUS
@@ -33,10 +34,12 @@ import {
  * morceau a part : elle ne peut pas importer le monolithe, elle en recopie les
  * valeurs — tests/systeme_hoas.test.mjs verifie qu'elles restent les memes. */
 const SYS_FOND = 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
-const SYS_CARTE = { display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 172, padding: 16, borderRadius: 'var(--o-radius,18px)', background: SYS_FOND, border: 'none', boxShadow: 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))', boxSizing: 'border-box', minWidth: 0 };
-const SYS_ICO = (rgb, col) => ({ width: 38, height: 38, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(' + rgb + ',.16)', color: col });
-const SYS_NOM = { fontSize: 14, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
-const SYS_SOUS = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+// Le gabarit vient de `styles.js` (plan M1) : la vue en tenait une copie,
+// qu'un test comparait morceau par morceau. Elle garde sa boite bornee.
+const SYS_CARTE = { ...CARTE_MAISON, boxSizing: 'border-box', minWidth: 0 };
+const SYS_ICO = (rgb, col) => ({ ...ICONE_CARTE, background: 'rgba(' + rgb + ',.16)', color: col });
+const SYS_NOM = NOM_CARTE;
+const SYS_SOUS = SOUS_CARTE;
 const SYS_PANNEAU = { background: SYS_FOND, border: 'none', borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', minWidth: 0 };
 const SYS_BADGE = (rgb, col) => ({ flexShrink: 0, padding: '4px 9px', borderRadius: 9, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(' + rgb + ',.14)', color: col });
 const COULEUR_NIVEAU = { warn: 'var(--o-warn2)', bad: 'var(--o-bad)' };

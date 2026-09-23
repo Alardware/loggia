@@ -150,11 +150,11 @@ test('les moteurs sont indépendants de React et du navigateur', () => {
 });
 
 test('le paquet livre ne traine pas les bundles des compilations passees', () => {
-  // Vite compile avec `emptyOutDir: false` : chaque compilation depose de
-  // nouveaux bundles au hash different, et rien ne reprend les anciens. La
-  // retenue de `pack_frontend.py` ne portait que sur la famille `index-*` ;
-  // toutes les autres — boot, meteo, parametres, vacplan, wx3d, Onboarding, en,
-  // demo — s'empilaient sans fin.
+  // Chaque compilation depose des bundles au hash different. La retenue de
+  // `pack_frontend.py` ne portait que sur la famille `index-*` ; toutes les
+  // autres — boot, meteo, parametres, vacplan, wx3d, Onboarding, en, demo —
+  // s'empilaient sans fin. (`dist` est vide a chaque build depuis le 23/09 ;
+  // la retenue, elle, vit toujours dans le paquet.)
   //
   // Mesure du 06/09 avant correction : 1 302 fichiers pour 158 Mo, dont 215
   // copies de `meteo-*` et 185 de `boot-*`. Tout cela partait chez chaque
@@ -175,11 +175,16 @@ test('le paquet livre ne traine pas les bundles des compilations passees', () =>
     const famille = base.slice(0, base.lastIndexOf('-')) + ext;
     parFamille[famille] = (parFamille[famille] || 0) + 1;
   }
-  // `GARDE = 3` dans pack_frontend.py, plus le bundle du jour : quatre au plus.
-  // Les caches iOS reclament parfois l'ancien fichier, d'ou cette marge.
-  const trop = Object.entries(parFamille).filter(([, n]) => n > 4);
+  /* La borne est `GARDE` de pack_frontend.py, lue ici meme : le chiffre est
+   * passe de 3 a 2 le 23/09 (plan, point M2) et ce test le suivra sans qu'on y
+   * pense. `retenir()` compte les proteges dans le quota, donc une famille ne
+   * depasse jamais `GARDE` — le bundle du jour est l'un des deux. */
+  const pack = readFileSync(join(RACINE, 'scripts', 'pack_frontend.py'), 'utf8');
+  const garde = Number((pack.match(/^GARDE\s*=\s*(\d+)/m) || [])[1]);
+  assert.ok(garde >= 1 && garde <= 3, 'GARDE illisible ou hors de propos dans pack_frontend.py');
+  const trop = Object.entries(parFamille).filter(([, n]) => n > garde);
   assert.deepEqual(trop, [],
-    'des familles de bundles s’accumulent dans le paquet livré : ' +
+    `des familles de bundles s’accumulent dans le paquet livré (GARDE = ${garde}) : ` +
     trop.map(([f, n]) => `${f} (${n} copies)`).join(', '));
 });
 

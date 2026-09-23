@@ -300,7 +300,7 @@ class LoggiaNuit:
         self.regles.degeler(haid)
         await self._async_service("light", "turn_off", [haid], data,
                                   regle="veilleuse", quoi="eteindre",
-                                  motif="%d min" % duree, priorite=PRIORITES["veilleuse"])
+                                  motif=("{n} min", {"n": duree}), priorite=PRIORITES["veilleuse"])
 
     # ── L'eclairage nocturne ───────────────────────────────────────────────
     @callback
@@ -343,7 +343,7 @@ class LoggiaNuit:
         partis = await self._async_service("light", "turn_on", cibles,
                                            {"brightness_pct": luminosite},
                                            regle="eclairage", quoi="allumer",
-                                           motif="mouvement : %s" % piece,
+                                           motif=("mouvement : {piece}", {"piece": piece}),
                                            priorite=PRIORITES["eclairage"])
         if partis:
             self.allumees[piece] = sorted(set(self.allumees.get(piece, [])) | set(partis))
@@ -396,7 +396,7 @@ class LoggiaNuit:
             duree = 3
         await self._async_service("light", "turn_off", cibles, None,
                                   regle="eclairage", quoi="eteindre",
-                                  motif="%d min sans mouvement" % duree,
+                                  motif=("{n} min sans mouvement", {"n": duree}),
                                   priorite=PRIORITES["eclairage"])
 
     # ── Les lampes oubliees ────────────────────────────────────────────────
@@ -417,8 +417,15 @@ class LoggiaNuit:
         # suivi — on n'eteint pas tout sur sa tete. L'interrupteur est celui
         # designe dans la regle de presence ; le journal dit que le coucher a
         # ete retenu, pour qu'on ne cherche pas pourquoi rien n'a bouge.
+        #
+        # SEULEMENT si la regle de presence tourne. Eteinte, elle n'arme plus
+        # la coupure automatique des trente minutes — personne ne rendrait
+        # donc la main, et le coucher serait retenu pour toujours sans que rien
+        # ne le dise. Le mode invite est une piece de cette regle, pas un
+        # interrupteur independant (audit du 23/09).
         presence = await self.store.async_get_shared(CLE_PRESENCE, None)
-        invite = ((presence or {}).get("invite") or {}).get("entite") if isinstance(presence, dict) else None
+        presence = presence if isinstance(presence, dict) else {}
+        invite = ((presence.get("invite") or {}).get("entite")) if presence.get("actif") else None
         if invite and invite_present(self.hass.states, invite):
             await self.regles.noter("nuit", "coucher", "retenir", n=0, motif="mode invite")
             return

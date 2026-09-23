@@ -112,8 +112,11 @@ sont masquées, avec le motif.
   laissé.
 - **Chip « n allumées »** dans l'en-tête, visible de partout ; un clic ouvre
   la vue Lumières.
-- **Français et anglais** — les états et commandes viennent de Home Assistant
-  dans toutes ses langues ; changer de langue est immédiat, sans rechargement.
+- **Sept langues** — français, anglais, allemand, néerlandais, italien,
+  espagnol, polonais : l'interface, le journal et les alertes envoyées au
+  téléphone.
+  Les états et commandes viennent de Home Assistant dans toutes ses langues ;
+  changer de langue est immédiat, sans rechargement.
 
 ## Vues personnalisées et cartes template
 
@@ -193,10 +196,15 @@ seuils que la barre de confort des pièces.
   aux administrateurs** (`require_admin`, sur les douze commandes WebSocket
   concernées — un test verrouille la liste). L'identité vient de la
   connexion authentifiée, jamais d'un champ envoyé par le navigateur.
-- Les automatisations n'appellent que des services **écrits en dur** dans le
-  composant (`cover.open_cover`, `climate.set_hvac_mode`…) : seule la cible
-  est configurable. Seuls les boutons sans fil font exception, et leur
-  affectation demande d'être administrateur.
+- Les règles n'appellent que des services **écrits en dur** dans le composant
+  (`cover.open_cover`, `climate.set_hvac_mode`…) : vous en choisissez la cible,
+  jamais le service. Trois exceptions, toutes explicites :
+  - un **bouton sans fil** appelle le service de son affectation — c'est là
+    tout son intérêt, et affecter demande d'être administrateur ;
+  - une **notification** part vers le service `notify.…` que vous avez désigné
+    dans Alertes ;
+  - un **robot** est commandé d'après sa plateforme, lue au registre de Home
+    Assistant, parce que les aspirateurs ne parlent pas tous la même langue.
 - Le jeton d'accès Home Assistant n'est lu que **pour les images** : les
   instantanés et le flux d'une caméra, la carte d'un robot aspirateur,
   auprès du proxy d'images de Home Assistant. Il n'est ni stocké, ni envoyé
@@ -226,7 +234,7 @@ compilé par l'esbuild de Vite, le HTML statique de React).
 
 La démo (`?demo` sur le serveur de développement) accepte des paramètres
 d'aperçu, pour vérifier une traduction, un thème ou une vue d'un seul
-chargement : `mode=auto|light|dark`, `lang=fr|en`, `theme=<nom du thème>`
+chargement : `mode=auto|light|dark`, `lang=<le code d'une des sept langues>`, `theme=<nom du thème>`
 (c'est par lui que l'audit de contraste rejoue chaque variante), `vue=<identifiant>` ou `vue=room:<pièce>`,
 `fiche=<entity_id>` (ouvre la fiche d'un appareil).
 

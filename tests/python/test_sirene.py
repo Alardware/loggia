@@ -185,8 +185,12 @@ def test_une_sirene_qui_gere_la_duree_est_eteinte_par_home_assistant(creer, rdv)
     m = creer({"siren.a": FauxEtat("off", {"supported_features": 16})})
     etat = lancer(m.async_tester("siren.a", par="u1"))
     assert m.hass.services.appels == [("siren", "turn_on", {"entity_id": ["siren.a"], "duration": 3}, "u1")]
-    assert rdv_du_module(rdv) == [] and m._rdv == {}, "rien a tenir : la sirene s'eteint elle-meme"
-    assert m.table == {}
+    # Un rendez-vous est arme ici AUSSI (audit du 23/09) : sans entree dans la
+    # table, un second appui pendant notre propre test etait refuse comme si la
+    # sirene sonnait pour de vrai. A l'echeance elle est deja eteinte, et
+    # `_async_eteindre` se contente de nettoyer.
+    assert len(rdv_du_module(rdv)) == 1 and set(m._rdv) == {"siren.a"}
+    assert set(m.table) == {"siren.a"}
     assert etat["duree"] == 3
     assert journal(m) == [("sonner", "test sonore de 3 s (duree geree par la sirene)", ["siren.a"])]
 
@@ -264,3 +268,29 @@ def test_le_composant_cree_le_module_et_ouvre_sa_commande():
     assert "require_admin" not in ws[i - 300:i]
     # ... mais sur ce qu'il a le droit de PILOTER, et c'est lui qui teste.
     assert "await sirene.async_tester(msg[\"entity_id\"], par=connection.user.id," in ws
+
+
+def test_reappuyer_pendant_le_test_d_une_sirene_a_duree_repart_de_zero(creer, rdv):
+    """La garde « elle sonne deja » ne doit viser QUE ce qui ne vient pas de
+    nous. Une sirene qui gere sa duree n'entrait pas dans la table : le second
+    appui etait refuse, et la carte disait « Le test n'a pas pu partir »."""
+    m = creer({"siren.a": FauxEtat("off", {"supported_features": 16})})
+    lancer(m.async_tester("siren.a", par="u1"))
+    m.hass.states.table["siren.a"] = FauxEtat("on", {"supported_features": 16})
+    lancer(m.async_tester("siren.a", par="u1"))
+    assert len(m.hass.services.appels) == 2, "le second appui doit repartir"
+    assert len(rdv_du_module(rdv)) == 1, "un seul rendez-vous : le precedent est desarme"
+
+
+def test_a_l_echeance_une_sirene_deja_eteinte_ne_recoit_rien(creer, rdv):
+    """Elle s'est arretee seule : on nettoie la table, on ne commande rien, et
+    on n'ecrit pas une extinction qui n'a pas eu lieu."""
+    m = creer({"siren.a": FauxEtat("off", {"supported_features": 16})})
+    lancer(m.async_tester("siren.a"))
+    m.hass.services.appels.clear()
+    _, rappel = rdv_du_module(rdv)[0]
+    rappel(None)
+    lancer(m.hass.taches.pop())
+    assert m.hass.services.appels == [], "la sirene etait deja eteinte"
+    assert m.table == {}, "la table est nettoyee"
+    assert [j for j in journal(m) if j[0] == "eteindre"] == []

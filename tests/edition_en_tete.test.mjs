@@ -95,7 +95,11 @@ test('chaque liste d’entites garde une fiche ; la meteo entre dans celle de l�
   const parVue = {};
   for (const m of t.matchAll(/^\s*([a-z]+): \[([^\]]*)\],/gm)) parVue[m[1]] = [...m[2].matchAll(/'([a-z]+)'/g)].map(x => x[1]);
   assert.deepEqual(parVue.accueil, ['rooms', 'weather', 'energy', 'people', 'cams'], 'la meteo : « la seule que je ne peux pas modifier encore »');
-  assert.deepEqual(parVue.objets, ['switches', 'medias', 'climate'], 'la vue Objets recoit ce que seul l’onglet portait');
+  /* Le distributeur de croquettes a rejoint Objets le 23/09 (plan, S1) : sa
+   * carte et sa fiche y vivent, et AUCUN ecran n'ecrivait `loggia_feeder` — il
+   * ne sortait que de la demonstration, pendant que le README promettait qu'on
+   * le designe « sur la page concernee ». */
+  assert.deepEqual(parVue.objets, ['switches', 'medias', 'climate', 'feeder'], 'la vue Objets recoit ce que seul l’onglet portait');
   assert.ok(!('meteo' in parVue), 'la vue Meteo n’existe plus : sa cle non plus');
   // Toute section dessinee par le formulaire est joignable depuis une vue.
   const sections = new Set([...bloc(par, 'function EntSections(', NL + '}').matchAll(/has\('([a-z]+)'\)/g)].map(m => m[1]));

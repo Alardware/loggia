@@ -384,14 +384,19 @@ test('ce qui demande un regard : rare — une mise a jour en attente n’en fait
   assert.deepEqual(alertesSysteme({}), [], 'sans mesure, rien a signaler');
 });
 
-test('la vue : le gabarit des cartes de la maison, recopie a l’identique', () => {
-  const rm = ligneDe(app, 'const RM_CARD = {');
-  const sys = ligneDe(vue, 'const SYS_CARTE = {');
-  for (const morceau of ["display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 172, padding: 16, borderRadius: 'var(--o-radius,18px)'", "border: 'none'", "boxShadow: 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))'"]) {
-    assert.ok(rm.includes(morceau) && sys.includes(morceau), morceau);
+test('la vue : le gabarit des cartes de la maison, partage et non recopie', () => {
+  /* Il l'etait, recopie — et ce test comparait les deux copies morceau par
+   * morceau pour qu'elles ne derivent pas. Le gabarit vit dans `styles.js`
+   * depuis le 23/09 (plan M1) : il n'y a plus qu'a verifier que les deux le
+   * prennent la, et que chacune garde SA difference, a decouvert. */
+  const styles = readFileSync(join(RACINE, 'src', 'styles.js'), 'utf8');
+  for (const morceau of ["display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 172, padding: 16, borderRadius: 'var(--o-radius,18px)'", "border: 'none'", "boxShadow: 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))'", "background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))'"]) {
+    assert.ok(styles.includes(morceau), 'le gabarit commun a perdu : ' + morceau);
   }
-  assert.ok(rm.includes("background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))'") && vue.includes("const SYS_FOND = 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';"), 'le meme fond');
-  assert.ok(vue.includes('const SYS_ICO = (rgb, col) => ({ width: 38, height: 38, borderRadius: 14,') && app.includes('const RM_ICO = (bg, col) => ({ width: 38, height: 38, borderRadius: 14,'), 'la meme boite d’icone');
+  assert.ok(app.includes('const RM_CARD = { ...CARTE_MAISON, transition:'), 'l’Accueil ne part plus du gabarit commun');
+  assert.ok(vue.includes('const SYS_CARTE = { ...CARTE_MAISON, boxSizing:'), 'la vue ne part plus du gabarit commun');
+  assert.ok(styles.includes('export const ICONE_CARTE = { width: 38, height: 38, borderRadius: 14,'), 'la boite d’icone commune');
+  assert.ok(vue.includes('const SYS_ICO = (rgb, col) => ({ ...ICONE_CARTE,') && app.includes('const RM_ICO = (bg, col) => ({ ...ICONE_CARTE,'), 'la meme boite d’icone');
   const tuile = vue.slice(vue.indexOf('function TuileMesure('), vue.indexOf('function PanneauCharge('));
   assert.ok(tuile.indexOf('className="sys-mesure-ico"') < tuile.indexOf('className="sys-mesure-val"') && tuile.indexOf('className="sys-mesure-val"') < tuile.indexOf('className="sys-mesure-titre"'), 'l’icone a gauche, le chiffre a droite, le titre DESSOUS');
   assert.ok(tuile.includes('{t.sous || ESPACE}'), 'la ligne de detail est reservee : les titres s’alignent');

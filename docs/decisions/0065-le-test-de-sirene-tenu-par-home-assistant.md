@@ -50,6 +50,17 @@ cause).
   au démarrage. Avant, le bouton répond « Le test n'a pas pu partir. ».
 - La démo simule le composant : la sirène de la démo ne gère pas la durée,
   c'est le cas tenu par le serveur qu'on y voit.
-- Plus aucun `setTimeout` de `src/` ne commande la maison.
+- Plus aucun `setTimeout` de `src/` ne commande un appareil. Ceux qui restent
+  règlent un affichage — un état optimiste qui retombe, une écriture de
+  configuration groupée — ou simulent le serveur dans `demo.js`, où il n'y a
+  pas de maison à commander.
 
-Tests : tests/python/test_sirene.py (12), tests/securite_trois_cartes.test.mjs.
+Tests : tests/python/test_sirene.py (15), tests/securite_trois_cartes.test.mjs.
+
+*Repris le 23/09* : la table ne gardait le test que lorsque Loggia comptait
+lui-même la durée. Une sirène qui gère la sienne n'y entrait pas, et la garde
+« elle sonne déjà, ce n'est pas nous » refusait alors un second appui pendant
+notre propre test — l'inverse de ce que cette décision promet. Le test s'écrit
+désormais dans la table dans les deux cas, et le rendez-vous est armé de même :
+à l'échéance, la sirène est trouvée déjà éteinte, la table se nettoie sans
+qu'aucune commande ne parte.

@@ -115,7 +115,10 @@ test('ce que la fiche envoie : le scenario sans ce qu’il a calcule', () => {
 });
 
 // ── Ce qu'App.jsx en fait (assertions sur les sources) ──────────────────────
-const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
+   * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
+   * adresse — on relit donc le monolithe ET ce qui en est sorti. */
+const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx'].map(f => readFileSync(join(RACINE, 'src', f), 'utf8')).join(String.fromCharCode(10));
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = app.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = app.indexOf(fin, d + 1); return app.slice(d, f < 0 ? undefined : f); };
 
@@ -170,7 +173,12 @@ test('la vue Scenarios : cartes standard, edition avec fleches et crayon, la bib
 });
 
 test('la veille et la recherche passent aux scenarios ; les liens sont sondes avec l’Accueil', () => {
-  assert.ok(app.includes("{scenariosAccueil(scenarios()).slice(0, 4).map(s => ("), 'la veille : quatre scénarios de l’Accueil');
+  /* La veille les reçoit en PROPS depuis le 23/09 (plan M1) : sortie
+   * d'App.jsx, elle ne connaît plus le magasin des scénarios ni la commande —
+   * on lui passe la liste de l'Accueil et de quoi en lancer un. */
+  assert.ok(app.includes("<AmbientOverlay scenes={scenariosAccueil(scenarios()).map(s => ({ ...s, nom: nomScenario(s) }))} onScene={(s) => lancerScenario(getHass(), s.id)}"),
+    'la veille : quatre scénarios de l’Accueil');
+  assert.ok(app.includes('{scenes.slice(0, 4).map(s => ('), 'la veille n’en montre plus quatre');
   assert.ok(app.includes("scenarios().forEach(s => { const nom = nomScenario(s); if (!match(nom)) return; results.push({ group: tr('Scénarios'),"), 'la recherche ⌘K');
   assert.ok(app.includes("const qsKeys = () => scenarios().map(s => s.lien).filter(Boolean);"), 'les scènes et scripts liés sont sondés');
   assert.ok(app.includes("{ label: 'Scénarios', svg: <Fi i=\"sparkles\"") && app.includes("'Scénarios': 'scenes',"), '« Scènes » est devenue « Scénarios », l’identifiant reste');

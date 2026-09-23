@@ -34,7 +34,9 @@ test('la barre des ambiances et ses quatre groupes portent leurs classes', () =>
   assert.ok(APP.includes("<div className={'o-qb' + (className ? ' ' + className : '')} "));
   assert.ok(APP.includes('<span className="o-qb-lbl" '), 'le libellé d’un groupe ne peut plus s’effacer au téléphone');
   assert.ok(SCENES.includes('<div className="o-bar o-bar-scenes" '), 'la barre a perdu sa classe : au téléphone, elle glisserait de nouveau');
-  const groupes = [['label="Direct"', 'o-qb-direct'], ["label={tr('Pièce')}", 'o-qb-piece'], ['label="Collection"', 'o-qb-collection'], ["label={tr('Luminosité')}", 'o-qb-lumi']];
+  // Les quatre libellés passent par `tr` depuis le 23/09 : « Direct » et
+  // « Collection » restaient en français dans les sept langues.
+  const groupes = [["label={tr('Direct')}", 'o-qb-direct'], ["label={tr('Pièce')}", 'o-qb-piece'], ["label={tr('Collection')}", 'o-qb-collection'], ["label={tr('Luminosité')}", 'o-qb-lumi']];
   for (const [libelle, classe] of groupes) {
     assert.ok(SCENES.includes('<QuickBox ' + libelle + ' className="' + classe + '">'), libelle + ' a perdu sa classe');
   }
@@ -42,8 +44,8 @@ test('la barre des ambiances et ses quatre groupes portent leurs classes', () =>
 
 test('les gestes directs : le mot à l’ordinateur, l’icône au téléphone, un nom toujours', () => {
   // Au téléphone, le mot s'efface : sans aria-label, le bouton n'aurait plus de nom.
-  assert.ok(SCENES.includes('<button onClick={warmWhite} aria-label="Blanc chaud" style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="bulb" '));
-  assert.ok(SCENES.includes('<span className="o-qb-txt">Blanc chaud</span></button>'));
+  assert.ok(SCENES.includes(`<button onClick={warmWhite} aria-label={tr('Blanc chaud')} style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="bulb" `));
+  assert.ok(SCENES.includes(`<span className="o-qb-txt">{tr('Blanc chaud')}</span></button>`));
   assert.ok(SCENES.includes("<button onClick={allOff} aria-label={tr('Éteindre')} style={miniBtn(false)}><span className=\"o-qb-ico\" aria-hidden=\"true\"><Fi i=\"power\" "));
   assert.ok(SCENES.includes("<span className=\"o-qb-txt\">{tr('Éteindre')}</span></button>"));
   // L'icône ne sert qu'au téléphone : hors du bloc, elle est cachée.

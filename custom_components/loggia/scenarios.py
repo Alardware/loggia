@@ -707,11 +707,13 @@ class LoggiaScenarios:
     async def _noter_lancement(self, s, nom, touchees, refusees, fait, erreurs=0) -> None:
         if self.regles is None:
             return
-        detail = ", ".join(f"{f['famille']} {f['n']}" for f in fait)
+        # Des parties, une par famille : « lumieres 3 · volets 2 », que l'ecran
+        # traduit gabarit par gabarit (ADR 0070).
+        detail: list = [(f["famille"] + " {n}", {"n": f["n"]}) for f in fait]
         if refusees:
-            detail += f" · {len(refusees)} cible(s) refusee(s) par les permissions du compte"
+            detail.append(("{n} cible(s) refusee(s) par les permissions du compte", {"n": len(refusees)}))
         if erreurs:
-            detail += f" · {erreurs} commande(s) refusee(s) par Home Assistant"
+            detail.append(("{n} commande(s) refusee(s) par Home Assistant", {"n": erreurs}))
         try:
             await self.regles.noter(MODULE, s["id"], nom, cibles=touchees,
                                     motif="lie" if s.get("lien") else "compose", detail=detail)

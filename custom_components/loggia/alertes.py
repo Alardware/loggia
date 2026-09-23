@@ -58,7 +58,7 @@ BINAIRES: dict[str, tuple[str, str]] = {
     "smoke": ("fumee", "Fumée détectée"),
     "gas": ("gaz", "Gaz détecté"),
     "carbon_monoxide": ("co", "Monoxyde de carbone détecté"),
-    "moisture": ("fuite", "Fuite d'eau détectée"),
+    "moisture": ("fuite", "Fuite d’eau détectée"),
     "safety": ("fumee", "Alerte de sûreté"),
 }
 PORTES = ("door", "window", "garage_door", "opening")
@@ -215,7 +215,7 @@ class LoggiaAlertes:
                     self._vanne_coupee = entite
             else:
                 await self._regles.noter("alertes", "danger", "couper", n=0, motif=motif,
-                                         detail="aucune vanne d'eau : rien à couper")
+                                         detail="aucune vanne d’eau : rien à couper")
 
     async def _danger_passe(self, haid: str, muet: bool = False) -> None:
         """Un capteur retombe. Tant qu'un autre danger dure, on ne rend rien."""
@@ -223,7 +223,7 @@ class LoggiaAlertes:
         if muet:
             _LOGGER.warning("Loggia alertes : %s s'est tu pendant un danger — la maison est rendue", haid)
             await self._regles.noter("alertes", "danger", "capteur muet", cibles=[haid], motif="danger",
-                                     detail="le capteur s'est tu pendant le danger : la maison est rendue, a verifier")
+                                     detail="le capteur s’est tu pendant le danger : la maison est rendue, a verifier")
         if self._dangers:
             return
         await self._async_rendre()
@@ -271,7 +271,7 @@ class LoggiaAlertes:
         if self._vanne_coupee:
             await self._regles.noter("alertes", "danger", "laisser coupée", cibles=[self._vanne_coupee],
                                      n=1, motif="danger passé",
-                                     detail="la vanne d'eau se rouvre à la main")
+                                     detail="la vanne d’eau se rouvre à la main")
             self._vanne_coupee = None
 
     async def _porte_ouverte(self, etat: Any) -> None:
@@ -281,7 +281,7 @@ class LoggiaAlertes:
             for s in self._hass.states.async_all("alarm_control_panel")
         )
         if armee:
-            await self._envoyer(etat, "portes", "Ouverture pendant que l'alarme est armée")
+            await self._envoyer(etat, "portes", "Ouverture pendant que l’alarme est armée")
 
     async def _envoyer(self, etat: Any, categorie: str, message: str, urgent: bool = False) -> None:
         cfg = await self._store.async_get_shared(CLE_CONFIG)
@@ -307,8 +307,10 @@ class LoggiaAlertes:
                 return
             self._dernier[etat.entity_id] = maintenant
         nom = etat.attributes.get("friendly_name") or etat.entity_id
+        # Le message est un gabarit : « Fumée détectée : {nom} » a sa cle dans
+        # chaque langue, le nom de l'appareil vient de Home Assistant (ADR 0070).
         parti = await self._regles.prevenir(
-            "alertes", categorie, f"{message} : {nom}", titre="Loggia — sûreté",
+            "alertes", categorie, (message + " : {nom}", {"nom": nom}), titre="Loggia — sûreté",
             critique=categorie in DANGER, motif=etat.entity_id)
         if parti:
             _LOGGER.info("Loggia : alerte %s envoyée pour %s", categorie, etat.entity_id)

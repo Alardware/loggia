@@ -21,7 +21,10 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const compter = (s, motif) => s.split(motif).length - 1;
 
-const app = lire('src', 'App.jsx');
+  /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
+   * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
+   * adresse — on relit donc le monolithe ET ce qui en est sorti. */
+const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx'].map(f => lire('src', f)).join(String.fromCharCode(10));
 const ui = lire('src', 'ui.jsx');
 const parametres = lire('src', 'views', 'parametres.jsx');
 const state = lire('src', 'state.js');

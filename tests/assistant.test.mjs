@@ -155,8 +155,8 @@ test('la feuille qui porte l’orbe est opaque', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Le poste fixe.
 //
-// La barre du bas n'existe qu'en dessous de 820 px, ou sur un écran tactile.
-// Au-dessus, sans entrée dans l'en-tête, l'assistant n'existe pas du tout.
+// La barre du bas n'existe QUE sur un écran tactile (le type d'appareil, jamais
+// la largeur). Ailleurs, sans entrée dans l'en-tête, l'assistant n'existe pas.
 // ─────────────────────────────────────────────────────────────────────────────
 
 test('l’en-tête reçoit de quoi ouvrir l’assistant', () => {
@@ -365,16 +365,21 @@ function blocMedia(requete) {
 }
 
 test('un seul bouton d’assistant par écran', () => {
-  // Les deux règles ensemble : la largeur ET le tactile, exactement là où la
-  // barre du bas paraît. Une seule des deux laisserait le doublon — sur une
-  // tablette large pour l'une, sur un téléphone pour l'autre.
+  /* UNE seule règle, celle du tactile (23/09, plan M13).
+   *
+   * La largeur en portait une seconde, sous 820 px : une fenêtre étroite à la
+   * souris montrait alors la barre du bas EN PLUS du bandeau du haut, et le
+   * README promettait l'inverse depuis toujours. L'assistant doit suivre la
+   * barre partout où elle paraît — donc là, et nulle part ailleurs. */
   const etroit = blocMedia('@media (max-width: 820px)');
-  assert.match(etroit, /\.loggia-mobilenav \{ display: flex !important; \}/,
-    'ce bloc n’est plus celui qui montre la barre du bas');
-  assert.match(etroit, /\.o-hdr-assist \{ display: none !important; \}/,
-    'sous 820 px, la barre du bas et l’en-tête offriraient deux fois le même geste');
+  assert.doesNotMatch(etroit, /\.loggia-mobilenav \{ display: flex !important; \}/,
+    'la largeur remontre la barre du bas : le poste fixe étroit aurait les deux navigations');
+  assert.doesNotMatch(etroit, /\n\s*\.o-hdr-assist \{ display: none !important; \}/,
+    'la largeur recache l’assistant de l’en-tête, alors que la barre du bas n’est plus là pour le reprendre');
+  assert.match(CSS, /html\.loggia-tactile \.loggia-mobilenav \{ display: flex !important; \}/,
+    'plus rien ne montre la barre du bas sur un écran tactile');
   assert.match(CSS, /html\.loggia-tactile \.o-hdr-assist \{ display: none !important; \}/,
-    'sur un écran tactile large, le doublon revient');
+    'sur un écran tactile, l’en-tête et la barre offriraient deux fois le même geste');
   const tactile = CSS.indexOf('html.loggia-tactile .loggia-mobilenav');
   const tactileAssist = CSS.indexOf('html.loggia-tactile .o-hdr-assist');
   assert.ok(tactile !== -1 && tactileAssist > tactile,

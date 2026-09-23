@@ -604,7 +604,9 @@ def test_sans_rien_d_allume_pas_de_decompte(creer, monkeypatch):
 
 def test_le_coucher_attend_quand_un_invite_garde_la_maison(creer):
     n = creer(cfg_coucher(), {**LAMPES, "input_boolean.invite": FauxEtat("on")})
-    lancer(n.store.async_set_shared("loggia_presence", {"invite": {"entite": "input_boolean.invite"}}))
+    # `actif` : le mode invite est une piece de la regle de presence, et c'est
+    # elle qui arme la coupure des trente minutes.
+    lancer(n.store.async_set_shared("loggia_presence", {"actif": True, "invite": {"entite": "input_boolean.invite"}}))
     lancer(n._async_coucher())
     assert n.hass.services.appels == [], "on n'eteint pas tout sur la tete de l'invite"
     j = lancer(n.regles.journal(module="nuit"))[0]
@@ -613,3 +615,14 @@ def test_le_coucher_attend_quand_un_invite_garde_la_maison(creer):
     n.hass.states.table["input_boolean.invite"] = FauxEtat("off")
     lancer(n._async_coucher())
     assert len(n.hass.services.appels) == 1
+
+
+def test_la_regle_de_presence_eteinte_le_coucher_ne_se_retient_plus(creer):
+    """Sans la regle, PERSONNE ne coupe le mode invite au bout de trente
+    minutes : `presence.py` sort avant d'armer quoi que ce soit. L'honorer
+    quand meme retenait le coucher pour toujours, sans un mot (audit 23/09)."""
+    n = creer(cfg_coucher(), {**LAMPES, "input_boolean.invite": FauxEtat("on")})
+    lancer(n.store.async_set_shared("loggia_presence", {"actif": False, "invite": {"entite": "input_boolean.invite"}}))
+    lancer(n._async_coucher())
+    assert len(n.hass.services.appels) == 1, "le coucher doit eteindre : rien ne rendrait la main"
+    assert not [j for j in lancer(n.regles.journal(module="nuit")) if j["quoi"] == "retenir"]

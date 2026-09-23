@@ -567,12 +567,16 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .grid-sys-metrics > div > div:nth-child(2) { font-size: 20px !important; }
   .grid-sys-power { grid-template-columns: 1fr 1fr 1fr !important; gap: 8px !important; }
   .grid-sys-power > button { flex-direction: column !important; gap: 8px !important; padding: 12px 6px !important; font-size: 11.5px !important; text-align: center !important; line-height: 1.25 !important; }
-  /* Barre de navigation du bas (mobile) : visible, + on libère de la place sous le contenu et on remonte le bouton thème */
-  .loggia-mobilenav { display: flex !important; }
-  /* L'assistant vit alors au centre de cette barre. Le garder aussi dans
-     l'en-tête ferait deux entrées pour le même geste sur le même écran. */
-  .o-hdr-assist { display: none !important; }
-  .o-navbar-on .loggia-content { padding-bottom: calc(112px + var(--o-safe-bottom, 0px)) !important; }
+  /* La barre du bas ne vit PLUS ici (23/09, plan M13).
+   *
+   * Trois règles la montraient sous 820 px — elle, l'assistant qu'elle reprend
+   * à l'en-tête, et la place à lui laisser sous le contenu. Elles doublaient
+   * `html.loggia-tactile` (lignes 204, 205, 219), à ceci près qu'elles
+   * répondaient à la LARGEUR : une fenêtre étroite à la souris affichait le
+   * bandeau du haut ET la barre du bas, vu à 768 px sur la démo. Le README
+   * promet depuis toujours que « c'est le TYPE d'appareil qui décide, jamais
+   * la largeur » — c'est désormais vrai. Le reste de ce bloc, lui, est bien
+   * une affaire de largeur : des grilles qui passent à deux colonnes. */
   .grid-pieces, .grid-etats, .grid-lights { grid-template-columns: 1fr 1fr !important; }
   /* Vue Objets mobile : appareils + plantes en 2 colonnes, cartes resserrées */
   /* Telecommande sous « Lancer sur » : cote a cote, elle serait illisible. */

@@ -323,7 +323,7 @@ class LoggiaRobots:
     async def async_lancer(self, planning: dict, quand) -> bool:
         """Lance un planning, ou dit au journal ce qui l'a retenu."""
         robot = planning["robot"]
-        motif = "planning %s" % planning["heure"]
+        motif = ("planning {heure}", {"heure": planning["heure"]})
         ph = phase(getattr(self.hass.states.get(robot), "state", None))
 
         async def retenu(pourquoi: str) -> bool:
@@ -358,7 +358,7 @@ class LoggiaRobots:
                     await self.regles.agir(MODULE, "planning", "switch", "turn_off", autres,
                                            quoi="ecarter les zones", motif=motif, priorite=PRIORITE)
             partis = await self.regles.agir(MODULE, "planning", "lawn_mower", "start_mowing", [robot],
-                                            quoi="tondre" + (" : " + noms if noms else ""),
+                                            quoi=("tondre : {noms}", {"noms": noms}) if noms else "tondre",
                                             motif=motif, priorite=PRIORITE)
             return bool(partis)
 
@@ -367,7 +367,7 @@ class LoggiaRobots:
         if commande:
             domaine, service, data = commande
             partis = await self.regles.agir(MODULE, "planning", domaine, service, [robot], data,
-                                            quoi="nettoyer : " + noms, motif=motif, priorite=PRIORITE)
+                                            quoi=("nettoyer : {noms}", {"noms": noms}), motif=motif, priorite=PRIORITE)
             return bool(partis)
         quoi = "nettoyer" if not zones else "nettoyer tout (pieces inconnues de cette integration)"
         partis = await self.regles.agir(MODULE, "planning", "vacuum", "start", [robot],

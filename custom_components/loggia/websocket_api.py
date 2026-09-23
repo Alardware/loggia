@@ -6,23 +6,37 @@ Assistant. Le client ne peut pas designer un autre utilisateur — aucune comman
 n'accepte de champ `user_id`. Un utilisateur ne lit et n'ecrit donc que sa propre
 configuration, et les permissions Home Assistant restent celles de sa session.
 
-Commandes :
-  loggia/config/get     -> {"config": {...}, "user": {...}}
-  loggia/config/set     -> fusionne un patch, renvoie la config resultante
-  loggia/config/delete  -> efface la configuration de l'utilisateur
-  loggia/config/stats   -> chiffres de diagnostic (admin uniquement)
-  loggia/config/suivre  -> un flux : a chaque ecriture, le compte et les cles
-                           qui ont change (jamais les valeurs), pour relire
-  loggia/discovery      -> ce que Home Assistant sait de l'installation
-  loggia/regles/etat    -> le journal de la maison, et ce qui retient en ce moment
-  loggia/regles/degeler -> rendre la main aux regles sur une entite (admin)
-  loggia/pin/verifier   -> le code administrateur, verifie ici (essais limites)
-  loggia/pin/definir    -> le definir, hache (admin uniquement)
-  loggia/minuteurs/etat|poser|annuler -> le minuteur d'extinction d'un appareil
-                           (tout compte, borne a ce qu'il pilote)
-  loggia/sirene/tester  -> sonner trois secondes, tenu ici (meme regime)
-  loggia/<module>/etat|config -> chaque module de regles : lecture ouverte,
-                           ecriture reservee aux administrateurs
+Les 32 commandes, toutes prefixees `loggia/`. Le compte et la repartition
+entre ouvertes et reservees sont verrouilles par `test_websocket_api.py` :
+une commande nouvelle doit y etre rangee d'un cote ou de l'autre.
+
+  La configuration
+    config/get      -> {"config": {...}, "user": {...}}
+    config/set      -> fusionne un patch, renvoie la config resultante
+    config/delete   -> efface la configuration de l'utilisateur
+    config/stats    -> chiffres de diagnostic (admin)
+    config/suivre   -> un flux : a chaque ecriture, le compte et les cles qui
+                       ont change (jamais les valeurs), pour relire
+  L'installation
+    discovery       -> ce que Home Assistant sait : pieces, appareils, entites
+  Le socle des regles
+    regles/etat     -> le journal de la maison, et ce qui retient en ce moment
+    regles/degeler  -> rendre la main aux regles sur une entite (admin)
+  Les modules de regles — `etat` se lit de tout compte, `config` est reservee
+  aux administrateurs : volets, fenetres, presence, nuit, veilles, scenarios,
+  robots.
+  Les gestes, ouverts a tout compte mais bornes a ce qu'il a le droit de
+  piloter
+    scenarios/lancer        -> lancer un scenario
+    minuteurs/etat|poser|annuler -> le minuteur d'extinction d'un appareil
+    sirene/tester           -> sonner trois secondes, tenu ici
+  Les boutons sans fil
+    interrupteurs/etat      -> ce que l'ecoute a vu passer
+    interrupteurs/affecter  -> lier un geste a une action (admin)
+    interrupteurs/ecouter   -> ouvrir l'ecoute cinq minutes (admin)
+  Le code administrateur
+    pin/verifier    -> verifie ici, essais limites
+    pin/definir     -> le definir, hache (admin)
 
 `loggia/discovery` est ouverte a tout compte authentifie, a dessein. Les
 commandes equivalentes de Home Assistant — `config/area_registry/list` et ses

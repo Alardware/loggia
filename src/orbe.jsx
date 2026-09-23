@@ -32,6 +32,11 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { tr } from './i18n.js';
 
+/* Lu une fois : le réglage système « réduire les animations ». Défini ici
+ * plutôt qu'importé de `ui.jsx` — l'orbe est un module chargé à la demande,
+ * qui ne tire que three.js et les traductions. */
+const MOINS_DE_MOUVEMENT = (() => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } })();
+
 /**
  * Monte l'orbe dans `hote` et rend de quoi la piloter.
  *
@@ -731,7 +736,12 @@ export function creerOrbe(hote) {
     if (cv.width !== cw || cv.height !== ch) resize();
     if (!rtScene) return;
 
-    const dt = Math.min(.05, clock.dt()); t += dt;
+    /* `prefers-reduced-motion` (plan M7) : l'orbe tournait, pulsait et
+     * ondulait sans rien demander à personne. Le temps avance désormais au
+     * sixième pour qui a réglé son système sur « moins d'animations » — il
+     * respire encore, assez pour dire qu'il écoute ou qu'il parle, sans le
+     * mouvement continu qui donne le vertige. */
+    const dt = (MOINS_DE_MOUVEMENT ? .16 : 1) * Math.min(.05, clock.dt()); t += dt;
     const M = MODES[S.mode];
 
     /* Le micro et l'enveloppe reconstruite depuis le texte prononcé vivaient

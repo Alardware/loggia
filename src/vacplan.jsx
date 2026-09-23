@@ -250,7 +250,7 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
   if (!haid) {
     return (
       <div style={{ padding: '28px 10px', textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>
-        Aucune carte : désigne l’entité <b>image</b> du robot dans Paramètres → Entités.
+        {tr('Aucune carte : désigne l’entité {quoi} du robot dans Paramètres → Entités.', { quoi: 'image' })}
       </div>
     );
   }
@@ -270,7 +270,7 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
         {src
           /* eslint-disable-next-line jsx-a11y/no-interactive-element-to-noninteractive-role */
           ? <canvas ref={cvRef} role="img" aria-label={tr('Plan du logement')} style={{ display: 'block', width: '100%', height: 'auto' }} />
-          : <div style={{ aspectRatio: '4/3', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>Carte indisponible</div>}
+          : <div style={{ aspectRatio: '4/3', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Carte indisponible')}</div>}
 
         {regions.map(r => {
           const z = zoneDe(r.couleur);
@@ -307,7 +307,7 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
         <span style={{ flex: 1 }} />
         <button onClick={pivoter} title={tr('Pivoter la carte d’un quart de tour')}
           style={{ padding: '5px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)' }}>
-          Pivoter
+          {tr('Pivoter')}
         </button>
         {Object.keys(assoc).length > 0 && (
           <button onClick={() => { setAssoc({}); cfgSet({ [CLE_ASSOC]: null }); }}
@@ -320,8 +320,8 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <span style={{ width: 15, height: 15, borderRadius: 4, background: '#' + aAssocier, border: '1px solid rgba(255,255,255,.35)' }} />
             <span style={{ fontSize: 12, fontWeight: 700 }}>{tr('Quelle pièce est-ce ?')}</span>
-            <button onClick={() => setAAssocier(null)} aria-label="Annuler"
-              style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 10, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'transparent', border: 'none', color: 'var(--o-text3)' }}>Annuler</button>
+            <button onClick={() => setAAssocier(null)} aria-label={tr('Annuler')}
+              style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 10, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'transparent', border: 'none', color: 'var(--o-text3)' }}>{tr('Annuler')}</button>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {libres.length ? libres.map(z => (

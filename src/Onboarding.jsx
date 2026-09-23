@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react';
-import { tr } from './i18n.js';
+import { tr, trN } from './i18n.js';
 
 // Meme rendu que dans App.jsx, redefini ici : trois lignes pures, contre un
 // cycle d'import entre les deux fichiers.
@@ -135,27 +135,27 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
           <span style={{ width: 40, height: 40, borderRadius: 14, background: 'linear-gradient(135deg,var(--o-ok),var(--o-accent))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#06121f', fontSize: 19 }}>O</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 800 }}>Loggia</div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', color: 'var(--o-text3)' }}>ÉTAPE {etapeAffichee} SUR {totalEtapes}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', color: 'var(--o-text3)' }}>{tr('ÉTAPE {a} SUR {b}', { a: etapeAffichee, b: totalEtapes })}</div>
           </div>
-          <button onClick={onSkip} style={{ ...ghost, padding: '7px 13px', fontSize: 12 }}>Passer</button>
+          <button onClick={onSkip} style={{ ...ghost, padding: '7px 13px', fontSize: 12 }}>{tr('Passer')}</button>
         </div>
 
         {step === 0 && (
           <>
             <div>
-              <h1 style={title}>Bienvenue</h1>
+              <h1 style={title}>{tr('Bienvenue')}</h1>
               <div style={lead}>
-                Loggia a lu votre installation Home Assistant. Rien n'est à saisir : les vues se remplissent avec ce qui existe déjà chez vous.
+                {tr("Loggia a lu votre installation Home Assistant. Rien n'est à saisir : les vues se remplissent avec ce qui existe déjà chez vous.")}
               </div>
             </div>
             <div style={{ ...card, padding: '20px 22px', display: 'flex', gap: 32, flexWrap: 'wrap' }}>
               <Stat v={totals.entities != null ? totals.entities : '—'} label={tr('ENTITÉS')} />
               <Stat v={totals.areasUsed != null ? totals.areasUsed : '—'} label={tr('ZONES UTILISÉES')} />
-              <Stat v={totals.domains != null ? totals.domains : '—'} label="DOMAINES" />
-              <Stat v={present.length} label="VUES DISPONIBLES" />
+              <Stat v={totals.domains != null ? totals.domains : '—'} label={tr('DOMAINES')} />
+              <Stat v={present.length} label={tr('VUES DISPONIBLES')} />
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setStep(1)} style={primary}>Commencer</button>
+              <button onClick={() => setStep(1)} style={primary}>{tr('Commencer')}</button>
             </div>
           </>
         )}
@@ -166,8 +166,8 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
               <h1 style={title}>{tr('Vos pièces')}</h1>
               <div style={lead}>
                 {suggested.length
-                  ? 'Ces zones Home Assistant contiennent des équipements d’ambiance. Décochez celles qui ne sont pas des pièces.'
-                  : 'Aucune zone Home Assistant ne ressemble à une pièce pour l’instant. Vous pourrez en désigner plus tard dans Paramètres → Entités.'}
+                  ? tr('Ces zones Home Assistant contiennent des équipements d’ambiance. Décochez celles qui ne sont pas des pièces.')
+                  : tr('Aucune zone Home Assistant ne ressemble à une pièce pour l’instant. Vous pourrez en désigner plus tard dans Paramètres → Entités.')}
               </div>
             </div>
             {suggested.length > 0 && (
@@ -175,28 +175,30 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
                 {suggested.map(a => (
                   <Check key={a.id} on={!!picked[a.id]} onT={() => setPicked(p => ({ ...p, [a.id]: !p[a.id] }))}
                     name={a.name}
-                    sub={a.ambiance + ' équipement' + (a.ambiance > 1 ? 's' : '') + (a.temp ? ' · capteur de température' : '')} />
+                    sub={trN(a.ambiance, '{n} équipement d’ambiance', '{n} équipements d’ambiance') + (a.temp ? ' · ' + tr('capteur de température') : '')} />
                 ))}
               </div>
             )}
             {technical.length > 0 && (
               <div style={{ ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <button onClick={() => setShowTech(v => !v)} style={{ ...ghost, alignSelf: 'flex-start', border: 'none', padding: '4px 2px' }}>
-                  {showTech ? 'Masquer' : 'Afficher'} les {technical.length} zones techniques
+                  {showTech
+                    ? trN(technical.length, 'Masquer la zone technique', 'Masquer les {n} zones techniques')
+                    : trN(technical.length, 'Afficher la zone technique', 'Afficher les {n} zones techniques')}
                 </button>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', padding: '0 2px' }}>
-                  Sans équipement d’ambiance — réseau, énergie, serveurs. Rarement des pièces.
+                  {tr('Sans équipement d’ambiance — réseau, énergie, serveurs. Rarement des pièces.')}
                 </div>
                 {showTech && technical.map(a => (
                   <Check key={a.id} on={!!picked[a.id]} onT={() => setPicked(p => ({ ...p, [a.id]: !p[a.id] }))}
-                    name={a.name} sub={a.entities + ' entités'} />
+                    name={a.name} sub={trN(a.entities, '{n} entité', '{n} entités')} />
                 ))}
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <button onClick={() => setStep(cles ? 2 : 3)} style={primary}>Continuer</button>
-              <button onClick={() => setStep(0)} style={ghost}>Retour</button>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{nPicked} pièce{nPicked > 1 ? 's' : ''}</span>
+              <button onClick={() => setStep(cles ? 2 : 3)} style={primary}>{tr('Continuer')}</button>
+              <button onClick={() => setStep(0)} style={ghost}>{tr('Retour')}</button>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{trN(nPicked, '{n} pièce', '{n} pièces')}</span>
             </div>
           </>
         )}
@@ -234,8 +236,8 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setStep(3)} style={primary}>Continuer</button>
-              <button onClick={() => setStep(1)} style={ghost}>Retour</button>
+              <button onClick={() => setStep(3)} style={primary}>{tr('Continuer')}</button>
+              <button onClick={() => setStep(1)} style={ghost}>{tr('Retour')}</button>
             </div>
           </>
         )}
@@ -245,8 +247,8 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
             <div>
               <h1 style={title}>{tr("C'est prêt")}</h1>
               <div style={lead}>
-                {present.length} vue{present.length > 1 ? 's' : ''} se remplissent avec votre installation.
-                {missing.length > 0 && ' Les autres restent masquées tant qu’il n’y a rien à y montrer — elles réapparaîtront d’elles-mêmes.'}
+                {trN(present.length, '{n} vue se remplit avec votre installation.', '{n} vues se remplissent avec votre installation.')}
+                {missing.length > 0 && ' ' + tr('Les autres restent masquées tant qu’il n’y a rien à y montrer — elles réapparaîtront d’elles-mêmes.')}
               </div>
             </div>
             {missing.length > 0 && (
@@ -261,8 +263,8 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
               </div>
             )}
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={finish} style={primary}>Ouvrir mon dashboard</button>
-              <button onClick={() => setStep(cles ? 2 : 1)} style={ghost}>Retour</button>
+              <button onClick={finish} style={primary}>{tr('Ouvrir mon dashboard')}</button>
+              <button onClick={() => setStep(cles ? 2 : 1)} style={ghost}>{tr('Retour')}</button>
             </div>
           </>
         )}

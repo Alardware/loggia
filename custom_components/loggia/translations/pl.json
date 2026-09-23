@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Loggia Dashboard",
+        "description": "Loggia sama odczytuje twoją instalację Home Assistant — nie ma tu nic do konfigurowania. Pojawi się w menu bocznym pod nazwą **Loggia**."
+      }
+    },
+    "abort": {
+      "already_configured": "Loggia jest już zainstalowana."
+    }
+  },
+  "services": {
+    "scenario": {
+      "name": "Uruchom scenariusz",
+      "description": "Uruchamia scenariusz Loggii: jeden z jej własnych (nuit, depart, retour, reveil, cinema, musique, invites, tout_eteindre) albo jeden z twoich.",
+      "fields": {
+        "id": {
+          "name": "Scenariusz",
+          "description": "Identyfikator scenariusza, taki jak pokazuje go widok Scenariusze: nuit, depart… albo perso_… dla dodanego scenariusza."
+        }
+      }
+    }
+  }
+}

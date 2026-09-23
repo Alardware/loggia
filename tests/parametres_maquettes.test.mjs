@@ -279,5 +279,5 @@ test('le menu déroulant s’ouvre sous son bouton, et son bouton est en bleu pl
   assert.ok(dd.includes('if (menuRef.current && menuRef.current.contains(e.target)) return;'), 'un appui dans le menu le fermerait avant le choix');
   assert.ok(dd.includes("zIndex: 9000"), 'le menu passerait sous une feuille (z-index 200)');
   assert.ok(dd.includes("border: 'none', background: 'var(--o-accent-fond)', color: '#fff' };"), 'le bouton du menu n’est plus en bleu plein');
-  assert.ok(APP.includes("<ListeChoix value={cat} options={HUE_CATS} onChange={setCat} label={tr('Collection de scènes')} />"), '« Collection » a quitté la liste commune');
+  assert.ok(APP.includes("<ListeChoix value={cat} options={HUE_CATS()} onChange={setCat} label={tr('Collection de scènes')} />"), '« Collection » a quitté la liste commune');
 });

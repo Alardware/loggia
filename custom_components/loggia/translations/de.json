@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Loggia Dashboard",
+        "description": "Loggia liest deine Home-Assistant-Installation von selbst — es gibt nichts einzustellen. Es erscheint unter dem Namen **Loggia** in der Seitenleiste."
+      }
+    },
+    "abort": {
+      "already_configured": "Loggia ist bereits installiert."
+    }
+  },
+  "services": {
+    "scenario": {
+      "name": "Szenario starten",
+      "description": "Startet ein Szenario von Loggia: eines seiner eigenen (nuit, depart, retour, reveil, cinema, musique, invites, tout_eteindre) oder eines von deinen.",
+      "fields": {
+        "id": {
+          "name": "Szenario",
+          "description": "Die Kennung des Szenarios, wie die Ansicht Szenarien sie zeigt: nuit, depart… oder perso_… für ein hinzugefügtes Szenario."
+        }
+      }
+    }
+  }
+}

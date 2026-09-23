@@ -81,10 +81,15 @@ const config = {
     // La cible de Vite 5 (« modules »), gardée telle quelle à la montée en Vite 7 :
     // la nouvelle cible par défaut laisserait tomber les tablettes en Safari 14-15.
     target: ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari14'],
-    outDir: 'dist', emptyOutDir: false, // emptyOutDir false : on garde les anciens bundles (caches clients)
-    // Pas de sourcemap en production : le composant est distribué par HACS et
-    // les vieux bundles s'accumulent (emptyOutDir) — les .map multiplieraient
-    // le poids de chaque install. Le débogage se fait sur le serveur dev.
+    // `dist` est VIDÉ à chaque compilation (23/09, plan M2). Il ne l'était pas,
+    // « pour les caches clients » — mais la rétention qui protège ces caches vit
+    // dans `custom_components/loggia/frontend/`, que le pack garde sur deux
+    // générations ; `dist` n'est servi à personne. Sans ce vidage il avait
+    // amassé 352 Mo en 3 300 fichiers, dont 354 versions d'`index.js`.
+    outDir: 'dist', emptyOutDir: true,
+    // Pas de sourcemap en production : le composant est distribué par HACS, et
+    // les .map multiplieraient le poids de chaque install pour un débogage qui
+    // se fait sur le serveur de développement.
     // vendor séparé : react/react-dom ne changent pas entre deploys → les clients ne re-téléchargent que le code app
     rollupOptions: { output: { manualChunks: { vendor: ['react', 'react-dom'], three: ['three'] } } },
   },

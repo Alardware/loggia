@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Loggia Dashboard",
+        "description": "Loggia leest je Home Assistant-installatie helemaal zelf — er valt niets in te stellen. Het verschijnt als **Loggia** in het zijmenu."
+      }
+    },
+    "abort": {
+      "already_configured": "Loggia is al geïnstalleerd."
+    }
+  },
+  "services": {
+    "scenario": {
+      "name": "Een scenario starten",
+      "description": "Start een scenario van Loggia: een van de eigen scenario's (nuit, depart, retour, reveil, cinema, musique, invites, tout_eteindre) of een van jouw scenario's.",
+      "fields": {
+        "id": {
+          "name": "Scenario",
+          "description": "De id van het scenario, zoals de weergave Scenario's die toont: nuit, depart… of perso_… voor een toegevoegd scenario."
+        }
+      }
+    }
+  }
+}

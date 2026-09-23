@@ -28,43 +28,56 @@
  * disparaissait derriere l'ecran d'erreur.
  */
 import { cfgVal, getHass } from './state.js';
+import { LANGUES, CHARGEURS, LOCALES } from './langues/index.js';
 
-/* Deux langues aujourd'hui, traduites en entier — plutot que soixante a moitie.
+/* Sept langues, traduites en entier — plutot que soixante a moitie (ADR 0070).
  *
- * L'espagnol et l'allemand ont ete retires le 29/08/2026, TEMPORAIREMENT :
- * Loggia n'etait pas encore destine a etre public. L'anglais est revenu juste
- * avant la publication, et d'autres langues sont prevues. L'historique git
- * garde les deux catalogues retires.
+ * L'espagnol et l'allemand avaient ete retires le 29/08/2026, quand Loggia
+ * n'etait pas encore public ; ils sont revenus, refaits, avec le neerlandais
+ * et l'italien. Le polonais est arrive ensuite, traduit par un utilisateur.
+ * La liste, les chargeurs et les locales vivent dans `langues/index.js`,
+ * partage avec l'amorce : ajouter une langue, c'est un fichier dans
+ * `langues/` et une ligne dans chacune de ses trois tables.
  *
- * Ajouter une langue, aujourd'hui : un fichier dans `langues/`, une entree
- * ici — et deux endroits encore ecrits pour l'anglais seul : le prechargement
- * de `main.jsx` (`window.__loggiaCatEN`) et `chargerCatalogueTardif`,
- * ci-dessous. Les pluriels, eux, ne connaissent que deux formes (1 /
- * plusieurs) : une langue qui en a trois, comme le polonais, demandera plus. */
-export const LANGUES = [
-  { code: 'auto', nom: 'Suivre Home Assistant' },
-  { code: 'fr', nom: 'Français' },
-  { code: 'en', nom: 'English' },
-];
+ * Les pluriels connaissent autant de formes que la langue en demande : une
+ * valeur de catalogue peut etre une chaine, ou un objet de formes que
+ * `Intl.PluralRules` departage (ADR 0071). */
+export { LANGUES };
 
-/* Le catalogue anglais n'est PAS importe ici : 40 Ko que le boot francophone
- * n'emporterait pour rien. L'amorce (main.jsx) le charge quand la langue
- * resolue le demande et le depose sur `window.__loggiaCatEN` avant d'evaluer
- * l'application. `chargerCatalogueTardif` couvre le cas restant : « auto » qui
- * bascule vers l'anglais a l'arrivee de hass. */
+/* Aucun catalogue n'est importe ici : 40 a 50 Ko chacun, que le boot
+ * francophone n'emporterait pour rien. L'amorce (main.jsx) charge celui de la
+ * langue probable et le depose sur `window.__loggiaCatalogue` ({ code, cat })
+ * avant d'evaluer l'application. `chargerCatalogueTardif` couvre le reste :
+ * « auto » qui bascule a l'arrivee de hass, ou un changement dans les reglages. */
 const CATALOGUES = {};
-try { if (typeof window !== 'undefined' && window.__loggiaCatEN) CATALOGUES.en = window.__loggiaCatEN; } catch { /* rien */ }
+try {
+  if (typeof window !== 'undefined' && window.__loggiaCatalogue && window.__loggiaCatalogue.cat) {
+    CATALOGUES[window.__loggiaCatalogue.code] = window.__loggiaCatalogue.cat;
+  }
+} catch { /* rien */ }
 
-let _chargementEn = null;
+const _chargements = {};
+function chargerCatalogue(code) {
+  if (CATALOGUES[code] || _chargements[code] || !CHARGEURS[code]) return;
+  _chargements[code] = CHARGEURS[code]().then(m => {
+    CATALOGUES[code] = m.default;
+    /* La langue demandee est celle qui vient d'arriver : on bascule — le poll
+     * de hass (2 s) redessine, les libelles suivent au tick d'apres. Les mots
+     * de Home Assistant gardes pour cette langue reviennent avec elle. */
+    if (_demande === code) { _code = code; _cat = m.default; _haMemo = lireLS(MEMO_HA + code); }
+  }).catch(() => { _chargements[code] = null; });
+}
+
+/* Ce que `preparerLangue` a demande en dernier : la langue du compte en
+ * « auto », sinon le choix explicite. C'est elle que `chargerCatalogue` sert
+ * quand son fichier arrive. */
+let _demande = null;
 function chargerCatalogueTardif(demande) {
-  if (CATALOGUES.en || _chargementEn) return;
-  _chargementEn = import('./langues/en.js').then(m => {
-    CATALOGUES.en = m.default;
-    // La demande etait l'anglais lui-meme : on bascule — le poll de hass (2 s)
-    // redessine, les libelles suivent au tick d'apres. Pour une langue exotique
-    // le code reste le sien, seul le FILET anglais devient disponible.
-    if (demande === 'en') { _code = 'en'; _cat = m.default; }
-  }).catch(() => { _chargementEn = null; });
+  _demande = demande;
+  /* Une langue qui a son catalogue le recoit. Une langue exotique servie par
+   * « auto » recoit le FILET anglais : Home Assistant lui donne ses etats et
+   * ses commandes, l'anglais le reste. */
+  chargerCatalogue(CHARGEURS[demande] ? demande : 'en');
 }
 
 /** Les langues proposees dans les reglages. */
@@ -240,7 +253,7 @@ export function langueDeHA(hass) {
   return String(brut).slice(0, 2).toLowerCase();
 }
 
-/* Ce que l'utilisateur a choisi, sans le resoudre : 'auto', 'fr', 'en'. */
+/* Ce que l'utilisateur a choisi, sans le resoudre : 'auto', ou un code de `LANGUES`. */
 export function choixLangue() {
   return cfgVal('loggia-langue', 'auto') || 'auto';
 }
@@ -404,8 +417,8 @@ export function preparerLangue(hass) {
    * On declenche le chargement ; `resoudre` sert le francais en attendant. */
   const choix = choixLangue();
   const demande = choix === 'auto' ? langueDeHA(hass) : choix;
-  // Toute langue autre que le francais s'appuie sur l'anglais — en plein pour
-  // « en », en filet pour une langue exotique servie par « auto ».
+  // Toute langue autre que le francais a son catalogue — ou, pour une langue
+  // exotique servie par « auto », le filet anglais.
   if (demande && demande !== LANGUE_SOURCE) chargerCatalogueTardif(demande);
   _code = resoudre(hass);
   _cat = CATALOGUES[_code] || null;
@@ -478,10 +491,64 @@ export function tr(texte, params) {
    * anglais, se lit. Complete en francais, il se ferme. */
   if (!s && _code !== LANGUE_SOURCE && CATALOGUES.en) s = CATALOGUES.en[texte] || null;
   if (!s) s = texte;
+  /* Trois formes de pluriel, et plus (ADR 0071). Une valeur de catalogue peut
+   * etre un objet de formes — { few, many, other } en polonais — que la regle
+   * de la langue departage d'apres le nombre passe. Les appelants ne changent
+   * pas : ils choisissent toujours la cle du singulier pour 1 et celle du
+   * pluriel sinon ; c'est CETTE cle-la qui porte les formes. */
+  if (typeof s === 'object') s = formePlurielle(s, nombreDe(params), _code);
   if (params) {
     for (const k in params) s = s.split('{' + k + '}').join(String(params[k]));
   }
   return s;
+}
+
+/* Le nombre qui departage les formes : `n` quand il existe, sinon le premier
+ * repere numerique (« Dans {j}j »). */
+function nombreDe(params) {
+  if (!params) return null;
+  if (typeof params.n === 'number') return params.n;
+  for (const k in params) if (typeof params[k] === 'number') return params[k];
+  return null;
+}
+
+const _regles = {};
+function categorie(code, n) {
+  try {
+    if (!_regles[code]) _regles[code] = new Intl.PluralRules(code);
+    return _regles[code].select(n);
+  } catch { return 'other'; }
+}
+
+/** La forme d'un objet de formes pour ce nombre dans cette langue : la
+ * categorie d'`Intl.PluralRules` (one, two, few, many, other), sinon `other`,
+ * sinon `many`, sinon la premiere ecrite. Exportee pour les tests. */
+export function formePlurielle(formes, n, code) {
+  if (!formes || typeof formes !== 'object') return String(formes == null ? '' : formes);
+  const cat = n == null ? 'other' : categorie(code || _code, n);
+  const s = formes[cat] || formes.other || formes.many || formes[Object.keys(formes)[0]];
+  return s == null ? '' : String(s);
+}
+
+/** Un texte qui compte : `trN(n, '{n} lampe allumée', '{n} lampes allumées')`.
+ *
+ * Les APPELANTS n'ecrivent que deux formes, une et plusieurs — ce dont le
+ * francais, l'anglais, l'allemand, le neerlandais, l'italien et l'espagnol
+ * ont besoin. Une langue qui en demande davantage, comme le polonais, le
+ * regle au CATALOGUE : la valeur y devient un objet de formes que
+ * `formePlurielle` departage par `Intl.PluralRules` (ADR 0071), sans qu'un
+ * seul appelant change. `n` est passe aux reperes. */
+export function trN(n, un, plusieurs, params) {
+  const p = Object.assign({ n }, params || {});
+  return tr(n === 1 ? un : plusieurs, p);
+}
+
+/** Le nom d'un profil tel qu'on l'affiche. « Administrateur » est le profil
+ * generique par defaut : une VALEUR gardee et comparee telle quelle dans la
+ * configuration, qui se lit donc dans la langue de l'ecran a l'affichage
+ * seulement. Un vrai nom vient de Home Assistant et ne se traduit pas. */
+export function nomProfil(nom) {
+  return nom === 'Administrateur' ? tr('Administrateur') : nom;
 }
 
 /** Le mot de Home Assistant pour une cle DONNEE, ou `null`.
@@ -503,9 +570,7 @@ export function comparerTextes(a, b) {
 /* Les dates et les heures etaient formatees sur 'fr-FR' en dur : le dashboard
  * affichait « Mardi 25 août » au milieu d'une interface anglaise. `Intl` fait
  * tout le travail — noms de jours, ordre jour/mois, 12 h ou 24 h — a condition
- * de lui donner la bonne locale. */
-const LOCALES = { fr: 'fr-FR', en: 'en-GB' };
-
+ * de lui donner la bonne locale (`LOCALES`, dans `langues/index.js`). */
 export function locale() {
   /* Une langue sans entree ici est rendue telle quelle : `Intl` sait quoi faire
    * de « de » ou de « pt », et se rabat seul sur la locale du navigateur si le

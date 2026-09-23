@@ -19,7 +19,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+/* `Ico`, `CUSTOM_SVG` et `FI_MAP` ont quitte App.jsx le 23/09 (plan M1) :
+ * un ecran sorti du monolithe ne pouvait plus appeler l'icone. Les noms
+ * d'icones, eux, sont cites des deux cotes — on relit donc les deux. */
+const src = ['icones.jsx', 'App.jsx'].map(x => readFileSync(join(RACINE, 'src', x), 'utf8')).join(String.fromCharCode(10));
 const css = readFileSync(join(RACINE, 'public', 'fonts', 'uicons-regular-rounded.css'), 'utf8');
 
 /** Le contenu d'un objet littéral nommé, sans l'évaluer.

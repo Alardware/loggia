@@ -9,7 +9,12 @@ tiennent tout ce fichier :
 
 2. La copie est ADDITIVE, jamais un miroir. Un navigateur au cache perime demande
    encore l'ancien `index-<hash>.js` : l'effacer lui donne un ecran blanc. Les
-   trois derniers de chaque famille restent.
+   DEUX derniers de chaque famille restent — celui du jour, et celui d'avant.
+
+   Trois generations pesaient 8 Mo dans le depot pour 1 Mo utile, et chaque
+   version en poussait deux de plus, pour toujours (plan du 22/09, point M2).
+   Deux suffisent : le cache d'un client ne saute qu'une version a la fois, et
+   celui qui en a saute deux recharge la page.
 
 Ce script vivait dans le dossier temporaire du build, que Windows nettoie. Il est
 au depot maintenant.
@@ -31,7 +36,7 @@ RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # d'avant les corrections — tableau de bord mort chez l'utilisateur.
 DIST = os.environ.get('LOGGIA_DIST', os.path.join(RACINE, 'dist'))
 CIBLE = os.path.join(RACINE, 'custom_components', 'loggia', 'frontend')
-GARDE = 3
+GARDE = 2
 
 
 def verifier_fraicheur(dist, racine):
@@ -98,11 +103,11 @@ def retenir(dossier, prefixe, suffixe, proteges=()):
 def atteignables(dist):
     """Les fichiers que `index.html` finit par demander, de proche en proche.
 
-    Vite compile avec `emptyOutDir: false` : le dossier de sortie n'est jamais
-    purge, et les bundles de toutes les compilations passees s'y empilent. La
-    copie etait aveugle — elle emportait ce tas vers le depot, d'ou il partait
-    chez chaque utilisateur par HACS. Sept avatars nommes d'apres les prenoms du
-    foyer ont voyage ainsi, references par aucune page.
+    `dist` est purge a chaque compilation depuis le 23/09, mais cette garde
+    reste : la copie etait aveugle du temps ou les bundles de toutes les
+    compilations passees s'y empilaient — elle emportait ce tas vers le depot,
+    d'ou il partait chez chaque utilisateur par HACS. Sept avatars nommes
+    d'apres les prenoms du foyer ont voyage ainsi, references par aucune page.
 
     On suit donc les references en cascade : le HTML, puis les js et les css
     qu'il tire. Ce qui n'est atteignable par aucun chemin ne sert a personne.

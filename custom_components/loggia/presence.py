@@ -258,7 +258,7 @@ class LoggiaPresence:
         if not self._indice_note:
             self._indice_note = True
             await self.regles.noter("presence", "depart", "reporter", n=0,
-                                    motif="%s : %s" % (genre, self._nom(haid)))
+                                    motif=(genre + " : {nom}", {"nom": self._nom(haid)}))
         await self._async_armer_depart(relance=True)
 
     def _declarer(self) -> None:

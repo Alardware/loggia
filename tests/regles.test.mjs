@@ -219,7 +219,8 @@ test('on peut observer sans agir, et l’écran le dit', () => {
 test('le journal dit pourquoi, et qui l’emporte', () => {
   // Le motif — « coucher +30 min », « vent 62 » — était tenu par le serveur
   // depuis la v3.7.0, mais jamais affiché.
-  assert.ok(src.includes("{j.motif ? ' · ' + j.motif : ''}"), 'le motif ne s’affiche plus');
+  // Depuis l'ADR 0070, `pourquoi(j)` rend regle · motif · detail, traduits.
+  assert.ok(src.includes("{pourquoi(j)}"), 'le motif ne s’affiche plus');
   assert.ok(src.includes("etat.priorites.map(nomPriorite).join(' › ')"), 'l’ordre de priorité ne s’affiche plus');
 });
 
@@ -289,7 +290,7 @@ for (const v of ['fenetres', 'presence', 'nuit']) {
 }
 
 test('le journal commun lit les champs du socle, et marque le simulé', () => {
-  assert.ok(JOURNAL.includes("[j.regle, j.motif, j.detail].filter(Boolean).join(' · ')"), 'le journal lit encore des champs qui n’existent plus');
+  assert.ok(JOURNAL.includes("{pourquoi(j)}") && JOURNAL.includes("{mot(j, 'quoi')}"), 'le journal lit encore des champs qui n’existent plus');
   assert.ok(JOURNAL.includes("{j.simule && <span style={badge('var(--o-warn)')}>{tr('simulé')}</span>}"), 'une ligne simulée se lirait comme une vraie manœuvre');
 });
 
@@ -369,7 +370,7 @@ test('la porte ou la fenêtre devant chaque volet se désigne dans Règles › V
 
 test('le journal dit pourquoi un ordre attend', () => {
   const vue = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
-  assert.ok(vue.includes("{attentes[id].motif ? ' · ' + attentes[id].motif : ''}"),
+  assert.ok(vue.includes("{mot(attentes[id], 'motif') ? ' · ' + mot(attentes[id], 'motif') : ''}"),
     '« en attente · fermer » sans dire si c’est le volet ou la baie');
 });
 

@@ -97,7 +97,8 @@ test('la politique des cookies dit vrai : aucun cookie, et chaque clé de sessio
     for (const m of texte.matchAll(/sessionStorage\.(?:get|set|remove)Item\(\s*'([^']+)'/g)) cles.add(m[1]);
   }
   // Deux clés passent par une constante : on tient la constante ET sa valeur.
-  const app = lire('src', 'App.jsx');
+  // + l'ecran de veille, sorti d'App.jsx le 23/09 (plan M1).
+  const app = ['App.jsx', 'ecranveille.jsx'].map(f => lire('src', f)).join(String.fromCharCode(10));
   assert.ok(app.includes("const ONGLET_CLE = 'loggia-accueil-onglet';"));
   assert.ok(app.includes("const cle = 'loggia-defilement';"));
   cles.add('loggia-accueil-onglet');
@@ -131,7 +132,7 @@ test('la confidentialité dit vrai : ni mesure d’audience, ni adresse tierce, 
   assert.ok(iSocket > 0 && iMicro > iSocket, 'le micro serait demandé avant de vérifier la liaison');
   assert.ok(!/\bsocket\s*:/.test(lire('src', 'demo.js')), 'la démo simule une liaison : le micro pourrait s’ouvrir sur le site');
   // La caméra : une seule option, coupée par défaut, nommée par la page.
-  assert.ok(lire('src', 'App.jsx').includes("localStorage.getItem('loggia-ambmotion') === '1'"));
+  assert.ok(lire('src', 'ecranveille.jsx').includes("localStorage.getItem('loggia-ambmotion') === '1'"));
   assert.ok(lire('src', 'views', 'parametres.jsx').includes("label={tr('Réveil par la caméra')}"));
   const h = page('confidentialite.html');
   for (const m of ['Réveil par la caméra', 'adresse IP', 'GitHub', 'Data Privacy Framework', 'CNIL', '3 place de Fontenoy', 'Ko-fi']) {

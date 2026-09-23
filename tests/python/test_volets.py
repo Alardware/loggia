@@ -923,7 +923,7 @@ def test_le_journal_dit_POURQUOI(creer):
     ligne = lancer(v.regles.journal())[0]
     assert ligne["module"] == "volets"
     assert ligne["regle"] == "planning"
-    assert ligne["motif"] == "coucher +30 min"
+    assert ligne["motif"] == "coucher du soleil +30 min"
     assert ligne["cibles"] == ["cover.salon"]
 
 
@@ -952,7 +952,7 @@ def test_l_etat_montre_le_journal_commun(creer):
     etat = lancer(v.async_etat())
     assert etat["journal"], "l'etat ne montre plus rien de ce que la regle a fait"
     assert etat["journal"][0]["regle"] == "planning"
-    assert etat["journal"][0]["motif"] == "coucher +30 min"
+    assert etat["journal"][0]["motif"] == "coucher du soleil +30 min"
 
 
 def test_le_composant_transmet_le_socle_aux_volets():
@@ -1302,7 +1302,7 @@ def test_un_ordre_parti_se_verifie_deux_minutes_plus_tard_et_se_redemande(creer,
     assert v.hass.services.appels[-1] == ("cover", "close_cover", {"entity_id": ["cover.salon"]})
     assert len(rdv.verifs()) == 1 and v._verifs["cover.salon"]["essais"] == 1
     j = lancer(v.regles.journal(module="volets"))
-    assert j[0]["motif"] == "coucher · immobile, essai 1/2" and "echec" not in j[0]
+    assert j[0]["motif"] == "coucher du soleil · immobile, essai 1/2" and "echec" not in j[0]
     # Cette fois le volet est ferme : plus rien a redire.
     v.hass.states.table["cover.salon"] = FauxEtat("closed", {"supported_features": 15, "current_position": 0})
     _echoir(v, rdv)

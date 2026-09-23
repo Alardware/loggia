@@ -281,6 +281,11 @@ export function PresenceReglages({ hass, cardSt }) {
         * pas en veille et l'extinction du coucher attend ; il se coupe seul
         * trente minutes après le retour d'un habitant. Sans désignation, la
         * carte dit quoi créer. */}
+      {/* Comme toutes ses voisines : la carte ne parait que si la regle
+        * tourne. La coupure automatique des trente minutes vit DANS cette
+        * regle — eteinte, elle n'arme plus rien, et la carte promettrait
+        * un retour a la normale qui ne viendrait pas (audit du 23/09). */}
+      {cfg.actif && !pliPres && (<>
       <div id="presence-invite" style={cardSt}>
         <div style={TITRE_PANNEAU}>{tr('Mode invité')}</div>
         <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>
@@ -307,6 +312,7 @@ export function PresenceReglages({ hass, cardSt }) {
           </div>
         )}
       </div>
+      </>)}
 
       {err && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
     </div>

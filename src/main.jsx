@@ -15,6 +15,7 @@
 // deviendrait un asset charge en retard — flash sans style, et plus de <link>
 // dans index.html pour l'inline du paquet (pack_frontend l'exige).
 import './index.css';
+import { CHARGEURS, langueServie } from './langues/index.js';
 
 /* La démo EN LIGNE (GitHub Pages) est une construction à part : `npm run
  * build:demo`, mode Vite « demo ». Il n'y a pas de Home Assistant derrière :
@@ -30,12 +31,14 @@ const demo = (() => {
   catch { return false; }
 })();
 
-/* Le catalogue anglais pese 40 Ko que le boot francophone n'a aucune raison
- * d'emporter : il ne se charge que si la langue resolue le demande, AVANT
+/* Un catalogue pese 40 a 50 Ko que le boot francophone n'a aucune raison
+ * d'emporter : celui de la langue resolue se charge, et lui seul, AVANT
  * d'evaluer l'application — des modules appellent tr() a l'import. La
  * resolution recopie `resoudreTot` d'i18n.js (choix explicite, sinon derniere
  * langue servie, sinon navigateur) : i18n ne peut pas etre importe ici sans
- * tirer la moitie du graphe dans l'amorce. Les deux doivent rester d'accord. */
+ * tirer la moitie du graphe dans l'amorce. Les deux doivent rester d'accord.
+ * `langues/index.js`, lui, est minuscule : c'est la liste des catalogues,
+ * importee en tete avec le CSS. */
 function langueProbable() {
   const lire = (k) => {
     try {
@@ -58,17 +61,18 @@ function langueProbable() {
     if (DEMO_SEULE) document.title = 'Loggia — démonstration';
     try { (await import('./demo.js')).installerDemo(); }
     catch (e) { console.error('demo indisponible', e); }
-    /* `?mode=auto|light|dark` et `?lang=fr|en` : réglages d'aperçu dans la
+    /* `?mode=auto|light|dark` et `?lang=<code>` : réglages d'aperçu dans la
      * démo — posés APRÈS l'installation du magasin mémoire (qui repart à neuf
      * à chaque chargement), sinon le vrai localStorage les recevrait.
      * `lang` sert à VÉRIFIER une traduction : sans lui, il fallait changer la
-     * langue de Home Assistant pour voir l'anglais. */
+     * langue de Home Assistant pour voir l'anglais. Tout code que Loggia sert
+     * en entier est accepté (`langueServie`). */
     try {
       const q = new URLSearchParams(window.location.search);
       const md = q.get('mode');
       if (md === 'auto' || md === 'light' || md === 'dark') localStorage.setItem('loggia-mode', md);
       const lg = q.get('lang');
-      if (lg === 'fr' || lg === 'en') localStorage.setItem('loggia-langue', JSON.stringify(lg));
+      if (lg && langueServie(lg)) localStorage.setItem('loggia-langue', JSON.stringify(lg));
       /* `?theme=ios` : le thème, comme le mode — pour REJOUER l'audit de
        * contraste variante par variante (15 thèmes × clair et sombre) au lieu
        * de cliquer dans les Paramètres à chaque passe. Un nom inconnu retombe
@@ -83,8 +87,9 @@ function langueProbable() {
       if (vu && /^[a-z]+(:.{1,40})?$/.test(vu)) sessionStorage.setItem('loggia-vue', vu);
     } catch { /* rien */ }
   }
-  if (langueProbable() === 'en') {
-    try { window.__loggiaCatEN = (await import('./langues/en.js')).default; }
+  const probable = langueProbable();
+  if (CHARGEURS[probable]) {
+    try { window.__loggiaCatalogue = { code: probable, cat: (await CHARGEURS[probable]()).default }; }
     catch { /* reseau : le francais couvre tout */ }
   }
   await import('./boot.jsx');

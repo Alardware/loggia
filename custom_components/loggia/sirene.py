@@ -153,7 +153,7 @@ class LoggiaSirene:
             return
         if self.regles is not None:
             await self.regles.noter(MODULE, "test", "eteindre", cibles=[haid], n=1,
-                                    motif="fin du test" + (" (redemarrage pendant le test)" if rattrape else ""))
+                                    motif="fin du test (redemarrage pendant le test)" if rattrape else "fin du test")
 
     async def _sauver(self) -> None:
         await self.store.async_set_shared(CLE, self.table)
@@ -186,14 +186,23 @@ class LoggiaSirene:
             data["duration"] = DUREE
         await self.hass.services.async_call(dom, "turn_on", data, blocking=False, context=ctx)
 
-        if not par_la_sirene:
-            self.table[haid] = {"fin": maintenant + DUREE, "par": par}
-            await self._sauver()
-            self._armer(haid)
+        # Le test est note dans la table DANS LES DEUX CAS (audit du 23/09).
+        #
+        # Il ne l'etait que quand nous tenions le compte : une sirene qui gere
+        # sa propre duree n'y entrait pas, et la garde du dessus — « elle sonne
+        # deja et ce n'est pas nous » — refusait donc un second appui pendant
+        # notre propre test. L'ADR 0065 promettait l'inverse.
+        #
+        # Le rendez-vous est arme lui aussi, meme quand la sirene s'arrete
+        # seule : a l'echeance, `_async_eteindre` la trouve deja eteinte et se
+        # contente de nettoyer la table, sans rien commander ni journaliser.
+        self.table[haid] = {"fin": maintenant + DUREE, "par": par}
+        await self._sauver()
+        self._armer(haid)
         if self.regles is not None:
             await self.regles.noter(MODULE, "test", "sonner", cibles=[haid], n=1,
-                                    motif="test sonore de %d s" % DUREE
-                                    + (" (duree geree par la sirene)" if par_la_sirene else ""))
+                                    motif=("test sonore de {s} s (duree geree par la sirene)" if par_la_sirene
+                                           else "test sonore de {s} s", {"s": DUREE}))
         return {"entity_id": haid, "duree": DUREE, "fin": maintenant + DUREE, "maintenant": maintenant}
 
     @callback

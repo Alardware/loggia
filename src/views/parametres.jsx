@@ -33,7 +33,7 @@ import { NuitReglages } from './nuit.jsx';
 import { VeillesReglages } from './veilles.jsx';
 import { JournalReglages } from './journal.jsx';
 import { weatherEntity } from '../wxutil.jsx';
-import { tr, locale, choixLangue, languesDisponibles } from '../i18n.js';
+import { tr, locale, choixLangue, languesDisponibles, nomProfil } from '../i18n.js';
 import { Panneau, Ligne, Pastille, CAPITALES, MONO, DESC_PANNEAU, FILET, btnPrimaire, btnSecondaire, btnDiscret, btnDanger } from './parcommun.jsx';
 
 /* ── Les briques d'affichage, au niveau du module ────────────────────────────
@@ -285,7 +285,7 @@ function AlertesTele({ hass }) {
   const test = () => {
     if (!cfg.service) { setMsg(tr('Choisis d’abord un téléphone.')); return; }
     if (local) { setMsg(tr('Démonstration : rien ne part vers un vrai téléphone.')); return; }
-    Promise.resolve().then(() => hass.callService('notify', cfg.service, { title: 'Loggia — sûreté', message: tr('Notification de test — tout est en place.') }))
+    Promise.resolve().then(() => hass.callService('notify', cfg.service, { title: tr('Loggia — sûreté'), message: tr('Notification de test — tout est en place.') }))
       .then(() => setMsg(tr('Test envoyé — regarde ton téléphone.')))
       .catch(() => setMsg(tr('Envoi impossible — Home Assistant a refusé ce service.')));
   };
@@ -437,9 +437,11 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
   const conso = !isNaN(cw) ? (Math.abs(cw) >= 995 ? (Math.abs(cw) / 1000).toFixed(1).replace('.', ',') + ' kW' : Math.round(Math.abs(cw)) + ' W') : '—';
   const pvAlarm = (pvRes && pvRes.alarm && pvRes.alarm.available) ? pvRes.alarm.main : null;
   const al = (secAlarm() && S[secAlarm()]) ? S[secAlarm()] : (pvAlarm ? S[pvAlarm] : null);
-  const alTxt = al ? (al.state === 'disarmed' ? tr('désarmée') : al.state.indexOf('armed') === 0 ? 'armée' : al.state) : '—';
+  const alTxt = al ? (al.state === 'disarmed' ? tr('désarmée') : al.state.indexOf('armed') === 0 ? tr('armée') : al.state) : '—';
   const h = now.getHours();
-  const greet = h < 6 ? 'Bonne nuit' : h < 12 ? 'Bonjour' : h < 18 ? tr('Bon après-midi') : 'Bonsoir';
+  // Les memes mots que l'Accueil, traduits — l'apercu montrait « Bonjour,
+  // Administrateur » en francais au milieu de l'italien (retour du 23/09).
+  const greet = h < 6 ? tr('Bonne nuit') : h < 12 ? tr('Bonjour') : h < 18 ? tr('Bon après-midi') : tr('Bonsoir');
   const tile = (v, l, c) => (
     <div key={l} style={{ background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: RAD[2], padding: '9px 11px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: c, flexShrink: 0 }} /><span style={{ fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span></div>
@@ -456,7 +458,7 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}</span>
         </div>
         <div style={{ background: 'var(--o-s3)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: RAD[1], padding: '10px 12px', marginBottom: 9 }}>
-          <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 15, fontWeight: 500 }}>{greet}{userName ? ', ' + userName : ''}</div>
+          <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 15, fontWeight: 500 }}>{greet}{userName ? ', ' + nomProfil(userName) : ''}</div>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr("l'aperçu suit le thème choisi")}</div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 9 }}>
@@ -608,17 +610,17 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
     <div role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div role="presentation" onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}><span style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 19, color: '#fff', background: `linear-gradient(135deg,${c},rgba(${cl_hexRgb(c)},.6))` }}>{(name.trim()[0] || '?').toUpperCase()}</span><div style={{ fontSize: 15, fontWeight: 800 }}>{user ? "Modifier l'utilisateur" : 'Nouvel utilisateur'}</div></div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>NOM</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>{tr('NOM')}</div>
         {/* `autoFocus` delibere : cette feuille s'ouvre pour saisir un nom, en
           * reponse a un clic. La regle vise les champs focalises au CHARGEMENT
           * d'une page. */}
-        <input aria-label="Nom" value={name} autoFocus onChange={e => setName(e.target.value)} placeholder="Nom" style={{ ...inp, marginBottom: 16 }} />
+        <input aria-label={tr('Nom')} value={name} autoFocus onChange={e => setName(e.target.value)} placeholder={tr('Nom')} style={{ ...inp, marginBottom: 16 }} />
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>{tr('RÔLE')}</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <button onClick={() => setRole('Admin')} style={roleBtn(role === 'Admin')}>Admin</button>
-          <button onClick={() => setRole('Famille')} style={roleBtn(role === 'Famille')}>Famille</button>
+          <button onClick={() => setRole('Admin')} style={roleBtn(role === 'Admin')}>{tr('Admin')}</button>
+          <button onClick={() => setRole('Famille')} style={roleBtn(role === 'Famille')}>{tr('Famille')}</button>
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 8 }}>COULEUR</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 8 }}>{tr('COULEUR')}</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
           {USER_COLORS.map(col => <button key={col} aria-label={tr('Couleur du profil')} onClick={() => setC(col)} style={{ width: 32, height: 32, borderRadius: '50%', border: col === c ? '2px solid var(--o-text)' : '2px solid transparent', background: col, cursor: 'pointer', flexShrink: 0 }} />)}
         </div>
@@ -645,7 +647,7 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: 'var(--o-bad)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Supprimer')}</button>}
           <div style={{ flex: 1 }} />
-          <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
+          <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Annuler')}</button>
           <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
         </div>
       </div>
@@ -705,11 +707,13 @@ function CvEditor({ cv, hass, onSave, onClose }) {
     <div role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div role="presentation" onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 470, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
         <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>{cv ? 'Modifier la vue' : 'Nouvelle vue'}</div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', marginBottom: 6 }}>NOM</div>
-        <input aria-label="Ma vue" value={name} onChange={e => setName(e.target.value)} placeholder="Ma vue" style={inp} />
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', marginBottom: 6 }}>{tr('NOM')}</div>
+        <input aria-label={tr('Ma vue')} value={name} onChange={e => setName(e.target.value)} placeholder={tr('Ma vue')} style={inp} />
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('ICÔNE')}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {CV_ICONS.map(ic => <button key={ic} onClick={() => setIcon(ic)} style={{ width: 40, height: 40, borderRadius: 10, border: icon === ic ? '2px solid var(--o-accent)' : 'var(--o-bw,1px) solid var(--o-bd2)', background: icon === ic ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: icon === ic ? 'var(--o-accent-soft)' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={ic} size={16} /></button>)}
+          {/* Une grille d'icônes nues : chacune dit son nom et si elle est
+            * choisie, sinon c'est « bouton » vingt fois (plan M7). */}
+          {CV_ICONS.map(ic => <button key={ic} aria-label={ic} aria-pressed={icon === ic} title={ic} onClick={() => setIcon(ic)} style={{ width: 40, height: 40, borderRadius: 10, border: icon === ic ? '2px solid var(--o-accent)' : 'var(--o-bw,1px) solid var(--o-bd2)', background: icon === ic ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: icon === ic ? 'var(--o-accent-soft)' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={ic} size={16} /></button>)}
         </div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>ENTITÉS ({ents.length})</div>
         {ents.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
@@ -719,7 +723,7 @@ function CvEditor({ cv, hass, onSave, onClose }) {
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
         <TplForm hass={getHass()} onAdd={(t) => setEnts(prev => [...prev, t])} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
+          <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Annuler')}</button>
           <button onClick={save} style={{ padding: '11px 20px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: name.trim() ? 1 : .5 }}>{tr('Enregistrer')}</button>
         </div>
       </div>
@@ -768,7 +772,7 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
             {addable && <button onClick={() => del(i)} title={tr('Retirer')} style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 14, fontWeight: 800 }}>×</button>}
           </div>
         ))}
-        {!rows.length && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '4px 2px' }}>Vide.</div>}
+        {!rows.length && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '4px 2px' }}>{tr('Vide.')}</div>}
       </div>
     </div>
   );
@@ -803,6 +807,20 @@ function useEntConfig(hass) {
       name: z.name || '', room: z.room || '', haid: z.haid || '',
       tempCible: z.tempCible || '', modeEnt: z.modeEnt || '',
       autoEnt: z.autoEnt || '', tempSensor: z.tempSensor || '',
+    }))),
+    /* Distributeur de croquettes : pilote par automatisations, sans equivalent
+     * standard dans Home Assistant — il n'y a rien a decouvrir, seulement a
+     * designer. Or AUCUN ecran ne l'ecrivait : `loggia_feeder` ne sortait que
+     * de la demonstration, si bien que la carte et la fiche du distributeur
+     * n'apparaissaient jamais sur une vraie installation, pendant que le README
+     * promettait cette designation (plan du 22/09, points S1 et M4). */
+    feeder: (() => {
+      const f = cfgVal('loggia_feeder', null) || loggiaEnt('feeder', null) || {};
+      const h = f.haids || {};
+      return { reservoir: h.reservoir || '', portionWeight: h.portionWeight || '', distribuees: h.distribuees || '', script: f.script || '' };
+    })(),
+    repas: avecCle((((cfgVal('loggia_feeder', null) || loggiaEnt('feeder', null) || {}).meals) || []).map(m => ({
+      time: m.time || '', label: m.label || '', g: m.g != null ? String(m.g) : '', auto: m.auto || '',
     }))),
   });
   const [ent, setEnt] = useState(readEnt);
@@ -840,6 +858,22 @@ function useEntConfig(hass) {
           autoEnt: z.autoEnt || null, hasAuto: !!z.autoEnt,
           tempSensor: z.tempSensor || null,
         })),
+        /* `null` quand rien n'est renseigne : la carte du distributeur se tait
+         * alors, au lieu de montrer un reservoir vide. `cfgSet` efface la cle. */
+        loggia_feeder: (ent.feeder.reservoir || ent.feeder.portionWeight || ent.repas.some(r => r.time))
+          ? {
+            haids: {
+              reservoir: ent.feeder.reservoir || null,
+              portionWeight: ent.feeder.portionWeight || null,
+              distribuees: ent.feeder.distribuees || null,
+            },
+            ...(ent.feeder.script ? { script: ent.feeder.script } : {}),
+            meals: ent.repas.filter(r => r.time).map((r, i) => ({
+              id: 'repas' + i, time: r.time, label: r.label || '',
+              g: Number(r.g) || 0, auto: r.auto || null,
+            })),
+          }
+          : null,
       });
     } catch { alert('Enregistrement impossible — la configuration n’a pas été appliquée.'); return; }
     // L'écriture serveur part en arrière-plan : on lui laisse le temps d'aboutir
@@ -848,7 +882,7 @@ function useEntConfig(hass) {
   };
   const dlists = useMemo(() => {
     const doms = ['sensor', 'person', 'switch', 'camera', 'media_player', 'alarm_control_panel', 'weather',
-      'climate', 'input_number', 'input_select', 'input_boolean'];
+      'climate', 'input_number', 'input_select', 'input_boolean', 'number', 'script', 'automation'];
     const m = {}; doms.forEach(d => { m[d] = []; });
     if (hass && hass.states) Object.keys(hass.states).forEach(id => { const d = id.slice(0, id.indexOf('.')); if (m[d]) m[d].push(id); });
     Object.keys(m).forEach(d => m[d].sort());
@@ -893,7 +927,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
           {/* Deux colonnes : a trois, le champ tronquait les noms d'entites,
               qui depassent souvent trente caracteres. */}
           <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
-            {[['consoNow', tr('Consommation')], ['surplusNow', 'Surplus'], ['solarOutput', 'Production solaire'],
+            {[['consoNow', tr('Consommation')], ['surplusNow', tr('Surplus')], ['solarOutput', tr('Production solaire')],
               ['evNow', 'Véhicule · charge'], ['batNow', 'Batterie · puissance'], ['batSoc', 'Batterie · niveau']].map(([k, l]) => (
               <div key={k}><div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)', marginBottom: 4 }}>{l.toUpperCase()}</div><ChampSuggere label={l} value={ent.energy[k] || ''} onChange={val => setEnt(o => ({ ...o, energy: { ...o.energy, [k]: val } }))} placeholder="sensor.…" suggestions={sugg('sensor')} style={entInp} /></div>
             ))}
@@ -902,7 +936,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
       )}
       {has('alarm') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
-          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>Alarme</div>
+          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Alarme')}</div>
           <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Panneau d'alarme (vue Sécurité, bannière, notifications).")}</div>
           <ChampSuggere label={tr('Panneau d’alarme')} value={ent.alarm} onChange={val => setEnt(o => ({ ...o, alarm: val }))} placeholder="alarm_control_panel.…" suggestions={sugg('alarm_control_panel')} style={entInp} />
         </div>
@@ -930,6 +964,32 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
           { k: 'tempSensor', label: tr('Température'), ph: 'sensor.…', domain: 'sensor', flex: 1.1 },
         ]}
         rows={ent.climate} onRows={entSet('climate')} check={check} />}
+      {has('feeder') && (
+        <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
+          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Distributeur de croquettes')}</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr('Piloté par automatisations : rien ne se devine. Le réservoir suffit à faire apparaître sa carte dans Objets.')}</div>
+          <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
+            {[['reservoir', tr('Réservoir'), 'input_number.…', 'input_number'],
+              ['portionWeight', tr('Poids d’une portion'), 'number.…', 'number'],
+              ['distribuees', tr('Distribué aujourd’hui'), 'sensor.… (optionnel)', 'sensor'],
+              ['script', tr('Script de distribution'), 'script.… (optionnel)', 'script']].map(([k, l, ph, d]) => (
+              <div key={k}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)', marginBottom: 4 }}>{l.toUpperCase()}</div>
+                <ChampSuggere label={l} value={ent.feeder[k] || ''} onChange={val => setEnt(o => ({ ...o, feeder: { ...o.feeder, [k]: val } }))} placeholder={ph} suggestions={sugg(d)} style={entInp} />
+              </div>
+            ))}
+          </div>
+          <EntSection sugg={sugg} title={tr('Repas de la journée')}
+            desc={tr('Chaque ligne est un repas programmé. « Interrupteur » est ce que la carte allume ou éteint pour activer ce repas : l’automatisation, ou son aide.')}
+            cols={[
+              { k: 'time', label: tr('Heure'), ph: '07:30', flex: .6 },
+              { k: 'label', label: tr('Libellé'), ph: tr('Matin'), flex: .8 },
+              { k: 'g', label: tr('Grammes'), ph: '45', flex: .5 },
+              { k: 'auto', label: tr('Interrupteur'), ph: 'automation.… / input_boolean.…', domain: 'automation', flex: 1.2 },
+            ]}
+            rows={ent.repas} onRows={entSet('repas')} check={check} />
+        </div>
+      )}
     </>
   );
 }
@@ -955,9 +1015,17 @@ function lienSur(url) {
   return /^https?:\/\//i.test(u) ? u : null;
 }
 
+/* Les vues du menu principal, hors Accueil — celles qui se masquent une par une
+ * dans Paramètres › Vues. Une seule liste : le compteur du sommaire et l'onglet
+ * comptaient chacun de leur côté, et le sommaire écrivait « 11 » en dur. */
+export const VUES_PRINCIPALES = ['pieces', 'scenes', 'objets', 'energie', 'securite', 'systeme'];
+
 export const VIEW_ENT_SECTIONS = {
   accueil: ['rooms', 'weather', 'energy', 'people', 'cams'],
-  objets: ['switches', 'medias', 'climate'],
+  // Le distributeur se designe dans Objets : c'est la que vivent sa carte et sa
+  // fiche. La vue Croquettes, elle, a quitte le menu le 30/08 — la fiche
+  // d'appareil universelle la remplace (voir les vues secondaires, ui.jsx).
+  objets: ['switches', 'medias', 'climate', 'feeder'],
   lumieres: ['switches'],
   energie: ['energy'],
   securite: ['alarm', 'cams'],
@@ -1279,25 +1347,27 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
 
   // Sections du sommaire : chiffre mis en avant + accroche.
   const SECTIONS = [
-    { id: 'users', name: 'Profils', ico: 'users', col: 'var(--o-accent-soft)', bg: 'rgba(var(--o-accent-rgb),.14)',
-      sub: (users[userIdx] || {}).name ? (users[userIdx] || {}).name + ' · ' + String((users[userIdx] || {}).role || '').toLowerCase() : 'Profils locaux et code admin',
+    { id: 'users', name: tr('Profils'), ico: 'users', col: 'var(--o-accent-soft)', bg: 'rgba(var(--o-accent-rgb),.14)',
+      sub: (users[userIdx] || {}).name ? nomProfil((users[userIdx] || {}).name) + ' · ' + tr(String((users[userIdx] || {}).role || '')).toLowerCase() : tr('Profils locaux et code admin'),
       big: String(users.length), unit: tr('profils du foyer'), admin: false },
     { id: 'apparence', name: tr('Apparence'), ico: 'palette', col: 'var(--o-purple)', bg: 'rgba(var(--o-purple-rgb),.14)',
       sub: tr('Thème, mode, effets'), big: (PRESET_META().find(x => x.id === loggiaTheme) || PRESET_META()[0]).name, unit: tr('{n} thèmes', { n: PRESET_META().length }), admin: false, small: true },
     { id: 'connexion', name: tr('Connexion HA'), long: 'Connexion à Home Assistant', ico: 'link', col: 'var(--o-ok)', bg: 'rgba(var(--o-ok-rgb),.14)',
-      sub: accessKind, pageSub: 'Session empruntée au navigateur · ' + accessKind, big: (lat != null && lat >= 0) ? lat + ' ms' : (hass ? 'active' : 'hors ligne'), unit: hass ? 'session active' : 'session absente', admin: false, small: true },
+      sub: accessKind, pageSub: tr('Session empruntée au navigateur') + ' · ' + accessKind, big: (lat != null && lat >= 0) ? lat + ' ms' : (hass ? tr('active') : tr('hors ligne')), unit: hass ? tr('session active') : tr('session absente'), admin: false, small: true },
     { id: 'auto', name: tr('Automatisations'), ico: 'bolt', col: 'var(--o-warn)', bg: 'rgba(var(--o-warn-rgb),.14)',
       sub: tr('Gérées dans Home Assistant'), big: String(autos.filter(a => a.on).length), unit: tr('actives sur {n}', { n: autos.length }), admin: true },
     { id: 'alertes', name: tr('Alertes'), ico: 'bell', col: 'var(--o-bad)', bg: 'rgba(var(--o-bad-rgb),.14)',
       sub: tr('Sûreté poussée sur téléphone'), big: tr('notify'), unit: tr('via app compagnon'), admin: true, small: true },
     { id: 'maj', name: tr('Mises à jour'), ico: 'refresh', col: 'var(--o-warn2)', bg: 'rgba(var(--o-warn2-rgb),.14)',
-      sub: upsAvail ? 'Firmwares et modules' : tr('Tout est à jour'), big: String(upsAvail || 0), unit: upsAvail ? 'en attente' : 'à jour', admin: true, dot: upsAvail > 0 },
+      sub: upsAvail ? tr('Firmwares et modules') : tr('Tout est à jour'), big: String(upsAvail || 0), unit: upsAvail ? tr('en attente') : tr('à jour'), admin: true, dot: upsAvail > 0 },
     { id: 'inter', name: tr('Interrupteurs'), ico: 'apps', col: 'var(--o-purple)', bg: 'rgba(var(--o-purple-rgb),.14)',
       sub: tr('Boutons sans fil Zigbee'), big: String(nbInter), unit: nbInter ? tr('réglés') : tr('à régler'), admin: true },
     { id: 'regles', name: tr('Règles'), ico: 'bolt', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
       sub: tr('Ce que Loggia fait tout seul'), big: String(nbVolRegles), unit: nbVolRegles ? tr('règles actives') : tr('à régler'), admin: true },
     { id: 'vues', name: tr('Vues'), ico: 'layout-fluid', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
-      sub: tr('Menu latéral et vues perso'), big: String(11 + customViews.length), unit: tr('vues disponibles'), admin: true },
+      // Compté, plus écrit en dur : « 11 + les vues perso » était juste le jour
+      // où on l'a tapé, et se serait démenti à la vue suivante (plan, M4).
+      sub: tr('Menu latéral et vues perso'), big: String(1 + VUES_PRINCIPALES.length + HIDDEN_VIEWS().length + customViews.length), unit: tr('vues disponibles'), admin: true },
     { id: 'about', name: tr('À propos'), ico: 'info', col: 'var(--o-text2)', bg: 'var(--o-s1)',
       sub: tr('React + Vite · servi par l’intégration'),
       big: (LOGGIA_INDEX && LOGGIA_INDEX.componentVersion) ? 'v' + LOGGIA_INDEX.componentVersion : '—',
@@ -1371,7 +1441,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     }
     if (tab === 'vues') {
       const c = readViewsCfg();
-      const principales = ['pieces', 'scenes', 'objets', 'energie', 'securite', 'systeme'];
+      const principales = VUES_PRINCIPALES;
       const vues = 1 + principales.filter(v => !viewReason(availViews, v) && !c.hidden.has(v)).length
         + HIDDEN_VIEWS().filter(h => !viewReason(availViews, h.vid) && c.shown.has(h.vid)).length + customViews.length;
       const total = 1 + principales.length + HIDDEN_VIEWS().length + customViews.length;
@@ -1409,7 +1479,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: sec.bg }}><Fi i={sec.ico} size={15} color={sec.col} /></span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800 }}>{sec.name}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800 }}>{tr(sec.name)}</div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sec.sub}</div>
                   </div>
                   {sec.dot && <span style={{ width: 7, height: 7, borderRadius: '50%', background: sec.col, flexShrink: 0 }} />}
@@ -1418,7 +1488,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                   <span style={{ fontSize: sec.small ? 17 : 24, fontWeight: 800, letterSpacing: '-.02em', color: sec.col, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sec.big}</span>
                   <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sec.unit}</span>
                 </div>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)' }}>Ouvrir<Fi i="angle-small-right" size={12} color="var(--o-accent-soft)" /></span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{tr('Ouvrir')}<Fi i="angle-small-right" size={12} color="var(--o-accent-soft)" /></span>
               </button>
             ))}
           </div>
@@ -1465,7 +1535,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                     <div className="o-theme-pts" style={{ display: 'flex', gap: 5, marginBottom: 9 }}>
                       {p.cols.map((c, k) => <div key={k} className="o-theme-pt" style={{ width: 18, height: 18, borderRadius: 9, background: c, border: '1px solid var(--o-bd1)' }} />)}
                     </div>
-                    <div className="o-theme-desc" style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</div>
+                    <div className="o-theme-desc" style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr(p.desc)}</div>
                   </button>
                 );
               })}
@@ -1500,9 +1570,18 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <Tgl on={haTheme === 'FOLLOW'} cb={onFollowHa} label={tr('Suivre le thème Home Assistant')} />
             </OptRow>
             <OptRow title={tr('Langue')} desc={tr('Les noms de pièces et d’appareils viennent de Home Assistant.')}>
-              <Seg value={choixLangue()}
-                opts={languesDisponibles(hass).map(l => [l.code, l.code === 'auto' ? tr('Auto') : l.code.toUpperCase()])}
-                onPick={v => {
+              {/* Un menu, pas une rangée de boutons : dès six langues, la rangée
+                * débordait (demande du 22/09). Chaque langue se lit dans sa
+                * propre langue — c'est ainsi qu'on la reconnaît —, son nom
+                * traduit en petit dessous, comme le sélecteur de HA. */}
+              <ListeChoix label={tr('Langue')} value={choixLangue()}
+                options={languesDisponibles(hass).map(l => ({
+                  id: l.code,
+                  label: l.code === 'auto' ? tr('Suivre Home Assistant') : l.nom,
+                  sub: l.enFrancais ? tr(l.enFrancais) : undefined,
+                }))}
+                style={{ gap: 12, minWidth: 0, width: 268, maxWidth: '100%', padding: '9px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)' }}
+                onChange={v => {
                   /* Pas de rechargement : les listes sont des fonctions, elles
                    * se disent dans la langue du moment, un redessin suffit. */
                   cfgSet({ 'loggia-langue': v });

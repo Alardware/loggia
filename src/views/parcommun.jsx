@@ -32,7 +32,12 @@ export function Panneau({ titre = null, desc = null, droite = null, niveau = nul
       {(titre || desc || droite) && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '18px 22px ' + (children ? '16px' : '18px'), flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-            {titre && <div style={{ ...TITRE_PANNEAU, ...(titreStyle || {}) }}>{titre}</div>}
+            {/* Un `h2`, plus un `div` (plan M7) : chaque panneau de Paramètres
+              * et de Règles portait son titre sans niveau, si bien qu'un
+              * lecteur d'écran n'avait aucun plan de la page. `margin: 0` et la
+              * graisse du jeton : rien ne bouge à l'œil, comme pour les titres
+              * de l'Accueil (ADR 0063). */}
+            {titre && <h2 style={{ margin: 0, ...TITRE_PANNEAU, ...(titreStyle || {}) }}>{titre}</h2>}
             {desc && <div style={DESC_PANNEAU}>{desc}</div>}
           </div>
           {droite && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{droite}</div>}

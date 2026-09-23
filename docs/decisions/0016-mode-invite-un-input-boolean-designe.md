@@ -41,8 +41,23 @@ l'alarme est armée, et l'alarme ne relève pas de Loggia.)
   main qui a rallumé l'interrupteur entre-temps le gèle, et il reste allumé.
   Reparti avant, ou mode éteint : la coupure s'annule. Sans personne suivie,
   pas de coupure automatique (la maison ne sait pas qu'un habitant rentre).
+- **Ce que la coupure ne fait pas** : elle vit en mémoire, et c'est la
+  TRANSITION « tous absents → un habitant rentre » qui l'arme. Un redémarrage
+  de Home Assistant pendant la demi-heure l'oublie donc, et l'habitant déjà là
+  au redémarrage n'en déclenche pas de nouvelle : le mode reste allumé jusqu'à
+  ce qu'on l'éteigne, ou jusqu'au prochain retour. C'est la même règle que
+  pour les lumières éteintes en partant — après un redémarrage, Loggia ne
+  prétend pas savoir depuis quand quelqu'un est rentré. La tenir malgré un
+  redémarrage demanderait d'écrire l'échéance au magasin, comme le minuteur
+  d'extinction (ADR 0068) et le test de sirène (ADR 0065) ; ce n'est pas fait.
 - `nuit.py` : l'extinction du coucher lit la désignation dans `loggia_presence`
   et, mode allumé, se retient — une ligne au journal le dit.
+  *Corrigé le 23/09* : elle la lisait même quand la **règle de présence était
+  éteinte**. L'interrupteur restait alors allumé pour toujours, puisque plus
+  rien ne le coupait, et le coucher n'éteignait donc plus jamais rien — sans
+  que rien à l'écran ne dise pourquoi. La désignation n'est désormais lue que
+  si `presence.actif`, et la carte du mode invité disparaît de l'onglet quand
+  la règle est éteinte.
 - L'onglet Présence : carte « Mode invité », un choix parmi les
   `input_boolean` de la maison, la bascule qui passe par Home Assistant, et
   la coupure programmée quand elle l'est. Sans désignation, la carte dit
