@@ -63,6 +63,7 @@ test('l’Accueil : la carte d’edition remplace la tuile, la case d’ajout fe
   // ne vient jamais se loger dans un trou qu'on a voulu vide (23/09).
   assert.ok(home.includes("<CarteAjout onClick={() => setPieceSheet({ nom: '', compacte: false })} label={tr('Ajouter une pièce')} />"), 'la case d’ajout');
   assert.ok(home.includes("gridColumn: piecesApres.c, gridRow: piecesApres.r + ' / span 1'"), 'et elle ferme la grille');
+  assert.ok(home.includes('premiereLibre(piecesPrises, piecesCols, 1, 400, piecesBas)'), 'le balayage part de la carte la plus basse : sinon la tuile remonte se loger dans le trou');
   assert.ok(home.includes('<FichePiece key={pieceSheet.nom} nom={pieceSheet.nom} compacte={pieceSheet.compacte} hass={dashHass} onEnregistrer={enregistrerPieceIci} onSupprimer={retirerPiece}'), 'la fiche');
   assert.ok(home.includes("tailles[piece.room] = compacte ? 'c' : 's';") && home.includes("piecesOrdre: (grille.piecesOrdre || []).map(n => n === avant ? piece.room : n)"), 'renommer emporte la taille et l’ordre');
   assert.ok(home.includes("piecesOrdre: (grille.piecesOrdre || []).filter(n => n !== nom)"), 'retirer les efface');

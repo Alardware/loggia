@@ -57,9 +57,18 @@ test('la tablette pose sa mosaïque sur trois colonnes', () => {
   assert.match(c, /const col = i % 3;/, 'la mosaïque ne compte plus en trois colonnes');
   assert.match(c, /Math\.floor\(i \/ 3\) % 2 === 0/, 'la parité des rangées ne renverse plus le motif');
   // Et la grille DOIT valoir trois colonnes, sinon les grandes tuiles
-  // tomberaient n'importe où.
-  assert.match(src, /\(tactile && wide\) \? 'repeat\(3,1fr\)'/,
-    'les trois colonnes de la tablette ne sont plus imposées');
+  // tomberaient n'importe où. Depuis le 23/09 ce nombre vient de
+  // `colonnesPour` — le même que celui qui place les cartes, sans quoi une
+  // carte se pose dans une colonne qui n'existe pas (mesuré : elle s'écrase
+  // alors à zéro pixel de large).
+  const pc = readFileSync(join(RACINE, 'src', 'placement.js'), 'utf8');
+  assert.match(pc, /if \(mosaique\) return 3;/, 'les trois colonnes de la tablette ne sont plus imposées');
+  assert.match(src, /colonnesPour\(el\.getBoundingClientRect\(\)\.width, etroitPieces, tactile && wide\)/,
+    'la mosaïque ne se déduit plus du type d’appareil');
+  assert.match(src, /gridTemplateColumns: 'repeat\(' \+ piecesCols \+ ',minmax\(0,1fr\)\)'/,
+    'la grille ne reçoit plus le nombre de colonnes qu’on a calculé : des colonnes implicites reviendront');
+  assert.ok(!/\.grid-chips \{ grid-template-columns[^}]*!important/.test(css),
+    'une règle CSS impose de nouveau les colonnes : le calcul ne la voit pas');
 });
 
 test('chaque tuile pièce a sa cellule : colonne ET rangée', () => {

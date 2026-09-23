@@ -47,7 +47,7 @@ import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { colonnesCam, camDispoDe, poserCamDispo, camDisposDe, camSerre, CAM_AUTO } from './camdispo.js';
 import { decalageServeur, resteMinuteur, decompte } from './minuteur.js';
-import { disposer, poser, premiereLibre, hauteur as hauteurCarte, cellulePointee, colonnesDe, nettoyer } from './placement.js';
+import { disposer, poser, premiereLibre, hauteur as hauteurCarte, cellulePointee, colonnesPour, nettoyer } from './placement.js';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
 import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { CARTE_RAIL, CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE } from './styles.js';
@@ -6802,15 +6802,18 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   // — souris directe, appui long au doigt — mais l'ordre est le sien
   // (accL.piecesOrdre). stopPropagation : sinon la section se saisit avec.
   const [pieceDrag, setPieceDrag] = useState(null); // { id, noms, c, r } — la cellule visée
-  /* La grille des pièces, mesurée : `auto-fill` met autant de colonnes que la
-   * largeur permet, et une place n'a de sens que rapportée à ce nombre-là. */
+  /* La grille des pièces : c'est NOUS qui décidons du nombre de colonnes, et la
+   * grille le reçoit (`repeat(n, minmax(0,1fr))`). Le lire sur le style calculé
+   * se mordait la queue — une carte posée hors du modèle y ajoutait une colonne
+   * implicite, comptée à la lecture suivante (voir placement.js). */
   const piecesGrille = useRef(null);
-  const [piecesCols, setPiecesCols] = useState(1);
+  const etroitPieces = !useWide(641); // le téléphone : deux colonnes, comme partout
+  const [piecesCols, setPiecesCols] = useState(() => (etroitPieces ? 2 : 3));
   useEffect(() => {
     const el = piecesGrille.current;
     if (!el || typeof ResizeObserver === 'undefined') return undefined;
     const lire = () => {
-      try { setPiecesCols(colonnesDe(getComputedStyle(el).gridTemplateColumns)); } catch { /* grille partie */ }
+      try { setPiecesCols(colonnesPour(el.getBoundingClientRect().width, etroitPieces, tactile && wide)); } catch { /* grille partie */ }
     };
     lire();
     const ro = new ResizeObserver(lire);
@@ -7558,7 +7561,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           piecesNoms.forEach(nom => {
             for (let k = 0; k < hauteurCarte(piecesTailles[nom]); k += 1) piecesPrises.add(piecesOu[nom].c + ':' + (piecesOu[nom].r + k));
           });
-          const piecesApres = premiereLibre(piecesPrises, piecesCols, 1);
+          // « Après tout le monde » se compte depuis la rangée de la carte la
+          // plus basse : la tuile s'y range à côté, ou dessous — jamais dans le
+          // trou laissé plus haut (vérifié en démonstration le 23/09).
+          const piecesBas = piecesNoms.reduce((m, nom) => Math.max(m, piecesOu[nom].r), 1);
+          const piecesApres = premiereLibre(piecesPrises, piecesCols, 1, 400, piecesBas);
           const piecesGrid = (
             // Deux densités comme partout : compacte = une rangée de 88 px
             // (défaut), standard = deux rangées. Choix par pièce en édition
@@ -7566,7 +7573,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             /* La mosaique de la tablette compte les colonnes : sans les fixer
               * a trois, `auto-fill` en donnerait quatre ou cinq et les grandes
               * tuiles tomberaient n'importe ou. */
-            <div ref={piecesGrille} className="grid-chips" style={{ display: 'grid', gridTemplateColumns: (tactile && wide) ? 'repeat(3,1fr)' : 'repeat(auto-fill,minmax(210px,1fr))', gap: 8 }}>
+            <div ref={piecesGrille} className="grid-chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + piecesCols + ',minmax(0,1fr))', gap: 8 }}>
               {ordrePieces(inner.map(p => p.name)).map(n => inner.find(p => p.name === n)).filter(Boolean).map((p, i) => {
                 /* Un choix explicite (bouton de taille en edition) prime sur
                   * tout : il vaut pour l'appareil qui l'a fait comme pour les

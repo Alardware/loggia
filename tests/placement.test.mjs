@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  disposer, poser, premiereLibre, cellulePointee, colonnesDe, nettoyer, rangeesMax, hauteur,
+  disposer, poser, premiereLibre, cellulePointee, colonnesPour, nettoyer, rangeesMax, hauteur,
 } from '../src/placement.js';
 
 // Cinq pièces, comme sur l'Accueil.
@@ -47,6 +47,31 @@ test('déposer sur une cellule libre ne déplace QUE la carte déposée', () => 
   for (const nom of ['A', 'B', 'C', 'D']) {
     assert.deepEqual(apres[nom], avant[nom], nom + ' n’avait aucune raison de bouger');
   }
+});
+
+test('le tout PREMIER geste ne déplace que la carte déposée', () => {
+  /* Le cas de la vraie vie, et celui que la démonstration a pris en faute le
+   * 23/09 : au départ PERSONNE n'a de place enregistrée. On ne notait alors
+   * que la carte déplacée — les autres, toujours sans place, se recalaient au
+   * premier creux et venaient combler le trou qu'elle laissait. Tout bougeait.
+   *
+   * Poser une carte fige donc la grille telle qu'elle est à cet instant. */
+  const avant = disposer(NOMS, COMPACTES, {}, 3); // A B C / D E
+  const apres = disposer(NOMS, COMPACTES, poser({}, NOMS, COMPACTES, 'A', 3, 3, 3), 3);
+  assert.deepEqual(apres.A, { c: 3, r: 3 }, 'A est allé où on l’a lâché');
+  for (const nom of ['B', 'C', 'D', 'E']) {
+    assert.deepEqual(apres[nom], avant[nom], nom + ' ne remonte pas combler le trou de A');
+  }
+  assert.deepEqual(poser({}, NOMS, COMPACTES, 'A', 3, 3, 3).B, avant.B, 'la place de chacun est écrite, pas seulement celle de A');
+});
+
+test('la première case libre peut se chercher APRÈS tout le monde', () => {
+  // A en (1,1) parti ailleurs : le trou reste, mais la tuile « Ajouter une
+  // pièce » ne doit pas venir s'y loger — elle se range plus bas.
+  const prises = new Set(['2:1', '3:1', '3:2']);
+  assert.deepEqual(premiereLibre(prises, 3, 1), { c: 1, r: 1 }, 'sans départ : le premier creux');
+  assert.deepEqual(premiereLibre(prises, 3, 1, 400, 2), { c: 1, r: 2 }, 'à partir de la rangée 2');
+  assert.deepEqual(premiereLibre(prises, 3, 1, 400, 0), { c: 1, r: 1 }, 'un départ absurde ne casse rien');
 });
 
 test('déposer sur une carte échange les deux, et personne d’autre', () => {
@@ -98,11 +123,21 @@ test('la cellule sous le doigt se calcule sur la grille réelle', () => {
   assert.deepEqual(cellulePointee(9999, 10, rect, 3), { c: 3, r: 1 });
 });
 
-test('on lit le nombre de colonnes que la grille montre vraiment', () => {
-  assert.equal(colonnesDe('210px 210px 210px'), 3);
-  assert.equal(colonnesDe('minmax(0px, 1fr) minmax(0px, 1fr)'), 2, 'les espaces des parenthèses ne comptent pas');
-  assert.equal(colonnesDe('none'), 1);
-  assert.equal(colonnesDe(''), 1);
+test('le nombre de colonnes se décide, il ne se lit pas', () => {
+  /* Mesuré dans le navigateur le 23/09 : lu sur le style calculé, il montait
+   * tout seul. Une carte posée hors du modèle y ajoute une colonne IMPLICITE,
+   * que la lecture suivante compte comme une vraie — et les colonnes en `1fr`
+   * s'écrasaient alors à zéro pixel, avec les pièces dedans.
+   *
+   * D'où trois réponses franches, et une seule dépend de la largeur. */
+  assert.equal(colonnesPour(360, true, false), 2, 'le téléphone : deux, quoi qu’il arrive');
+  assert.equal(colonnesPour(1200, true, true), 2, 'même large, un écran étroit reste à deux');
+  assert.equal(colonnesPour(1180, false, true), 3, 'la mosaïque de la tablette');
+  assert.equal(colonnesPour(930, false, false), 4, '930 px : quatre cartes de 210 et trois écarts');
+  assert.equal(colonnesPour(700, false, false), 3);
+  assert.equal(colonnesPour(218, false, false), 1, 'trop étroit : une seule, jamais zéro');
+  assert.equal(colonnesPour(0, false, false), 1);
+  assert.equal(colonnesPour(undefined, false, false), 1, 'avant la première mesure');
 });
 
 test('une pièce supprimée ne garde pas sa cellule', () => {

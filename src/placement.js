@@ -47,10 +47,12 @@ export function rangeesMax(noms, tailles, cols) {
 }
 
 /** La première cellule libre pour une carte de `h` rangées, en balayant de
- *  gauche à droite puis vers le bas. */
-export function premiereLibre(occupees, cols, h, maxRangees = 400) {
+ *  gauche à droite puis vers le bas. `depart` permet de ne chercher qu'à partir
+ *  d'une rangée : la tuile « Ajouter une pièce » se met APRÈS tout le monde,
+ *  elle ne vient pas se loger dans un creux qu'on a voulu vide. */
+export function premiereLibre(occupees, cols, h, maxRangees = 400, depart = 1) {
   const n = Math.max(1, entier(cols, 1));
-  for (let r = 1; r <= maxRangees; r += 1) {
+  for (let r = Math.max(1, entier(depart, 1)); r <= maxRangees; r += 1) {
     for (let c = 1; c <= n; c += 1) {
       let libre = true;
       for (let i = 0; i < h; i += 1) if (occupees.has(c + ':' + (r + i))) { libre = false; break; }
@@ -135,7 +137,15 @@ export function poser(places, noms, tailles, nom, c, r, cols) {
     return false;
   }).sort((a, b) => (actuel[a].r - actuel[b].r) || (actuel[a].c - actuel[b].c));
 
-  const neuf = { ...(places || {}) };
+  /* On écrit la place de TOUT LE MONDE, pas seulement de la carte déplacée.
+   *
+   * Vérifié dans le navigateur le 23/09 : sans cela, les cartes sans place
+   * enregistrée — toutes, au premier geste — se recalaient au premier creux, et
+   * le trou laissé par la carte qu'on vient de bouger se remplissait aussitôt.
+   * Tout bougeait, ce qui est exactement ce qu'il ne fallait pas. Poser une
+   * carte fige donc la grille telle qu'elle est à cet instant : chacune garde
+   * sa cellule, et un trou reste un trou. */
+  const neuf = { ...(places || {}), ...actuel };
   neuf[nom] = cible;
   if (genees.length) {
     neuf[genees[0]] = { c: mienne.c, r: mienne.r };
@@ -154,12 +164,27 @@ export function cellulePointee(x, y, rect, cols, rangee = RANGEE, ecart = ECART)
   return { c, r };
 }
 
-/** Le nombre de colonnes que la grille montre vraiment, lu sur le style
- *  calculé — `auto-fill` en met autant que la largeur permet. */
-export function colonnesDe(gridTemplateColumns) {
-  const s = String(gridTemplateColumns || '').trim();
-  if (!s || s === 'none') return 1;
-  return Math.max(1, s.split(/\s+(?![^(]*\))/).filter(Boolean).length);
+/** La largeur en dessous de laquelle une carte de pièce n'est plus lisible. */
+export const LARGEUR_MIN = 210;
+
+/* Le nombre de colonnes se DÉCIDE ici — il ne se lit pas sur le style calculé.
+ *
+ * Mesuré dans le navigateur le 23/09 : le lire ne marche pas. Une carte posée
+ * dans une colonne que le modèle n'a pas en crée une IMPLICITE, que le style
+ * calculé liste comme les autres. La lecture suivante comptait donc les
+ * colonnes qu'on venait d'inventer, et s'y tenait. La règle qui imposait deux
+ * colonnes au téléphone (`!important`) suffisait à lancer la boucle : quatre
+ * colonnes lues, deux vraies, et les cartes des deux premières écrasées à zéro
+ * pixel de large — deux pièces invisibles.
+ *
+ * La grille reçoit donc `repeat(n, minmax(0,1fr))` avec le n d'ici : plus
+ * aucune colonne implicite ne peut naître. Et la mesure ne se mord pas la
+ * queue — toutes les colonnes valant `1fr`, la largeur de la grille ne dépend
+ * pas de leur nombre. */
+export function colonnesPour(largeur, etroit, mosaique) {
+  if (etroit) return 2; // téléphone : deux cartes, la grille commune (176 × 184)
+  if (mosaique) return 3; // tablette : la mosaïque tient sur trois colonnes
+  return Math.max(1, Math.floor((Math.max(0, entier(largeur, 0)) + ECART) / (LARGEUR_MIN + ECART)));
 }
 
 /** Ce qu'on enregistre : les places des pièces qui existent encore. Une pièce
