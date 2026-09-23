@@ -5861,17 +5861,27 @@ const barBtn = (actif) => ({ padding: '5px 11px', borderRadius: 10, border: acti
  * « chambre », la barre exigeait une egalite exacte et retombait sur une
  * maison. La meme piece portait donc deux icones selon l'endroit.
  */
+/* Les mots sont ceux des SEPT langues (23/09/2026).
+ *
+ * La table ne connaissait que le francais et l'anglais. Une maison allemande
+ * dont les zones s'appellent « Wohnzimmer » et « Kueche » recevait donc la
+ * maison neutre partout : Loggia parle sa langue, mais ne reconnait pas ses
+ * pieces. Le nom est compare EN MINUSCULES et sans retirer les accents — les
+ * formes accentuees sont donc ecrites telles quelles, et les variantes sans
+ * accent (kueche, bano, lazienka) ajoutees a cote.
+ *
+ * L'ordre compte : la chambre d'enfant passe avant la chambre, sans quoi elle
+ * ne serait jamais atteinte. Meme vocabulaire que `LIGHT_ROOM`, qui range deja
+ * les luminaires ainsi — lui n'a que le francais et l'anglais, parce qu'il lit
+ * des `entity_id`, pas des noms de zone. */
 const PARENTE = [
-  // La chambre d'enfant passe avant la chambre, sans quoi elle ne serait
-  // jamais atteinte. Meme vocabulaire que `LIGHT_ROOM`, qui range deja les
-  // luminaires ainsi.
-  [/enfant|kid|child|bebe|bébé|nursery/, 'Chambre enfant'],
-  [/chambre|bedroom/, 'Chambre'],
-  [/sejour|séjour|salon|living/, 'Séjour'],
-  [/cuisine|kitchen/, 'Cuisine'],
-  [/bureau|office|atelier/, 'Bureau'],
-  [/sdb|bain|douche|bathroom|salle d ?'?eau/, 'Salle de bain'],
-  [/exter|extér|jardin|terrasse|balcon|outdoor/, 'Extérieur'],
+  [/enfant|kid|child|bebe|bébé|nursery|kinderzimmer|kinderkamer|cameretta|infantil|dzieci/, 'Chambre enfant'],
+  [/chambre|bedroom|schlafzimmer|slaapkamer|camera|dormitorio|sypialnia/, 'Chambre'],
+  [/sejour|séjour|salon|salón|living|wohnzimmer|woonkamer|soggiorno|salotto|sala\b|pok[oó]j dzienny/, 'Séjour'],
+  [/cuisine|kitchen|küche|kueche|keuken|cucina|cocina|kuchnia/, 'Cuisine'],
+  [/bureau|office|atelier|büro|buero|kantoor|studio|ufficio|despacho|oficina|biuro|gabinet/, 'Bureau'],
+  [/sdb|bain|douche|bathroom|salle d ?'?eau|badezimmer|badkamer|bagno|baño|bano|łazienka|lazienka|\bbad\b/, 'Salle de bain'],
+  [/exter|extér|jardin|terrasse|balcon|outdoor|garten|tuin|giardino|jardín|ogr[oó]d|terras|terrazza|terraza|taras|balkon/, 'Extérieur'],
 ];
 
 /* Les teintes qu'une piece peut choisir (fiche « Ajouter une piece », maquette

@@ -59,7 +59,18 @@ function langueProbable() {
     // Lu par la barre latérale : la démo n'a pas de serveur à nommer.
     window.__loggiaDemo = true;
     if (DEMO_SEULE) document.title = 'Loggia — démonstration';
-    try { (await import('./demo.js')).installerDemo(); }
+    /* La langue de la maison factice, lue ICI et pas dans `demo.js` : une ligne
+     * plus bas, le magasin mémoire remplace `localStorage`, et le `?lang=` de
+     * l'URL n'y est écrit qu'après. La démonstration nomme ses pièces dans
+     * cette langue — « Wohnzimmer », pas « Salon » (23/09). */
+    const lgDemo = (() => {
+      try {
+        const q = new URLSearchParams(window.location.search).get('lang');
+        if (q && langueServie(q)) return q;
+      } catch { /* rien */ }
+      return langueProbable();
+    })();
+    try { (await import('./demo.js')).installerDemo(lgDemo); }
     catch (e) { console.error('demo indisponible', e); }
     /* `?mode=auto|light|dark` et `?lang=<code>` : réglages d'aperçu dans la
      * démo — posés APRÈS l'installation du magasin mémoire (qui repart à neuf

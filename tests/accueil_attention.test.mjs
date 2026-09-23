@@ -72,7 +72,9 @@ test('l’accueil surveille ce que la carte Securite et « A surveiller » lisen
 
 test('la demo a de quoi montrer la carte, et les mots ont leur traduction', () => {
   assert.ok(demo.includes("['chambre', 'Chambre', 19.6, 49, 1480],"), 'une chambre au palier « Élevé » en CO2 (1 400 ppm, captures du 19/09)');
-  assert.ok(demo.includes("{ name: 'Jardin', online: false }"), 'une camera hors ligne');
+  /* Le nom est celui d'un LIEU : la demo le traduit (23/09), la table est
+   * donc devenue une fonction. Ce qui compte ici reste la camera eteinte. */
+  assert.ok(demo.includes("{ name: lieu('Jardin'), online: false }"), 'une camera hors ligne');
   for (const k of ['À surveiller', 'Tout va bien', 'Tout est sécurisé', 'Caméra hors ligne', 'Portes', 'Fenêtres', '{n} points à surveiller', 'CO₂ élevé', 'Ouvert, alarme armée']) {
     assert.ok(en.includes("'" + k + "':") || en.includes('"' + k + '":'), k + ' manque a en.js');
   }

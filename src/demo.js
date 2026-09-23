@@ -23,8 +23,191 @@
  */
 
 const maintenant = () => new Date().toISOString();
-const s = (state, attributes = {}) => ({ state: String(state), attributes, last_updated: maintenant(), last_changed: maintenant() });
+/* Un seul endroit traduit les noms : ici. Chaque etat factice passe par `s`,
+ * les cent-vingt `friendly_name` sont donc couverts sans les toucher un par
+ * un. `toucher()` ne fait que FUSIONNER des attributs deja batis : il ne
+ * retraduit rien, et `etiquette` est de toute facon sans effet sur un nom
+ * qu'elle ne connait pas. */
+const s = (state, attributes = {}) => ({
+  state: String(state),
+  attributes: attributes.friendly_name
+    ? { ...attributes, friendly_name: etiquette(attributes.friendly_name) }
+    : attributes,
+  last_updated: maintenant(), last_changed: maintenant(),
+});
 const ilYaMin = (min) => new Date(Date.now() - min * 60000).toISOString();
+
+/* Les noms des lieux de la maison factice (23/09/2026).
+ *
+ * Dans une VRAIE installation, un nom de pièce vient de Home Assistant : il est
+ * déjà dans la langue de la maison, et Loggia ne le traduit jamais. Ici la
+ * maison est inventée, ses noms sont les nôtres — et une démonstration en
+ * polonais qui annonçait « Salle de bain » ne montrait pas ce qu'elle promet.
+ *
+ * Le nom d'une pièce sert aussi de CLÉ : il relie la configuration, l'index des
+ * zones, les scénarios, la règle des fenêtres et le journal. Il ne s'écrit donc
+ * qu'ICI, en français, et TOUT le reste passe par `lieu()` — un seul endroit à
+ * traduire, et les deux côtés d'une comparaison parlent toujours la même langue.
+ *
+ * Les noms d'APPAREILS, eux, restent tels quels : chacun nomme ses lampes comme
+ * il veut, et une démonstration qui les traduirait mentirait sur ce qu'on voit
+ * chez soi. */
+const LIEUX = {
+  'Salon': { en: 'Living room', de: 'Wohnzimmer', nl: 'Woonkamer', it: 'Soggiorno', es: 'Salón', pl: 'Salon' },
+  'Cuisine': { en: 'Kitchen', de: 'Küche', nl: 'Keuken', it: 'Cucina', es: 'Cocina', pl: 'Kuchnia' },
+  'Chambre': { en: 'Bedroom', de: 'Schlafzimmer', nl: 'Slaapkamer', it: 'Camera', es: 'Dormitorio', pl: 'Sypialnia' },
+  'Bureau': { en: 'Office', de: 'Büro', nl: 'Kantoor', it: 'Studio', es: 'Despacho', pl: 'Biuro' },
+  'Entrée': { en: 'Entrance', de: 'Eingang', nl: 'Entree', it: 'Ingresso', es: 'Entrada', pl: 'Wejście' },
+  'Salle de bain': { en: 'Bathroom', de: 'Badezimmer', nl: 'Badkamer', it: 'Bagno', es: 'Baño', pl: 'Łazienka' },
+  'Jardin': { en: 'Garden', de: 'Garten', nl: 'Tuin', it: 'Giardino', es: 'Jardín', pl: 'Ogród' },
+};
+
+/* La langue de la maison factice, posée une fois par `installerDemo`. Elle se
+ * lit AVANT que le magasin mémoire ne remplace `localStorage` : après, le choix
+ * venu de l'URL n'y serait plus. */
+let LANGUE_DEMO = 'fr';
+
+/** Le nom d'un lieu dans la langue de la démonstration. */
+const lieu = (fr) => (LIEUX[fr] && LIEUX[fr][LANGUE_DEMO]) || fr;
+
+/* Les deux cameras. Une fonction, pas une table : leurs noms sont des lieux,
+ * et la langue n'est connue qu'apres l'import. */
+const CAMERAS = () => [
+  { name: lieu('Jardin'), online: false },
+  { name: lieu('Entrée'), haid: 'camera.entree', online: true },
+];
+
+/* Les noms d'APPAREILS de la maison factice (23/09/2026).
+ *
+ * Meme raison que `LIEUX` : cette maison est inventee, ses appareils portent
+ * les noms que NOUS avons ecrits. Une demonstration polonaise qui annonce
+ * « Enceinte salon » ne montre pas ce qu'elle promet.
+ *
+ * Difference avec une VRAIE installation : la, un nom d'appareil est celui que
+ * la maison a tape, et Loggia n'y touche jamais. Restent donc en l'etat, ici
+ * aussi, les noms qu'une INTEGRATION donne — « System Monitor Memory use »,
+ * « Home Assistant Core Update » — parce qu'ils sont anglais meme dans une
+ * maison francaise, et les prenoms.
+ *
+ * Contrairement aux lieux, ces noms ne sont PAS des cles : `etiquette()` est
+ * appliquee une fois, quand l'etat factice est bati. */
+const APPAREILS = {
+  'humidité': { en: 'humidity', de: 'Luftfeuchte', nl: 'luchtvochtigheid', it: 'umidità', es: 'humedad', pl: 'wilgotność' },
+  'température': { en: 'temperature', de: 'Temperatur', nl: 'temperatuur', it: 'temperatura', es: 'temperatura', pl: 'temperatura' },
+  'Alarme': { en: 'Alarm', de: 'Alarm', nl: 'Alarm', it: 'Allarme', es: 'Alarma', pl: 'Alarm' },
+  'Alarme : armement en partant': { en: 'Alarm: arm on leaving', de: 'Alarm: beim Verlassen scharf', nl: 'Alarm: inschakelen bij vertrek', it: 'Allarme: attiva quando esci', es: 'Alarma: armar al salir', pl: 'Alarm: uzbrojenie przy wyjściu' },
+  'Apéro': { en: 'Drinks', de: 'Aperitif', nl: 'Borrel', it: 'Aperitivo', es: 'Aperitivo', pl: 'Aperitif' },
+  'Arrivée d’eau': { en: 'Water inlet', de: 'Wasserzulauf', nl: 'Wateraanvoer', it: 'Ingresso acqua', es: 'Entrada de agua', pl: 'Dopływ wody' },
+  'Arrosage du potager': { en: 'Vegetable patch watering', de: 'Bewässerung Gemüsebeet', nl: 'Bewatering moestuin', it: 'Irrigazione dell’orto', es: 'Riego del huerto', pl: 'Podlewanie warzywnika' },
+  'Aspirateur': { en: 'Vacuum', de: 'Staubsauger', nl: 'Stofzuiger', it: 'Aspirapolvere', es: 'Aspiradora', pl: 'Odkurzacz' },
+  'Aspirateur Brosse latérale': { en: 'Vacuum Side brush', de: 'Staubsauger Seitenbürste', nl: 'Stofzuiger Zijborstel', it: 'Aspirapolvere Spazzola laterale', es: 'Aspiradora Cepillo lateral', pl: 'Odkurzacz Szczotka boczna' },
+  'Aspirateur Brosse principale': { en: 'Vacuum Main brush', de: 'Staubsauger Hauptbürste', nl: 'Stofzuiger Hoofdborstel', it: 'Aspirapolvere Spazzola principale', es: 'Aspiradora Cepillo principal', pl: 'Odkurzacz Szczotka główna' },
+  'Aspirateur Durée totale de nettoyage': { en: 'Vacuum Total cleaning time', de: 'Staubsauger Gesamtreinigungszeit', nl: 'Stofzuiger Totale schoonmaaktijd', it: 'Aspirapolvere Tempo totale di pulizia', es: 'Aspiradora Tiempo total de limpieza', pl: 'Odkurzacz Łączny czas sprzątania' },
+  'Aspirateur Détection tapis': { en: 'Vacuum Carpet detection', de: 'Staubsauger Teppicherkennung', nl: 'Stofzuiger Tapijtdetectie', it: 'Aspirapolvere Rilevamento tappeti', es: 'Aspiradora Detección de alfombras', pl: 'Odkurzacz Wykrywanie dywanów' },
+  'Aspirateur Filtre': { en: 'Vacuum Filter', de: 'Staubsauger Filter', nl: 'Stofzuiger Filter', it: 'Aspirapolvere Filtro', es: 'Aspiradora Filtro', pl: 'Odkurzacz Filtr' },
+  'Aspirateur Mode avancé': { en: 'Vacuum Advanced mode', de: 'Staubsauger Erweiterter Modus', nl: 'Stofzuiger Geavanceerde modus', it: 'Aspirapolvere Modalità avanzata', es: 'Aspiradora Modo avanzado', pl: 'Odkurzacz Tryb zaawansowany' },
+  'Aspirateur Mode de travail': { en: 'Vacuum Work mode', de: 'Staubsauger Arbeitsmodus', nl: 'Stofzuiger Werkmodus', it: 'Aspirapolvere Modalità di lavoro', es: 'Aspiradora Modo de trabajo', pl: 'Odkurzacz Tryb pracy' },
+  'Aspirateur Nombre total de nettoyages': { en: 'Vacuum Total cleanings', de: 'Staubsauger Reinigungen gesamt', nl: 'Stofzuiger Aantal schoonmaakbeurten', it: 'Aspirapolvere Numero totale di pulizie', es: 'Aspiradora Número total de limpiezas', pl: 'Odkurzacz Łączna liczba sprzątań' },
+  'Aspirateur Réinitialiser le filtre': { en: 'Vacuum Reset filter', de: 'Staubsauger Filter zurücksetzen', nl: 'Stofzuiger Filter resetten', it: 'Aspirapolvere Reimposta filtro', es: 'Aspiradora Reiniciar filtro', pl: 'Odkurzacz Zresetuj filtr' },
+  'Aspirateur Serpillière': { en: 'Vacuum Mop', de: 'Staubsauger Wischmopp', nl: 'Stofzuiger Dweil', it: 'Aspirapolvere Panno', es: 'Aspiradora Mopa', pl: 'Odkurzacz Mop' },
+  'Aspirateur Surface nettoyée': { en: 'Vacuum Cleaned area', de: 'Staubsauger Gereinigte Fläche', nl: 'Stofzuiger Schoongemaakt oppervlak', it: 'Aspirapolvere Superficie pulita', es: 'Aspiradora Superficie limpiada', pl: 'Odkurzacz Posprzątana powierzchnia' },
+  'Aspirateur Surface totale nettoyée': { en: 'Vacuum Total cleaned area', de: 'Staubsauger Gesamte gereinigte Fläche', nl: 'Stofzuiger Totaal schoongemaakt oppervlak', it: 'Aspirapolvere Superficie totale pulita', es: 'Aspiradora Superficie total limpiada', pl: 'Odkurzacz Łączna posprzątana powierzchnia' },
+  'Avant mise à jour': { en: 'Before update', de: 'Vor dem Update', nl: 'Voor de update', it: 'Prima dell’aggiornamento', es: 'Antes de actualizar', pl: 'Przed aktualizacją' },
+  'Basilic': { en: 'Basil', de: 'Basilikum', nl: 'Basilicum', it: 'Basilico', es: 'Albahaca', pl: 'Bazylia' },
+  'Basilic conductivité': { en: 'Basil conductivity', de: 'Basilikum Leitfähigkeit', nl: 'Basilicum geleidbaarheid', it: 'Basilico conducibilità', es: 'Albahaca conductividad', pl: 'Bazylia przewodność' },
+  'Basilic humidité du sol': { en: 'Basil soil moisture', de: 'Basilikum Bodenfeuchte', nl: 'Basilicum bodemvochtigheid', it: 'Basilico umidità del terreno', es: 'Albahaca humedad del suelo', pl: 'Bazylia wilgotność gleby' },
+  'Basilic lumière': { en: 'Basil light', de: 'Basilikum Licht', nl: 'Basilicum licht', it: 'Basilico luce', es: 'Albahaca luz', pl: 'Bazylia światło' },
+  'Basilic pile': { en: 'Basil battery', de: 'Basilikum Batterie', nl: 'Basilicum batterij', it: 'Basilico batteria', es: 'Albahaca batería', pl: 'Bazylia bateria' },
+  'Basilic température': { en: 'Basil temperature', de: 'Basilikum Temperatur', nl: 'Basilicum temperatuur', it: 'Basilico temperatura', es: 'Albahaca temperatura', pl: 'Bazylia temperatura' },
+  'Bouton Cuisine': { en: 'Kitchen button', de: 'Taster Küche', nl: 'Knop keuken', it: 'Pulsante cucina', es: 'Botón cocina', pl: 'Przycisk kuchnia' },
+  'Calendrier maison': { en: 'Home calendar', de: 'Kalender Zuhause', nl: 'Agenda thuis', it: 'Calendario di casa', es: 'Calendario de casa', pl: 'Kalendarz domowy' },
+  'Caméra entrée': { en: 'Entrance camera', de: 'Kamera Eingang', nl: 'Camera entree', it: 'Telecamera ingresso', es: 'Cámara entrada', pl: 'Kamera wejście' },
+  'Caméra entrée Détection de mouvement': { en: 'Entrance camera Motion detection', de: 'Kamera Eingang Bewegungserkennung', nl: 'Camera entree Bewegingsdetectie', it: 'Telecamera ingresso Rilevamento movimento', es: 'Cámara entrada Detección de movimiento', pl: 'Kamera wejście Wykrywanie ruchu' },
+  'Caméra entrée Détection des pleurs': { en: 'Entrance camera Crying detection', de: 'Kamera Eingang Weinerkennung', nl: 'Camera entree Huildetectie', it: 'Telecamera ingresso Rilevamento pianto', es: 'Cámara entrada Detección de llanto', pl: 'Kamera wejście Wykrywanie płaczu' },
+  'Caméra entrée Mode privé': { en: 'Entrance camera Privacy mode', de: 'Kamera Eingang Privatmodus', nl: 'Camera entree Privémodus', it: 'Telecamera ingresso Modalità privata', es: 'Cámara entrada Modo privado', pl: 'Kamera wejście Tryb prywatny' },
+  'Caméra entrée Mouvement': { en: 'Entrance camera Motion', de: 'Kamera Eingang Bewegung', nl: 'Camera entree Beweging', it: 'Telecamera ingresso Movimento', es: 'Cámara entrada Movimiento', pl: 'Kamera wejście Ruch' },
+  'Caméra entrée Personne': { en: 'Entrance camera Person', de: 'Kamera Eingang Person', nl: 'Camera entree Persoon', it: 'Telecamera ingresso Persona', es: 'Cámara entrada Persona', pl: 'Kamera wejście Osoba' },
+  'Caméra entrée Suivi de mouvement': { en: 'Entrance camera Motion tracking', de: 'Kamera Eingang Bewegungsverfolgung', nl: 'Camera entree Bewegingsvolging', it: 'Telecamera ingresso Inseguimento movimento', es: 'Cámara entrada Seguimiento de movimiento', pl: 'Kamera wejście Śledzenie ruchu' },
+  'Caméra entrée Voyant': { en: 'Entrance camera Indicator light', de: 'Kamera Eingang Kontrollleuchte', nl: 'Camera entree Indicatielampje', it: 'Telecamera ingresso Spia', es: 'Cámara entrada Piloto', pl: 'Kamera wejście Kontrolka' },
+  'Carte météo animée': { en: 'Animated weather map', de: 'Animierte Wetterkarte', nl: 'Geanimeerde weerkaart', it: 'Mappa meteo animata', es: 'Mapa del tiempo animado', pl: 'Animowana mapa pogody' },
+  'Chauffage : consigne de nuit': { en: 'Heating: night setpoint', de: 'Heizung: Nachttemperatur', nl: 'Verwarming: nachtinstelling', it: 'Riscaldamento: temperatura notturna', es: 'Calefacción: consigna nocturna', pl: 'Ogrzewanie: temperatura nocna' },
+  'Cinéma': { en: 'Cinema', de: 'Kino', nl: 'Bioscoop', it: 'Cinema', es: 'Cine', pl: 'Kino' },
+  'Consommation du jour': { en: 'Today’s consumption', de: 'Verbrauch heute', nl: 'Verbruik vandaag', it: 'Consumo di oggi', es: 'Consumo de hoy', pl: 'Zużycie dzisiaj' },
+  'Consommation heures creuses': { en: 'Off-peak consumption', de: 'Verbrauch Nebenzeit', nl: 'Verbruik daltarief', it: 'Consumo fuori punta', es: 'Consumo en horas valle', pl: 'Zużycie poza szczytem' },
+  'Consommation heures pleines': { en: 'Peak consumption', de: 'Verbrauch Hauptzeit', nl: 'Verbruik piektarief', it: 'Consumo di punta', es: 'Consumo en horas punta', pl: 'Zużycie w szczycie' },
+  'Croquettes distribuées aujourd’hui': { en: 'Kibble served today', de: 'Heute ausgegebenes Futter', nl: 'Vandaag gegeven brokken', it: 'Crocchette erogate oggi', es: 'Pienso servido hoy', pl: 'Karma wydana dzisiaj' },
+  'Distribuer': { en: 'Serve', de: 'Ausgeben', nl: 'Geven', it: 'Eroga', es: 'Servir', pl: 'Wydaj' },
+  'Délestage du chauffe-eau': { en: 'Water heater load shedding', de: 'Lastabwurf Warmwasserspeicher', nl: 'Afschakeling boiler', it: 'Distacco dello scaldacqua', es: 'Deslastre del calentador', pl: 'Odłączanie bojlera' },
+  'Détecteur de fumée cuisine': { en: 'Kitchen smoke detector', de: 'Rauchmelder Küche', nl: 'Rookmelder keuken', it: 'Rilevatore di fumo cucina', es: 'Detector de humo cocina', pl: 'Czujnik dymu kuchnia' },
+  'Détecteur de fumée entrée': { en: 'Entrance smoke detector', de: 'Rauchmelder Eingang', nl: 'Rookmelder entree', it: 'Rilevatore di fumo ingresso', es: 'Detector de humo entrada', pl: 'Czujnik dymu wejście' },
+  'Détecteur de monoxyde salon': { en: 'Living room CO detector', de: 'CO-Melder Wohnzimmer', nl: 'CO-melder woonkamer', it: 'Rilevatore di CO soggiorno', es: 'Detector de CO salón', pl: 'Czujnik czadu salon' },
+  'Enceinte salon': { en: 'Living room speaker', de: 'Lautsprecher Wohnzimmer', nl: 'Speaker woonkamer', it: 'Diffusore soggiorno', es: 'Altavoz salón', pl: 'Głośnik salon' },
+  'Fenêtre chambre': { en: 'Bedroom window', de: 'Fenster Schlafzimmer', nl: 'Raam slaapkamer', it: 'Finestra camera', es: 'Ventana dormitorio', pl: 'Okno sypialnia' },
+  'Fenêtre salon': { en: 'Living room window', de: 'Fenster Wohnzimmer', nl: 'Raam woonkamer', it: 'Finestra soggiorno', es: 'Ventana salón', pl: 'Okno salon' },
+  'Fuite sous l’évier': { en: 'Leak under the sink', de: 'Leck unter der Spüle', nl: 'Lekkage onder de gootsteen', it: 'Perdita sotto il lavello', es: 'Fuga bajo el fregadero', pl: 'Wyciek pod zlewem' },
+  'Injection du jour': { en: 'Today’s export', de: 'Einspeisung heute', nl: 'Teruglevering vandaag', it: 'Immissione di oggi', es: 'Inyección de hoy', pl: 'Oddanie dzisiaj' },
+  'Interrupteur Chambre': { en: 'Bedroom switch', de: 'Schalter Schlafzimmer', nl: 'Schakelaar slaapkamer', it: 'Interruttore camera', es: 'Interruptor dormitorio', pl: 'Włącznik sypialnia' },
+  'Interrupteur Couloir': { en: 'Hallway switch', de: 'Schalter Flur', nl: 'Schakelaar gang', it: 'Interruttore corridoio', es: 'Interruptor pasillo', pl: 'Włącznik korytarz' },
+  'Invité': { en: 'Guest', de: 'Gast', nl: 'Gast', it: 'Ospite', es: 'Invitado', pl: 'Gość' },
+  'Je rentre': { en: 'Coming home', de: 'Ich komme heim', nl: 'Ik kom thuis', it: 'Torno a casa', es: 'Vuelvo a casa', pl: 'Wracam' },
+  'Lave-linge terminé': { en: 'Washing machine finished', de: 'Waschmaschine fertig', nl: 'Wasmachine klaar', it: 'Lavatrice finita', es: 'Lavadora terminada', pl: 'Pralka skończyła' },
+  'Lumière couloir la nuit': { en: 'Hallway light at night', de: 'Flurlicht bei Nacht', nl: 'Ganglicht ’s nachts', it: 'Luce corridoio di notte', es: 'Luz del pasillo de noche', pl: 'Światło korytarza w nocy' },
+  'Mouvement entrée': { en: 'Entrance motion', de: 'Bewegung Eingang', nl: 'Beweging entree', it: 'Movimento ingresso', es: 'Movimiento entrada', pl: 'Ruch wejście' },
+  'Météo': { en: 'Weather', de: 'Wetter', nl: 'Weer', it: 'Meteo', es: 'Tiempo', pl: 'Pogoda' },
+  'Nuit': { en: 'Night', de: 'Nacht', nl: 'Nacht', it: 'Notte', es: 'Noche', pl: 'Noc' },
+  'Part fossile du réseau': { en: 'Fossil share of the grid', de: 'Fossiler Anteil im Netz', nl: 'Fossiel aandeel van het net', it: 'Quota fossile della rete', es: 'Parte fósil de la red', pl: 'Udział paliw kopalnych w sieci' },
+  'Pile porte entrée': { en: 'Entrance door battery', de: 'Batterie Eingangstür', nl: 'Batterij voordeur', it: 'Batteria porta ingresso', es: 'Batería puerta entrada', pl: 'Bateria drzwi wejściowych' },
+  'Plafonnier': { en: 'Ceiling light', de: 'Deckenleuchte', nl: 'Plafondlamp', it: 'Plafoniera', es: 'Plafón', pl: 'Lampa sufitowa' },
+  'Porte d’entrée': { en: 'Front door', de: 'Eingangstür', nl: 'Voordeur', it: 'Porta d’ingresso', es: 'Puerta de entrada', pl: 'Drzwi wejściowe' },
+  'Portion du distributeur': { en: 'Feeder portion', de: 'Portion des Futterautomaten', nl: 'Portie voederautomaat', it: 'Porzione del distributore', es: 'Ración del dispensador', pl: 'Porcja podajnika' },
+  'Production du jour': { en: 'Today’s production', de: 'Erzeugung heute', nl: 'Productie vandaag', it: 'Produzione di oggi', es: 'Producción de hoy', pl: 'Produkcja dzisiaj' },
+  'Production solaire': { en: 'Solar production', de: 'Solarerzeugung', nl: 'Zonneproductie', it: 'Produzione solare', es: 'Producción solar', pl: 'Produkcja słoneczna' },
+  'Radiateur bureau hors gel': { en: 'Office radiator frost protection', de: 'Heizkörper Büro Frostschutz', nl: 'Radiator kantoor vorstbeveiliging', it: 'Radiatore studio antigelo', es: 'Radiador despacho antihielo', pl: 'Grzejnik biuro ochrona przed mrozem' },
+  'Radiateur chambre': { en: 'Bedroom radiator', de: 'Heizkörper Schlafzimmer', nl: 'Radiator slaapkamer', it: 'Radiatore camera', es: 'Radiador dormitorio', pl: 'Grzejnik sypialnia' },
+  'Radiateur salon': { en: 'Living room radiator', de: 'Heizkörper Wohnzimmer', nl: 'Radiator woonkamer', it: 'Radiatore soggiorno', es: 'Radiador salón', pl: 'Grzejnik salon' },
+  'Repas du matin': { en: 'Morning meal', de: 'Morgenmahlzeit', nl: 'Ochtendmaaltijd', it: 'Pasto del mattino', es: 'Comida de la mañana', pl: 'Poranny posiłek' },
+  'Repas du soir': { en: 'Evening meal', de: 'Abendmahlzeit', nl: 'Avondmaaltijd', it: 'Pasto della sera', es: 'Comida de la tarde', pl: 'Wieczorny posiłek' },
+  'Réseau': { en: 'Grid', de: 'Netz', nl: 'Net', it: 'Rete', es: 'Red', pl: 'Sieć' },
+  'Réservoir de croquettes': { en: 'Kibble tank', de: 'Futterbehälter', nl: 'Brokkenreservoir', it: 'Serbatoio crocchette', es: 'Depósito de pienso', pl: 'Zbiornik karmy' },
+  'Réveil': { en: 'Wake up', de: 'Aufwachen', nl: 'Opstaan', it: 'Sveglia', es: 'Despertar', pl: 'Pobudka' },
+  'Salon Bruit': { en: 'Living room Noise', de: 'Wohnzimmer Lärm', nl: 'Woonkamer Geluid', it: 'Soggiorno Rumore', es: 'Salón Ruido', pl: 'Salon Hałas' },
+  'Sauvegarde automatique': { en: 'Automatic backup', de: 'Automatische Sicherung', nl: 'Automatische back-up', it: 'Backup automatico', es: 'Copia automática', pl: 'Kopia automatyczna' },
+  'Sirène intérieure': { en: 'Indoor siren', de: 'Innensirene', nl: 'Binnensirene', it: 'Sirena interna', es: 'Sirena interior', pl: 'Syrena wewnętrzna' },
+  'Soleil': { en: 'Sun', de: 'Sonne', nl: 'Zon', it: 'Sole', es: 'Sol', pl: 'Słońce' },
+  'Sonnette vers le téléphone': { en: 'Doorbell to phone', de: 'Türklingel aufs Handy', nl: 'Deurbel naar telefoon', it: 'Campanello al telefono', es: 'Timbre al teléfono', pl: 'Dzwonek na telefon' },
+  'Surplus': { en: 'Surplus', de: 'Überschuss', nl: 'Overschot', it: 'Surplus', es: 'Excedente', pl: 'Nadwyżka' },
+  'Thermostat chambre': { en: 'Bedroom thermostat', de: 'Thermostat Schlafzimmer', nl: 'Thermostaat slaapkamer', it: 'Termostato camera', es: 'Termostato dormitorio', pl: 'Termostat sypialnia' },
+  'Thermostat salon': { en: 'Living room thermostat', de: 'Thermostat Wohnzimmer', nl: 'Thermostaat woonkamer', it: 'Termostato soggiorno', es: 'Termostato salón', pl: 'Termostat salon' },
+  'Tondeuse': { en: 'Mower', de: 'Mähroboter', nl: 'Grasmaaier', it: 'Tosaerba', es: 'Cortacésped', pl: 'Kosiarka' },
+  'Tondeuse Cycles de batterie': { en: 'Mower Battery cycles', de: 'Mähroboter Akkuzyklen', nl: 'Grasmaaier Accucycli', it: 'Tosaerba Cicli batteria', es: 'Cortacésped Ciclos de batería', pl: 'Kosiarka Cykle baterii' },
+  'Tondeuse Détection de pluie': { en: 'Mower Rain detection', de: 'Mähroboter Regenerkennung', nl: 'Grasmaaier Regendetectie', it: 'Tosaerba Rilevamento pioggia', es: 'Cortacésped Detección de lluvia', pl: 'Kosiarka Wykrywanie deszczu' },
+  'Tondeuse En charge': { en: 'Mower Charging', de: 'Mähroboter Lädt', nl: 'Grasmaaier Opladen', it: 'Tosaerba In carica', es: 'Cortacésped Cargando', pl: 'Kosiarka Ładowanie' },
+  'Tondeuse Hauteur des lames': { en: 'Mower Blade height', de: 'Mähroboter Schnitthöhe', nl: 'Grasmaaier Maaihoogte', it: 'Tosaerba Altezza lame', es: 'Cortacésped Altura de cuchillas', pl: 'Kosiarka Wysokość ostrzy' },
+  'Tondeuse Kilométrage total': { en: 'Mower Total distance', de: 'Mähroboter Gesamtstrecke', nl: 'Grasmaaier Totale afstand', it: 'Tosaerba Distanza totale', es: 'Cortacésped Distancia total', pl: 'Kosiarka Łączny dystans' },
+  'Tondeuse Micrologiciel': { en: 'Mower Firmware', de: 'Mähroboter Firmware', nl: 'Grasmaaier Firmware', it: 'Tosaerba Firmware', es: 'Cortacésped Firmware', pl: 'Kosiarka Oprogramowanie' },
+  'Tondeuse Signal Wi-Fi': { en: 'Mower Wi-Fi signal', de: 'Mähroboter WLAN-Signal', nl: 'Grasmaaier Wifi-signaal', it: 'Tosaerba Segnale Wi-Fi', es: 'Cortacésped Señal Wi-Fi', pl: 'Kosiarka Sygnał Wi-Fi' },
+  'Tondeuse Surface': { en: 'Mower Area', de: 'Mähroboter Fläche', nl: 'Grasmaaier Oppervlak', it: 'Tosaerba Superficie', es: 'Cortacésped Superficie', pl: 'Kosiarka Powierzchnia' },
+  'Tondeuse Sécurité faune': { en: 'Mower Wildlife safety', de: 'Mähroboter Tierschutz', nl: 'Grasmaaier Dierbeveiliging', it: 'Tosaerba Sicurezza fauna', es: 'Cortacésped Seguridad fauna', pl: 'Kosiarka Ochrona zwierząt' },
+  'Tondeuse Temps de travail total': { en: 'Mower Total working time', de: 'Mähroboter Gesamtarbeitszeit', nl: 'Grasmaaier Totale werktijd', it: 'Tosaerba Tempo di lavoro totale', es: 'Cortacésped Tiempo total de trabajo', pl: 'Kosiarka Łączny czas pracy' },
+  'Tondeuse Voix': { en: 'Mower Voice', de: 'Mähroboter Stimme', nl: 'Grasmaaier Stem', it: 'Tosaerba Voce', es: 'Cortacésped Voz', pl: 'Kosiarka Głos' },
+  'Tondeuse Zone Côté garage': { en: 'Mower Zone Garage side', de: 'Mähroboter Zone Garagenseite', nl: 'Grasmaaier Zone Garagekant', it: 'Tosaerba Zona Lato garage', es: 'Cortacésped Zona Lado garaje', pl: 'Kosiarka Strefa Przy garażu' },
+  'Tondeuse Zone Pelouse arrière': { en: 'Mower Zone Back lawn', de: 'Mähroboter Zone Rasen hinten', nl: 'Grasmaaier Zone Achtergazon', it: 'Tosaerba Zona Prato dietro', es: 'Cortacésped Zona Césped trasero', pl: 'Kosiarka Strefa Trawnik z tyłu' },
+  'Tondeuse Zone Pelouse avant': { en: 'Mower Zone Front lawn', de: 'Mähroboter Zone Rasen vorne', nl: 'Grasmaaier Zone Voorgazon', it: 'Tosaerba Zona Prato davanti', es: 'Cortacésped Zona Césped delantero', pl: 'Kosiarka Strefa Trawnik z przodu' },
+  'Travail': { en: 'Work', de: 'Arbeit', nl: 'Werk', it: 'Lavoro', es: 'Trabajo', pl: 'Praca' },
+  'Téléphone de Camille': { en: 'Camille’s phone', de: 'Camilles Telefon', nl: 'Telefoon van Camille', it: 'Telefono di Camille', es: 'Teléfono de Camille', pl: 'Telefon Camille' },
+  'Variateur Salon': { en: 'Living room dimmer', de: 'Dimmer Wohnzimmer', nl: 'Dimmer woonkamer', it: 'Dimmer soggiorno', es: 'Regulador salón', pl: 'Ściemniacz salon' },
+  'Veilleuse chambre au coucher': { en: 'Bedroom night light at bedtime', de: 'Nachtlicht Schlafzimmer zur Schlafenszeit', nl: 'Nachtlampje slaapkamer bij bedtijd', it: 'Luce notturna camera all’ora di dormire', es: 'Luz nocturna dormitorio al acostarse', pl: 'Lampka nocna sypialnia przed snem' },
+  'Vigilance météo': { en: 'Weather warning', de: 'Wetterwarnung', nl: 'Weerwaarschuwing', it: 'Allerta meteo', es: 'Aviso meteorológico', pl: 'Ostrzeżenie pogodowe' },
+  'Volet chambre': { en: 'Bedroom blind', de: 'Rollladen Schlafzimmer', nl: 'Rolluik slaapkamer', it: 'Tapparella camera', es: 'Persiana dormitorio', pl: 'Roleta sypialnia' },
+  'Volet cuisine': { en: 'Kitchen blind', de: 'Rollladen Küche', nl: 'Rolluik keuken', it: 'Tapparella cucina', es: 'Persiana cocina', pl: 'Roleta kuchnia' },
+  'Volet salon': { en: 'Living room blind', de: 'Rollladen Wohnzimmer', nl: 'Rolluik woonkamer', it: 'Tapparella soggiorno', es: 'Persiana salón', pl: 'Roleta salon' },
+  'Volets : fermeture au coucher du soleil': { en: 'Blinds: close at sunset', de: 'Rollläden: schließen bei Sonnenuntergang', nl: 'Rolluiken: sluiten bij zonsondergang', it: 'Tapparelle: chiusura al tramonto', es: 'Persianas: cerrar al atardecer', pl: 'Rolety: zamknięcie o zachodzie' },
+  'Volets : ouverture du matin': { en: 'Blinds: open in the morning', de: 'Rollläden: Öffnen am Morgen', nl: 'Rolluiken: openen ’s ochtends', it: 'Tapparelle: apertura al mattino', es: 'Persianas: apertura por la mañana', pl: 'Rolety: otwarcie rano' },
+  'Éclairage terrasse au crépuscule': { en: 'Terrace lighting at dusk', de: 'Terrassenbeleuchtung bei Dämmerung', nl: 'Terrasverlichting bij schemering', it: 'Illuminazione terrazza al crepuscolo', es: 'Iluminación de la terraza al anochecer', pl: 'Oświetlenie tarasu o zmierzchu' },
+};
+
+/** Le nom d'un appareil, sinon d'un lieu, dans la langue de la demonstration. */
+const etiquette = (fr) => (APPAREILS[fr] && APPAREILS[fr][LANGUE_DEMO]) || lieu(fr);
 
 const PIECES = [
   ['salon', 'Salon', 21.4, 47, 612],
@@ -207,15 +390,15 @@ function etatsInitiaux() {
     'scene.nuit': s('unknown', { friendly_name: 'Nuit' }),
   };
   PIECES.forEach(([cle, nom, t, h, co2]) => {
-    states['sensor.' + cle + '_temperature'] = s(t, { friendly_name: nom + ' température', unit_of_measurement: '°C', device_class: 'temperature' });
-    states['sensor.' + cle + '_humidite'] = s(h, { friendly_name: nom + ' humidité', unit_of_measurement: '%', device_class: 'humidity' });
-    if (co2 != null) states['sensor.' + cle + '_co2'] = s(co2, { friendly_name: nom + ' CO2', unit_of_measurement: 'ppm', device_class: 'carbon_dioxide' });
+    states['sensor.' + cle + '_temperature'] = s(t, { friendly_name: lieu(nom) + ' ' + etiquette('température'), unit_of_measurement: '°C', device_class: 'temperature' });
+    states['sensor.' + cle + '_humidite'] = s(h, { friendly_name: lieu(nom) + ' ' + etiquette('humidité'), unit_of_measurement: '%', device_class: 'humidity' });
+    if (co2 != null) states['sensor.' + cle + '_co2'] = s(co2, { friendly_name: lieu(nom) + ' CO2', unit_of_measurement: 'ppm', device_class: 'carbon_dioxide' });
     /* Le salon a une lampe de COULEUR, les autres non : c'est ce qui permet
      * de voir que Loggia ne propose une teinte que la ou elle existe. */
     states['light.' + cle] = s(cle === 'salon' || cle === 'cuisine' ? 'on' : 'off', cle === 'salon'
-      ? { friendly_name: 'Plafonnier ' + nom, brightness: 180, rgb_color: [255, 176, 92], color_temp_kelvin: 2900,
+      ? { friendly_name: etiquette('Plafonnier') + ' ' + lieu(nom), brightness: 180, rgb_color: [255, 176, 92], color_temp_kelvin: 2900,
           min_color_temp_kelvin: 2000, max_color_temp_kelvin: 6535, supported_color_modes: ['color_temp', 'rgb'] }
-      : { friendly_name: 'Plafonnier ' + nom, brightness: 180, supported_color_modes: ['brightness'] });
+      : { friendly_name: etiquette('Plafonnier') + ' ' + lieu(nom), brightness: 180, supported_color_modes: ['brightness'] });
   });
   return states;
 }
@@ -235,7 +418,7 @@ function configDemo() {
       calme: { actif: false, debut: '22:00', fin: '07:00' },
       actions: { actif: true, lumieres: true, volets: true, vanne: { actif: true, entite: '' } } },
     loggia_rooms: PIECES.map(([cle, nom, , , co2]) => ({
-      room: nom,
+      room: lieu(nom),
       haid: { temp: 'sensor.' + cle + '_temperature', humidity: 'sensor.' + cle + '_humidite', co2: co2 != null ? 'sensor.' + cle + '_co2' : null },
     })),
     // `loggia_energyHaids` est la cle que lisent `enHaids()` ET la disponibilite
@@ -243,18 +426,18 @@ function configDemo() {
     // `loggia_cameras` est la cle que lit l'agregat — `loggia_entities.cameras`
     // sert ailleurs. Sans `haid`, la tuile prend son rendu de repli : degrade,
     // halo et badge « Direct », au lieu d'attendre un flux qui n'existe pas ici.
-    loggia_cameras: [{ name: 'Jardin', online: false }, { name: 'Entrée', haid: 'camera.entree', online: true }],
+    loggia_cameras: CAMERAS(),
     loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
     loggia_entities: {
       weather: ['weather.maison', 'sun.sun'],
       alarm: 'alarm_control_panel.maison',
-      cameras: [{ name: 'Jardin', online: false }, { name: 'Entrée', haid: 'camera.entree', online: true }],
+      cameras: CAMERAS(),
       people: [{ name: 'Camille', haid: 'person.camille' }, { name: 'Alex', haid: 'person.alex' }],
       energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
     },
     // Deux profils : la demo doit exercer les DEUX branches, admin comprise.
-    loggia_users: [{ name: 'Démo', role: 'Admin', c: 'var(--o-accent)' }, { name: 'Invité', role: 'Famille', c: 'var(--o-purple)' }],
-    loggia_plants: [{ base: 'sensor.basilic', name: 'Basilic', room: 'Cuisine' }],
+    loggia_users: [{ name: 'Démo', role: 'Admin', c: 'var(--o-accent)' }, { name: etiquette('Invité'), role: 'Famille', c: 'var(--o-purple)' }],
+    loggia_plants: [{ base: 'sensor.basilic', name: etiquette('Basilic'), room: lieu('Cuisine') }],
     // Le distributeur a sa cle (alias `feeder` → `loggia_feeder`) : `loggia_entities`
     // ne se lit qu'avec un serveur, que la demo n'a pas.
     loggia_feeder: { haids: { reservoir: 'input_number.croquettes_reservoir', portionWeight: 'number.distributeur_portion', distribuees: 'sensor.croquettes_du_jour' },
@@ -287,20 +470,26 @@ const SCN_PIECE = {
   'light.bureau': 'Bureau', 'light.entree': 'Entrée', 'lock.porte_entree': 'Entrée', 'light.sdb': 'Salle de bain',
 };
 const SCN_INTIME = /chambre|bain/i;
-const SCN_CFG = {
+/* Bati au PREMIER ACCES, jamais a l'import : il porte un nom de piece, et la
+ * langue de la maison n'est connue qu'a `installerDemo`. Une table evaluee a
+ * l'import figerait ses libelles dans la langue de demarrage — la meme
+ * meprise que `HUE_CATS()` le 23/09. C'est aussi un MAGASIN : les scenarios
+ * qu'on enregistre y restent le temps de l'onglet. */
+let SCN_CFG_ = null;
+const SCN_CFG = () => (SCN_CFG_ || (SCN_CFG_ = {
   integres: { reveil: { lien: 'scene.reveil' }, cinema: { lien: 'scene.cinema' } },
-  persos: [{ id: 'perso_apero', nom: 'Apéro', icone: 'glass-cheers', teinte: 'tendre', accueil: true, masque: false, lien: null, piece: null,
-    actions: [SCN_A('medias', 'lecture', 'piece', { piece: 'Salon' }), SCN_A('lumieres', 'allumer', 'piece', { piece: 'Salon', valeur: 40 })] }],
+  persos: [{ id: 'perso_apero', nom: etiquette('Apéro'), icone: 'glass-cheers', teinte: 'tendre', accueil: true, masque: false, lien: null, piece: null,
+    actions: [SCN_A('medias', 'lecture', 'piece', { piece: lieu('Salon') }), SCN_A('lumieres', 'allumer', 'piece', { piece: lieu('Salon'), valeur: 40 })] }],
   ordre: [],
-};
+}));
 const SCN_DERNIERS = { nuit: Date.now() / 1000 - 9 * 3600, depart: Date.now() / 1000 - 86400 - 1800 };
 function scnEffectifs() {
   const out = SCN_INTEGRES.map(b => {
-    const o = SCN_CFG.integres[b.id] || {};
+    const o = SCN_CFG().integres[b.id] || {};
     return { id: b.id, integre: true, nom: o.nom || null, icone: o.icone || b.icone, teinte: o.teinte || b.teinte, masque: !!o.masque, accueil: o.accueil !== false,
       lien: o.lien || null, piece: o.piece || null, actions: (Array.isArray(o.actions) ? o.actions : b.actions).map(a => ({ ...a })), modifie: Object.keys(o).length > 0 };
-  }).concat(SCN_CFG.persos.map(p => ({ ...p, integre: false, modifie: true, actions: (p.actions || []).map(a => ({ ...a })) })));
-  if (SCN_CFG.ordre.length) { const rang = {}; SCN_CFG.ordre.forEach((id, i) => { rang[id] = i; }); out.sort((a, b) => (rang[a.id] == null ? 99 : rang[a.id]) - (rang[b.id] == null ? 99 : rang[b.id])); }
+  }).concat(SCN_CFG().persos.map(p => ({ ...p, integre: false, modifie: true, actions: (p.actions || []).map(a => ({ ...a })) })));
+  if (SCN_CFG().ordre.length) { const rang = {}; SCN_CFG().ordre.forEach((id, i) => { rang[id] = i; }); out.sort((a, b) => (rang[a.id] == null ? 99 : rang[a.id]) - (rang[b.id] == null ? 99 : rang[b.id])); }
   return out;
 }
 function scnCibles(a, states, piece) {
@@ -310,7 +499,7 @@ function scnCibles(a, states, piece) {
   const ou = a.piece || piece;
   return Object.keys(states).filter(id => {
     if (id.indexOf(dom) !== 0) return false;
-    const st = states[id].state, p = SCN_PIECE[id] || null;
+    const st = states[id].state, p = SCN_PIECE[id] ? lieu(SCN_PIECE[id]) : null;
     if (a.portee === 'piece' && (!ou || !p || p.toLowerCase() !== ou.toLowerCase())) return false;
     if (a.portee === 'vie' && (!p || SCN_INTIME.test(p))) return false;
     if (a.famille === 'lumieres') return a.geste === 'eteindre' ? st === 'on' : true;
@@ -320,7 +509,7 @@ function scnCibles(a, states, piece) {
     return true;
   }).sort();
 }
-const scnPieceDe = (s) => s.piece || ((s.id === 'cinema' || s.id === 'musique') ? 'Salon' : null);
+const scnPieceDe = (s) => s.piece || ((s.id === 'cinema' || s.id === 'musique') ? lieu('Salon') : null);
 function scenariosDemo(states) {
   const liens = Object.keys(states).filter(id => /^(scene|script)\./.test(id)).sort().map(id => ({ haid: id, nom: (states[id].attributes || {}).friendly_name || id }));
   const scenarios = scnEffectifs().map(s => {
@@ -330,30 +519,30 @@ function scenariosDemo(states) {
     const suggestion = s.integre && !s.lien ? ({ retour: 'scene.je_rentre', nuit: 'scene.nuit' }[s.id] || null) : null;
     return { ...s, piece_effective: piece, resume, dernier: SCN_DERNIERS[s.id] || null, suggestion: suggestion && states[suggestion] ? suggestion : null, lien_absent: !!s.lien && !states[s.lien] };
   });
-  return { scenarios, liens, pieces: ['Bureau', 'Chambre', 'Cuisine', 'Entrée', 'Salle de bain', 'Salon'], alarme: 'alarm_control_panel.maison', journal: [] };
+  return { scenarios, liens, pieces: ['Bureau', 'Chambre', 'Cuisine', 'Entrée', 'Salle de bain', 'Salon'].map(lieu).sort(), alarme: 'alarm_control_panel.maison', journal: [] };
 }
 function scenariosPatch(patch) {
   const p = patch || {};
   if (p.enregistrer) {
     const s = { ...p.enregistrer };
     if (SCN_INTEGRES.some(b => b.id === s.id)) {
-      const o = { ...(SCN_CFG.integres[s.id] || {}), ...s }; delete o.id; if (o.actions == null) delete o.actions;
-      SCN_CFG.integres[s.id] = o;
+      const o = { ...(SCN_CFG().integres[s.id] || {}), ...s }; delete o.id; if (o.actions == null) delete o.actions;
+      SCN_CFG().integres[s.id] = o;
     } else {
-      const ex = s.id ? SCN_CFG.persos.find(x => x.id === s.id) : null;
+      const ex = s.id ? SCN_CFG().persos.find(x => x.id === s.id) : null;
       if (ex) Object.assign(ex, s, { actions: s.actions || [] });
       else {
         const base = 'perso_' + String(s.nom || 'scenario').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
         let id = base, n = 2;
-        while (SCN_CFG.persos.some(x => x.id === id)) { id = base + '_' + n; n += 1; }
-        SCN_CFG.persos.push({ id, nom: s.nom || id, icone: s.icone || 'sparkles', teinte: s.teinte || 'accent', lien: s.lien || null, piece: s.piece || null, actions: s.actions || [], accueil: s.accueil !== false, masque: !!s.masque });
+        while (SCN_CFG().persos.some(x => x.id === id)) { id = base + '_' + n; n += 1; }
+        SCN_CFG().persos.push({ id, nom: s.nom || id, icone: s.icone || 'sparkles', teinte: s.teinte || 'accent', lien: s.lien || null, piece: s.piece || null, actions: s.actions || [], accueil: s.accueil !== false, masque: !!s.masque });
       }
     }
   }
-  if (p.supprimer) SCN_CFG.persos = SCN_CFG.persos.filter(x => x.id !== p.supprimer);
-  if (p.reinitialiser) delete SCN_CFG.integres[p.reinitialiser];
-  if (Array.isArray(p.ordre)) SCN_CFG.ordre = p.ordre.slice();
-  return SCN_CFG;
+  if (p.supprimer) SCN_CFG().persos = SCN_CFG().persos.filter(x => x.id !== p.supprimer);
+  if (p.reinitialiser) delete SCN_CFG().integres[p.reinitialiser];
+  if (Array.isArray(p.ordre)) SCN_CFG().ordre = p.ordre.slice();
+  return SCN_CFG();
 }
 function scenariosLancer(id, states) {
   const s = scnEffectifs().find(x => x.id === id);
@@ -491,7 +680,7 @@ function previsionsDemo(type) {
  * un vocabulaire qui n'existe pas. */
 const INTER_AFF = {
   'z2m/Variateur Salon': {
-    nom: 'Variateur Salon',
+    nom: etiquette('Variateur Salon'),
     source: 'z2m',
     actions: {
       on_press_release: [{ service: 'homeassistant.turn_on', data: { entity_id: 'light.salon' } }],
@@ -512,12 +701,12 @@ function interDemo() {
   return {
     appareils: [
       {
-        cle: 'z2m/Variateur Salon', source: 'z2m', nom: 'Variateur Salon',
+        cle: 'z2m/Variateur Salon', source: 'z2m', nom: etiquette('Variateur Salon'),
         affectees: ['off_press_release', 'on_press_release', 'up_press_release'],
         vues: ['down_press_release', 'off_press_release', 'on_press_release', 'up_press_release'],
       },
       {
-        cle: 'z2m/Bouton Cuisine', source: 'z2m', nom: 'Bouton Cuisine',
+        cle: 'z2m/Bouton Cuisine', source: 'z2m', nom: etiquette('Bouton Cuisine'),
         affectees: [], vues: ['on', 'off', 'brightness_move_up'],
       },
     ],
@@ -525,9 +714,9 @@ function interDemo() {
     ecoute: interEcoute(),
     affectations: INTER_AFF,
     journal: [
-      { cle: 'z2m/Bouton Cuisine', source: 'z2m', nom: 'Bouton Cuisine', action: 'on', ts: INTER_DEPART - 4 },
-      { cle: 'z2m/Variateur Salon', source: 'z2m', nom: 'Variateur Salon', action: 'up_press_release', ts: INTER_DEPART - 26 },
-      { cle: 'z2m/Variateur Salon', source: 'z2m', nom: 'Variateur Salon', action: 'on_press_release', ts: INTER_DEPART - 71 },
+      { cle: 'z2m/Bouton Cuisine', source: 'z2m', nom: etiquette('Bouton Cuisine'), action: 'on', ts: INTER_DEPART - 4 },
+      { cle: 'z2m/Variateur Salon', source: 'z2m', nom: etiquette('Variateur Salon'), action: 'up_press_release', ts: INTER_DEPART - 26 },
+      { cle: 'z2m/Variateur Salon', source: 'z2m', nom: etiquette('Variateur Salon'), action: 'on_press_release', ts: INTER_DEPART - 71 },
     ],
   };
 }
@@ -581,17 +770,19 @@ function voletsPatch(patch) {
 
 /* Fenetre ouverte, chauffage coupe : la regle armee sur une piece, pour que la
  * page se montre remplie plutot que vide. */
-const FEN_CFG = {
+/* Paresseux pour la meme raison que `SCN_CFG()` : la piece est ici une CLE. */
+let FEN_CFG_ = null;
+const FEN_CFG = () => (FEN_CFG_ || (FEN_CFG_ = {
   actif: true, delai: 3, reprise: 0,
-  pieces: { Chambre: { actif: true, ouvrants: ['binary_sensor.fenetre_chambre'], chauffages: ['switch.radiateur_chambre'] } },
-};
+  pieces: { [lieu('Chambre')]: { actif: true, ouvrants: ['binary_sensor.fenetre_chambre'], chauffages: ['switch.radiateur_chambre'] } },
+}));
 
 function fenetresDemo() {
   return {
-    config: FEN_CFG,
+    config: FEN_CFG(),
     coupes: {},
     en_attente: [],
-    journal: [{ module: 'fenetres', regle: 'fenetre', quoi: 'rendre', cibles: ['switch.radiateur_chambre'], n: 1, motif: 'Chambre', detail: '', simule: false, ts: Date.now() / 1000 - 5400 }],
+    journal: [{ module: 'fenetres', regle: 'fenetre', quoi: 'rendre', cibles: ['switch.radiateur_chambre'], n: 1, motif: lieu('Chambre'), detail: '', simule: false, ts: Date.now() / 1000 - 5400 }],
   };
 }
 
@@ -599,12 +790,12 @@ function fenetresPatch(patch) {
   Object.keys(patch || {}).forEach(k => {
     if (k === 'pieces') {
       Object.keys(patch.pieces || {}).forEach(nom => {
-        if (patch.pieces[nom] === null) delete FEN_CFG.pieces[nom];
-        else FEN_CFG.pieces[nom] = { ...(FEN_CFG.pieces[nom] || {}), ...patch.pieces[nom] };
+        if (patch.pieces[nom] === null) delete FEN_CFG().pieces[nom];
+        else FEN_CFG().pieces[nom] = { ...(FEN_CFG().pieces[nom] || {}), ...patch.pieces[nom] };
       });
-    } else FEN_CFG[k] = patch[k];
+    } else FEN_CFG()[k] = patch[k];
   });
-  return FEN_CFG;
+  return FEN_CFG();
 }
 
 /* Le Superviseur de la demonstration (vue Systeme, ADR 0037) : une machine, six
@@ -646,8 +837,8 @@ function superviseurDemo(msg) {
     '/supervisor/info': { version: '2026.03.2', version_latest: '2026.03.2', update_available: false },
     '/addons': { addons: MODULES_DEMO.map(m => ({ ...m })) },
     '/backups': { backups: [
-      { slug: 'demo1', name: 'Sauvegarde automatique', date: nuit.toISOString(), type: 'full', size: 1945.6 },
-      { slug: 'demo0', name: 'Avant mise à jour', date: new Date(nuit.getTime() - 5 * 86400000).toISOString(), type: 'partial', size: 412.3 },
+      { slug: 'demo1', name: etiquette('Sauvegarde automatique'), date: nuit.toISOString(), type: 'full', size: 1945.6 },
+      { slug: 'demo0', name: etiquette('Avant mise à jour'), date: new Date(nuit.getTime() - 5 * 86400000).toISOString(), type: 'partial', size: 412.3 },
     ] },
     '/network/info': { interfaces: [{ interface: 'eth0', type: 'ethernet', enabled: true, connected: true, primary: true, ipv4: { method: 'auto', address: ['192.0.2.20/24'], gateway: '192.0.2.1' } }] },
   };
@@ -683,8 +874,8 @@ function logbookDemo() {
  * entites qui y sont rangees. Le dashboard croise ensuite avec les etats. */
 function indexDemo(states) {
   const ZONES = [
-    ['salon', 'Salon'], ['cuisine', 'Cuisine'], ['chambre', 'Chambre'],
-    ['bureau', 'Bureau'], ['entree', 'Entrée'], ['sdb', 'Salle de bain'],
+    ['salon', lieu('Salon')], ['cuisine', lieu('Cuisine')], ['chambre', lieu('Chambre')],
+    ['bureau', lieu('Bureau')], ['entree', lieu('Entrée')], ['sdb', lieu('Salle de bain')],
   ];
   const ZONE_DE = {
     salon: ['light.salon', 'media_player.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_co2', 'sensor.salon_bruit', 'cover.salon', 'cover.volet_salon',
@@ -1026,7 +1217,13 @@ function calendrierDemo(id) {
   ]);
 }
 
-export function installerDemo() {
+export function installerDemo(langue) {
+  /* La langue de la maison factice. Elle est lue par l'appelant AVANT que le
+   * magasin memoire ne remplace `localStorage` : le `?lang=` de l'URL n'y est
+   * ecrit qu'ensuite, et serait donc invisible d'ici. Sans elle, la maison
+   * garde ses noms francais. */
+  if (langue && LIEUX.Salon[langue]) LANGUE_DEMO = langue;
+
   // ── 1. Magasin mémoire à la place du localStorage ─────────────────────────
   const mem = new Map();
   const cfg = configDemo();

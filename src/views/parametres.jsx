@@ -1587,6 +1587,30 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                   cfgSet({ 'loggia-langue': v });
                   // La racine ecoute : elle rappelle `preparerLangue` puis redessine.
                   try { window.dispatchEvent(new CustomEvent('loggia-langue-changee')); } catch {}
+                  /* SAUF en démonstration (23/09) : la maison factice nomme ses
+                   * pièces au démarrage, et les renommer à chaud demanderait de
+                   * la rebâtir entière — ces noms sont aussi des clés. On
+                   * recharge donc avec la langue dans l'URL. Le magasin mémoire
+                   * repart à neuf à chaque chargement de toute façon, et le lien
+                   * devient partageable. Une vraie installation, elle, tient ses
+                   * noms de Home Assistant : rien à recharger. */
+                  if (typeof window !== 'undefined' && window.__loggiaDemo) {
+                    try {
+                      /* La vue courante survit au rechargement par
+                       * `sessionStorage`. Si c'est une PIÈCE, son nom vient de
+                       * changer : gardée telle quelle, elle rouvrirait une
+                       * pièce qui n'existe plus, vide et intitulée dans
+                       * l'ancienne langue. On revient à l'Accueil. */
+                      const vue = window.sessionStorage.getItem('loggia-vue') || '';
+                      if (vue.indexOf('room:') === 0) window.sessionStorage.setItem('loggia-vue', 'accueil');
+                    } catch { /* rien */ }
+                    try {
+                      const u = new URL(window.location.href);
+                      if (v === 'auto') u.searchParams.delete('lang');
+                      else u.searchParams.set('lang', v);
+                      window.location.replace(u.toString());
+                    } catch { /* rien : le redessin a déjà eu lieu */ }
+                  }
                 }} />
             </OptRow>
             <OptRow title={tr('Barre de navigation')} desc={tr('Accès rapide en bas de l’écran, sur mobile.')}>
