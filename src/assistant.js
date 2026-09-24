@@ -23,12 +23,6 @@ export const choixAssistant = () => {
   return /^[a-z][a-z0-9_]*$/.test(s) ? s : '';
 };
 
-/** Le nom du composant réglé, ou '' — l'ancienne forme du réglage. */
-export const nomAssistant = () => {
-  const c = choixAssistant();
-  return c.indexOf('.') < 0 ? c : '';
-};
-
 /**
  * Les entités de conversation de la maison, triées par nom.
  *

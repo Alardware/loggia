@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.config_entries import ConfigEntry
@@ -50,17 +49,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+# Les modules qui ECOUTENT et PROGRAMMENT : abonnements au bus, rendez-vous,
+# minuteries. Ils savent tous se taire, et se rebatissent au chargement
+# suivant puisque `_async_setup_common` ne les cree que s'ils manquent.
+#
+# `regles` en fait partie : c'est lui qui ecoute les gestes et qui retient
+# l'ecriture differee du journal. Son arret l'ECRIT avant de partir.
+MODULES_VIVANTS = (
+    "alertes", "fenetres", "interrupteurs", "minuteurs", "nuit", "presence",
+    "robots", "scenarios", "sirene", "veilles", "volets", "regles",
+)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Retire le panneau.
+    """Retire le panneau, et fait taire ce qui ecoute.
 
     Les vues HTTP et les commandes WebSocket ne se desenregistrent pas : elles
-    vivent jusqu'a l'arret du process. On ne touche donc PAS au drapeau qui les
-    protege — sinon le chargement suivant (bouton « Recharger » de l'interface,
-    action courante) retenterait `register_view` sur des routes deja prises.
-    Seul le panneau, qui se reenregistre proprement, est remis a zero.
+    vivent jusqu'a l'arret du process. On ne touche donc PAS aux drapeaux qui
+    les protegent — sinon le chargement suivant (bouton « Recharger » de
+    l'interface, action courante) retenterait `register_view` sur des routes
+    deja prises. Le service `loggia.scenario` non plus, pour la meme raison.
+
+    LE RESTE S'ARRETE (24/09, plan S7). Douze modules portaient une methode
+    d'arret que PERSONNE n'appelait : leurs abonnements et leurs rendez-vous
+    survivaient au dechargement, et un rechargement ne les recreait meme pas
+    — ils etaient encore dans `hass.data`. On les arrete donc, et on les
+    retire : le chargement suivant les rebatit neufs.
+
+    Le magasin reste : il porte le fichier et son verrou, et rien ne l'ecoute.
     """
     async_remove_panel(hass)
-    hass.data.get(DOMAIN, {}).pop("panel", None)
+    data = hass.data.get(DOMAIN, {})
+    data.pop("panel", None)
+    for nom in MODULES_VIVANTS:
+        module = data.pop(nom, None)
+        if module is None:
+            continue
+        arreter = getattr(module, "async_arreter", None) or getattr(module, "arreter", None)
+        if arreter is None:
+            continue
+        try:
+            arreter()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia %s : arret impossible", nom)
     return True
 
 
@@ -76,11 +107,6 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
     # Ni les vues HTTP ni les commandes WebSocket ne savent se desenregistrer.
     # Les reenregistrer ferait au mieux un doublon, au pire lever une exception
     # qui ferait echouer tout le rechargement.
-    if not data.get("http"):
-        data["http"] = True
-        hass.http.register_view(LoggiaPingView())
-        _LOGGER.info("Loggia %s : /api/loggia/ping enregistre", VERSION)
-
     # Configuration par utilisateur (remplace le localStorage du navigateur).
     # Import local et try/except : si ce bloc echoue, le proxy de services doit
     # continuer a fonctionner — il tourne depuis juin et ne doit pas dependre
@@ -251,13 +277,26 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                 # Appele par une personne : ses permissions d'entite valent ici
                 # aussi. Par une automatisation (pas d'utilisateur) : celles de
                 # la maison.
+                #
+                # UN COMPTE ILLISIBLE FAIT REFUSER, IL N'ELARGIT PAS (24/09, M10).
+                # `controle_de(None)` vaut « aucun filtre » : c'est le bon sens
+                # pour une automatisation, qui n'a pas d'utilisateur, et le pire
+                # possible pour une personne dont le compte n'a pas pu etre lu.
+                # Le scenario partait alors avec les droits de la maison entiere,
+                # l'inverse exact de l'ADR 0045. Un appel qui PORTE un identifiant
+                # doit pouvoir le resoudre, sinon il ne part pas.
                 utilisateur = None
                 if uid:
                     try:
                         utilisateur = await hass.auth.async_get_user(uid)
                     except Exception:  # noqa: BLE001
                         utilisateur = None
-                from .scenarios import controle_de
+                from .scenarios import compte_resolu, controle_de
+
+                if not compte_resolu(uid, utilisateur):
+                    _LOGGER.warning(
+                        "Loggia : scenario refuse, le compte %s n'a pas pu etre lu", uid)
+                    return
 
                 await scenarios.async_lancer(str(call.data.get("id") or ""), user_id=uid,
                                              controle=controle_de(utilisateur) if uid else None)
@@ -278,13 +317,3 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["panel"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : panneau indisponible")
-
-
-class LoggiaPingView(HomeAssistantView):
-    """GET /api/loggia/ping — verification d'installation (auth requise)."""
-
-    url = "/api/loggia/ping"
-    name = "api:loggia:ping"
-
-    async def get(self, request):
-        return self.json({"loggia": True, "version": VERSION})

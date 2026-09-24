@@ -86,7 +86,7 @@ export function languesDisponibles() {
 }
 
 /* Le francais n'a pas de catalogue : c'est la langue des sources. */
-export const LANGUE_SOURCE = 'fr';
+const LANGUE_SOURCE = 'fr';
 
 /* Les textes de Loggia qui existent DEJA dans Home Assistant, et sous quelle cle.
  *
@@ -164,8 +164,16 @@ const CLES_HA = {
   // Etats
   'Allumé': 'C:fan:state.on',
   'Éteint': 'C:fan:state.off',
-  'Ouvert': 'C:lock:state.open',
-  'Fermé': 'C:group:state.closed',
+  /* Les deux du MEME domaine (retour de Seba882, issue #5, 24/09).
+   * « Ouvert » venait de `lock`, « Fermé » de `group` : en français les deux se
+   * lisent pareil, et rien ne se voyait. En polonais, Home Assistant rend
+   * `lock:state.open` par un adjectif (« Otwarte ») et `group:state.closed` par
+   * une forme verbale (« zamknięto », plutot « on a fermé ») : sur la MEME carte,
+   * une porte changeait de registre selon son etat. `cover` est le domaine dont
+   * les etats sont litteralement ceux d'un ouvrant, et c'est pour des ouvrants
+   * que Loggia emploie ces mots — volets, portes, fenetres. */
+  'Ouvert': 'C:cover:state.open',
+  'Fermé': 'C:cover:state.closed',
   'En pause': 'C:timer:state.paused',
   'EN PAUSE': 'C:timer:state.paused',
   'En veille': 'C:media_player:state.standby',

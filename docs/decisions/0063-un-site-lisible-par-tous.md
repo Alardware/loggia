@@ -132,8 +132,11 @@ carte teintée. Même remède que pour les gris, étendu :
   couleurs.
 
 Audit complet rejoué : **306 → 86 → 6 textes sous 4,5:1** sur 13 378, le pire
-à 3,84. Les six sont dans la vue Sécurité de trois thèmes (un nom de caméra,
-« TOUT EST CALME », les initiales d'une personne). Mesuré sur une carte allumée
+à 3,84. Les six étaient dans la vue Sécurité de trois thèmes (un nom de caméra,
+« TOUT EST CALME », les initiales d'une personne). **Soldés le 24/09 (ADR
+0078)** : leur point commun n'était pas la vue mais le mécanisme — tous écrits
+par un compagnon « r,g,b » posé sur un lavis de sa propre teinte, le seul cas
+que la garde ne testait pas. Mesuré sur une carte allumée
 en Loggia clair : gris `#54617b` → `#3f495c`, violet `#6d23eb` → `#5c14d6` ;
 sur une carte éteinte et sur la page, rien ne bouge.
 

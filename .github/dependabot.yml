@@ -1,0 +1,32 @@
+# Dependabot : les actions GitHub, et RIEN D'AUTRE (24/09, plan M15).
+#
+# Les `uses:` des workflows sont epingles par SHA — un tag `v7` peut etre
+# deplace vers un autre commit sans que personne le voie, un SHA non. Mais un
+# SHA epingle ne se met plus a jour tout seul : il faut quelqu'un pour le
+# relever quand une faille est corrigee en amont. C'est le travail de ce
+# fichier. L'un ne va pas sans l'autre : epingler sans surveiller, c'est figer
+# une version vulnerable pour toujours.
+#
+# `npm` n'est PAS ici, a dessein. Le paquet HACS embarque un bundle versionne
+# dans `custom_components/loggia/frontend/` : une montee de dependance demande
+# de reconstruire et de repackager, ce qu'une pull request automatique ne fait
+# pas. Les ALERTES Dependabot restent actives — c'est la lecture qui compte,
+# pas la PR.
+#
+# Les deux branches flottantes de `validate.yml` — `hassfest@master` et
+# `hacs/action@main` — sont volontaires et documentees a leur ligne. Dependabot
+# ne les touchera pas : il ne releve que ce qui porte une version.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Un seul lot plutot qu'une PR par action : sept actions, sept PR par
+    # semaine rendraient l'avis illisible, et un avis illisible ne se lit pas.
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"

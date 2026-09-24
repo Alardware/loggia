@@ -570,7 +570,7 @@ function AdminPinEditor({ hass }) {
         <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: defini ? 'var(--o-s1)' : 'rgba(var(--o-warn-rgb),.16)' }}><Fi i="key" size={15} color={defini ? 'var(--o-text2)' : 'var(--o-warn)'} /></span>
         {tr('Code administrateur')}
       </span>}
-      desc={<span style={{ display: 'block', paddingLeft: 44 }}>{tr('Requis pour basculer vers un profil Admin. Haché, jamais affiché — le même sur tous les appareils.')}</span>}
+      desc={<span style={{ display: 'block', paddingLeft: 44 }}>{tr('Requis pour basculer vers un profil Admin, et vérifié par le composant. Haché, jamais affiché — le même sur tous les appareils.')}</span>}
       droite={defini ? <Pastille niveau="ok" icone="check">{tr('Code défini')}</Pastille> : <Pastille niveau="alerte" icone="triangle-warning">{tr('Encore 0000')}</Pastille>}>
       <div className="grid-par-pin" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) auto', gap: 14, alignItems: 'end', padding: '4px 22px 20px' }}>
         <div><div style={champ}>{tr('Nouveau code')}</div><input aria-label={tr('Nouveau code')} value={np} onChange={e => { setNp(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" type="password" autoComplete="new-password" style={inp} /></div>
@@ -609,7 +609,7 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
   return (
     <div role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div role="presentation" onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}><span style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 19, color: '#fff', background: `linear-gradient(135deg,${c},rgba(${cl_hexRgb(c)},.6))` }}>{(name.trim()[0] || '?').toUpperCase()}</span><div style={{ fontSize: 15, fontWeight: 800 }}>{user ? "Modifier l'utilisateur" : 'Nouvel utilisateur'}</div></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}><span style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 19, color: '#fff', background: `linear-gradient(135deg,${c},rgba(${cl_hexRgb(c)},.6))` }}>{(name.trim()[0] || '?').toUpperCase()}</span><div style={{ fontSize: 15, fontWeight: 800 }}>{user ? tr("Modifier l'utilisateur") : tr('Nouvel utilisateur')}</div></div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>{tr('NOM')}</div>
         {/* `autoFocus` delibere : cette feuille s'ouvre pour saisir un nom, en
           * reponse a un clic. La regle vise les champs focalises au CHARGEMENT
@@ -1018,7 +1018,7 @@ function lienSur(url) {
 /* Les vues du menu principal, hors Accueil — celles qui se masquent une par une
  * dans Paramètres › Vues. Une seule liste : le compteur du sommaire et l'onglet
  * comptaient chacun de leur côté, et le sommaire écrivait « 11 » en dur. */
-export const VUES_PRINCIPALES = ['pieces', 'scenes', 'objets', 'energie', 'securite', 'systeme'];
+const VUES_PRINCIPALES = ['pieces', 'scenes', 'objets', 'energie', 'securite', 'systeme'];
 
 export const VIEW_ENT_SECTIONS = {
   accueil: ['rooms', 'weather', 'energy', 'people', 'cams'],
@@ -1175,7 +1175,17 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const [majVerifie, setMajVerifie] = useState(() => { try { return Number(localStorage.getItem('loggia-maj-verifie')) || 0; } catch { return 0; } });
   // Utilisateurs : dernière activité par profil (posée par applyUser)
   const lastSeen = (() => { try { return JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); } catch { return {}; } })();
-  const seenRel = (name, isCur) => { if (isCur) return 'actif maintenant'; const t = lastSeen[name]; if (!t) return ''; const m = (Date.now() - t) / 60000; if (m < 60) return 'vu il y a ' + Math.max(1, Math.round(m)) + ' min'; if (m < 1440) return 'vu il y a ' + Math.round(m / 60) + ' h'; if (m < 2880) return 'vu hier'; return 'vu il y a ' + Math.round(m / 1440) + ' j'; };
+  const seenRel = (name, isCur) => {
+    if (isCur) return tr('actif maintenant');
+    const t = lastSeen[name]; if (!t) return '';
+    const m = (Date.now() - t) / 60000;
+    /* `tr` et non `trN` : la minute, l'heure et le jour s'ecrivent en abrege,
+     * et un abrege ne se decline pas — « 2 min », « 5 min ». */
+    if (m < 60) return tr('vu il y a {n} min', { n: Math.max(1, Math.round(m)) });
+    if (m < 1440) return tr('vu il y a {n} h', { n: Math.round(m / 60) });
+    if (m < 2880) return tr('vu hier');
+    return tr('vu il y a {n} j', { n: Math.round(m / 1440) });
+  };
   const [editing, setEditing] = useState(null); // { i, u } pour éditer, { i:null } pour ajouter
   // Automatisations : état optimiste local (id → on/off) au-dessus de hass.
   const [autoOv, setAutoOv] = useState({});
@@ -1352,7 +1362,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       big: String(users.length), unit: tr('profils du foyer'), admin: false },
     { id: 'apparence', name: tr('Apparence'), ico: 'palette', col: 'var(--o-purple)', bg: 'rgba(var(--o-purple-rgb),.14)',
       sub: tr('Thème, mode, effets'), big: (PRESET_META().find(x => x.id === loggiaTheme) || PRESET_META()[0]).name, unit: tr('{n} thèmes', { n: PRESET_META().length }), admin: false, small: true },
-    { id: 'connexion', name: tr('Connexion HA'), long: 'Connexion à Home Assistant', ico: 'link', col: 'var(--o-ok)', bg: 'rgba(var(--o-ok-rgb),.14)',
+    { id: 'connexion', name: tr('Connexion HA'), long: tr('Connexion à Home Assistant'), ico: 'link', col: 'var(--o-ok)', bg: 'rgba(var(--o-ok-rgb),.14)',
       sub: accessKind, pageSub: tr('Session empruntée au navigateur') + ' · ' + accessKind, big: (lat != null && lat >= 0) ? lat + ' ms' : (hass ? tr('active') : tr('hors ligne')), unit: hass ? tr('session active') : tr('session absente'), admin: false, small: true },
     { id: 'auto', name: tr('Automatisations'), ico: 'bolt', col: 'var(--o-warn)', bg: 'rgba(var(--o-warn-rgb),.14)',
       sub: tr('Gérées dans Home Assistant'), big: String(autos.filter(a => a.on).length), unit: tr('actives sur {n}', { n: autos.length }), admin: true },
@@ -1751,7 +1761,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         ];
         // Une vue masquee garde sa description : c'est ce qu'on lit pour
         // decider de la remettre, « masquée » ne disait rien.
-        const DESC_SECONDAIRE = { lumieres: tr('éclairages de la maison'), climat: tr('chauffage et clim'), medias: tr('enceintes et écrans'), biblio: tr('catalogue des cartes') };
+        // Chaque vue secondaire dit ce qu'elle porte : sans sa ligne ici, elle
+        // s'affiche nue au milieu de voisines qui se presentent (24/09, S2).
+        const DESC_SECONDAIRE = { lumieres: tr('éclairages de la maison'), climat: tr('chauffage et clim'), volets: tr('modes et planning'), medias: tr('enceintes et écrans'), biblio: tr('catalogue des cartes') };
         const cfg = readViewsCfg();
         const bump = () => setAutoOpen(o => ({ ...o }));
         const toggleMain = (vid) => { const c = readViewsCfg(); if (c.hidden.has(vid)) c.hidden.delete(vid); else c.hidden.add(vid); writeViewsCfg(c); bump(); };

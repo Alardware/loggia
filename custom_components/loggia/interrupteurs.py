@@ -45,6 +45,8 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Event, HomeAssistant, callback
 
+from .regles import demarrer
+
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
 
@@ -118,7 +120,7 @@ class LoggiaInterrupteurs:
         # Ce qui est reellement branche. L'interface le montre : sans cela, une
         # page muette ne dit pas si personne n'appuie ou si personne n'ecoute.
         self.sources: dict[str, Any] = {"mqtt_present": False, "z2m": False, "zha": False, "deconz": False}
-        hass.async_create_task(self._async_demarrer())
+        demarrer(hass, self, self._async_demarrer(), "interrupteurs")
 
     async def _async_demarrer(self) -> None:
         """Branche les trois sources. L'absence de l'une n'empeche pas les autres."""

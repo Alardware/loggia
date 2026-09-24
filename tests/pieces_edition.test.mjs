@@ -100,8 +100,3 @@ test('Parametres ne perd ni l’icone ni la teinte a l’enregistrement', () => 
   assert.ok(par.includes("icon: r.icon || null, teinte: r.teinte || null, temp:"), 'lues avec la piece');
   assert.ok(par.includes("...(r.icon ? { icon: r.icon } : {}), ...(r.teinte ? { teinte: r.teinte } : {}), haid: {"), 'reecrites avec elle');
 });
-
-test('les mots de la fiche et des cartes ont leur traduction', () => {
-  ['Une rangée', 'Deux rangées', 'Aucun capteur', '{n} capteur', '{n} capteurs', 'Ajouter une pièce', 'Modifier la pièce', 'TEINTE', 'Tuile compacte', 'Une pièce porte déjà ce nom.', 'Salon, Cuisine, Chambre…', 'Accent', 'Ambre', 'Tendre', 'Bain', 'Vert', 'CO₂']
-    .forEach(k => assert.ok(en.includes("  '" + k + "':"), k + ' manque dans en.js'));
-});

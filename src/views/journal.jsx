@@ -147,4 +147,3 @@ export function JournalReglages({ hass, cardSt }) {
   );
 }
 
-export default JournalReglages;

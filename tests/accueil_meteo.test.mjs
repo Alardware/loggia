@@ -172,5 +172,4 @@ test('la carte : la disposition fournie — le lieu et le chiffre a gauche, le c
 test('la demonstration pousse des previsions, et l’anglais suit', () => {
   assert.ok(demo.includes("if (msg && msg.type === 'weather/subscribe_forecast') {") && demo.includes('rappel({ type: msg.forecast_type, forecast: previsionsDemo(msg.forecast_type) });'), 'un abonnement, comme sur une vraie installation');
   assert.ok(demo.includes("temperature: 24.3, humidity: 52, temperature_unit: '°C', supported_features: 3,"), 'l’entite de la demo dit savoir donner le jour et l’heure');
-  for (const k of ['Maint.', 'Max {n}', 'Min {n}', 'Météo', '{n} h']) assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
 });

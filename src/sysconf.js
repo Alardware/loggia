@@ -70,7 +70,7 @@ export function sysSensors() {
 // c'est la découverte qui a rempli l'emplacement, sinon le libellé historique.
 // Libellés d'attente : ils ne s'affichent que le temps de la découverte, ou
 // pour un emplacement resté vide.
-export const SYS_NAMES_DEF = { host: 'Machine 1', nebula: 'Machine 2', ucg: 'Machine 3' };
+const SYS_NAMES_DEF = { host: 'Machine 1', nebula: 'Machine 2', ucg: 'Machine 3' };
 export function sysNames() {
   const cfg = loggiaEnt('sysNames', null);
   const out = { ...SYS_NAMES_DEF, ...(cfg && typeof cfg === 'object' ? cfg : {}) };

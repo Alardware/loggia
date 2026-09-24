@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
-from .regles import Regles, niveau
+from .regles import Regles, demarrer, niveau
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -234,7 +234,9 @@ class LoggiaRobots:
         self.regles = regles
         self.cfg: dict[str, Any] = {"plannings": [], "robots": {}}
         self._defait: list[Any] = []
-        hass.async_create_task(self._async_demarrer())
+        # Un registre illisible ne se signale qu'une fois (voir `_registre`).
+        self._registre_dit = False
+        demarrer(hass, self, self._async_demarrer(), "robots")
 
     async def _async_demarrer(self) -> None:
         self.cfg = await self.async_config()
@@ -278,11 +280,23 @@ class LoggiaRobots:
 
     # ── Ce que Home Assistant sait du robot ────────────────────────────────
     def _registre(self):
+        """Le registre des entites, ou None — en le DISANT (24/09, plan M10).
+
+        Sans registre, le robot perd sa plateforme et ses aires : le planning
+        passe entier, et rien n'expliquait pourquoi. Une fois par vie du
+        process suffit a le signaler : repete a chaque lecture, il noierait
+        le journal de Home Assistant.
+        """
         try:
             from homeassistant.helpers import entity_registry as er
 
             return er.async_get(self.hass)
         except Exception:  # noqa: BLE001
+            if not self._registre_dit:
+                self._registre_dit = True
+                _LOGGER.warning(
+                    "Loggia robots : registre des entites illisible — ni plateforme "
+                    "ni aire, le planning passera entier", exc_info=True)
             return None
 
     def _entree(self, haid: str):

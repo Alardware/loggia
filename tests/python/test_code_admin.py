@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import pytest
 
+from pathlib import Path
+
 from conftest import charger
+
+RACINE = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
@@ -92,3 +96,55 @@ def test_les_rates_trop_vieux_ne_comptent_plus(module):
         lim.rate("u1")
     t[0] = 601.0
     assert lim.rate("u1") == 0, "quatre rates d'il y a dix minutes sont oublies"
+
+
+# ── Le passage vers un profil Admin (24/09, plan M14) ──────────────────────
+
+PROFILS = [{"name": "Démo", "role": "Admin"}, {"name": "Invité", "role": "Famille"}]
+
+
+def test_seul_le_passage_vers_un_profil_admin_est_garde():
+    """`loggia_active_user` reste OUVERTE : une tablette de famille change de
+    profil, c'est son usage premier. Seul le passage vers Admin se garde."""
+    m = charger("code_admin")
+    assert m.passage_admin({"loggia_active_user": "0"}, PROFILS) is True
+    assert m.passage_admin({"loggia_active_user": "1"}, PROFILS) is False
+    # Le role se compare sans casse ni espaces : un profil importe peut varier.
+    assert m.passage_admin({"loggia_active_user": "0"}, [{"role": " admin "}]) is True
+    # Rien a garder : une autre cle, un index hors liste, une liste illisible.
+    assert m.passage_admin({"loggia_look": "ios"}, PROFILS) is False
+    assert m.passage_admin({"loggia_active_user": "9"}, PROFILS) is False
+    assert m.passage_admin({"loggia_active_user": "0"}, None) is False
+    assert m.passage_admin({"loggia_active_user": "abc"}, PROFILS) is False
+    assert m.passage_admin({"loggia_active_user": "0"}, ["pas un objet"]) is False
+
+
+def test_un_code_verifie_ouvre_le_passage_pour_un_temps_puis_se_ferme():
+    m = charger("code_admin")
+    t = [1000.0]
+    lp = m.LaissezPasser(duree=300, horloge=lambda: t[0])
+    assert lp.valide("a") is False, "rien n'est ouvert sans avoir prouve le code"
+    lp.accorder("a")
+    assert lp.valide("a") is True
+    assert lp.valide("b") is False, "le laissez-passer vaut pour UN compte"
+    t[0] += 299
+    assert lp.valide("a") is True
+    t[0] += 2
+    assert lp.valide("a") is False, "il ne vaut pas plus que sa duree"
+    lp.accorder("a")
+    lp.retirer("a")
+    assert lp.valide("a") is False
+
+
+def test_le_gestionnaire_garde_bien_le_passage():
+    """La regle est branchee, et un administrateur Home Assistant la saute :
+    il peut deja tout ailleurs, lui demander le code n'ajoute rien."""
+    src = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_text(encoding="utf-8")
+    assert "refus = await _refus_profil_admin(patch, connection)" in src
+    corps = src.split("async def _refus_profil_admin")[1].split("@websocket_api")[0]
+    assert "if connection.user.is_admin:" in corps
+    assert "laissez_passer.valide(connection.user.id)" in corps
+    assert "passage_admin(patch, profils)" in corps
+    # Une verification reussie l'accorde.
+    assert "laissez_passer.accorder(uid)" in src
+

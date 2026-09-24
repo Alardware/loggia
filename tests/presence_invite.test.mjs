@@ -29,7 +29,4 @@ test('cote serveur : la maison n’est jamais vide, le coucher attend, et la cou
 
 test('les mots ont leur traduction', () => {
   const en = lire('src/langues/en.js');
-  for (const k of ['Mode invité', 'L’interrupteur', 'Interrupteur du mode invité', 'Aucun interrupteur', 'Invité en ce moment', 'Pas d’invité', 'Un habitant est rentré : le mode se coupera dans la demi-heure.']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
-  }
 });

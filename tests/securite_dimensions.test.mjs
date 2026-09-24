@@ -38,9 +38,15 @@ test('l’alarme : le mot d’une chip ne se tronque jamais — il s’efface, d
 
 test('la presence : trois lignes dans 184 px, et le lieu qui s’efface quand la carte est etroite', () => {
   const c = bloc('function CvPresence(', NL + '}');
-  assert.ok(c.includes(`<div className="o-piece o-carte-presence" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>`));
-  assert.ok(c.includes('liste.slice(0, 3).map((p) => (') && c.includes('<div style={{ marginTop: 8 }}>'), 'trois personnes tiennent dans le format standard (186 px mesures avec 10 px de marge)');
-  assert.ok(c.includes(`<span className="o-presence-ou" style={{ fontWeight: 600, color: 'var(--o-text3)' }}> · {p.home ? tr('À la maison') : 'Absent'}</span>`), 'le lieu a sa classe');
+  /* La carte garde son cadre et son format. Ce qu'elle MET dedans a change le
+   * 24/09 (ADR 0088) : au-dela de trois, on passe des lignes a une grille
+   * d'avatars, et la carte s'ouvre. Ce qui se verifie ici reste la DIMENSION —
+   * le contenu est l'affaire de `carte_presence.test.mjs`. */
+  assert.ok(c.includes(`style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden', cursor: ouvrable ? 'pointer' : 'default' }}>`));
+  assert.ok(c.includes('{liste.length <= 3 && liste.map((p) => (') && c.includes('<div style={{ marginTop: 8 }}>'), 'trois personnes en lignes tiennent dans le format standard (186 px mesures avec 10 px de marge)');
+  assert.ok(c.includes(`<span className="o-presence-ou" style={{ fontWeight: 600, color: 'var(--o-text3)' }}> · {etat(p)}</span>`), 'le lieu a sa classe');
+  // Au-dela de trois, c'est la grille qui doit tenir : huit cases au plus.
+  assert.ok(c.includes('(liste.length > 8 ? liste.slice(0, 7) : liste).map('), 'jamais plus de huit cases dans les 184 px');
   assert.ok(css.includes('@container (max-width: 230px) { .o-presence-ou { display: none; } }'), 'a 176 px la pastille de couleur le dit deja');
 });
 

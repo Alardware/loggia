@@ -64,9 +64,3 @@ test('l’accueil surveille ce qu’En ce moment montre et commande', () => {
   const k = bloc('  const accueilKeys = [', '];');
   ['media_player.', 'climate.', 'cover.', 'vacuum.', 'fan.', 'humidifier.', 'valve.'].forEach(d => assert.ok(k.includes("'" + d + "'"), d));
 });
-
-test('les mots de l’accueil ont leur traduction', () => {
-  ['Portes et fenêtres', '{n} ouvrants ouverts sur {m}', '{n} ouvrant ouvert sur {m}', 'Tout est fermé', 'Activation…', 'Fermer la vanne', '{n} zones chauffent', '{n} zone chauffe',
-    '{p} % — ni ouvert ni fermé', 'Lecteurs, appareils, chauffage et volets', '{n} EN COURS', '1 EN COURS', 'RIEN EN COURS', 'Rien ne tourne pour le moment.', '{n} autres', 'Tout est dans Objets', '{n} en cours']
-    .forEach(k => assert.ok(en.includes("  '" + k + "':"), k + ' manque dans en.js'));
-});

@@ -71,7 +71,7 @@ const WX_NOMS = {
   aube: 'Lever du soleil', crepuscule: 'Coucher du soleil',
 };
 // Les mêmes libellés que `haWeatherLabel` : une condition n'a qu'un nom.
-export const nomMeteo = (wx) => tr(WX_NOMS[wx] || 'Nuageux');
+const nomMeteo = (wx) => tr(WX_NOMS[wx] || 'Nuageux');
 
 /* Une icône FIGÉE : le SVG dessiné une fois dans un canvas. Une image SVG
  * posée sur un canvas rend sa PREMIÈRE image, animations comprises — c'est

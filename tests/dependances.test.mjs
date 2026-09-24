@@ -97,10 +97,24 @@ const VERIFIE = {
 const APOSTROPHE = String.fromCharCode(39);
 const ANTISLASH = String.fromCharCode(92);
 
+/* UNE seule passe ESLint pour tout le fichier (24/09, plan S8).
+ *
+ * Les deux relevés ci-dessous lisent les MÊMES messages : celui des
+ * expressions posées en dur, et celui des dépendances omises. Chacun lançait
+ * sa propre passe sur tout `src/` — 45 s à deux, la quasi-totalité du temps de
+ * la suite. La promesse est retenue : le second relevé attend le premier au
+ * lieu de refaire le travail. Aucune garantie ne change.
+ *
+ * Le dossier par son chemin ABSOLU, et non `'src'` : ESLint résoudrait
+ * relativement au répertoire courant, qui n'a pas à être celui du dépôt. */
+let passeEnCours = null;
+const passe = () => (passeEnCours = passeEnCours
+  || new ESLint({ cwd: RACINE }).lintFiles([join(RACINE, 'src')]));
+
 /** Les expressions posées en dur dans un tableau de dépendances, s'il en reste. */
 async function expressions() {
   const out = [];
-  for (const f of await new ESLint({ cwd: RACINE }).lintFiles([join(RACINE, 'src')])) {
+  for (const f of await passe()) {
     const nom = relative(RACINE, f.filePath).split(ANTISLASH).join('/');
     const lignes = readFileSync(f.filePath, 'utf8').split(String.fromCharCode(10));
     for (const m of f.messages) {
@@ -125,9 +139,7 @@ test('aucune expression posée en dur dans un tableau de dépendances', async ()
 /** Ce que l'outil voit aujourd'hui, dans la même forme. */
 async function releve() {
   const par = {};
-  // Le dossier par son chemin absolu, et non `'src'` : ESLint résoudrait
-  // relativement au répertoire courant, qui n'a pas à être celui du dépôt.
-  for (const f of await new ESLint({ cwd: RACINE }).lintFiles([join(RACINE, 'src')])) {
+  for (const f of await passe()) {
     // Relatif à la racine du dépôt, jamais à un nom de dossier : sur un poste
     // de développement le projet s'appelle « OrionV2-source », sur le runner
     // d'intégration « loggia ». Découper sur un nom en dur passait ici et
@@ -197,4 +209,35 @@ test('le sondage lit le hass du moment, pas celui du premier rendu', () => {
     'la boucle rappelle un hass capturé : elle tient de nouveau à une propriété non écrite');
   assert.ok(!/\}, \[!!/.test(corps),
     'la dépendance redevient une expression que l’outil ne sait pas vérifier');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Troisième défaut de la même famille : l'import que plus personne ne lit.
+//
+// Découper un fichier laisse du gravier derrière lui. La 2.97.16 a livré cinq
+// imports morts dans la vue Système — `LOGGIA_RESOLVED`, `loggiaEnt`, `peut`,
+// `sysKeys`, `SYS_SLOTS` — sans que rien ne proteste : `no-unused-vars` est
+// réglé sur « avertissement », et l'avertissement se tenait au milieu de
+// trente-neuf autres. Il était là. Personne ne le lisait.
+//
+// Un import mort ne coûte pas que de la lecture : il maintient une arête dans
+// le graphe des modules. `import { CamLive, HaImage }` retient `camera.jsx`
+// même si `HaImage` n'est plus appelé nulle part, et un jour cette arête sera
+// la seule à garder un module entier dans le bundle de démarrage.
+//
+// Ce test promeut le seul avertissement `no-unused-vars` en échec. Les autres
+// règles restent ce qu'elles sont — celles des dépendances de hooks sont
+// délibérément tolérées, et `tests/dependances.test.mjs` en tient l'inventaire.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('aucun nom déclaré ne reste sans lecteur', async () => {
+  const morts = [];
+  for (const f of await passe()) {
+    for (const m of f.messages) {
+      if (m.ruleId !== 'no-unused-vars') continue;
+      morts.push(relative(RACINE, f.filePath).split(ANTISLASH).join('/') + ':' + m.line + ' → ' + m.message.split(' is defined')[0]);
+    }
+  }
+  assert.deepEqual(morts.sort(), [],
+    'un nom déclaré n’est lu nulle part : un découpage a laissé son gravier');
 });

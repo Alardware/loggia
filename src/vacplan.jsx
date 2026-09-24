@@ -72,7 +72,7 @@ function ecart(a, b) {
  *   que les regions les plus etendues jusqu'a ce compte : au-dela, ce sont des
  *   variantes de teinte, pas des pieces.
  */
-export function detecterPieces(data, w, h, attendu = 0) {
+function detecterPieces(data, w, h, attendu = 0) {
   const seaux = new Map();
   // Un pixel sur deux dans chaque direction : quatre fois moins de travail,
   // pour un resultat identique a cette echelle.

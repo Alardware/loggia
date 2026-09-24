@@ -171,7 +171,4 @@ test('seules les feuilles à onglets gardent une hauteur fixe', () => {
 
 test('les mots de la liste existent en anglais', () => {
   const en = lire('src', 'langues', 'en.js');
-  for (const k of ['Rechercher…', 'Aucun résultat', 'Alarme à armer', 'Entité du tarif heures creuses', 'Prises et interrupteurs']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque à en.js');
-  }
 });

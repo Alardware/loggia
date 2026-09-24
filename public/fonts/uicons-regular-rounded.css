@@ -1,6 +1,10 @@
 @font-face {
 font-family: "uicons-regular-rounded";
 src: url("./uicons-regular-rounded.woff2") format("woff2");
+/* `block` et non `swap` : le repli d'une police d'icones dessine des carres
+   vides. Mieux vaut un court instant sans rien, puis la bonne icone. Sans
+   cette ligne, l'attente n'etait bornee par rien (23/09). */
+font-display: block;
 }
 
     i[class^="fi-rr-"]:before, i[class*=" fi-rr-"]:before, span[class^="fi-rr-"]:before, span[class*="fi-rr-"]:before {

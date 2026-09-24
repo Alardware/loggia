@@ -71,7 +71,4 @@ test('la carte d’une cle, les noms choisis, la cle synchronisee, les mots', ()
   assert.ok(vue.includes('return dc.card(k, ed.labelOf(k));'), 'une carte ajoutee passe par la fabrique commune');
   assert.ok(src.includes('function CvSirene({ id, hass, label = null }) {') && src.includes('const nom = label || cvName(st, id);') && src.includes('<div style={RM_NAME}>{label || cvName(st, id)}</div>'), 'l’alarme et la sirene portent le nom choisi');
   assert.ok(LOGGIA_SYNC_KEYS.indexOf('loggia_seclayout') >= 0, 'l’agencement de la vue suit le compte, comme les autres');
-  for (const k of ['Sirène', 'Entités de la vue']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
-  }
 });

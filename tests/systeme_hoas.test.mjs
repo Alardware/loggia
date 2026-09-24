@@ -472,12 +472,4 @@ test('la demonstration repond comme un Superviseur, et l’anglais suit', () => 
   assert.ok(demo.includes("if (msg && msg.type === 'supervisor/api') return superviseurDemo(msg);") && demo.includes("if (msg && msg.type === 'system_log/list') return Promise.resolve(erreursDemo());") && demo.includes("if (msg && msg.type === 'system_health/info') {") && demo.includes("String(chemin).indexOf('logbook/') === 0"));
   assert.ok(demo.includes("'sensor.system_monitor_processor_use': s(18,") && demo.includes("device: 'sysmon'"), 'un appareil, pour que les freres se retrouvent');
   assert.ok(demo.includes("if (m) m.state = geste[2] === 'start' ? 'started' : 'stopped';"), 'la bascule de la demo repond');
-  for (const k of ['Tout fonctionne', '{n} à surveiller', 'Rafraîchi', 'Charge', '60 dernières minutes', 'moy. {n} %', 'pic {n} %', 'moy. {n} % sur 1 h', '−60 min', '−30 min', 'maintenant',
-    'Versions', 'Superviseur', 'Système d’exploitation', 'Interface', '{v} dispo', 'Dernière sauvegarde complète', 'Dernière sauvegarde', 'Modules complémentaires', '{n} en cours sur {t}',
-    'Arrêté', 'En erreur', 'Arrêter ?', 'Arrêter', 'Démarrer', 'Réseau & stockage', 'Adresse IP locale', 'Débit entrant', 'Débit sortant', 'Base de données', 'Connexion…', 'Déconnecté',
-    '{n} événements', '{n} événement', 'INFO', 'AVERT.', 'ERREUR', 'Température CPU', 'Temp.', 'alerte à {n} °C', 'Go', 'Mo', 'Ko', 'To', 'Machine virtuelle', 'en ligne depuis {d}',
-    'Mise à jour disponible', 'Plus de mise à jour en attente', 'Machine en ligne', 'Machine hors ligne', 'Processeur à {n} °C — vérifier la ventilation.', '{nom} est en erreur.',
-    'Deux gestes : le premier arme, le second confirme.']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
-  }
 });

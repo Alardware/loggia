@@ -169,10 +169,3 @@ test('le dessin : les surfaces du rail, rien sans source, l’heure calée sur l
     assert.ok(css.includes(r), r + ' manque à index.css');
   }
 });
-
-test('les mots nouveaux sont traduits', () => {
-  for (const k of ['Heure', 'en option', 'Aiguilles', 'Tuiles', 'Semaine', 'Mois', 'Heures', 'Minutes', 'Secondes', 'Événement',
-    'Aucun événement aujourd’hui', '+ {n} autres', '+ 1 autre', 'Heures d’ailleurs', 'Fuseau horaire', 'Ajouter une ville', 'N. York', 'Tokyo', 'Londres', 'Sydney']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque à en.js');
-  }
-});

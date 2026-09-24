@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Vues qui existent quelle que soit l'installation. */
-export const VIEW_ALWAYS = ['accueil', 'parametres'];
+const VIEW_ALWAYS = ['accueil', 'parametres'];
 
 /** Tous les identifiants de vue que le dashboard sait afficher. */
 export const VIEW_IDS = [
@@ -46,8 +46,16 @@ export function allAvailable() {
  * `loggia_cameras`, `loggia_energyHaids`… Ne regarder que la premiere revenait a
  * ignorer tout ce que l'utilisateur saisit aujourd'hui : sa vue Energie restait
  * annoncee « tableau de bord Energie non configure » alors qu'il venait d'en
- * designer les capteurs. Miroir de `ENT_ALIAS` dans state.js — les deux doivent
- * dire la meme chose. */
+ * designer les capteurs.
+ *
+ * Cette table n'est PAS un miroir de `ENT_ALIAS` (state.js), contrairement a
+ * ce que cette phrase a longtemps dit (corrige le 24/09, plan S5).
+ * `ENT_ALIAS` nomme les sept domaines que l'ecran Entites ECRIT ; celle-ci en
+ * nomme treize, parce qu'elle sert a LIRE — et qu'une installation venue d'une
+ * version anterieure peut porter `loggia_system`, `loggia_plants`,
+ * `loggia_covers` ou `loggia_vacuum`, que plus rien n'ecrit aujourd'hui. Les
+ * garder ici, c'est garder son reglage a qui l'avait ; les retirer
+ * l'effacerait en silence. */
 const CLES_DOMAINE = {
   cameras: 'loggia_cameras',
   people: 'loggia_people',

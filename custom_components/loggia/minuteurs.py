@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Context, HomeAssistant, callback
 
+from .regles import demarrer
+
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
 
@@ -154,7 +156,7 @@ class LoggiaMinuteurs:
         self.table: dict[str, dict[str, Any]] = {}
         self._rdv: dict[str, Any] = {}
         self._ecoute = None
-        hass.async_create_task(self._async_demarrer())
+        demarrer(hass, self, self._async_demarrer(), "minuteurs")
 
     async def _async_demarrer(self) -> None:
         self.table = normaliser(await self.store.async_get_shared(CLE, None))

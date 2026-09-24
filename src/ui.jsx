@@ -71,11 +71,20 @@ export const cl_hexRgb = (c) => HX_TOKENS[c] ? `var(${HX_TOKENS[c]})` : (typeof 
 export const HIDDEN_VIEWS = () => [
   { label: tr('Lumières'), vid: 'lumieres', icon: 'bulb', c: 'var(--o-lampe)' },
   { label: tr('Climat'), vid: 'climat', icon: 'thermometer-half', c: 'var(--o-orange)' },
-  /* Volets a quitté la liste le 30/08/2026. Le motif d'alors — « l'Ouverture
-   * vit dans la vue Climatisation » — n'a plus cours : `ClimatView` n'existe
-   * plus, « Climat » ouvre la vue Objets filtrée sur le chauffage, et les
-   * volets ont de nouveau leur vue à eux (`VoletsView`). Elle reste hors de
-   * cette liste, mais la route et les cartes d'Objets y mènent. */
+  /* Volets avait quitté la liste le 30/08/2026, au motif que « l'Ouverture vit
+   * dans la vue Climatisation ». Ce motif n'a plus cours depuis longtemps :
+   * `ClimatView` n'existe plus, « Climat » ouvre Objets filtré sur le
+   * chauffage, et les volets ont de nouveau leur vue à eux (`VoletsView`).
+   *
+   * Elle y revient le 24/09 (plan S2). La situation était à l'envers :
+   * Lumières, Climat et Médias figurent ici alors qu'elles ne font qu'ouvrir
+   * Objets avec un filtre, tandis que Volets — qui porte une VRAIE vue, sa
+   * barre de modes et son planning (ADR 0023) — n'y était pas, donc ne
+   * pouvait même pas être activée. On n'y arrivait que par la recherche.
+   *
+   * Y figurer n'allume rien : `shown` est vide par défaut, et la vue ne
+   * s'offre qu'aux installations qui ont des volets (`isViewAvailable`). */
+  { label: tr('Volets'), vid: 'volets', icon: 'blinds', c: 'var(--o-purple)' },
   /* Aspirateur et Croquettes ont quitté la liste le 30/08/2026 : la FICHE
    * APPAREIL UNIVERSELLE (tap sur la carte, vue Objets) montre tout ce que
    * l'appareil expose — la vue dédiée ne racontait rien de plus. Les routes
@@ -148,26 +157,6 @@ export const editBtn = (accent) => ({ padding: '7px 12px', borderRadius: 10, fon
 // « Suivre HA »). Chaque cle ne surcharge que si elle s'ecarte du defaut, pour laisser
 // le preset decider du reste : Atrium n'a pas d'ombre, iOS est tres arrondi, etc.
 export const LOOK_DEF = { glass: false, radius: 'doux', shadow: true, hairline: true, contrast: false, accent: '', tint: 'douce', fond: 'aucun' };
-
-// Lignes denses de la vue Énergie (même patron que la carte Ambiance des pièces).
-export const EnRow = ({ label, desc, children }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', flexWrap: 'wrap' }}>
-    <div style={{ flex: '1 1 190px', minWidth: 0 }}>
-      <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}>{desc}</div>
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>{children}</div>
-  </div>
-);
-
-export const EnVal = ({ v, col }) => <span style={{ fontSize: 15, fontWeight: 800, color: col || 'var(--o-text)', whiteSpace: 'nowrap' }}><FlipText live text={String(v)} /></span>;
-
-export const EnGauge = ({ v, pct, col }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-    <EnVal v={v} col={col} />
-    <Gauge pct={pct} color={col} h={3} style={{ width: 160 }} />
-  </div>
-);
 
 export const USER_COLORS = ['#4f8cff', 'var(--o-ok)', 'var(--o-purple)', '#ff8a4c', '#ec4899', '#22d3ee', '#ffb347', '#f87171'];
 // Un seul profil au départ, sans nom propre ni liaison à une personne : c'est à

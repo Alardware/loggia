@@ -87,9 +87,11 @@ test('l’écoute des rejets reste dans la fenêtre du panneau, et parle la lang
 });
 
 test('les libellés de l’alarme passent tous par la traduction', () => {
+  /* Qu'ils AIENT une traduction est vérifié ailleurs, pour tout le projet
+   * (`tout_tr_traduit`). Ici on vérifie autre chose : qu'ils passent bien par
+   * `tr()`. Un libellé écrit en clair resterait français partout. */
   for (const l of ['Alarme · état inconnu', 'ALARME DÉCLENCHÉE', 'Alarme · activation…', 'Alarme armée · Absent', 'Alarme armée · Présent', 'Alarme armée']) {
     assert.ok(app.includes("tr('" + l + "')"), l);
-    assert.ok(en.includes("'" + l + "':"), l + ' en anglais');
   }
   assert.ok(!app.includes(": 'Alarme armée'}"), 'plus de libellé brut dans la puce d’ambiance');
 });

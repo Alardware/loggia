@@ -98,5 +98,4 @@ test('le branchement : en option dans le rail, rien sans capteur, la couleur dit
   assert.ok(carte.includes("dernier ? (haut ? 'var(--o-warn)' : 'var(--o-accent-fond)') : (haut ? 'rgba(var(--o-warn-rgb),.45)' : 'rgba(var(--o-accent-rgb),.22)')"), 'la dernière barre est le moment ; au-dessus du seuil, l’ambre');
   assert.ok(carte.includes("{action && (") && carte.includes('useHistoriqueJour(hass, capteur ? capteur.id : null)'), 'le bouton seulement s’il y a un geste ; l’historique relu toutes les cinq minutes');
   const en = lire('src', 'langues', 'en.js');
-  for (const k of ['Aérer au-dessus de {n} ppm', 'CO₂ sur 24 heures', 'Ventiler', 'Ouvrir les volets · aérer', 'maintenant']) assert.ok(en.includes("'" + k + "':"), k + ' manque à en.js');
 });

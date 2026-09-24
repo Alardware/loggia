@@ -42,7 +42,7 @@ export function lireCouleur(s) {
 }
 
 /** Toutes les couleurs d'une valeur composée (un dégradé, par exemple). */
-export function couleursDe(s) {
+function couleursDe(s) {
   const out = [];
   const re = /#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|color\(srgb[^)]*\)/gi;
   let m;
@@ -64,7 +64,7 @@ export function composer(dessous, dessus) {
   return [0, 1, 2].map(i => dessous[i] * (1 - a) + dessus[i] * a);
 }
 export const versHex = (c) => '#' + [0, 1, 2].map(i => Math.round(Math.max(0, Math.min(255, c[i]))).toString(16).padStart(2, '0')).join('');
-export const versRgb = (c) => [0, 1, 2].map(i => Math.round(Math.max(0, Math.min(255, c[i])))).join(',');
+const versRgb = (c) => [0, 1, 2].map(i => Math.round(Math.max(0, Math.min(255, c[i])))).join(',');
 
 function versHsl([r, g, b]) {
   r /= 255; g /= 255; b /= 255;
@@ -97,7 +97,7 @@ export function ajuster(c, fonds, cible, sens) {
  * `sur` (facultatif) recalcule des fonds à partir de la couleur en cours : une
  * teinte écrit souvent sur son PROPRE lavis.
  */
-export function ajusterTous(c, contraintes, sens, sur = null) {
+function ajusterTous(c, contraintes, sens, sur = null) {
   const tient = (x) => contraintes.every(([fonds, cible]) => fonds.every(f => contraste(x, f) >= cible))
     && (!sur || sur.fonds(x).every(f => contraste(x, f) >= sur.cible));
   if (tient(c)) return c;
@@ -244,7 +244,21 @@ export function garde(lire) {
      * jauges (Atrium) ou le rendre invalide (une référence à lui-même) : s'il
      * n'est pas lisible en texte, il rejoint la teinte ajustée. */
     const rc = lireCouleur('rgb(' + lire(jeton + '-rgb') + ')');
-    if (AVEC_RGB.has(jeton) && !out[jeton + '-rgb'] && (!rc || fonds.some(f => contraste(rc, f) < SEUILS.teinte))) out[jeton + '-rgb'] = versRgb(x);
+    if (AVEC_RGB.has(jeton) && !out[jeton + '-rgb']) {
+      /* Le compagnon ecrit AUSSI sur le lavis de SA PROPRE teinte, et c'est ce
+       * cas-la qui manquait (23/09, plan M8). La pastille d'etat de la vue
+       * Securite est `rgb(var(--o-ok-rgb))` pose sur `rgba(var(--o-ok-rgb),.14)`
+       * : le jeton hexadecimal etait corrige juste au-dessus, son compagnon
+       * restait vif, et le texte tombait sous le seuil. Ce sont les six textes
+       * que l'ADR 0063 laissait en suspens — un nom de camera, « TOUT EST
+       * CALME », les initiales d'une personne —, tous ecrits par un compagnon.
+       * Le test est le meme que celui de la teinte : `surSoi`. */
+      const surLavis = surSoi.fonds(rc || c);
+      const illisible = !rc
+        || fonds.some(f => contraste(rc, f) < SEUILS.teinte)
+        || surLavis.some(f => contraste(rc, f) < surSoi.cible);
+      if (illisible) out[jeton + '-rgb'] = versRgb(x);
+    }
   }
   /* Les gris, APRÈS les teintes : ils s'écrivent aussi sur les cartes teintées
    * — « 612 ppm » sur la pièce bleue, « Tout est éteint » sur la carte ambrée.

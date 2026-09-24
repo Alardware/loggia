@@ -41,7 +41,14 @@ test('CodeQL avancé : les mêmes langages et catégories que la configuration p
   assert.ok(wf.includes('language: [actions, javascript-typescript, python]'), 'un langage de la configuration par défaut manque');
   // Les catégories de la configuration par défaut : les alertes gardent leur historique.
   assert.ok(wf.includes('category: "/language:${{ matrix.language }}"'));
-  assert.ok(wf.includes('github/codeql-action/init@v4') && wf.includes('github/codeql-action/analyze@v4'));
+  /* Les deux etapes, sur la majeure 4. La reference est epinglee par SHA
+   * depuis le 24/09 (plan M15) : on vise donc le chemin de l'action et la
+   * version que le commentaire porte, pas le tag — qui n'existe plus ici.
+   * Que le SHA SOIT la est verifie par `workflows_epingles.test.mjs`. */
+  for (const etape of ['init', 'analyze']) {
+    assert.match(wf, new RegExp('github/codeql-action/' + etape + '@[0-9a-f]{40} # v4\\.'),
+      'l’etape ' + etape + ' de CodeQL v4 a change de forme');
+  }
   // Le moins de droits possible : lire, et écrire les résultats dans Security.
   assert.match(wf, /^permissions:\n  contents: read\n/m);
   assert.equal((wf.match(/: write/g) || []).length, 1, 'un droit d’écriture de trop');

@@ -342,11 +342,3 @@ test('la clé de traduction voyage du registre jusqu’à l’index', () => {
   const d = lire('src', 'discovery.js');
   assert.ok(d.includes('translation_key: e.key || null,') && d.includes('translationKey: e.translation_key || null,'), 'le front la garde');
 });
-
-test('les mots nouveaux sont traduits', () => {
-  const en = lire('src', 'langues', 'en.js');
-  for (const k of ['À la base · en charge', 'Tonte en cours', 'Démarrer · {n} zones', 'Filtre', 'Brosse principale', 'Lames', '{n} h sur {m} h', '{n} h restantes', 'Interrompu', 'Dernier passage', 'Cette semaine',
-    'Entretien recommandé', '{nom} à {n} %', 'Sélectionne une zone', 'Remplacé', 'Compteurs', 'Nom du robot', 'Tous les réglages de l’appareil', 'Micrologiciel']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque à en.js');
-  }
-});

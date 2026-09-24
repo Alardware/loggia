@@ -148,7 +148,7 @@ def test_lancer_un_scenario_dit_les_commandes_refusees():
 # ── Les modules : plus de lecture muette ───────────────────────────────────
 
 @pytest.mark.parametrize("fichier,attendu", [
-    ("nuit.py", 2), ("presence.py", 4), ("volets.py", 1), ("veilles.py", 1), ("robots.py", 2), ("alertes.py", 1),
+    ("nuit.py", 2), ("presence.py", 4), ("volets.py", 2), ("veilles.py", 1), ("robots.py", 3), ("alertes.py", 1),
 ])
 def test_chaque_lecture_qui_echoue_se_dit(fichier, attendu):
     src = (RACINE / "custom_components" / "loggia" / fichier).read_text(encoding="utf-8")
@@ -183,3 +183,149 @@ def test_les_veilles_ont_un_rang():
     assert module.PRIORITES["co2"] == regles.niveau("nuit", 10)
     assert module.PRIORITES["creuses"] == regles.niveau("confort", 5)
     assert module.PRIORITES["co2"] > module.PRIORITES["creuses"] > 0
+
+
+# ── M10 : les replis qui elargissaient, ou qui se taisaient ────────────────
+
+def test_un_compte_illisible_fait_refuser_au_lieu_d_elargir():
+    """Le coeur de M10 (24/09).
+
+    `controle_de(None)` vaut « aucun filtre ». C'est juste pour une
+    automatisation, qui n'a pas d'utilisateur. C'est le pire possible pour une
+    personne dont le compte n'a pas pu etre lu : le scenario partait avec les
+    droits de la maison entiere.
+    """
+    scn = charger("scenarios")
+    # Sans identifiant : rien a resoudre, la maison agit sous ses droits.
+    assert scn.compte_resolu(None, None) is True
+    assert scn.compte_resolu("", None) is True
+    # Un identifiant present et resolu : on continue.
+    assert scn.compte_resolu("abc", object()) is True
+    # Un identifiant present et IRRESOLU : on refuse.
+    assert scn.compte_resolu("abc", None) is False
+
+    # Et c'est bien cette regle qui garde le service.
+    src = (RACINE / "custom_components" / "loggia" / "__init__.py").read_text(encoding="utf-8")
+    assert "if not compte_resolu(uid, utilisateur):" in src
+    assert "return" in src.split("if not compte_resolu(uid, utilisateur):")[1][:200]
+
+
+def test_un_module_qui_rate_son_demarrage_le_dit_et_le_retient(caplog):
+    """Une tache lancee et oubliee emporte son erreur avec elle : le module
+    repondait ensuite a l'ecran comme si de rien n'etait."""
+    regles = charger("regles")
+
+    class FauxHass:
+        def __init__(self):
+            self.taches = []
+
+        def async_create_task(self, coro):
+            self.taches.append(coro)
+
+    class Module:
+        pass
+
+    async def qui_rate():
+        raise RuntimeError("magasin injoignable")
+
+    async def qui_marche():
+        return None
+
+    for coro, attendu in ((qui_rate(), False), (qui_marche(), True)):
+        h, m = FauxHass(), Module()
+        regles.demarrer(h, m, coro, "essai")
+        assert m.demarrage is None, "l'etat n'est connu qu'une fois la tache passee"
+        lancer(h.taches[0])
+        assert m.demarrage is attendu
+
+    assert "demarrage impossible" in caplog.text
+    assert "magasin injoignable" in caplog.text
+
+
+def test_chaque_module_passe_par_le_demarrage_garde():
+    """Neuf modules posaient la tache eux-memes, sans filet."""
+    dossier = RACINE / "custom_components" / "loggia"
+    for f in ("fenetres", "interrupteurs", "minuteurs", "nuit", "presence",
+              "robots", "scenarios", "sirene", "veilles", "volets"):
+        src = (dossier / (f + ".py")).read_text(encoding="utf-8")
+        assert "hass.async_create_task(self._async_demarrer())" not in src, f
+        assert 'demarrer(hass, self, self._async_demarrer(), "' in src, f
+
+
+# ── S7 : ce qui ecoute finit par se taire ──────────────────────────────────
+
+def test_chaque_module_vivant_sait_s_arreter():
+    """Douze modules portaient une methode d'arret que personne n'appelait.
+
+    Maintenant qu'`async_unload_entry` les appelle, la liste et la realite
+    doivent rester d'accord : un module ajoute a `MODULES_VIVANTS` sans savoir
+    se taire laisserait ses abonnements derriere lui.
+    """
+    dossier = RACINE / "custom_components" / "loggia"
+    init = (dossier / "__init__.py").read_text(encoding="utf-8")
+    bloc = init.split("MODULES_VIVANTS = (")[1].split(")")[0]
+    noms = re.findall(r'"([a-z_]+)"', bloc)
+    assert len(noms) == 12, noms
+    for nom in noms:
+        src = (dossier / (nom + ".py")).read_text(encoding="utf-8")
+        assert "def async_arreter" in src or "def arreter" in src, nom
+
+
+def test_le_dechargement_arrete_mais_ne_touche_pas_a_l_irreversible():
+    """Les vues HTTP, les commandes WebSocket et le service ne se
+    desenregistrent pas : les oublier ferait echouer le chargement suivant."""
+    init = (RACINE / "custom_components" / "loggia" / "__init__.py").read_text(encoding="utf-8")
+    # Borne a la fonction : sans cela on ramasse `_async_setup_common`, qui
+    # suit et qui, lui, parle bien de "http" et de "ws".
+    corps = init.split("async def async_unload_entry")[1]
+    corps = re.split(r"\n(?:async )?def ", corps)[0]
+    assert "for nom in MODULES_VIVANTS:" in corps
+    assert 'data.pop(nom, None)' in corps
+    assert 'getattr(module, "async_arreter", None) or getattr(module, "arreter", None)' in corps
+    # Plus de drapeau "http" depuis le retrait du ping (24/09) : le panneau
+    # pose ses chemins statiques par lui-meme, et ne se retire pas non plus.
+    for garde in ('"ws"', '"service_scenario"', '"store"'):
+        assert garde not in corps, garde + " ne doit pas etre retire au dechargement"
+
+
+def test_les_alertes_savent_se_taire():
+    """Elles ecoutaient TOUT le bus sans garder de quoi s'arreter : un
+    rechargement posait une seconde ecoute par-dessus la premiere."""
+    module = charger("alertes")
+    a = module.LoggiaAlertes.__new__(module.LoggiaAlertes)
+    retires = []
+    a._defait = lambda: retires.append(1)
+    a.async_arreter()
+    assert retires == [1]
+    assert a._defait is None
+    a.async_arreter()  # deux fois de suite : sans effet, sans lever
+    assert retires == [1]
+
+
+def test_les_deux_replis_morts_ont_disparu():
+    """Ils visaient des versions anterieures au minimum annonce, 2024.7."""
+    dossier = RACINE / "custom_components" / "loggia"
+    assert "register_static_path(" not in (dossier / "panel.py").read_text(encoding="utf-8").replace(
+        "async_register_static_paths(", "")
+    etages = (dossier / "discovery.py").read_text(encoding="utf-8").split("def _etages")[1].split("def ")[0]
+    assert "except ImportError" not in etages
+
+
+
+def test_les_deux_portes_que_personne_n_ouvrait_ont_disparu():
+    """`loggia/config/stats` et `GET /api/loggia/ping` (24/09, plan S7).
+
+    Aucune ligne de `src/` ne les appelait, le README ne les citait pas. Une
+    porte que personne n'ouvre est une porte a tenir vraie pour rien : le
+    diagnostic promettait des chiffres que nul n'a jamais lus, le ping ne
+    repondait qu'a qui savait deja ou regarder.
+    """
+    dossier = RACINE / "custom_components" / "loggia"
+    for fichier, interdits in (
+        ("websocket_api.py", ("WS_STATS", "config/stats", "handle_stats")),
+        ("store.py", ("async_stats",)),
+        ("__init__.py", ("LoggiaPingView", "loggia/ping", "HomeAssistantView")),
+    ):
+        src = (dossier / fichier).read_text(encoding="utf-8")
+        for mot in interdits:
+            assert mot not in src, fichier + " parle encore de " + mot

@@ -193,7 +193,7 @@ seuils que la barre de confort des pièces.
   retire aucun. Un compte ne peut donc rien faire ici qu'il ne puisse déjà
   faire ailleurs dans Home Assistant.
 - Les commandes qui écrivent la configuration de la maison sont **réservées
-  aux administrateurs** (`require_admin`, sur les douze commandes WebSocket
+  aux administrateurs** (`require_admin`, sur les onze commandes WebSocket
   concernées — un test verrouille la liste). L'identité vient de la
   connexion authentifiée, jamais d'un champ envoyé par le navigateur.
 - Les règles n'appellent que des services **écrits en dur** dans le composant

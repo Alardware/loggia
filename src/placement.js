@@ -23,9 +23,9 @@
  */
 
 /** Hauteur d'une rangée, en pixels — `grid-auto-rows` de `.grid-chips`. */
-export const RANGEE = 88;
+const RANGEE = 88;
 /** L'écart entre deux cartes, en pixels. */
-export const ECART = 8;
+const ECART = 8;
 
 /** Une carte compacte occupe une rangée, une standard deux. */
 export const hauteur = (taille) => (taille === 'c' ? 1 : 2);
@@ -165,7 +165,7 @@ export function cellulePointee(x, y, rect, cols, rangee = RANGEE, ecart = ECART)
 }
 
 /** La largeur en dessous de laquelle une carte de pièce n'est plus lisible. */
-export const LARGEUR_MIN = 210;
+const LARGEUR_MIN = 210;
 
 /* Le nombre de colonnes se DÉCIDE ici — il ne se lit pas sur le style calculé.
  *

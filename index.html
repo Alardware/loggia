@@ -4,10 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Loggia</title>
-  <!-- Polices auto-hébergées (public/fonts) : dashboard fonctionnel sans internet -->
+  <!-- Polices auto-hébergées (public/fonts) : dashboard fonctionnel sans internet.
+       La variante PLEINE des icones (uicons-solid) n'est pas chargee : toutes les
+       classes de Loggia sont baties en `fi fi-rr-` (icones.jsx, ui.jsx,
+       Onboarding.jsx), aucune en `fi-sr-`. Elle coutait 151 Ko de CSS et 188 Ko
+       de police, en feuille BLOQUANTE, pour rien (23/09). -->
   <link rel="stylesheet" href="./fonts/fonts.css" />
   <link rel="stylesheet" href="./fonts/uicons-regular-rounded.css" />
-  <link rel="stylesheet" href="./fonts/uicons-solid-rounded.css" />
 </head>
 <body>
   <div id="root"></div>

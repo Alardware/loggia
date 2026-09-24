@@ -57,9 +57,3 @@ test('les cles composees posees dans une piece sont surveillees', () => {
   assert.ok(k.includes("if (x === 'obj:feeder') return croqKeys();") && k.includes("x.indexOf('plant:') === 0) return plantKeys();") && k.includes("x.indexOf('zone:') === 0) return climateKeys();"), 'distributeur, plante, zone');
   assert.ok(src.includes('activeRoom ? [...roomKeys, ...(layoutOf(ROOM_LAYOUT_KEY, activeRoom).added || []).flatMap(cvAggKeys)]'), 'les ajouts de la piece courante');
 });
-
-test('les mots du composeur ont leur traduction', () => {
-  ['Toutes les cartes', 'CARTES DE LOGGIA', 'APPAREILS', 'SANS PIÈCE', 'AUCUN RÉSULTAT', 'AUCUN APPAREIL', '{n} APPAREILS', '1 APPAREIL', 'Zone de chauffage', '{n} cartes', '{n} carte',
-    'Rechercher une carte, un appareil, une pièce…', 'Coche pour ajouter, décoche pour retirer. Tout s’applique tout de suite.']
-    .forEach(k => assert.ok(en.includes("  '" + k + "':"), k + ' manque dans en.js'));
-});

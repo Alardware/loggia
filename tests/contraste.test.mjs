@@ -177,3 +177,40 @@ test('la garde est branchée, purgée, et les thèmes sans ombre gardent un file
   // Tout ce que la garde peut poser doit être purgeable.
   for (const cle of Object.keys(garde(lecteur(LOGGIA_SOMBRE)))) assert.ok(JETONS_GARDE.includes(cle), cle + ' manque à JETONS_GARDE');
 });
+
+test('le compagnon « r,g,b » se lit sur le lavis de SA PROPRE teinte', () => {
+  /* Six textes restaient sous 4,5:1 après l’ADR 0063, tous dans la vue
+   * Sécurité — un nom de caméra, « TOUT EST CALME », les initiales d’une
+   * personne. Tous écrits par un compagnon : la pastille d’état est
+   * `rgb(var(--o-ok-rgb))` posé sur `rgba(var(--o-ok-rgb),.14)`.
+   *
+   * La garde corrigeait déjà la TEINTE sur son propre lavis, mais ne testait
+   * son compagnon que contre la page et les cartes unies : le jeton partait
+   * assombri, son compagnon restait vif (23/09, plan M8). */
+  const PASTILLE = 0.14;   // ce que pose la pastille d’état de la vue Sécurité
+  /* En CLAIR : c’est là que le défaut vivait. Sur une carte sombre, une teinte
+   * vive se détache de son propre lavis sans effort ; sur une carte claire,
+   * un vert moyen s’y noie. */
+  const CLAIR = {
+    '--o-bg': '#f4f6fb', '--o-bggrad': '', '--o-surfA': 'rgba(255,255,255,.72)',
+    '--o-surfB': 'rgba(248,250,253,.72)', '--o-text': '#141c33', '--o-text2': '#4c5875',
+    '--o-text3': '#6b7794', '--o-text3-rgb': '107,119,148', '--o-accent': '#2f6df6',
+    '--o-accent-soft': '#2f6df6', '--o-ok': '#15803d', '--o-ok-rgb': '34,197,94',
+    '--o-warn': '#b9700c', '--o-bad': '#c2402d', '--o-cold': '#2563eb',
+    '--o-rose': '#be185d', '--o-purple': '#7c3aed',
+  };
+  const carte = composer([244, 246, 251], [255, 255, 255, 0.72]);
+  const avant = lireCouleur('rgb(' + CLAIR['--o-ok-rgb'] + ')');
+  assert.ok(contraste(avant, composer(carte, [avant[0], avant[1], avant[2], PASTILLE])) < SEUILS.wcag,
+    'le cas d’essai ne reproduit plus le défaut : le compagnon se lit déjà');
+
+  const o = garde(lecteur(CLAIR));
+  assert.ok(o['--o-ok-rgb'], 'le compagnon vif n’a pas été rattrapé');
+  const lu = lireCouleur('rgb(' + o['--o-ok-rgb'] + ')');
+  assert.ok(contraste(lu, composer(carte, [lu[0], lu[1], lu[2], PASTILLE])) >= SEUILS.wcag - 0.03,
+    'le compagnon ne se lit pas sur sa propre pastille');
+
+  // Et un thème qui tient déjà n’est pas touché : Loggia garde son vert.
+  const sain = garde(lecteur(LOGGIA_SOMBRE));
+  assert.equal(sain['--o-ok-rgb'], undefined, 'le vert de Loggia a bougé sans raison');
+});

@@ -86,7 +86,4 @@ test('la sirene : reconnue meme en interrupteur, choisie si configuree, pilotee 
   // du composant (ADR 0065) : la duree n'est plus comptee dans l'onglet.
   assert.ok(c.includes("const dom = String(id).split('.')[0];") && c.includes('commanderService(hass, id, dom, svc,') && c.includes("hass.callWS({ type: 'loggia/sirene/tester', entity_id: id })") && !c.includes('SIRENE_DUREE'), 'un switch s’allume comme un switch ; les trois secondes sont tenues par Home Assistant');
   assert.ok(src.includes("securite: [...secBaseKeys(), 'camera.', 'siren.', 'switch.', ...secKeys,"), 'les interrupteurs sont relus sur la vue');
-  for (const k of ['ALARME', 'Armée · Maison', 'Armée · Absent', 'Armée · Nuit', 'Armée · Vacances', 'Déclenchée', 'EN CE MOMENT', 'Lecture, machines, chauffage, volets en mouvement']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
-  }
 });

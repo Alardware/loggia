@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import Context, HomeAssistant, callback
 
 from .discovery import async_index
+from .regles import demarrer
 from .nuit import CLE as CLE_NUIT, fait_nuit
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
@@ -60,6 +61,15 @@ CLE_ANCIENNE = "loggia_quickscenes"
 CLE_ALARME = "loggia_alarm"
 CLE_PRESENCE = "loggia_presence"
 MODULE = "scenarios"
+
+# Les evenements qui rendent une lecture des registres perimee. Ce sont les
+# noms publics de Home Assistant : on les ecrit en clair plutot que d'importer
+# trois helpers pour trois constantes.
+EVENEMENTS_REGISTRE = (
+    "entity_registry_updated",
+    "device_registry_updated",
+    "area_registry_updated",
+)
 
 MAX_SCENARIOS = 24
 MAX_ACTIONS = 12
@@ -526,6 +536,19 @@ def controle_de(user: Any) -> Any:
     return lambda entity_id: bool(verif(entity_id, "control"))
 
 
+def compte_resolu(uid: Any, utilisateur: Any) -> bool:
+    """Un appel qui PORTE un identifiant de compte doit pouvoir le resoudre.
+
+    Sans identifiant — une automatisation, un interrupteur sans fil — il n'y a
+    rien a resoudre : la maison agit sous ses propres droits, c'est voulu.
+    Mais un identifiant PRESENT que l'on n'arrive pas a lire ne doit jamais
+    valoir « aucun filtre » : `controle_de(None)` rend precisement cela, et le
+    scenario partait alors avec les droits de la maison entiere au lieu de ceux
+    de la personne. L'inverse exact de l'ADR 0045 (24/09, plan M10).
+    """
+    return not uid or utilisateur is not None
+
+
 def filtrer_autorisees(haids, controle: Any) -> tuple[list, list]:
     """(gardees, ecartees) : ce que le compte peut piloter, et le reste."""
     if controle is None:
@@ -539,6 +562,12 @@ def filtrer_autorisees(haids, controle: Any) -> tuple[list, list]:
 class LoggiaScenarios:
     """Compose, garde et lance les scenarios de la maison."""
 
+    # Valeurs de CLASSE : un objet bati sans passer par `__init__` — ce que
+    # font les tests — garde un cache vide au lieu de lever. Immuables toutes
+    # les deux : une liste de classe serait partagee entre les instances.
+    _registres: tuple[dict[str, dict[str, Any]], list[str]] | None = None
+    _defait: tuple = ()
+
     def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
         self.store = store
@@ -546,7 +575,22 @@ class LoggiaScenarios:
         # Le dernier lancement de chaque scenario compose, en memoire : un
         # scenario lie a sa date dans l'etat de sa scene.
         self._derniers: dict[str, float] = {}
-        hass.async_create_task(self._async_demarrer())
+        # Les registres, relus seulement quand ils changent (24/09, plan M9).
+        self._registres: tuple[dict[str, dict[str, Any]], list[str]] | None = None
+        self._defait: list = []
+        for evenement in EVENEMENTS_REGISTRE:
+            try:
+                self._defait.append(hass.bus.async_listen(evenement, self._oublier_registres))
+            except Exception:  # noqa: BLE001
+                _LOGGER.warning(
+                    "Loggia scenarios : %s inecoutable, l'inventaire se refera a chaque appel",
+                    evenement, exc_info=True)
+        demarrer(hass, self, self._async_demarrer(), "scenarios")
+
+    @callback
+    def _oublier_registres(self, _evenement=None) -> None:
+        """Une piece renommee, un appareil deplace : on refera la lecture."""
+        self._registres = None
 
     async def _async_demarrer(self) -> None:
         try:
@@ -559,17 +603,37 @@ class LoggiaScenarios:
         try:
             return list(self.hass.states.async_entity_ids(domaine))
         except Exception:  # noqa: BLE001
+            # Une liste vide vaut « ce scenario n'a rien a faire » : il passe
+            # sans rien toucher, et sans rien dire (24/09, plan M10).
+            _LOGGER.warning(
+                "Loggia scenarios : etats du domaine %s illisibles, "
+                "les scenarios le croiront vide", domaine, exc_info=True)
             return []
 
-    @callback
-    def inventaire(self) -> dict[str, Any]:
-        """Les entites pilotables, avec leur piece (celle de l'entite, sinon
-        de son appareil), leur classe et leur etat. Une entite de
-        configuration ou de diagnostic — la diode d'une borne — n'y est pas."""
+    def _lire_registres(self) -> tuple[dict[str, dict[str, Any]], list[str]]:
+        """Ce que les REGISTRES disent : par entite sa piece, sa classe, sa
+        categorie et si elle est cachee ; et les noms des pieces de la maison.
+
+        Relu seulement quand ils changent (24/09, plan M9). L'ecran sonde
+        `loggia/scenarios/etat` toutes les cinq secondes, et chaque appel
+        refaisait l'index complet des zones, des appareils et des entites —
+        douze fois par minute et par ecran ouvert, pour des registres qui ne
+        bougent qu'au renommage d'une piece ou a l'ajout d'un appareil. Les
+        trois evenements de registre le font oublier.
+
+        Les ETATS, eux, ne sont jamais mis en cache : ils changent tout le
+        temps, c'est le sujet meme de l'inventaire.
+        """
+        if self._registres is not None:
+            return self._registres
         try:
             index = async_index(self.hass)
         except Exception:  # noqa: BLE001
-            index = {}
+            _LOGGER.warning(
+                "Loggia scenarios : registres illisibles, l'inventaire sera vide",
+                exc_info=True)
+            # On ne retient PAS un echec : la lecture suivante reessaiera.
+            return {}, []
         zones = {a.get("id"): a.get("name") for a in index.get("areas") or [] if a.get("id")}
         appareils = {d.get("id"): d.get("area") for d in index.get("devices") or [] if d.get("id")}
         registre: dict[str, dict[str, Any]] = {}
@@ -579,6 +643,16 @@ class LoggiaScenarios:
             zone = e.get("area") or appareils.get(e.get("device"))
             registre[e["id"]] = {"piece": zones.get(zone), "classe": e.get("device_class"),
                                  "categorie": e.get("category"), "cache": bool(e.get("hidden"))}
+        noms = sorted({z for z in zones.values() if z})
+        self._registres = (registre, noms)
+        return self._registres
+
+    @callback
+    def inventaire(self) -> dict[str, Any]:
+        """Les entites pilotables, avec leur piece (celle de l'entite, sinon
+        de son appareil), leur classe et leur etat. Une entite de
+        configuration ou de diagnostic — la diode d'une borne — n'y est pas."""
+        registre, noms_zones = self._lire_registres()
         entites: dict[str, dict[str, Any]] = {}
         for domaine in DOMAINES.values():
             for haid in self._ids(domaine):
@@ -592,7 +666,7 @@ class LoggiaScenarios:
                                  "etat": str(getattr(st, "state", "") or ""),
                                  "attrs": attrs,
                                  "nom": str(attrs.get("friendly_name") or haid)}
-        return {"zones": sorted({z for z in zones.values() if z}), "entites": entites}
+        return {"zones": noms_zones, "entites": entites}
 
     async def _veilleuses(self) -> list[str]:
         nuit = await self.store.async_get_shared(CLE_NUIT, None)
@@ -835,4 +909,10 @@ class LoggiaScenarios:
 
     @callback
     def async_arreter(self) -> None:
-        """Rien a defaire : aucun abonnement, aucune minuterie."""
+        """Les trois abonnements aux registres ; aucune minuterie."""
+        for defaire in list(self._defait):
+            try:
+                defaire()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia scenarios : desabonnement sans effet")
+        self._defait = ()

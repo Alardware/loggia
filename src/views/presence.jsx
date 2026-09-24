@@ -319,4 +319,3 @@ export function PresenceReglages({ hass, cardSt }) {
   );
 }
 
-export default PresenceReglages;

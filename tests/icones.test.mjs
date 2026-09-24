@@ -84,3 +84,22 @@ test('chaque icône de pièce est rendable', () => {
   const absentes = noms.filter(n => !rendable(n));
   assert.deepEqual(absentes, [], 'ces icônes de pièce n’afficheraient rien :\n  ' + absentes.join('\n  '));
 });
+
+test('la police PLEINE n’est ni chargée ni employée, et l’attente est bornée', () => {
+  /* 151 Ko de CSS et 188 Ko de police, en feuille BLOQUANTE, pour zéro classe
+   * utilisée : toutes les icones de Loggia sont baties en `fi fi-rr-`. Retirée
+   * le 23/09 (plan M3). Ce test empêche de la remettre par distraction — et
+   * d’écrire une classe `fi-sr-` qui ne s’afficherait plus. */
+  const index = readFileSync(join(RACINE, 'index.html'), 'utf8');
+  /* On cherche la BALISE, pas le mot : la remarque qui explique le retrait
+   * nomme la police, et se faisait prendre pour elle. */
+  const feuilles = [...index.matchAll(/<link[^>]+href="([^"]+)"/g)].map(m => m[1]);
+  assert.ok(!feuilles.some(f => /uicons-solid/.test(f)), 'la police pleine est à nouveau chargée');
+  assert.ok(feuilles.some(f => /uicons-regular-rounded\.css/.test(f)), 'la police des icones a disparu');
+  assert.ok(!/fi-sr-/.test(src.replace(/\/\*[\s\S]*?\*\//g, '')),
+    'une classe `fi-sr-` est apparue : sa police n’est plus là');
+
+  /* `block` et non `swap` : le repli d’une police d’icones dessine des carrés
+   * vides. Sans cette ligne, l’attente n’était bornée par rien. */
+  assert.match(css, /font-display:\s*block/, 'l’attente de la police n’est plus bornée');
+});

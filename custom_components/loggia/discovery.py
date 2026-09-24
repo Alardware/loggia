@@ -80,11 +80,13 @@ def _zones(hass: HomeAssistant) -> list[dict[str, Any]]:
 
 @callback
 def _etages(hass: HomeAssistant) -> list[dict[str, Any]]:
-    """Les etages n'existent que depuis Home Assistant 2024.4."""
-    try:
-        from homeassistant.helpers import floor_registry as fr
-    except ImportError:
-        return []
+    """Les etages, presents depuis Home Assistant 2024.4.
+
+    Le repli qui rendait une liste vide visait des versions anterieures a
+    notre minimum, 2024.7 (`hacs.json`) : retire le 24/09 (plan S7).
+    """
+    from homeassistant.helpers import floor_registry as fr
+
     reg = fr.async_get(hass)
     return [
         {"id": f.floor_id, "name": f.name, "level": getattr(f, "level", None)}

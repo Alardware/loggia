@@ -80,6 +80,69 @@ def verifier(pin: Any, enregistrement: Any) -> bool:
     return hmac.compare_digest(attendu, calcule)
 
 
+def passage_admin(patch: Any, profils: Any) -> bool:
+    """Ce patch fait-il basculer vers un profil Admin ? (24/09, plan M14)
+
+    Vrai seulement si `loggia_active_user` y figure ET designe un profil dont
+    le role est « Admin ». Un index hors liste, une liste illisible, un autre
+    role : faux — il n'y a rien a garder. C'est l'appelant qui decide quoi
+    faire d'une liste de profils qu'il n'a pas pu lire.
+    """
+    if not isinstance(patch, dict) or "loggia_active_user" not in patch:
+        return False
+    try:
+        rang = int(str(patch.get("loggia_active_user")))
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(profils, list) or not 0 <= rang < len(profils):
+        return False
+    vise = profils[rang]
+    if not isinstance(vise, dict):
+        return False
+    return str(vise.get("role") or "").strip().lower() == "admin"
+
+
+# Combien de temps un code verifie vaut laissez-passer. Assez pour taper le
+# code puis choisir le profil, trop court pour qu'un ecran laisse ouvert des
+# heures serve a quelqu'un d'autre.
+LAISSEZ_PASSER = 300
+
+
+class LaissezPasser:
+    """Qui a prouve le code, et jusqu'a quand (24/09, plan M14).
+
+    L'ecran annoncait « Requis pour basculer vers un profil Admin », et rien
+    ne le verifiait : `loggia_active_user` est ouverte a tout compte, un appel
+    direct suffisait a se donner l'affichage administrateur. La maison restait
+    protegee — `loggia_users` refuse toujours l'ecriture, personne ne se donne
+    un role — mais la phrase, elle, etait fausse.
+
+    EN MEMOIRE seulement, comme le limiteur : un redemarrage l'oublie, et
+    c'est voulu. Un laissez-passer qui survit a un redemarrage est un
+    laissez-passer qu'on a oublie de retirer.
+    """
+
+    def __init__(self, duree: int = LAISSEZ_PASSER, horloge=time.monotonic) -> None:
+        self._duree = duree
+        self._horloge = horloge
+        self._jusqua: dict[str, float] = {}
+
+    def accorder(self, cle: str) -> None:
+        self._jusqua[cle] = self._horloge() + self._duree
+
+    def valide(self, cle: str) -> bool:
+        fin = self._jusqua.get(cle)
+        if fin is None:
+            return False
+        if fin <= self._horloge():
+            del self._jusqua[cle]
+            return False
+        return True
+
+    def retirer(self, cle: str) -> None:
+        self._jusqua.pop(cle, None)
+
+
 class Limiteur:
     """Les essais rates, par compte : au-dela de `ESSAIS_LIBRES` dans la fenetre,
     un blocage qui double a chaque palier. En memoire : un redemarrage l'oublie,

@@ -498,4 +498,3 @@ export function VoletsReglages({ hass, cardSt }) {
   );
 }
 
-export default VoletsReglages;

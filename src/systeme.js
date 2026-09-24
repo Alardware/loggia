@@ -34,7 +34,7 @@ export function niveau(v, seuils) {
 const FACTEURS = { B: 1, kB: 1e3, KB: 1e3, KiB: 1024, MB: 1e6, MiB: 1024 ** 2, GB: 1e9, GiB: 1024 ** 3, TB: 1e12, TiB: 1024 ** 4 };
 const PALIERS = [['To', 1024 ** 4], ['Go', 1024 ** 3], ['Mo', 1024 ** 2], ['Ko', 1024]];
 
-export const estTaille = (unite) => Object.prototype.hasOwnProperty.call(FACTEURS, String(unite));
+const estTaille = (unite) => Object.prototype.hasOwnProperty.call(FACTEURS, String(unite));
 
 export function enOctets(valeur, unite) {
   const n = typeof valeur === 'number' ? valeur : parseFloat(valeur);
@@ -46,7 +46,7 @@ export function nombre(n, decimales = 0) {
   return Number(n).toLocaleString(locale(), { maximumFractionDigits: decimales, minimumFractionDigits: 0 });
 }
 
-export function uniteDe(octets) {
+function uniteDe(octets) {
   for (const [u, k] of PALIERS) if (octets >= k) return u;
   return 'Ko';
 }

@@ -50,7 +50,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
-from .regles import niveau
+from .regles import demarrer, niveau
 from .textes import joindre
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
@@ -398,7 +398,7 @@ class LoggiaVolets:
         # Les ordres partis qu'il reste a VERIFIER (ADR 0007) :
         # {entity_id: {"service", "extra", "cible", "essais", ..., "annule"}}
         self._verifs: dict[str, Any] = {}
-        hass.async_create_task(self._async_demarrer())
+        demarrer(hass, self, self._async_demarrer(), "volets")
 
     async def _async_demarrer(self) -> None:
         self.cfg = await self.async_config()
@@ -764,7 +764,13 @@ class LoggiaVolets:
             return get_astral_event_next(self.hass, evenement).timestamp()
         except Exception:  # noqa: BLE001
             # Sans le soleil, une demi-journee : assez pour rattraper un
-            # decrochage, trop court pour agir a contretemps.
+            # decrochage, trop court pour agir a contretemps. On le DIT : un
+            # ordre qui expire douze heures plus tard au lieu du prochain
+            # lever ou coucher ne se devine pas (24/09, plan M10).
+            _LOGGER.warning(
+                "Loggia volets : heure du soleil illisible, l'ordre en attente "
+                "expirera dans 12 h au lieu du prochain %s",
+                "coucher" if sens == "ouvrir" else "lever", exc_info=True)
             return time.time() + 12 * 3600
 
     def _mettre_en_attente(self, cibles: list, sens: str, motif: str = "volet injoignable") -> None:

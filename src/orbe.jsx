@@ -43,7 +43,7 @@ const MOINS_DE_MOUVEMENT = (() => { try { return window.matchMedia('(prefers-red
  * Une fonction plutôt qu'un composant : le rendu tourne en dehors de React, à
  * soixante images par seconde, et n'a rien à faire dans un cycle de rendu.
  */
-export function creerOrbe(hote) {
+function creerOrbe(hote) {
   let vivant = true;
 
   class MiniOrbit {

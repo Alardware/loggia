@@ -302,4 +302,3 @@ export function VeillesReglages({ hass, cardSt }) {
   );
 }
 
-export default VeillesReglages;

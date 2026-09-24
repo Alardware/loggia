@@ -138,11 +138,3 @@ test('la démo répond comme le serveur', () => {
   assert.ok(demo.includes("if (msg && msg.type === 'loggia/robots/config') return Promise.resolve({ config: robotsPatch(msg.patch) });"));
   assert.ok(demo.includes('if (Array.isArray(p.plannings)) ROB_CFG.plannings = p.plannings;'), 'la liste est REMPLACÉE, comme côté serveur');
 });
-
-test('les mots nouveaux sont traduits', () => {
-  const en = lire('src', 'langues', 'en.js');
-  for (const k of ['Planning', 'Prochain passage', 'Passages planifiés', 'Nouveau passage', 'Modifier le passage', 'Ne pas déranger', 'Capteur de pluie', 'Tous les jours', 'En semaine', 'Le week-end',
-    'Tout le logement', 'Tout le jardin', 'Les zones allumées', 'Demain', 'Réservé aux administrateurs.', 'Dans la plage « Ne pas déranger » : ce passage ne partira pas.']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque à en.js');
-  }
-});

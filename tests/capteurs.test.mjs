@@ -34,8 +34,3 @@ test('la carte capteur : la carte de base — la mesure en grand, le verdict de 
   assert.ok(!c.includes('soeurs.map') && !src.includes('PUCE_MESURE'), 'plus de puces soeurs');
   assert.ok(!c.includes("parts.join(' · ')"), 'plus la ligne « 579 ppm · 25,7 °C · 50 % »');
 });
-
-test('les noms de mesure ont leur traduction', () => {
-  ['Particules fines', 'Particules', 'Tension', 'Courant', 'Signal', 'COV', 'Humidité du sol', 'Vent', 'Précipitations', 'Gaz', 'Eau', 'Mesure', 'Qualité d’air', 'Bruit', 'Pile', 'Pile faible']
-    .forEach(k => assert.ok(en.includes("  '" + k + "':"), k + ' manque dans en.js'));
-});

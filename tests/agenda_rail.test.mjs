@@ -108,7 +108,4 @@ test('le rail : une carte Agenda a la place de deux — la date, la bande, ce qu
   assert.ok(d.includes('moment: railMoment, rappels: railRappels, agenda: railAgenda,') && !d.includes('calendrier: railCal') && !d.includes('<CvCalendrier id={calRailId}'), 'le mini-mois a quitte le rail (la carte du catalogue reste)');
   const o = bloc('  const ordreDe = (zone) => {', NL + '  };');
   assert.ok(o.includes('.filter(s => base.indexOf(s) >= 0)'), 'un ordre enregistre avec une section inconnue l’ignore simplement (un vieux « calendrier » ne fait que ranger le widget en option, toujours absent tant qu’on ne l’ajoute pas)');
-  for (const k of ['{n} AUJOURD’HUI', '1 AUJOURD’HUI', 'RIEN AUJOURD’HUI', 'Rien ce jour-là', 'Rien de prévu ces 7 jours', 'Ouvrir le calendrier']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
-  }
 });

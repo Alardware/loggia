@@ -14,7 +14,7 @@ import { LOCAL_ONLY_KEYS } from './config.js';
 /** Index de la decouverte : zones, appareils, entites. */
 export let LOGGIA_INDEX = null;
 /** `loggia_entities` de l'utilisateur courant. */
-export let LOGGIA_ENT = {};
+let LOGGIA_ENT = {};
 /** Ce que resolve.js a trouve : thermostats, volets, cameras… */
 export let LOGGIA_RESOLVED = null;
 /** Configuration de l'utilisateur, telle que le serveur la connait. */
@@ -28,7 +28,7 @@ let cfgSave = null;
  * tout vaut null / {} et les lectures retombent sur leurs replis.
  */
 /** Vrai des que le composant a repondu : le serveur fait alors autorite. */
-export let LOGGIA_SERVER = false;
+let LOGGIA_SERVER = false;
 
 export function setLoggiaState({ index, ent, resolved, cfg, save, server }) {
   if (index !== undefined) LOGGIA_INDEX = index;
@@ -97,9 +97,14 @@ export function migrerAnciennesCles() {
       if (k && (k.indexOf('orion_') === 0 || k.indexOf('orion-') === 0)) vieilles.push(k);
     }
     vieilles.forEach((vieux) => {
-      // `orion-skyorion` portait deux fois le nom du projet ; sa contrepartie
-      // ne s'obtient pas en changeant le prefixe.
-      const neuf = vieux === 'orion-skyorion' ? 'loggia-ciel' : 'loggia' + vieux.slice(5);
+      /* `orion-skyorion` portait deux fois le nom du projet, et sa
+       * contrepartie ne s'obtenait pas en changeant le prefixe. Ce cas
+       * particulier est parti le 24/09 (plan S5) : il recopiait un reglage
+       * vers `loggia-ciel`, que plus rien ne lit depuis que le ciel etoile a
+       * ete retire. Une cle `orion-skyorion` restante devient donc
+       * `loggia-skyorion`, qui ne sert a rien non plus — mais au moins la
+       * regle est UNE, au lieu d'une exception qui promet une reprise. */
+      const neuf = 'loggia' + vieux.slice(5);
       if (ls.getItem(neuf) == null) ls.setItem(neuf, ls.getItem(vieux));
     });
   } catch { /* stockage indisponible : rien a reprendre */ }
@@ -264,7 +269,14 @@ export function loggiaEnt(domain, fallback = null) {
  * composant, verifie par lui. Une copie laissee la par les versions d'avant
  * s'efface au premier chargement. */
 try { localStorage.removeItem('loggia_admin_pin'); } catch { /* stockage indisponible, ou pas de navigateur */ }
-export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_weather', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_customviews', 'loggia_users', 'loggia_assistant', 'loggia_accueil', 'loggia_look', 'loggia_active_user', 'loggia_roomlayout', 'loggia_objlayout', 'loggia_lightlayout', 'loggia_climlayout', 'loggia_coverlayout', 'loggia_enlayout', 'loggia_medlayout', 'loggia_seclayout', 'loggia_camdispo', 'loggia_lights', 'loggia_climate', 'loggia-theme', 'loggia-mode', 'loggia-ha', 'loggia-navbar', 'loggia-navoffset', 'loggia-topoffset', 'loggia-wxfx', 'loggia-ciel', 'loggia-langue'];
+/* Quatre cles sont sorties de cette liste le 24/09 (plan S5) parce que RIEN
+ * ne les lisait, nulle part : `loggia_lightlayout`, `loggia_climlayout` et
+ * `loggia_medlayout` — les vues Lumieres, Climat et Medias n'ont pas d'editeur
+ * d'agencement, ces trois-la etaient synchronisees pour personne — et
+ * `loggia-ciel`, dont la fonctionnalite (le ciel etoile) a ete supprimee sans
+ * elle. Les retirer n'efface aucune donnee : une valeur deja posee reste ou
+ * elle est, elle cesse seulement d'etre portee et exportee. */
+export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_weather', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_customviews', 'loggia_users', 'loggia_assistant', 'loggia_accueil', 'loggia_look', 'loggia_active_user', 'loggia_roomlayout', 'loggia_objlayout', 'loggia_coverlayout', 'loggia_enlayout', 'loggia_seclayout', 'loggia_camdispo', 'loggia_lights', 'loggia_climate', 'loggia-theme', 'loggia-mode', 'loggia-ha', 'loggia-navbar', 'loggia-navoffset', 'loggia-topoffset', 'loggia-wxfx', 'loggia-langue'];
 
 /** Les cles que le MOTEUR lit : la configuration de la maison, pas l'apparence.
  *
@@ -280,26 +292,15 @@ export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_a
  */
 export const LOGGIA_CONFIG_KEYS = LOGGIA_SYNC_KEYS.filter(k => k.indexOf('loggia_') === 0);
 
-export const importLoggiaConfig = (txt) => {
-  const o = JSON.parse(String(txt).trim());
-  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('invalide');
-  // Miroir EXACT de la source : on purge d'abord toutes les clés synchronisables —
-  // une clé absente de l'export = retour aux défauts (sinon une vieille config locale survivrait à l'import).
-  LOGGIA_SYNC_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch {} });
-  Object.keys(o).forEach(k => { if (LOGGIA_SYNC_KEYS.indexOf(k) >= 0 && typeof o[k] === 'string') { try { localStorage.setItem(k, o[k]); } catch {} } });
-  window.location.reload();
-};
-
-export const exportLoggiaConfig = () => { const o = {}; LOGGIA_SYNC_KEYS.forEach(k => { try { const v = localStorage.getItem(k); if (v != null) o[k] = v; } catch {} }); return JSON.stringify(o); };
-
 // ─────────────────────────────────────────────────────────────────────────────
 // La configuration COMPLETE : celle du serveur, pas seulement du navigateur.
 //
-// Les trois fonctions ci-dessus travaillent sur le `localStorage`. C'etait la
-// verite avant que la configuration soit partagee entre appareils ; depuis, la
-// source est le composant, et `cfgVal` lui donne la priorite. Vider le seul
-// stockage local ne reinitialisait donc rien : tout redescendait du serveur au
-// rechargement suivant.
+// Il y avait ici un export et un import qui ne lisaient que le `localStorage`.
+// C'etait la verite avant que la configuration soit partagee entre appareils ;
+// depuis, la source est le composant, et `cfgVal` lui donne la priorite. Vider
+// le seul stockage local ne reinitialisait rien : tout redescendait du serveur
+// au rechargement suivant. Plus personne ne les appelait (24/09, plan S4) : ce
+// qui suit les remplace, et interroge le serveur.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Le pont vers le composant, ou null s'il n'est pas installe. */
@@ -556,10 +557,10 @@ export function enHaids() {
 // palette existante, Home Assistant ne le fournissant pas.
 
 // Configurable (Paramètres → Entités) : {name, haid, ma?} — id/couleur auto-complétés.
-export const MED_COLORS = ['var(--o-cyan)', 'var(--o-accent)', 'var(--o-purple)', 'var(--o-ok)', '#ff8a4c', '#f472b6', '#8fb7ff', '#ffce73'];
+const MED_COLORS = ['var(--o-cyan)', 'var(--o-accent)', 'var(--o-purple)', 'var(--o-ok)', '#ff8a4c', '#f472b6', '#8fb7ff', '#ffce73'];
 
 // Lecteurs multimédia : la configuration, sinon ce que la résolution apparie.
-export function medResolved() {
+function medResolved() {
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.media;
   return (r && r.available) ? r.list : [];
 }
@@ -569,7 +570,7 @@ export function medResolved() {
 // Pièces trouvées par la découverte, au format attendu par les vues. C'est le
 // repli quand l'utilisateur n'a rien choisi. Il n'y a plus de liste écrite :
 // une pièce non trouvée n'apparaît pas, plutôt que d'apparaître vide.
-export function discoveredRooms() {
+function discoveredRooms() {
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.rooms;
   const src = (r && r.suggested && r.suggested.length) ? r.suggested : null;
   if (!src) return null;

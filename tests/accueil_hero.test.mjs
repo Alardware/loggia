@@ -66,7 +66,4 @@ test('les scenarios : UNE rangee qui defile, tous dedans ; le chemin vers la vue
   assert.ok(large.includes('padding: 6px 6px 26px; margin: -6px -6px -26px;'), 'les ombres vivent, la mise en page ne bouge pas');
   assert.ok(large.includes('@media (pointer: coarse) { .o-qscenes-fleche { display: none !important; } }'), 'au doigt on glisse : pas de fleches');
   assert.ok(css.includes('.grid-qscenes > button { flex: 0 0 150px; scroll-snap-align: start; }'), 'le telephone garde sa regle : 150 px par carte');
-  for (const k of ['Voir l’énergie', 'Voir la pièce la plus chargée', 'Voir la sécurité', 'Voir les lumières', 'Voir les médias', 'Voir ce qui tourne', 'Tous les scénarios', 'Scénarios précédents', 'Scénarios suivants', '{n} scénario']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
-  }
 });

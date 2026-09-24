@@ -14,7 +14,7 @@ SOURCE = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_tex
 
 # Ce qui ECRIT la maison : administrateurs seulement.
 ADMIN_SEULEMENT = [
-    "WS_STATS", "WS_INT_AFFECTER", "WS_INT_ECOUTER", "WS_VOL_CONFIG", "WS_FEN_CONFIG", "WS_PRE_CONFIG",
+    "WS_INT_AFFECTER", "WS_INT_ECOUTER", "WS_VOL_CONFIG", "WS_FEN_CONFIG", "WS_PRE_CONFIG",
     "WS_NUI_CONFIG", "WS_VEI_CONFIG", "WS_SCN_CONFIG", "WS_ROB_CONFIG", "WS_REG_DEGELER",
     "WS_PIN_DEFINIR",
 ]
@@ -53,9 +53,16 @@ def test_ecrire_la_maison_reste_aux_administrateurs():
 
 
 def test_chaque_commande_est_enregistree():
+    attendus = set()
     for c in ADMIN_SEULEMENT + OUVERTES:
         nom = "handle_" + c[3:].lower()
+        attendus.add(nom)
         assert f"websocket_api.async_register_command(hass, {nom})" in SOURCE, nom + " n'est pas enregistree"
+    # ET DANS L'AUTRE SENS (24/09, plan S7) : une commande retiree laissait son
+    # enregistrement derriere elle, et le composant levait un NameError au
+    # demarrage — que ce fichier ne voyait pas, faute d'appeler la fonction.
+    inscrits = set(re.findall(r"async_register_command\(hass, (handle_[a-z_]+)\)", SOURCE))
+    assert inscrits == attendus, "enregistrement orphelin : " + repr(sorted(inscrits - attendus))
 
 
 def test_le_code_administrateur_ne_sort_jamais_du_serveur():

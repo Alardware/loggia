@@ -477,4 +477,3 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
   );
 }
 
-export default InterrupteursSection;

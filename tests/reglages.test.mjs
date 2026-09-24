@@ -71,11 +71,21 @@ test('le balayage de disponibilité passe par les clés de configuration', () =>
 });
 
 test('l’export garde tout, lui', () => {
-  // Restreindre le balayage ne doit pas amputer l'export : une sauvegarde qui
-  // oublierait le thème et la langue les perdrait au réimport.
+  /* Restreindre le balayage ne doit pas amputer l'export : une sauvegarde qui
+   * oublierait le thème et la langue les perdrait au réimport.
+   *
+   * Le test épinglait `exportLoggiaConfig`, qui ne lisait que le `localStorage`
+   * et que plus personne n'appelait (24/09, plan S4). Le vrai export est
+   * `exportConfigComplete` : il part du SERVEUR, et complète par le stockage
+   * local par MOTIF — `loggia_` ou `loggia-` —, pas par une liste. C'est ce qui
+   * doit rester vrai : une clé nouvelle est exportée sans qu'on y pense. */
   const state = lire('src', 'state.js');
-  assert.match(state, /exportLoggiaConfig = \(\) => \{ const o = \{\}; LOGGIA_SYNC_KEYS\.forEach/,
-    'l’export ne couvre plus toutes les clés synchronisées');
+  const corps = state.slice(state.indexOf('export async function exportConfigComplete'));
+  assert.match(corps, /\/\^loggia\[_-\]\//,
+    'l’export ne balaie plus le stockage local par motif : une clé nouvelle y échapperait');
+  const fonction = corps.slice(0, corps.indexOf('\n}'));
+  assert.ok(!/LOGGIA_(SYNC|CONFIG)_KEYS/.test(fonction),
+    'l’export s’est remis à filtrer par une liste, qu’il faudrait tenir à jour');
   assert.ok(LOGGIA_SYNC_KEYS.length > LOGGIA_CONFIG_KEYS.length,
     'la liste de synchronisation a été amputée au lieu d’être filtrée à la lecture');
   for (const k of LOGGIA_CONFIG_KEYS) {

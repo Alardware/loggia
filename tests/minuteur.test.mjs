@@ -60,8 +60,5 @@ test('la démo répond comme le composant, et les mots sont traduits', () => {
   for (const t of ['loggia/minuteurs/etat', 'loggia/minuteurs/poser', 'loggia/minuteurs/annuler']) {
     assert.ok(demo.includes("msg.type === '" + t + "'"), t);
   }
-  for (const s of ['Extinction à {h}', 'Temps restant', 'Ce compte ne pilote pas cet appareil.', 'Le minuteur n’a pas pu être enregistré.']) {
-    assert.ok(en.includes("'" + s + "'"), 'traduction manquante : ' + s);
-  }
   assert.ok(!en.includes('tant que Loggia reste ouvert'), 'l’ancienne phrase ne traîne plus dans le catalogue');
 });

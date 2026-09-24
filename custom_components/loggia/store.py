@@ -609,13 +609,3 @@ class LoggiaStore:
                 await self._store.async_save(nouveau)
                 self._data = nouveau
                 self._signaler(user_id, perso=sorted(anciennes) if isinstance(anciennes, dict) else [])
-
-    async def async_stats(self) -> dict[str, Any]:
-        """Chiffres utiles au diagnostic, sans exposer le contenu."""
-        data = await self._load()
-        return {
-            "users": len(data["users"]),
-            "shared": len(data["shared"]),
-            "keys": {uid: len(cfg) for uid, cfg in data["users"].items()},
-            "version": STORAGE_VERSION,
-        }

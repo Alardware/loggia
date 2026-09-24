@@ -134,10 +134,6 @@ test('les dates de l’historique se traduisent', () => {
 });
 
 test('les libellés de l’historique existent en anglais', () => {
-  for (const cle of ['Historique des mises en page', 'Avant la séance', 'Restaurer',
-    'Tout oublier', 'Agencement par défaut', '{n} sections masquées']) {
-    assert.ok(en.includes(`'${cle}':`), `« ${cle} » n’est pas traduit : il s’affichera en français`);
-  }
   // Le pluriel passe par un paramètre : sans le jeton, `tr` rendrait « {n} ».
   assert.match(en, /'\{n\} sections masquées': '\{n\} sections hidden'/,
     'la traduction du pluriel a perdu son jeton {n}');

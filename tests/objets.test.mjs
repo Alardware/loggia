@@ -118,6 +118,25 @@ test('les vues Lumieres, Climat et Medias sont remplacees : leurs routes menent 
   assert.ok(src.includes('function VoletsView('), 'la vue Volets, elle, reste');
 });
 
+test('la vue Volets est enfin CHOISISSABLE, et pas seulement joignable par la recherche', () => {
+  /* Le 30/08 elle avait quitte la liste des vues secondaires, au motif que
+   * l'Ouverture vivait dans la vue Climatisation. Ce motif est mort avec
+   * `ClimatView`. La situation restee en place etait a l'envers : Lumieres,
+   * Climat et Medias figuraient dans cette liste alors qu'elles ne font
+   * qu'ouvrir Objets filtre, et Volets — qui porte une VRAIE vue, sa barre de
+   * modes et son planning (ADR 0023) — n'y etait pas, donc ne pouvait meme
+   * pas etre activee. Corrige le 24/09 (plan S2). */
+  const ui = readFileSync(join(RACINE, 'src', 'ui.jsx'), 'utf8');
+  assert.ok(ui.includes("{ label: tr('Volets'), vid: 'volets', icon: 'blinds', c: 'var(--o-purple)' },"),
+    'Volets a quitte la liste des vues secondaires : on ne peut plus l’activer');
+  // Chaque voisine dit ce qu'elle porte ; sans sa ligne, Volets s'affichait nue.
+  const par = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
+  assert.match(par, /DESC_SECONDAIRE = \{[^}]*volets: tr\('modes et planning'\)/,
+    'la vue Volets a perdu son sous-titre dans Parametres');
+  // Et la route, elle, n'a jamais bouge.
+  assert.ok(src.includes("view === 'volets' ? <VoletsView hass={hass}"), 'la route de la vue Volets');
+});
+
 test('la vue Objets dessine les cartes de la piece, une par appareil, derriere des puces a l’arrondi 9', () => {
   const d = src.indexOf('function ObjetsView(');
   const vue = src.slice(d, src.indexOf(String.fromCharCode(10) + '}', d));

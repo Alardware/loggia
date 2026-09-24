@@ -49,7 +49,4 @@ test('« A surveiller » vit dans le rail, et plus de point « appareils hors li
 test('la demo montre une piece a probleme et une piece active ; les mots ont leur traduction', () => {
   assert.ok(demo.includes("'binary_sensor.fenetre_chambre': s('on', { friendly_name: 'Fenêtre chambre', device_class: 'window' })"), 'la fenetre de la chambre est ouverte');
   assert.ok(demo.includes("salon: ['light.salon', 'media_player.salon',"), 'l’enceinte du salon est dans sa zone');
-  for (const k of ['Fenêtre ouverte', '{n} fenêtres ouvertes', 'Porte ouverte', '{n} portes ouvertes', '{n} lumières', '{n} lumière', 'TV', 'Chauffe', 'Rafraîchit', 'Tout est éteint']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
-  }
 });

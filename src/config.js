@@ -42,11 +42,11 @@ const isLoggiaKey = (k) => typeof k === 'string' && KEY_PREFIXES.some(p => k.ind
 // (V1), et `loggia_users` (V2) a `loggia_users_v2` (V1). Ne pas confondre.
 // `loggia-sky`, `loggia-frosted`, `loggia-contrast` et `loggia-light` ne sont PAS des
 // cles : ce sont des classes CSS. `loggia-fellback` vit dans sessionStorage.
-export const MIGRATABLE_KEYS = [
+const MIGRATABLE_KEYS = [
   'loggia-croqpanel', 'loggia-enpanel', 'loggia-ha', 'loggia-hiddenviews', 'loggia-lastseen',
   'loggia-mode', 'loggia-navbar', 'loggia-navoffset', 'loggia-objpanel', 'loggia-parpanel',
   'loggia-roompanel', 'loggia-scenepanel', 'loggia-secpanel', 'loggia-shownviews',
-  'loggia-ciel', 'loggia-syspanel', 'loggia-theme', 'loggia-topoffset', 'loggia-vacpanel',
+  'loggia-syspanel', 'loggia-theme', 'loggia-topoffset', 'loggia-vacpanel',
   'loggia-wxfx',
   'loggia_active_user', 'loggia_alarm', 'loggia_cameras', 'loggia_customviews',
   'loggia_energyHaids', 'loggia_haCfg', 'loggia_lights', 'loggia_look', 'loggia_medias',
@@ -89,7 +89,7 @@ export function collectLocal() {
  * Cles du localStorage effectivement migrables : celles que la V2 utilise.
  * Le reste (reliquats V1) est ignore, et jamais efface.
  */
-export function collectMigratable() {
+function collectMigratable() {
   const all = collectLocal();
   const out = {};
   Object.keys(all).forEach(k => { if (MIGRATABLE.has(k)) out[k] = all[k]; });
@@ -97,7 +97,7 @@ export function collectMigratable() {
 }
 
 /** Cles Loggia presentes mais inconnues de la V2 — diagnostic uniquement. */
-export function collectLegacy() {
+function collectLegacy() {
   const all = collectLocal();
   return Object.keys(all).filter(k => !MIGRATABLE.has(k));
 }

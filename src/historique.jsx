@@ -137,24 +137,3 @@ export function useSysHist(hass, ids, hours, refreshKey) {
   }, [connecte, key, hours, refreshKey]);
   return data;
 }
-// Aire + ligne sur points d'historique {t,v}, echelle automatique.
-//
-// Une serie inventee servait autrefois de repli quand l'historique manquait :
-// la courbe s'affichait sous le libelle « Releve Home Assistant » sans que rien
-// ne distingue le vrai du decor. Faute d'historique, on le dit maintenant.
-export function SysArea({ pts, color, fill, h = 64 }) {
-  const data = pts && pts.length >= 2 ? pts : null;
-  if (!data) return <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('historique indisponible')}</div>;
-  const vals = data.map(pt => pt.v);
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const span = max - min || 1;
-  const W = 240;
-  const xs = vals.map((v, i) => [(i / (vals.length - 1)) * W, h - 4 - ((v - min) / span) * (h - 12)]);
-  const line = 'M ' + xs.map(([x, y]) => x.toFixed(1) + ' ' + y.toFixed(1)).join(' L ');
-  return (
-    <svg viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height: h, display: 'block' }}>
-      <path d={`${line} L ${W} ${h} L 0 ${h} Z`} fill={fill} />
-      <path d={line} fill="none" stroke={color} strokeWidth="1.8" vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}

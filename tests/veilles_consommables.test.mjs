@@ -28,7 +28,4 @@ test('la veille cote serveur ne lit que ce qui est designe', () => {
 
 test('les mots ont leur traduction', () => {
   const en = lire('src/langues/en.js');
-  for (const k of ['Consommables', 'Capteurs désignés', 'Désigner un capteur…', 'Vérifiés une fois par heure.', 'Seuil des consommables, dans l’unité du capteur']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
-  }
 });

@@ -292,4 +292,3 @@ export function NuitReglages({ hass, cardSt }) {
   );
 }
 
-export default NuitReglages;

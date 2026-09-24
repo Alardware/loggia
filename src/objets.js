@@ -23,7 +23,7 @@ export const DOMAINES_IOT = ['vacuum', 'lawn_mower', 'feeder', 'fan', 'humidifie
 
 /** Les classes de capteur binaire qui disent une presence : la fiche d'edition
  * les nomme ; sous les filtres, ce sont des capteurs comme les autres. */
-export const CLASSES_PRESENCE = ['motion', 'occupancy', 'presence'];
+const CLASSES_PRESENCE = ['motion', 'occupancy', 'presence'];
 
 /**
  * Les filtres d'un objet. Le premier est son filtre principal, tire du

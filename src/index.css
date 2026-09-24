@@ -1109,6 +1109,12 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
 @container (max-width: 544px) { .o-armchips[data-n="6"] .o-armchip-txt { display: none; } }
 @container (max-width: 190px) { .o-armchips { gap: 5px !important; } }
 @container (max-width: 230px) { .o-presence-ou { display: none; } }
+/* Quatre personnes et plus : une grille d'avatars, quatre par rangée, deux
+ * rangées — huit tiennent dans les 184 px du format standard (ADR 0088).
+ * Sous 230 px (la carte du téléphone fait 176 px), les prénoms s'effacent
+ * comme le « · À la maison » : l'avatar et sa pastille disent l'essentiel,
+ * le nom reste au survol et au lecteur d'écran. */
+@container (max-width: 230px) { .o-presence-nom { display: none; } }
 
 /* ── La carte météo du rail de l'Accueil (ADR 0038) ───────────────────────────
  * Le rail fait 330 px sur grand écran, 276 px en dessous : le chiffre de la

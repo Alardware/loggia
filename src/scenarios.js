@@ -20,7 +20,6 @@ export const GESTES_SCENARIO = {
   serrures: ['verrouiller'],
 };
 export const PORTEES = ['maison', 'piece', 'vie'];
-export const CONDITIONS = [null, 'nuit', 'jour'];
 export const IDS_INTEGRES = ['reveil', 'depart', 'retour', 'nuit', 'cinema', 'musique', 'invites', 'tout_eteindre'];
 
 /* Des FONCTIONS, pas des tables : appelees au rendu, elles parlent la langue

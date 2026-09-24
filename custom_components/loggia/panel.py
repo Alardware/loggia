@@ -34,18 +34,16 @@ PANEL_ICON = "mdi:view-dashboard-variant"
 async def _async_serve_files(hass: HomeAssistant, root: Path) -> None:
     """Expose `frontend/` sous URL_BASE.
 
-    `async_register_static_paths` est l'API depuis Home Assistant 2024.7 ;
-    l'ancienne `register_static_path` reste en repli pour les versions
-    anterieures, ou la nouvelle n'existe pas.
+    `async_register_static_paths` est l'API depuis Home Assistant 2024.7, qui
+    est notre minimum (`hacs.json`). Le repli vers l'ancienne
+    `register_static_path`, depreciee, visait des versions que Loggia ne sert
+    pas : retire le 24/09 (plan S7).
     """
-    try:
-        from homeassistant.components.http import StaticPathConfig
+    from homeassistant.components.http import StaticPathConfig
 
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(URL_BASE, str(root), cache_headers=False)]
-        )
-    except ImportError:
-        hass.http.register_static_path(URL_BASE, str(root), cache_headers=False)
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(URL_BASE, str(root), cache_headers=False)]
+    )
 
 
 def _horodatage(chemin: Path) -> int | None:

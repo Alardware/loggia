@@ -89,13 +89,17 @@ class LoggiaAlertes:
         self._regles = regles
         # Anti-rafale : un capteur qui bat (fuite au bord du seuil) ne doit pas
         # mitrailler le telephone. L'alarme declenchee passe toujours.
+        self._defait = None
         self._dernier: dict[str, float] = {}
         # La maison qui reagit (§18) : les dangers en cours, l'etat d'AVANT de
         # ce qu'on a touche — pour le rendre —, et la vanne qu'on a coupee.
         self._dangers: dict[str, str] = {}
         self._avant: dict[str, dict] = {}
         self._vanne_coupee: str | None = None
-        hass.bus.async_listen("state_changed", self._on_state)
+        # On GARDE de quoi se taire : sans ce fil, l'ecoute survivait au
+        # dechargement du composant et un rechargement en posait une seconde
+        # (24/09, plan S7).
+        self._defait = hass.bus.async_listen("state_changed", self._on_state)
         _LOGGER.info("Loggia : alertes de sûreté à l'écoute")
 
     @callback
@@ -314,3 +318,15 @@ class LoggiaAlertes:
             critique=categorie in DANGER, motif=etat.entity_id)
         if parti:
             _LOGGER.info("Loggia : alerte %s envoyée pour %s", categorie, etat.entity_id)
+
+    @callback
+    def async_arreter(self) -> None:
+        """Retire l'ecoute du bus. Aucune minuterie : les alertes reagissent a
+        l'instant, elles ne programment rien."""
+        if self._defait is None:
+            return
+        try:
+            self._defait()
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Loggia alertes : ecoute deja retiree")
+        self._defait = None

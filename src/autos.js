@@ -23,7 +23,7 @@ const sansAccent = (t) => String(t || '').toLowerCase().normalize('NFD').replace
 /* Familles de métier, dans l'ordre où on les cherche. La première qui matche
  * gagne : « alarme lumière » est une affaire de sécurité avant d'être une
  * affaire de lampe. */
-export const AUTO_FAMILLES = [
+const AUTO_FAMILLES = [
   ['Sécurité', /(alarme|alarmo|intrusion|serrure|verrou|camera|sonnette|portail|surveillance)/],
   ['Lumières', /(lumiere|lampe|veilleuse|eclairage|luminaire|led|spot|guirlande|plafonnier|suspension|applique)/],
   ['Volets', /(volet|store|rideau|persienne|brise.?soleil)/],

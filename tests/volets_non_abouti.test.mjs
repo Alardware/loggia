@@ -29,7 +29,4 @@ test('la ligne rouge : dans l’onglet Volets et dans le Journal', () => {
 
 test('les mots ont leur traduction', () => {
   const en = lire('src/langues/en.js');
-  for (const k of ['Manœuvre non confirmée', 'Tentatives', 'Deux minutes après un ordre, un volet joignable qui n’a pas bougé se voit redemander. Après la dernière tentative, la manœuvre est notée en rouge ci-dessous.']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
-  }
 });

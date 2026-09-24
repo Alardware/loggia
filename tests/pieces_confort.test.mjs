@@ -171,10 +171,6 @@ test('les icones existent, la demo a un sonometre, et l’anglais suit', () => {
   for (const m of pur.matchAll(/icone: '([a-z0-9-]+)'/g)) assert.ok(police.includes('.fi-rr-' + m[1] + ':before'), m[1] + ' n’existe pas dans la police');
   assert.ok(police.includes('.fi-rr-leaf:before'));
   assert.ok(demo.includes("'sensor.salon_bruit': s(34, { friendly_name: 'Salon Bruit', unit_of_measurement: 'dB', device_class: 'sound_pressure' }),") && demo.includes("'sensor.salon_humidite', 'sensor.salon_co2', 'sensor.salon_bruit', 'cover.salon',"), 'dans la zone du salon');
-  for (const k of ['INDICE DE CONFORT', 'Indice de confort', 'Confortable', 'Correct', 'Acceptable', 'À améliorer', 'Inconfortable', 'Trop froid', 'Frais', 'Idéal', 'Un peu chaud', 'Trop chaud', 'Très chaud',
-    'Trop sec', 'Bon', 'Humide', 'Trop humide', 'Excellent', 'Moyen', 'Élevé', 'Confiné', 'Calme', 'Animé', 'Bruyant', 'Très bruyant', 'Froid', 'Chaud', 'Sec', 'Très sec', 'Très humide', 'Modéré', 'Bruit', 'Température', 'Humidité', 'Historique du confort', 'Niveau sonore élevé dans la pièce.']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
-  }
 });
 
 test('la barre a la hauteur de celle des scenarios (retour du 18/09)', () => {

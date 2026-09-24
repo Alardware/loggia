@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
-from .regles import niveau
+from .regles import demarrer, niveau
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -114,7 +114,7 @@ class LoggiaFenetres:
         self.coupes: dict[str, dict[str, str]] = {}
         self._minuteurs: dict[str, Any] = {}
         self._defait: list[Any] = []
-        hass.async_create_task(self._async_demarrer())
+        demarrer(hass, self, self._async_demarrer(), "fenetres")
 
     async def _async_demarrer(self) -> None:
         self.cfg = await self.async_config()

@@ -245,4 +245,3 @@ export function FenetresReglages({ hass, cardSt }) {
   );
 }
 
-export default FenetresReglages;

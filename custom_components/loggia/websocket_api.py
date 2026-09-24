@@ -6,7 +6,7 @@ Assistant. Le client ne peut pas designer un autre utilisateur — aucune comman
 n'accepte de champ `user_id`. Un utilisateur ne lit et n'ecrit donc que sa propre
 configuration, et les permissions Home Assistant restent celles de sa session.
 
-Les 32 commandes, toutes prefixees `loggia/`. Le compte et la repartition
+Les 31 commandes, toutes prefixees `loggia/`. Le compte et la repartition
 entre ouvertes et reservees sont verrouilles par `test_websocket_api.py` :
 une commande nouvelle doit y etre rangee d'un cote ou de l'autre.
 
@@ -14,7 +14,6 @@ une commande nouvelle doit y etre rangee d'un cote ou de l'autre.
     config/get      -> {"config": {...}, "user": {...}}
     config/set      -> fusionne un patch, renvoie la config resultante
     config/delete   -> efface la configuration de l'utilisateur
-    config/stats    -> chiffres de diagnostic (admin)
     config/suivre   -> un flux : a chaque ecriture, le compte et les cles qui
                        ont change (jamais les valeurs), pour relire
   L'installation
@@ -57,9 +56,8 @@ import voluptuous as vol
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.util import dt as dt_util
 
-from .code_admin import CODE_DEFAUT, Limiteur, code_valide, hacher, verifier
+from .code_admin import CODE_DEFAUT, LaissezPasser, Limiteur, code_valide, hacher, passage_admin, verifier
 from .discovery import async_index
 from .scenarios import controle_de
 from .store import MAX_TOTAL_BYTES, MAX_VALUE_BYTES, SIGNAL_CONFIG, LoggiaStore, MaisonReserveeError
@@ -69,7 +67,6 @@ _LOGGER = logging.getLogger(__name__)
 WS_GET = "loggia/config/get"
 WS_SET = "loggia/config/set"
 WS_DELETE = "loggia/config/delete"
-WS_STATS = "loggia/config/stats"
 WS_CFG_SUIVRE = "loggia/config/suivre"
 WS_DISCOVERY = "loggia/discovery"
 WS_INT_ETAT = "loggia/interrupteurs/etat"
@@ -149,6 +146,38 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         config = await store.async_get_user(connection.user.id)
         connection.send_result(msg["id"], {"config": config, "user": _user_info(connection)})
 
+    async def _refus_profil_admin(patch, connection) -> str:
+        """Le motif du refus, ou une chaine vide (24/09, plan M14).
+
+        `loggia_active_user` est OUVERTE a tout compte, et doit le rester : une
+        tablette de famille change de profil, c'est son usage premier. Mais
+        l'ecran annonce « Requis pour basculer vers un profil Admin », et rien
+        ne le verifiait : un appel direct sautait le code.
+
+        On ne garde donc QUE le passage vers un profil Admin, et seulement
+        pour un compte qui n'est pas deja administrateur de Home Assistant —
+        celui-la n'a rien a prouver, il peut tout ailleurs.
+
+        La liste des profils illisible fait REFUSER : sans elle on ne sait pas
+        ce que l'on ouvre (ADR 0079).
+        """
+        if "loggia_active_user" not in patch:
+            return ""
+        if connection.user.is_admin:
+            return ""
+        if laissez_passer.valide(connection.user.id):
+            return ""
+        try:
+            profils = await store.async_get_shared("loggia_users", None)
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning(
+                "Loggia : liste des profils illisible, le passage Admin est refuse",
+                exc_info=True)
+            return "le code administrateur n'a pas pu etre verifie"
+        if not passage_admin(patch, profils):
+            return ""
+        return "le code administrateur est requis pour ce profil"
+
     @websocket_api.websocket_command(
         {
             vol.Required("type"): WS_SET,
@@ -165,6 +194,10 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         problem = _payload_too_big(patch)
         if problem:
             connection.send_error(msg["id"], "payload_too_large", problem)
+            return
+        refus = await _refus_profil_admin(patch, connection)
+        if refus:
+            connection.send_error(msg["id"], "not_admin", refus)
             return
         try:
             # Le role vient de la connexion authentifiee, jamais du message :
@@ -192,27 +225,10 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         await store.async_delete_user(connection.user.id)
         connection.send_result(msg["id"], {"config": {}})
 
-    # Qui a obtenu l'index, et quand. Tenu en memoire seulement : c'est un
-    # diagnostic, pas une trace a conserver. Il repond a une question qu'on ne
-    # peut pas poser autrement — la decouverte arrive-t-elle vraiment aux
-    # comptes ordinaires, pour qui les commandes de Home Assistant sont fermees.
-    servis: dict[str, dict[str, Any]] = {}
-
-    @websocket_api.websocket_command({vol.Required("type"): WS_STATS})
-    @websocket_api.require_admin
-    @websocket_api.async_response
-    async def handle_stats(hass, connection, msg):
-        stats = await store.async_stats()
-        stats["discovery"] = servis
-        connection.send_result(msg["id"], stats)
-
     @websocket_api.websocket_command({vol.Required("type"): WS_DISCOVERY})
     @callback
     def handle_discovery(hass, connection, msg):
         user = connection.user
-        vu = servis.setdefault(user.id, {"name": user.name, "admin": user.is_admin, "count": 0})
-        vu["count"] += 1
-        vu["last"] = dt_util.utcnow().isoformat(timespec="seconds")
         # Le compte vient de la connexion authentifiee, jamais du message : il
         # sert a retirer de la reponse ce que ce compte n'a pas le droit de lire.
         connection.send_result(msg["id"], {"index": async_index(hass, user)})
@@ -490,6 +506,9 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     # Un compte a la fois : sans ce verrou, des tentatives envoyees en rafale
     # passaient toutes avant que le blocage ne tombe (audit 18/09).
     verrous_pin: dict[str, asyncio.Lock] = {}
+    # Ce qu'un code verifie ouvre : le passage vers un profil Admin, pour
+    # quelques minutes et pour ce compte-la seulement (24/09, plan M14).
+    laissez_passer = LaissezPasser()
 
     @websocket_api.websocket_command({vol.Required("type"): WS_PIN_VERIFIER, vol.Required("pin"): str})
     @websocket_api.async_response
@@ -510,6 +529,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                 ok = await hass.async_add_executor_job(verifier, pin, enregistrement)
             if ok:
                 limiteur.reussi(uid)
+                laissez_passer.accorder(uid)
                 connection.send_result(msg["id"], {"ok": True})
                 return
             duree = limiteur.rate(uid)
@@ -729,6 +749,5 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_get)
     websocket_api.async_register_command(hass, handle_set)
     websocket_api.async_register_command(hass, handle_delete)
-    websocket_api.async_register_command(hass, handle_stats)
     websocket_api.async_register_command(hass, handle_cfg_suivre)
     _LOGGER.info("Loggia : commandes WebSocket de configuration enregistrees")

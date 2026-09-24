@@ -125,6 +125,32 @@ CRITIQUE: dict[str, Any] = {
 SILENCIEUSE: dict[str, Any] = {"importance": "low", "push": {"sound": "none"}}
 
 
+def demarrer(hass: HomeAssistant, module: Any, coro: Any, nom: str) -> None:
+    """Lance le demarrage d'un module SANS le perdre (24/09, plan M10).
+
+    Chaque module posait `hass.async_create_task(self._async_demarrer())` et
+    s'en remettait la. Une tache qui leve n'est retrouvee par personne : au
+    mieux Home Assistant ecrit « Task exception was never retrieved » quand le
+    ramasse-miettes passe, au pire rien du tout. Le module repondait ensuite a
+    l'ecran comme si de rien n'etait — table vide, aucune reprise, aucun mot.
+
+    Ici l'echec est ECRIT, et il se retient : `module.demarrage` vaut True quand
+    tout s'est bien passe, False sinon. Ce que le module rend a l'ecran peut
+    donc dire qu'il n'a pas demarre, au lieu de se taire.
+    """
+    setattr(module, "demarrage", None)
+
+    async def _garde() -> None:
+        try:
+            await coro
+            setattr(module, "demarrage", True)
+        except Exception:  # noqa: BLE001
+            setattr(module, "demarrage", False)
+            _LOGGER.exception("Loggia %s : demarrage impossible", nom)
+
+    hass.async_create_task(_garde())
+
+
 class Regles:
     """Journal, geste manuel, et l'entonnoir par lequel toute regle commande."""
 

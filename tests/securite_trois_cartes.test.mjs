@@ -83,7 +83,4 @@ test('la vue : la rangee des trois cartes remplace le bandeau, la presence y des
 
 test('la demo a une sirene, et les mots ont leur traduction', () => {
   assert.ok(demo.includes("'siren.interieure': s('off', { friendly_name: 'Sirène intérieure', supported_features: 7, available_tones: ['alarme', 'carillon'] }),"), 'deux sonneries, pas de duree geree');
-  for (const k of ['Sirène active', 'Sirène au repos', 'Test sonore (3 s)', 'Test en cours…', 'Le test n’a pas pu partir.', 'Sonneries', 'Déclenchée par {noms}', '{n} ouvrants ouverts : {noms}', '1 ouvrant ouvert : {noms}', '{n} capteurs contournés', '1 capteur contourné']) {
-    assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
-  }
 });

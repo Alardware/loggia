@@ -256,7 +256,84 @@ const BANDEAU_ALERTE = { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 4
 const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scénarios': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Système': 'systeme', 'Paramètres': 'parametres' };
 const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'croquettes', 'medias', 'objets', 'securite', 'systeme', 'parametres']);
 
-function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAutorisees = null, editMode = false, onToggleEdit = null }) {
+/* ── Profils et notifications AU TACTILE (24/09) ──────────────────────────
+ *
+ * Sur un téléphone ou une tablette, `html.loggia-tactile` masque le bandeau du
+ * haut (index.css). Or la pastille de profil et la cloche n'y vivaient QUE :
+ * changer de profil depuis un mobile était impossible, et Paramètres › Profils
+ * ne sait que créer et modifier. La cloche était perdue de la même façon.
+ *
+ * Les deux reviennent en deux rangées dans le PIED DU TIROIR, au-dessus du
+ * séparateur — au même endroit et pour la même raison que « Mode édition »,
+ * rapatrié là quand le bandeau a disparu. Le bandeau reste masqué, et sur
+ * ordinateur rien ne change : la pastille reste en haut à droite.
+ *
+ * Basculer vers un profil Admin continue de passer par le code : la feuille
+ * appelle `onSwitchUser`, c'est-à-dire `switchUser`, qui ouvre `PinModal`. Le
+ * composant le vérifie de son côté depuis l'ADR 0080 — écrire
+ * `loggia_active_user` sans laissez-passer se fait refuser. */
+function FeuilleProfils({ users, userIdx, onSwitchUser, onGerer, onClose }) {
+  return (
+    <BottomSheet onClose={onClose}>
+      <TitreFeuille marge={12}><span style={{ fontSize: 17, fontWeight: 800 }}>{tr('Changer de profil')}</span></TitreFeuille>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {/* La clé est le NOM, pas le rang — même raison qu'au bandeau. */}
+        {users.map((u, i) => (
+          <button key={u.name || i} onClick={() => { if (onSwitchUser) onSwitchUser(i); onClose(); }}
+            aria-current={i === userIdx ? 'true' : undefined}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '11px 12px', borderRadius: 12, border: 'none', cursor: 'pointer', textAlign: 'left', background: i === userIdx ? 'var(--o-s1)' : 'transparent', color: 'var(--o-text1)' }}>
+            <span style={{ width: 34, height: 34, borderRadius: '50%', background: userBg(u), flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 14, fontWeight: 700 }}>{nomProfil(u.name)}</span>
+              <span style={{ display: 'block', fontSize: 11.5, color: 'var(--o-text2)', fontWeight: 600 }}>{tr(u.role || 'Invité')}</span>
+            </span>
+            {i === userIdx && <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--o-ok)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
+          </button>
+        ))}
+      </div>
+      <button onClick={() => { onGerer(); onClose(); }}
+        style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', marginTop: 12, padding: '12px 12px 0', border: 'none', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', background: 'transparent', color: 'var(--o-accent)', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+        <Fi i="settings" size={14} /><span>{tr('Gérer les profils')}</span>
+      </button>
+    </BottomSheet>
+  );
+}
+
+function FeuilleNotifications({ notifs, onClose }) {
+  return (
+    <BottomSheet onClose={onClose}>
+      <TitreFeuille marge={12}><span style={{ fontSize: 17, fontWeight: 800 }}>{tr('Notifications')}</span></TitreFeuille>
+      {notifs.length ? (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {notifs.map((n, i) => (
+            <div key={i} style={{ display: 'flex', gap: 12, padding: '11px 2px', borderBottom: i < notifs.length - 1 ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: n[0], marginTop: 5, flexShrink: 0 }} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{n[1]}</div>
+                <div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{n[2]}</div>
+                {n[3] && <div style={{ fontSize: 11, color: 'var(--o-text3)', marginTop: 2 }}>{n[3]}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : <div style={{ padding: '26px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucune notification')}</div>}
+    </BottomSheet>
+  );
+}
+
+function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAutorisees = null, editMode = false, onToggleEdit = null,
+  tactile = false, users = [], userIdx = 0, onSwitchUser = null, notifs = [] }) {
+  const [profilsOuverts, setProfilsOuverts] = useState(false);
+  const [notifsOuvertes, setNotifsOuvertes] = useState(false);
+  const profilActif = users[userIdx] || users[0] || { name: 'Administrateur', role: 'Admin' };
+  /* Vu = persisté par appareil, MÊME clé que la cloche du bandeau : ce sont
+   * deux portes sur la même chose, un point rouge éteint d'un côté ne doit pas
+   * se rallumer de l'autre. */
+  const [vuSig, setVuSig] = useState(() => { try { return localStorage.getItem('loggia-notifsvues') || ''; } catch { return ''; } });
+  const nsig = notifs.map(n => '' + n[1] + n[2]).join('|');
+  const nonVues = notifs.length > 0 && nsig !== vuSig;
+  const marquerVues = () => { setVuSig(nsig); try { localStorage.setItem('loggia-notifsvues', nsig); } catch {} };
+  const ligneTiroir = { display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'var(--o-bw,1px) solid var(--o-bd3)', background: 'var(--o-s1)', color: 'var(--o-text1)', textAlign: 'left', width: '100%' };
   // Permissions par profil : `null` = tout (admins et profils sans restriction).
   const permis = (vid) => !vuesAutorisees || vid === 'accueil' || vid === 'parametres' || vuesAutorisees.has(vid);
   // Une vue que l'installation ne peut pas remplir ne figure pas dans le menu.
@@ -305,6 +382,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
     </div>
   );
   return (
+    <>
     <aside ref={navRef} className={'loggia-aside ' + (open ? 'is-open' : 'is-closed')} style={{ width: 264, flexShrink: 0, position: 'sticky', top: 0, alignSelf: 'flex-start', height: '100vh', overflowY: 'auto', background: 'linear-gradient(180deg,var(--o-side1),var(--o-side2))', borderRight: 'var(--o-bw,1px) solid var(--o-bd3)', padding: 'calc(18px + var(--o-safe-top,0px)) 12px 18px', display: 'flex', flexDirection: 'column' }}>
       {pill && <div aria-hidden="true" className="o-navpill" style={{ position: 'absolute', left: 12, right: 12, top: 0, height: pill.h, transform: `translateY(${pill.top}px)`, borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', pointerEvents: 'none', zIndex: 0 }}><span style={{ position: 'absolute', left: 0, top: 9, bottom: 9, width: 3, borderRadius: 4, background: 'var(--o-accent-fond)' }} /></div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 8px 14px' }}>
@@ -345,7 +423,31 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
         </div>
       )}
       {NAV.filter(g => g.reglages).map(groupeNav)}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto', paddingTop: 14, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+      {/* Profil et notifications : AU-DESSUS du séparateur, et au tactile
+        * seulement — sur ordinateur ils vivent en haut à droite, et les
+        * répéter ici serait un réglage en double. */}
+      {tactile && (users.length > 0 || notifs.length > 0) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 'auto', paddingTop: 10 }}>
+          {users.length > 0 && (
+            <button onClick={() => setProfilsOuverts(true)} aria-haspopup="dialog"
+              style={{ ...ligneTiroir, gap: 10 }}>
+              <span style={{ width: 28, height: 28, borderRadius: '50%', background: userBg(profilActif), flexShrink: 0 }} />
+              <span className="o-side-text" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomProfil(profilActif.name)}</span>
+              <svg className="o-side-text" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: .6 }}><path d="M9 18l6-6-6-6" /></svg>
+            </button>
+          )}
+          <button onClick={() => { setNotifsOuvertes(true); marquerVues(); }} aria-haspopup="dialog"
+            aria-label={tr('Notifications') + (nonVues ? ' · ' + trN(notifs.length, tr('{n} non lue'), tr('{n} non lues')) : '')}
+            style={ligneTiroir}>
+            <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+              <Fi i="bell" size={13} />
+              {nonVues && <span aria-hidden="true" style={{ position: 'absolute', top: -2, right: -3, width: 7, height: 7, borderRadius: '50%', background: 'var(--o-bad)' }} />}
+            </span>
+            <span className="o-side-text" style={{ flex: 1, minWidth: 0 }}>{tr('Notifications')}</span>
+          </button>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: tactile && (users.length > 0 || notifs.length > 0) ? 0 : 'auto', paddingTop: 14, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
         {/* Mode édition depuis le tiroir : le crayon du bandeau du haut
           * n'existe plus quand le bandeau est masqué (aperçu tactile). */}
         {onToggleEdit && (
@@ -358,6 +460,16 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 0' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: ha && !ha.online ? '0 0 7px var(--o-bad)' : '0 0 7px var(--o-ok)', animation: ha && !ha.online ? 'pulse 1.2s infinite' : 'none' }} /><div className="o-side-text" style={{ lineHeight: 1.2 }}><div style={{ fontSize: 12, fontWeight: 700, color: ha && !ha.online ? 'var(--o-bad)' : undefined }}>{ha && !ha.online ? tr('Home Assistant · Hors ligne') : tr('Home Assistant · En ligne')}</div><div style={{ fontSize: 10, color: 'var(--o-text3)', fontWeight: 600 }}>{haHost()}</div></div></div>
       </div>
     </aside>
+    {/* HORS de l'aside : son `transform` (le tiroir qui glisse) en ferait le
+      * bloc conteneur du `position: fixed` de la feuille, et son
+      * `overflow-y: auto` la découperait — même piège que le bandeau du haut,
+      * quelques centaines de lignes plus bas. */}
+    {profilsOuverts && (
+      <FeuilleProfils users={users} userIdx={userIdx} onSwitchUser={onSwitchUser}
+        onGerer={() => onNav && onNav('parametres')} onClose={() => setProfilsOuverts(false)} />
+    )}
+    {notifsOuvertes && <FeuilleNotifications notifs={notifs} onClose={() => setNotifsOuvertes(false)} />}
+    </>
   );
 }
 
@@ -714,8 +826,12 @@ function Header() {
             <div style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 12, borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}><span style={{ width: 40, height: 40, borderRadius: '50%', background: curBg, flexShrink: 0 }} /><div style={{ minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{nomProfil(cur.name)}</div><div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{tr(cur.role)} · {tr('Maison')}</div></div></div>
             <div style={{ padding: '8px 12px 4px', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text3)' }}>{tr('CHANGER DE PROFIL')}</div>
             <div style={{ padding: '0 6px 6px' }}>
+              {/* La cle est le NOM, pas le rang : ces lignes sont des boutons,
+                  donc focalisables. Ajouter ou retirer un profil pendant que le
+                  menu est ouvert deplacait le focus d'une ligne a l'autre, React
+                  reutilisant le bouton par sa position (24/09, plan M9). */}
               {users.map((u, i) => (
-                <button key={i} onClick={() => { onSwitchUser && onSwitchUser(i); setUserOpen(false); }} style={{ ...mItem, gap: 12, background: i === userIdx ? 'var(--o-s1)' : 'transparent' }}>
+                <button key={u.name || i} onClick={() => { onSwitchUser && onSwitchUser(i); setUserOpen(false); }} style={{ ...mItem, gap: 12, background: i === userIdx ? 'var(--o-s1)' : 'transparent' }}>
                   <span style={{ width: 30, height: 30, borderRadius: '50%', background: userBg(u), flexShrink: 0 }} />
                   <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{nomProfil(u.name)}</span><span style={{ display: 'block', fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>{tr(u.role)}</span></span>
                   {i === userIdx && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--o-ok)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
@@ -1014,6 +1130,22 @@ function applyVars(root, v) {
 // "Suivre HA" : lit le thème ACTIF de HA (nom via selectedTheme/default) puis sa définition
 // Lit les valeurs RÉSOLUES du thème HA appliqué sur le parent (comme la V1 : C5).
 // Marche pour tous les thèmes HACS (var() + tokens maison résolus par le navigateur).
+/* Ce que Home Assistant affiche, en une chaine comparable (24/09, plan M9).
+ *
+ * « Suivre Home Assistant » reappliquait le theme TOUTES LES 1,5 s : retirer
+ * une cinquantaine de proprietes de la racine, les reecrire, puis relancer la
+ * garde de contraste et ses calculs de couleur. Quarante fois par minute,
+ * indefiniment, pour un theme qui ne change presque jamais — et chaque passe
+ * invalidait le style de toute la page.
+ *
+ * On garde la lecture, qui est la source de verite : le theme de HA peut
+ * changer sans que son NOM bouge, le mode sombre par exemple. Mais on ne
+ * REECRIT que si la lecture a change. */
+function signatureHaTheme(hass) {
+  const v = readComputedHaTheme(hass);
+  return v ? JSON.stringify(v) : '';
+}
+
 function readComputedHaTheme(hass) {
   try {
     const top = window.top || window;
@@ -8037,8 +8169,23 @@ const sceneGradient = (colors) => {
   const layers = colors.slice(0, 5).map(([r, g, b], i) => `radial-gradient(circle at ${pos[i] || pos[i % 5]}, rgb(${r},${g},${b}) 0%, rgba(${r},${g},${b},0) 55%)`);
   return [...layers, 'linear-gradient(135deg,#1a1f2e,#0d1018)'].join(', ');
 };
-// Vrai JPEG Hue par-dessus, dégradé RGB en fallback (jamais de carte grise vide).
-const sceneBackground = (scene) => { const g = sceneGradient(scene.colors); return scene.uuid ? `url('${HUE_SCENE_IMG_BASE}${scene.uuid}.jpeg') center/cover no-repeat, ${g}` : g; };
+/* Le vrai JPEG de Hue par-dessus, le degrade RGB en dessous — jamais de carte
+ * grise vide. Mais ces images sont FACULTATIVES : il faut les deposer soi-meme
+ * dans `www/hue_scenes/`, et presque personne ne le fait. Tant que la carte les
+ * demandait sans rien savoir, la vue Scenarios tirait neuf requetes en 404 a
+ * CHAQUE affichage, sur la demo en ligne comme sur toute installation sans ce
+ * dossier : la console se remplissait, et rien ne le disait (23/09, plan M6).
+ *
+ * On demande donc l'image UNE fois par ambiance et par session, hors du rendu,
+ * et on ne la pose qu'une fois qu'elle a repondu. Une absence se retient : la
+ * seconde visite ne redemande rien. */
+const HUE_IMG = new Map();
+const sceneBackground = (scene, avecImage) => {
+  const g = sceneGradient(scene.colors);
+  return (scene.uuid && avecImage)
+    ? `url('${HUE_SCENE_IMG_BASE}${scene.uuid}.jpeg') center/cover no-repeat, ${g}`
+    : g;
+};
 const sceneByName = (name) => { for (const c of Object.values(HUE_SCENES)) { const s = c.scenes.find(x => x.name === name); if (s) return s; } return null; };
 
 function ScenesContent({ hass }) {
@@ -8077,6 +8224,28 @@ function ScenesContent({ hass }) {
   const allOff = () => { setSel(''); runOrLights('allOff', 'turn_off'); };
 
   const scenes = HUE_SCENES[cat] ? HUE_SCENES[cat].scenes : [];
+  /* Les images de la collection affichee, demandees une seule fois. `cat` suffit
+   * comme dependance : `scenes` est recalcule a chaque rendu et bouclerait. */
+  const [, redessinerImages] = useState(0);
+  useEffect(() => {
+    const inconnues = scenes.map(x => x.uuid).filter(u => u && !HUE_IMG.has(u));
+    if (!inconnues.length) return undefined;
+    let vivant = true;
+    let reste = inconnues.length;
+    inconnues.forEach(u => {
+      const img = new Image();
+      const fini = (ok) => {
+        HUE_IMG.set(u, ok);
+        reste -= 1;
+        if (vivant && reste === 0) redessinerImages(v => v + 1);
+      };
+      img.onload = () => fini(true);
+      img.onerror = () => fini(false);
+      img.src = HUE_SCENE_IMG_BASE + u + '.jpeg';
+    });
+    return () => { vivant = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cat]);
   const selScene = sel ? sceneByName(sel) : null;
   const lit = !!selScene;
   const selColor = selScene ? rgbHex(selScene.colors[0]) : '#5f6c87';
@@ -8140,13 +8309,13 @@ function ScenesContent({ hass }) {
           const on = sel === sc.name;
           return (
             <button aria-label={tr('Appliquer {nom}', { nom: sc.name })} key={sc.name} onClick={() => pickScene(sc)} title={tr('Appliquer {nom}', { nom: sc.name })} style={{ position: 'relative', textAlign: 'left', padding: 0, overflow: 'hidden', cursor: 'pointer', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.55)' : 'var(--o-bd2)'), boxShadow: on ? '0 0 0 1px rgba(var(--o-accent-rgb),.3)' : 'none', transition: 'border-color .2s, box-shadow .2s' }}>
-              <span aria-hidden="true" style={{ display: 'block', height: 96, background: sceneBackground(sc) }} />
+              <span aria-hidden="true" style={{ display: 'block', height: 96, background: sceneBackground(sc, HUE_IMG.get(sc.uuid) === true) }} />
               <span style={{ display: 'block', padding: '11px 13px 12px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 13, fontWeight: 800, color: on ? 'var(--o-accent-soft)' : 'var(--o-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.name}</span>
                   {on && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent-fond)', flexShrink: 0 }} />}
                 </span>
-                <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>Luminosité {sc.brightness} %</span>
+                <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr('Luminosité {n} %', { n: sc.brightness })}</span>
                 <span style={{ display: 'flex', gap: 4, marginTop: 9 }}>
                   {sc.colors.slice(0, 5).map((c, ci) => <span key={ci} style={{ flex: 1, height: 4, borderRadius: 4, background: rgbHex(c) }} />)}
                 </span>
@@ -8922,8 +9091,8 @@ const EN_LAYOUT_KEY = 'loggia_enlayout';
 
 /* Sources de puissance sur 24 h — plusieurs séries dans une même échelle.
  *
- * `SysArea` ne trace qu'une courbe et recale son échelle sur elle : deux
- * courbes tracées ainsi ne seraient pas comparables. Ici l'échelle est
+ * Une courbe qui recale son échelle sur elle-même ne se compare pas à sa
+ * voisine. Ici l'échelle est
  * COMMUNE, le zéro est une ligne (le réseau passe en négatif quand on
  * exporte), et le survol donne l'heure et les valeurs, comme le tableau de
  * bord Énergie de Home Assistant.
@@ -9353,6 +9522,24 @@ const VAC_KEYS = [];   // le poll vient de vacKeys() : préfixe de domaine + ent
 
 
 // Vue atteinte alors que l'installation n'a pas de quoi la remplir.
+/* Les identifiants de vue que l'application sait rendre (23/09, plan M5).
+ *
+ * La vue courante survit dans `sessionStorage`. Un identifiant INCONNU — onglet
+ * d'une version anterieure, `?vue=home` tape a la main, lien perime — ne
+ * correspondait a aucune branche du rendu et tombait sur le tableau de bord
+ * SANS donnees : sept pieces d'exemple avec des releves inventes (18,1 degres,
+ * 412 ppm), « Tout va bien », et « Home Assistant n'est pas joignable » alors
+ * que la connexion etait la. Reproduit sur la demonstration en ligne.
+ *
+ * La maison d'exemple garde sa raison d'etre : c'est l'ecran d'AVANT la
+ * premiere connexion. Elle ne doit simplement plus servir de repli a une
+ * erreur de route. Une vue inconnue revient donc a l'accueil. */
+const VUES_RENDUES = new Set(['accueil', 'parametres', 'pieces', 'scenes', 'objets',
+  'energie', 'securite', 'systeme', 'lumieres', 'climat', 'volets', 'croquettes',
+  'medias', 'biblio']);
+const vueRendue = (v) => !!v && (VUES_RENDUES.has(v)
+  || v.indexOf('room:') === 0 || v.indexOf('cv:') === 0);
+
 const VIEW_TITLES = {
   pieces: tr('Pièces'), scenes: tr('Scénarios'), objets: tr('Objets'), energie: tr('Énergie'),
   securite: tr('Sécurité'), systeme: tr('Système'), lumieres: tr('Lumières'), climat: tr('Climat'),
@@ -10923,7 +11110,42 @@ function CvAir({ hass }) {
     </div>
   );
 }
-/* Présence : toute la maisonnée en lignes — avatar, où, depuis quand. */
+/* Toute la maisonnée, sans limite : la carte n'en montre que ce que 184 px
+ * peuvent porter. Même patron que les autres feuilles (ADR 0055) : hauteur au
+ * contenu, une croix en bout de ligne d'en-tête. Chaque ligne dit où est la
+ * personne et depuis quand, comme la carte d'une personne seule. */
+function FeuillePresence({ liste, onClose }) {
+  const maison = liste.filter(p => p.home).length;
+  return (
+    <BottomSheet onClose={onClose}>
+      <TitreFeuille marge={12}>
+        <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
+          <span style={{ fontSize: 17, fontWeight: 800 }}>{tr('Présence')}</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: maison ? 'var(--o-ok)' : 'var(--o-text3)' }}>{maison + ' / ' + liste.length}</span>
+        </span>
+      </TitreFeuille>
+      <div role="list">
+        {liste.map((p) => (
+          <div key={p.haid} role="listitem" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+            <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 12, fontWeight: 800, color: p.home ? 'var(--o-text2)' : 'var(--o-text3)', opacity: p.home || !p.img ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: p.home ? 'var(--o-ok)' : 'var(--o-text3)' }}>{(p.home ? tr('À la maison') : tr('Absent')) + (p.lc ? ' · ' + relTime(p.lc).toLowerCase() : '')}</span>
+            </span>
+            <span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', flexShrink: 0, background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', boxShadow: p.home ? '0 0 6px rgba(var(--o-ok-rgb),.6)' : 'none' }} />
+          </div>
+        ))}
+      </div>
+    </BottomSheet>
+  );
+}
+/* Présence : toute la maisonnée. Jusqu'à trois personnes, une ligne chacune —
+ * avatar, où, depuis quand. À partir de quatre, la ligne déborderait le format
+ * standard (deux rangées de 88 px, règle du projet) : une grille d'avatars,
+ * quatre par rangée, deux rangées — huit tiennent —, et « +n » sur la dernière
+ * case au-delà (ADR 0088). L'ordre est celui de la configuration : une famille
+ * connaît les places, et l'avatar estompé dit déjà l'absence. Un toucher ouvre
+ * la feuille, où tout le monde tient sans limite. */
 function CvPresence({ hass, gens = null }) {
   const S = (hass && hass.states) || {};
   const liste = (gens || peopleList()).map(p => {
@@ -10931,8 +11153,23 @@ function CvPresence({ hass, gens = null }) {
     return { ...p, home: !!st && st.state === 'home', lc: st && st.last_changed };
   });
   const maison = liste.filter(p => p.home).length;
-  return (
-    <div className="o-piece o-carte-presence" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
+  const [ouvert, setOuvert] = useState(false);
+  const ouvrable = liste.length > 0;
+  const etat = (p) => p.home ? tr('À la maison') : tr('Absent');
+  const avatar = (p, taille) => (
+    <span aria-hidden="true" style={{ position: 'relative', width: taille, height: taille, flexShrink: 0 }}>
+      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 10, fontWeight: 800, color: p.home ? 'var(--o-text2)' : 'var(--o-text3)', opacity: p.home || !p.img ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
+      <span style={{ position: 'absolute', right: -2, bottom: -2, width: 9, height: 9, borderRadius: '50%', background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', border: '2px solid var(--o-surfA)', boxShadow: p.home ? '0 0 6px rgba(var(--o-ok-rgb),.6)' : 'none' }} />
+    </span>
+  );
+  return (<>
+    {/* Ouvrable, la carte EST un bouton (rôle, tabulation, Entrée et Espace),
+      * comme une carte d'appareil ; vide, elle n'est rien de tout cela. */}
+    {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
+    <div className="o-piece o-carte-presence" role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : undefined} aria-label={ouvrable ? tr('Ouvrir') + ' ' + tr('Présence') : undefined}
+      onClick={ouvrable ? () => setOuvert(true) : undefined}
+      onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOuvert(true); } } : undefined}
+      style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden', cursor: ouvrable ? 'pointer' : 'default' }}>
       {/* Gabarit maison : icône hg, compteur hd, TITRE SOUS L'ICÔNE. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(maison ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s1)', maison ? 'var(--o-ok)' : 'var(--o-text3)')}><Fi i="users" size={16} /></span>
@@ -10941,18 +11178,33 @@ function CvPresence({ hass, gens = null }) {
       <div style={{ marginTop: 8 }}>
         <div style={RM_NAME}>{tr('Présence')}</div>
         {liste.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Personne de configuré')}</div>}
-        {/* Trois lignes au plus : le FORMAT STANDARD (2 rangées de 88 px) est
-          * une règle dure — une quatrième personne déborderait la carte. */}
-        {liste.slice(0, 3).map((p) => (
+        {liste.length <= 3 && liste.map((p) => (
           <div key={p.haid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', marginTop: 2 }}>
             <span style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 10, fontWeight: 800, color: p.home ? 'var(--o-text2)' : 'var(--o-text3)', opacity: p.home || !p.img ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<span className="o-presence-ou" style={{ fontWeight: 600, color: 'var(--o-text3)' }}> · {p.home ? tr('À la maison') : 'Absent'}</span></span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<span className="o-presence-ou" style={{ fontWeight: 600, color: 'var(--o-text3)' }}> · {etat(p)}</span></span>
             <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', boxShadow: p.home ? '0 0 6px rgba(var(--o-ok-rgb),.6)' : 'none' }} />
           </div>
         ))}
+        {liste.length > 3 && (
+          <div className="o-presence-grille" role="list" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '4px 4px', marginTop: 2 }}>
+            {(liste.length > 8 ? liste.slice(0, 7) : liste).map((p) => (
+              <div key={p.haid} role="listitem" title={p.name + ' · ' + etat(p)} aria-label={p.name + ' · ' + etat(p)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 0 }}>
+                {avatar(p, 26)}
+                <span className="o-presence-nom" aria-hidden="true" style={{ maxWidth: '100%', fontSize: 10.5, fontWeight: 700, color: p.home ? 'var(--o-text1)' : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+              </div>
+            ))}
+            {liste.length > 8 && (
+              <div role="listitem" title={trN(liste.length - 7, tr('{n} autre personne'), tr('{n} autres personnes'))} aria-label={trN(liste.length - 7, tr('{n} autre personne'), tr('{n} autres personnes'))} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 0 }}>
+                <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', fontSize: 10.5, fontWeight: 800, color: 'var(--o-text2)' }}>{'+' + (liste.length - 7)}</span>
+                <span className="o-presence-nom" aria-hidden="true" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)' }}>{'…'}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
-  );
+    {ouvert && <FeuillePresence liste={liste} onClose={() => setOuvert(false)} />}
+  </>);
 }
 /* Ouvrants : portes, fenêtres, garage — l'état de chaque ouverture, et le
  * verdict d'ensemble en tête. */
@@ -11649,6 +11901,8 @@ function CvTyped({ x, hass, dc }) {
  * chaque famille même sans posséder les entités. Sert de banc d'essai pour
  * itérer sur le design. Le hass est un faux local — aucun appel ne part. */
 const BIBLIO_ART = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E';
+/* Neuf personnes, pour voir la grille et le « +n » : presents et absents meles. */
+const FAMILLE_BIBLIO = ['Camille', 'Alex', 'Marie', 'Sam', 'Noa', 'Lou', 'Éli', 'Maé', 'Zoé'].map((name, i) => ({ name, haid: 'person.biblio' + (i === 0 ? '' : '_' + (i + 1)), img: null }));
 function biblioStates() {
   const il_y_a = (min) => new Date(Date.now() - min * 60000).toISOString();
   const s = (state, attributes) => ({ state: String(state), attributes: attributes || {}, last_changed: il_y_a(12), last_updated: il_y_a(12) });
@@ -11686,6 +11940,16 @@ function biblioStates() {
     'calendar.biblio': s('off', { friendly_name: 'Maison' }),
     'zone.home': s('1', { friendly_name: 'Maison', latitude: 46.98, longitude: 1.92, radius: 100 }),
     'person.biblio_3': s('not_home', { friendly_name: 'Marie', latitude: 47.06, longitude: 2.05 }),
+    /* Une maisonnee de neuf, pour voir la grille et son « +n » (ADR 0088).
+     * Presents et absents meles : c'est l'avatar estompe qui doit se lire. */
+    'person.biblio_4': s('home', { friendly_name: 'Sam' }),
+    'person.biblio_5': s('not_home', { friendly_name: 'Noa' }),
+    'person.biblio_6': s('home', { friendly_name: 'Lou' }),
+    'person.biblio_7': s('not_home', { friendly_name: 'Éli' }),
+    'person.biblio_8': s('home', { friendly_name: 'Maé' }),
+    'person.biblio_9': s('not_home', { friendly_name: 'Zoé' }),
+    'person.biblio_10': s('home', { friendly_name: 'Tom' }),
+    'person.biblio_11': s('not_home', { friendly_name: 'Ana' }),
     'sensor.biblio_energie_hist': s(7.4, { friendly_name: 'Énergie maison', unit_of_measurement: 'kWh', device_class: 'energy' }),
     // Arrivees le 20/09, pour les familles que la bibliotheque ne montrait pas
     // encore : la sirene (retour du 16/09), la meteo (le ciel se fond dans le
@@ -11806,6 +12070,7 @@ function BiblioView() {
       <Rangee>
         <Item l={tr('Qualité air')} w={280}><CvAir hass={hb} /></Item>
         <Item l={tr('Présence maison')} w={280}><CvPresence hass={hb} gens={[{ name: 'Camille', haid: 'person.biblio', img: null }, { name: 'Alex', haid: 'person.biblio_2', img: null }]} /></Item>
+        <Item l={tr('Famille nombreuse')} w={280}><CvPresence hass={hb} gens={FAMILLE_BIBLIO} /></Item>
         <Item l={tr('Ouvrants')} w={280}><CvOuvrants hass={hb} /></Item>
         <Item l={tr('Énergie maison')} w={280}><CvEnergie hass={hb} roles={{ solarNow: 'sensor.biblio_solaire', gridNow: 'sensor.biblio_reseau', consoJour: 'sensor.biblio_conso_jour' }} /></Item>
         <Item l={tr('Calendrier')} w={280}><CvCalendrier id="calendar.biblio" hass={hb} /></Item>
@@ -13179,7 +13444,10 @@ export default function App() {
    * bas, le rendu attend que les donnees soient la avant de monter la vue, et
    * montre en attendant une surface vide plutot que l'accueil. */
   const [view, setView] = useState(() => {
-    try { return window.sessionStorage.getItem('loggia-vue') || 'accueil'; } catch { return 'accueil'; }
+    try {
+      const v = window.sessionStorage.getItem('loggia-vue');
+      return vueRendue(v) ? v : 'accueil';
+    } catch { return 'accueil'; }
   });
   useEffect(() => {
     try { window.sessionStorage.setItem('loggia-vue', view); } catch { /* stockage indisponible */ }
@@ -13332,6 +13600,22 @@ export default function App() {
     parametres: ['automation.', 'update.'], // clés-préfixes : automations + mises à jour (onglets admin)
   };
   const activeCv = view.indexOf('cv:') === 0 ? customViews.find(c => 'cv:' + c.id === view) : null;
+  /* Une route `room:` ou `cv:` peut designer ce qui n'existe plus : une piece
+   * renommee, une vue personnalisee supprimee ailleurs. Sans garde, l'ecran
+   * montre une piece vide au nom d'hier. On attend que la configuration soit
+   * LA (sans quoi on renverrait a l'accueil pendant le chargement), puis on y
+   * revient. */
+  const nomsPieces = (cfg.rooms || []).map(r => r.room);
+  const sigRoutes = nomsPieces.join('|') + '#' + customViews.map(c => c.id).join('|');
+  useEffect(() => {
+    if (view.indexOf('room:') === 0) {
+      if (nomsPieces.length && nomsPieces.indexOf(view.slice(5)) < 0) setView('accueil');
+      return;
+    }
+    if (view.indexOf('cv:') === 0 && customViews.length
+        && !customViews.some(c => 'cv:' + c.id === view)) setView('accueil');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, sigRoutes]);
   // Nav « Pièces » = ouvre la 1re pièce configurée (les chips de RoomView naviguent ensuite entre pièces)
   const activeRoom = view.indexOf('room:') === 0 ? view.slice(5) : view === 'pieces' ? ((cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))[0] || null) : null;
   // Vue pièce : on poll le domaine des appareils pilotables + les capteurs de la pièce (clés-préfixes).
@@ -13405,9 +13689,17 @@ export default function App() {
       // Un reglage de la maison refuse n'est pas une panne : c'est une regle.
       // Le message generique laissait croire a un incident, et l'on cherchait
       // du cote de Home Assistant une explication qui etait ici.
-      setToast(r && r.code === 'not_admin'
-        ? tr('Réglage non enregistré — il appartient à la maison, et seul un administrateur Home Assistant peut le changer')
-        : r && r.code === 'scenario_incomplet' ? String(r.message)
+      /* `not_admin` couvre DEUX refus depuis l'ADR 0080 : un réglage de la
+       * maison, et le passage vers un profil Admin sans le code. Le message
+       * unique disait « seul un administrateur Home Assistant peut le
+       * changer » — faux pour le second, où le code suffit. Le composant dit
+       * lequel dans son motif. */
+      const codeAdmin = r && r.code === 'not_admin' && /code administrateur/i.test(String(r.message || ''));
+      setToast(codeAdmin
+        ? tr('Profil non changé — le code administrateur est requis')
+        : r && r.code === 'not_admin'
+          ? tr('Réglage non enregistré — il appartient à la maison, et seul un administrateur Home Assistant peut le changer')
+          : r && r.code === 'scenario_incomplet' ? String(r.message)
           : tr('Commande non exécutée — Home Assistant a refusé ou n’a pas répondu'));
       clearTimeout(toastTRef.current); toastTRef.current = setTimeout(() => setToast(null), 4000);
     };
@@ -13442,8 +13734,22 @@ export default function App() {
     if (!SAFE_NOLOOK) { try { localStorage.setItem('loggia-mode', themeMode); localStorage.setItem('loggia-theme', loggiaTheme); localStorage.setItem('loggia-ha', haTheme); } catch {} }
     let mq = null;
     if (themeMode === 'auto') { try { mq = window.matchMedia('(prefers-color-scheme: light)'); mq.addEventListener('change', run); } catch { mq = null; } }
-    // Suivre HA : hass.themes peut charger après coup / l'actif peut changer → on réapplique en boucle
-    if (haTheme === 'FOLLOW') { const iv = setInterval(run, 1500); return () => { clearInterval(iv); if (mq) mq.removeEventListener('change', run); }; }
+    /* Suivre HA : `hass.themes` peut charger après coup, et le thème actif
+     * changer — on regarde donc en boucle. Mais on ne REECRIT que si la
+     * lecture a changé : sans cette garde, la racine était repeinte et la
+     * garde de contraste relancée quarante fois par minute pour rien
+     * (24/09, plan M9). `dernier` vit dans l'effet : un changement de mode,
+     * de thème ou d'apparence le rejoue depuis zéro. */
+    if (haTheme === 'FOLLOW') {
+      let dernier = signatureHaTheme(getHass());
+      const iv = setInterval(() => {
+        const sig = signatureHaTheme(getHass());
+        if (sig === dernier) return;
+        dernier = sig;
+        run();
+      }, 1500);
+      return () => { clearInterval(iv); if (mq) mq.removeEventListener('change', run); };
+    }
     return () => { if (mq) mq.removeEventListener('change', run); };
   }, [themeMode, loggiaTheme, haTheme, look]);
   // Bascule Nabu Casa automatique. Garde-fous, tous obligatoires :
@@ -13476,10 +13782,16 @@ export default function App() {
   /* Interface TACTILE — téléphone ET tablette, portrait comme paysage : la
    * classe `loggia-tactile` masque le bandeau du haut, met la sidebar en
    * tiroir et affiche la barre du bas. Le type d'appareil (pointer: coarse)
-   * décide, jamais la largeur. */
+   * décide, jamais la largeur.
+   *
+   * Le drapeau est aussi tenu en état (24/09) : le tiroir doit SAVOIR qu'il
+   * est seul à porter le profil et la cloche, et ne pas les rendre du tout
+   * sur ordinateur, où elles vivent en haut à droite. */
+  const [tactile, setTactile] = useState(false);
   useEffect(() => {
     const actif = (() => { try { return window.matchMedia('(pointer: coarse)').matches; } catch { return false; } })();
     try { document.documentElement.classList.toggle('loggia-tactile', actif); } catch {}
+    setTactile(actif);
     if (actif) setNavOpen(false); // la sidebar devient un tiroir : fermée d'office
   }, [view]);
   /* Le menu mobile se fermait au clic sur le voile, mais rien au clavier :
@@ -13664,6 +13976,14 @@ export default function App() {
     // une tablette sur des roles perimes. Le serveur la refuse maintenant ;
     // on ne la tente donc que depuis un compte qui a le droit de l'ecrire.
     if (haAdmin && hu.id && users[i].haId !== hu.id) persistUsers(users.map((u, j) => j === i ? { ...u, haId: hu.id } : u));
+    /* La reconnaissance ne PROUVE pas le code (24/09). Depuis l'ADR 0080, le
+     * composant refuse d'ecrire `loggia_active_user` vers un profil Admin sans
+     * laissez-passer : tenter ici aurait fait apparaitre un refus au demarrage,
+     * sans que personne ait rien demande. Un compte administrateur Home
+     * Assistant, lui, n'a rien a prouver. Un repli refuse, il n'elargit pas
+     * (ADR 0079) : on reste sur le profil en cours, et la bascule se fait a la
+     * main, par le code. */
+    if (!haAdmin && String(users[i].role || '').toLowerCase() === 'admin') return;
     applyUser(i);
   }, [hass, users, haAdmin]);
   // Retour haptique léger au tap sur un élément interactif (Android ; iOS web n'expose pas vibrate → seul le rebond visuel s'affiche).
@@ -13718,7 +14038,7 @@ export default function App() {
       {haLost && <div role="alert" style={BANDEAU_ALERTE}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {!haLost && discovery.echec && <div role="alert" style={BANDEAU_ALERTE}>{tr('La découverte de la maison a été interrompue — recharge la page')}</div>}
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 14, padding: '10px 16px', fontSize: 12, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
-      <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={peutEditer ? () => setEditMode(e => !e) : null} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={(() => {
+      <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={peutEditer ? () => setEditMode(e => !e) : null} tactile={tactile} users={users} userIdx={userIdx} onSwitchUser={switchUser} notifs={notifs} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={(() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
         let devCount = 0;
         if (ok) { const doms = ['light.', 'switch.', 'media_player.', 'camera.', 'climate.', 'cover.', 'vacuum.', 'lawn_mower.']; for (const id in hass.states) { if (doms.some(d => id.indexOf(d) === 0) && hass.states[id] && hass.states[id].state !== 'unavailable') devCount++; } }

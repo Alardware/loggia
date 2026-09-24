@@ -23,7 +23,7 @@ export const DISCOVERY_VERSION = 1;
 
 // Domaines pris en compte pour les capacités. Cette liste dit « ce qu'on sait
 // afficher », jamais « ce que l'utilisateur possède ».
-export const CAP_DOMAINS = [
+const CAP_DOMAINS = [
   'light', 'switch', 'sensor', 'binary_sensor', 'climate', 'cover', 'fan',
   'media_player', 'vacuum', 'lawn_mower', 'lock', 'camera', 'alarm_control_panel',
   'water_heater', 'humidifier', 'weather', 'person', 'device_tracker',
@@ -34,7 +34,7 @@ export const CAP_DOMAINS = [
 
 // Domaines qui justifient une vue spécialisée. La vue n'est proposée que si au
 // moins une entité du domaine existe (cf. capabilities().views).
-export const VIEW_CAPS = {
+const VIEW_CAPS = {
   lumieres: ['light'],
   climat: ['climate', 'water_heater'],
   volets: ['cover'],
@@ -142,7 +142,7 @@ async function registresDuComposant(hass) {
   };
 }
 
-export async function fetchRegistries(hass) {
+async function fetchRegistries(hass) {
   const errors = [];
   const duComposant = await registresDuComposant(hass);
   if (duComposant) {
