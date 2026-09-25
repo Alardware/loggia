@@ -88,5 +88,28 @@ deux rangées au-dessus du séparateur, la feuille qui s'ouvre, la bascule vers
 « Invité », le point des non-lues qui s'éteint. Puis sur ordinateur : `tactile`
 faux, bandeau visible, pied du tiroir inchangé.
 
+## Ajustement du 25/09 — l'espacement, que j'avais raté
+
+> « le bouton notification est littéralement posé sur le séparateur et l'espace
+> entre les 2 boutons est trop mince, il faut reprendre comme pour ceux en
+> dessous mode édition et alarme »
+
+Trois défauts, et la vérification de la veille ne les avait pas vus parce
+qu'elle mesurait le COMPORTEMENT — la feuille s'ouvre, la bascule agit — sans
+jamais mesurer les espaces.
+
+| | avant | après |
+|---|---|---|
+| écart entre les deux rangées | **4 px** | **8**, comme celles du dessous |
+| marge avant le séparateur | **0** — le bouton posé sur le trait | **14** (15 de l'autre côté) |
+| hauteur de la rangée Profil | **48 px** | **37**, comme ses trois voisines |
+
+La pastille de 28 px dictait la hauteur de sa rangée et la faisait dépasser de
+onze pixels. À 17 px elle tient dans la ligne de texte, et les quatre rangées
+font 37.
+
+Mesuré au téléphone après correction, et tenu par un test : un espacement qui
+ne se voit qu'à l'œil se reperd à la première retouche.
+
 Tests : 955 au vert côté JS (+7), 573 côté Python, lint propre, audit propre,
 `textes_serveur.mjs --check` à jour, `npm run build` passe.

@@ -152,7 +152,11 @@ test('le style se choisit en édition, sur sa propre ligne ; les villes par le g
   assert.ok(d.includes('const choisirStyle = (id, style) => saveGrille({ styles: { ...(grille.styles || {}), [id]: style } });'));
   assert.ok(d.includes("{id === 'calendrier' && styleDe(grille.styles, id) === 'mois' && ("), 'le globe n’existe que pour le mois');
   assert.ok(d.includes("heure: <HorlogeRail style={styleDe(grille.styles, 'heure')} hass={dashHass} />,"));
-  assert.ok(d.includes("calendrier: <CalendrierRail style={styleDe(grille.styles, 'calendrier')} hass={dashHass} calId={calRailId} evenementsJour={evenementsDuJour(aVenir, maintenantAg)} villes={grille.villes} onOpen={dc.ouvrir} />,"), 'les villes passent BRUTES : validées dans le widget, une fois par changement');
+  /* `evenements={aVenir}` s'est ajoute le 25/09 (ADR 0041, ses « non faits ») :
+   * la bande des sept jours, pour poser un point sous ceux qui portent un
+   * rendez-vous et pouvoir en choisir un. `evenementsJour` reste le jour
+   * courant — c'est ce que la tuile Agenda montre par defaut. */
+  assert.ok(d.includes("calendrier: <CalendrierRail style={styleDe(grille.styles, 'calendrier')} hass={dashHass} calId={calRailId} evenementsJour={evenementsDuJour(aVenir, maintenantAg)} evenements={aVenir} villes={grille.villes} onOpen={dc.ouvrir} />,"), 'les villes passent BRUTES : validées dans le widget, une fois par changement');
   assert.ok(d.includes('{villesOuvertes && <FeuilleVilles villes={villesDe(grille.villes)} onEnregistrer={(v) => saveGrille({ villes: v })} onClose={() => setVillesOuvertes(false)} />}'));
 });
 

@@ -16,7 +16,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { tr } from './i18n.js';
 import { weatherEntity, WeatherIco, haWeatherLabel } from './wxutil.jsx';
-import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour } from './meteo.js';
+import { Fi } from './ui.jsx';
+import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour, pluieEtVent } from './meteo.js';
 import { CARTE_RAIL } from './styles.js';
 
 /* La surface, le filet et l'ombre de `railPanel` (App.jsx) — « En ce moment »,
@@ -61,6 +62,7 @@ export function CarteMeteo({ hass, onOpen = null }) {
   const mode = modeMeteo(st.state, nuit);
   const ciel = haWeatherLabel(st.state);
   const extremes = extremesDuJour(parJour, maintenant);
+  const pluie = pluieEtVent(parJour, a, maintenant);
   const heures = heuresMeteo({ etat: st, previsions: parHeure, maintenant, soleil });
   const nom = a.friendly_name || tr('Météo');
   const ouvrir = () => { if (onOpen) onOpen(id); };
@@ -83,6 +85,29 @@ export function CarteMeteo({ hass, onOpen = null }) {
           {extremes && <div style={{ fontSize: 12, fontWeight: 600, color: DOUX, marginTop: 3 }}>{[tr('Max {n}', { n: extremes.max }), extremes.min && tr('Min {n}', { n: extremes.min })].filter(Boolean).join(' · ')}</div>}
         </div>
       </div>
+      {/* La pluie attendue et le vent (ADR 0038, son « non fait »). La capture
+        * du 17/09 ne les montrait pas — c'est pour ça qu'ils avaient attendu.
+        * Une ligne discrète sous l'en-tête, jamais une colonne de plus : la
+        * disposition de la capture ne bouge pas.
+        *
+        * On n'affiche QUE ce que le service donne. Le cumul ne sort pas seul,
+        * sans probabilité : « 0 mm » sous un ciel ensoleillé est du bruit. */}
+      {(pluie.proba != null || pluie.vent != null) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 9, fontSize: 12, fontWeight: 600, color: DOUX }}>
+          {pluie.proba != null && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <Fi i="raindrops" size={12} />
+              {pluie.proba + ' %' + (pluie.cumul ? ' · ' + tr('{n} mm', { n: pluie.cumul }) : '')}
+            </span>
+          )}
+          {pluie.vent != null && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <Fi i="wind" size={12} />
+              {pluie.vent + ' ' + pluie.uniteVent}
+            </span>
+          )}
+        </div>
+      )}
       {heures.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + heures.length + ', minmax(0, 1fr))', gap: 2, marginTop: 12, paddingTop: 11, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
           {heures.map(h => (

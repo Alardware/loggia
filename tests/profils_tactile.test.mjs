@@ -43,6 +43,25 @@ test('le tiroir porte le profil et la cloche, au TACTILE seulement', () => {
     'les rangees passent avant « Mode edition », pas apres');
 });
 
+test('les deux rangees respirent comme « Mode edition » et « Alarme » dessous', () => {
+  /* Retour du 25/09 : « le bouton notification est litteralement pose sur le
+   * separateur et l'espace entre les 2 boutons est trop mince ». C'etait vrai
+   * trois fois — ecart de 4 au lieu de 8, aucune marge basse (le bouton
+   * touchait le trait), et une pastille de 28 px qui faisait depasser la
+   * rangee profil de onze pixels.
+   *
+   * MESURE au telephone, apres correction : les quatre rangees font 37 px,
+   * les ecarts valent 8, et il reste 14 px avant le trait pour 15 apres. */
+  const side = bloc('function Sidebar(', NL + '/* ── Recherche globale');
+  assert.ok(side.includes("gap: 8, marginTop: 'auto', paddingTop: 10, paddingBottom: 14 }}"),
+    'le bloc des deux rangees a perdu son ecart de 8 ou sa marge basse de 14');
+  assert.ok(side.includes("width: 17, height: 17, borderRadius: '50%', background: userBg(profilActif)"),
+    'la pastille du profil dicte de nouveau la hauteur de sa rangee');
+  // Le bloc d'en dessous, celui qui sert de reference.
+  assert.ok(side.includes("gap: 8, marginTop: tactile && (users.length > 0 || notifs.length > 0) ? 0 : 'auto', paddingTop: 14"),
+    'la reference a change : remesurer les deux blocs ensemble');
+});
+
 test('la bascule passe par onSwitchUser — donc par le code pour un Admin', () => {
   const feuille = bloc('function FeuilleProfils(', NL + 'function FeuilleNotifications');
   assert.ok(feuille.includes('onSwitchUser(i)'), 'la feuille appelle switchUser');

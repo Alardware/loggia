@@ -92,3 +92,32 @@ export function extremesDuJour(previsionsJour, maintenant) {
   if (!p || degres(p.temperature) == null) return null;
   return { max: degres(p.temperature), min: degres(p.templow) };
 }
+
+/* La pluie attendue et le vent — le « non fait » de l'ADR 0038 (25/09).
+ *
+ * Trois valeurs, TOUTES facultatives, et aucune n'est inventée : la
+ * probabilité et le cumul viennent de la prévision du JOUR (la même entrée que
+ * `extremesDuJour`, même règle de date locale), le vent de l'entité. Un
+ * service qui ne donne pas la probabilité, ou pas le vent, laisse simplement
+ * sa valeur à `null` — la carte n'affiche que ce qui existe.
+ *
+ * Un cumul de zéro n'est PAS rien : c'est l'information « il ne pleuvra pas ».
+ * Mais on ne l'affiche pas seul, sans probabilité : une ligne « 0 mm » sur une
+ * carte qui annonce « Ensoleillé » est du bruit. C'est l'appelant qui tranche,
+ * avec les trois valeurs sous les yeux. */
+export function pluieEtVent(previsionsJour, attributs, maintenant) {
+  const a = attributs || {};
+  const auj = new Date(maintenant);
+  const memeJour = (t) => { const d = new Date(t); return d.getFullYear() === auj.getFullYear() && d.getMonth() === auj.getMonth() && d.getDate() === auj.getDate(); };
+  const p = (previsionsJour || []).find(x => { const t = Date.parse((x && x.datetime) || ''); return !isNaN(t) && memeJour(t); }) || {};
+  const nombre = (v) => { const n = Number(v); return (v == null || v === '' || isNaN(n)) ? null : n; };
+  const proba = nombre(p.precipitation_probability);
+  const cumul = nombre(p.precipitation);
+  const vent = nombre(a.wind_speed);
+  return {
+    proba: proba == null ? null : Math.max(0, Math.min(100, Math.round(proba))),
+    cumul: cumul == null ? null : Math.round(cumul * 10) / 10,
+    vent: vent == null ? null : Math.round(vent),
+    uniteVent: a.wind_speed_unit || 'km/h',
+  };
+}

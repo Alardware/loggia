@@ -73,6 +73,19 @@ const config = {
   // plutôt qu'à leur découverte au premier chargement de page.
   optimizeDeps: { include: ['react', 'react-dom', 'three'] },
   server: {
+    /* Le port vient de l'ENVIRONNEMENT quand il est donné (25/09).
+     *
+     * Plusieurs conversations travaillent parfois sur ce dépôt en même temps,
+     * chacune avec son serveur : la première prend 5173, la suivante se
+     * heurtait à elle et il a fallu inventer une entrée « -5174 », qui se
+     * heurte à son tour. L'outil d'aperçu sait attribuer un port libre et le
+     * passe par `PORT` — encore faut-il que Vite le lise, ce qu'il ne fait pas
+     * de lui-même.
+     *
+     * `strictPort` reste faux : sans `PORT`, Vite part de 5173 et prend le
+     * premier port libre au lieu d'échouer. */
+    port: process.env.PORT ? Number(process.env.PORT) : undefined,
+    strictPort: false,
     // Transformer les gros modules avant la première requête du navigateur :
     // App.jsx est un monolithe, son premier chargement est le goulot.
     warmup: { clientFiles: ['./src/main.jsx', './src/App.jsx', './src/ui.jsx', './src/index.css'] },

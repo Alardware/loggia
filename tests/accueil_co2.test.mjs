@@ -54,11 +54,32 @@ test('l’étendue de la journée comprend le moment', () => {
 
 test('la pièce la plus chargée, la seule qui compte', () => {
   const c = [{ id: 'sensor.a', piece: 'Salon', valeur: 640 }, { id: 'sensor.b', piece: 'Chambre', valeur: '1240' }, { id: 'sensor.c', piece: 'Bureau', valeur: null }, { id: '', piece: 'Sans', valeur: 9000 }];
-  assert.deepEqual(A.pireCapteur(c), { id: 'sensor.b', piece: 'Chambre', valeur: 1240 });
-  assert.deepEqual(A.pireCapteur([{ id: 'sensor.a', valeur: 5 }]), { id: 'sensor.a', piece: null, valeur: 5 });
+  assert.deepEqual(A.pireCapteur(c), { id: 'sensor.b', piece: 'Chambre', valeur: 1240, seuil: 1400, rapport: 1240 / 1400 });
+  assert.deepEqual(A.pireCapteur([{ id: 'sensor.a', valeur: 5 }]), { id: 'sensor.a', piece: null, valeur: 5, seuil: 1400, rapport: 5 / 1400 });
   assert.equal(A.pireCapteur([{ id: 'sensor.c', piece: 'Bureau', valeur: 'unknown' }]), null);
   assert.equal(A.pireCapteur([]), null);
   assert.equal(A.pireCapteur(null), null);
+});
+
+test('« le pire » = le plus loin de SON seuil, pas le plus gros chiffre', () => {
+  /* Le « non fait » de l'ADR 0044 (25/09). Une chambre reglee a 1 000 qui en
+   * affiche 1 100 est plus urgente qu'un sejour regle a 1 600 qui en affiche
+   * 1 400 — meme si 1 400 est le plus gros nombre des deux. */
+  const deux = [
+    { id: 'sensor.sejour', piece: 'Séjour', valeur: 1400, seuil: 1600 },
+    { id: 'sensor.chambre', piece: 'Chambre', valeur: 1100, seuil: 1000 },
+  ];
+  assert.equal(A.pireCapteur(deux).piece, 'Chambre', 'le plus gros chiffre n’est pas le plus urgent');
+  assert.equal(A.pireCapteur(deux).seuil, 1000, 'la carte annonce le seuil de CETTE piece');
+
+  // SANS seuil par piece, le classement est EXACTEMENT celui d'avant.
+  const sansSeuil = deux.map(({ seuil, ...r }) => r); // eslint-disable-line no-unused-vars
+  assert.equal(A.pireCapteur(sansSeuil).piece, 'Séjour', 'sans reglage, le plus gros chiffre gagne, comme avant');
+
+  // Le seuil de la maison sert de defaut, et un seuil absurde est ignore.
+  assert.equal(A.pireCapteur([{ id: 'x', valeur: 900 }], 1000).seuil, 1000);
+  assert.equal(A.pireCapteur([{ id: 'x', valeur: 900, seuil: 0 }], 1000).seuil, 1000, 'un seuil a zero retombe sur la maison');
+  assert.equal(A.pireCapteur([{ id: 'x', valeur: 900, seuil: 'beaucoup' }]).seuil, 1400, 'un seuil illisible retombe sur la maison');
 });
 
 test('le seuil est celui de la veille du serveur, sinon celui de la maison', () => {
@@ -89,8 +110,13 @@ test('le branchement : en option dans le rail, rien sans capteur, la couleur dit
   assert.deepEqual(WIDGETS_OPTION, ['heure', 'calendrier', 'co2']);
   const app = lire('src', 'App.jsx');
   assert.ok(app.includes("const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'calendrier', 'rappels', 'agenda'];"));
-  assert.ok(app.includes("co2: co2Pire ? <Co2Rail hass={dashHass} capteur={co2Pire} seuil={seuilCo2(veillesEtat)} action={co2Action} onAgir={aerer} /> : null,"), 'sans capteur, pas de section — même en option');
-  assert.ok(app.includes("a.rooms.filter(r => r.co2Id).map(r => ({ id: r.co2Id, piece: r.name, valeur: r.co2 }))"), 'les capteurs sont ceux des pièces');
+  /* Le seuil affiché est celui de la piece retenue, pas celui de la maison
+   * (ADR 0044, son « non fait » — 25/09) : une piece peut avoir le sien, et
+   * `pireCapteur` classe alors sur l'ecart au seuil. Sans reglage, chaque
+   * piece herite de la maison et le rendu est identique. */
+  assert.ok(app.includes("co2: co2Pire ? <Co2Rail hass={dashHass} capteur={co2Pire} seuil={co2Pire.seuil} action={co2Action} onAgir={aerer} /> : null,"), 'sans capteur, pas de section — même en option');
+  assert.ok(app.includes("a.rooms.filter(r => r.co2Id).map(r => ({ id: r.co2Id, piece: r.name, valeur: r.co2, seuil: r.co2Seuil }))"), 'les capteurs sont ceux des pièces, avec leur seuil');
+  assert.ok(app.includes('const co2Maison = seuilCo2(veillesEtat);'), 'le seuil de la maison sert de defaut a qui n’en a pas');
   assert.ok(app.includes("const aerer = (act) => commanderService(dashHass, act.ids, act.domaine, act.service, { entity_id: act.ids });"));
   const vue = lire('src', 'widgetsrail.jsx');
   const carte = vue.slice(vue.indexOf('export function Co2Rail('));

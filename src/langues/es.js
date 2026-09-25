@@ -2353,4 +2353,9 @@ export default {
   'Famille nombreuse': 'Familia numerosa',
   // — la vue Volets redevient choisissable (plan S2, 24/09)
   'modes et planning': 'modos y planificación',
+  // — pluie et vent sur la meteo du rail (ADR 0038, 25/09)
+  '{n} mm': '{n} mm',
+  // — un seuil de CO2 par piece (ADR 0044, 25/09)
+  'Seuil CO₂': 'Umbral de CO₂',
+  '1400 par défaut': '1400 por defecto',
 };

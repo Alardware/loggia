@@ -426,12 +426,18 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
       {/* Profil et notifications : AU-DESSUS du séparateur, et au tactile
         * seulement — sur ordinateur ils vivent en haut à droite, et les
         * répéter ici serait un réglage en double. */}
+      {/* Même respiration que « Mode édition » et « Alarme » dessous : le même
+        * écart de 8, et une marge basse de 14 pour ne pas venir poser le
+        * bouton SUR le trait du séparateur (retour du 25/09). */}
       {tactile && (users.length > 0 || notifs.length > 0) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 'auto', paddingTop: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto', paddingTop: 10, paddingBottom: 14 }}>
           {users.length > 0 && (
             <button onClick={() => setProfilsOuverts(true)} aria-haspopup="dialog"
               style={{ ...ligneTiroir, gap: 10 }}>
-              <span style={{ width: 28, height: 28, borderRadius: '50%', background: userBg(profilActif), flexShrink: 0 }} />
+              {/* 17 px, pas 28 : la pastille dictait la hauteur de la rangée,
+                * qui dépassait ses trois voisines de onze pixels. À 17 elle
+                * tient dans la ligne de texte, et les quatre font 37. */}
+              <span style={{ width: 17, height: 17, borderRadius: '50%', background: userBg(profilActif), flexShrink: 0 }} />
               <span className="o-side-text" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomProfil(profilActif.name)}</span>
               <svg className="o-side-text" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: .6 }}><path d="M9 18l6-6-6-6" /></svg>
             </button>
@@ -5899,9 +5905,19 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
           * faire — le mot s'efface, l'icone reste, les puces se partagent la
           * largeur (17/09) ; le titre juste dessous dit le filtre choisi. */}
         <div className="o-favrow o-objfiltres" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}>
-          {filtres.map(f => { const on = f.id === actuel; return (
-            <button key={f.id} className="o-objfiltre" onClick={() => setChoix(f.id)} aria-pressed={on} aria-label={f.label} title={f.label} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>
+          {/* Le compte sur chaque puce (ADR 0040, resté « non fait ») : savoir
+            * ce qu'une famille porte AVANT de la toucher. Au téléphone les
+            * puces n'ont que leur icône et se partagent la largeur sur UNE
+            * ligne — le nombre s'efface avec le mot, et `aria-label` le dit à
+            * toutes les tailles. */}
+          {filtres.map(f => { const on = f.id === actuel;
+            const n = f.id === 'tous' ? objets.length : objets.filter(o => o.filtres.indexOf(f.id) >= 0).length;
+            return (
+            <button key={f.id} className="o-objfiltre" onClick={() => setChoix(f.id)} aria-pressed={on} aria-label={f.label + ' · ' + trN(n, tr('{n} appareil'), tr('{n} appareils'))} title={f.label} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>
               {f.prise ? <PlugIcon size={13} /> : f.ico ? <Ico name={f.ico} size={14} /> : <Fi i={f.fi} size={13} />}<span className="o-objfiltre-mot">{f.label}</span>
+              {/* `currentColor` : la puce choisie passe en bleu plein avec un
+                * texte blanc — un jeton figé y deviendrait illisible. */}
+              <span className="o-objfiltre-nb" aria-hidden="true" style={{ fontWeight: 800, opacity: .55 }}>{n}</span>
             </button>); })}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
@@ -7898,7 +7914,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           // Le CO2 (ADR 0044) : la piece la plus chargee ; le seuil et la
           // ventilation viennent de la veille du serveur, les volets de la zone
           // du capteur. Sans capteur, pas de section — meme en option.
-          const co2Pire = pireCapteur((a && a.rooms) ? a.rooms.filter(r => r.co2Id).map(r => ({ id: r.co2Id, piece: r.name, valeur: r.co2 })) : []);
+          /* Chaque piece apporte SON seuil s'il est regle (ADR 0044) ; le
+           * classement se fait alors sur l'ecart au seuil, pas sur les ppm.
+           * Sans reglage, tout le monde partage celui de la maison et le
+           * resultat est celui d'avant. */
+          const co2Maison = seuilCo2(veillesEtat);
+          const co2Pire = pireCapteur((a && a.rooms) ? a.rooms.filter(r => r.co2Id).map(r => ({ id: r.co2Id, piece: r.name, valeur: r.co2, seuil: r.co2Seuil })) : [], co2Maison);
           const co2Action = co2Pire ? actionAerer({ ventilation: ventilationVeille(veillesEtat, etatsAcc), volets: voletsDeLaZone(LOGGIA_INDEX, etatsAcc, co2Pire.id) }) : null;
           const aerer = (act) => commanderService(dashHass, act.ids, act.domaine, act.service, { entity_id: act.ids });
           const secsRail = {
@@ -7907,8 +7928,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             moment: railMoment, rappels: railRappels, agenda: railAgenda,
             // En option (ADR 0041) : `Sec` ne les monte que si on les a ajoutes.
             heure: <HorlogeRail style={styleDe(grille.styles, 'heure')} hass={dashHass} />,
-            calendrier: <CalendrierRail style={styleDe(grille.styles, 'calendrier')} hass={dashHass} calId={calRailId} evenementsJour={evenementsDuJour(aVenir, maintenantAg)} villes={grille.villes} onOpen={dc.ouvrir} />,
-            co2: co2Pire ? <Co2Rail hass={dashHass} capteur={co2Pire} seuil={seuilCo2(veillesEtat)} action={co2Action} onAgir={aerer} /> : null,
+            calendrier: <CalendrierRail style={styleDe(grille.styles, 'calendrier')} hass={dashHass} calId={calRailId} evenementsJour={evenementsDuJour(aVenir, maintenantAg)} evenements={aVenir} villes={grille.villes} onOpen={dc.ouvrir} />,
+            co2: co2Pire ? <Co2Rail hass={dashHass} capteur={co2Pire} seuil={co2Pire.seuil} action={co2Action} onAgir={aerer} /> : null,
           };
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
           const renduRail = ordreDe('rail').map(id => secsRail[id] ? Sec('rail', id, secsRail[id]) : null).filter(Boolean);
@@ -12711,7 +12732,7 @@ function deriveAccueil(hass, cfg, resolved) {
   // Conso maison estimée = net + prod connue (sera exacte quand l'onduleur toit sera intégré)
   const consoW = (netW != null) ? Math.max(0, netW + (solarW || 0)) : null;
   const autoPct = (consoW != null && consoW > 0) ? Math.min(100, Math.round((solarW || 0) / consoW * 100)) : ((solarW || 0) > 0 ? 100 : 0);
-  const rooms = (cfg.rooms || []).map(r => ({ name: r.room, area: r.area || null, icon: r.icon || null, lights: (r.haid && r.haid.lights) || [], temp: num(r.haid && r.haid.temp), hum: num(r.haid && r.haid.humidity), co2: num(r.haid && r.haid.co2), tempId: r.haid && r.haid.temp, humId: r.haid && r.haid.humidity, co2Id: r.haid && r.haid.co2 }));
+  const rooms = (cfg.rooms || []).map(r => ({ name: r.room, area: r.area || null, icon: r.icon || null, lights: (r.haid && r.haid.lights) || [], temp: num(r.haid && r.haid.temp), hum: num(r.haid && r.haid.humidity), co2: num(r.haid && r.haid.co2), tempId: r.haid && r.haid.temp, humId: r.haid && r.haid.humidity, co2Id: r.haid && r.haid.co2, co2Seuil: num(r.haid && r.haid.co2seuil) }));
   const indoor = rooms.filter(r => !estDehors(r.name));
   const avg = arr => { const x = arr.filter(v => v != null); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : null; };
   const inTemp = avg(indoor.map(r => r.temp)), inHum = avg(indoor.map(r => r.hum));

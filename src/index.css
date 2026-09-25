@@ -292,7 +292,10 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 @media (max-width: 560px) {
   .o-objfiltres { gap: 6px !important; overflow-x: visible !important; padding-bottom: 2px; }
   .o-objfiltres > .o-objfiltre { flex: 1 1 0 !important; min-width: 0; padding: 11px 0 !important; }
-  .o-objfiltre-mot { display: none; }
+  /* Le compte part avec le mot : à cette largeur les puces n'ont que leur
+   * icône et se partagent la ligne — un nombre seul à côté d'une icône se
+   * lirait mal, et `aria-label` le porte de toute façon (ADR 0040, 25/09). */
+  .o-objfiltre-mot, .o-objfiltre-nb { display: none; }
 }
 /* Héros « En ce moment » : la carte du catalogue remplit le gabarit 184 px. */
 .o-hero > * { height: 100%; box-sizing: border-box; }

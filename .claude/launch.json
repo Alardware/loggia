@@ -8,22 +8,16 @@
         "run",
         "dev"
       ],
-      "url": "http://localhost:5173",
-      "port": 5173
+      "autoPort": true
     },
     {
       "name": "loggia-dev-5174",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
-        "dev",
-        "--",
-        "--port",
-        "5174",
-        "--strictPort"
+        "dev"
       ],
-      "url": "http://localhost:5174",
-      "port": 5174
+      "autoPort": true
     }
   ]
 }

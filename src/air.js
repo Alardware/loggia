@@ -59,12 +59,24 @@ export function etendue(barres, actuel = null) {
 }
 
 /** Le capteur le plus chargé : [{id, piece, valeur}] → celui-là, ou null. */
-export function pireCapteur(capteurs) {
+export function pireCapteur(capteurs, seuilMaison = null) {
+  /* « Le pire » veut dire LE PLUS LOIN DE SON SEUIL, pas le plus haut en ppm
+   * (ADR 0044, son « non fait » — 25/09). Une chambre réglée à 1 000 ppm qui
+   * en affiche 1 100 est plus urgente qu'un séjour réglé à 1 600 qui en
+   * affiche 1 400, même si le second chiffre est plus gros.
+   *
+   * Sans seuil par pièce — c'est le cas par défaut — tout le monde partage
+   * celui de la maison, les rapports sont donc proportionnels aux valeurs et
+   * le classement est EXACTEMENT celui d'avant. Rien ne bouge pour qui n'a
+   * rien réglé. */
   let pire = null;
   (capteurs || []).forEach(c => {
     const v = c && c.id ? nombre(c.valeur) : null;
     if (v == null) return;
-    if (!pire || v > pire.valeur) pire = { id: c.id, piece: c.piece || null, valeur: v };
+    const s = nombre(c.seuil);
+    const seuil = (s != null && s > 0) ? Math.round(s) : (seuilMaison || SEUIL_CO2);
+    const rapport = v / seuil;
+    if (!pire || rapport > pire.rapport) pire = { id: c.id, piece: c.piece || null, valeur: v, seuil, rapport };
   });
   return pire;
 }

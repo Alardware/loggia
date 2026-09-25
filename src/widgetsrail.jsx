@@ -15,7 +15,7 @@
  * soleil ; pas de météo, pas de température sous les aiguilles.
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { tr, locale } from './i18n.js';
+import { tr, trN, locale } from './i18n.js';
 import { BottomSheet, Fi, ChampSuggere, TitreFeuille } from './ui.jsx';
 import { weatherEntity, WeatherIco } from './wxutil.jsx';
 import { degres, estNuit, modeMeteo } from './meteo.js';
@@ -24,6 +24,7 @@ import {
   prochainSoleil, resumeAgendaDuJour, fuseauValide, villesDe, VILLES_MAX,
 } from './horloge.js';
 import { pointsHistorique, barresJournee, etendue, reperesAxe } from './air.js';
+import { cleJour, comptesParJour, evenementsDuJour } from './agenda.js';
 import { CARTE_RAIL, petitesCapitales } from './styles.js';
 
 /* La surface des cartes du rail (voir `railPanel` dans App.jsx et cartemeteo.jsx). */
@@ -117,13 +118,27 @@ const pastilleJour = (n, auj, taille, fond, classe = null) => (
     fontSize: taille >= 28 ? 12 : 11.5, fontWeight: auj ? 800 : 600, fontVariantNumeric: 'tabular-nums', color: auj ? 'var(--o-text)' : 'var(--o-text1)' }}>{n}</span>
 );
 
-function CalendrierSemaine({ hass, calId, evenementsJour, onOpen }) {
+function CalendrierSemaine({ hass, calId, evenementsJour, evenements = null, onOpen }) {
   const t = useMaintenant(60000);
   const d = new Date(t);
   const S = (hass && hass.states) || {};
   const soleil = prochainSoleil(S['sun.sun'] || null, t);
-  const resume = resumeAgendaDuJour(evenementsJour);
   const jours = semaineDe(d, premierJourSemaine(locale()));
+  /* Un point sous les jours qui portent un rendez-vous, et un jour qu'on
+   * choisit — les deux « non faits » de l'ADR 0041 (25/09).
+   *
+   * Le compte vient de la bande entière (`evenements`), pas du seul jour
+   * courant : c'est ce qui manquait. La prop reste FACULTATIVE — sans elle,
+   * pas de point, et la tuile Agenda garde son jour. Le calendrier ne lit que
+   * sept jours : un point n'apparaît donc que sur la semaine lue, jamais
+   * au-delà, et c'est mieux que d'en inventer.
+   *
+   * Choisir un jour ne change QUE la tuile du dessus. Retoucher le même jour
+   * revient à aujourd'hui : on ne se retrouve pas coincé sur un mardi. */
+  const [jourChoisi, setJourChoisi] = useState(null);
+  const comptes = evenements ? comptesParJour(evenements, jours.map(j => j.date)) : {};
+  const duJour = (jourChoisi && evenements) ? evenementsDuJour(evenements, jourChoisi) : evenementsJour;
+  const resume = resumeAgendaDuJour(duJour);
   const ligneAgenda = resume.prochain
     ? (resume.prochain.start && resume.prochain.start.dateTime ? heureLocale(new Date(resume.prochain.start.dateTime)) : tr('journée')) + ' · ' + (resume.prochain.summary || tr('Événement'))
     : tr('Aucun événement aujourd’hui');
@@ -147,12 +162,24 @@ function CalendrierSemaine({ hass, calId, evenementsJour, onOpen }) {
     <div className="o-w-temps" style={{ ...CARTE_RAIL, padding: 10 }}>
       {tuiles.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + tuiles.length + ', minmax(0, 1fr))', gap: 8, marginBottom: 10 }}>{tuiles}</div>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 2, padding: '0 2px 2px' }}>
-        {jours.map(j => (
-          <div key={j.date.getTime()} aria-current={j.aujourdhui ? 'date' : undefined} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-            {pastilleJour(j.date.getDate(), j.aujourdhui, 30, 'var(--o-s2)')}
+        {jours.map(j => { const n = comptes[cleJour(j.date)] || 0; const choisi = !!jourChoisi && cleJour(jourChoisi) === cleJour(j.date); return (
+          /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
+          <div key={j.date.getTime()} aria-current={j.aujourdhui ? 'date' : undefined}
+            role={evenements ? 'button' : undefined} tabIndex={evenements ? 0 : undefined}
+            aria-label={evenements ? j.date.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }) + (n ? ' · ' + trN(n, tr('{n} événement'), tr('{n} événements')) : '') : undefined}
+            onClick={evenements ? () => setJourChoisi(p => (p && cleJour(p) === cleJour(j.date)) ? null : j.date) : undefined}
+            onKeyDown={evenements ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setJourChoisi(p => (p && cleJour(p) === cleJour(j.date)) ? null : j.date); } } : undefined}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: evenements ? 'pointer' : 'default' }}>
+            {pastilleJour(j.date.getDate(), j.aujourdhui || choisi, 30, 'var(--o-s2)')}
+            {/* Le point ne PREND PAS de place : la rangée garderait deux
+              * hauteurs selon qu'un jour porte un rendez-vous ou non. Il se
+              * pose dans un creux de 4 px, toujours là, coloré ou vide. */}
+            <span aria-hidden="true" style={{ height: 4, display: 'flex', alignItems: 'center', marginTop: -3 }}>
+              <span style={{ width: 4, height: 4, borderRadius: '50%', background: n ? 'var(--o-accent)' : 'transparent' }} />
+            </span>
             <span style={{ ...PETITES_CAPITALES, color: j.aujourdhui ? 'var(--o-text)' : 'var(--o-text3)' }}>{sansPoint(j.date.toLocaleDateString(locale(), { weekday: 'short' }))}</span>
           </div>
-        ))}
+        ); })}
       </div>
     </div>
   );
@@ -205,10 +232,10 @@ function CalendrierMois({ villes }) {
   );
 }
 
-export function CalendrierRail({ style = 'semaine', hass = null, calId = null, evenementsJour = null, villes = null, onOpen = null }) {
+export function CalendrierRail({ style = 'semaine', hass = null, calId = null, evenementsJour = null, evenements = null, villes = null, onOpen = null }) {
   return style === 'mois'
     ? <CalendrierMois villes={villes} />
-    : <CalendrierSemaine hass={hass} calId={calId} evenementsJour={evenementsJour} onOpen={onOpen} />;
+    : <CalendrierSemaine hass={hass} calId={calId} evenementsJour={evenementsJour} evenements={evenements} onOpen={onOpen} />;
 }
 
 /* ════════════ LES VILLES DU CALENDRIER « MOIS » ════════════ */

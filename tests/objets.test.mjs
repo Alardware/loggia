@@ -156,10 +156,18 @@ test('la vue Objets dessine les cartes de la piece, une par appareil, derriere d
   assert.ok(filtres.includes("{ id: 'prises', label: tr('Prises'), prise: true },"), 'la prise garde son icone de prise');
   assert.deepEqual(ids.slice(2), OBJ_ORDRE, 'les puces suivent l’ordre du module, une pour une');
   // Au telephone : l'icone seule, les puces se partagent la largeur — une ligne, sans defilement.
-  assert.ok(vue.includes('<span className="o-objfiltre-mot">{f.label}</span>') && vue.includes('aria-label={f.label} title={f.label}'), 'le mot peut s’effacer : il reste lisible par un lecteur d’ecran et au survol');
+  /* Le mot peut s'effacer : il reste lisible par un lecteur d'ecran et au
+   * survol. Depuis le 25/09 (ADR 0040, son « non fait »), l'`aria-label` porte
+   * AUSSI le compte de la famille — le nombre s'efface avec le mot, mais pas
+   * pour qui ecoute la page. */
+  assert.ok(vue.includes('<span className="o-objfiltre-mot">{f.label}</span>'), 'le mot a sa classe');
+  assert.ok(vue.includes("aria-label={f.label + ' · ' + trN(n, tr('{n} appareil'), tr('{n} appareils'))} title={f.label}"),
+    'l’etiquette dit la famille ET ce qu’elle porte');
+  assert.ok(vue.includes("const n = f.id === 'tous' ? objets.length : objets.filter(o => o.filtres.indexOf(f.id) >= 0).length;"),
+    '« Tous » compte tout, une famille compte les siens');
   const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
   const tel = css.slice(css.indexOf('.o-objfiltres { gap: 6px'));
-  assert.ok(css.includes('.o-objfiltres > .o-objfiltre { flex: 1 1 0 !important; min-width: 0;') && css.includes('.o-objfiltre-mot { display: none; }') && tel.indexOf('overflow-x: visible') > 0, 'la regle du telephone');
+  assert.ok(css.includes('.o-objfiltres > .o-objfiltre { flex: 1 1 0 !important; min-width: 0;') && css.includes('.o-objfiltre-mot, .o-objfiltre-nb { display: none; }') && tel.indexOf('overflow-x: visible') > 0, 'la regle du telephone');
   assert.ok(css.lastIndexOf('@media (max-width: 560px)', css.indexOf('.o-objfiltres { gap: 6px')) > css.indexOf('.o-favrow::-webkit-scrollbar-track'), 'elle ne vaut qu’au telephone');
   const m = src.indexOf('function objetsDeLaMaison(');
   const maison = src.slice(m, src.indexOf(String.fromCharCode(10) + '}', m));

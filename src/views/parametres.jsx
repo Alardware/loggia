@@ -791,7 +791,7 @@ function useEntConfig(hass) {
   const avecCle = (a) => a.map((r, i) => ({ ...r, _k: r._k || 'k' + i + '_' + Math.random().toString(36).slice(2, 6) }));
   // Lecture de la configuration courante, telle que le formulaire l'affiche.
   const readEnt = () => ({
-    rooms: avecCle(normRooms(cfgVal('loggia_rooms', null)).map(r => ({ room: r.room || '', icon: r.icon || null, teinte: r.teinte || null, temp: (r.haid && r.haid.temp) || '', humidity: (r.haid && r.haid.humidity) || '', co2: (r.haid && r.haid.co2) || '',
+    rooms: avecCle(normRooms(cfgVal('loggia_rooms', null)).map(r => ({ room: r.room || '', icon: r.icon || null, teinte: r.teinte || null, temp: (r.haid && r.haid.temp) || '', humidity: (r.haid && r.haid.humidity) || '', co2: (r.haid && r.haid.co2) || '', co2seuil: (r.haid && r.haid.co2seuil) != null ? String(r.haid.co2seuil) : '',
       lights: Array.isArray(r.haid && r.haid.lights) ? r.haid.lights.join(', ') : ((r.haid && r.haid.lights) || '') }))),
     energy: { ...enHaids(), ...(cfgVal('loggia_energyHaids', null) || {}) },
     alarm: secAlarm() || '',
@@ -836,7 +836,7 @@ function useEntConfig(hass) {
       cfgSet({
         // L'icone et la teinte choisies dans la fiche de l'accueil (v3.23)
         // ne se reglent pas ici, mais ne doivent pas s'y perdre.
-        loggia_rooms: ent.rooms.filter(r => r.room).map(r => ({ room: r.room, ...(r.icon ? { icon: r.icon } : {}), ...(r.teinte ? { teinte: r.teinte } : {}), haid: { temp: r.temp || null, humidity: r.humidity || null, co2: r.co2 || null,
+        loggia_rooms: ent.rooms.filter(r => r.room).map(r => ({ room: r.room, ...(r.icon ? { icon: r.icon } : {}), ...(r.teinte ? { teinte: r.teinte } : {}), haid: { temp: r.temp || null, humidity: r.humidity || null, co2: r.co2 || null, co2seuil: (Number(r.co2seuil) > 0 ? Math.round(Number(r.co2seuil)) : null),
           // Vide = toutes les lumieres de la piece. Une liste explicite ne
           // vaut que pour le bouton de la carte, pas pour le comptage.
           lights: String(r.lights || '').split(',').map(s => s.trim()).filter(Boolean) } })),
@@ -919,7 +919,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
           <button onClick={detecter} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(var(--o-ok-rgb),.13)', border: '1px solid rgba(var(--o-ok-rgb),.3)', color: 'var(--o-ok)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}><Fi i="magic-wand" size={13} />{tr('Détecter automatiquement')}</button>
         </div>
       )}
-      {has('rooms') && <EntSection sugg={sugg} title={tr('Pièces (Accueil)')} desc={tr("Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce.")} cols={[{ k: 'room', label: tr('Pièce'), ph: tr('Séjour'), flex: .8 }, { k: 'temp', label: tr('Température'), ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: tr('Humidité'), ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }, { k: 'lights', label: tr('Lampes du bouton'), ph: tr('toutes (light.a, light.b)'), domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
+      {has('rooms') && <EntSection sugg={sugg} title={tr('Pièces (Accueil)')} desc={tr("Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce.")} cols={[{ k: 'room', label: tr('Pièce'), ph: tr('Séjour'), flex: .8 }, { k: 'temp', label: tr('Température'), ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: tr('Humidité'), ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }, { k: 'co2seuil', label: tr('Seuil CO₂'), ph: tr('1400 par défaut'), flex: .55 }, { k: 'lights', label: tr('Lampes du bouton'), ph: tr('toutes (light.a, light.b)'), domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
       {has('energy') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Énergie')}</div>

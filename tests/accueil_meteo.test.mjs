@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
  * « 16.2° » sur un runner anglais. Elle est fixee AVANT le premier import (voir
  * tests/systeme_hoas.test.mjs). */
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
-const { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour } = await import('../src/meteo.js');
+const { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour, pluieEtVent } = await import('../src/meteo.js');
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
@@ -106,6 +106,38 @@ test('les heures : « Maint. », puis les prochaines heures pleines — six case
   const sansEtat = heuresMeteo({ etat: { state: 'sunny', attributes: {} }, previsions, maintenant, soleil });
   assert.deepEqual(sansEtat.map(c => c.libelle), ['15 h', '16 h', '17 h', '19 h', '20 h', '21 h'], 'sans temperature du moment, six heures de prevision');
   assert.deepEqual(heuresMeteo({ maintenant }), []);
+});
+
+test('la pluie attendue et le vent : ce que le service donne, et rien de plus', () => {
+  /* Le « non fait » de l'ADR 0038 (25/09). Meme regle de date locale que
+   * `extremesDuJour` : c'est la prevision d'AUJOURD'HUI qui compte. Les trois
+   * valeurs sont independantes et facultatives — rien n'est invente. */
+  const maintenant = new Date(2026, 8, 17, 14, 20).getTime();
+  const minuit = (j) => iso(new Date(2026, 8, j, 0, 0).getTime());
+  const auj = { datetime: minuit(17), precipitation: 4.23, precipitation_probability: 70 };
+  const demain = { datetime: minuit(18), precipitation: 12, precipitation_probability: 95 };
+
+  assert.deepEqual(pluieEtVent([auj, demain], { wind_speed: 13.6, wind_speed_unit: 'km/h' }, maintenant),
+    { proba: 70, cumul: 4.2, vent: 14, uniteVent: 'km/h' }, 'le cumul s’arrondit au dixieme, le vent a l’unite');
+  assert.deepEqual(pluieEtVent([demain], {}, maintenant),
+    { proba: null, cumul: null, vent: null, uniteVent: 'km/h' }, 'demain n’est pas aujourd’hui : la ligne ne se dessine pas');
+
+  // Chaque valeur peut manquer SEULE : un service donne parfois l'une sans l'autre.
+  assert.equal(pluieEtVent([{ datetime: minuit(17), precipitation: 2 }], {}, maintenant).proba, null);
+  assert.equal(pluieEtVent([{ datetime: minuit(17), precipitation: 2 }], {}, maintenant).cumul, 2);
+  assert.equal(pluieEtVent([], { wind_speed: 7 }, maintenant).vent, 7, 'le vent vient de l’entite, pas de la prevision');
+
+  // Un cumul de ZERO n'est pas une absence : la carte decide d'en faire ou non
+  // une ligne, le calcul, lui, le rapporte tel quel.
+  assert.equal(pluieEtVent([{ datetime: minuit(17), precipitation: 0, precipitation_probability: 10 }], {}, maintenant).cumul, 0);
+
+  // Bornes et valeurs illisibles.
+  assert.equal(pluieEtVent([{ datetime: minuit(17), precipitation_probability: 140 }], {}, maintenant).proba, 100);
+  assert.equal(pluieEtVent([{ datetime: minuit(17), precipitation_probability: -5 }], {}, maintenant).proba, 0);
+  assert.equal(pluieEtVent([{ datetime: minuit(17), precipitation_probability: 'beaucoup' }], {}, maintenant).proba, null);
+  assert.equal(pluieEtVent([{ datetime: 'pas une date', precipitation: 3 }], {}, maintenant).cumul, null);
+  assert.equal(pluieEtVent(null, null, maintenant).uniteVent, 'km/h', 'sans unite annoncee, le km/h de Home Assistant');
+  assert.equal(pluieEtVent([], { wind_speed: 20, wind_speed_unit: 'mph' }, maintenant).uniteVent, 'mph', 'une install en mph lit des mph');
 });
 
 test('le maximum et le minimum sont ceux d’AUJOURD’HUI, en date locale — sinon rien', () => {
