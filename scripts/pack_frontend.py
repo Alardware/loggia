@@ -212,6 +212,50 @@ def bundles_morts(dossier, vivants):
     return morts
 
 
+def renvois_morts(dossier, proteges):
+    """Regle 4 : un fichier garde qui en reclame un absent s'en va aussi.
+
+    La regle 2 garde les `GARDE` dernieres generations DE CHAQUE FAMILLE. Elle
+    suppose que les familles tournent ensemble — elles ne le font pas. Un
+    `wx3d-*` dont le contenu n'a pas bouge garde son empreinte pendant que
+    `boot-*`, qui embarque l'ecran, en change a chaque compilation. Au bout de
+    quelques versions, le `boot` de la generation precedente — garde — reclame
+    un `wx3d` de la generation d'avant — rattrape par la rotation, donc parti.
+
+    Mesure du 27/09 sur le paquet de la v3.76.0 publiee : **36 renvois morts**.
+    La generation N-1 existe pour servir le client au cache perime ; une
+    generation N-1 trouee ne sert personne, elle lui donne des 404.
+
+    On retire donc, jusqu'a point fixe, tout fichier garde dont une reference
+    manque — retirer l'un peut en condamner un autre. La generation VIVANTE est
+    protegee : si elle est trouee, c'est la compilation qui est fautive, et le
+    refus plus bas le dit deja.
+    """
+    empreinte = re.compile(
+        r'^[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)*-[A-Za-z0-9_-]{8}\.(?:js|css)$')
+    partis = []
+    while True:
+        presents = set(os.listdir(dossier))
+        tour = []
+        for f in sorted(presents):
+            if f in proteges or not f.endswith(('.js', '.css')):
+                continue
+            try:
+                with io.open(os.path.join(dossier, f), encoding='utf-8', errors='ignore') as fh:
+                    refs = re.findall(r'["\'/]([A-Za-z0-9._-]+\.(?:js|css))', fh.read())
+            except Exception:
+                continue
+            # Une reference n'est un renvoi de paquet que si elle porte une
+            # empreinte : `index.css` ou `panel.js` ne sont pas des bundles.
+            if any(empreinte.match(r) and r not in presents for r in refs):
+                tour.append(f)
+        if not tour:
+            return partis
+        for f in tour:
+            os.remove(os.path.join(dossier, f))
+        partis += tour
+
+
 def balayer_publics(dist, cible):
     """Retire du paquet les fichiers publics que `public/` ne produit plus.
 
@@ -344,11 +388,15 @@ def main():
     efface = []
     for prefixe, suffixe in sorted(familles):
         efface += retenir(assets_dst, prefixe, suffixe, reference)
+    # Regle 4, en DERNIER : les deux balayages ci-dessus viennent peut-etre de
+    # retirer ce qu'une generation gardee reclamait.
+    troues = renvois_morts(assets_dst, reference)
     print('bundle publie       :', ', '.join(sorted(f for f in reference if f.endswith('.js'))))
     print('assets copies       :', n)
     print('fichiers publics    :', autres)
     print('anciens bundles otes:', len(efface), efface if efface else '')
     print('modules disparus    :', len(morts), morts if morts else '')
+    print('renvois morts otes  :', len(troues), troues if troues else '')
     print('publics disparus    :', len(publics_otes), publics_otes if publics_otes else '')
     print('cible               :', CIBLE)
     return 0

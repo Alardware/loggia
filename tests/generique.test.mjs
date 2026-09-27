@@ -253,6 +253,27 @@ test('le paquet livre ne traine pas les bundles d’un module disparu', () => {
   assert.deepEqual([...pendantes], [],
     'des fichiers du paquet livré en réclament d’autres qui n’y sont pas (404 chez l’utilisateur) : ' +
     [...pendantes].join(', '));
+
+  /* Et le mécanisme qui le tient, pas seulement le résultat du jour.
+   *
+   * La règle 2 garde les `GARDE` dernières générations DE CHAQUE FAMILLE, en
+   * supposant qu'elles tournent ensemble. Elles ne le font pas : un `wx3d-*`
+   * inchangé garde son empreinte pendant que `boot-*`, qui embarque l'écran,
+   * en change à chaque compilation. Au bout de quelques versions, le `boot`
+   * gardé réclame un `wx3d` que la rotation a emporté — 36 renvois morts dans
+   * le paquet de la v3.76.0 publiée, que ce test a trouvés le 27/09.
+   *
+   * Une génération N-1 trouée ne sert personne : elle donne des 404 au client
+   * au cache périmé qu'elle prétend servir. */
+  const pack4 = readFileSync(join(RACINE, 'scripts', 'pack_frontend.py'), 'utf8');
+  assert.ok(pack4.includes('def renvois_morts(dossier, proteges):'),
+    'la règle 4 a disparu de pack_frontend.py : les renvois morts reviendront à la prochaine rotation');
+  assert.match(pack4.slice(pack4.indexOf('def renvois_morts')), /while True:/,
+    'la règle 4 ne boucle plus jusqu’au point fixe : retirer un fichier peut en condamner un autre');
+  assert.ok(pack4.includes('troues = renvois_morts(assets_dst, reference)'),
+    'la règle 4 n’est plus appelée');
+  assert.ok(pack4.indexOf('troues = renvois_morts') > pack4.indexOf('efface += retenir('),
+    'la règle 4 doit passer APRÈS la rétention, qui vient peut-être de retirer ce qu’une génération gardée réclamait');
 });
 
 test('la documentation ne promet pas de garde-fou inexistant', () => {
