@@ -22,7 +22,7 @@ const compter = (s, motif) => s.split(motif).length - 1;
   /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
    * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
    * adresse — on relit donc le monolithe ET ce qui en est sorti. */
-const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx'].map(f => lire('src', f)).join(String.fromCharCode(10));
+const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10));
 
 test('une pile : rien tant qu’elle tient, attention à 20 %, action à 5 %', () => {
   assert.deepEqual(SEUILS_PILE, { alerte: 20, danger: 5 });

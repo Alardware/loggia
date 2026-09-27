@@ -23,7 +23,9 @@ import { fileURLToPath } from 'node:url';
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 
-const app = lire('src', 'App.jsx');
+/* Le theme est sorti dans `src/theme.js` (27/09, audit point 9) : on relit
+ * donc le monolithe ET ce qui en est parti. */
+const app = ['App.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10));
 const par = lire('src', 'views', 'parametres.jsx');
 
 /** Le bloc source de `LOGGIA_PRESETS`, des accolades à la fonction suivante. */
@@ -202,4 +204,53 @@ test('The Projekt garde sa lueur, dans les deux modes', () => {
   for (const [nom, part] of [['sombre', p.dark], ['clair', p.light]]) {
     assert.match(part, /bggrad: 'radial-gradient\(/, `variante ${nom} : la lueur a disparu, le fond est redevenu plat`);
   }
+});
+
+test('le theme vit dans son fichier, et n’est plus un morceau du monolithe', () => {
+  // Audit du 27/09, point 9 — première étape du découpage d'`App.jsx`.
+  //
+  // Quatre cent cinquante et une lignes sont parties : aucune n'est un
+  // composant, aucune n'appelle un hook, aucune ne rend de JSX. C'est ce qui
+  // en faisait le premier morceau à sortir, et c'est ce que ce test tient.
+  const theme = lire('src', 'theme.js');
+  const appSeul = lire('src', 'App.jsx');
+
+  // Ce qui doit y vivre, et qui n'est plus dans le monolithe.
+  for (const [quoi, motif] of [
+    ['les quatorze préréglages', 'const LOGGIA_PRESETS = {'],
+    ['les jetons qu’un thème surcharge', 'const THEME_KEYS = ['],
+    ['la pose des variables', 'function applyVars(root, v) {'],
+    ['l’apparence', 'function applyLook(root, L, frostedPreset, light) {'],
+    ['la porte du thème', 'export function applyTheme(opts, hass) {'],
+    ['le réglage d’apparence', 'export function readLook() {'],
+    ['le miroir du thème HA', 'function readComputedHaTheme(hass) {'],
+    ['sa signature', 'export function signatureHaTheme(hass) {'],
+    ['le lavis', 'export let LAVIS = 1;'],
+    ['le mode de secours', 'export const SAFE_NOLOOK = ('],
+  ]) {
+    assert.ok(theme.includes(motif), quoi + ' a quitté src/theme.js');
+    assert.ok(!appSeul.includes(motif), quoi + ' est revenu dans App.jsx');
+  }
+
+  /* Ni hook ni JSX : c'est la raison pour laquelle ce morceau part en premier.
+   * Le jour où l'un des deux apparaît ici, le fichier a changé de nature. */
+  assert.ok(!/\buse(State|Effect|Memo|Ref|Callback|Context|Id)\b/.test(theme),
+    'un hook est apparu dans src/theme.js : ce n’est plus un module de calcul');
+  assert.ok(!/from 'react'/.test(theme), 'src/theme.js importe React');
+  assert.ok(!/=> \(\s*</.test(theme) && !/return \(\s*</.test(theme), 'du JSX est apparu dans src/theme.js');
+
+  /* Trois dépendances, pas une de plus — et `LOOK_DEF` reste dans `ui.jsx`,
+   * d'où `views/parametres.jsx` le lit aussi. */
+  for (const dep of ["import { garde, JETONS_GARDE } from './contraste.js';",
+    "import { cfgVal } from './state.js';", "import { LOOK_DEF } from './ui.jsx';"]) {
+    assert.ok(theme.includes(dep), 'src/theme.js a perdu : ' + dep);
+  }
+
+  /* App.jsx n'en importe que ce qu'il LIT. `lum` et `cssToRgb` sont restés
+   * internes : une porte publique sans personne derrière est une dette, et
+   * `exports_sans_client.test.mjs` la refuse. */
+  assert.ok(appSeul.includes("import { LAVIS, SAFE_NOLOOK, applyTheme, lav, readLook, signatureHaTheme } from './theme.js';"),
+    'App.jsx n’importe plus du thème exactement ce qu’il lit');
+  assert.ok(!/^export function lum\(/m.test(theme), '`lum` est exporté sans client : il ne sert qu’au thème');
+  assert.ok(!/^export function cssToRgb\(/m.test(theme), '`cssToRgb` est exporté sans client');
 });

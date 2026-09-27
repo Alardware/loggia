@@ -22,7 +22,7 @@ const css = lire('src', 'index.css');
   /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
    * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
    * adresse — on relit donc le monolithe ET ce qui en est sorti. */
-const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx'].map(f => lire('src', f)).join(String.fromCharCode(10));
+const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10));
 
 const bloc = (debut) => { const i = css.indexOf(debut); return css.slice(i, css.indexOf('\n}', i)); };
 const jetons = (texte) => { const m = {}; for (const [, k, v] of texte.matchAll(/(--o-[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\b/g)) m[k] = v; return m; };
