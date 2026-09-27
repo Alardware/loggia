@@ -155,6 +155,23 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
           else if (msg.type === 'answer') pc.setRemoteDescription({ type: 'answer', sdp: msg.answer }).catch(() => {});
           else if (msg.type === 'candidate' && msg.candidate) { try { pc.addIceCandidate(new RTCIceCandidate(typeof msg.candidate === 'string' ? { candidate: msg.candidate, sdpMLineIndex: 0 } : msg.candidate)); } catch {} }
         }, { type: 'camera/webrtc/offer', entity_id: haid, offer: pc.localDescription.sdp });
+        /* Le meme piege que pour la configuration ICE, quinze lignes plus haut
+         * — et il restait ouvert (audit du 27/09). `createOffer`,
+         * `setLocalDescription` et cet abonnement s'attendent : on peut avoir
+         * change de camera entre-temps. Le nettoyage de l'effet a alors deja
+         * appele `cleanupRtc` avec `unsub` encore a `null` : il n'a ferme que
+         * `pc`, et l'abonnement arrive ici pour ne plus jamais etre ferme.
+         * Changer vite de camera pendant la negociation laissait donc un
+         * abonnement `camera/webrtc/offer` par passage.
+         *
+         * On ferme les deux a la main : `cleanupRtc` a pu etre remis a `null`
+         * entre-temps, et refermer ce qui l'est deja ne coute rien. */
+        if (cancelled) {
+          try { unsub(); } catch { /* deja ferme */ }
+          try { pc.close(); } catch { /* deja fermee */ }
+          cleanupRtc = null;
+          return false;
+        }
       } catch { cleanupRtc(); cleanupRtc = null; return false; }
       /* Quatre secondes suffisent en direct, sur le reseau local. Passer par un
        * relais TURN en demande davantage : allocation aupres du relais, puis

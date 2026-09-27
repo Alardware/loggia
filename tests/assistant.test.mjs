@@ -396,3 +396,29 @@ test('le bouton de l’assistant : un micro, rond en haut, carré rose-violet en
   assert.match(BOUTON, /width: 48, height: 48, borderRadius: 15, marginTop: -14,/, 'un carré arrondi, posé au-dessus de la barre');
   assert.doesNotMatch(BOUTON, /radial-gradient\(circle at 38% 32%/, 'l’ancien disque est revenu');
 });
+
+test('un seul flux à la fois, et plus aucun après un arrêt', () => {
+  // Audit du 27/09 : `desabonnerRef` ne portait QUE le dernier abonnement, et
+  // la popup était le seul endroit qui le fermait. Chaque question posée dans
+  // une même séance écrasait la référence de la précédente et laissait son
+  // abonnement vivant, avec toute sa fermeture — `ws`, les poseurs d'état, la
+  // réponse en cours. Dix questions, dix abonnements.
+  //
+  // Rien ne le montrait : la garde `tour !== tourRef.current` faisait tomber
+  // leurs événements dans le vide, donc l'écran restait juste.
+  assert.match(FEUILLE, /const fermerFlux = \(\) => \{/, 'le flux n’a plus de fermeture nommée');
+  // Fermé aux TROIS endroits : nouveau tour, arrêt, démontage.
+  const i = FEUILLE.indexOf('const message = { type: `${ns}/chat`');
+  assert.notEqual(i, -1, 'la commande de flux a disparu');
+  assert.match(FEUILLE.slice(i), /fermerFlux\(\);\r?\n\s*try \{/,
+    'le tour précédent n’est plus fermé avant d’en ouvrir un autre');
+  const a = FEUILLE.indexOf('const annuler = () => {');
+  assert.match(FEUILLE.slice(a, a + 500), /fermerFlux\(\);/,
+    'arrêter ne ferme plus le flux : bousculer `tourRef` laisse l’abonnement ouvert');
+  assert.match(FEUILLE, /useEffect\(\(\) => \(\) => \{ fermerFlux\(\); \}, \[\]\);/,
+    'le démontage ne ferme plus le flux');
+  // Et la course : un tour plus récent parti PENDANT l'attente ne doit pas se
+  // faire écraser sa référence par celui qui se réveille après lui.
+  assert.match(FEUILLE, /if \(tour !== tourRef\.current\) \{ try \{ defaire\(\); \}/,
+    'un tour dépassé pendant l’attente écrase de nouveau la référence du tour courant');
+});
