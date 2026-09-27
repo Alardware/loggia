@@ -13,7 +13,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -186,6 +186,73 @@ test('le paquet livre ne traine pas les bundles des compilations passees', () =>
   assert.deepEqual(trop, [],
     `des familles de bundles s’accumulent dans le paquet livré (GARDE = ${garde}) : ` +
     trop.map(([f, n]) => `${f} (${n} copies)`).join(', '));
+});
+
+test('le paquet livre ne traine pas les bundles d’un module disparu', () => {
+  // Le test au-dessus borne les familles VIVANTES. Une famille MORTE lui
+  // échappe : elle compte exactement `GARDE` fichiers depuis le jour où Vite a
+  // cessé de la produire, et ne redescend jamais en dessous — la retenue garde
+  // « les deux derniers » d’un module qui n’existe plus.
+  //
+  // Mesure du 27/09 avant correction : `aspirateur-*.js`, `meteo-*.js`,
+  // `robot-*.js` (devenu `ficherobot-*`) et `boot-*.css` (renommé
+  // `index-*.css`) — 7 fichiers, 160 Ko dans CHAQUE installation, cités par
+  // aucun fichier du paquet. Pire que du poids : ils importaient eux-mêmes six
+  // chunks absents du dossier (`vacplan-DqhCZQ5k.js`, `wx3d-Bu1khYey.js`…),
+  // donc 404 garantis pour le client au cache périmé qu’ils prétendaient
+  // servir. `pack_frontend.py` les balaie depuis (règle 3) ; ce test dit si le
+  // balayage cesse un jour de faire son travail.
+  const dossier = join(RACINE, 'custom_components', 'loggia', 'frontend', 'assets');
+  const html = join(RACINE, 'custom_components', 'loggia', 'frontend', 'index.html');
+  const fichiers = readdirSync(dossier);
+
+  /* Ce que l’index.html du paquet finit par demander, de proche en proche —
+   * même parcours qu’`atteignables()` dans pack_frontend.py. */
+  const vus = new Set();
+  const aVoir = [...readFileSync(html, 'utf8').matchAll(/assets\/([A-Za-z0-9._-]+)/g)].map(m => m[1]);
+  while (aVoir.length) {
+    const f = aVoir.pop();
+    if (vus.has(f)) continue;
+    vus.add(f);
+    const p = join(dossier, f);
+    if (!/\.(js|css)$/.test(f) || !existsSync(p)) continue;
+    aVoir.push(...[...readFileSync(p, 'utf8')
+      .matchAll(/["'/]([A-Za-z0-9._-]+\.(?:js|css|jpg|jpeg|png|webp|svg|woff2?))/g)].map(m => m[1]));
+  }
+
+  /* La génération d’AVANT est volontairement hors de ce parcours : c’est elle
+   * que `GARDE = 2` protège. On ne condamne donc un fichier que si AUCUN
+   * vivant de même extension ne partage son début de nom.
+   *
+   * Toutes les coupures du nom sont essayées, pas la seule dernière : un hash
+   * Vite peut contenir un tiret. `demo-B6-lYSYp.js` (vivant) et
+   * `demo-DpsM1nrN.js` (la génération d’avant) tombent sinon dans deux
+   * familles différentes, et la seconde passe pour morte — c’est arrivé. */
+  const morts = fichiers.filter(f => {
+    if (vus.has(f)) return false;
+    const suf = f.endsWith('.js') ? '.js' : f.endsWith('.css') ? '.css' : null;
+    if (!suf) return false;
+    const base = f.slice(0, -suf.length);
+    const coupures = [...base].map((c, i) => (c === '-' ? base.slice(0, i + 1) : null)).filter(Boolean);
+    if (!coupures.length) return false;
+    return ![...vus].some(v => v.endsWith(suf) && coupures.some(p => v.startsWith(p)));
+  });
+  assert.deepEqual(morts, [],
+    'des bundles d’un module que le build ne produit plus restent dans le paquet livré : ' +
+    morts.join(', ') + ' — relancer `python scripts/pack_frontend.py`');
+
+  /* Et l’autre moitié du défaut : un fichier du paquet qui en réclame un
+   * absent. C’est ce qui transforme du poids mort en écran cassé. */
+  const pendantes = new Set();
+  for (const f of fichiers) {
+    if (!/\.(js|css)$/.test(f)) continue;
+    for (const m of readFileSync(join(dossier, f), 'utf8').matchAll(/\.\/([A-Za-z0-9._-]+\.(?:js|css))/g)) {
+      if (m[1] !== f && !existsSync(join(dossier, m[1]))) pendantes.add(`${f} → ${m[1]}`);
+    }
+  }
+  assert.deepEqual([...pendantes], [],
+    'des fichiers du paquet livré en réclament d’autres qui n’y sont pas (404 chez l’utilisateur) : ' +
+    [...pendantes].join(', '));
 });
 
 test('la documentation ne promet pas de garde-fou inexistant', () => {
