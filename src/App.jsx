@@ -5522,7 +5522,12 @@ function useScenarios(hass) {
   return { etat, err, lancer, enCours, enregistrer, ordonner, noms, tous, liste: scenariosVisibles(tous) };
 }
 
-const PUCE_SCN = { fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 9, background: 'var(--o-s1)', color: 'var(--o-text1)', whiteSpace: 'nowrap' };
+/* `lineHeight` est ÉCRIT, parce que la rangée compte dessus : 15 de ligne plus
+ * 4 et 4 de rembourrage font 23 px, la hauteur d'UNE pastille — et la rangée
+ * s'y borne pour ne montrer qu'une seule ligne (voir `CarteScenario`). Laissé
+ * au défaut de la police, ce nombre changerait avec la langue. */
+const H_PUCE_SCN = 23;
+const PUCE_SCN = { fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 9, lineHeight: '15px', background: 'var(--o-s1)', color: 'var(--o-text1)', whiteSpace: 'nowrap' };
 /* La carte d'un scénario, au gabarit maison : l'icône en haut à gauche dans
  * un disque teinté, le dernier lancement en haut à droite, le titre sous
  * l'icône ; compacte (88) sur l'Accueil, standard (184) dans la vue, où elle
@@ -5547,7 +5552,22 @@ function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLanc
       <div style={{ marginTop: compacte ? 8 : 12, fontSize: compacte ? 13 : 15, fontWeight: 700, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
       {!compacte && <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, lineHeight: 1.45, color: 'var(--o-text2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.lien_absent ? tr('Scène introuvable') : resumeScenario(s, noms)}</div>}
       {!compacte && (
-        <div style={{ position: 'absolute', left: 15, bottom: 14, display: 'flex', gap: 6 }}>
+        /* La rangée s'arrête à la marge de DROITE, et ne montre qu'une ligne.
+         *
+         * Elle n'était bornée qu'à gauche, chaque pastille en `nowrap` : sur
+         * un téléphone la rangée mesurait 192 px pour une carte de 141, et la
+         * carte la coupait en plein mot — « scène H », « Loggi » (audit du
+         * 27/09, mesuré à 320, 360 et 390 px).
+         *
+         * Pas de seuil en pixels : ce qui ne tient pas passe à la ligne
+         * suivante, hors de la hauteur visible, et disparaît donc ENTIER. La
+         * dernière pastille cède la première — l'origine du scénario pèse
+         * moins que ce qu'il fait. Et la règle vaut dans les sept langues
+         * sans rien régler : une rangée mesure 220 px en français, 249 en
+         * espagnol, un nombre écrit d'avance aurait trahi l'une ou l'autre.
+         *
+         * Mesuré : 1 pastille sur une carte de 141 px, 2 sur 176, 3 sur 236. */
+        <div style={{ position: 'absolute', left: 15, right: 15, bottom: 14, display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', gap: 6, height: H_PUCE_SCN, overflow: 'hidden' }}>
           <span style={PUCE_SCN}>{nActions > 1 ? tr('{n} actions', { n: nActions }) : tr('{n} action', { n: nActions })}</span>
           {cibles != null && <span style={PUCE_SCN}>{cibles > 1 ? tr('{n} cibles', { n: cibles }) : tr('{n} cible', { n: cibles })}</span>}
           <span style={PUCE_SCN}>{s.lien ? tr('scène HA') : 'Loggia'}</span>

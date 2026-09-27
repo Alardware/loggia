@@ -160,6 +160,30 @@ test('la carte suit le gabarit : disque teinte en haut a gauche, dernier lanceme
   assert.ok(app.includes("const PUCE_SCN = { fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 9,"), 'des puces à l’arrondi 9');
 });
 
+test('les puces de la carte ne se coupent pas en plein mot sur un telephone', () => {
+  // Audit du 27/09 : la rangée n'était bornée qu'à GAUCHE, chaque puce en
+  // `nowrap`. Sur un téléphone la rangée mesurait 192 px pour une carte de
+  // 141, et la carte la coupait en plein mot — « scène H », « Loggi »
+  // (mesuré à 320, 360 et 390 px).
+  //
+  // Pas de seuil en pixels : ce qui ne tient pas passe à la ligne suivante,
+  // hors de la hauteur visible, et disparaît donc ENTIER. Un nombre écrit
+  // d'avance aurait trahi une langue ou l'autre — la rangée mesure 220 px en
+  // français, 249 en espagnol.
+  const c = bloc('function CarteScenario(', NL + '}');
+  assert.ok(c.includes('left: 15, right: 15, bottom: 14'),
+    'la rangée de puces n’est plus bornée à droite : elle repassera sous le bord de la carte');
+  assert.ok(c.includes("flexWrap: 'wrap'") && c.includes("alignContent: 'flex-start'"),
+    'les puces ne passent plus à la ligne : elles seront coupées au lieu de disparaître');
+  assert.ok(c.includes('height: H_PUCE_SCN') && c.includes("overflow: 'hidden'"),
+    'la rangée ne tient plus sur UNE ligne : une seconde rangée de puces apparaîtra');
+  // La hauteur est calculée, pas devinée : 15 de ligne + 4 + 4 de
+  // rembourrage. `lineHeight` doit donc rester écrit dans la puce.
+  assert.ok(app.includes('const H_PUCE_SCN = 23;'), 'la hauteur d’une puce n’est plus nommée');
+  assert.ok(app.includes("lineHeight: '15px'"),
+    'la puce n’impose plus sa hauteur de ligne : 23 px ne veut plus rien dire, et la langue la ferait varier');
+});
+
 test('la vue Scenarios : cartes standard, edition avec fleches et crayon, la bibliotheque Hue dessous', () => {
   const v = bloc('function ScenariosView(', NL + '}');
   assert.ok(v.includes("sansDernier={edit}") && v.includes("position: 'absolute', right: 12, top: 12"), 'les outils prennent la place du repère');

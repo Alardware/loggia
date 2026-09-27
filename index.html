@@ -4,6 +4,31 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Loggia</title>
+  <!-- Le thème AVANT la première peinture (audit du 27/09).
+
+       Dans `index.css`, le sombre est `:root` et le clair `html.loggia-light` ;
+       `html` prend `var(--o-bg)`. La classe n'arrivait qu'avec React, donc tout
+       écran réglé en clair s'allumait SOMBRE une fraction de seconde à chaque
+       chargement — visible sur une tablette murale, plusieurs fois par jour.
+
+       Les mêmes clés et les mêmes défauts qu'`App.jsx` (`loggia-mode` au
+       montage, `modeEff` pour « auto »), à une règle près : on ne pose la
+       classe QUE si l'on est sûr. « Suivre Home Assistant » (`loggia-ha` à
+       `FOLLOW`) ne se tranche qu'une fois HA joignable — on s'abstient, et
+       l'écran se comporte comme avant. Se tromper coûterait plus cher que
+       s'abstenir : un éclair CLAIR sur un écran sombre, la nuit. -->
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem('loggia-ha') === 'FOLLOW') return;
+        var m = localStorage.getItem('loggia-mode');
+        if (m !== 'light' && m !== 'dark' && m !== 'auto') m = 'dark';
+        var clair = m === 'light'
+          || (m === 'auto' && window.matchMedia('(prefers-color-scheme: light)').matches);
+        if (clair) document.documentElement.classList.add('loggia-light');
+      } catch (e) { /* stockage refusé : on garde le sombre, comme avant */ }
+    })();
+  </script>
   <!-- Polices auto-hébergées (public/fonts) : dashboard fonctionnel sans internet.
        La variante PLEINE des icones (uicons-solid) n'est pas chargee : toutes les
        classes de Loggia sont baties en `fi fi-rr-` (icones.jsx, ui.jsx,
