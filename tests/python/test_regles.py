@@ -61,6 +61,22 @@ class FauxEvenement:
         self.context = context
 
 
+class FauxBus:
+    """Le bus de Home Assistant, reduit a ce qu'on lui demande : une ecoute
+    unique, et le desabonnement qu'elle rend."""
+
+    def __init__(self):
+        self.ecoutes = []
+
+    def async_listen_once(self, evenement, rappel):
+        self.ecoutes.append((evenement, rappel))
+
+        def defaire():
+            self.ecoutes.remove((evenement, rappel))
+
+        return defaire
+
+
 @pytest.fixture
 def module():
     return charger("regles")
@@ -114,6 +130,50 @@ def test_une_ligne_porte_son_motif(socle):
     assert ligne["motif"] == "coucher + 30"
     assert ligne["n"] == 2
     assert ligne["ts"] > 0
+
+
+def test_l_ecoute_de_l_arret_part_avec_le_module(module):
+    """Audit du 27/09 : le desabonnement rendu par `async_listen_once` partait
+    a la poubelle, et `arreter()` ne le retirait pas. Chaque rechargement de
+    l'integration laissait une instance accrochee au bus jusqu'a l'arret reel
+    du process — puis autant d'ecritures concurrentes du meme journal."""
+    hass = FauxHass()
+    hass.bus = FauxBus()
+    r = module.Regles(hass, FauxMagasin(None))
+    r._depot = FauxStore(None)
+    assert [e[0] for e in hass.bus.ecoutes] == ["homeassistant_stop"]
+    r.arreter()
+    assert hass.bus.ecoutes == []
+    hass.abandonner()
+
+
+def test_le_journal_en_attente_est_ecrit_au_rechargement(socle):
+    """Audit du 27/09 : `arreter()` annulait l'ecriture differee sans jamais
+    l'ecrire, alors que `_sur_arret` — le meme geste, a l'arret reel — ecrit
+    avant de partir. Les lignes notees dans les vingt secondes precedant un
+    rechargement disparaissaient en silence : justement le journal qu'on vient
+    consulter pour comprendre une regle qui ne s'est pas declenchee."""
+    r = socle()
+    lancer(r.noter("nuit", "veilleuse", "eteindre"))
+    assert r._ecriture is not None, "l'ecriture differee doit etre en attente"
+    assert r.hass.taches == []
+    r.arreter()
+    assert r._ecriture is None
+    assert len(r.hass.taches) == 1, "ce que le differe retenait doit partir"
+
+
+def test_un_rechargement_sans_ligne_en_attente_n_ecrit_rien(socle):
+    """`_entrees` porte tout le journal, deja relu du magasin. Sans garde,
+    chaque rechargement reecrirait a l'identique un fichier de cinq cents
+    lignes."""
+    r = socle({"entrees": [{"ts": 1.0, "module": "nuit", "regle": "veilleuse",
+                            "quoi": "eteindre", "cibles": [], "n": 0,
+                            "motif": "", "detail": ""}]})
+    lancer(r.journal())
+    assert r._entrees, "le journal est bien charge"
+    assert r._ecriture is None, "rien n'est en attente"
+    r.arreter()
+    assert r.hass.taches == []
 
 
 def test_le_journal_survit_au_redemarrage(socle):

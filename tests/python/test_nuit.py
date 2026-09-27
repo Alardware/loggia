@@ -265,6 +265,32 @@ def test_un_patch_partiel_garde_le_reste(creer):
 
 # ── Sur le socle ────────────────────────────────────────────────────────────
 
+def test_une_veilleuse_deja_allumee_est_reprise_au_demarrage(creer):
+    """Audit du 27/09 : la veilleuse ne reagissait qu'a une TRANSITION vers
+    « on ». Un redemarrage de Home Assistant pendant qu'elle brule n'en produit
+    aucune — la minuterie n'etait jamais posee, et la lampe restait allumee
+    jusqu'au matin. Ici `duree: 0`, donc la reprise eteint tout de suite ;
+    c'est le geste qui prouve qu'elle a bien vu la lampe."""
+    n = creer(cfg_veilleuse(), AVEC_FONDU)
+    lancer(n._async_reabonner())
+    assert [a[1] for a in n.hass.services.appels] == ["turn_off"]
+
+
+def test_une_veilleuse_eteinte_n_est_pas_reprise(creer):
+    """La reprise ne regarde que ce qui BRULE : une lampe eteinte n'a pas de
+    minuterie a reposer."""
+    n = creer(cfg_veilleuse(), {"light.veilleuse": FauxEtat("off")})
+    lancer(n._async_reabonner())
+    assert n.hass.services.appels == []
+
+
+def test_la_veilleuse_eteinte_par_reglage_ne_reprend_rien(creer):
+    """Module debraye : la reprise ne touche a rien, meme allumee."""
+    n = creer(cfg_veilleuse(actif=False), AVEC_FONDU)
+    lancer(n._async_reabonner())
+    assert n.hass.services.appels == []
+
+
 def test_la_veilleuse_eteint_ce_qu_une_main_a_allume(creer):
     """C'est sa definition : on l'allume au coucher, elle s'eteint seule. Le
     gel de cette main ne la retient pas — sinon une veilleuse de trente
@@ -273,6 +299,10 @@ def test_la_veilleuse_eteint_ce_qu_une_main_a_allume(creer):
 
     n = creer(cfg_veilleuse(), AVEC_FONDU)
     lancer(n._async_reabonner())
+    # La fixture pose `duree: 0` sur une lampe DEJA allumee : la reprise des
+    # veilleuses (audit du 27/09) l'eteint donc au montage, ce qui est bien son
+    # role. Ce test-ci ne parle que du gel de la main — on repart de zero.
+    n.hass.services.appels.clear()
 
     class Ev:
         data = {"entity_id": "light.veilleuse"}

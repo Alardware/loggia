@@ -182,15 +182,26 @@ class Regles:
         self._depot = None
         # A l'arret de Home Assistant, ce que l'ecriture differee retient
         # encore doit partir : sinon les dernieres lignes disparaissaient (audit 18/09).
+        #
+        # Le desabonnement se GARDE (audit du 27/09). Il partait a la poubelle,
+        # et `arreter()` ne le retirait pas : chaque rechargement de
+        # l'integration laissait une instance `Regles` accrochee au bus jusqu'a
+        # l'arret reel du process — et le jour venu, autant d'ecritures
+        # concurrentes du meme fichier de journal qu'il y avait eu de
+        # rechargements.
+        self._defait_arret = None
         bus = getattr(hass, "bus", None)
         if bus is not None and hasattr(bus, "async_listen_once"):
             try:
-                bus.async_listen_once("homeassistant_stop", self._sur_arret)
+                self._defait_arret = bus.async_listen_once("homeassistant_stop", self._sur_arret)
             except Exception:  # noqa: BLE001
                 _LOGGER.debug("Loggia regles : pas d'ecoute de l'arret")
 
     async def _sur_arret(self, _event) -> None:
         """L'arret : ecrire tout de suite ce que le differe retient."""
+        # Home Assistant retire lui-meme une ecoute `once` apres l'avoir
+        # declenchee : la garder ici ferait mentir `arreter()`.
+        self._defait_arret = None
         if self._ecriture is not None:
             try:
                 self._ecriture()
@@ -640,9 +651,32 @@ class Regles:
             except Exception:  # noqa: BLE001
                 _LOGGER.debug("Loggia regles : ecoute deja retiree")
             self._defait_gestes = None
-        if self._ecriture is not None:
+        # L'ecoute de l'arret part avec le reste : sans elle, l'instance qu'on
+        # vient de retirer de `hass.data` resterait vivante dans le bus.
+        if self._defait_arret is not None:
+            try:
+                self._defait_arret()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia regles : ecoute de l'arret deja retiree")
+            self._defait_arret = None
+        # Ce que l'ecriture differee retenait part MAINTENANT (audit du 27/09).
+        #
+        # On l'annulait sans jamais l'ecrire, alors que `_sur_arret` — le meme
+        # geste, a l'arret reel — ecrit avant de partir, et que `__init__.py` le
+        # promet noir sur blanc. Les lignes notees dans les vingt secondes
+        # precedant un rechargement disparaissaient donc en silence : justement
+        # le journal qu'on vient consulter pour comprendre une regle qui ne
+        # s'est pas declenchee.
+        #
+        # On n'ecrit que si une ecriture ETAIT en attente. `_entrees` porte tout
+        # le journal, deja relu du magasin : sans cette garde, chaque
+        # rechargement reecrirait a l'identique un fichier de cinq cents lignes.
+        differee = self._ecriture is not None
+        if differee:
             try:
                 self._ecriture()
             except Exception:  # noqa: BLE001
                 _LOGGER.debug("Loggia regles : ecriture deja annulee")
             self._ecriture = None
+            if self._entrees:
+                self.hass.async_create_task(self._ecrire())
