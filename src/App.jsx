@@ -7041,19 +7041,28 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   useEffect(() => { if (!editMode) { setPasse([]); setFutur([]); } }, [editMode]);
   /* Ctrl+Z, Ctrl+Maj+Z — mais jamais dans un champ de saisie : on y volerait
    * l'annulation du texte que la personne est en train de taper. */
+  /* Les deux gestes dans une référence VIVANTE (audit du 27/09). `annuler` et
+   * `refaire` se referment sur `passe`, `futur` et `accL` : ils changent
+   * d'identité à chaque rendu, donc les nommer en dépendances reposerait
+   * l'écoute aussi souvent que de n'en déclarer aucune — ce que faisait
+   * l'effet ci-dessous, sur `window`, à chaque tic de `useHass`. Le détour est
+   * celui que le projet emploie déjà ailleurs (`systeme.jsx`, `wx3d.jsx`). */
+  const gestesZ = useRef({ annuler, refaire });
+  useEffect(() => { gestesZ.current = { annuler, refaire }; });
   useEffect(() => {
-    if (!editMode) return;
+    if (!editMode) return undefined;
     const onKey = (e) => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
       const t = e.target;
       const dansUnChamp = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
       if (dansUnChamp) return;
       e.preventDefault();
-      if (e.shiftKey) refaire(); else annuler();
+      const { annuler: defaire, refaire: rejouer } = gestesZ.current;
+      if (e.shiftKey) rejouer(); else defaire();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  });
+  }, [editMode]);
   const ordreDe = (zone) => {
     const base = zone === 'main' ? ACC_MAIN : ACC_RAIL;
     const sauve = (grille[zone] || []).map(s => ACC_RENOMME[s] || s).filter(s => base.indexOf(s) >= 0);
@@ -7159,19 +7168,43 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
    * se mordait la queue — une carte posée hors du modèle y ajoutait une colonne
    * implicite, comptée à la lecture suivante (voir placement.js). */
   const piecesGrille = useRef(null);
+  const piecesObs = useRef(null);
+  const mesurerPieces = useRef(null);
   const etroitPieces = !useWide(641); // le téléphone : deux colonnes, comme partout
   const [piecesCols, setPiecesCols] = useState(() => (etroitPieces ? 2 : 3));
+  /* La mesure dans une référence vivante : l'observateur se pose UNE fois, et
+   * doit lire les réglages du jour — pas ceux du montage. Changer de format
+   * (téléphone, mosaïque) remesure sans le reposer. */
   useEffect(() => {
-    const el = piecesGrille.current;
-    if (!el || typeof ResizeObserver === 'undefined') return undefined;
-    const lire = () => {
+    mesurerPieces.current = () => {
+      const el = piecesGrille.current;
+      if (!el) return;
       try { setPiecesCols(colonnesPour(el.getBoundingClientRect().width, etroitPieces, tactile && wide)); } catch { /* grille partie */ }
     };
+    if (piecesGrille.current) mesurerPieces.current();
+  }, [etroitPieces, tactile, wide]);
+  /* La grille se pose elle-même (audit du 27/09). L'effet qui tenait
+   * l'observateur n'avait AUCUN tableau de dépendances : `Dashboard` se rend à
+   * chaque tic de `useHass` — plusieurs fois par minute dans une vraie maison
+   * —, et il détruisait puis rebâtissait un `ResizeObserver` en forçant un
+   * calcul de mise en page synchrone, à ce rythme-là.
+   *
+   * Déclarer des dépendances n'aurait pas suffi : la grille vit dans une
+   * SECTION de l'Accueil, elle arrive donc parfois après le premier rendu — on
+   * glisse jusqu'à sa page, on active la section. L'effet sans dépendances
+   * rattrapait ce cas par accident, en se relançant sans fin. Une `ref` de
+   * rappel le fait exprès : React l'appelle quand le nœud arrive, et de
+   * nouveau avec `null` quand il part. Mémoïsée à vide, sans quoi React la
+   * rappellerait à chaque rendu — le défaut qu'on vient de retirer. */
+  const poserGrillePieces = useCallback((el) => {
+    if (piecesObs.current) { piecesObs.current.disconnect(); piecesObs.current = null; }
+    piecesGrille.current = el;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const lire = () => { if (mesurerPieces.current) mesurerPieces.current(); };
     lire();
-    const ro = new ResizeObserver(lire);
-    ro.observe(el);
-    return () => ro.disconnect();
-  });
+    piecesObs.current = new ResizeObserver(lire);
+    piecesObs.current.observe(el);
+  }, []);
   /* La taille RÉSOLUE de chaque pièce : le choix explicite s'il existe, sinon
    * celle que l'ordre donne par défaut. Le placement en a besoin — une carte
    * standard occupe deux rangées. */
@@ -7925,7 +7958,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             /* La mosaique de la tablette compte les colonnes : sans les fixer
               * a trois, `auto-fill` en donnerait quatre ou cinq et les grandes
               * tuiles tomberaient n'importe ou. */
-            <div ref={piecesGrille} className="grid-chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + piecesCols + ',minmax(0,1fr))', gap: 8 }}>
+            <div ref={poserGrillePieces} className="grid-chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + piecesCols + ',minmax(0,1fr))', gap: 8 }}>
               {ordrePieces(inner.map(p => p.name)).map(n => inner.find(p => p.name === n)).filter(Boolean).map((p, i) => {
                 /* Un choix explicite (bouton de taille en edition) prime sur
                   * tout : il vaut pour l'appareil qui l'a fait comme pour les

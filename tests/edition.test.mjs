@@ -64,7 +64,28 @@ test('Ctrl+Z ne vole pas l’annulation d’un champ de saisie', () => {
   // détection existe et ne sert à rien.
   assert.match(bloc, /if \(dansUnChamp\) return;/,
     'le raccourci détecte le champ de saisie mais ne s’y abstient plus');
-  assert.match(bloc, /if \(e\.shiftKey\) refaire\(\); else annuler\(\);/, 'Maj ne distingue plus refaire de défaire');
+  // Les deux gestes se lisent dans une référence vivante depuis l'audit du
+  // 27/09 : ils se referment sur `passe`, `futur` et `accL`, donc les nommer
+  // en dépendances reposerait l'écoute aussi souvent que de n'en déclarer
+  // aucune. Maj doit continuer de les distinguer.
+  assert.match(bloc, /const \{ annuler: defaire, refaire: rejouer \} = gestesZ\.current;/,
+    'les gestes ne se lisent plus dans la référence vivante');
+  assert.match(bloc, /if \(e\.shiftKey\) rejouer\(\); else defaire\(\);/, 'Maj ne distingue plus refaire de défaire');
+});
+
+test('l’écoute du clavier ne se repose pas à chaque rendu', () => {
+  // Audit du 27/09 : l'effet n'avait AUCUN tableau de dépendances. `Dashboard`
+  // se rend à chaque tic de `useHass` — plusieurs fois par minute dans une
+  // vraie maison — et l'écoute de `window` était retirée puis reposée à ce
+  // rythme-là, tant qu'on restait en mode édition.
+  // Ancré sur le raccourci lui-même : `App.jsx` porte d'autres écoutes du
+  // clavier, et la première venue n'est pas celle-ci.
+  const i = src.indexOf("e.key.toLowerCase() !== 'z'");
+  assert.notEqual(i, -1, 'le raccourci a disparu');
+  const fin = src.slice(i, i + 700);
+  assert.match(fin, /window\.addEventListener\('keydown', onKey\);/, 'l’écoute du raccourci a disparu');
+  assert.match(fin, /\}, \[editMode\]\);/,
+    'l’effet du raccourci n’est plus borné à `editMode` : il se repose à chaque rendu');
 });
 
 test('le bouton dit « défaire », pas « annuler »', () => {
