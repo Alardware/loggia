@@ -6035,11 +6035,15 @@ function prochaineRation(S) {
  * et lecteurs configures, puis tout le registre — une carte par appareil, sans
  * les entites cachees, desactivees ou de configuration —, le distributeur et
  * les plantes de la configuration. Les memes regles que la Vue Piece. */
-function objetsDeLaMaison(hass, ajoutes = []) {
+/* `epingles` arrive du dehors depuis l'audit du 27/09 : la vue mémoïse cette
+ * liste et nous la passe, ce qui rend la dépendance VISIBLE. Lue ici, elle
+ * était invisible à `exhaustive-deps` — et la déclarer sans l'employer aurait
+ * ajouté un avertissement à un inventaire que le projet garde court exprès. */
+function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
   const S = (hass && hass.states) || {};
   const meta = (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id)) || {};
   const pieceDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function') ? (LOGGIA_INDEX.areaNameOf(id) || null) : null;
-  const epingles = new Set(lireEpingles().map(x => cvId(x)));
+  const epingles = epinglesDehors || new Set(lireEpingles().map(x => cvId(x)));
   const out = [];
   const pris = new Set();
   const entree = (cle, o) => {
@@ -6108,21 +6112,43 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
   useEffect(() => { try { window.sessionStorage.setItem('loggia-objets-filtre', choix); } catch { /* stockage indisponible */ } }, [choix]);
   // L'agencement : ce que la maison propose, moins les retraits, plus les
   // ajouts, dans l'ordre choisi — le meme editeur que les pieces.
-  const ajoutes = layoutOf(OBJ_LAYOUT_KEY, 'objets').added || [];
-  const tousObjets = objetsDeLaMaison(hass, ajoutes);
-  const ordrePieces = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).map(z => z.name);
+  /* La chaîne d'Objets, MÉMOÏSÉE (audit du 27/09).
+   *
+   * `objetsDeLaMaison` fait un `Object.keys` complet sur toutes les entités de
+   * la maison, puis vient un tri, puis deux passes de comptage. Cette vue sert
+   * CINQ entrées de menu — Lumières, Climat, Volets, Médias, Objets — et tout
+   * cela repartait à chaque rendu, y compris quand seul un état LOCAL avait
+   * bougé : changer de puce de filtre rescannait la maison entière.
+   *
+   * Les trois entrées sont d'abord STABILISÉES par leur signature. Sans cela,
+   * `ajoutes` et `ordrePieces` sont des tableaux neufs à chaque rendu, et
+   * mémoïser dessus ne servirait à rien — tout en ajoutant des avertissements
+   * à l'inventaire de `tests/dependances.test.mjs`. Ici les dépendances sont
+   * complètes et l'inventaire ne bouge pas. */
+  const ajoutesSig = (layoutOf(OBJ_LAYOUT_KEY, 'objets').added || []).join('|');
+  const ajoutes = useMemo(() => (ajoutesSig ? ajoutesSig.split('|') : []), [ajoutesSig]);
+  const ordreSig = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).map(z => z.name).join('|');
+  const ordrePieces = useMemo(() => (ordreSig ? ordreSig.split('|') : []), [ordreSig]);
+  /* Les épingles étaient lues DANS `objetsDeLaMaison`, donc invisibles à la
+   * règle des dépendances — et pourtant le résultat en dépend. On les lit ici
+   * et on les passe : la dépendance devient visible et vérifiable. */
+  const epinglesSig = lireEpingles().map(x => cvId(x)).join('|');
+  const epingles = useMemo(() => new Set(epinglesSig ? epinglesSig.split('|') : []), [epinglesSig]);
+  const tousObjets = useMemo(() => objetsDeLaMaison(hass, ajoutes, epingles), [hass, ajoutes, epingles]);
   // L'ordre propose est deja piece par piece : c'est de LA que part un
   // deplacement — sinon la grille sautait a la premiere prise (bug vecu).
-  const derived = trierObjets(tousObjets.filter(o => ajoutes.indexOf(o.cle) < 0), ordrePieces).map(o => o.cle);
+  const derived = useMemo(
+    () => trierObjets(tousObjets.filter(o => ajoutes.indexOf(o.cle) < 0), ordrePieces).map(o => o.cle),
+    [tousObjets, ajoutes, ordrePieces]);
   const ed = useLayoutEditor(OBJ_LAYOUT_KEY, 'objets', derived);
-  const parCle = new Map(tousObjets.map(o => [o.cle, o]));
-  const objets = ed.ids.map(cle => parCle.get(cle)).filter(Boolean);
-  const puces = pucesObjets(objets);
+  const parCle = useMemo(() => new Map(tousObjets.map(o => [o.cle, o])), [tousObjets]);
+  const objets = useMemo(() => ed.ids.map(cle => parCle.get(cle)).filter(Boolean), [ed.ids, parCle]);
+  const puces = useMemo(() => pucesObjets(objets), [objets]);
   const filtres = OBJ_FILTRES().filter(f => puces.some(p => p.id === f.id));
   const actuel = filtres.some(f => f.id === choix) ? choix : 'tous';
   // L'ordre est celui de l'editeur : le propose (piece par piece), ou celui choisi a la main.
   const visibles = objets.filter(o => actuel === 'tous' || o.filtres.indexOf(actuel) >= 0);
-  const stats = statsObjets(objets);
+  const stats = useMemo(() => statsObjets(objets), [objets]);
   const [addSheet, setAddSheet] = useState(false);
   const [cardEdit, setCardEdit] = useState(null);
   const nomDe = (o) => ed.labelOf(o.cle) || o.nom;
@@ -14051,9 +14077,47 @@ export default function App() {
   const weatherRaw = wEnt ? String(wEnt.state) : null; // état HA brut pour le fond GLSL (presets = états HA)
   const weatherTemp = wEnt && wEnt.attributes ? wEnt.attributes.temperature : null;
   const weatherLabel = wEnt ? haWeatherLabel(wEnt.state) : null;
-  let accueil = null; // Dashboard + vue Pièce (capteurs de la pièce) — pas calculé ailleurs
-  if (view === 'accueil' || activeRoom) { try { accueil = deriveAccueil(hass, cfg, loggiaRuntime.resolved); if (accueil) accueil.index = loggiaRuntime.index; } catch (e) { console.error('deriveAccueil', e); accueil = null; } }
-  let notifs; try { notifs = deriveNotifs(hass); } catch (e) { console.error('deriveNotifs', e); notifs = []; }
+  /* Les deux dérivations de l'Accueil, MÉMOÏSÉES (audit du 27/09).
+   *
+   * `deriveAccueil` balaie les pièces, les lumières, le chauffage, les volets,
+   * les plantes, les machines, l'alarme, les caméras et les médias — cent
+   * trente lignes. Elle était appelée DANS le rendu, comme `deriveNotifs`.
+   *
+   * Ce n'est pas le changement d'état qui coûtait : quand la maison bouge,
+   * refaire le calcul est juste. C'est tout le RESTE. Mesuré sur la
+   * démonstration, `hass` identique d'un bout à l'autre : un aller-retour en
+   * mode édition provoquait QUATRE recalculs complets des deux dérivations et
+   * du balayage d'entités de la barre latérale. Rien n'avait changé dans la
+   * maison.
+   *
+   * `cfg` et `loggiaRuntime` sont déjà mémoïsés : les dépendances sont donc
+   * complètes, et la règle `exhaustive-deps` n'a rien à redire — l'inventaire
+   * de `tests/dependances.test.mjs` ne bouge pas d'une ligne. */
+  const accueil = useMemo(() => {
+    // Dashboard + vue Pièce (capteurs de la pièce) — pas calculé ailleurs
+    if (view !== 'accueil' && !activeRoom) return null;
+    try {
+      const a = deriveAccueil(hass, cfg, loggiaRuntime.resolved);
+      if (a) a.index = loggiaRuntime.index;
+      return a;
+    } catch (e) { console.error('deriveAccueil', e); return null; }
+  }, [view, activeRoom, hass, cfg, loggiaRuntime.resolved, loggiaRuntime.index]);
+  const notifs = useMemo(() => {
+    try { return deriveNotifs(hass); } catch (e) { console.error('deriveNotifs', e); return []; }
+  }, [hass]);
+  /* Le compte d'appareils de la barre latérale — TOUJOURS montée, quelle que
+   * soit la vue — bouclait sur TOUTES les entités de la maison à chaque rendu
+   * d'`App()`, avec un test sur huit préfixes de domaine. Le coût est
+   * proportionnel à la taille de l'installation, et il était payé même quand
+   * la vue affichée n'avait rien à voir avec ces domaines. */
+  const nbAppareils = useMemo(() => {
+    const S = (hass && hass.states) || null;
+    if (!S || (hass.connected !== undefined && !hass.connected)) return 0;
+    const doms = ['light.', 'switch.', 'media_player.', 'camera.', 'climate.', 'cover.', 'vacuum.', 'lawn_mower.'];
+    let n = 0;
+    for (const id in S) { if (doms.some(d => id.indexOf(d) === 0) && S[id] && S[id].state !== 'unavailable') n++; }
+    return n;
+  }, [hass]);
   // (thème/mode/suivi HA lus paresseusement à l'initialisation des states —
   //  les relire ici arrivait après leur première réécriture.)
   const [look, setLook] = useState(readLook);
@@ -14376,8 +14440,7 @@ export default function App() {
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 14, padding: '10px 16px', fontSize: 12, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
       <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={peutEditer ? () => setEditMode(e => !e) : null} tactile={tactile} users={users} userIdx={userIdx} onSwitchUser={switchUser} notifs={notifs} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={(() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
-        let devCount = 0;
-        if (ok) { const doms = ['light.', 'switch.', 'media_player.', 'camera.', 'climate.', 'cover.', 'vacuum.', 'lawn_mower.']; for (const id in hass.states) { if (doms.some(d => id.indexOf(d) === 0) && hass.states[id] && hass.states[id].state !== 'unavailable') devCount++; } }
+        const devCount = nbAppareils;
         const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null;
         const aid = (secAlarm() && ok && hass.states[secAlarm()]) ? secAlarm() : rAl;
         const ast = (ok && aid && hass.states[aid]) ? hass.states[aid].state : null;
