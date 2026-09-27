@@ -26,7 +26,3 @@ test('la ligne rouge : dans l’onglet Volets et dans le Journal', () => {
   const r = lire('custom_components/loggia/regles.py');
   assert.ok(r.includes('echec: bool = False') && r.includes('if echec:\n            entree["echec"] = True'), 'regles.noter pose le drapeau');
 });
-
-test('les mots ont leur traduction', () => {
-  const en = lire('src/langues/en.js');
-});

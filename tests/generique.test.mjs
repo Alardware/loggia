@@ -303,3 +303,60 @@ test('une URL venue d’une entité ne devient pas un lien sans contrôle', () =
   assert.match(src, /notes: lienSur\(at\.release_url\)/,
     'l’URL de notes n’est plus filtrée là où elle entre');
 });
+
+test('aucun test ne prétend vérifier quelque chose sans rien vérifier', () => {
+  // Audit du 27/09. Quatre tests portaient un nom — « les mots ont leur
+  // traduction », « les mots de la liste existent en anglais » — et un corps
+  // qui lisait un fichier sans jamais rien en conclure. Ils passaient TOUJOURS,
+  // et comptaient dans le total.
+  //
+  // Un test vert qui ne vérifie rien est pire qu'un test absent : il donne
+  // l'impression que la question est gardée.
+  //
+  // Les aides qui assertent pour le compte d'un test sont nommées ici. Une
+  // nouvelle aide fera échouer ce test, qui la réclamera — c'est voulu.
+  const AIDES = /assert|\bok\(|\bko\(|expect\(|\.throws|\.rejects/;
+  const muets = [];
+  let total = 0;
+  for (const f of readdirSync(join(RACINE, 'tests')).filter(n => n.endsWith('.test.mjs'))) {
+    const s = readFileSync(join(RACINE, 'tests', f), 'utf8');
+    const depart = [...s.matchAll(/\btest\(\s*(['"`])([^'"`]*)\1\s*,/g)].map(m => ({ nom: m[2], i: m.index }));
+    total += depart.length;
+    depart.forEach((t, k) => {
+      const fin = k + 1 < depart.length ? depart[k + 1].i : s.length;
+      if (!AIDES.test(s.slice(t.i, fin))) muets.push(f + ' :: ' + t.nom);
+    });
+  }
+  assert.ok(total > 900, 'le repérage des tests ne trouve plus rien : le motif a dû changer');
+  assert.deepEqual(muets, [], 'des tests ne vérifient rien : ' + muets.join(', '));
+});
+
+test('ce qui a été retiré ne revient pas', () => {
+  // Audit du 27/09, point 8.
+  const pkg = JSON.parse(readFileSync(join(RACINE, 'package.json'), 'utf8'));
+  // `@bybas/weather-icons` était une dépendance de PRODUCTION qu'aucun fichier
+  // n'importait : ses dix-sept dessins ont été recopiés dans `src/assets/wx/`
+  // (voir `wxutil.jsx`). HACS la téléchargeait pour rien.
+  assert.ok(!Object.keys(pkg.dependencies || {}).includes('@bybas/weather-icons'),
+    'la dépendance des icônes météo est revenue : rien ne l’importe');
+  // Mais l'ATTRIBUTION reste due : les dessins sont toujours là, sous licence
+  // MIT. Retirer le crédit avec le paquet aurait été une faute.
+  assert.match(readFileSync(join(RACINE, 'site', 'legal', 'mentions-legales.html'), 'utf8'), /@bybas\/weather-icons/,
+    'le crédit des icônes météo a disparu des mentions légales, alors que les dessins sont toujours livrés');
+  assert.ok(readdirSync(join(RACINE, 'src', 'assets', 'wx')).length >= 17, 'les dessins météo ont disparu');
+  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  // `stag` rendait `undefined`, et son commentaire prétendait la garder « pour
+  // les ~200 appels existants ». Il en restait UN.
+  assert.ok(!/const stag = \(\) => undefined;/.test(app), '`stag` est revenue : elle ne rend rien');
+  assert.ok(!/\.\.\.stag\(/.test(app), 'un étalement de `stag` est revenu : il étale `undefined`');
+  // La durée de cycle du lave-vaisselle était ÉCRITE EN DUR, et la barre de
+  // progression comme le « ~X min restant » en découlaient — faux dès que le
+  // cycle ne fait pas cette durée. Choix de l'utilisateur : les deux partent,
+  // le mesuré reste (phase, durée écoulée, watts).
+  assert.ok(!/totalMin = 80/.test(app), 'la durée de cycle inventée du lave-vaisselle est revenue');
+  const i = app.indexOf("machines.lv = {");
+  assert.notEqual(i, -1, 'la carte du lave-vaisselle a disparu');
+  assert.match(app.slice(i, i + 420), /bar: null/, 'la barre de progression du lave-vaisselle est revenue');
+  assert.match(app.slice(i, i + 420), /extra: active \? \(Math\.round\(power\) \+ 'W'\) : null/,
+    'le « ~X min restant » est revenu : il se calculait sur une durée inventée');
+});

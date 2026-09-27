@@ -565,8 +565,11 @@ function Shiny({ on = true, children, style }) {
   if (!on || REDUCE_MOTION) return <span style={style}>{children}</span>;
   return <span className="o-shiny" style={style}>{children}</span>;
 }
-// Cascade retiree le 21/08 (demande user) : plus aucun delai d'entree. Conserve pour les ~200 appels existants.
-const stag = () => undefined;
+/* La cascade d'entree est partie le 21/08 (demande user). Restait `stag`, une
+ * fonction qui rend `undefined` — et son commentaire disait la garder « pour
+ * les ~200 appels existants ». Il en restait UN, qui etalait `undefined` dans
+ * un style (audit du 27/09). La classe CSS `.o-stag`, elle, sert toujours :
+ * c'est par elle qu'`onPaintReady` relance les animations mises en pause. */
 // relance les animations CSS en pause une fois le 1er paint atteint (cartes montées avant l'affichage de l'iframe)
 onPaintReady(() => { try { document.querySelectorAll('.o-stag, .o-draw, .o-fadein').forEach(el => { el.style.animationPlayState = 'running'; }); } catch {} });
 
@@ -1486,8 +1489,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         // déjà que la pièce est éclairée.
         background: `linear-gradient(160deg,${p.bg},rgba(0,0,0,0) 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
         boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))',
-        transition: 'box-shadow .3s ease, background .3s ease',
-        ...stag(idx) }}>
+        transition: 'box-shadow .3s ease, background .3s ease' }}>
         {/* Le bouton de surface : il couvre la carte, passe SOUS les contrôles
           * du pied (positionnés, donc peints après lui) et porte le nom du
           * geste. `inset: 0` plutôt qu'un `onClick` sur la carte : un bouton
@@ -13148,14 +13150,25 @@ function deriveAccueil(hass, cfg, resolved) {
     else if (power > 500) { phase = tr('Rinçage'); color = 'var(--o-ok)'; spin = true; }
     else if (power > 200) { phase = tr('Séchage'); color = 'var(--o-warn)'; anim = 'charge'; }
     else { phase = tr('En cours'); color = 'var(--o-cold)'; spin = true; }
-    const totalMin = 80; const idt = S[notifIds().dishwasherStart];
+    /* La barre de progression et le « ~X min restant » sont PARTIS (audit du
+     * 27/09). Ils se calculaient sur une durée de cycle de quatre-vingts
+     * minutes écrite en dur — un chiffre qu'aucune entité ne donne, et faux
+     * dès que le cycle ne fait pas cette durée-là. « Il reste 12 min » sur une
+     * machine qui en a encore pour une heure est pire que rien.
+     *
+     * Ce qui reste est MESURÉ : la phase d'après la puissance, la durée
+     * écoulée d'après l'heure de départ, les watts.
+     *
+     * Le départ reste borné à la journée — l'horodatage compte les secondes
+     * depuis minuit, et un cycle commencé la veille donnerait n'importe quoi.
+     * La borne est une vraie journée, plus une durée de cycle supposée. */
+    const idt = S[notifIds().dishwasherStart];
     const ts = (idt && idt.attributes && idt.attributes.timestamp) ? idt.attributes.timestamp : 0;
     const nowD = new Date(); const todayStart = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime() / 1000;
     const elapsedMin = Math.max(0, Math.floor((nowD.getTime() / 1000 - (todayStart + ts)) / 60));
-    const validProg = ts > 0 && elapsedMin <= totalMin * 2; // timestamp plausible (sinon barre/temps faux au changement de jour ou si entité absente)
-    const remain = Math.max(0, totalMin - elapsedMin); const prog = Math.min(100, Math.round(elapsedMin / totalMin * 100));
+    const departSu = ts > 0 && elapsedMin <= 1440;
     const fmtT = (mn) => { const h = Math.floor(mn / 60), mm = mn % 60; return (h > 0 ? h + 'h' : '') + (mm < 10 && h > 0 ? '0' : '') + mm + 'min'; };
-    machines.lv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase, color, active, anim, spin, valueIcon: 'timer', valueText: active ? (validProg ? fmtT(elapsedMin) : tr('En cours')) : '--:--', bar: (active && validProg) ? prog : null, barColor: color, extra: active ? (validProg ? ('~' + fmtT(remain) + ' · ' + Math.round(power) + 'W') : (Math.round(power) + 'W')) : null };
+    machines.lv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase, color, active, anim, spin, valueIcon: 'timer', valueText: active ? (departSu ? fmtT(elapsedMin) : tr('En cours')) : '--:--', bar: null, barColor: color, extra: active ? (Math.round(power) + 'W') : null };
   }
   { const pbE = S[notifIds().bins];
     if (pbE) {
