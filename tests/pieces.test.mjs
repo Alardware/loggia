@@ -140,11 +140,20 @@ test('l’interrupteur d’une tuile pièce ne dépend pas de ses voisins', () =
   // standard (38 × 21) partage sa rangée avec les minis masquables ; le chip,
   // lui, n'utilise pas `space-between` et n'a jamais eu le défaut. On vise
   // donc le bon par sa taille, pas par son rôle.
+  // Depuis l'audit du 27/09, la ZONE touchable fait 24 de haut et la pastille
+  // en garde 21 : `marginLeft: 'auto'` vit donc sur l'enveloppe, la taille du
+  // dessin sur la pastille. On vérifie les deux, et qu'elles restent liées.
   const j = c.indexOf('width: 38, height: 21, borderRadius: 999');
-  assert.notEqual(j, -1, 'l’interrupteur du pied standard introuvable');
-  const style = c.slice(j, c.indexOf('}}', j));
-  assert.match(style, /marginLeft: 'auto'/,
+  assert.notEqual(j, -1, 'la pastille du pied standard introuvable');
+  const k = c.lastIndexOf('role="switch"', j);
+  assert.notEqual(k, -1, 'l’interrupteur du pied standard introuvable');
+  const enveloppe = c.slice(k, j);
+  assert.match(enveloppe, /marginLeft: 'auto'/,
     'sans marginLeft:auto, l’interrupteur repasse à gauche dès que les minis sont masqués');
+  assert.match(enveloppe, /height: 24/,
+    'la zone touchable retombe sous les 24 px que demande la règle');
+  assert.match(enveloppe, /margin: '-1\.5px 0'/,
+    'sans la marge négative, les trois pixels empruntés font descendre la rangée');
 });
 
 test('les minis ne cèdent que lorsque la place manque vraiment', () => {

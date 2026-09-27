@@ -331,7 +331,62 @@ export function FlipText({ text, style, live = false }) {
  * voisins (« pourquoi ils ne sont pas alignés ? et horizontalement ») : 34 px,
  * rayon 10, le fond de l'épingle. Elle ferme la feuille qui la contient. */
 const CROIX = <svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>;
+/* Rendre INERTE tout ce qui n'est pas la feuille (audit du 27/09).
+ *
+ * Le piège à focus ne retenait que la touche Tab. Le curseur virtuel d'un
+ * lecteur d'écran — flèches de NVDA, balayage de VoiceOver — ne passe pas par
+ * le clavier : il lit le document. On pouvait donc sortir de la feuille par en
+ * dessous, atteindre une carte derrière le voile, et l'activer.
+ *
+ * On ne DÉPLACE pas la feuille dans une couche à part : elle est rendue là où
+ * elle s'ouvre, et le thème dépoli en dépend (une carte dans une carte ne
+ * refloute pas). On marque donc inertes tous ses FRÈRES, de proche en proche
+ * jusqu'au corps du document — la feuille et ses ancêtres restent seuls
+ * joignables.
+ *
+ * `inert` suffit : la spécification retire l'élément du parcours clavier ET de
+ * l'arbre d'accessibilité. Pas besoin d'y ajouter `aria-hidden`, qu'on
+ * risquerait d'effacer là où il était posé pour une autre raison.
+ *
+ * Un frère DÉJÀ inerte n'est pas touché : une feuille ouverte par-dessus une
+ * autre ne doit pas, en se fermant, réveiller ce que la première avait éteint.
+ */
+export function inerterAutour(noeud) {
+  if (!noeud || typeof document === 'undefined') return () => {};
+  const marques = [];
+  let el = noeud;
+  while (el.parentElement) {
+    const parent = el.parentElement;
+    for (const frere of Array.from(parent.children)) {
+      if (frere === el || frere.hasAttribute('inert')) continue;
+      frere.setAttribute('inert', '');
+      marques.push(frere);
+    }
+    if (parent === document.body) break;
+    el = parent;
+  }
+  return () => { marques.forEach(n => n.removeAttribute('inert')); marques.length = 0; };
+}
+
 const FermerCtx = createContext(null);
+/* Le nom de la feuille vient de sa ligne de titre (audit du 27/09).
+ *
+ * `role="dialog"` sans nom fait annoncer « dialogue », et rien d'autre, à
+ * l'ouverture de n'importe quelle fiche. La feuille tend donc un id, et la
+ * PREMIÈRE ligne de titre qui le demande le porte — `TitreFeuille` ici,
+ * `FicheEntete` dans App.jsx.
+ *
+ * Le jeton évite deux écueils : deux lignes de titre dans la même feuille ne
+ * peuvent pas porter le même id, et le double montage du mode strict de React
+ * ne fait pas passer la ligne pour une seconde. */
+const TitreCtx = createContext(null);
+export function useIdTitreFeuille() {
+  const ctx = useContext(TitreCtx);
+  const jeton = useRef({});
+  const [id, setId] = useState(null);
+  useEffect(() => { if (ctx && ctx.prendre(jeton.current)) setId(ctx.id); }, [ctx]);
+  return id;
+}
 export function CroixFeuille({ style = null }) {
   const fermer = useContext(FermerCtx);
   return (
@@ -341,9 +396,10 @@ export function CroixFeuille({ style = null }) {
 }
 /* Une ligne de titre simple : le titre à gauche, la croix à droite. */
 export function TitreFeuille({ children, style = null, marge = 0 }) {
+  const idTitre = useIdTitreFeuille();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: marge }}>
-      <div style={{ flex: 1, minWidth: 0, ...style }}>{children}</div>
+      <div id={idTitre || undefined} style={{ flex: 1, minWidth: 0, ...style }}>{children}</div>
       <CroixFeuille />
     </div>
   );
@@ -366,9 +422,23 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
   // naitre sur le voile — qui fermait la feuille en pleine saisie. Le
   // stopPropagation de la feuille n'y peut rien : l'evenement n'y passe pas.
   const partiDuVoile = useRef(false);
+  const voileRef = useRef(null);
+  /* Le nom de la feuille : la première ligne de titre prend cet id. */
+  const idTitre = useId();
+  const prisPar = useRef(null);
+  const ctxTitre = useMemo(() => ({
+    id: idTitre,
+    prendre: (jeton) => { if (!prisPar.current) prisPar.current = jeton; return prisPar.current === jeton; },
+  }), [idTitre]);
   // A11y : focus dans la feuille à l'ouverture (Escape marche alors partout), restauré à la fermeture
   useEffect(() => {
     const prev = document.activeElement;
+    /* Le reste de la page devient inerte le temps de la feuille : voir
+     * `inerterAutour`. Fait ICI, dans le même effet que le focus, parce que
+     * l'ORDRE compte : au démontage, on réveille la page AVANT de rendre le
+     * focus — sinon on le rendrait à un élément encore inerte, qui le
+     * refuserait, et le clavier repartirait du début du document. */
+    const reveiller = inerterAutour(voileRef.current);
     /* Le premier élément du contenu, pas la croix ; et un champ qui a déjà
      * pris le focus (`autoFocus` de la recherche) le garde. */
     const t = setTimeout(() => { try {
@@ -376,7 +446,7 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
       const cible = [...el.querySelectorAll('button, [tabindex="0"], input, [role="switch"]')].find(n => !n.hasAttribute('data-croix'));
       (cible || el).focus({ preventScroll: true });
     } catch {} }, 60);
-    return () => { clearTimeout(t); try { if (prev && prev.focus) prev.focus({ preventScroll: true }); } catch {} };
+    return () => { clearTimeout(t); reveiller(); try { if (prev && prev.focus) prev.focus({ preventScroll: true }); } catch {} };
   }, []);
   // Glisser-fermer iOS : la feuille suit le doigt depuis la poignée ; > 120 px = fermeture, sinon rebond spring.
   const dragClose = (e) => {
@@ -401,7 +471,7 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
      * feuille partait alors à la section et l'ajout ne se faisait jamais
      * (retour 01/09). Les gestes internes (poignée, boutons) sont plus bas
      * dans l'arbre : ils continuent de fonctionner. */
-    <div role="presentation"
+    <div role="presentation" ref={voileRef}
       onPointerDown={(e) => { e.stopPropagation(); partiDuVoile.current = e.target === e.currentTarget; }}
       onPointerMove={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
@@ -412,7 +482,7 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
         * comme le motif attendu ailleurs. Elle voit ici un role passif a qui
         * on aurait rajoute des gestes. */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-      <div ref={sheetRef} className={'o-sheet' + (opaque ? ' o-sheet-opaque' : '') + (onglets ? ' o-sheet-onglets' : '')} role="dialog" aria-modal="true" tabIndex={-1} onClick={e => e.stopPropagation()}
+      <div ref={sheetRef} className={'o-sheet' + (opaque ? ' o-sheet-opaque' : '') + (onglets ? ' o-sheet-onglets' : '')} role="dialog" aria-modal="true" aria-labelledby={idTitre} tabIndex={-1} onClick={e => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
           // Piège de focus : Tab boucle dans la feuille — derrière, la page vit
@@ -434,10 +504,12 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
         {/* La croix vit sur la ligne d'en-tête de chaque feuille (`CroixFeuille`,
           * `TitreFeuille`, `FicheEntete`) ; elle ferme par ce contexte. Une
           * feuille qui ne passe qu'un `title` reçoit la ligne toute faite. */}
-        <FermerCtx.Provider value={close}>
-          {title ? <TitreFeuille style={{ fontSize: 17, fontWeight: 800 }} marge={12}>{title}</TitreFeuille> : null}
-          {typeof children === 'function' ? children(close) : children}
-        </FermerCtx.Provider>
+        <TitreCtx.Provider value={ctxTitre}>
+          <FermerCtx.Provider value={close}>
+            {title ? <TitreFeuille style={{ fontSize: 17, fontWeight: 800 }} marge={12}>{title}</TitreFeuille> : null}
+            {typeof children === 'function' ? children(close) : children}
+          </FermerCtx.Provider>
+        </TitreCtx.Provider>
       </div>
     </div>
   );

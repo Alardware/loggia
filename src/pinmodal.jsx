@@ -7,6 +7,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { tr } from './i18n.js';
+import { inerterAutour } from './ui.jsx';
 
 // Modale du code administrateur — gate le basculement vers un profil Admin.
 // Le code n'est PLUS dans le navigateur (18/09) : il est vérifié par le
@@ -42,13 +43,23 @@ export function PinModal({ hass, onClose, onSuccess }) {
   };
   const partiDuVoile = useRef(false);
   const boiteRef = useRef(null);
+  const voileRef = useRef(null);
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
   // Focus dans la boite a l'ouverture, rendu a l'element d'origine ensuite —
   // sans quoi le clavier reste derriere la modale.
   useEffect(() => {
     const avant = document.activeElement;
+    /* Et le reste de la page devient INERTE (audit du 27/09). La boite ne
+     * piegeait rien du tout : Echap la fermait, mais le curseur virtuel d'un
+     * lecteur d'ecran — qui lit le document, pas le parcours clavier —
+     * atteignait et activait une carte derriere le voile, sans code.
+     *
+     * Inerte, le fond n'a plus besoin de piege a focus : Tab ne trouve plus
+     * rien d'autre. Reveille AVANT de rendre le focus, sinon on le rendrait a
+     * un element encore inerte, qui le refuserait. */
+    const reveiller = inerterAutour(voileRef.current);
     const t = setTimeout(() => { try { const el = boiteRef.current; if (el) (el.querySelector('button, [tabindex="0"]') || el).focus({ preventScroll: true }); } catch {} }, 40);
-    return () => { clearTimeout(t); try { if (avant && avant.focus) avant.focus({ preventScroll: true }); } catch {} };
+    return () => { clearTimeout(t); reveiller(); try { if (avant && avant.focus) avant.focus({ preventScroll: true }); } catch {} };
   }, []);
   const padBtn = { height: 52, borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 600, cursor: 'pointer' };
   const add = (d) => {
@@ -62,7 +73,7 @@ export function PinModal({ hass, onClose, onSuccess }) {
     });
   };
   return (
-    <div role="presentation"
+    <div role="presentation" ref={voileRef}
       onPointerDown={(e) => { partiDuVoile.current = e.target === e.currentTarget; }}
       onClick={(e) => { if (e.target === e.currentTarget && partiDuVoile.current) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.62)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>

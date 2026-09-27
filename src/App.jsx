@@ -31,7 +31,8 @@ import { isViewAvailable, viewReason } from './views.js';
 import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
-  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere, CroixFeuille, TitreFeuille
+  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere, CroixFeuille, TitreFeuille,
+  useIdTitreFeuille
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
@@ -385,7 +386,17 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
   );
   return (
     <>
-    <aside ref={navRef} className={'loggia-aside ' + (open ? 'is-open' : 'is-closed')} style={{ width: 264, flexShrink: 0, position: 'sticky', top: 0, alignSelf: 'flex-start', height: '100vh', overflowY: 'auto', background: 'linear-gradient(180deg,var(--o-side1),var(--o-side2))', borderRight: 'var(--o-bw,1px) solid var(--o-bd3)', padding: 'calc(18px + var(--o-safe-top,0px)) 12px 18px', display: 'flex', flexDirection: 'column' }}>
+    {/* Hors écran, le tiroir sort AUSSI du parcours (audit du 27/09).
+      * Au tactile, `is-closed` le pousse par `transform: translateX(-100%)` —
+      * il reste donc `display: flex`, visible pour le navigateur, et ses onze
+      * boutons restaient tabulables et lisibles par un lecteur d'écran, à
+      * l'aveugle. Sur ORDINATEUR, `is-closed` n'est qu'un rail de 72 px, bien
+      * visible et bien utile : on n'y touche pas.
+      *
+      * `inert` en chaîne vide : React 18 ne le connaît pas comme booléen et
+      * `inert={true}` écrirait `inert="true"` avec un avertissement. */}
+    <aside ref={navRef} className={'loggia-aside ' + (open ? 'is-open' : 'is-closed')}
+      inert={tactile && !open ? '' : undefined} style={{ width: 264, flexShrink: 0, position: 'sticky', top: 0, alignSelf: 'flex-start', height: '100vh', overflowY: 'auto', background: 'linear-gradient(180deg,var(--o-side1),var(--o-side2))', borderRight: 'var(--o-bw,1px) solid var(--o-bd3)', padding: 'calc(18px + var(--o-safe-top,0px)) 12px 18px', display: 'flex', flexDirection: 'column' }}>
       {pill && <div aria-hidden="true" className="o-navpill" style={{ position: 'absolute', left: 12, right: 12, top: 0, height: pill.h, transform: `translateY(${pill.top}px)`, borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', pointerEvents: 'none', zIndex: 0 }}><span style={{ position: 'absolute', left: 0, top: 9, bottom: 9, width: 3, borderRadius: 4, background: 'var(--o-accent-fond)' }} /></div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 8px 14px' }}>
         {/* Le logo du projet. C'etait un « O » sur un degrade — le O d'Orion,
@@ -1529,11 +1540,18 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
             )}
           </div> : <span />}
           {canToggle && (
+            /* La zone touchable fait 24 de haut, la pastille en garde 21
+              * (audit du 27/09). C'est le premier geste d'une carte de pièce,
+              * et il mesurait 38 × 21 — sous les 24 que demande la règle. La
+              * marge négative rend les trois pixels empruntés : la rangée ne
+              * bouge pas d'un cheveu, et le dessin est le même. */
             <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
               onClick={e => { e.stopPropagation(); doToggle(); }}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-              style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, marginLeft: 'auto', background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
-              <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
+              style={{ display: 'inline-flex', alignItems: 'center', height: 24, cursor: 'pointer', flexShrink: 0, margin: '-1.5px 0', marginLeft: 'auto' }}>
+              <span aria-hidden="true" style={{ display: 'block', width: 38, height: 21, borderRadius: 999, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
+                <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
+              </span>
             </span>
           )}
         </div>
@@ -3286,11 +3304,40 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
  * meme dans toutes les feuilles : CroixFeuille) ; puis
  * une commande principale, des puces, et des RANGEES : un titre, une phrase
  * qui dit ce que ca fait, et a droite la valeur, la bascule ou le bouton. */
+/* Une rangée de points de page, au gabarit tactile (audit du 27/09).
+ *
+ * Le point mesure 8 px : bien trop petit pour un doigt — la règle en demande
+ * 24 (WCAG 2.5.8), et sur une tablette murale, une main qui tremble n'en vise
+ * aucun. On garde le POINT tel quel et on agrandit ce qui l'entoure, avec une
+ * marge verticale négative pour que la rangée ne grandisse pas d'un pixel.
+ *
+ * Les points se touchent alors sans se chevaucher : leurs centres sont à 24,
+ * l'écart exact que la règle demande. Les flèches voisines gardent leur place,
+ * la rangée qui les sépare garde son `gap`.
+ *
+ * Trois écrans posaient ces points — deux d'entre eux à l'octet près. */
+function PointsDePage({ n, courant, onChoisir, couleur = 'var(--o-accent-fond)' }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center' }}>
+      {Array.from({ length: n }, (_, i) => (
+        <button key={i} type="button" aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === courant} onClick={() => onChoisir(i)}
+          style={{ width: 24, height: 24, margin: '-8px 0', padding: 0, border: 'none', background: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span aria-hidden="true" style={{ display: 'block', width: 8, height: 8, borderRadius: 4, background: i === courant ? couleur : 'var(--o-bd2)' }} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function FicheEntete({ titre, sous, id = null, droite = null }) {
+  /* C'est cette ligne qui NOMME la feuille : sans elle, un lecteur d'écran
+   * annonce « dialogue » et rien d'autre à l'ouverture de n'importe quelle
+   * fiche (audit du 27/09). `id` reste celui de l'entité, pour l'épingle. */
+  const idTitre = useIdTitreFeuille();
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 24, fontWeight: 500, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
+        <div id={idTitre || undefined} style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 24, fontWeight: 500, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
         {sous ? <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sous}</div> : null}
       </div>
       {droite}
@@ -4226,10 +4273,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
                 <button aria-label={tr('Icônes précédentes')} disabled={pageIcone === 0} onClick={() => setPageIcone(p => Math.max(0, p - 1))} style={pageurIcone(pageIcone > 0)}><Fi i="angle-small-left" size={14} /></button>
                 {pagesIcone <= 8
-                  ? Array.from({ length: pagesIcone }, (_, i) => (
-                    <button key={i} aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === pageIcone} onClick={() => setPageIcone(i)}
-                      style={{ width: 8, height: 8, padding: 0, borderRadius: 4, border: 'none', cursor: 'pointer', background: i === pageIcone ? 'var(--o-accent-fond)' : 'var(--o-bd2)' }} />
-                  ))
+                  ? <PointsDePage n={pagesIcone} courant={pageIcone} onChoisir={setPageIcone} />
                   : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', fontVariantNumeric: 'tabular-nums' }}>{tr('Page {n}', { n: pageIcone + 1 })} / {pagesIcone}</span>}
                 <button aria-label={tr('Icônes suivantes')} disabled={pageIcone >= pagesIcone - 1} onClick={() => setPageIcone(p => Math.min(pagesIcone - 1, p + 1))} style={pageurIcone(pageIcone < pagesIcone - 1)}><Fi i="angle-small-right" size={14} /></button>
               </div>
@@ -6503,10 +6547,7 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
           {pages > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
               <button aria-label={tr('Icônes précédentes')} disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={pageur(page > 0)}><Fi i="angle-small-left" size={14} /></button>
-              {Array.from({ length: pages }, (_, i) => (
-                <button key={i} aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === page} onClick={() => setPage(i)}
-                  style={{ width: 8, height: 8, padding: 0, borderRadius: 4, border: 'none', cursor: 'pointer', background: i === page ? t.col : 'var(--o-bd2)' }} />
-              ))}
+              <PointsDePage n={pages} courant={page} onChoisir={setPage} couleur={t.col} />
               <button aria-label={tr('Icônes suivantes')} disabled={page === pages - 1} onClick={() => setPage(p => Math.min(pages - 1, p + 1))} style={pageur(page < pages - 1)}><Fi i="angle-small-right" size={14} /></button>
             </div>
           )}
@@ -6697,10 +6738,18 @@ function OngletsAccueil({ maison, moment, edit = false, demande = null, onDemand
       {/* Pas de barre d'onglets (retour user du 15/09 : « j'en veux pas de
         * ca ») : deux points, comme sous l'ancienne glissiere — le doigt
         * glisse, la souris tape le point. */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
+      {/* Le point reste un point, sa zone touchable fait 24 (audit du 27/09).
+        * Mesurés à 18 × 6 et 6 × 6, ces deux points étaient les plus petites
+        * cibles de tout le dashboard — et ils changent de PAGE. La marge
+        * verticale négative garde la rangée à sa hauteur, et `gap: 0` pose
+        * leurs centres à 24 l'un de l'autre : l'écart exact que demande la
+        * règle, et l'espacement visible ne bouge presque pas (8 → 12). */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 0, marginBottom: 12 }}>
         {onglets.map((lbl, i) => { const on = onglet === i; return (
           <button key={lbl} type="button" aria-label={lbl} aria-pressed={on} title={lbl} onClick={() => va(i)}
-            style={{ width: on ? 18 : 6, height: 6, borderRadius: 999, border: 'none', padding: 0, cursor: 'pointer', background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', transition: 'all .25s' }} />
+            style={{ minWidth: 24, height: 24, margin: '-9px 0', border: 'none', padding: 0, cursor: 'pointer', background: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span aria-hidden="true" style={{ display: 'block', width: on ? 18 : 6, height: 6, borderRadius: 999, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', transition: 'all .25s' }} />
+          </button>
         ); })}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, transform: dx ? 'translateX(' + dx + 'px)' : undefined, transition: dx ? 'none' : 'transform .2s' }}>
@@ -8570,9 +8619,9 @@ function ScenesContent({ hass }) {
         </QuickBox>
         <QuickBox label={tr('Luminosité')} className="o-qb-lumi">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider(tr('Luminosité des scènes'), bri, setBri, { min: 5, max: 100, step: 5 })}>
-            <button onClick={() => setBri(bri - 5)} aria-label={tr('Baisser')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
+            <button onClick={() => setBri(bri - 5)} aria-label={tr('Baisser')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
             <span style={{ minWidth: 44, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--o-warn)' }}>{bri} %</span>
-            <button onClick={() => setBri(bri + 5)} aria-label={tr('Monter')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
+            <button onClick={() => setBri(bri + 5)} aria-label={tr('Monter')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
           </div>
         </QuickBox>
         <span style={{ flex: 1 }} />
@@ -8734,10 +8783,7 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
           {pages > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
               <button aria-label={tr('Icônes précédentes')} disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={pageur(page > 0)}><Fi i="angle-small-left" size={14} /></button>
-              {Array.from({ length: pages }, (_, i) => (
-                <button key={i} aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === page} onClick={() => setPage(i)}
-                  style={{ width: 8, height: 8, padding: 0, borderRadius: 4, border: 'none', cursor: 'pointer', background: i === page ? t.col : 'var(--o-bd2)' }} />
-              ))}
+              <PointsDePage n={pages} courant={page} onChoisir={setPage} couleur={t.col} />
               <button aria-label={tr('Icônes suivantes')} disabled={page === pages - 1} onClick={() => setPage(p => Math.min(pages - 1, p + 1))} style={pageur(page < pages - 1)}><Fi i="angle-small-right" size={14} /></button>
             </div>
           )}
@@ -9946,9 +9992,9 @@ function CroquettesContent({ hass }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Ration')}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider(tr('Poids d’une portion'), portionW, setPortionWeight, { min: 2, max: 30, step: 1, unit: 'g' })}>
-            <button onClick={() => setPortionWeight(portionW - 1)} aria-label={tr('Baisser')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
+            <button onClick={() => setPortionWeight(portionW - 1)} aria-label={tr('Baisser')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
             <span style={{ minWidth: 40, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--o-warn)' }}>{Math.round(portionW)} g</span>
-            <button onClick={() => setPortionWeight(portionW + 1)} aria-label={tr('Monter')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
+            <button onClick={() => setPortionWeight(portionW + 1)} aria-label={tr('Monter')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
