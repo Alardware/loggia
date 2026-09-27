@@ -276,7 +276,7 @@ try { localStorage.removeItem('loggia_admin_pin'); } catch { /* stockage indispo
  * `loggia-ciel`, dont la fonctionnalite (le ciel etoile) a ete supprimee sans
  * elle. Les retirer n'efface aucune donnee : une valeur deja posee reste ou
  * elle est, elle cesse seulement d'etre portee et exportee. */
-export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_weather', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_customviews', 'loggia_users', 'loggia_assistant', 'loggia_accueil', 'loggia_look', 'loggia_active_user', 'loggia_roomlayout', 'loggia_objlayout', 'loggia_coverlayout', 'loggia_enlayout', 'loggia_seclayout', 'loggia_camdispo', 'loggia_lights', 'loggia_climate', 'loggia-theme', 'loggia-mode', 'loggia-ha', 'loggia-navbar', 'loggia-navoffset', 'loggia-topoffset', 'loggia-wxfx', 'loggia-langue'];
+export const LOGGIA_SYNC_KEYS = ['loggia_rooms', 'loggia_energyHaids', 'loggia_alarm', 'loggia_weather', 'loggia_people', 'loggia_switchlights', 'loggia_cameras', 'loggia_medias', 'loggia_customviews', 'loggia_users', 'loggia_assistant', 'loggia_accueil', 'loggia_look', 'loggia_active_user', 'loggia_roomlayout', 'loggia_objlayout', 'loggia_coverlayout', 'loggia_enlayout', 'loggia_seclayout', 'loggia_camdispo', 'loggia_icones', 'loggia_lights', 'loggia_climate', 'loggia-theme', 'loggia-mode', 'loggia-ha', 'loggia-navbar', 'loggia-navoffset', 'loggia-topoffset', 'loggia-wxfx', 'loggia-langue'];
 
 /** Les cles que le MOTEUR lit : la configuration de la maison, pas l'apparence.
  *
@@ -438,6 +438,16 @@ export async function resetLoggiaComplet() {
 // Interrupteurs traités comme des lumières — choix de l'utilisateur, sans
 // défaut : une installation neuve n'en déclare aucun.
 export const switchLightsCfg = () => (cfgVal('loggia_switchlights', []) || []).filter(Boolean);
+
+/* L'icone qu'on a CHOISIE pour une entite : `{ "<entity_id>": "<glyphe>" }`.
+ *
+ * Elle ne dit rien d'autre. Jusqu'au 26/09, la seule facon de changer l'allure
+ * d'une prise etait de la declarer lumiere — ce qui change aussi sa carte, sa
+ * famille et son filtre. « Je veux pouvoir, si je le desire, modifier l'icone
+ * par defaut », sans que cela « change de categorie », et pour n'importe quel
+ * type de carte. Une entree ici ne touche donc ni au domaine, ni aux filtres :
+ * elle remplace un glyphe, rien de plus, et son absence rend la devinette. */
+export const iconesCfg = () => { const v = cfgVal('loggia_icones', null); return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; };
 
 // Reliquat de transition : un choix explicite reste prioritaire, mais il n'y a
 // plus d'entite par defaut — c'est la decouverte qui trouve le panneau.

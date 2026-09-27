@@ -2397,4 +2397,19 @@ export default {
   // — un seuil de CO2 par piece (ADR 0044, 25/09)
   'Seuil CO₂': 'CO₂ threshold',
   '1400 par défaut': '1400 by default',
+  // — l'icone d'une carte, choisie a la main (26/09)
+  'Seul le dessin change : la famille, le filtre et la carte restent les mêmes.': 'Only the drawing changes: the family, the filter and the card stay the same.',
+  'Aucune icône choisie : Loggia garde celle qu’il devine.': 'No icon chosen: Loggia keeps the one it guesses.',
+  // — ce qu'il y a au bout d'une prise (26/09)
+  'Serveur NAS': 'NAS server',
+  'Ordinateur': 'Computer',
+  'Sèche-linge': 'Tumble dryer',
+  'Réfrigérateur': 'Fridge',
+  'Télévision': 'Television',
+  'Cafetière': 'Coffee maker',
+  'Radiateur': 'Heater',
+  'Box internet': 'Internet box',
+  'Borne de recharge': 'Charging station',
+  'Compresseur': 'Compressor',
+  'Branchée': 'Plugged in',
 };

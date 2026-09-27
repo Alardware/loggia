@@ -30,7 +30,9 @@ const fichiers = [];
   for (const f of readdirSync(d)) {
     const p = join(d, f);
     if (statSync(p).isDirectory()) { if (f !== 'langues') walk(p); }
-    else if (/\.jsx?$/.test(f)) fichiers.push(p);
+    // `dessins.js` ne porte pas un mot d'interface : c'est du balisage SVG, des
+    // `<rect>` et des `<path>` que le filet lit comme des noeuds de texte.
+    else if (/\.jsx?$/.test(f) && f !== 'dessins.js') fichiers.push(p);
   }
 })(SRC);
 const nom = (f) => relative(SRC, f).replace(/\\/g, '/');
@@ -44,6 +46,43 @@ const I18N = readFileSync(join(SRC, 'i18n.js'), 'utf8');
 const BLOC_HA = I18N.slice(I18N.indexOf('const CLES_HA = {'), I18N.indexOf('export function langueDeHA'));
 const CLES_HA = new Set([...BLOC_HA.matchAll(/^\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")\s*:/gm)]
   .map(m => (m[1] ?? m[2]).replace(/\\'/g, "'")));
+
+test('deux mots opposés viennent du MÊME domaine de Home Assistant', () => {
+  /* Retour d'un utilisateur polonais sur la 3.73 (25/09), et c'est un vrai
+   * défaut, pas une question de traduction :
+   *
+   *   'Ouvert': 'C:lock:state.open',
+   *   'Fermé': 'C:group:state.closed',
+   *
+   * En français les deux se lisent pareil, donc personne ne le voyait. En
+   * polonais, `lock:state.open` donne « Otwarte » — un adjectif — et
+   * `group:state.closed` donne « zamknięto », une forme verbale (« on a
+   * fermé »). Sur la MÊME carte, une porte disait donc « Otwarte » ouverte et
+   * « zamknięto » fermée : deux registres.
+   *
+   * Corrigé en 3.74.0 : les deux viennent de `cover`. Ce test est là pour que
+   * ça ne se reperde pas — le défaut est invisible en français, il ne se
+   * rattrapera pas à l'œil.
+   *
+   * Chaque domaine traduit son vocabulaire dans SA table : deux mots qui se
+   * répondent à l'écran doivent venir de la même, sinon rien ne garantit
+   * qu'ils se répondent ailleurs qu'en français. */
+  const domaine = (mot) => {
+    const m = BLOC_HA.match(new RegExp(String.raw`^\s*'` + mot + String.raw`'\s*:\s*'C:([a-z_]+):`, 'm'));
+    assert.ok(m, mot + ' a quitté le vocabulaire de Home Assistant');
+    return m[1];
+  };
+  const PAIRES = [
+    ['Ouvert', 'Fermé'],
+    ['Allumé', 'Éteint'],
+    ['MAISON', 'absent'],
+    ['ACTIF', 'Inactif'],
+  ];
+  for (const [a, b] of PAIRES) {
+    assert.equal(domaine(a), domaine(b),
+      `« ${a} » et « ${b} » se répondent à l’écran : ils doivent venir du même domaine`);
+  }
+});
 
 test('chaque tr(«…») a sa clé, au catalogue ou chez Home Assistant', () => {
   /* La clé EST le texte français : une clé absente ne casse rien, la phrase

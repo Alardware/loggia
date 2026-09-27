@@ -68,7 +68,7 @@ test('le bandeau porte « Entites de la vue » et sait changer son mot d’ordre
   assert.ok(bloc(app, 'function Dashboard(', NL + 'function ').includes('</>} onEnt={onEnt} />'), 'l’Accueil passe par la propriete, plus par un bouton a lui');
   assert.ok(bloc(app, 'function EnergieContent(', NL + 'function ').includes("onEnt={onEnt} entLabel={tr('Entités du schéma')} />"), 'l’Energie garde son libelle');
   assert.ok(bloc(app, 'function SecuriteContent(', NL + '}').includes('{edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} onEnt={onEnt} />}'), 'la Securite');
-  assert.equal((app.match(/<ObjetsView hass=\{hass\} onNav=\{setView\}(?: filtre="[a-z]+")? edit=\{editMode && peutEditer\} onEnt=\{editMode && peutEditer \? \(\) => setEntSheet\(true\) : null\} \/>/g) || []).length, 4, 'Objets, sur ses quatre routes');
+  assert.equal((app.match(/<ObjetsView hass=\{hass\} onNav=\{setView\}(?: filtre="[a-z]+")? edit=\{editMode && peutEditer\} onEnt=\{editMode && peutEditer \? \(\) => setEntSheet\(true\) : null\} \/>/g) || []).length, 5, 'Objets, sur ses cinq routes');
 });
 
 test('Parametres : plus de barre Sombre / Clair au sommaire, le reglage reste dans Apparence', () => {

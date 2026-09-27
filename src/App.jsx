@@ -38,6 +38,8 @@ import { CarteMeteo } from './cartemeteo.jsx';
 import { BarreConfort } from './barreconfort.jsx';
 import { HorlogeRail, CalendrierRail, FeuilleVilles, Co2Rail } from './widgetsrail.jsx';
 import { pireCapteur, seuilCo2, ventilationVeille, voletsDeLaZone, actionAerer } from './air.js';
+import { TYPES_PRISE, NOMS_PRISE, typeDePrise, modePrise, motDuMode, animationPrise, couleurPrise, libelleType } from './prises.js';
+import { DESSINS_CAT, FONTE_CAT } from './dessins.js';
 import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, villesDe } from './horloge.js';
 import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile } from './confort.js';
 import { pilesMaison } from './piles.js';
@@ -76,7 +78,7 @@ const OrbeMini = lazy(() => import('./orbe.jsx'));
 import {
   LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle,
   feederScript, enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, droitsDe, usersSig,
-  vacSensors
+  vacSensors, iconesCfg
 } from './state.js';
 // L'accueil de premiere installation ne sert qu'une fois : son code n'a pas a
 // peser dans le bundle de chaque ouverture.
@@ -2114,6 +2116,21 @@ function JaugePile({ barres }) {
  * haut a gauche, bascule ou repere en haut a droite, nom SOUS l'icone, etat
  * ensuite. La rangee horizontale de `CvCard` reste aux autres vues. */
 const ROOM_GENERIQUES = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren', 'valve', 'lock', 'camera', 'binary_sensor', 'sensor'];
+/**
+ * Le glyphe d'une carte : celui qu'on a CHOISI, sinon celui de la famille.
+ *
+ * Chaque famille dessinait le sien — une ampoule pour `RoomLightCard`, un volet
+ * pour `RoomCoverCard`, une flamme pour le climat — sans jamais demander si
+ * l'utilisateur en avait choisi un autre. Le choix se rangeait bien, et ne se
+ * voyait nulle part : « si j'en choisis un, ça ne le change pas, l'ancien
+ * reste » (27/09). Une carte passe donc par ici, et son dessin d'origine n'est
+ * plus qu'un défaut.
+ */
+const GlypheCarte = ({ id, size = 19, anime = false, children }) => {
+  const mien = iconeChoisie(id);
+  return mien ? <Ico name={mien} size={size} anime={anime} /> : children;
+};
+
 function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const S = (hass && hass.states) || {};
   const st = S[id] || null;
@@ -2124,7 +2141,6 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const nom = label || cvName(st, id);
   // Le carre d'une camera montre un appareil photo ; le repere en haut a
   // droite, la camera video — les deux glyphes de la maquette.
-  const ico = dom === 'camera' ? 'camera' : cvIcoEntite(dom, id, st, nom);
   const call = (d, svc, data) => commanderService(hass, id, d, svc, { entity_id: id, ...(data || {}) });
   const togglable = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren', 'valve'].indexOf(dom) >= 0;
   const on = !mort && (dom === 'valve' ? s === 'open' : dom === 'lock' ? s === 'locked' : s === 'on');
@@ -2147,6 +2163,24 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   })();
   const fmtW = (w) => w >= 1000 ? (Math.round(w / 100) / 10).toFixed(1).replace('.', ',') + ' kW' : Math.round(w) + ' W';
   const fmtN = (n) => (Math.round(n * 10) / 10).toString().replace('.', ',');
+  /* LA PRISE DIT CE QU'ELLE ALIMENTE (26/09).
+   *
+   * Une prise commandée ne publie que `on`/`off` : toutes portaient le même
+   * dessin et le même mot. Le nom que l'utilisateur lui a donné dit pourtant ce
+   * qu'il y a au bout, et son capteur de puissance dit si l'appareil travaille
+   * ou dort. Voir `src/prises.js`.
+   *
+   * Ce bloc vient APRÈS `puissance` : il la lit, et une constante ne se lit pas
+   * avant sa ligne — l'écran entier tombait en « erreur de rendu » (mesuré dans
+   * la démonstration). */
+  const carteDePrise = dom === 'switch' && !mort && !cvEstLumiere(id);
+  const typePrise = carteDePrise ? typeDePrise(nom, null, id) : null;
+  const modeDePrise = carteDePrise ? modePrise(actif, puissance) : null;
+  const tp = carteDePrise ? TYPES_PRISE[typePrise] : null;
+  const priseVive = carteDePrise && modeDePrise === 'marche';
+  const anim = carteDePrise ? animationPrise(typePrise, modeDePrise) : null;
+  const etiquetteType = carteDePrise ? libelleType(typePrise, nom, NOMS_PRISE()) : null;
+  const ico = iconeChoisie(id) || (dom === 'camera' ? 'camera' : carteDePrise ? tp.ico : cvIcoEntite(dom, id, st, nom));
   const etatsBin = BIN_ETATS()[a.device_class] || null;
   const danger = dom === 'binary_sensor' && !!(etatsBin && etatsBin[2]) && s === 'on';
   // Un ouvrant (porte, fenetre, garage, portail) : la carte d'avant, plus son
@@ -2196,9 +2230,22 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   else if (dom === 'fan') { sub = actif ? (a.percentage != null ? tr('Vitesse {n} %', { n: Math.round(a.percentage) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else if (dom === 'humidifier') { sub = actif ? (a.current_humidity != null ? tr('Humidité {n} %', { n: Math.round(a.current_humidity) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else if (dom === 'valve') { sub = actif ? tr('Ouverte') : tr('Fermée'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
+  else if (carteDePrise) {
+    // « En veille · 1 W » et « Chauffe · 1 250 W » ne se lisent pas pareil :
+    // c'est tout l'objet du changement. Éteinte, aucune puissance — zéro watt
+    // sur une prise coupée n'apprend rien.
+    sub = motDuMode(typePrise, modeDePrise) + (puissance != null && modeDePrise !== 'eteinte' ? ' · ' + fmtW(puissance) : '');
+    couleur = couleurPrise(typePrise, modeDePrise);
+  }
   else { sub = (actif ? tr('Allumée') : tr('Éteinte')) + (puissance != null ? ' · ' + fmtW(puissance) : ''); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('var(--o-lampe)', .16), 'var(--o-warn)', 'rgba(var(--o-lampe-rgb),'], froid: ['rgba(var(--o-cold-rgb),.16)', 'var(--o-cold)', 'rgba(var(--o-cold-rgb),'], orange: ['rgba(var(--o-warn2-rgb),.16)', 'var(--o-warn2)', 'rgba(var(--o-warn2-rgb),'] };
-  const [icoFond, icoTexte, lavisBase] = TEINTES[teinte];
+  const [icoFondT, icoTexteT, lavisT] = TEINTES[teinte];
+  // Une prise qui travaille prend la couleur de SON appareil — plaque, glyphe
+  // et lavis. En veille, elle reste sobre : sans quoi veille et marche se
+  // ressembleraient de loin, et le partage ne servirait à rien.
+  const icoFond = priseVive ? 'rgba(' + tp.rgb + ',.18)' : icoFondT;
+  const icoTexte = priseVive ? tp.col : icoTexteT;
+  const lavisBase = priseVive ? 'rgba(' + tp.rgb + ',' : lavisT;
   // Un capteur qui a un verdict est ALLUME au sens de la carte : lavis, icone
   // et repere dans sa teinte.
   const allume = !mort && (danger || direct || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera')) || avis != null;
@@ -2212,11 +2259,22 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : undefined} aria-label={ouvrable ? tr('Ouvrir') + ' ' + nom : undefined}
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined} onClick={ouvrable ? () => onOpen(id) : undefined}
       style={{ ...RM_CARD, position: 'relative', cursor: ouvrable ? 'pointer' : 'default',
-        ...(allume && LAVIS ? { background: `linear-gradient(180deg,transparent 28%,${lavisBase}${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
+        // Le lavis dit « ça travaille ». Une prise en veille ne travaille pas :
+        // elle garde la surface ordinaire, et c'est ce qui la distingue.
+        ...((allume && LAVIS && (!carteDePrise || priseVive)) ? { background: `linear-gradient(180deg,transparent 28%,${lavisBase}${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
         border: 'none' }}>
       {ouvrant && <IlluOuvrant type={a.device_class === 'window' ? 'fenetre' : 'porte'} ouvert={ouvert} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)')}>{ico ? <Fi i={ico} size={17} /> : <PlugIcon size={17} />}</span>
+        {/* La plaque, et l'animation de l'appareil QUAND IL TRAVAILLE : le
+          * tambour tourne, la sirène tremble, la lueur respire, les témoins du
+          * NAS clignotent. Rien ne bouge en veille — et `prefers-reduced-motion`
+          * coupe tout, comme partout. */}
+        <span style={{ ...RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)'), position: 'relative' }}>
+          {/* `Ico` et non `Fi` : l'électroménager n'existe pas dans la fonte,
+            * il est dessiné dans `icones.jsx`. Pour un nom de la fonte, les
+            * deux rendent la même chose. */}
+          <span className={anim ? 'o-prise-' + anim : undefined} style={{ display: 'inline-flex' }}>{ico ? <Ico name={ico} size={17} anime={priseVive} /> : <PlugIcon size={17} />}</span>
+        </span>
         {(togglable || dom === 'lock') && !mort
           ? <RmBascule on={actif} nom={nom} onToggle={basculer} />
           : (dom === 'sensor' && mesure && !mort)
@@ -2226,6 +2284,11 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
             : pile != null ? <PileRepere n={pile} /> : null}
       </div>
       <div style={{ marginTop: 14, position: 'relative' }}>
+        {/* Ce que la prise alimente, au-dessus de son nom — et seulement quand
+          * on le sait : « PRISE » écrit au-dessus d'une prise n'apprend rien. */}
+        {etiquetteType && (
+          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: allume ? icoTexte : 'var(--o-text3)', marginBottom: 3 }}>{etiquetteType}</div>
+        )}
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>
         {jauge && !mort && <JaugeMesure jauge={jauge} />}
@@ -2288,7 +2351,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
         border: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         {/* Sans halo (retour 31/08) : il noyait le carré de l'icône en rond. */}
-        <span style={RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accentLu : 'var(--o-text3)')}><LightIcon type={ltype} size={19} /></span>
+        <span style={RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accentLu : 'var(--o-text3)')}><GlypheCarte id={id} size={19}><LightIcon type={ltype} size={19} /></GlypheCarte></span>
         {!mort && <RmBascule on={on} nom={nom} onToggle={toggle} />}
       </div>
       <div>
@@ -2340,7 +2403,7 @@ function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
       onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }}
       onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(actif ? 'rgba(var(--o-ok-rgb),.16)' : 'var(--o-s1)', actif ? 'var(--o-ok)' : 'var(--o-text3)')}><Ico name={dom === 'vacuum' ? 'vacuum' : 'mower'} size={17} color={actif ? 'var(--o-ok)' : 'var(--o-text3)'} /></span>
+        <span style={RM_ICO(actif ? 'rgba(var(--o-ok-rgb),.16)' : 'var(--o-s1)', actif ? 'var(--o-ok)' : 'var(--o-text3)')}><GlypheCarte id={id} size={17}><Ico name={dom === 'vacuum' ? 'vacuum' : 'mower'} size={17} color={actif ? 'var(--o-ok)' : 'var(--o-text3)'} /></GlypheCarte></span>
         {bat != null && <span style={{ fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: bat < 20 ? 'var(--o-bad)' : bat < 50 ? 'var(--o-warn)' : 'var(--o-text2)' }}>{Math.round(bat)}%</span>}
       </div>
       <div>
@@ -2506,7 +2569,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
         <span style={{ ...RM_ICO(pos > 0 ? 'rgba(var(--o-purple-rgb),.16)' : 'var(--o-s1)', pos > 0 ? 'var(--o-purple)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden' }}>
           {/* store qui descend dans le chip : hauteur = part fermée, suit la position en douceur */}
           <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: (100 - pos) + '%', background: 'linear-gradient(180deg,rgba(var(--o-purple-rgb),.34),rgba(var(--o-purple-rgb),.14))', transition: REDUCE_MOTION ? 'none' : 'height .7s cubic-bezier(.22,.61,.36,1)', pointerEvents: 'none' }} />
-          <Ico name={(a.device_class === 'garage' || a.device_class === 'gate') ? 'garage' : 'blinds'} size={18} /></span>
+          <GlypheCarte id={id} size={18}><Ico name={(a.device_class === 'garage' || a.device_class === 'gate') ? 'garage' : 'blinds'} size={18} /></GlypheCarte></span>
         <span style={{ fontSize: 15, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos} %</span>
       </div>
       <div style={{ marginTop: 14 }}>
@@ -2576,7 +2639,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
       border: 'none' }}>
       {/* Allumé = ROUGE (retour d'essai) : l'ambre warn2 rendait jaune. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(marche && !mort ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche && !mort ? 'var(--o-bad)' : 'var(--o-text3)')}><Fi i={heating ? 'flame' : 'thermometer-half'} size={17} /></span>
+        <span style={RM_ICO(marche && !mort ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche && !mort ? 'var(--o-bad)' : 'var(--o-text3)')}><GlypheCarte id={id} size={17}><Fi i={heating ? 'flame' : 'thermometer-half'} size={17} /></GlypheCarte></span>
         {!mort && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
       </div>
       <div style={{ marginTop: 14 }}>
@@ -2683,7 +2746,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
       border: 'none' }}>
       {/* Climat = ROUGE, comme le thermostat : l'ambre rendait jaune. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(marche ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche ? 'var(--o-bad)' : 'var(--o-text3)')}><Fi i={heating && marche ? 'flame' : 'thermometer-half'} size={17} /></span>
+        <span style={RM_ICO(marche ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche ? 'var(--o-bad)' : 'var(--o-text3)')}><GlypheCarte id={'zone:' + zone.id} size={17}><Fi i={heating && marche ? 'flame' : 'thermometer-half'} size={17} /></GlypheCarte></span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {z.auto && <span style={{ padding: '4px 8px', borderRadius: 9, fontSize: 10, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>{tr('AUTO')}</span>}
           {(modeMarche || off) && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
@@ -3198,7 +3261,7 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
           {/* `onError` n'est pas une interaction : c'est le repli quand la pochette
             * ne charge pas. La regle vise les clics poses sur un element inerte. */}
           {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-          {np.art ? <img src={np.art} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Fi i={a.device_class === 'tv' ? 'screen' : 'tv-music'} size={17} />}
+          {np.art ? <img src={np.art} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <GlypheCarte id={id} size={17}><Fi i={a.device_class === 'tv' ? 'screen' : 'tv-music'} size={17} /></GlypheCarte>}
         </span>
         {!mort && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
       </div>
@@ -3958,6 +4021,75 @@ function declarerLumiere(id, oui) {
   cfgSet({ loggia_switchlights: n.length ? n : null });
 }
 
+/* ── L'ICÔNE D'UNE CARTE, CHOISIE À LA MAIN (26/09) ──────────────────────────
+ *
+ * « Je veux pouvoir, si je le désire, modifier l'icône par défaut », sans que
+ * cela « change de catégorie », et « peu importe le type de carte ».
+ *
+ * Jusqu'ici le seul levier était de déclarer une prise « lumière » : elle
+ * changeait alors d'icône, mais aussi de carte, de famille et de filtre. Trois
+ * effets pour une envie d'un seul.
+ *
+ * Un choix d'icône ne fait donc QUE cela. Il se range par entité dans la maison
+ * (`loggia_icones`), il vaut pour toutes les cartes qui montrent cette entité —
+ * tuile, compacte, fiche, chip — et l'effacer rend la devinette d'origine.
+ *
+ * Trente glyphes, trois pages de dix comme la fiche d'une pièce, tous vérifiés
+ * dans `public/fonts/uicons-regular-rounded.css`. */
+/* LA GRILLE D'ICÔNES SUIT LA CATÉGORIE DE LA CARTE (27/09).
+ *
+ * « Je ne retrouve pas mon catalogue éclairage. Pour chaque catégorie, il
+ * faudrait filtrer et mettre en avant d'abord les icônes liées à sa catégorie,
+ * puis passer aux autres. »
+ *
+ * Une grille de deux cents icônes où la bonne est en page six ne sert à rien.
+ * Pour une lampe, les ampoules d'abord ; pour un volet, les volets ; pour une
+ * prise, l'électroménager. Le reste suit, sans disparaître — on peut toujours
+ * mettre une clé à molette sur une lampe si on le veut.
+ *
+ * Chaque groupe donne d'abord ses DESSINS, puis ses glyphes de police (« les
+ * icônes de base ») : un thermostat dessiné avant un thermomètre de police. */
+const GROUPES_ICONES = {
+  lumiere: { dessins: ['eclairage'], fonte: ['eclairage'] },
+  volet: { dessins: ['ouvrants'], fonte: [] },
+  chauffage: { dessins: ['climat'], fonte: [] },
+  prise: { dessins: ['electro', 'iot'], fonte: ['cuisine', 'energie'] },
+  multimedia: { dessins: ['multimedia'], fonte: ['multimedia'] },
+  capteur: { dessins: ['securite', 'meteo'], fonte: ['securite'] },
+  camera: { dessins: ['securite'], fonte: ['securite'] },
+  serrure: { dessins: ['ouvrants', 'securite'], fonte: ['securite'] },
+  alarme: { dessins: ['securite'], fonte: ['securite'] },
+  sirene: { dessins: ['securite'], fonte: ['securite'] },
+  presence: { dessins: ['securite'], fonte: ['securite'] },
+  aspirateur: { dessins: ['iot'], fonte: ['reseau'] },
+  tondeuse: { dessins: ['iot', 'maison'], fonte: [] },
+  plante: { dessins: ['maison'], fonte: [] },
+  animaux: { dessins: ['maison'], fonte: [] },
+};
+/** Toutes les icônes, celles du groupe d'abord, sans doublon et sans perte. */
+function iconesPour(domaine) {
+  const g = GROUPES_ICONES[domaine] || { dessins: [], fonte: [] };
+  const vues = new Set();
+  const out = [];
+  const pousser = (liste) => { for (const n of (liste || [])) { if (!vues.has(n)) { vues.add(n); out.push(n); } } };
+  g.dessins.forEach(c => pousser(DESSINS_CAT[c]));
+  g.fonte.forEach(c => pousser(FONTE_CAT[c]));
+  Object.values(DESSINS_CAT).forEach(pousser);
+  Object.values(FONTE_CAT).forEach(pousser);
+  return out;
+}
+/** Le glyphe choisi pour cette entité, ou `null` — rien n'est deviné ici. */
+function iconeChoisie(id) {
+  const v = iconesCfg()[id];
+  return (typeof v === 'string' && v) ? v : null;
+}
+/** Poser un glyphe, ou l'enlever (`null`) pour revenir au défaut. */
+function declarerIcone(id, glyphe) {
+  const m = { ...iconesCfg() };
+  if (glyphe) m[id] = glyphe; else delete m[id];
+  cfgSet({ loggia_icones: Object.keys(m).length ? m : null });
+}
+
 /* « Modifier l'entite » (maquette du 14/09) : le nom, le domaine (celui que
  * Home Assistant donne — seule une prise peut se declarer lumiere, ou
  * l'inverse), la piece (deplacer l'entite d'une grille a l'autre),
@@ -3972,11 +4104,24 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   const prefixe = id.indexOf('dev:') === 0 ? 'dev:' : '';
   const brut = prefixe ? id.slice(prefixe.length) : id;
   const estEntite = brut.indexOf('.') > 0 && brut.indexOf(':') < 0;
+  /* Une carte de ZONE (radiateur en fil pilote) n'a pas d'`entity_id`, mais
+   * elle a une cle stable : elle peut donc porter une icone choisie. Un
+   * titre de section, non — il n'a pas de dessin. */
+  const estZone = brut.indexOf('zone:') === 0;
+  const peutChoisirIcone = estEntite || estZone;
   const S = (hass && hass.states) || {};
   const classe = (S[brut] && S[brut].attributes && S[brut].attributes.device_class) || '';
   const domaine = domaineEdition(brut, { estLumiere: cvEstLumiere(brut), classe });
   const estPrise = estEntite && brut.indexOf('switch.') === 0;
   const [lumiere, setLumiere] = useState(estPrise && cvEstLumiere(brut));
+  // L'icone choisie : `null` = celle que Loggia devine (26/09).
+  const [monIcone, setMonIcone] = useState(() => iconeChoisie(brut));
+  const [pageIcone, setPageIcone] = useState(() => 0);
+  const [apercuIcone, setApercuIcone] = useState(null);
+  // La grille suit la categorie de la carte, et se refait si on bascule une
+  // prise en lumiere : c'est le meme `domaineChoisi` que les puces au-dessus.
+  const listeIcones = iconesPour(estZone ? 'chauffage' : estPrise ? (lumiere ? 'lumiere' : 'prise') : domaine);
+  const pagesIcone = Math.max(1, Math.ceil(listeIcones.length / ICONES_PAR_PAGE));
   const pieces = estEntite ? piecesDeLaMaison() : [];
   const pieceActuelle = estEntite ? (piece || pieceDeLEntite(hass, brut)) : null;
   const [choixPiece, setChoixPiece] = useState(pieceActuelle);
@@ -3987,6 +4132,11 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   const valider = (close) => {
     ed.rename(id, val);
     if (estPrise && lumiere !== cvEstLumiere(brut)) declarerLumiere(brut, lumiere);
+    /* Et on REDESSINE. Le choix d'icône ne passe par aucun état de React : il
+     * se lit dans la configuration de la maison, au moment du rendu. Écrit sans
+     * rien secouer, il restait donc invisible jusqu'au prochain rechargement —
+     * « si j'en choisis un ça ne le change pas, l'ancien reste » (27/09). */
+    if (peutChoisirIcone && monIcone !== iconeChoisie(brut)) { declarerIcone(brut, monIcone); if (ed.rafraichir) ed.rafraichir(); }
     if (estEntite && choixPiece && choixPiece !== pieceActuelle) { deplacerDansPiece(hass, brut, choixPiece); if (ed.rafraichir) ed.rafraichir(); }
     if (estEntite) {
       const eps = lireEpingles();
@@ -4005,6 +4155,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   // « manque de couleurs dans l'edition, les icones c'est plus sympa »).
   const puce = (on, possible, t) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: possible ? 'pointer' : 'default', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? t.bord : 'var(--o-bd2)'), background: on ? t.fond : 'var(--o-s1)', color: on ? t.texte : 'var(--o-text1)', opacity: (on || possible) ? 1 : .45 });
   const teinteRgb = (rgb) => ({ bord: 'rgba(' + rgb + ',.5)', fond: 'rgba(' + rgb + ',.14)', texte: 'rgb(' + rgb + ')' });
+  const pageurIcone = (possible) => ({ width: 28, height: 28, padding: 0, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: possible ? 'pointer' : 'default', opacity: possible ? 1 : .35, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' });
   const domaineChoisi = estPrise ? (lumiere ? 'lumiere' : 'prise') : domaine;
 
   return (
@@ -4039,6 +4190,51 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
               </div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>
                 {estPrise ? tr('Une prise peut se déclarer lumière : elle prend alors la carte et le filtre des lampes.') : tr('Le domaine vient de Home Assistant.')}
+              </div>
+            </>
+          )}
+
+          {/* L'ICÔNE, et rien d'autre (26/09). Toucher la puce allumée la rend
+            * au défaut ; le domaine, la famille et le filtre ne bougent pas —
+            * c'était tout le problème de la déclaration « lumière ».
+            *
+            * Pas seulement pour une ENTITÉ (27/09) : un radiateur en fil pilote
+            * est une ZONE, sa carte porte une clé `zone:…` et non un
+            * `entity_id`. « Les radiateurs, impossible de changer l'icône, je
+            * n'ai pas l'option » — la section vivait sous la condition du
+            * domaine, qui ne vaut que pour une entité. */}
+          {peutChoisirIcone && (
+            <>
+              <div style={etiquette}>{tr('ICÔNE')}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+                {listeIcones.slice(pageIcone * ICONES_PAR_PAGE, (pageIcone + 1) * ICONES_PAR_PAGE).map(ic => { const on = ic === monIcone; return (
+                  <button key={ic} aria-pressed={on} aria-label={ic} onClick={() => setMonIcone(on ? null : ic)}
+                    onMouseEnter={() => setApercuIcone(ic)} onMouseLeave={() => setApercuIcone(null)}
+                    onFocus={() => setApercuIcone(ic)} onBlur={() => setApercuIcone(null)}
+                    style={{ height: 46, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'var(--o-bw,1px) solid ' + (on ? 'var(--o-accent-fond)' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>
+                    {/* Un appareil dessiné bouge. Encore faut-il pouvoir le
+                      * voir : il s'anime sous le curseur, au clavier quand il
+                      * prend le focus, et une fois choisi — au doigt, c'est le
+                      * seul moment où l'on peut le regarder. */}
+                    <Ico name={ic} size={18} anime={on || apercuIcone === ic} />
+                  </button>
+                ); })}
+              </div>
+              {/* Deux cent cinquante icônes font vingt-cinq pages : une rangée
+                * de vingt-cinq points ne se vise pas. Au-delà de huit, les
+                * points cèdent la place au compte. */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
+                <button aria-label={tr('Icônes précédentes')} disabled={pageIcone === 0} onClick={() => setPageIcone(p => Math.max(0, p - 1))} style={pageurIcone(pageIcone > 0)}><Fi i="angle-small-left" size={14} /></button>
+                {pagesIcone <= 8
+                  ? Array.from({ length: pagesIcone }, (_, i) => (
+                    <button key={i} aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === pageIcone} onClick={() => setPageIcone(i)}
+                      style={{ width: 8, height: 8, padding: 0, borderRadius: 4, border: 'none', cursor: 'pointer', background: i === pageIcone ? 'var(--o-accent-fond)' : 'var(--o-bd2)' }} />
+                  ))
+                  : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', fontVariantNumeric: 'tabular-nums' }}>{tr('Page {n}', { n: pageIcone + 1 })} / {pagesIcone}</span>}
+                <button aria-label={tr('Icônes suivantes')} disabled={pageIcone >= pagesIcone - 1} onClick={() => setPageIcone(p => Math.min(pagesIcone - 1, p + 1))} style={pageurIcone(pageIcone < pagesIcone - 1)}><Fi i="angle-small-right" size={14} /></button>
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '8px 2px 0' }}>
+                {monIcone ? tr('Seul le dessin change : la famille, le filtre et la carte restent les mêmes.') : tr('Aucune icône choisie : Loggia garde celle qu’il devine.')}
               </div>
             </>
           )}
@@ -5888,8 +6084,16 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
             * par « Lumières », « Climat » ou « Médias », cette vue s'annonçait
             * « Objets » — un lecteur d'écran lisait donc le mauvais nom, et
             * trois entrées du menu menaient toutes au même titre. */}
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{filtre === 'lumieres' ? tr('Lumières') : filtre === 'chauffage' ? tr('Climat') : filtre === 'multimedia' ? tr('Médias') : tr('Objets')}</h1>
+          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{filtre === 'lumieres' ? tr('Lumières') : filtre === 'chauffage' ? tr('Climat') : filtre === 'multimedia' ? tr('Médias') : filtre === 'volets' ? tr('Volets') : tr('Objets')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('{n} appareils répartis dans {p} pièces · {a} actifs', { n: stats.appareils, p: stats.pieces, a: stats.actifs })}</div>
+          {/* Les volets ont une chose que les autres familles n'ont pas : des
+            * MODES et un planning, qui ne tiennent dans aucune carte. L'entrée
+            * du menu ouvre désormais cette vue-ci, filtrée, comme Lumières ou
+            * Médias (demande du 26/09) — le reste se rejoint par ce lien, qui
+            * est un lien d'en-tête et non une fausse carte dans la grille. */}
+          {filtre === 'volets' && onNav && (
+            <button onClick={() => onNav('voletsplan')} style={{ marginTop: 9, padding: 0, border: 'none', background: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{tr('modes et planning')} →</button>
+          )}
         </div>
         <div className="grid-objstats" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
           {[[stats.appareils, tr('appareils reliés'), 'var(--o-text)'], [scenes, tr('scènes'), 'var(--o-purple)'], [stats.absentes, tr('entités absentes'), stats.absentes ? 'var(--o-bad)' : 'var(--o-text)']].map(([v, l, c], i) => (
@@ -8805,6 +9009,10 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
   const allClose = () => { setCovers(cs => cs.map(c => ({ ...c, pos: 0 }))); call('cover', 'close_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
   const pickMode = (m) => { setModeLocal(m); call('input_select', 'select_option', { entity_id: voletMode(), option: m }); };
 
+  // Le mode tel qu'il se DIT : son libellé dans la liste, ou rien. Un état que
+  // la liste ne connaît pas (`unavailable`, `unknown`) n'est pas un mode.
+  const nomDuMode = (voletModes(S).find(m => m.id === mode) || {}).label || null;
+
   const openCount = covers.filter(c => c.pos > 0).length;
 
   return (
@@ -8823,7 +9031,11 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
             ))}
           </div>
         : <ViewHead titre={tr('Volets')}
-            sous={(covers.length > 1 ? tr('{n} volets', { n: covers.length }) : tr('{n} volet', { n: covers.length })) + (mode ? ' · ' + String(mode).toLowerCase() : '')}
+            /* Le NOM du mode, jamais l'état brut. Une installation dont
+             * l'entité de mode est indisponible affichait « 2 volets ·
+             * unavailable » — un mot de Home Assistant, en anglais, dans une
+             * ligne qui se lit (vu chez l'utilisateur le 26/09). */
+            sous={(covers.length > 1 ? tr('{n} volets', { n: covers.length }) : tr('{n} volet', { n: covers.length })) + (nomDuMode ? ' · ' + String(nomDuMode).toLowerCase() : '')}
             badge={openCount ? (openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })) : tr('tous fermés')}
             rgb={openCount ? 'var(--o-ok-rgb)' : 'var(--o-text3-rgb)'} />}
 
@@ -9556,7 +9768,7 @@ const VAC_KEYS = [];   // le poll vient de vacKeys() : préfixe de domaine + ent
  * premiere connexion. Elle ne doit simplement plus servir de repli a une
  * erreur de route. Une vue inconnue revient donc a l'accueil. */
 const VUES_RENDUES = new Set(['accueil', 'parametres', 'pieces', 'scenes', 'objets',
-  'energie', 'securite', 'systeme', 'lumieres', 'climat', 'volets', 'croquettes',
+  'energie', 'securite', 'systeme', 'lumieres', 'climat', 'volets', 'voletsplan', 'croquettes',
   'medias', 'biblio']);
 const vueRendue = (v) => !!v && (VUES_RENDUES.has(v)
   || v.indexOf('room:') === 0 || v.indexOf('cv:') === 0);
@@ -9564,7 +9776,7 @@ const vueRendue = (v) => !!v && (VUES_RENDUES.has(v)
 const VIEW_TITLES = {
   pieces: tr('Pièces'), scenes: tr('Scénarios'), objets: tr('Objets'), energie: tr('Énergie'),
   securite: tr('Sécurité'), systeme: tr('Système'), lumieres: tr('Lumières'), climat: tr('Climat'),
-  volets: tr('Volets'), croquettes: tr('Croquettes'), medias: tr('Médias'),
+  volets: tr('Volets'), voletsplan: tr('Volets'), croquettes: tr('Croquettes'), medias: tr('Médias'),
 };
 function ViewEmpty({ vid, reason, onNav }) {
   return (
@@ -10107,6 +10319,10 @@ function MenuDeroulant({ icone = null, etiquette, valeur, options, surChoix, ren
  * type de luminaire, état du moment (porte ouverte/fermée, chauffe en cours).
  * Tous les glyphes sont vérifiés dans uicons-regular-rounded.css. */
 function cvIcoEntite(dom, id, st, name) {
+  // Ce que l'utilisateur a choisi passe avant tout le reste, et ne change rien
+  // d'autre que le glyphe (26/09).
+  const mienne = iconeChoisie(id);
+  if (mienne) return mienne;
   const a = (st && st.attributes) || {};
   const dc = a.device_class || '';
   const s = st ? st.state : null;
@@ -10130,7 +10346,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   const poseT = (v) => { setOvT(v); clearTimeout(ovTRef.current); ovTRef.current = setTimeout(() => setOvT(null), 4000); };
   const dom = cvDomain(id);
   const name = label || cvName(st, id);
-  const ico = dom === 'switch' ? (cvEstLumiere(id) ? 'bulb' : null) : cvIcoEntite(dom, id, st, name); // null = prise, SVG maison
+  const ico = dom === 'switch' ? (iconeChoisie(id) || (cvEstLumiere(id) ? 'bulb' : null)) : cvIcoEntite(dom, id, st, name); // null = prise, SVG maison
   const s = st ? st.state : null;
   const a = (st && st.attributes) || {};
   const dead = !st || s === 'unavailable' || s === 'unknown';
@@ -14082,7 +14298,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <ObjetsView hass={hass} onNav={setView} filtre="volets" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'voletsplan' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}
