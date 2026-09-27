@@ -133,8 +133,16 @@ test('la vue Volets est enfin CHOISISSABLE, et pas seulement joignable par la re
   const par = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
   assert.match(par, /DESC_SECONDAIRE = \{[^}]*volets: tr\('modes et planning'\)/,
     'la vue Volets a perdu son sous-titre dans Parametres');
-  // Et la route, elle, n'a jamais bouge.
-  assert.ok(src.includes("view === 'volets' ? <VoletsView hass={hass}"), 'la route de la vue Volets');
+  /* La route, elle, a bouge le 26/09, sur une remarque de l'utilisateur :
+   * « je ne comprends pas pourquoi ca ne m'ouvre pas comme pour les autres
+   * vues, le raccourci vers Appareils Ouverture ». L'entree du menu ouvre donc
+   * Objets filtre sur les volets, comme ses trois voisines ; la vue a modes et
+   * planning garde sa porte, sous `voletsplan`, par un lien d'en-tete. */
+  assert.ok(src.includes("view === 'volets' ? <ObjetsView hass={hass} onNav={setView} filtre=\"volets\""),
+    'l’entree Volets n’ouvre plus Objets filtre');
+  assert.ok(src.includes("view === 'voletsplan' ? <VoletsView hass={hass}"), 'la vue a modes et planning n’est plus joignable');
+  assert.ok(src.includes("onClick={() => onNav('voletsplan')}") && src.includes("{tr('modes et planning')} →"),
+    'le lien d’en-tete vers les modes a disparu : plus rien n’y mene');
 });
 
 test('la vue Objets dessine les cartes de la piece, une par appareil, derriere des puces a l’arrondi 9', () => {

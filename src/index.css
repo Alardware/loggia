@@ -1238,3 +1238,53 @@ html.loggia-light .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 
 .rb-onglet { flex: 1 1 0; min-width: 0; flex-direction: column; display: inline-flex; align-items: center; gap: 4px; padding: 8px 2px; border: none; border-radius: 12px; cursor: pointer; font: inherit; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
 .rb-accueil, .rb-zones, .rb-histo, .rb-planning { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .rb-pieces { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+
+/* ── La prise dit ce qu'elle alimente (26/09) ────────────────────────────────
+ *
+ * L'animation ne parle QUE de l'appareil au travail : tambour qui tourne,
+ * sirene qui tremble, lueur qui respire, temoins du NAS qui clignotent. Elle
+ * est posee par la carte seulement quand la puissance mesuree depasse le seuil
+ * de veille — rien ne bouge pour une prise allumee qui ne fait rien.
+ *
+ * `currentColor` : la plaque porte deja la couleur de son appareil.
+ */
+@keyframes o-prise-turn { to { transform: rotate(360deg); } }
+@keyframes o-prise-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes o-prise-shake { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-14deg); } 40% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 80% { transform: rotate(5deg); } }
+.o-prise-turn { animation: o-prise-turn 6s linear infinite; }
+.o-prise-bob { animation: o-prise-bob 1.8s ease-in-out infinite; }
+.o-prise-shake { transform-origin: 50% 10%; animation: o-prise-shake .9s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .o-prise-turn, .o-prise-bob, .o-prise-shake { animation: none; }
+}
+
+/* ── Les appareils dessines : leur mouvement est DANS le dessin (26/09) ───────
+ *
+ * Chaque trace de `dessins.js` porte son animation en style en ligne
+ * (`animation:o-ic-...`). Les keyframes vivent ici, prefixees comme le reste de
+ * Loggia. La carte n'allume rien : elle FIGE, avec `o-ico-fige`, tant que
+ * l'appareil ne travaille pas.
+ */
+@keyframes o-ic-spin { to { transform: rotate(360deg); } }
+@keyframes o-ic-beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.14); } }
+@keyframes o-ic-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@keyframes o-ic-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes o-ic-dial { 0%, 100% { transform: rotate(-40deg); } 50% { transform: rotate(40deg); } }
+@keyframes o-ic-down { 0% { transform: translateY(-4px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(4px); opacity: 0; } }
+@keyframes o-ic-drop { 0% { transform: translateY(-3px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(4px); opacity: 0; } }
+@keyframes o-ic-fill { 0%, 100% { opacity: .12; } 50% { opacity: .6; } }
+@keyframes o-ic-flicker { 0%, 100% { transform: scaleY(1); opacity: 1; } 20% { transform: scaleY(1.08) skewX(-2deg); opacity: .85; } 45% { transform: scaleY(.94); opacity: 1; } 70% { transform: scaleY(1.05) skewX(2deg); opacity: .7; } }
+@keyframes o-ic-float { 0%, 100% { transform: translate(0, 0); } 33% { transform: translate(2px, -2px); } 66% { transform: translate(-2px, 1px); } }
+@keyframes o-ic-pop-up { 0%, 35%, 100% { transform: translateY(2px); } 50%, 85% { transform: translateY(-2.5px); } }
+@keyframes o-ic-scan { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
+@keyframes o-ic-seq { 0% { opacity: .18; } 20%, 70% { opacity: 1; } 90%, 100% { opacity: .18; } }
+@keyframes o-ic-shine { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+@keyframes o-ic-slide { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(2.5px); } }
+@keyframes o-ic-twinkle { 0%, 100% { transform: scale(1) rotate(0); opacity: 1; } 50% { transform: scale(.8) rotate(18deg); opacity: .5; } }
+@keyframes o-ic-up { 0% { transform: translateY(4px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(-4px); opacity: 0; } }
+/* Fige un dessin : la carte s'en sert partout ou l'appareil ne travaille pas —
+ * une grille de choix, une prise en veille, une vignette. */
+.o-ico-fige svg *, .o-ico-fige * { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  [style*="animation:o-ic-"] { animation: none !important; }
+}

@@ -5,13 +5,31 @@
  * traces SVG, si bien qu'un ecran sorti d'App.jsx ne pouvait plus l'appeler —
  * c'est ce qui a casse l'ecran de veille a sa sortie.
  *
- * Deux sources, dans cet ordre : un trace maison quand il existe, sinon le
- * glyphe de la police Flaticon UICons chargee par `index.html`.
+ * TROIS sources depuis le 26/09, dans cet ordre : l'appareil DESSINE
+ * (`dessins.js` — l'electromenager, qui n'existe dans aucune fonte), puis un
+ * trace maison, puis le glyphe de la police Flaticon UICons chargee par
+ * `index.html`.
+ *
+ * Un dessin est fait de TRAITS et porte son mouvement ; un trace maison est un
+ * aplat. Les deux prennent `currentColor`, donc la teinte de la carte.
  */
+import { DESSINS } from './dessins.js';
+
+/* Un dessin paraissait PLUS PETIT que le glyphe d'à côté (retour du 26/09 :
+ * « l'icône en elle-même est trop petite par rapport aux autres »).
+ *
+ * Ce n'est pas une illusion : un appareil du catalogue tient dans 16 à 19 unités
+ * sur les 24 du repère, quand un glyphe de la fonte occupe la quasi-totalité de
+ * son cadratin. À taille égale, l'un remplit donc moins que l'autre.
+ *
+ * On agrandit le TRACÉ, pas la boîte : la mise en page ne bouge pas d'un pixel,
+ * et `overflow: visible` laisse déborder ce qui dépasse. L'épaisseur du trait
+ * suit l'échelle — c'est voulu, elle pesait trop peu à côté des glyphes pleins. */
+const ECHELLE_DESSIN = 1.18;
+const OUVRE_GRANDI = '<g transform="translate(12 12) scale(' + ECHELLE_DESSIN + ') translate(-12 -12)">';
 // SVG custom (Flaticon premium fournis par l'utilisateur, single-path 24×24 fill)
 const CUSTOM_SVG = {
   vacuum: 'm24,12c0,6.617-5.383,12-12,12S0,18.617,0,12c0-2.9,1.035-5.563,2.754-7.64L.101,1.707,1.515.293l2.644,2.644c.851-.737,1.809-1.351,2.841-1.829v8.892c0,2.757,2.243,5,5,5s5-2.243,5-5V1.103c.993.459,1.916,1.044,2.741,1.743L22.485.101l1.414,1.414-2.745,2.745c1.771,2.092,2.845,4.791,2.845,7.74Zm-15-5.974c.838-.635,1.87-1.026,3-1.026s2.162.391,3,1.026V.389c-.96-.249-1.963-.389-3-.389s-2.04.141-3,.391v5.634Zm0,3.974c0,1.654,1.346,3,3,3s3-1.346,3-3-1.346-3-3-3-3,1.346-3,3Z',
-  dishwasher: 'm15.61 21.985c.873-1.241 1.39-2.976 1.39-4.985s-.517-3.744-1.39-4.985c1.908.082 3.39 2.235 3.39 4.985s-1.482 4.902-3.39 4.985zm-7.61.015c-1.71 0-3-2.149-3-5s1.29-5 3-5 3 2.149 3 5-1.29 5-3 5zm1-5c0-1.936-.751-3-1-3s-1 1.064-1 3 .751 3 1 3 1-1.064 1-3zm.5-13.5c-.828 0-1.5.672-1.5 1.5s.672 1.5 1.5 1.5 1.5-.672 1.5-1.5-.672-1.5-1.5-1.5zm5 0c-.828 0-1.5.672-1.5 1.5s.672 1.5 1.5 1.5 1.5-.672 1.5-1.5-.672-1.5-1.5-1.5zm7.5 1.5v14c0 2.757-2.243 5-5 5h-10c-2.757 0-5-2.243-5-5v-14c0-2.757 2.243-5 5-5h10c2.757 0 5 2.243 5 5zm-2 5h-16v9c0 1.654 1.346 3 3 3h10c1.654 0 3-1.346 3-3zm0-5c0-1.654-1.346-3-3-3h-10c-1.654 0-3 1.346-3 3v3h16zm-5 12c0-2.75-1.482-4.902-3.39-4.985.873 1.241 1.39 2.975 1.39 4.985s-.517 3.744-1.39 4.985c1.908-.082 3.39-2.235 3.39-4.985z',
   couch: 'm2,8v-1c0-3.314,2.686-6,6-6h8c3.314,0,6,2.686,6,6v1c-2.209,0-4,1.791-4,4v3H6v-3c0-2.209-1.791-4-4-4Zm19.664,2.027c-.983.16-1.664,1.083-1.664,2.08v3.893c0,.552-.448,1-1,1H5c-.552,0-1-.448-1-1v-3.893c0-.996-.681-1.92-1.664-2.08-1.253-.204-2.336.758-2.336,1.973v4c0,1.636.786,3.088,2,4v2c0,.552.448,1,1,1s1-.448,1-1v-1.1c.323.066.658.1,1,.1h14c.342,0,.677-.034,1-.1v1.1c0,.552.448,1,1,1s1-.448,1-1v-2c1.214-.912,2-2.364,2-4v-4c0-1.215-1.083-2.176-2.336-1.973Z',
   'solar-panel': 'm23.899,16.232l-.862-3.256c-.464-1.753-2.055-2.977-3.867-2.977H4.83c-1.813,0-3.403,1.224-3.867,2.977l-.862,3.256c-.24.907-.05,1.854.523,2.598.572.743,1.438,1.17,2.377,1.17h7.999v2h-4c-.552,0-1,.447-1,1s.448,1,1,1h10c.553,0,1-.447,1-1s-.447-1-1-1h-4v-2h7.999c.938,0,1.805-.427,2.378-1.17.572-.744.763-1.69.522-2.598Zm-2.796-2.744l.135.512h-4.558l-.143-2h2.632c.906,0,1.701.612,1.934,1.488Zm-12.065,4.512l.143-2h5.638l.143,2h-5.924Zm.286-4l.143-2h5.067l.143,2h-5.352Zm-4.495-2h2.632l-.143,2H2.761l.135-.512c.231-.876,1.027-1.488,1.933-1.488Zm-2.621,5.61c-.191-.248-.254-.563-.174-.866l.197-.744h4.944l-.143,2H3.001c-.312,0-.602-.143-.792-.39Zm19.583,0c-.191.248-.48.391-.793.391h-4.033l-.143-2h4.945l.197.744c.08.303.017.618-.174.865ZM4,7c0-.553.448-1,1-1h2.101c.188-.923.64-1.745,1.261-2.408l-1.351-2.04c-.305-.46-.179-1.08.281-1.386.459-.305,1.08-.18,1.386.282l1.318,1.99c.616-.272,1.289-.438,2.004-.438s1.389.166,2.006.439l1.328-1.993c.306-.459.925-.583,1.387-.277.459.306.584.927.277,1.387l-1.359,2.039c.62.662,1.072,1.484,1.26,2.406h2.101c.553,0,1,.447,1,1s-.447,1-1,1h-3c-.553,0-1-.447-1-1,0-1.654-1.346-3-3-3s-3,1.346-3,3c0,.553-.448,1-1,1h-3c-.552,0-1-.447-1-1Z',
   'house-energy': 'M21.576,5.327L15.077,.941c-1.869-1.262-4.284-1.261-6.153,0L2.423,5.327C.906,6.352,0,8.056,0,9.886v8.614c0,3.032,2.467,5.5,5.5,5.5h13c3.033,0,5.5-2.468,5.5-5.5V9.886c0-1.83-.906-3.534-2.424-4.559Zm-.576,13.173c0,1.379-1.122,2.5-2.5,2.5h-3.42l1.853-5.372c.275-.797-.317-1.628-1.16-1.628h-2.87l1.369-4.497c.228-.748-.332-1.503-1.114-1.503-.392,0-.758,.197-.973,.525l-4.952,7.361c-.592,.91,.061,2.114,1.147,2.114h2.755l-1.152,3H5.5c-1.378,0-2.5-1.121-2.5-2.5V9.886c0-.832,.412-1.606,1.102-2.072L10.602,3.428c.425-.287,.911-.43,1.398-.43s.974,.143,1.398,.43l6.5,4.386c.69,.466,1.102,1.24,1.102,2.072v8.614Z',
@@ -22,7 +40,21 @@ const CUSTOM_SVG = {
 // Mappe les clés "machine" vers les noms Flaticon (pour celles dispo en webfont)
 const FI_MAP = { mower: 'tractor', trash: 'trash', 'trash-full': 'trash-clock', battery: 'battery-full', 'battery-charging': 'battery-bolt', timer: 'clock' };
 // Icône universelle : SVG custom si dispo, sinon glyphe Flaticon UICons.
-export function Ico({ name, size = 20, color = 'currentColor', style }) {
+export function Ico({ name, size = 20, color = 'currentColor', style, anime = false }) {
+  /* Le dessin d'abord. Son corps est du balisage, pas un attribut : un appareil
+   * est fait de plusieurs traits, et certains bougent tout seuls. Il vient de
+   * `dessins.js`, ecrit par nous a partir du catalogue — jamais d'une entite,
+   * jamais d'une saisie. */
+  if (DESSINS[name]) {
+    return (
+      /* FIGE par defaut. Un dessin porte son mouvement ; s'il bougeait partout,
+       * une grille de choix ou une liste de cartes deviendrait une fete foraine.
+       * On ne l'anime que la ou quelque chose travaille vraiment (`anime`). */
+      <svg aria-hidden="true" className={anime ? undefined : 'o-ico-fige'} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
+        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', overflow: 'visible', ...style }}
+        dangerouslySetInnerHTML={{ __html: OUVRE_GRANDI + DESSINS[name] + '</g>' }} />
+    );
+  }
   if (CUSTOM_SVG[name]) return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" style={style}><path d={CUSTOM_SVG[name]} fill={color} /></svg>;
   return <i aria-hidden="true" className={'fi fi-rr-' + (FI_MAP[name] || name)} style={{ fontSize: size, color, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...style }} />;
 }

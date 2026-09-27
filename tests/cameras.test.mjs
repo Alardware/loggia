@@ -118,10 +118,14 @@ test('la carte camera porte sa couleur : lavis, icone et repere en bleu quand el
   const carte = src.slice(d, src.indexOf('\nfunction ', d + 1));
   assert.ok(carte.includes("const direct = dom === 'camera' && !mort && (s === 'streaming' || s === 'recording' || s === 'idle');"), 'l’etat « en direct » est nomme');
   assert.ok(carte.includes("const allume = !mort && (danger || direct || (actif"), 'une camera en direct est allumee : lavis compris');
-  assert.ok(carte.includes("const ico = dom === 'camera' ? 'camera' : cvIcoEntite(dom, id, st, nom);"), 'appareil photo dans le carre, camera video en repere');
+  // Depuis le 26/09, une icone CHOISIE a la main passe devant (`iconeChoisie`)
+  // — sans rien changer d'autre. Le defaut, lui, n'a pas bouge.
+  assert.ok(carte.includes("const ico = iconeChoisie(id) || (dom === 'camera' ? 'camera' : carteDePrise ? tp.ico : cvIcoEntite(dom, id, st, nom));"), 'appareil photo dans le carre, camera video en repere');
   assert.ok(carte.includes("RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)')"), 'la teinte de l’icone suit allume');
   assert.ok(carte.includes("color: direct ? icoTexte : 'var(--o-text3)'"), 'le repere en haut a droite aussi');
-  assert.ok(carte.includes('(allume && LAVIS ?'), 'le lavis suit allume, donc la camera en direct');
+  // Le lavis suit toujours `allume` — une prise EN VEILLE fait seule exception
+  // depuis le 26/09 : elle est allumee, mais elle ne travaille pas.
+  assert.ok(carte.includes('(allume && LAVIS && (!carteDePrise || priseVive))'), 'le lavis suit allume, donc la camera en direct');
 });
 
 test('l’Accueil et la fiche dessinent la meme tuile camera', () => {

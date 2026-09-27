@@ -2358,4 +2358,19 @@ export default {
   // — un seuil de CO2 par piece (ADR 0044, 25/09)
   'Seuil CO₂': 'CO₂-drempel',
   '1400 par défaut': '1400 standaard',
+  // — l'icone d'une carte, choisie a la main (26/09)
+  'Seul le dessin change : la famille, le filtre et la carte restent les mêmes.': 'Alleen de tekening verandert: de familie, het filter en de kaart blijven gelijk.',
+  'Aucune icône choisie : Loggia garde celle qu’il devine.': 'Geen pictogram gekozen: Loggia houdt het pictogram dat het raadt.',
+  // — ce qu'il y a au bout d'une prise (26/09)
+  'Serveur NAS': 'NAS-server',
+  'Ordinateur': 'Computer',
+  'Sèche-linge': 'Wasdroger',
+  'Réfrigérateur': 'Koelkast',
+  'Télévision': 'Televisie',
+  'Cafetière': 'Koffiezetapparaat',
+  'Radiateur': 'Radiator',
+  'Box internet': 'Internetmodem',
+  'Borne de recharge': 'Laadpaal',
+  'Compresseur': 'Compressor',
+  'Branchée': 'Aangesloten',
 };

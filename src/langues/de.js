@@ -2358,4 +2358,19 @@ export default {
   // — un seuil de CO2 par piece (ADR 0044, 25/09)
   'Seuil CO₂': 'CO₂-Schwelle',
   '1400 par défaut': '1400 als Standard',
+  // — l'icone d'une carte, choisie a la main (26/09)
+  'Seul le dessin change : la famille, le filtre et la carte restent les mêmes.': 'Nur die Zeichnung ändert sich: Familie, Filter und Karte bleiben gleich.',
+  'Aucune icône choisie : Loggia garde celle qu’il devine.': 'Kein Symbol gewählt: Loggia behält das erkannte.',
+  // — ce qu'il y a au bout d'une prise (26/09)
+  'Serveur NAS': 'NAS-Server',
+  'Ordinateur': 'Computer',
+  'Sèche-linge': 'Wäschetrockner',
+  'Réfrigérateur': 'Kühlschrank',
+  'Télévision': 'Fernseher',
+  'Cafetière': 'Kaffeemaschine',
+  'Radiateur': 'Heizkörper',
+  'Box internet': 'Internet-Router',
+  'Borne de recharge': 'Ladestation',
+  'Compresseur': 'Kompressor',
+  'Branchée': 'Angeschlossen',
 };
