@@ -26,7 +26,7 @@ import { viewReason } from '../views.js';
 import { detecterCapteursPieces } from '../resolve.js';
 import { autoFamille } from '../autos.js';
 import { InterrupteursSection, gestesRegles, appareilsVisibles } from './interrupteurs.jsx';
-import { VoletsReglages } from './volets.jsx';
+import { VoletsReglages, VoletsAffichage } from './volets.jsx';
 import { FenetresReglages } from './fenetres.jsx';
 import { PresenceReglages } from './presence.jsx';
 import { NuitReglages } from './nuit.jsx';
@@ -1894,7 +1894,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             );
           })()}
         </div>
-        {ongletRegle === 'volets' ? <VoletsReglages hass={hass} cardSt={cardSt} />
+        {ongletRegle === 'volets' ? <><VoletsAffichage cardSt={cardSt} /><div style={{ height: 16 }} /><VoletsReglages hass={hass} cardSt={cardSt} /></>
           : ongletRegle === 'fenetres' ? <FenetresReglages hass={hass} cardSt={cardSt} />
             : ongletRegle === 'presence' ? <PresenceReglages hass={hass} cardSt={cardSt} />
               : ongletRegle === 'nuit' ? <NuitReglages hass={hass} cardSt={cardSt} />

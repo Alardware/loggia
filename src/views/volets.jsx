@@ -14,7 +14,51 @@ import {
 import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt, majuscule } from './parcommun.jsx';
 import { tr } from '../i18n.js';
+import { cfgVal, cfgSet } from '../state.js';
 import { mot, pourquoi } from '../journalmots.js';
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Le seuil de fermeture — le seul reglage de cette page qui ne parte PAS au
+ * composant serveur.
+ *
+ * C'est de l'affichage, pas une action : aucune regle ne l'attend, il ne
+ * declenche rien, et il doit rester lisible meme quand le serveur ne repond
+ * pas. Il passe donc par `cfgSet`, qui ecrit en local ET cote serveur — le
+ * seuil suit donc l'utilisateur d'un ecran a l'autre, ce qui est juste : il
+ * decrit le MATERIEL, pas la taille de l'ecran.
+ *
+ * Pourquoi il existe : un volet ne bute pas toujours a zero. Celui d'une
+ * chambre s'arrete a 1 %, et Home Assistant le dit alors `open` — son
+ * `is_closed` compare la position a zero. Loggia le dessinait ouvert sur un
+ * volet visiblement ferme.
+ * ───────────────────────────────────────────────────────────────────────────── */
+const SEUILS = [0, 1, 2, 5];
+const SEUIL_DEF = 2;
+const lireSeuil = () => { const n = +cfgVal('loggia_coverseuil', SEUIL_DEF); return SEUILS.indexOf(n) >= 0 ? n : SEUIL_DEF; };
+export function VoletsAffichage({ cardSt }) {
+  /* `cfgVal` n'est pas un etat React : sans ce miroir, la puce choisie ne
+   * s'allumait qu'au prochain rendu venu d'ailleurs. */
+  const [seuil, setSeuil] = useState(lireSeuil);
+  const choisir = (n) => { setSeuil(n); cfgSet({ loggia_coverseuil: n === SEUIL_DEF ? null : n }); };
+  const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
+  return (
+    <div style={cardSt}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{tr('Considérer fermé en dessous de')}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 12 }}>
+        {tr('Certains volets butent à 1 ou 2 % au lieu de zéro : Loggia les dirait ouverts. Le pourcentage affiché reste le vrai.')}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {SEUILS.map(n => (
+          <button key={n} type="button" aria-pressed={seuil === n}
+            onClick={() => choisir(n)}
+            style={puce(seuil === n)}>
+            {n === 0 ? tr('Zéro pile') : n + ' %'}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /* `champ` et `Nombre` vivent ici, et non dans le composant.
  *

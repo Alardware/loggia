@@ -560,6 +560,46 @@ function useFlash() {
   };
   return [ref, flash];
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Un etat optimiste qui EXPIRE.
+ *
+ * Une carte n'attend pas Home Assistant pour changer d'aspect : elle montre
+ * tout de suite ce qu'on vient de lui demander, sinon le doigt arrive avant
+ * l'image. Ce mensonge utile ne se vidait que si l'etat REEL bougeait —
+ * `useEffect(() => setOv(null), [reel])`, recopie dans quatorze cartes.
+ *
+ * Quand l'etat reel ne bouge jamais, il tenait indefiniment : commande
+ * refusee, volet qui bute a 1 %, echo Zigbee qui rejoue l'ancienne valeur. La
+ * carte disait « Ferme » pendant que la maison disait « ouvert », et SEUL un
+ * changement de page le revelait — le composant mourait, l'etat optimiste avec
+ * lui, et la verite reapparaissait. L'utilisateur croyait alors que le RETOUR
+ * mentait, alors que c'etait l'affichage d'avant (retour du 27/09 : « si je
+ * ferme mes volets et que je change de page et que je reviens la carte est
+ * ouvert alors que le volet est bien ferme »).
+ *
+ * Deux cartes sur quatorze avaient un filet. C'est desormais le meme pour
+ * toutes : passe ce delai, la carte redit ce que la maison dit, quoi qu'il
+ * arrive. Un affichage en retard se corrige tout seul ; un affichage faux, non.
+ *
+ * `reel` est une SIGNATURE : passer plusieurs valeurs se fait en les joignant,
+ * comme le faisait le tableau de dependances qu'il remplace.
+ * ───────────────────────────────────────────────────────────────────────────── */
+const OPTIMISTE_MS = 6000;
+function useOptimiste(reel, delai = OPTIMISTE_MS) {
+  const [ov, setOv] = useState(null);
+  const minuteur = useRef(0);
+  useEffect(() => () => clearTimeout(minuteur.current), []);
+  // L'etat reel a repondu : le filet n'a plus de raison d'attendre.
+  useEffect(() => { clearTimeout(minuteur.current); setOv(null); }, [reel]);
+  const poser = useCallback((v) => {
+    setOv(v);
+    clearTimeout(minuteur.current);
+    minuteur.current = setTimeout(() => setOv(null), delai);
+  }, [delai]);
+  return [ov, poser];
+}
+
 // <ActionBtn onClick style>label</ActionBtn> : ripple au clic + « ✓ » 900 ms qui remplace le label (commande envoyée)
 // <Shiny on>texte</Shiny> : sweep lumineux discret (background-clip:text) sur un badge ACTIF uniquement.
 function Shiny({ on = true, children, style }) {
@@ -962,12 +1002,9 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
   // et la température suffisent, et l'historique n'est plus interrogé.
   // Optimiste : l'interrupteur bascule tout de suite, puis se réconcilie avec HA au poll suivant
   const realOn = (mains && mains.length) ? mains.some(l => l.on) : null;
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realOn]);
-  // Filet 6 s : si HA ne confirme pas (commande rejetée), retour à l'état réel
-  const ovRevertRef = useRef(0);
-  useEffect(() => () => clearTimeout(ovRevertRef.current), []);
-  const doToggle = () => { flash(p.tc || 'var(--o-accent)'); if (realOn != null) { setOv(!(ov != null ? ov : realOn)); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); } onToggleLights && onToggleLights(); };
+  // Le filet des 6 s est celui d'`useOptimiste`, comme partout ailleurs.
+  const [ov, setOv] = useOptimiste(realOn);
+  const doToggle = () => { flash(p.tc || 'var(--o-accent)'); if (realOn != null) setOv(!(ov != null ? ov : realOn)); onToggleLights && onToggleLights(); };
   if (chip) {
     // Pièce COMPACTE, direction « teinte pièce » (choix 31/08) : la couleur de
     // la pièce baigne la carte (son lavis en dégradé), icône NUE sans boîte,
@@ -1713,8 +1750,7 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const call = (d, svc, data) => commanderService(hass, id, d, svc, { entity_id: id, ...(data || {}) });
   const togglable = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren', 'valve'].indexOf(dom) >= 0;
   const on = !mort && (dom === 'valve' ? s === 'open' : dom === 'lock' ? s === 'locked' : s === 'on');
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [s]);
+  const [ov, setOv] = useOptimiste(s);
   const actif = ov != null ? ov : on;
   const basculer = () => {
     const nv = !actif; setOv(nv);
@@ -1879,8 +1915,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const dimmable = rgb || ct || modes.indexOf('brightness') >= 0 || a.brightness != null;
   const isSwitch = id.indexOf('switch.') === 0;
   const realOn = st ? st.state === 'on' : false;
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realOn]);
+  const [ov, setOv] = useOptimiste(realOn);
   const on = ov != null ? ov : realOn;
   const bri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : 100;
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
@@ -1892,17 +1927,12 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const adjustable = !isSwitch && dimmable && !mort;
   const nom = label || a.friendly_name || id;
   const [flashRef, flash] = useFlash();
-  // Filet : si HA n'a pas confirmé sous 6 s (commande rejetée), retour à l'état réel au lieu de rester désynchronisé
-  const ovRevertRef = useRef(0);
-  useEffect(() => () => clearTimeout(ovRevertRef.current), []);
-  const toggle = () => { flash(accent); setOv(!on); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); commander(hass, id, on ? 'turn_off' : 'turn_on'); };
-  // Luminosité optimiste : fenêtre fixe 4 s (l'écho Zigbee rejoue l'ancienne valeur).
-  const [ovBri, setOvBri] = useState(null);
-  const ovBriRef = useRef(0);
-  useEffect(() => () => clearTimeout(ovBriRef.current), []);
+  // Le filet des 6 s est celui d'`useOptimiste` : la bascule ne le porte plus.
+  const toggle = () => { flash(accent); setOv(!on); commander(hass, id, on ? 'turn_off' : 'turn_on'); };
+  // Luminosité optimiste : fenêtre plus courte, 4 s (l'écho Zigbee rejoue l'ancienne valeur).
+  const [ovBri, setOvBri] = useOptimiste(bri, 4000);
   const poseBri = (pct) => {
     setOvBri(pct); setOv(pct > 0);
-    clearTimeout(ovBriRef.current); ovBriRef.current = setTimeout(() => { setOvBri(null); setOv(null); }, 4000);
     if (pct > 0) commander(hass, id, 'set_brightness', pct);
     else commander(hass, id, 'turn_off');
   };
@@ -2112,38 +2142,71 @@ function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, 
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Quand un volet est-il ferme ?
+ *
+ * Pas toujours a zero. Celui d'une chambre bute a 1 % (retour du 27/09), et
+ * Home Assistant le dit alors `open` : son `is_closed` compare la position a
+ * zero, pas a « en bas ». Loggia, qui ne regardait QUE `pos === 0`, le
+ * dessinait donc ouvert — lavis violet, icone violette, « Ouvert a 1 % » — sur
+ * un volet visiblement ferme.
+ *
+ * Le seuil est REGLABLE parce qu'il appartient au materiel, pas a Loggia. Deux
+ * pour cent par defaut : ce qui a ete mesure ici, sans rien decider pour une
+ * installation qui bute juste. Il joue aux DEUX bouts — un volet qui plafonne
+ * a 99 % est « Ouvert », pas « Ouvert a 99 % », c'est la meme butee a l'envers.
+ *
+ * L'etat de Home Assistant reste l'autorite quand il dit `closed` : Loggia le
+ * contredisait, et c'etait le plus grave des deux.
+ *
+ * Le POURCENTAGE affiche, lui, reste le vrai. Le mot est un verdict, le chiffre
+ * une mesure : mentir sur le chiffre ferait chercher la panne ailleurs.
+ * ───────────────────────────────────────────────────────────────────────────── */
+const COVER_SEUIL_DEF = 2;
+function coverSeuil() {
+  const n = +cfgVal('loggia_coverseuil', COVER_SEUIL_DEF);
+  return (isFinite(n) && n >= 0 && n <= 20) ? Math.round(n) : COVER_SEUIL_DEF;
+}
+// `st` peut manquer (entite absente) : seule la position tranche alors.
+function coverFerme(st, pos) {
+  if (st && st.state === 'closed') return true;
+  if (st && st.state === 'open' && pos >= 100) return false;
+  return pos <= coverSeuil();
+}
+const coverOuvert = (pos) => pos >= 100 - coverSeuil();
+
 function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const realPos = a.current_position != null ? Math.round(a.current_position) : (st && st.state === 'open' ? 100 : 0);
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realPos]);
+  const [ov, setOv] = useOptimiste(realPos);
   const pos = ov != null ? ov : realPos;
+  const ferme = coverFerme(st, pos);
   const mort = !st || st.state === 'unavailable';
   const nom = titre || a.friendly_name || id;
   const mouvement = st && (st.state === 'opening' || st.state === 'closing') ? st.state : null;
   // Le sous-titre dit l'état en mots (maquettes du 14/09) ; le pourcentage
   // reste en haut à droite, la glissière montre la position.
-  const sub = mort ? tr('Indisponible') : mouvement === 'opening' ? tr('Ouverture…') : mouvement === 'closing' ? tr('Fermeture…') : pos === 0 ? tr('Fermé') : pos === 100 ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
+  const sub = mort ? tr('Indisponible') : mouvement === 'opening' ? tr('Ouverture…') : mouvement === 'closing' ? tr('Fermeture…') : ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
   const poser = (v) => { setOv(v); commander(hass, id, 'set_position', v); };
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : volet ouvert = lavis VIOLET, gradué par la position — le bleu accent restait trop proche des autres cartes.
-      ...(pos > 0 && LAVIS ? {
+      ...(!ferme && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-purple-rgb),${lav(.10 + pos * .0012)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
       } : null),
       // Sans bordure, comme la carte lumière : l'ombre et le lavis suffisent.
       border: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ ...RM_ICO(pos > 0 ? 'rgba(var(--o-purple-rgb),.16)' : 'var(--o-s1)', pos > 0 ? 'var(--o-purple)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden' }}>
+        <span style={{ ...RM_ICO(!ferme ? 'rgba(var(--o-purple-rgb),.16)' : 'var(--o-s1)', !ferme ? 'var(--o-purple)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden' }}>
           {/* store qui descend dans le chip : hauteur = part fermée, suit la position en douceur */}
           <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: (100 - pos) + '%', background: 'linear-gradient(180deg,rgba(var(--o-purple-rgb),.34),rgba(var(--o-purple-rgb),.14))', transition: REDUCE_MOTION ? 'none' : 'height .7s cubic-bezier(.22,.61,.36,1)', pointerEvents: 'none' }} />
           <GlypheCarte id={id} size={18}><Ico name={(a.device_class === 'garage' || a.device_class === 'gate') ? 'garage' : 'blinds'} size={18} /></GlypheCarte></span>
-        <span style={{ fontSize: 15, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos} %</span>
+        <span style={{ fontSize: 15, fontWeight: 800, color: ferme ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos} %</span>
       </div>
       <div style={{ marginTop: 14 }}>
         <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: pos > 0 && !mort ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}</div>
+        <div style={{ ...RM_SUB, color: !ferme && !mort ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}</div>
         <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" actif={!mort} label={tr('Position') + ' ' + nom} onCommit={poser} />
         {/* Les mêmes trois gestes que la carte compacte : ouvrir, stop, fermer — la glissière règle le reste. */}
         <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
@@ -2171,9 +2234,8 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const realTarget = a.temperature != null ? a.temperature : 20;
-  const [ov, setOv] = useState(null);
+  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
   const etatSt = st && st.state;
-  useEffect(() => { setOv(null); }, [realTarget, etatSt]);
   const target = ov != null ? ov : realTarget;
   const mode = st ? st.state : 'off';
   const off = mode === 'off';
@@ -2182,8 +2244,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const cooling = a.hvac_action === 'cooling';
   const all = a.hvac_modes || ['off', 'heat'];
   // Bascule optimiste, comme la lampe : arrêt ↔ le mode de marche de l'entité.
-  const [ovOn, setOvOn] = useState(null);
-  useEffect(() => { setOvOn(null); }, [etatSt]);
+  const [ovOn, setOvOn] = useOptimiste(etatSt);
   const marche = ovOn != null ? ovOn : !off;
   const modeMarche = ['heat', 'auto', 'heat_cool', 'cool'].find(m => all.indexOf(m) >= 0) || all.find(m => m !== 'off') || 'heat';
   const basculer = () => { const nv = !marche; setOvOn(nv); commander(hass, id, 'set_hvac_mode', nv ? modeMarche : 'off'); };
@@ -2282,8 +2343,7 @@ function pilotFamille(option) {
 function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const S = (hass && hass.states) || null;
   const z = readZone(S, zone);
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [z.target, z.mode]);
+  const [ov, setOv] = useOptimiste([z.target, z.mode].join('|'));
   const target = ov != null ? ov : (z.target != null ? z.target : 19);
   const off = z.mode === 'off';
   const heating = !off && z.current != null && z.current < target;
@@ -2296,8 +2356,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   };
   // Bascule : arrêt ↔ confort (ou le premier mode qui n'est pas l'arrêt),
   // optimiste comme partout. Les autres modes vivent dans la fiche.
-  const [ovOn, setOvOn] = useState(null);
-  useEffect(() => { setOvOn(null); }, [z.mode]);
+  const [ovOn, setOvOn] = useOptimiste(z.mode);
   const marche = ovOn != null ? ovOn : !off;
   const modeArret = options.find(o => pilotFamille(o) === 'off') || 'off';
   const modeMarche = options.find(o => pilotFamille(o) === 'confort') || options.find(o => pilotFamille(o) !== 'off') || null;
@@ -2337,8 +2396,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
 function RoomPilotSheet({ zone, hass, onClose }) {
   const S = (hass && hass.states) || null;
   const z = readZone(S, zone);
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [z.target, z.mode, z.auto]);
+  const [ov, setOv] = useOptimiste([z.target, z.mode, z.auto].join('|'));
   const target = ov != null ? ov : (z.target != null ? z.target : 19);
   const off = z.mode === 'off';
   const heating = !off && z.current != null && z.current < target;
@@ -2678,8 +2736,7 @@ function RoomMediaSheet({ id, hass, onClose }) {
   const ALight = acc ? `rgb(${acc.map(v => Math.round(v + (255 - v) * .28)).join(',')})` : 'var(--o-accent-soft)';
   const onArt = !!artOk;
   const tMain = onArt ? '#fff' : 'var(--o-text)', tSub = onArt ? 'rgba(255,255,255,.75)' : 'var(--o-text2)', tDim = onArt ? 'rgba(255,255,255,.55)' : 'var(--o-text3)';
-  const [volOv, setVolOv] = useState(null);
-  useEffect(() => { setVolOv(null); }, [np.vol]);
+  const [volOv, setVolOv] = useOptimiste(np.vol);
   const vol = volOv != null ? volOv : np.vol;
   const [seekOv, setSeekOv] = useState(null);
   const seekT = useRef(null);
@@ -2805,12 +2862,10 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
   const nom = label || a.friendly_name || id;
   // Bascule d'alimentation en haut à droite (maquettes du 14/09) : lecture
   // et pause vivent dans les boutons du bas, avec piste précédente / suivante.
-  const [ovOn, setOvOn] = useState(null);
-  useEffect(() => { setOvOn(null); }, [np.on]);
+  const [ovOn, setOvOn] = useOptimiste(np.on);
   const marche = ovOn != null ? ovOn : !!np.on;
   const basculer = () => { const nv = !marche; setOvOn(nv); call(nv ? 'turn_on' : 'turn_off'); };
-  const [ovVol, setOvVol] = useState(null);
-  useEffect(() => { setOvVol(null); }, [vol]);
+  const [ovVol, setOvVol] = useOptimiste(vol);
   const volAff = ovVol != null ? ovVol : vol;
   const poserVol = (v) => { setOvVol(v); call('volume_set', { volume_level: v / 100 }, np.ctl); };
   const texte = mort ? tr('Indisponible') : np.title ? (np.title + (sub ? ' · ' + sub : '')) : (marche ? (np.playing ? tr('Lecture') : tr('En pause')) : tr('Éteint'));
@@ -2989,15 +3044,15 @@ function RoomCoverSheet({ id, hass, onClose }) {
   const st = S ? S[id] : null;
   const a = (st && st.attributes) || {};
   const realPos = a.current_position != null ? Math.round(a.current_position) : (st && st.state === 'open' ? 100 : 0);
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realPos]);
+  const [ov, setOv] = useOptimiste(realPos);
   const pos = ov != null ? ov : realPos;
+  const ferme = coverFerme(st, pos);
   const call = (d, s2, data) => commanderService(hass, (data || {}).entity_id, d, s2, data || {});
   const cov = (svc, data) => call('cover', svc, { entity_id: id, ...(data || {}) });
   const poser = (v) => { setOv(v); cov('set_cover_position', { position: v }); };
   const nom = a.friendly_name || id;
   const zone = zoneDe(id);
-  const etatTxt = pos === 0 ? tr('Fermé') : pos === 100 ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
+  const etatTxt = ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
   // La regle du planning (Regles › Volets) : ce volet suit-il le soleil ?
   const { etat: volets } = useEtatServeur(hass, 'loggia/volets/etat', 15000, '');
   const plan = volets && volets.config && volets.config.planning;
@@ -3018,7 +3073,9 @@ function RoomCoverSheet({ id, hass, onClose }) {
     hass.callWS({ type: 'loggia/volets/config', patch });
   };
   const chips = [{ id: 'ferme', nom: tr('Fermé') }, { id: 'mi', nom: tr('Mi-course') }, { id: 'ouvert', nom: tr('Ouvert') }];
-  const chip = pos === 0 ? 'ferme' : pos === 100 ? 'ouvert' : pos === 50 ? 'mi' : null;
+  // La puce choisie suit le meme verdict : sinon « Ferme » restait creuse sur
+  // un volet ferme a 1 %, et aucune des trois n'etait allumee.
+  const chip = ferme ? 'ferme' : coverOuvert(pos) ? 'ouvert' : pos === 50 ? 'mi' : null;
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
@@ -3048,9 +3105,8 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const st = S[id] || null;
   const a = (st && st.attributes) || {};
   const realTarget = a.temperature != null ? a.temperature : 20;
-  const [ov, setOv] = useState(null);
+  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
   const etatSt = st && st.state;
-  useEffect(() => { setOv(null); }, [realTarget, etatSt]);
   const target = ov != null ? ov : realTarget;
   const cur = a.current_temperature;
   const mode = st ? st.state : 'off';
@@ -3058,8 +3114,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const heating = a.hvac_action === 'heating';
   const cooling = a.hvac_action === 'cooling';
   const all = a.hvac_modes || ['off', 'heat'];
-  const [ovOn, setOvOn] = useState(null);
-  useEffect(() => { setOvOn(null); }, [etatSt]);
+  const [ovOn, setOvOn] = useOptimiste(etatSt);
   const marche = ovOn != null ? ovOn : !off;
   const modeMarche = ['heat', 'auto', 'heat_cool', 'cool'].find(m => all.indexOf(m) >= 0) || all.find(m => m !== 'off') || 'heat';
   const basculer = () => { const nv = !marche; setOvOn(nv); commander(hass, id, 'set_hvac_mode', nv ? modeMarche : 'off'); };
@@ -3118,10 +3173,8 @@ function RoomLightSheet({ light, hass, onClose }) {
   const a = (st && st.attributes) || {};
   const realOn = st ? st.state === 'on' : light.on;
   const realBri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : light.bri;
-  const [ovOn, setOvOn] = useState(null);
-  useEffect(() => { setOvOn(null); }, [realOn]);
-  const [ovBri, setOvBri] = useState(null);
-  useEffect(() => { setOvBri(null); }, [realBri]);
+  const [ovOn, setOvOn] = useOptimiste(realOn);
+  const [ovBri, setOvBri] = useOptimiste(realBri);
   const on = ovOn != null ? ovOn : realOn;
   const bri = ovBri != null ? ovBri : realBri;
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : light.color;
@@ -3182,8 +3235,7 @@ function RoomSwitchSheet({ id, hass, onClose }) {
   const st = S[id] || null;
   const a = (st && st.attributes) || {};
   const realOn = !!st && st.state === 'on';
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realOn]);
+  const [ov, setOv] = useOptimiste(realOn);
   const on = ov != null ? ov : realOn;
   const basculer = () => { const nv = !on; setOv(nv); commanderService(hass, id, 'homeassistant', nv ? 'turn_on' : 'turn_off', { entity_id: id }); };
   const nom = a.friendly_name || id;
@@ -3242,8 +3294,7 @@ function RoomLockSheet({ id, hass, onClose }) {
   const a = (st && st.attributes) || {};
   const s2 = st ? st.state : null;
   const realLocked = s2 === 'locked';
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [s2]);
+  const [ov, setOv] = useOptimiste(s2);
   const locked = ov != null ? ov : realLocked;
   const basculer = () => { const nv = !locked; setOv(nv); commanderService(hass, id, 'lock', nv ? 'lock' : 'unlock', { entity_id: id }); };
   const nom = a.friendly_name || id;
@@ -5511,9 +5562,8 @@ function FichePlante({ pl, onClose }) {
  * qui ne ferait rien. */
 function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, portion, feed, onRempli, ficheId, onClose }) {
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const [ovPortion, setOvPortion] = useState(null);
+  const [ovPortion, setOvPortion] = useOptimiste(valeurPortion);
   const valeurPortion = portion ? portion.valeur : null;
-  useEffect(() => { setOvPortion(null); }, [valeurPortion]);
   const pv = ovPortion != null ? ovPortion : valeurPortion;
   const poserPortion = (v) => { if (!portion) return; const nv = Math.max(portion.min, Math.min(portion.max, v)); setOvPortion(nv); call('number', 'set_value', { entity_id: portion.id, value: nv }); };
   const [appareil, setAppareil] = useState(false);
@@ -7334,7 +7384,15 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     const ex = roomExtras && roomExtras[rmNorm(name)];
     if (!ex || !ex.covers.length) return null;
     const S = dashHass.states;
-    const open = ex.covers.some(id => { const st = S[id]; return st && (st.state === 'open' || st.state === 'opening'); });
+    // Meme verdict que la carte : un volet qui bute a 1 % est ferme, et la
+    // pastille de la piece doit proposer « Ouvrir », pas « Fermer ».
+    const open = ex.covers.some(id => {
+      const st = S[id];
+      if (!st) return false;
+      if (st.state === 'opening') return true;
+      const p = st.attributes && st.attributes.current_position;
+      return !coverFerme(st, p != null ? Math.round(p) : (st.state === 'open' ? 100 : 0));
+    });
     return { open, onToggle: () => { commanderService(dashHass, ex.covers, 'cover', open ? 'close_cover' : 'open_cover', { entity_id: ex.covers }); } };
   };
   // ── Héros contextuel : « ce qui compte maintenant » ──────────────────────
@@ -8689,7 +8747,9 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
   // la liste ne connaît pas (`unavailable`, `unknown`) n'est pas un mode.
   const nomDuMode = (voletModes(S).find(m => m.id === mode) || {}).label || null;
 
-  const openCount = covers.filter(c => c.pos > 0).length;
+  // « n ouverts » : le meme verdict que les cartes, sinon un volet qui bute a
+  // 1 % se comptait comme ouvert dans le resume de la vue.
+  const openCount = covers.filter(c => !coverFerme(S && S[c.haid], c.pos)).length;
 
   return (
     <div className="loggia-content" style={{ padding: embarque ? '0 28px 40px' : '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
