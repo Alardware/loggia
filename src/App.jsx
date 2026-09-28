@@ -821,11 +821,27 @@ function Header() {
     if (nsig && nsig !== nsigPrev.current && nsig !== vuSig) { setBellRing(true); const t = setTimeout(() => setBellRing(false), 900); nsigPrev.current = nsig; return () => clearTimeout(t); }
     nsigPrev.current = nsig;
   }, [nsig]);
+  /* Les deux menus de l'en-tête se refermaient au CLIC DEHORS, et à rien
+   * d'autre : ouvert au clavier, celui des notifications n'avait aucune sortie
+   * au clavier. Échap le referme maintenant, comme toute couche posée par
+   * dessus — et rend le focus au bouton qui l'a ouvert, sinon on repart du
+   * haut de la page à chaque fermeture. */
+  const clocheRef = useRef(null);
+  const profilRef = useRef(null);
   useEffect(() => {
     if (!notifOpen && !userOpen) return;
     const close = (e) => { if (!(e.target.closest && e.target.closest('[data-hdr-menu]'))) { setNotifOpen(false); setUserOpen(false); } };
+    const echap = (e) => {
+      if (e.key !== 'Escape') return;
+      // La feuille par-dessus, s'il y en a une, se ferme la premiere.
+      e.stopPropagation();
+      const bouton = notifOpen ? clocheRef.current : profilRef.current;
+      setNotifOpen(false); setUserOpen(false);
+      if (bouton && bouton.focus) bouton.focus();
+    };
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('keydown', echap);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', echap); };
   }, [notifOpen, userOpen]);
   // Auto-hide barre (porté de V1) : masquée en défilant vers le bas, réapparaît en remontant.
   const [hidden, setHidden] = useState(false);
@@ -870,10 +886,10 @@ function Header() {
         {/* La cloche annonce ce qu'elle porte (plan M7) : le point rouge des
           * non-lues ne se voit pas d'un lecteur d'écran, et « Notifications »
           * seul ne disait pas s'il y avait quelque chose à lire. */}
-        <button onClick={() => { setNotifOpen(o => { const n = !o; if (n) marquerVues(); return n; }); setUserOpen(false); }}
+        <button ref={clocheRef} onClick={() => { setNotifOpen(o => { const n = !o; if (n) marquerVues(); return n; }); setUserOpen(false); }}
           aria-label={tr('Notifications') + (nonVues ? ' · ' + trN(notifs.length, tr('{n} non lue'), tr('{n} non lues')) : '')}
           aria-expanded={notifOpen} title={tr('Notifications')} style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{nonVues && <span className="o-livedot" aria-hidden="true" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: 'var(--o-bad)', border: '2px solid var(--o-bg2)' }} />}</button>
-        <button aria-label={tr('Profil')} onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }} title={tr('Profil')} style={{ width: 44, height: 44, borderRadius: '50%', marginLeft: 4, background: curBg, border: '2px solid rgba(255,255,255,.15)', cursor: 'pointer', flexShrink: 0 }} />
+        <button ref={profilRef} aria-label={tr('Profil')} aria-expanded={userOpen} onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }} title={tr('Profil')} style={{ width: 44, height: 44, borderRadius: '50%', marginLeft: 4, background: curBg, border: '2px solid rgba(255,255,255,.15)', cursor: 'pointer', flexShrink: 0 }} />
         {notifOpen && (
           <div style={{ ...menu, right: 52, width: 'min(304px, calc(100vw - 32px))' }}>
             <div style={{ padding: '12px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 14 }}>{tr('Notifications')}</span><span onClick={marquerVues} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); marquerVues(); } }} style={{ fontSize: 12, color: 'var(--o-accent-soft)', cursor: 'pointer', fontWeight: 600 }}>{tr('Tout lire')}</span></div>
@@ -7465,6 +7481,22 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <Header />
+      {/* Deux régions vivantes, et elles sont TOUJOURS montées.
+        *
+        * L'état de l'alarme et la carte « À surveiller » changent tout seuls —
+        * la maison s'arme, un détecteur se tait, une fuite arrive. À l'écran
+        * ça se voit ; pour qui n'a pas le focus dessus, ça ne se disait pas.
+        *
+        * Le piège est là : un lecteur d'écran n'annonce le contenu d'une
+        * région que s'il CHANGE, et une région qui apparaît déjà remplie ne
+        * dit rien. Les poser DANS la carte n'aurait donc rien annoncé au
+        * moment qui compte — celui où la carte apparaît. Elles vivent donc
+        * ici, vides tant qu'il n'y a rien, et c'est leur texte qui change.
+        *
+        * Deux régions plutôt qu'une : sinon l'arrivée d'un point d'attention
+        * ferait répéter l'état de l'alarme, et réciproquement. */}
+      <div className="o-vh" role="status">{alarmeTuile ? tr('Alarme') + ' : ' + alarmeTuile.texte : ''}</div>
+      <div className="o-vh" role="status">{points.length ? tr('À surveiller') + ' : ' + resumeAttention(points) : ''}</div>
       {/* Le fond météo attend que le tableau de bord soit peint.
         *
         * `WeatherGL` est chargé à la demande — mais il était monté dès le
@@ -10206,8 +10238,13 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
       {!dense && dom === 'light' && !dead && (a.brightness != null || (a.supported_color_modes || []).indexOf('brightness') >= 0) && (
         <div className="o-cvrange" role="presentation" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
           <Fi i="bulb" size={13} color="var(--o-text3)" />
+          {/* Le curseur s'appelait « {n} % de luminosité » avec un `n` VIDE :
+            * le nom lu était donc « % de luminosité », et rien ne disait de
+            * quelle lampe. Un curseur se nomme par ce qu'il COMMANDE — sa
+            * valeur, elle, est déjà dite par le curseur lui-même. Même formule
+            * que les jauges des cartes de pièce. */}
           <input type="range" min="1" max="100" key={on ? Math.round((a.brightness || 0) / 255 * 100) : 0}
-            defaultValue={on ? Math.round((a.brightness || 0) / 255 * 100) : 0} aria-label={tr('{n} % de luminosité', { n: '' })}
+            defaultValue={on ? Math.round((a.brightness || 0) / 255 * 100) : 0} aria-label={tr('Luminosité') + ' ' + name}
             onPointerUp={(e) => call('light', 'turn_on', { brightness_pct: +e.target.value })}
             onKeyUp={(e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') call('light', 'turn_on', { brightness_pct: +e.target.value }); }}
             style={{ flex: 1, minWidth: 0 }} />
