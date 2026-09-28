@@ -5,7 +5,8 @@ import { formatEcran, vueFormat, patchFormat, echangerPartout, ordonnerSelon, or
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
 // La table des conditions, elle, est de la donnee pure et reste immediate.
 import { WX_PRESETS } from './wxpresets.js';
-import { garde, JETONS_GARDE, lisibleSurLavis } from './contraste.js';
+import { lisibleSurLavis } from './contraste.js';
+import { LAVIS, SAFE_NOLOOK, applyTheme, lav, readLook, signatureHaTheme } from './theme.js';
 // Le mode clair, lu sur la racine : les couleurs d'appareils s'y assombrissent.
 const estClair = () => typeof document !== 'undefined' && document.documentElement.classList.contains('loggia-light');
 const WeatherGL = lazy(() => import('./wx3d.jsx'));
@@ -31,7 +32,8 @@ import { isViewAvailable, viewReason } from './views.js';
 import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
-  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere, CroixFeuille, TitreFeuille
+  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere, CroixFeuille, TitreFeuille,
+  useIdTitreFeuille
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
@@ -385,7 +387,17 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
   );
   return (
     <>
-    <aside ref={navRef} className={'loggia-aside ' + (open ? 'is-open' : 'is-closed')} style={{ width: 264, flexShrink: 0, position: 'sticky', top: 0, alignSelf: 'flex-start', height: '100vh', overflowY: 'auto', background: 'linear-gradient(180deg,var(--o-side1),var(--o-side2))', borderRight: 'var(--o-bw,1px) solid var(--o-bd3)', padding: 'calc(18px + var(--o-safe-top,0px)) 12px 18px', display: 'flex', flexDirection: 'column' }}>
+    {/* Hors écran, le tiroir sort AUSSI du parcours (audit du 27/09).
+      * Au tactile, `is-closed` le pousse par `transform: translateX(-100%)` —
+      * il reste donc `display: flex`, visible pour le navigateur, et ses onze
+      * boutons restaient tabulables et lisibles par un lecteur d'écran, à
+      * l'aveugle. Sur ORDINATEUR, `is-closed` n'est qu'un rail de 72 px, bien
+      * visible et bien utile : on n'y touche pas.
+      *
+      * `inert` en chaîne vide : React 18 ne le connaît pas comme booléen et
+      * `inert={true}` écrirait `inert="true"` avec un avertissement. */}
+    <aside ref={navRef} className={'loggia-aside ' + (open ? 'is-open' : 'is-closed')}
+      inert={tactile && !open ? '' : undefined} style={{ width: 264, flexShrink: 0, position: 'sticky', top: 0, alignSelf: 'flex-start', height: '100vh', overflowY: 'auto', background: 'linear-gradient(180deg,var(--o-side1),var(--o-side2))', borderRight: 'var(--o-bw,1px) solid var(--o-bd3)', padding: 'calc(18px + var(--o-safe-top,0px)) 12px 18px', display: 'flex', flexDirection: 'column' }}>
       {pill && <div aria-hidden="true" className="o-navpill" style={{ position: 'absolute', left: 12, right: 12, top: 0, height: pill.h, transform: `translateY(${pill.top}px)`, borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', pointerEvents: 'none', zIndex: 0 }}><span style={{ position: 'absolute', left: 0, top: 9, bottom: 9, width: 3, borderRadius: 4, background: 'var(--o-accent-fond)' }} /></div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 8px 14px' }}>
         {/* Le logo du projet. C'etait un « O » sur un degrade — le O d'Orion,
@@ -548,14 +560,57 @@ function useFlash() {
   };
   return [ref, flash];
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Un etat optimiste qui EXPIRE.
+ *
+ * Une carte n'attend pas Home Assistant pour changer d'aspect : elle montre
+ * tout de suite ce qu'on vient de lui demander, sinon le doigt arrive avant
+ * l'image. Ce mensonge utile ne se vidait que si l'etat REEL bougeait —
+ * `useEffect(() => setOv(null), [reel])`, recopie dans quatorze cartes.
+ *
+ * Quand l'etat reel ne bouge jamais, il tenait indefiniment : commande
+ * refusee, volet qui bute a 1 %, echo Zigbee qui rejoue l'ancienne valeur. La
+ * carte disait « Ferme » pendant que la maison disait « ouvert », et SEUL un
+ * changement de page le revelait — le composant mourait, l'etat optimiste avec
+ * lui, et la verite reapparaissait. L'utilisateur croyait alors que le RETOUR
+ * mentait, alors que c'etait l'affichage d'avant (retour du 27/09 : « si je
+ * ferme mes volets et que je change de page et que je reviens la carte est
+ * ouvert alors que le volet est bien ferme »).
+ *
+ * Deux cartes sur quatorze avaient un filet. C'est desormais le meme pour
+ * toutes : passe ce delai, la carte redit ce que la maison dit, quoi qu'il
+ * arrive. Un affichage en retard se corrige tout seul ; un affichage faux, non.
+ *
+ * `reel` est une SIGNATURE : passer plusieurs valeurs se fait en les joignant,
+ * comme le faisait le tableau de dependances qu'il remplace.
+ * ───────────────────────────────────────────────────────────────────────────── */
+const OPTIMISTE_MS = 6000;
+function useOptimiste(reel, delai = OPTIMISTE_MS) {
+  const [ov, setOv] = useState(null);
+  const minuteur = useRef(0);
+  useEffect(() => () => clearTimeout(minuteur.current), []);
+  // L'etat reel a repondu : le filet n'a plus de raison d'attendre.
+  useEffect(() => { clearTimeout(minuteur.current); setOv(null); }, [reel]);
+  const poser = useCallback((v) => {
+    setOv(v);
+    clearTimeout(minuteur.current);
+    minuteur.current = setTimeout(() => setOv(null), delai);
+  }, [delai]);
+  return [ov, poser];
+}
+
 // <ActionBtn onClick style>label</ActionBtn> : ripple au clic + « ✓ » 900 ms qui remplace le label (commande envoyée)
 // <Shiny on>texte</Shiny> : sweep lumineux discret (background-clip:text) sur un badge ACTIF uniquement.
 function Shiny({ on = true, children, style }) {
   if (!on || REDUCE_MOTION) return <span style={style}>{children}</span>;
   return <span className="o-shiny" style={style}>{children}</span>;
 }
-// Cascade retiree le 21/08 (demande user) : plus aucun delai d'entree. Conserve pour les ~200 appels existants.
-const stag = () => undefined;
+/* La cascade d'entree est partie le 21/08 (demande user). Restait `stag`, une
+ * fonction qui rend `undefined` — et son commentaire disait la garder « pour
+ * les ~200 appels existants ». Il en restait UN, qui etalait `undefined` dans
+ * un style (audit du 27/09). La classe CSS `.o-stag`, elle, sert toujours :
+ * c'est par elle qu'`onPaintReady` relance les animations mises en pause. */
 // relance les animations CSS en pause une fois le 1er paint atteint (cartes montées avant l'affichage de l'iframe)
 onPaintReady(() => { try { document.querySelectorAll('.o-stag, .o-draw, .o-fadein').forEach(el => { el.style.animationPlayState = 'running'; }); } catch {} });
 
@@ -863,461 +918,9 @@ function Header() {
 const sectionTitle = { margin: 0, fontWeight: 400, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
 const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none' };
 
-// "couleur CSS (hex/rgb) → 'r,g,b'" pour alimenter les tokens rgba(var(--o-accent-rgb),...)
-function cssToRgb(c) {
-  c = (c || '').trim();
-  if (c[0] === '#') { let h = c.slice(1); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; const n = parseInt(h, 16); return isNaN(n) ? '' : `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`; }
-  const m = c.match(/(\d+)[ ,]+(\d+)[ ,]+(\d+)/); return m ? `${m[1]},${m[2]},${m[3]}` : '';
-}
-
-const THEME_KEYS = ['--o-bg', '--o-bggrad', '--o-bg2', '--o-side1', '--o-side2', '--o-surfA', '--o-surfB', '--o-header', '--o-text', '--o-text1', '--o-text2', '--o-text3', '--o-bd1', '--o-bd2', '--o-bd3', '--o-s1', '--o-s2', '--o-s3', '--o-s4', '--o-s5', '--o-well', '--o-well2', '--o-well0', '--o-accent', '--o-accent-rgb', '--o-accent-soft', '--o-accent-soft-rgb', '--o-shadow', '--o-bw', '--o-font',
-  // tokens fins des presets (Atrium) — purgés au changement de thème comme les autres
-  '--o-ok', '--o-ok-rgb', '--o-warn2', '--o-warn2-rgb', '--o-bad', '--o-bad-rgb', '--o-shadow-hover', '--o-shadow-rangee',
-  // Le voile du bandeau meteo. Un preset qui le teinte sans qu'il figure
-  // ici le laisserait au theme suivant : le bleu de l'un sur le fond de
-  // l'autre, jusqu'au rechargement.
-  '--o-sky',
-  /* Accents decoratifs. Ils portent chacun un ROLE : `--o-purple` est la
-   * couleur des volets d'un bout a l'autre du dashboard, `--o-cyan` celle
-   * des scenes, `--o-gold` celle de ce qu'on epingle. Un theme peut donc
-   * les reteindre sans rien brouiller, tant qu'ils restent distincts entre
-   * eux — et il le faut pour une charte monochrome, ou un violet detonne. */
-  '--o-purple', '--o-purple-rgb', '--o-cyan', '--o-cyan-rgb',
-  '--o-cold', '--o-cold-rgb', '--o-gold', '--o-gold-rgb',
-  '--o-warn', '--o-warn-rgb',
-  /* Les teintes des pieces. Elles suivent un theme qui n'a qu'une couleur,
-   * et redeviennent celles d'avant des qu'on en change. */
-  '--o-piece-ambre', '--o-piece-ambre-rgb', '--o-piece-tendre',
-  '--o-piece-tendre-rgb', '--o-piece-vert', '--o-piece-vert-rgb',
-  '--o-piece-chambre', '--o-piece-chambre-rgb', '--o-piece-bain', '--o-piece-bain-rgb'];
-// Thèmes natifs Loggia (créés pour Loggia, adaptés des thèmes HA fournis). Chaque preset a une variante claire + sombre,
-// pilotée par le Mode d'affichage. Forme = entrée de applyVars (bg/surface/text/accent/radius/shadow/border/font/bggrad).
-const LOGGIA_PRESETS = {
-  neumorphix: {
-    light: { bg: '#e8eaf0', surface: '#eef0f6', surfaceElevated: '#f3f5fb', text: '#2c2f3a', muted: '#606470', border: 'rgba(120,130,160,.14)', accent: '#6c7ae0', accentText: '#5563cc', radius: '20px', borderWidth: '0px', shadow: '6px 6px 14px #d3d6e1, -6px -6px 14px #ffffff', bggrad: 'linear-gradient(160deg,#edeff5,#e3e6ef)', font: "'Manrope', -apple-system, sans-serif" },
-    dark: { bg: '#1e2128', surface: '#262b35', surfaceElevated: '#2c323e', text: '#e2e8f0', muted: '#94a3b8', border: 'rgba(255,255,255,.05)', accent: '#5de0d8', radius: '20px', borderWidth: '0px', shadow: '5px 5px 12px #13161c, -5px -5px 12px #2d3340', bggrad: 'linear-gradient(160deg,#21252e,#171a20)', font: "'Manrope', -apple-system, sans-serif" },
-  },
-  google: {
-    light: { bg: '#f6f8fc', surface: '#ffffff', surfaceElevated: '#ffffff', text: '#202124', muted: '#5f6368', border: '#e7e9ee', accent: '#1a73e8', radius: '12px', borderWidth: '1px', shadow: '0 1px 3px rgba(60,64,67,.15), 0 1px 2px rgba(60,64,67,.1)', bggrad: '', font: "'Google Sans','Roboto',-apple-system,sans-serif" },
-    dark: { bg: '#171717', surface: '#202124', surfaceElevated: '#26282c', text: '#f2f2f2', muted: '#a6a6a6', border: '#2c2d31', accent: '#8ab4f8', radius: '12px', borderWidth: '1px', shadow: '0 1px 3px rgba(0,0,0,.5)', bggrad: '', font: "'Google Sans','Roboto',-apple-system,sans-serif" },
-  },
-  ios: {
-    light: { bg: '#e5e5ea', surface: '#fbfbfd', surfaceElevated: '#ffffff', text: '#1c1c1e', muted: '#6c6c70', border: 'rgba(60,60,67,.1)', accent: '#ff9409', accentText: '#b35c00', radius: '22px', borderWidth: '0px', shadow: '0 10px 30px rgba(0,0,0,.08)', bggrad: 'linear-gradient(165deg,#eef0f5,#e1e4ed)', font: "-apple-system,'SF Pro Display','Segoe UI',sans-serif" },
-    dark: { bg: '#0d0d10', surface: '#1c1c1e', surfaceElevated: '#262629', text: '#ffffff', muted: '#aeaeb2', border: 'rgba(255,255,255,.08)', accent: '#ff9f09', radius: '22px', borderWidth: '0px', shadow: '0 10px 30px rgba(0,0,0,.5)', bggrad: 'linear-gradient(165deg,#1a1a20,#09090c)', font: "-apple-system,'SF Pro Display','Segoe UI',sans-serif" },
-  },
-  // Frosted Glass : surfaces TRANSLUCIDES (le flou backdrop est appliqué en CSS via html.loggia-frosted) sur un fond dégradé.
-  frosted: {
-    light: { bg: '#e6e8f5', surface: 'rgba(255,255,255,.55)', surfaceElevated: 'rgba(255,255,255,.72)', text: '#15183a', muted: '#54597e', border: 'rgba(255,255,255,.55)', accent: '#6a74d3', accentText: '#4e57b0', radius: '18px', borderWidth: '1px', shadow: '0 14px 30px rgba(40,40,90,.14)', bggrad: 'linear-gradient(120deg,#f4e9f1 0%,#e3e9f8 45%,#bcc8f0 100%)', font: "-apple-system,'Segoe UI',Roboto,sans-serif" },
-    dark: { bg: '#0d111c', surface: 'rgba(34,38,58,.42)', surfaceElevated: 'rgba(44,49,72,.55)', text: '#eaebf2', muted: '#a6abc6', border: 'rgba(234,235,238,.14)', accent: '#8f97de', radius: '18px', borderWidth: '1px', shadow: '0 14px 30px rgba(0,0,0,.38)', bggrad: 'radial-gradient(ellipse 95% 75% at 55% 32%,#283050 0%,#141b2d 55%,#0b0f1a 100%)', font: "-apple-system,'Segoe UI',Roboto,sans-serif" },
-  },
-  // ── Thèmes éditeur VS Code (palettes officielles ; variante claire = pendant light officiel) ──
-  onedark: {
-    dark: { bg: '#21252b', surface: '#282c34', surfaceElevated: '#2f343e', text: '#abb2bf', muted: '#7f848e', border: 'rgba(255,255,255,.06)', accent: '#61afef', radius: '18px', borderWidth: '1px', shadow: '0 12px 30px rgba(0,0,0,.4)', bggrad: 'linear-gradient(170deg,#23272e,#1d2025)', font: "'Manrope', -apple-system, sans-serif" },
-    light: { bg: '#eaeaeb', surface: '#fafafa', surfaceElevated: '#ffffff', text: '#383a42', muted: '#696c77', border: 'rgba(56,58,66,.13)', accent: '#4078f2', accentText: '#2f5cc4', radius: '18px', borderWidth: '1px', shadow: '0 10px 24px rgba(56,58,66,.10)', bggrad: '', font: "'Manrope', -apple-system, sans-serif" },
-  },
-  dracula: {
-    dark: { bg: '#21222c', surface: '#282a36', surfaceElevated: '#343746', text: '#f8f8f2', muted: '#8a94c0', border: 'rgba(189,147,249,.14)', accent: '#bd93f9', radius: '18px', borderWidth: '1px', shadow: '0 12px 30px rgba(0,0,0,.42)', bggrad: 'radial-gradient(ellipse 90% 70% at 50% 0%,#2b2d3d 0%,#1e1f29 60%)', font: "'Manrope', -apple-system, sans-serif" },
-    light: { bg: '#f3efe0', surface: '#fffbeb', surfaceElevated: '#ffffff', text: '#1f1f1f', muted: '#635d97', border: 'rgba(100,74,201,.16)', accent: '#644ac9', accentText: '#4f39a8', radius: '18px', borderWidth: '1px', shadow: '0 10px 24px rgba(100,74,201,.10)', bggrad: '', font: "'Manrope', -apple-system, sans-serif" },
-  },
-  github: {
-    dark: { bg: '#0d1117', surface: '#161b22', surfaceElevated: '#1c2129', text: '#e6edf3', muted: '#8b949e', border: '#30363d', accent: '#58a6ff', radius: '14px', borderWidth: '1px', shadow: '0 8px 24px rgba(0,0,0,.4)', bggrad: '', font: "'Manrope', -apple-system, sans-serif" },
-    light: { bg: '#f6f8fa', surface: '#ffffff', surfaceElevated: '#ffffff', text: '#1f2328', muted: '#656d76', border: '#d0d7de', accent: '#0969da', accentText: '#0969da', radius: '14px', borderWidth: '1px', shadow: '0 6px 18px rgba(31,35,40,.08)', bggrad: '', font: "'Manrope', -apple-system, sans-serif" },
-  },
-  tokyo: {
-    dark: { bg: '#16161e', surface: '#1a1b26', surfaceElevated: '#1f2335', text: '#c0caf5', muted: '#7982a9', border: 'rgba(122,162,247,.11)', accent: '#7aa2f7', radius: '18px', borderWidth: '1px', shadow: '0 12px 30px rgba(0,0,0,.45)', bggrad: 'radial-gradient(ellipse 95% 70% at 50% 0%,#1e2030 0%,#131420 60%)', font: "'Manrope', -apple-system, sans-serif" },
-    light: { bg: '#d5d6db', surface: '#e6e7ed', surfaceElevated: '#f2f2f7', text: '#343b58', muted: '#5a607d', border: 'rgba(52,59,88,.15)', accent: '#2e7de9', accentText: '#1f5bb8', radius: '18px', borderWidth: '1px', shadow: '0 10px 24px rgba(52,59,88,.10)', bggrad: '', font: "'Manrope', -apple-system, sans-serif" },
-  },
-  material: {
-    dark: { bg: '#1e282d', surface: '#263238', surfaceElevated: '#2e3c43', text: '#eeffff', muted: '#7d97a5', border: 'rgba(255,255,255,.06)', accent: '#80cbc4', radius: '20px', borderWidth: '0px', shadow: '0 12px 30px rgba(0,0,0,.4)', bggrad: 'linear-gradient(165deg,#243036,#1b2429)', font: "'Manrope', -apple-system, sans-serif" },
-    light: { bg: '#eceff1', surface: '#fafafa', surfaceElevated: '#ffffff', text: '#37474f', muted: '#607d8b', border: 'rgba(55,71,79,.12)', accent: '#00897b', accentText: '#00695c', radius: '20px', borderWidth: '0px', shadow: '0 10px 24px rgba(55,71,79,.10)', bggrad: '', font: "'Manrope', -apple-system, sans-serif" },
-  },
-  nightowl: {
-    dark: { bg: '#01111d', surface: '#011627', surfaceElevated: '#0b2942', text: '#d6deeb', muted: '#7e97b3', border: 'rgba(95,126,151,.22)', accent: '#82aaff', radius: '18px', borderWidth: '1px', shadow: '0 12px 32px rgba(0,0,0,.5)', bggrad: 'radial-gradient(ellipse 95% 70% at 50% 0%,#04203a 0%,#010f1a 60%)', font: "'Manrope', -apple-system, sans-serif" },
-    light: { bg: '#f0f0f0', surface: '#fbfbfb', surfaceElevated: '#ffffff', text: '#403f53', muted: '#676688', border: 'rgba(64,63,83,.14)', accent: '#0c969b', accentText: '#0a7c80', radius: '18px', borderWidth: '1px', shadow: '0 10px 24px rgba(64,63,83,.10)', bggrad: '', font: "'Manrope', -apple-system, sans-serif" },
-  },
-  // ── Paires de couleurs (réf. envoyée par le user) : Charcoal × Soft Lavender, Plum Wine × Blush Pink ──
-  lavande: {
-    dark: { bg: '#232326', surface: '#2b2b2f', surfaceElevated: '#333338', text: '#ece9f4', muted: '#a8a3bd', border: 'rgba(214,205,234,.12)', accent: '#c3b5e6', accentText: '#d6cdea', radius: '20px', borderWidth: '1px', shadow: '0 4px 10px rgba(0,0,0,.24), 0 16px 32px rgba(0,0,0,.2)', bggrad: 'linear-gradient(170deg,#27272b,#1d1d20)', font: "'Manrope', -apple-system, sans-serif" },
-    light: { bg: '#e9e4f3', surface: '#f7f5fb', surfaceElevated: '#ffffff', text: '#2b2b30', muted: '#6d6785', border: 'rgba(43,43,48,.12)', accent: '#7b68b8', accentText: '#5f4da0', radius: '20px', borderWidth: '1px', shadow: '0 2px 6px rgba(43,43,48,.06), 0 12px 28px rgba(43,43,48,.10)', bggrad: 'linear-gradient(165deg,#efeaf7,#e2dcf0)', font: "'Manrope', -apple-system, sans-serif" },
-  },
-  plum: {
-    dark: { bg: '#22101a', surface: '#341624', surfaceElevated: '#421c2e', text: '#f6e7ec', muted: '#c39aa9', border: 'rgba(242,198,207,.14)', accent: '#eda4b6', accentText: '#f2c6cf', radius: '20px', borderWidth: '1px', shadow: '0 4px 10px rgba(0,0,0,.26), 0 16px 32px rgba(0,0,0,.22)', bggrad: 'radial-gradient(ellipse 95% 70% at 50% 0%,#3d1628 0%,#1c0d15 60%)', font: "'Manrope', -apple-system, sans-serif" },
-    light: { bg: '#f6e3e8', surface: '#fdf5f7', surfaceElevated: '#ffffff', text: '#3c1526', muted: '#8d5a6c', border: 'rgba(90,30,58,.14)', accent: '#a03d5e', accentText: '#832c4a', radius: '20px', borderWidth: '1px', shadow: '0 2px 6px rgba(90,30,58,.06), 0 12px 28px rgba(90,30,58,.10)', bggrad: 'linear-gradient(165deg,#f9ebef,#f2dae1)', font: "'Manrope', -apple-system, sans-serif" },
-  },
-  // ── Atrium : le thème du tableau de bord maison. Sa signature n'est pas sa
-  //    couleur — elle est proche de celle d'Loggia — mais son traitement : aucune
-  //    ombre, des surfaces opaques, et un filet d'un pixel qui porte seul la
-  //    structure. Le fond descend au quasi-noir neutre pour que les cartes se
-  //    détachent par leur clarté, et non par une ombre portée.
-  atrium: {
-    dark: {
-      bg: '#07090d', surface: '#0b0f15', surfaceElevated: '#111620', text: '#e9eef5', muted: '#a8b2c1',
-      border: 'rgba(255,255,255,.065)', accent: '#5b8cff', accentText: '#8fb0ff',
-      radius: '16px', borderWidth: '1px', shadow: '0 0 0 1px rgba(255,255,255,.085)', bggrad: '', font: "'Manrope', -apple-system, sans-serif",
-      fine: {
-        // carte = dégradé c1 → c2 + filet 1px ; aucune ombre portée au repos —
-        // le filet EST l'ombre (un anneau), sinon les cartes se confondaient
-        // avec la page, la règle du gabarit leur interdisant une bordure.
-        '--o-shadow-rangee': '0 0 0 1px rgba(255,255,255,.085)',
-        '--o-surfA': '#111620', '--o-surfB': '#0b0f15',
-        '--o-bg2': '#0a0d12', '--o-side1': '#0a0d12', '--o-side2': '#07090d',
-        '--o-header': 'rgba(8,10,14,.88)',
-        '--o-well': '#0d1117', '--o-well0': '#111620', '--o-well2': '#07090d',
-        // 7 niveaux de texte du handoff → 4 tokens Loggia (t1 · t2 · t3 · t6)
-        '--o-text': '#e9eef5', '--o-text1': '#cfd7e2', '--o-text2': '#a8b2c1', '--o-text3': '#5c6675',
-        // traits (hair) — jamais confondus avec les remplissages
-        '--o-bd1': 'rgba(255,255,255,.1)', '--o-bd2': 'rgba(255,255,255,.065)', '--o-bd3': 'rgba(255,255,255,.045)',
-        // remplissages neutres (s1 → s4)
-        '--o-s1': 'rgba(255,255,255,.07)', '--o-s2': 'rgba(255,255,255,.045)', '--o-s3': 'rgba(255,255,255,.03)',
-        '--o-s4': 'rgba(255,255,255,.02)', '--o-s5': 'rgba(255,255,255,.02)',
-        // sémantique : le texte change entre les thèmes, pas les points/jauges
-        '--o-ok': '#5ee089', '--o-ok-rgb': '34,197,94', '--o-warn2': '#f7bd5c', '--o-warn2-rgb': '245,165,36',
-        '--o-bad': '#f79c92', '--o-bad-rgb': '240,104,90',
-        '--o-shadow-hover': '0 16px 34px rgba(0,0,0,.45)',
-      },
-    },
-    light: {
-      bg: '#f2f4f7', surface: '#ffffff', surfaceElevated: '#ffffff', text: '#101828', muted: '#475467',
-      border: 'rgba(16,24,40,.1)', accent: '#5b8cff', accentText: '#1d55c9',
-      radius: '16px', borderWidth: '1px', shadow: '0 0 0 1px rgba(16,24,40,.14)', bggrad: '', font: "'Manrope', -apple-system, sans-serif",
-      fine: {
-        '--o-shadow-rangee': '0 0 0 1px rgba(16,24,40,.14)',
-        // en clair, c1 = c2 = blanc : la carte est plate, c'est le filet qui la détache
-        '--o-surfA': '#ffffff', '--o-surfB': '#ffffff',
-        '--o-bg2': '#ffffff', '--o-side1': '#ffffff', '--o-side2': '#ffffff',
-        '--o-header': 'rgba(246,247,249,.9)',
-        '--o-well': '#ffffff', '--o-well0': '#ffffff', '--o-well2': '#f2f4f7',
-        '--o-text': '#101828', '--o-text1': '#26303f', '--o-text2': '#475467', '--o-text3': '#8a93a1',
-        '--o-bd1': 'rgba(16,24,40,.14)', '--o-bd2': 'rgba(16,24,40,.1)', '--o-bd3': 'rgba(16,24,40,.07)',
-        '--o-s1': 'rgba(16,24,40,.07)', '--o-s2': 'rgba(16,24,40,.05)', '--o-s3': 'rgba(16,24,40,.035)',
-        '--o-s4': 'rgba(16,24,40,.022)', '--o-s5': 'rgba(16,24,40,.022)',
-        '--o-ok': '#15803d', '--o-ok-rgb': '34,197,94', '--o-warn2': '#b45309', '--o-warn2-rgb': '245,165,36',
-        '--o-bad': '#b42318', '--o-bad-rgb': '240,104,90',
-        '--o-shadow-hover': '0 16px 34px rgba(16,24,40,.12)',
-      },
-    },
-  },
-  /* ── The Projekt ────────────────────────────────────────────────────────
-   *
-   * D'après la planche de charte : dix teintes, une seule source de lumière.
-   *
-   * Le noir n'y est jamais neutre — #020D12 tire sur le bleu — et l'azur
-   * #3CA2D9 ne sert qu'à désigner ce qui agit. La glace #BEE8FF, elle, ne
-   * remplit rien : elle écrit.
-   *
-   * Trois choix viennent de la planche et non de l'habitude.
-   *
-   * Le fond n'est pas plat. Toutes les vignettes montrent une lueur venue du
-   * haut ; `bggrad` la reproduit, et c'est elle qui donne la profondeur que
-   * les autres thèmes vont chercher dans une ombre portée.
-   *
-   * Les traits et les remplissages sont teintés de GLACE, jamais de blanc. Un
-   * `rgba(255,255,255,.1)` posé sur ce fond vire au gris et casse la dominante
-   * froide en un coup ; `rgba(190,232,255,…)` la tient.
-   *
-   * Et l'accent qui remplit n'est pas celui qui écrit. #3CA2D9 sur #020D12
-   * passe tout juste ; #BEE8FF y respire. D'où `accent` d'un côté,
-   * `accentText` de l'autre — la charte fait la même distinction en donnant
-   * deux bleus là où un seul aurait suffi.
-   */
-  projekt: {
-    dark: {
-      bg: '#020D12', surface: '#06202E', surfaceElevated: '#0A2A3B', text: '#ffffff', muted: '#6c8ea3',
-      border: 'rgba(190,232,255,.12)', accent: '#3ca2d9', accentText: '#bee8ff',
-      radius: '14px', borderWidth: '1px',
-      shadow: '0 4px 12px rgba(0,0,0,.45), 0 18px 40px rgba(1,10,15,.4)',
-      // La lueur du haut, reprise de la planche : elle éclaire l'en-tête et
-      // s'éteint avant le bas de page, comme sur chaque vignette.
-      bggrad: 'radial-gradient(118% 78% at 50% -14%, #0b3d57 0%, #06283a 30%, #03151e 58%, #020D12 82%)',
-      font: "'Manrope', -apple-system, sans-serif",
-      fine: {
-        '--o-surfA': '#0a2a3b', '--o-surfB': '#06202e',
-        '--o-bg2': '#03131c', '--o-side1': '#04161f', '--o-side2': '#020d12',
-        '--o-header': 'rgba(2,13,18,.8)',
-        '--o-well': '#051b27', '--o-well0': '#0a2a3b', '--o-well2': '#020d12',
-        // Quatre niveaux de texte : blanc pur pour les titres, TP-10 pour le
-        // courant, puis deux gris bleutés — TP-09 ferme la marche.
-        // TP-09 (#6c8ea3) tombait a 4,29:1 sur la carte haute : mesure, pas
-        // impression. Eclairci juste assez pour passer, sans quitter l'acier.
-        '--o-text': '#ffffff', '--o-text1': '#d9e2e7', '--o-text2': '#9db6c5', '--o-text3': '#7597ab',
-        '--o-bd1': 'rgba(190,232,255,.17)', '--o-bd2': 'rgba(190,232,255,.11)', '--o-bd3': 'rgba(190,232,255,.075)',
-        '--o-s1': 'rgba(190,232,255,.1)', '--o-s2': 'rgba(190,232,255,.065)', '--o-s3': 'rgba(190,232,255,.045)',
-        '--o-s4': 'rgba(190,232,255,.03)', '--o-s5': 'rgba(190,232,255,.03)',
-        // Le voile du bandeau météo : lui aussi vire au bleu de la charte,
-        // sinon il ramène le gris que tout le reste évite.
-        '--o-sky': 'rgba(60,162,217,.34)',
-        // Sémantique : le texte change d'un thème à l'autre, pas la lecture
-        // d'un point vert ou d'une jauge rouge. On les refroidit, sans plus.
-        '--o-ok': '#4fd1a5', '--o-ok-rgb': '79,209,165',
-        '--o-warn2': '#f0b25e', '--o-warn2-rgb': '240,178,94',
-        '--o-bad': '#f58c7f', '--o-bad-rgb': '245,140,127',
-        /* Accents décoratifs : la charte n'a qu'une teinte, la hiérarchie s'y
-         * fait par la CLARTÉ. Chacun garde son rôle — les volets restent d'une
-         * seule couleur partout — mais aucun ne sort du bleu. Un violet de
-         * volet sur ce fond se voyait de l'autre bout de la pièce. */
-        '--o-gold': '#bee8ff', '--o-gold-rgb': '190,232,255',
-        '--o-cold': '#8fc6e8', '--o-cold-rgb': '143,198,232',
-        '--o-cyan': '#5bc8f5', '--o-cyan-rgb': '91,200,245',
-        /* Les volets prennent l'ACIER, pas un second azur. Le premier essai,
-         * #4e8fcb, faisait deux bleus vifs a onze degres de teinte l'un de
-         * l'autre — et 4,35:1, sous le seuil. L'acier desature s'oppose au
-         * vif de l'accent par la saturation, comme la charte le fait elle-meme
-         * en donnant #3CA2D9 ET #6C8EA3. */
-        '--o-purple': '#8aafc4', '--o-purple-rgb': '138,175,196',
-        // L'avertissement garde sa chaleur : c'est ce qui le fait lire comme
-        // un avertissement. Juste assez rabattu pour ne pas jurer.
-        '--o-warn': '#f2c97d', '--o-warn-rgb': '242,201,125',
-        /* Les teintes des PIÈCES ne sont pas reprises ici, et c'est un choix.
-         *
-         * Elles ont été ramenées dans la gamme une fois : sept pièces d'un
-         * même bleu, échelonnées par la clarté. Le résultat était cohérent et
-         * illisible — on ne repère plus la cuisine du coin de l'œil, il faut
-         * lire l'icône. Ces couleurs n'habillent pas, elles identifient, et
-         * une charte de marque ne l'emporte pas là-dessus. */
-        // Au survol, la lumière plutôt que l'ombre : c'est le geste de la charte.
-        '--o-shadow-hover': '0 22px 48px rgba(2,96,147,.4)',
-      },
-    },
-    light: {
-      bg: '#e7eef3', surface: '#ffffff', surfaceElevated: '#ffffff', text: '#020d12', muted: '#4b6879',
-      border: 'rgba(5,31,45,.13)', accent: '#026093', accentText: '#014e78',
-      radius: '14px', borderWidth: '1px',
-      shadow: '0 1px 2px rgba(5,31,45,.06), 0 10px 26px rgba(5,31,45,.07)',
-      // La planche a aussi ses plages claires — #FFFFFF, #E0E0E0, #D9E2E7. La
-      // lueur reste, retournée : le blanc en haut, le gris bleuté en bas.
-      bggrad: 'radial-gradient(118% 78% at 50% -14%, #ffffff 0%, #edf3f7 34%, #dde7ed 72%, #d9e2e7 100%)',
-      font: "'Manrope', -apple-system, sans-serif",
-      fine: {
-        '--o-surfA': '#ffffff', '--o-surfB': '#fbfdfe',
-        '--o-bg2': '#eff4f7', '--o-side1': '#ffffff', '--o-side2': '#e7eef3',
-        '--o-header': 'rgba(247,250,252,.88)',
-        '--o-well': '#ffffff', '--o-well0': '#ffffff', '--o-well2': '#e7eef3',
-        // Sur blanc, TP-09 ne donne que 3,48:1. Assombri jusqu'a 4,58:1.
-        '--o-text': '#020d12', '--o-text1': '#051f2d', '--o-text2': '#3f5a69', '--o-text3': '#587a8d',
-        '--o-bd1': 'rgba(5,31,45,.16)', '--o-bd2': 'rgba(5,31,45,.11)', '--o-bd3': 'rgba(5,31,45,.075)',
-        '--o-s1': 'rgba(5,31,45,.075)', '--o-s2': 'rgba(5,31,45,.05)', '--o-s3': 'rgba(5,31,45,.035)',
-        '--o-s4': 'rgba(5,31,45,.022)', '--o-s5': 'rgba(5,31,45,.022)',
-        '--o-sky': 'rgba(2,96,147,.22)',
-        // Assombris pour rester lisibles sur blanc, comme le veut le thème clair.
-        '--o-ok': '#0f7a5a', '--o-ok-rgb': 'var(--o-ok-rgb)',
-        '--o-warn2': '#a85b0b', '--o-warn2-rgb': '245,158,11',
-        '--o-bad': '#b4231a', '--o-bad-rgb': '239,68,68',
-        // Mêmes rôles, retournés : sur blanc c'est le plus SOMBRE qui
-        // ressort. L'ordre de clarté s'inverse, la hiérarchie tient.
-        '--o-gold': '#01507b', '--o-gold-rgb': '1,80,123',
-        '--o-cold': '#0d6f9f', '--o-cold-rgb': '13,111,159',
-        '--o-cyan': '#0a6e9e', '--o-cyan-rgb': '10,110,158',
-        '--o-purple': '#4b6e82', '--o-purple-rgb': '75,110,130',
-        // 4,14:1 sur blanc : sous le seuil. Assombri a 4,82:1.
-        '--o-warn': '#9a6809', '--o-warn-rgb': '154,104,9',
-        // Mêmes rôles, assombris : sur blanc c'est la profondeur qui range.
-        '--o-shadow-hover': '0 18px 40px rgba(5,31,45,.14)',
-      },
-    },
-  },
-};
-function lum(c) {
-  c = (c || '').trim(); let r, g, b;
-  if (c[0] === '#') { let h = c.slice(1); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; const n = parseInt(h, 16); if (isNaN(n)) return 1; r = (n >> 16) & 255; g = (n >> 8) & 255; b = n & 255; }
-  else { const m = c.match(/(\d+)[ ,]+(\d+)[ ,]+(\d+)/); if (!m) return 1; r = +m[1]; g = +m[2]; b = +m[3]; }
-  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-}
-function applyVars(root, v) {
-  const set = (k, val) => { if (val) root.style.setProperty(k, val); };
-  set('--o-bg', v.bg); set('--o-bg2', v.bg); set('--o-side2', v.bg); set('--o-well2', v.bg);
-  set('--o-surfA', v.surfaceElevated || v.surface); set('--o-surfB', v.surface); set('--o-header', v.surface); set('--o-side1', v.surfaceElevated || v.surface); set('--o-well', v.surface); set('--o-well0', v.surfaceElevated || v.surface);
-  set('--o-text', v.text); set('--o-text1', v.text); set('--o-text2', v.muted); set('--o-text3', v.muted);
-  set('--o-bd1', v.border); set('--o-bd2', v.border); set('--o-bd3', v.border);
-  set('--o-s1', v.border); set('--o-s2', v.border); set('--o-s3', v.border); set('--o-s4', v.border); set('--o-s5', v.border);
-  if (v.accent) { set('--o-accent', v.accent); const rgb = cssToRgb(v.accent); if (rgb) set('--o-accent-rgb', rgb); const at = v.accentText || v.accent; set('--o-accent-soft', at); const rgbS = cssToRgb(at); if (rgbS) set('--o-accent-soft-rgb', rgbS); }
-  set('--o-radius', v.radius); set('--o-shadow', v.shadow); set('--o-bw', v.borderWidth); set('--o-font', v.font); set('--o-bggrad', v.bggrad);
-  // Tokens fins d'un preset (7 niveaux de texte, traits ≠ remplissages, sémantique) :
-  // appliqués en dernier, ils affinent le mapping grossier ci-dessus sans le remplacer.
-  if (v.fine) Object.keys(v.fine).forEach(k => set(k, v.fine[k]));
-}
-// "Suivre HA" : lit le thème ACTIF de HA (nom via selectedTheme/default) puis sa définition
-// Lit les valeurs RÉSOLUES du thème HA appliqué sur le parent (comme la V1 : C5).
-// Marche pour tous les thèmes HACS (var() + tokens maison résolus par le navigateur).
-/* Ce que Home Assistant affiche, en une chaine comparable (24/09, plan M9).
- *
- * « Suivre Home Assistant » reappliquait le theme TOUTES LES 1,5 s : retirer
- * une cinquantaine de proprietes de la racine, les reecrire, puis relancer la
- * garde de contraste et ses calculs de couleur. Quarante fois par minute,
- * indefiniment, pour un theme qui ne change presque jamais — et chaque passe
- * invalidait le style de toute la page.
- *
- * On garde la lecture, qui est la source de verite : le theme de HA peut
- * changer sans que son NOM bouge, le mode sombre par exemple. Mais on ne
- * REECRIT que si la lecture a change. */
-function signatureHaTheme(hass) {
-  const v = readComputedHaTheme(hass);
-  return v ? JSON.stringify(v) : '';
-}
-
-function readComputedHaTheme(hass) {
-  try {
-    const top = window.top || window;
-    const d = top.document;
-    const els = [];
-    if (d.documentElement) els.push(d.documentElement);
-    const he = d.querySelector('home-assistant'); if (he) els.push(he);
-    const hr = he && he.shadowRoot && he.shadowRoot.querySelector('home-assistant-main'); if (hr) els.push(hr);
-    if (d.body) els.push(d.body);
-    for (const el of els) {
-      const t = top.getComputedStyle(el), r = l => (t.getPropertyValue(l) || '').trim();
-      const bg = r('--lovelace-background') || r('--primary-background-color');
-      if (!bg) continue;
-      const dark = (hass && hass.themes && typeof hass.themes.darkMode === 'boolean') ? hass.themes.darkMode : lum(bg) < 0.5;
-      return {
-        dark, bg,
-        accent: r('--primary-color'),
-        surface: r('--ha-card-background') || r('--card-background-color'),
-        surfaceElevated: r('--card-background-color') || r('--ha-card-background'),
-        text: r('--primary-text-color'),
-        muted: r('--secondary-text-color'),
-        border: r('--ha-card-border-color') || r('--divider-color'),
-        radius: r('--ha-card-border-radius'),
-        shadow: r('--ha-card-box-shadow'),
-        borderWidth: r('--ha-card-border-width'),
-        font: r('--primary-font-family') || r('--mdc-typography-font-family') || r('--paper-font-body1_-_font-family'),
-      };
-    }
-  } catch {}
-  return null;
-}
-/* Safe mode « sans thème » : posé par l'écran d'erreur (boot.jsx), consommé
- * ici — il ne vaut que pour UN chargement et ne touche pas à la configuration.
- * Un preset ou un look corrompu ne doit pas condamner le dashboard. */
-const SAFE_NOLOOK = (() => {
-  try { if (sessionStorage.getItem('loggia_safe_nolook')) { sessionStorage.removeItem('loggia_safe_nolook'); return true; } } catch { /* rien */ }
-  return false;
-})();
-
-function readLook() {
-  if (SAFE_NOLOOK) return { ...LOOK_DEF };
-  try {
-    const L = { ...LOOK_DEF, ...(cfgVal('loggia_look', null) || {}) };
-    if (L.fond !== 'photo') L.fond = 'aucun'; // les degrades retires retombent sur « aucun »
-    // « Bleu », retire des couleurs d'accent le 19/09 : c'etait l'accent du theme
-    // d'origine, deja offert par « Couleur du theme ».
-    if (L.accent === '#4f8cff') L.accent = '';
-    return L;
-  } catch { return { ...LOOK_DEF }; }
-}
-
-/* Teinte d'état : les cartes qui montrent un appareil ACTIF (lampe allumée,
- * volet ouvert, radiateur qui chauffe) lavent leur surface de leur couleur.
- * Le réglage module l'intensité de ce lavis. « Douce » = le rendu historique
- * (les ampoules l'avaient déjà, en dur) ; « Sans » rend les cartes neutres ;
- * « Pleine » double la présence de la couleur, façon GlassHome.
- *
- * `LAVIS` est un facteur module-level et non un état React : il est LU au
- * rendu (jamais à l'import), et changer le réglage redessine tout l'arbre. */
-const TEINTES = { sans: 0, discrete: .6, douce: 1, pleine: 1.9 };
-let LAVIS = 1;
-/** Alpha de lavis bornée : base × facteur du réglage, plafonnée à .85. */
-const lav = (base) => Math.min(.85, Math.round(base * LAVIS * 1000) / 1000);
-
-/* Fond d'écran : « aucun » ou la photo de l'utilisateur (voir lireFondPhoto).
- * Les dégradés Minuit / Abysse / Ardoise ont vécu du 28 au 29/08/2026 —
- * retirés à la demande de l'utilisateur, la photo les rendait superflus. Une
- * ancienne valeur enregistrée retombe sur « aucun ». */
-function applyLook(root, L, frostedPreset, light) {
-  // Intensité du lavis de teinte, lue par les cartes au rendu (voir TEINTES).
-  LAVIS = TEINTES[L.tint] != null ? TEINTES[L.tint] : 1;
-  /* Un seul matériau depuis le 29/08 (décision user) : le translucide de
-   * l'accueil, partout. Le réglage Opaque/Verre a disparu de l'Apparence ;
-   * `L.glass` reste dans les configs enregistrées mais n'est plus lu. */
-  const verre = true;
-  root.classList.toggle('loggia-frosted', verre);
-  /* « Verre » ne posait qu'un `backdrop-filter`. Or un flou d'arriere-plan ne se
-   * voit qu'a travers ce qui est translucide : les surfaces sont a 90 %
-   * d'opacite, certains themes les donnent carrement opaques, et l'effet
-   * n'apparaissait pas. D'ou l'impression que le reglage ne faisait rien selon
-   * le theme choisi.
-   *
-   * On ouvre donc la surface elle-meme. En JS et non en CSS : les presets posent
-   * ces tokens EN INLINE sur la racine, et une regle de classe ne bat pas un
-   * style inline — c'est ecrit dans index.css, et c'est pourquoi la premiere
-   * tentative ne pouvait pas fonctionner.
-   *
-   * On garde une base solide : sous 55 % d'opacite, le texte des cartes passe
-   * sous le seuil de contraste sur un fond clair.
-   *
-   * La surface lue est celle DU THEME : un preset la pose en inline, et la
-   * retirer d'abord faisait relire celle de Loggia — les quatorze autres
-   * themes dessinaient leurs cartes dans le bleu nuit de Loggia (audit du
-   * 19/09). `applyTheme` a deja purge les jetons : rien ne s'accumule. Un
-   * theme deja plus translucide (Frosted Glass, un verre par conception)
-   * garde son opacite. */
-  ['--o-surfA', '--o-surfB'].forEach(token => {
-    if (!verre) return;
-    const brut = getComputedStyle(root).getPropertyValue(token).trim();
-    const rgb = cssToRgb(brut);
-    if (!rgb) return;
-    // L'alpha : la quatrieme composante d'un rgb()/rgba(), s'il y en a une.
-    const parts = ((brut.match(/rgba?\(([^)]*)\)/) || [])[1] || '').split(/[\s,/]+/).filter(Boolean);
-    const alpha = parts.length === 4 ? (parts[3].endsWith('%') ? parseFloat(parts[3]) / 100 : parseFloat(parts[3])) : 1;
-    root.style.setProperty(token, 'rgba(' + rgb + ',' + Math.min(isNaN(alpha) ? 1 : alpha, .62) + ')');
-  });
-  root.classList.toggle('loggia-contrast', !!L.contrast);
-  if (L.contrast) {
-    const cs = getComputedStyle(root);
-    const towardText = (token, part) => {
-      const a = cssToRgb(cs.getPropertyValue('--o-text').trim());
-      const b = cssToRgb(cs.getPropertyValue(token).trim());
-      if (!a || !b) return;
-      const A = a.split(','), B = b.split(',');
-      root.style.setProperty(token, 'rgb(' + [0, 1, 2].map(i => Math.round(+A[i] * part + +B[i] * (1 - part))).join(',') + ')');
-    };
-    towardText('--o-text2', .55); towardText('--o-text3', .42); towardText('--o-bd3', .22);
-  }
-  if (L.radius === 'net') root.style.setProperty('--o-radius', '7px');
-  else if (L.radius === 'rond') root.style.setProperty('--o-radius', '26px');
-  if (!L.shadow) { root.style.setProperty('--o-shadow', 'none'); root.style.setProperty('--o-shadow-hover', 'none'); }
-  if (!L.hairline) root.style.setProperty('--o-bw', '0px');
-  /* L'accent DU THEME, avant qu'un choix de l'Apparence le remplace : la
-   * pastille « Couleur du theme » le montre. Elle lisait `--o-accent` — apres
-   * un choix, deux pastilles de la meme couleur (19/09). Relu a chaque
-   * application : `--o-accent` vient d'etre purge (THEME_KEYS) puis repose par
-   * le theme. */
-  root.style.setProperty('--o-accent-theme', getComputedStyle(root).getPropertyValue('--o-accent').trim());
-  if (L.accent) {
-    const rgb = cssToRgb(L.accent);
-    root.style.setProperty('--o-accent', L.accent); root.style.setProperty('--o-accent-soft', L.accent);
-    if (rgb) { root.style.setProperty('--o-accent-rgb', rgb); root.style.setProperty('--o-accent-soft-rgb', rgb); }
-  }
-  /* La garde de contraste (ADR 0060), en DERNIER : elle relit les couleurs
-   * telles qu'elles sont posées — surfaces comprises — et ne retouche que
-   * celles qui manquent leur seuil. Un theme qui tient les siens n'est pas
-   * touche ; les quatorze palettes venues d'ailleurs, si. */
-  const csFinal = getComputedStyle(root);
-  const corrige = garde(t => csFinal.getPropertyValue(t).trim());
-  Object.keys(corrige).forEach(k => root.style.setProperty(k, corrige[k]));
-}
-
-function applyTheme(opts, hass) {
-  const root = document.documentElement;
-  THEME_KEYS.forEach(k => root.style.removeProperty(k)); root.style.removeProperty('--o-radius'); root.style.removeProperty('--o-bggrad'); root.style.removeProperty('--o-shadow-hover');
-  // Ce que la garde de contraste a posé la fois d'avant : sinon la correction
-  // d'un thème suivrait au suivant.
-  JETONS_GARDE.forEach(k => root.style.removeProperty(k));
-  root.classList.remove('loggia-frosted');
-  const L = opts.look || readLook();
-  // Suivre HA : miroir du thème actif de HA (valeurs résolues sur le parent).
-  if (opts.haTheme === 'FOLLOW') {
-    const v = readComputedHaTheme(hass);
-    if (v) { applyVars(root, v); root.classList.toggle('loggia-light', !v.dark); applyLook(root, L, false, !v.dark); return !!v.dark; }
-    // computed pas prêt → base en attendant (l'effet poll réessaie)
-  }
-  const light = opts.mode === 'light';
-  root.classList.toggle('loggia-light', light);
-  // Preset Loggia ('' = défaut → tokens CSS de base, aucune surcharge). Sinon applique la variante claire/sombre.
-  const preset = LOGGIA_PRESETS[opts.loggiaTheme];
-  if (preset) { const v = preset[light ? 'light' : 'dark']; if (v) applyVars(root, v); }
-  applyLook(root, L, opts.loggiaTheme === 'frosted', light); // 'frosted' active aussi le flou backdrop des cartes
-  return !light;
-}
+/* Le thème est sorti dans `src/theme.js` (27/09, audit point 9) : les couleurs,
+ * les quatorze préréglages, la pose sur la racine et la garde de contraste.
+ * Rien n'y est un composant — c'est pour cela qu'il part en premier. */
 
 /**
  * Les icones de Home Assistant, traduites vers la police du dashboard.
@@ -1399,12 +1002,9 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
   // et la température suffisent, et l'historique n'est plus interrogé.
   // Optimiste : l'interrupteur bascule tout de suite, puis se réconcilie avec HA au poll suivant
   const realOn = (mains && mains.length) ? mains.some(l => l.on) : null;
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realOn]);
-  // Filet 6 s : si HA ne confirme pas (commande rejetée), retour à l'état réel
-  const ovRevertRef = useRef(0);
-  useEffect(() => () => clearTimeout(ovRevertRef.current), []);
-  const doToggle = () => { flash(p.tc || 'var(--o-accent)'); if (realOn != null) { setOv(!(ov != null ? ov : realOn)); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); } onToggleLights && onToggleLights(); };
+  // Le filet des 6 s est celui d'`useOptimiste`, comme partout ailleurs.
+  const [ov, setOv] = useOptimiste(realOn);
+  const doToggle = () => { flash(p.tc || 'var(--o-accent)'); if (realOn != null) setOv(!(ov != null ? ov : realOn)); onToggleLights && onToggleLights(); };
   if (chip) {
     // Pièce COMPACTE, direction « teinte pièce » (choix 31/08) : la couleur de
     // la pièce baigne la carte (son lavis en dégradé), icône NUE sans boîte,
@@ -1475,8 +1075,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         // déjà que la pièce est éclairée.
         background: `linear-gradient(160deg,${p.bg},rgba(0,0,0,0) 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
         boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))',
-        transition: 'box-shadow .3s ease, background .3s ease',
-        ...stag(idx) }}>
+        transition: 'box-shadow .3s ease, background .3s ease' }}>
         {/* Le bouton de surface : il couvre la carte, passe SOUS les contrôles
           * du pied (positionnés, donc peints après lui) et porte le nom du
           * geste. `inset: 0` plutôt qu'un `onClick` sur la carte : un bouton
@@ -1529,11 +1128,18 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
             )}
           </div> : <span />}
           {canToggle && (
+            /* La zone touchable fait 24 de haut, la pastille en garde 21
+              * (audit du 27/09). C'est le premier geste d'une carte de pièce,
+              * et il mesurait 38 × 21 — sous les 24 que demande la règle. La
+              * marge négative rend les trois pixels empruntés : la rangée ne
+              * bouge pas d'un cheveu, et le dessin est le même. */
             <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
               onClick={e => { e.stopPropagation(); doToggle(); }}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-              style={{ width: 38, height: 21, borderRadius: 999, cursor: 'pointer', flexShrink: 0, marginLeft: 'auto', background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
-              <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
+              style={{ display: 'inline-flex', alignItems: 'center', height: 24, cursor: 'pointer', flexShrink: 0, margin: '-1.5px 0', marginLeft: 'auto' }}>
+              <span aria-hidden="true" style={{ display: 'block', width: 38, height: 21, borderRadius: 999, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
+                <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
+              </span>
             </span>
           )}
         </div>
@@ -2144,8 +1750,7 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const call = (d, svc, data) => commanderService(hass, id, d, svc, { entity_id: id, ...(data || {}) });
   const togglable = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren', 'valve'].indexOf(dom) >= 0;
   const on = !mort && (dom === 'valve' ? s === 'open' : dom === 'lock' ? s === 'locked' : s === 'on');
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [s]);
+  const [ov, setOv] = useOptimiste(s);
   const actif = ov != null ? ov : on;
   const basculer = () => {
     const nv = !actif; setOv(nv);
@@ -2310,8 +1915,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const dimmable = rgb || ct || modes.indexOf('brightness') >= 0 || a.brightness != null;
   const isSwitch = id.indexOf('switch.') === 0;
   const realOn = st ? st.state === 'on' : false;
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realOn]);
+  const [ov, setOv] = useOptimiste(realOn);
   const on = ov != null ? ov : realOn;
   const bri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : 100;
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
@@ -2323,17 +1927,12 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const adjustable = !isSwitch && dimmable && !mort;
   const nom = label || a.friendly_name || id;
   const [flashRef, flash] = useFlash();
-  // Filet : si HA n'a pas confirmé sous 6 s (commande rejetée), retour à l'état réel au lieu de rester désynchronisé
-  const ovRevertRef = useRef(0);
-  useEffect(() => () => clearTimeout(ovRevertRef.current), []);
-  const toggle = () => { flash(accent); setOv(!on); clearTimeout(ovRevertRef.current); ovRevertRef.current = setTimeout(() => setOv(null), 6000); commander(hass, id, on ? 'turn_off' : 'turn_on'); };
-  // Luminosité optimiste : fenêtre fixe 4 s (l'écho Zigbee rejoue l'ancienne valeur).
-  const [ovBri, setOvBri] = useState(null);
-  const ovBriRef = useRef(0);
-  useEffect(() => () => clearTimeout(ovBriRef.current), []);
+  // Le filet des 6 s est celui d'`useOptimiste` : la bascule ne le porte plus.
+  const toggle = () => { flash(accent); setOv(!on); commander(hass, id, on ? 'turn_off' : 'turn_on'); };
+  // Luminosité optimiste : fenêtre plus courte, 4 s (l'écho Zigbee rejoue l'ancienne valeur).
+  const [ovBri, setOvBri] = useOptimiste(bri, 4000);
   const poseBri = (pct) => {
     setOvBri(pct); setOv(pct > 0);
-    clearTimeout(ovBriRef.current); ovBriRef.current = setTimeout(() => { setOvBri(null); setOv(null); }, 4000);
     if (pct > 0) commander(hass, id, 'set_brightness', pct);
     else commander(hass, id, 'turn_off');
   };
@@ -2543,38 +2142,71 @@ function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, 
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Quand un volet est-il ferme ?
+ *
+ * Pas toujours a zero. Celui d'une chambre bute a 1 % (retour du 27/09), et
+ * Home Assistant le dit alors `open` : son `is_closed` compare la position a
+ * zero, pas a « en bas ». Loggia, qui ne regardait QUE `pos === 0`, le
+ * dessinait donc ouvert — lavis violet, icone violette, « Ouvert a 1 % » — sur
+ * un volet visiblement ferme.
+ *
+ * Le seuil est REGLABLE parce qu'il appartient au materiel, pas a Loggia. Deux
+ * pour cent par defaut : ce qui a ete mesure ici, sans rien decider pour une
+ * installation qui bute juste. Il joue aux DEUX bouts — un volet qui plafonne
+ * a 99 % est « Ouvert », pas « Ouvert a 99 % », c'est la meme butee a l'envers.
+ *
+ * L'etat de Home Assistant reste l'autorite quand il dit `closed` : Loggia le
+ * contredisait, et c'etait le plus grave des deux.
+ *
+ * Le POURCENTAGE affiche, lui, reste le vrai. Le mot est un verdict, le chiffre
+ * une mesure : mentir sur le chiffre ferait chercher la panne ailleurs.
+ * ───────────────────────────────────────────────────────────────────────────── */
+const COVER_SEUIL_DEF = 2;
+function coverSeuil() {
+  const n = +cfgVal('loggia_coverseuil', COVER_SEUIL_DEF);
+  return (isFinite(n) && n >= 0 && n <= 20) ? Math.round(n) : COVER_SEUIL_DEF;
+}
+// `st` peut manquer (entite absente) : seule la position tranche alors.
+function coverFerme(st, pos) {
+  if (st && st.state === 'closed') return true;
+  if (st && st.state === 'open' && pos >= 100) return false;
+  return pos <= coverSeuil();
+}
+const coverOuvert = (pos) => pos >= 100 - coverSeuil();
+
 function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const realPos = a.current_position != null ? Math.round(a.current_position) : (st && st.state === 'open' ? 100 : 0);
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realPos]);
+  const [ov, setOv] = useOptimiste(realPos);
   const pos = ov != null ? ov : realPos;
+  const ferme = coverFerme(st, pos);
   const mort = !st || st.state === 'unavailable';
   const nom = titre || a.friendly_name || id;
   const mouvement = st && (st.state === 'opening' || st.state === 'closing') ? st.state : null;
   // Le sous-titre dit l'état en mots (maquettes du 14/09) ; le pourcentage
   // reste en haut à droite, la glissière montre la position.
-  const sub = mort ? tr('Indisponible') : mouvement === 'opening' ? tr('Ouverture…') : mouvement === 'closing' ? tr('Fermeture…') : pos === 0 ? tr('Fermé') : pos === 100 ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
+  const sub = mort ? tr('Indisponible') : mouvement === 'opening' ? tr('Ouverture…') : mouvement === 'closing' ? tr('Fermeture…') : ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
   const poser = (v) => { setOv(v); commander(hass, id, 'set_position', v); };
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : volet ouvert = lavis VIOLET, gradué par la position — le bleu accent restait trop proche des autres cartes.
-      ...(pos > 0 && LAVIS ? {
+      ...(!ferme && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-purple-rgb),${lav(.10 + pos * .0012)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
       } : null),
       // Sans bordure, comme la carte lumière : l'ombre et le lavis suffisent.
       border: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ ...RM_ICO(pos > 0 ? 'rgba(var(--o-purple-rgb),.16)' : 'var(--o-s1)', pos > 0 ? 'var(--o-purple)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden' }}>
+        <span style={{ ...RM_ICO(!ferme ? 'rgba(var(--o-purple-rgb),.16)' : 'var(--o-s1)', !ferme ? 'var(--o-purple)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden' }}>
           {/* store qui descend dans le chip : hauteur = part fermée, suit la position en douceur */}
           <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: (100 - pos) + '%', background: 'linear-gradient(180deg,rgba(var(--o-purple-rgb),.34),rgba(var(--o-purple-rgb),.14))', transition: REDUCE_MOTION ? 'none' : 'height .7s cubic-bezier(.22,.61,.36,1)', pointerEvents: 'none' }} />
           <GlypheCarte id={id} size={18}><Ico name={(a.device_class === 'garage' || a.device_class === 'gate') ? 'garage' : 'blinds'} size={18} /></GlypheCarte></span>
-        <span style={{ fontSize: 15, fontWeight: 800, color: pos === 0 ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos} %</span>
+        <span style={{ fontSize: 15, fontWeight: 800, color: ferme ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos} %</span>
       </div>
       <div style={{ marginTop: 14 }}>
         <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: pos > 0 && !mort ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}</div>
+        <div style={{ ...RM_SUB, color: !ferme && !mort ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}</div>
         <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" actif={!mort} label={tr('Position') + ' ' + nom} onCommit={poser} />
         {/* Les mêmes trois gestes que la carte compacte : ouvrir, stop, fermer — la glissière règle le reste. */}
         <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
@@ -2602,9 +2234,8 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const realTarget = a.temperature != null ? a.temperature : 20;
-  const [ov, setOv] = useState(null);
+  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
   const etatSt = st && st.state;
-  useEffect(() => { setOv(null); }, [realTarget, etatSt]);
   const target = ov != null ? ov : realTarget;
   const mode = st ? st.state : 'off';
   const off = mode === 'off';
@@ -2613,8 +2244,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const cooling = a.hvac_action === 'cooling';
   const all = a.hvac_modes || ['off', 'heat'];
   // Bascule optimiste, comme la lampe : arrêt ↔ le mode de marche de l'entité.
-  const [ovOn, setOvOn] = useState(null);
-  useEffect(() => { setOvOn(null); }, [etatSt]);
+  const [ovOn, setOvOn] = useOptimiste(etatSt);
   const marche = ovOn != null ? ovOn : !off;
   const modeMarche = ['heat', 'auto', 'heat_cool', 'cool'].find(m => all.indexOf(m) >= 0) || all.find(m => m !== 'off') || 'heat';
   const basculer = () => { const nv = !marche; setOvOn(nv); commander(hass, id, 'set_hvac_mode', nv ? modeMarche : 'off'); };
@@ -2713,8 +2343,7 @@ function pilotFamille(option) {
 function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const S = (hass && hass.states) || null;
   const z = readZone(S, zone);
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [z.target, z.mode]);
+  const [ov, setOv] = useOptimiste([z.target, z.mode].join('|'));
   const target = ov != null ? ov : (z.target != null ? z.target : 19);
   const off = z.mode === 'off';
   const heating = !off && z.current != null && z.current < target;
@@ -2727,8 +2356,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   };
   // Bascule : arrêt ↔ confort (ou le premier mode qui n'est pas l'arrêt),
   // optimiste comme partout. Les autres modes vivent dans la fiche.
-  const [ovOn, setOvOn] = useState(null);
-  useEffect(() => { setOvOn(null); }, [z.mode]);
+  const [ovOn, setOvOn] = useOptimiste(z.mode);
   const marche = ovOn != null ? ovOn : !off;
   const modeArret = options.find(o => pilotFamille(o) === 'off') || 'off';
   const modeMarche = options.find(o => pilotFamille(o) === 'confort') || options.find(o => pilotFamille(o) !== 'off') || null;
@@ -2768,8 +2396,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
 function RoomPilotSheet({ zone, hass, onClose }) {
   const S = (hass && hass.states) || null;
   const z = readZone(S, zone);
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [z.target, z.mode, z.auto]);
+  const [ov, setOv] = useOptimiste([z.target, z.mode, z.auto].join('|'));
   const target = ov != null ? ov : (z.target != null ? z.target : 19);
   const off = z.mode === 'off';
   const heating = !off && z.current != null && z.current < target;
@@ -3109,8 +2736,7 @@ function RoomMediaSheet({ id, hass, onClose }) {
   const ALight = acc ? `rgb(${acc.map(v => Math.round(v + (255 - v) * .28)).join(',')})` : 'var(--o-accent-soft)';
   const onArt = !!artOk;
   const tMain = onArt ? '#fff' : 'var(--o-text)', tSub = onArt ? 'rgba(255,255,255,.75)' : 'var(--o-text2)', tDim = onArt ? 'rgba(255,255,255,.55)' : 'var(--o-text3)';
-  const [volOv, setVolOv] = useState(null);
-  useEffect(() => { setVolOv(null); }, [np.vol]);
+  const [volOv, setVolOv] = useOptimiste(np.vol);
   const vol = volOv != null ? volOv : np.vol;
   const [seekOv, setSeekOv] = useState(null);
   const seekT = useRef(null);
@@ -3236,12 +2862,10 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
   const nom = label || a.friendly_name || id;
   // Bascule d'alimentation en haut à droite (maquettes du 14/09) : lecture
   // et pause vivent dans les boutons du bas, avec piste précédente / suivante.
-  const [ovOn, setOvOn] = useState(null);
-  useEffect(() => { setOvOn(null); }, [np.on]);
+  const [ovOn, setOvOn] = useOptimiste(np.on);
   const marche = ovOn != null ? ovOn : !!np.on;
   const basculer = () => { const nv = !marche; setOvOn(nv); call(nv ? 'turn_on' : 'turn_off'); };
-  const [ovVol, setOvVol] = useState(null);
-  useEffect(() => { setOvVol(null); }, [vol]);
+  const [ovVol, setOvVol] = useOptimiste(vol);
   const volAff = ovVol != null ? ovVol : vol;
   const poserVol = (v) => { setOvVol(v); call('volume_set', { volume_level: v / 100 }, np.ctl); };
   const texte = mort ? tr('Indisponible') : np.title ? (np.title + (sub ? ' · ' + sub : '')) : (marche ? (np.playing ? tr('Lecture') : tr('En pause')) : tr('Éteint'));
@@ -3286,11 +2910,40 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
  * meme dans toutes les feuilles : CroixFeuille) ; puis
  * une commande principale, des puces, et des RANGEES : un titre, une phrase
  * qui dit ce que ca fait, et a droite la valeur, la bascule ou le bouton. */
+/* Une rangée de points de page, au gabarit tactile (audit du 27/09).
+ *
+ * Le point mesure 8 px : bien trop petit pour un doigt — la règle en demande
+ * 24 (WCAG 2.5.8), et sur une tablette murale, une main qui tremble n'en vise
+ * aucun. On garde le POINT tel quel et on agrandit ce qui l'entoure, avec une
+ * marge verticale négative pour que la rangée ne grandisse pas d'un pixel.
+ *
+ * Les points se touchent alors sans se chevaucher : leurs centres sont à 24,
+ * l'écart exact que la règle demande. Les flèches voisines gardent leur place,
+ * la rangée qui les sépare garde son `gap`.
+ *
+ * Trois écrans posaient ces points — deux d'entre eux à l'octet près. */
+function PointsDePage({ n, courant, onChoisir, couleur = 'var(--o-accent-fond)' }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center' }}>
+      {Array.from({ length: n }, (_, i) => (
+        <button key={i} type="button" aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === courant} onClick={() => onChoisir(i)}
+          style={{ width: 24, height: 24, margin: '-8px 0', padding: 0, border: 'none', background: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span aria-hidden="true" style={{ display: 'block', width: 8, height: 8, borderRadius: 4, background: i === courant ? couleur : 'var(--o-bd2)' }} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function FicheEntete({ titre, sous, id = null, droite = null }) {
+  /* C'est cette ligne qui NOMME la feuille : sans elle, un lecteur d'écran
+   * annonce « dialogue » et rien d'autre à l'ouverture de n'importe quelle
+   * fiche (audit du 27/09). `id` reste celui de l'entité, pour l'épingle. */
+  const idTitre = useIdTitreFeuille();
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 24, fontWeight: 500, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
+        <div id={idTitre || undefined} style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 24, fontWeight: 500, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
         {sous ? <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sous}</div> : null}
       </div>
       {droite}
@@ -3391,15 +3044,15 @@ function RoomCoverSheet({ id, hass, onClose }) {
   const st = S ? S[id] : null;
   const a = (st && st.attributes) || {};
   const realPos = a.current_position != null ? Math.round(a.current_position) : (st && st.state === 'open' ? 100 : 0);
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realPos]);
+  const [ov, setOv] = useOptimiste(realPos);
   const pos = ov != null ? ov : realPos;
+  const ferme = coverFerme(st, pos);
   const call = (d, s2, data) => commanderService(hass, (data || {}).entity_id, d, s2, data || {});
   const cov = (svc, data) => call('cover', svc, { entity_id: id, ...(data || {}) });
   const poser = (v) => { setOv(v); cov('set_cover_position', { position: v }); };
   const nom = a.friendly_name || id;
   const zone = zoneDe(id);
-  const etatTxt = pos === 0 ? tr('Fermé') : pos === 100 ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
+  const etatTxt = ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
   // La regle du planning (Regles › Volets) : ce volet suit-il le soleil ?
   const { etat: volets } = useEtatServeur(hass, 'loggia/volets/etat', 15000, '');
   const plan = volets && volets.config && volets.config.planning;
@@ -3420,7 +3073,9 @@ function RoomCoverSheet({ id, hass, onClose }) {
     hass.callWS({ type: 'loggia/volets/config', patch });
   };
   const chips = [{ id: 'ferme', nom: tr('Fermé') }, { id: 'mi', nom: tr('Mi-course') }, { id: 'ouvert', nom: tr('Ouvert') }];
-  const chip = pos === 0 ? 'ferme' : pos === 100 ? 'ouvert' : pos === 50 ? 'mi' : null;
+  // La puce choisie suit le meme verdict : sinon « Ferme » restait creuse sur
+  // un volet ferme a 1 %, et aucune des trois n'etait allumee.
+  const chip = ferme ? 'ferme' : coverOuvert(pos) ? 'ouvert' : pos === 50 ? 'mi' : null;
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
@@ -3450,9 +3105,8 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const st = S[id] || null;
   const a = (st && st.attributes) || {};
   const realTarget = a.temperature != null ? a.temperature : 20;
-  const [ov, setOv] = useState(null);
+  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
   const etatSt = st && st.state;
-  useEffect(() => { setOv(null); }, [realTarget, etatSt]);
   const target = ov != null ? ov : realTarget;
   const cur = a.current_temperature;
   const mode = st ? st.state : 'off';
@@ -3460,8 +3114,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const heating = a.hvac_action === 'heating';
   const cooling = a.hvac_action === 'cooling';
   const all = a.hvac_modes || ['off', 'heat'];
-  const [ovOn, setOvOn] = useState(null);
-  useEffect(() => { setOvOn(null); }, [etatSt]);
+  const [ovOn, setOvOn] = useOptimiste(etatSt);
   const marche = ovOn != null ? ovOn : !off;
   const modeMarche = ['heat', 'auto', 'heat_cool', 'cool'].find(m => all.indexOf(m) >= 0) || all.find(m => m !== 'off') || 'heat';
   const basculer = () => { const nv = !marche; setOvOn(nv); commander(hass, id, 'set_hvac_mode', nv ? modeMarche : 'off'); };
@@ -3520,10 +3173,8 @@ function RoomLightSheet({ light, hass, onClose }) {
   const a = (st && st.attributes) || {};
   const realOn = st ? st.state === 'on' : light.on;
   const realBri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : light.bri;
-  const [ovOn, setOvOn] = useState(null);
-  useEffect(() => { setOvOn(null); }, [realOn]);
-  const [ovBri, setOvBri] = useState(null);
-  useEffect(() => { setOvBri(null); }, [realBri]);
+  const [ovOn, setOvOn] = useOptimiste(realOn);
+  const [ovBri, setOvBri] = useOptimiste(realBri);
   const on = ovOn != null ? ovOn : realOn;
   const bri = ovBri != null ? ovBri : realBri;
   const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : light.color;
@@ -3584,8 +3235,7 @@ function RoomSwitchSheet({ id, hass, onClose }) {
   const st = S[id] || null;
   const a = (st && st.attributes) || {};
   const realOn = !!st && st.state === 'on';
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [realOn]);
+  const [ov, setOv] = useOptimiste(realOn);
   const on = ov != null ? ov : realOn;
   const basculer = () => { const nv = !on; setOv(nv); commanderService(hass, id, 'homeassistant', nv ? 'turn_on' : 'turn_off', { entity_id: id }); };
   const nom = a.friendly_name || id;
@@ -3644,8 +3294,7 @@ function RoomLockSheet({ id, hass, onClose }) {
   const a = (st && st.attributes) || {};
   const s2 = st ? st.state : null;
   const realLocked = s2 === 'locked';
-  const [ov, setOv] = useState(null);
-  useEffect(() => { setOv(null); }, [s2]);
+  const [ov, setOv] = useOptimiste(s2);
   const locked = ov != null ? ov : realLocked;
   const basculer = () => { const nv = !locked; setOv(nv); commanderService(hass, id, 'lock', nv ? 'lock' : 'unlock', { entity_id: id }); };
   const nom = a.friendly_name || id;
@@ -4226,10 +3875,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
                 <button aria-label={tr('Icônes précédentes')} disabled={pageIcone === 0} onClick={() => setPageIcone(p => Math.max(0, p - 1))} style={pageurIcone(pageIcone > 0)}><Fi i="angle-small-left" size={14} /></button>
                 {pagesIcone <= 8
-                  ? Array.from({ length: pagesIcone }, (_, i) => (
-                    <button key={i} aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === pageIcone} onClick={() => setPageIcone(i)}
-                      style={{ width: 8, height: 8, padding: 0, borderRadius: 4, border: 'none', cursor: 'pointer', background: i === pageIcone ? 'var(--o-accent-fond)' : 'var(--o-bd2)' }} />
-                  ))
+                  ? <PointsDePage n={pagesIcone} courant={pageIcone} onChoisir={setPageIcone} />
                   : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', fontVariantNumeric: 'tabular-nums' }}>{tr('Page {n}', { n: pageIcone + 1 })} / {pagesIcone}</span>}
                 <button aria-label={tr('Icônes suivantes')} disabled={pageIcone >= pagesIcone - 1} onClick={() => setPageIcone(p => Math.min(pagesIcone - 1, p + 1))} style={pageurIcone(pageIcone < pagesIcone - 1)}><Fi i="angle-small-right" size={14} /></button>
               </div>
@@ -5522,7 +5168,12 @@ function useScenarios(hass) {
   return { etat, err, lancer, enCours, enregistrer, ordonner, noms, tous, liste: scenariosVisibles(tous) };
 }
 
-const PUCE_SCN = { fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 9, background: 'var(--o-s1)', color: 'var(--o-text1)', whiteSpace: 'nowrap' };
+/* `lineHeight` est ÉCRIT, parce que la rangée compte dessus : 15 de ligne plus
+ * 4 et 4 de rembourrage font 23 px, la hauteur d'UNE pastille — et la rangée
+ * s'y borne pour ne montrer qu'une seule ligne (voir `CarteScenario`). Laissé
+ * au défaut de la police, ce nombre changerait avec la langue. */
+const H_PUCE_SCN = 23;
+const PUCE_SCN = { fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 9, lineHeight: '15px', background: 'var(--o-s1)', color: 'var(--o-text1)', whiteSpace: 'nowrap' };
 /* La carte d'un scénario, au gabarit maison : l'icône en haut à gauche dans
  * un disque teinté, le dernier lancement en haut à droite, le titre sous
  * l'icône ; compacte (88) sur l'Accueil, standard (184) dans la vue, où elle
@@ -5547,7 +5198,22 @@ function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLanc
       <div style={{ marginTop: compacte ? 8 : 12, fontSize: compacte ? 13 : 15, fontWeight: 700, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
       {!compacte && <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, lineHeight: 1.45, color: 'var(--o-text2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.lien_absent ? tr('Scène introuvable') : resumeScenario(s, noms)}</div>}
       {!compacte && (
-        <div style={{ position: 'absolute', left: 15, bottom: 14, display: 'flex', gap: 6 }}>
+        /* La rangée s'arrête à la marge de DROITE, et ne montre qu'une ligne.
+         *
+         * Elle n'était bornée qu'à gauche, chaque pastille en `nowrap` : sur
+         * un téléphone la rangée mesurait 192 px pour une carte de 141, et la
+         * carte la coupait en plein mot — « scène H », « Loggi » (audit du
+         * 27/09, mesuré à 320, 360 et 390 px).
+         *
+         * Pas de seuil en pixels : ce qui ne tient pas passe à la ligne
+         * suivante, hors de la hauteur visible, et disparaît donc ENTIER. La
+         * dernière pastille cède la première — l'origine du scénario pèse
+         * moins que ce qu'il fait. Et la règle vaut dans les sept langues
+         * sans rien régler : une rangée mesure 220 px en français, 249 en
+         * espagnol, un nombre écrit d'avance aurait trahi l'une ou l'autre.
+         *
+         * Mesuré : 1 pastille sur une carte de 141 px, 2 sur 176, 3 sur 236. */
+        <div style={{ position: 'absolute', left: 15, right: 15, bottom: 14, display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', gap: 6, height: H_PUCE_SCN, overflow: 'hidden' }}>
           <span style={PUCE_SCN}>{nActions > 1 ? tr('{n} actions', { n: nActions }) : tr('{n} action', { n: nActions })}</span>
           {cibles != null && <span style={PUCE_SCN}>{cibles > 1 ? tr('{n} cibles', { n: cibles }) : tr('{n} cible', { n: cibles })}</span>}
           <span style={PUCE_SCN}>{s.lien ? tr('scène HA') : 'Loggia'}</span>
@@ -5896,9 +5562,8 @@ function FichePlante({ pl, onClose }) {
  * qui ne ferait rien. */
 function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, portion, feed, onRempli, ficheId, onClose }) {
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const [ovPortion, setOvPortion] = useState(null);
+  const [ovPortion, setOvPortion] = useOptimiste(valeurPortion);
   const valeurPortion = portion ? portion.valeur : null;
-  useEffect(() => { setOvPortion(null); }, [valeurPortion]);
   const pv = ovPortion != null ? ovPortion : valeurPortion;
   const poserPortion = (v) => { if (!portion) return; const nv = Math.max(portion.min, Math.min(portion.max, v)); setOvPortion(nv); call('number', 'set_value', { entity_id: portion.id, value: nv }); };
   const [appareil, setAppareil] = useState(false);
@@ -5971,11 +5636,15 @@ function prochaineRation(S) {
  * et lecteurs configures, puis tout le registre — une carte par appareil, sans
  * les entites cachees, desactivees ou de configuration —, le distributeur et
  * les plantes de la configuration. Les memes regles que la Vue Piece. */
-function objetsDeLaMaison(hass, ajoutes = []) {
+/* `epingles` arrive du dehors depuis l'audit du 27/09 : la vue mémoïse cette
+ * liste et nous la passe, ce qui rend la dépendance VISIBLE. Lue ici, elle
+ * était invisible à `exhaustive-deps` — et la déclarer sans l'employer aurait
+ * ajouté un avertissement à un inventaire que le projet garde court exprès. */
+function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
   const S = (hass && hass.states) || {};
   const meta = (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id)) || {};
   const pieceDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function') ? (LOGGIA_INDEX.areaNameOf(id) || null) : null;
-  const epingles = new Set(lireEpingles().map(x => cvId(x)));
+  const epingles = epinglesDehors || new Set(lireEpingles().map(x => cvId(x)));
   const out = [];
   const pris = new Set();
   const entree = (cle, o) => {
@@ -6044,21 +5713,43 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
   useEffect(() => { try { window.sessionStorage.setItem('loggia-objets-filtre', choix); } catch { /* stockage indisponible */ } }, [choix]);
   // L'agencement : ce que la maison propose, moins les retraits, plus les
   // ajouts, dans l'ordre choisi — le meme editeur que les pieces.
-  const ajoutes = layoutOf(OBJ_LAYOUT_KEY, 'objets').added || [];
-  const tousObjets = objetsDeLaMaison(hass, ajoutes);
-  const ordrePieces = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).map(z => z.name);
+  /* La chaîne d'Objets, MÉMOÏSÉE (audit du 27/09).
+   *
+   * `objetsDeLaMaison` fait un `Object.keys` complet sur toutes les entités de
+   * la maison, puis vient un tri, puis deux passes de comptage. Cette vue sert
+   * CINQ entrées de menu — Lumières, Climat, Volets, Médias, Objets — et tout
+   * cela repartait à chaque rendu, y compris quand seul un état LOCAL avait
+   * bougé : changer de puce de filtre rescannait la maison entière.
+   *
+   * Les trois entrées sont d'abord STABILISÉES par leur signature. Sans cela,
+   * `ajoutes` et `ordrePieces` sont des tableaux neufs à chaque rendu, et
+   * mémoïser dessus ne servirait à rien — tout en ajoutant des avertissements
+   * à l'inventaire de `tests/dependances.test.mjs`. Ici les dépendances sont
+   * complètes et l'inventaire ne bouge pas. */
+  const ajoutesSig = (layoutOf(OBJ_LAYOUT_KEY, 'objets').added || []).join('|');
+  const ajoutes = useMemo(() => (ajoutesSig ? ajoutesSig.split('|') : []), [ajoutesSig]);
+  const ordreSig = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).map(z => z.name).join('|');
+  const ordrePieces = useMemo(() => (ordreSig ? ordreSig.split('|') : []), [ordreSig]);
+  /* Les épingles étaient lues DANS `objetsDeLaMaison`, donc invisibles à la
+   * règle des dépendances — et pourtant le résultat en dépend. On les lit ici
+   * et on les passe : la dépendance devient visible et vérifiable. */
+  const epinglesSig = lireEpingles().map(x => cvId(x)).join('|');
+  const epingles = useMemo(() => new Set(epinglesSig ? epinglesSig.split('|') : []), [epinglesSig]);
+  const tousObjets = useMemo(() => objetsDeLaMaison(hass, ajoutes, epingles), [hass, ajoutes, epingles]);
   // L'ordre propose est deja piece par piece : c'est de LA que part un
   // deplacement — sinon la grille sautait a la premiere prise (bug vecu).
-  const derived = trierObjets(tousObjets.filter(o => ajoutes.indexOf(o.cle) < 0), ordrePieces).map(o => o.cle);
+  const derived = useMemo(
+    () => trierObjets(tousObjets.filter(o => ajoutes.indexOf(o.cle) < 0), ordrePieces).map(o => o.cle),
+    [tousObjets, ajoutes, ordrePieces]);
   const ed = useLayoutEditor(OBJ_LAYOUT_KEY, 'objets', derived);
-  const parCle = new Map(tousObjets.map(o => [o.cle, o]));
-  const objets = ed.ids.map(cle => parCle.get(cle)).filter(Boolean);
-  const puces = pucesObjets(objets);
+  const parCle = useMemo(() => new Map(tousObjets.map(o => [o.cle, o])), [tousObjets]);
+  const objets = useMemo(() => ed.ids.map(cle => parCle.get(cle)).filter(Boolean), [ed.ids, parCle]);
+  const puces = useMemo(() => pucesObjets(objets), [objets]);
   const filtres = OBJ_FILTRES().filter(f => puces.some(p => p.id === f.id));
   const actuel = filtres.some(f => f.id === choix) ? choix : 'tous';
   // L'ordre est celui de l'editeur : le propose (piece par piece), ou celui choisi a la main.
   const visibles = objets.filter(o => actuel === 'tous' || o.filtres.indexOf(actuel) >= 0);
-  const stats = statsObjets(objets);
+  const stats = useMemo(() => statsObjets(objets), [objets]);
   const [addSheet, setAddSheet] = useState(false);
   const [cardEdit, setCardEdit] = useState(null);
   const nomDe = (o) => ed.labelOf(o.cle) || o.nom;
@@ -6483,10 +6174,7 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
           {pages > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
               <button aria-label={tr('Icônes précédentes')} disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={pageur(page > 0)}><Fi i="angle-small-left" size={14} /></button>
-              {Array.from({ length: pages }, (_, i) => (
-                <button key={i} aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === page} onClick={() => setPage(i)}
-                  style={{ width: 8, height: 8, padding: 0, borderRadius: 4, border: 'none', cursor: 'pointer', background: i === page ? t.col : 'var(--o-bd2)' }} />
-              ))}
+              <PointsDePage n={pages} courant={page} onChoisir={setPage} couleur={t.col} />
               <button aria-label={tr('Icônes suivantes')} disabled={page === pages - 1} onClick={() => setPage(p => Math.min(pages - 1, p + 1))} style={pageur(page < pages - 1)}><Fi i="angle-small-right" size={14} /></button>
             </div>
           )}
@@ -6677,10 +6365,18 @@ function OngletsAccueil({ maison, moment, edit = false, demande = null, onDemand
       {/* Pas de barre d'onglets (retour user du 15/09 : « j'en veux pas de
         * ca ») : deux points, comme sous l'ancienne glissiere — le doigt
         * glisse, la souris tape le point. */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
+      {/* Le point reste un point, sa zone touchable fait 24 (audit du 27/09).
+        * Mesurés à 18 × 6 et 6 × 6, ces deux points étaient les plus petites
+        * cibles de tout le dashboard — et ils changent de PAGE. La marge
+        * verticale négative garde la rangée à sa hauteur, et `gap: 0` pose
+        * leurs centres à 24 l'un de l'autre : l'écart exact que demande la
+        * règle, et l'espacement visible ne bouge presque pas (8 → 12). */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 0, marginBottom: 12 }}>
         {onglets.map((lbl, i) => { const on = onglet === i; return (
           <button key={lbl} type="button" aria-label={lbl} aria-pressed={on} title={lbl} onClick={() => va(i)}
-            style={{ width: on ? 18 : 6, height: 6, borderRadius: 999, border: 'none', padding: 0, cursor: 'pointer', background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', transition: 'all .25s' }} />
+            style={{ minWidth: 24, height: 24, margin: '-9px 0', border: 'none', padding: 0, cursor: 'pointer', background: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span aria-hidden="true" style={{ display: 'block', width: on ? 18 : 6, height: 6, borderRadius: 999, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', transition: 'all .25s' }} />
+          </button>
         ); })}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, transform: dx ? 'translateX(' + dx + 'px)' : undefined, transition: dx ? 'none' : 'transform .2s' }}>
@@ -7041,19 +6737,28 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   useEffect(() => { if (!editMode) { setPasse([]); setFutur([]); } }, [editMode]);
   /* Ctrl+Z, Ctrl+Maj+Z — mais jamais dans un champ de saisie : on y volerait
    * l'annulation du texte que la personne est en train de taper. */
+  /* Les deux gestes dans une référence VIVANTE (audit du 27/09). `annuler` et
+   * `refaire` se referment sur `passe`, `futur` et `accL` : ils changent
+   * d'identité à chaque rendu, donc les nommer en dépendances reposerait
+   * l'écoute aussi souvent que de n'en déclarer aucune — ce que faisait
+   * l'effet ci-dessous, sur `window`, à chaque tic de `useHass`. Le détour est
+   * celui que le projet emploie déjà ailleurs (`systeme.jsx`, `wx3d.jsx`). */
+  const gestesZ = useRef({ annuler, refaire });
+  useEffect(() => { gestesZ.current = { annuler, refaire }; });
   useEffect(() => {
-    if (!editMode) return;
+    if (!editMode) return undefined;
     const onKey = (e) => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
       const t = e.target;
       const dansUnChamp = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
       if (dansUnChamp) return;
       e.preventDefault();
-      if (e.shiftKey) refaire(); else annuler();
+      const { annuler: defaire, refaire: rejouer } = gestesZ.current;
+      if (e.shiftKey) rejouer(); else defaire();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  });
+  }, [editMode]);
   const ordreDe = (zone) => {
     const base = zone === 'main' ? ACC_MAIN : ACC_RAIL;
     const sauve = (grille[zone] || []).map(s => ACC_RENOMME[s] || s).filter(s => base.indexOf(s) >= 0);
@@ -7159,19 +6864,43 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
    * se mordait la queue — une carte posée hors du modèle y ajoutait une colonne
    * implicite, comptée à la lecture suivante (voir placement.js). */
   const piecesGrille = useRef(null);
+  const piecesObs = useRef(null);
+  const mesurerPieces = useRef(null);
   const etroitPieces = !useWide(641); // le téléphone : deux colonnes, comme partout
   const [piecesCols, setPiecesCols] = useState(() => (etroitPieces ? 2 : 3));
+  /* La mesure dans une référence vivante : l'observateur se pose UNE fois, et
+   * doit lire les réglages du jour — pas ceux du montage. Changer de format
+   * (téléphone, mosaïque) remesure sans le reposer. */
   useEffect(() => {
-    const el = piecesGrille.current;
-    if (!el || typeof ResizeObserver === 'undefined') return undefined;
-    const lire = () => {
+    mesurerPieces.current = () => {
+      const el = piecesGrille.current;
+      if (!el) return;
       try { setPiecesCols(colonnesPour(el.getBoundingClientRect().width, etroitPieces, tactile && wide)); } catch { /* grille partie */ }
     };
+    if (piecesGrille.current) mesurerPieces.current();
+  }, [etroitPieces, tactile, wide]);
+  /* La grille se pose elle-même (audit du 27/09). L'effet qui tenait
+   * l'observateur n'avait AUCUN tableau de dépendances : `Dashboard` se rend à
+   * chaque tic de `useHass` — plusieurs fois par minute dans une vraie maison
+   * —, et il détruisait puis rebâtissait un `ResizeObserver` en forçant un
+   * calcul de mise en page synchrone, à ce rythme-là.
+   *
+   * Déclarer des dépendances n'aurait pas suffi : la grille vit dans une
+   * SECTION de l'Accueil, elle arrive donc parfois après le premier rendu — on
+   * glisse jusqu'à sa page, on active la section. L'effet sans dépendances
+   * rattrapait ce cas par accident, en se relançant sans fin. Une `ref` de
+   * rappel le fait exprès : React l'appelle quand le nœud arrive, et de
+   * nouveau avec `null` quand il part. Mémoïsée à vide, sans quoi React la
+   * rappellerait à chaque rendu — le défaut qu'on vient de retirer. */
+  const poserGrillePieces = useCallback((el) => {
+    if (piecesObs.current) { piecesObs.current.disconnect(); piecesObs.current = null; }
+    piecesGrille.current = el;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const lire = () => { if (mesurerPieces.current) mesurerPieces.current(); };
     lire();
-    const ro = new ResizeObserver(lire);
-    ro.observe(el);
-    return () => ro.disconnect();
-  });
+    piecesObs.current = new ResizeObserver(lire);
+    piecesObs.current.observe(el);
+  }, []);
   /* La taille RÉSOLUE de chaque pièce : le choix explicite s'il existe, sinon
    * celle que l'ordre donne par défaut. Le placement en a besoin — une carte
    * standard occupe deux rangées. */
@@ -7655,7 +7384,15 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     const ex = roomExtras && roomExtras[rmNorm(name)];
     if (!ex || !ex.covers.length) return null;
     const S = dashHass.states;
-    const open = ex.covers.some(id => { const st = S[id]; return st && (st.state === 'open' || st.state === 'opening'); });
+    // Meme verdict que la carte : un volet qui bute a 1 % est ferme, et la
+    // pastille de la piece doit proposer « Ouvrir », pas « Fermer ».
+    const open = ex.covers.some(id => {
+      const st = S[id];
+      if (!st) return false;
+      if (st.state === 'opening') return true;
+      const p = st.attributes && st.attributes.current_position;
+      return !coverFerme(st, p != null ? Math.round(p) : (st.state === 'open' ? 100 : 0));
+    });
     return { open, onToggle: () => { commanderService(dashHass, ex.covers, 'cover', open ? 'close_cover' : 'open_cover', { entity_id: ex.covers }); } };
   };
   // ── Héros contextuel : « ce qui compte maintenant » ──────────────────────
@@ -7925,7 +7662,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             /* La mosaique de la tablette compte les colonnes : sans les fixer
               * a trois, `auto-fill` en donnerait quatre ou cinq et les grandes
               * tuiles tomberaient n'importe ou. */
-            <div ref={piecesGrille} className="grid-chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + piecesCols + ',minmax(0,1fr))', gap: 8 }}>
+            <div ref={poserGrillePieces} className="grid-chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + piecesCols + ',minmax(0,1fr))', gap: 8 }}>
               {ordrePieces(inner.map(p => p.name)).map(n => inner.find(p => p.name === n)).filter(Boolean).map((p, i) => {
                 /* Un choix explicite (bouton de taille en edition) prime sur
                   * tout : il vaut pour l'appareil qui l'a fait comme pour les
@@ -8517,9 +8254,9 @@ function ScenesContent({ hass }) {
         </QuickBox>
         <QuickBox label={tr('Luminosité')} className="o-qb-lumi">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider(tr('Luminosité des scènes'), bri, setBri, { min: 5, max: 100, step: 5 })}>
-            <button onClick={() => setBri(bri - 5)} aria-label={tr('Baisser')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
+            <button onClick={() => setBri(bri - 5)} aria-label={tr('Baisser')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
             <span style={{ minWidth: 44, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--o-warn)' }}>{bri} %</span>
-            <button onClick={() => setBri(bri + 5)} aria-label={tr('Monter')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
+            <button onClick={() => setBri(bri + 5)} aria-label={tr('Monter')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
           </div>
         </QuickBox>
         <span style={{ flex: 1 }} />
@@ -8681,10 +8418,7 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
           {pages > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
               <button aria-label={tr('Icônes précédentes')} disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={pageur(page > 0)}><Fi i="angle-small-left" size={14} /></button>
-              {Array.from({ length: pages }, (_, i) => (
-                <button key={i} aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === page} onClick={() => setPage(i)}
-                  style={{ width: 8, height: 8, padding: 0, borderRadius: 4, border: 'none', cursor: 'pointer', background: i === page ? t.col : 'var(--o-bd2)' }} />
-              ))}
+              <PointsDePage n={pages} courant={page} onChoisir={setPage} couleur={t.col} />
               <button aria-label={tr('Icônes suivantes')} disabled={page === pages - 1} onClick={() => setPage(p => Math.min(pages - 1, p + 1))} style={pageur(page < pages - 1)}><Fi i="angle-small-right" size={14} /></button>
             </div>
           )}
@@ -9013,7 +8747,9 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
   // la liste ne connaît pas (`unavailable`, `unknown`) n'est pas un mode.
   const nomDuMode = (voletModes(S).find(m => m.id === mode) || {}).label || null;
 
-  const openCount = covers.filter(c => c.pos > 0).length;
+  // « n ouverts » : le meme verdict que les cartes, sinon un volet qui bute a
+  // 1 % se comptait comme ouvert dans le resume de la vue.
+  const openCount = covers.filter(c => !coverFerme(S && S[c.haid], c.pos)).length;
 
   return (
     <div className="loggia-content" style={{ padding: embarque ? '0 28px 40px' : '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -9893,9 +9629,9 @@ function CroquettesContent({ hass }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Ration')}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider(tr('Poids d’une portion'), portionW, setPortionWeight, { min: 2, max: 30, step: 1, unit: 'g' })}>
-            <button onClick={() => setPortionWeight(portionW - 1)} aria-label={tr('Baisser')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
+            <button onClick={() => setPortionWeight(portionW - 1)} aria-label={tr('Baisser')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
             <span style={{ minWidth: 40, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--o-warn)' }}>{Math.round(portionW)} g</span>
-            <button onClick={() => setPortionWeight(portionW + 1)} aria-label={tr('Monter')} style={{ width: 22, height: 22, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
+            <button onClick={() => setPortionWeight(portionW + 1)} aria-label={tr('Monter')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
@@ -13023,14 +12759,25 @@ function deriveAccueil(hass, cfg, resolved) {
     else if (power > 500) { phase = tr('Rinçage'); color = 'var(--o-ok)'; spin = true; }
     else if (power > 200) { phase = tr('Séchage'); color = 'var(--o-warn)'; anim = 'charge'; }
     else { phase = tr('En cours'); color = 'var(--o-cold)'; spin = true; }
-    const totalMin = 80; const idt = S[notifIds().dishwasherStart];
+    /* La barre de progression et le « ~X min restant » sont PARTIS (audit du
+     * 27/09). Ils se calculaient sur une durée de cycle de quatre-vingts
+     * minutes écrite en dur — un chiffre qu'aucune entité ne donne, et faux
+     * dès que le cycle ne fait pas cette durée-là. « Il reste 12 min » sur une
+     * machine qui en a encore pour une heure est pire que rien.
+     *
+     * Ce qui reste est MESURÉ : la phase d'après la puissance, la durée
+     * écoulée d'après l'heure de départ, les watts.
+     *
+     * Le départ reste borné à la journée — l'horodatage compte les secondes
+     * depuis minuit, et un cycle commencé la veille donnerait n'importe quoi.
+     * La borne est une vraie journée, plus une durée de cycle supposée. */
+    const idt = S[notifIds().dishwasherStart];
     const ts = (idt && idt.attributes && idt.attributes.timestamp) ? idt.attributes.timestamp : 0;
     const nowD = new Date(); const todayStart = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime() / 1000;
     const elapsedMin = Math.max(0, Math.floor((nowD.getTime() / 1000 - (todayStart + ts)) / 60));
-    const validProg = ts > 0 && elapsedMin <= totalMin * 2; // timestamp plausible (sinon barre/temps faux au changement de jour ou si entité absente)
-    const remain = Math.max(0, totalMin - elapsedMin); const prog = Math.min(100, Math.round(elapsedMin / totalMin * 100));
+    const departSu = ts > 0 && elapsedMin <= 1440;
     const fmtT = (mn) => { const h = Math.floor(mn / 60), mm = mn % 60; return (h > 0 ? h + 'h' : '') + (mm < 10 && h > 0 ? '0' : '') + mm + 'min'; };
-    machines.lv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase, color, active, anim, spin, valueIcon: 'timer', valueText: active ? (validProg ? fmtT(elapsedMin) : tr('En cours')) : '--:--', bar: (active && validProg) ? prog : null, barColor: color, extra: active ? (validProg ? ('~' + fmtT(remain) + ' · ' + Math.round(power) + 'W') : (Math.round(power) + 'W')) : null };
+    machines.lv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase, color, active, anim, spin, valueIcon: 'timer', valueText: active ? (departSu ? fmtT(elapsedMin) : tr('En cours')) : '--:--', bar: null, barColor: color, extra: active ? (Math.round(power) + 'W') : null };
   }
   { const pbE = S[notifIds().bins];
     if (pbE) {
@@ -13952,9 +13699,47 @@ export default function App() {
   const weatherRaw = wEnt ? String(wEnt.state) : null; // état HA brut pour le fond GLSL (presets = états HA)
   const weatherTemp = wEnt && wEnt.attributes ? wEnt.attributes.temperature : null;
   const weatherLabel = wEnt ? haWeatherLabel(wEnt.state) : null;
-  let accueil = null; // Dashboard + vue Pièce (capteurs de la pièce) — pas calculé ailleurs
-  if (view === 'accueil' || activeRoom) { try { accueil = deriveAccueil(hass, cfg, loggiaRuntime.resolved); if (accueil) accueil.index = loggiaRuntime.index; } catch (e) { console.error('deriveAccueil', e); accueil = null; } }
-  let notifs; try { notifs = deriveNotifs(hass); } catch (e) { console.error('deriveNotifs', e); notifs = []; }
+  /* Les deux dérivations de l'Accueil, MÉMOÏSÉES (audit du 27/09).
+   *
+   * `deriveAccueil` balaie les pièces, les lumières, le chauffage, les volets,
+   * les plantes, les machines, l'alarme, les caméras et les médias — cent
+   * trente lignes. Elle était appelée DANS le rendu, comme `deriveNotifs`.
+   *
+   * Ce n'est pas le changement d'état qui coûtait : quand la maison bouge,
+   * refaire le calcul est juste. C'est tout le RESTE. Mesuré sur la
+   * démonstration, `hass` identique d'un bout à l'autre : un aller-retour en
+   * mode édition provoquait QUATRE recalculs complets des deux dérivations et
+   * du balayage d'entités de la barre latérale. Rien n'avait changé dans la
+   * maison.
+   *
+   * `cfg` et `loggiaRuntime` sont déjà mémoïsés : les dépendances sont donc
+   * complètes, et la règle `exhaustive-deps` n'a rien à redire — l'inventaire
+   * de `tests/dependances.test.mjs` ne bouge pas d'une ligne. */
+  const accueil = useMemo(() => {
+    // Dashboard + vue Pièce (capteurs de la pièce) — pas calculé ailleurs
+    if (view !== 'accueil' && !activeRoom) return null;
+    try {
+      const a = deriveAccueil(hass, cfg, loggiaRuntime.resolved);
+      if (a) a.index = loggiaRuntime.index;
+      return a;
+    } catch (e) { console.error('deriveAccueil', e); return null; }
+  }, [view, activeRoom, hass, cfg, loggiaRuntime.resolved, loggiaRuntime.index]);
+  const notifs = useMemo(() => {
+    try { return deriveNotifs(hass); } catch (e) { console.error('deriveNotifs', e); return []; }
+  }, [hass]);
+  /* Le compte d'appareils de la barre latérale — TOUJOURS montée, quelle que
+   * soit la vue — bouclait sur TOUTES les entités de la maison à chaque rendu
+   * d'`App()`, avec un test sur huit préfixes de domaine. Le coût est
+   * proportionnel à la taille de l'installation, et il était payé même quand
+   * la vue affichée n'avait rien à voir avec ces domaines. */
+  const nbAppareils = useMemo(() => {
+    const S = (hass && hass.states) || null;
+    if (!S || (hass.connected !== undefined && !hass.connected)) return 0;
+    const doms = ['light.', 'switch.', 'media_player.', 'camera.', 'climate.', 'cover.', 'vacuum.', 'lawn_mower.'];
+    let n = 0;
+    for (const id in S) { if (doms.some(d => id.indexOf(d) === 0) && S[id] && S[id].state !== 'unavailable') n++; }
+    return n;
+  }, [hass]);
   // (thème/mode/suivi HA lus paresseusement à l'initialisation des states —
   //  les relire ici arrivait après leur première réécriture.)
   const [look, setLook] = useState(readLook);
@@ -14277,8 +14062,7 @@ export default function App() {
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 14, padding: '10px 16px', fontSize: 12, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
       <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={peutEditer ? () => setEditMode(e => !e) : null} tactile={tactile} users={users} userIdx={userIdx} onSwitchUser={switchUser} notifs={notifs} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={(() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
-        let devCount = 0;
-        if (ok) { const doms = ['light.', 'switch.', 'media_player.', 'camera.', 'climate.', 'cover.', 'vacuum.', 'lawn_mower.']; for (const id in hass.states) { if (doms.some(d => id.indexOf(d) === 0) && hass.states[id] && hass.states[id].state !== 'unavailable') devCount++; } }
+        const devCount = nbAppareils;
         const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null;
         const aid = (secAlarm() && ok && hass.states[secAlarm()]) ? secAlarm() : rAl;
         const ast = (ok && aid && hass.states[aid]) ? hass.states[aid].state : null;

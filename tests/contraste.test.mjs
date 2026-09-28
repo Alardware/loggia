@@ -9,7 +9,9 @@ import { fileURLToPath } from 'node:url';
 import { lireCouleur, contraste, composer, ajuster, garde, versHex, SEUILS, JETONS_GARDE, LAVIS, LAVIS_DENSE } from '../src/contraste.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+/* Le theme est sorti dans `src/theme.js` (27/09, audit point 9) : on relit
+ * donc le monolithe ET ce qui en est parti. */
+const src = ['App.jsx', 'theme.js'].map(f => readFileSync(join(RACINE, 'src', f), 'utf8')).join(String.fromCharCode(10));
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 
 // Les jetons d'un thème, tels que `getComputedStyle` les rendrait.
@@ -160,7 +162,17 @@ test('une carte plate se détache de la page — mais seulement faute de filet',
 });
 
 test('la garde est branchée, purgée, et les thèmes sans ombre gardent un filet', () => {
-  assert.ok(src.includes("import { garde, JETONS_GARDE, lisibleSurLavis } from './contraste.js';"), 'le module est importé');
+  /* L'import s'est SÉPARÉ le 27/09 : `garde` et `JETONS_GARDE` sont partis avec
+   * le thème dans `src/theme.js`, `lisibleSurLavis` est resté dans `App.jsx`,
+   * où les cartes l'appellent. Les deux moitiés se vérifient séparément —
+   * `src` est la concaténation des deux fichiers, une seule recherche ne dirait
+   * pas laquelle porte quoi. */
+  const appSeul = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const themeSeul = readFileSync(join(RACINE, 'src', 'theme.js'), 'utf8');
+  assert.ok(appSeul.includes("import { lisibleSurLavis } from './contraste.js';"),
+    'App.jsx n’importe plus la lisibilité sur lavis, dont ses cartes se servent');
+  assert.ok(themeSeul.includes("import { garde, JETONS_GARDE } from './contraste.js';"),
+    'le thème n’importe plus la garde de contraste ni les jetons qu’elle pose');
   // La couleur vraie d'une ampoule habille sa carte ; l'icône prend la lisible.
   assert.ok(src.includes('const accentLu = (rgb && color) ? lisibleSurLavis(color, estClair(), .7) : accent;'), 'la carte lumière d’une pièce');
   assert.ok(src.includes("const teinteLu = rgbHex ? lisibleSurLavis(rgbHex, estClair(), .28) : teinte;"), 'la carte compacte');

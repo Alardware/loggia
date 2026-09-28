@@ -13,7 +13,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -188,6 +188,94 @@ test('le paquet livre ne traine pas les bundles des compilations passees', () =>
     trop.map(([f, n]) => `${f} (${n} copies)`).join(', '));
 });
 
+test('le paquet livre ne traine pas les bundles d’un module disparu', () => {
+  // Le test au-dessus borne les familles VIVANTES. Une famille MORTE lui
+  // échappe : elle compte exactement `GARDE` fichiers depuis le jour où Vite a
+  // cessé de la produire, et ne redescend jamais en dessous — la retenue garde
+  // « les deux derniers » d’un module qui n’existe plus.
+  //
+  // Mesure du 27/09 avant correction : `aspirateur-*.js`, `meteo-*.js`,
+  // `robot-*.js` (devenu `ficherobot-*`) et `boot-*.css` (renommé
+  // `index-*.css`) — 7 fichiers, 160 Ko dans CHAQUE installation, cités par
+  // aucun fichier du paquet. Pire que du poids : ils importaient eux-mêmes six
+  // chunks absents du dossier (`vacplan-DqhCZQ5k.js`, `wx3d-Bu1khYey.js`…),
+  // donc 404 garantis pour le client au cache périmé qu’ils prétendaient
+  // servir. `pack_frontend.py` les balaie depuis (règle 3) ; ce test dit si le
+  // balayage cesse un jour de faire son travail.
+  const dossier = join(RACINE, 'custom_components', 'loggia', 'frontend', 'assets');
+  const html = join(RACINE, 'custom_components', 'loggia', 'frontend', 'index.html');
+  const fichiers = readdirSync(dossier);
+
+  /* Ce que l’index.html du paquet finit par demander, de proche en proche —
+   * même parcours qu’`atteignables()` dans pack_frontend.py. */
+  const vus = new Set();
+  const aVoir = [...readFileSync(html, 'utf8').matchAll(/assets\/([A-Za-z0-9._-]+)/g)].map(m => m[1]);
+  while (aVoir.length) {
+    const f = aVoir.pop();
+    if (vus.has(f)) continue;
+    vus.add(f);
+    const p = join(dossier, f);
+    if (!/\.(js|css)$/.test(f) || !existsSync(p)) continue;
+    aVoir.push(...[...readFileSync(p, 'utf8')
+      .matchAll(/["'/]([A-Za-z0-9._-]+\.(?:js|css|jpg|jpeg|png|webp|svg|woff2?))/g)].map(m => m[1]));
+  }
+
+  /* La génération d’AVANT est volontairement hors de ce parcours : c’est elle
+   * que `GARDE = 2` protège. On ne condamne donc un fichier que si AUCUN
+   * vivant de même extension ne partage son début de nom.
+   *
+   * Toutes les coupures du nom sont essayées, pas la seule dernière : un hash
+   * Vite peut contenir un tiret. `demo-B6-lYSYp.js` (vivant) et
+   * `demo-DpsM1nrN.js` (la génération d’avant) tombent sinon dans deux
+   * familles différentes, et la seconde passe pour morte — c’est arrivé. */
+  const morts = fichiers.filter(f => {
+    if (vus.has(f)) return false;
+    const suf = f.endsWith('.js') ? '.js' : f.endsWith('.css') ? '.css' : null;
+    if (!suf) return false;
+    const base = f.slice(0, -suf.length);
+    const coupures = [...base].map((c, i) => (c === '-' ? base.slice(0, i + 1) : null)).filter(Boolean);
+    if (!coupures.length) return false;
+    return ![...vus].some(v => v.endsWith(suf) && coupures.some(p => v.startsWith(p)));
+  });
+  assert.deepEqual(morts, [],
+    'des bundles d’un module que le build ne produit plus restent dans le paquet livré : ' +
+    morts.join(', ') + ' — relancer `python scripts/pack_frontend.py`');
+
+  /* Et l’autre moitié du défaut : un fichier du paquet qui en réclame un
+   * absent. C’est ce qui transforme du poids mort en écran cassé. */
+  const pendantes = new Set();
+  for (const f of fichiers) {
+    if (!/\.(js|css)$/.test(f)) continue;
+    for (const m of readFileSync(join(dossier, f), 'utf8').matchAll(/\.\/([A-Za-z0-9._-]+\.(?:js|css))/g)) {
+      if (m[1] !== f && !existsSync(join(dossier, m[1]))) pendantes.add(`${f} → ${m[1]}`);
+    }
+  }
+  assert.deepEqual([...pendantes], [],
+    'des fichiers du paquet livré en réclament d’autres qui n’y sont pas (404 chez l’utilisateur) : ' +
+    [...pendantes].join(', '));
+
+  /* Et le mécanisme qui le tient, pas seulement le résultat du jour.
+   *
+   * La règle 2 garde les `GARDE` dernières générations DE CHAQUE FAMILLE, en
+   * supposant qu'elles tournent ensemble. Elles ne le font pas : un `wx3d-*`
+   * inchangé garde son empreinte pendant que `boot-*`, qui embarque l'écran,
+   * en change à chaque compilation. Au bout de quelques versions, le `boot`
+   * gardé réclame un `wx3d` que la rotation a emporté — 36 renvois morts dans
+   * le paquet de la v3.76.0 publiée, que ce test a trouvés le 27/09.
+   *
+   * Une génération N-1 trouée ne sert personne : elle donne des 404 au client
+   * au cache périmé qu'elle prétend servir. */
+  const pack4 = readFileSync(join(RACINE, 'scripts', 'pack_frontend.py'), 'utf8');
+  assert.ok(pack4.includes('def renvois_morts(dossier, proteges):'),
+    'la règle 4 a disparu de pack_frontend.py : les renvois morts reviendront à la prochaine rotation');
+  assert.match(pack4.slice(pack4.indexOf('def renvois_morts')), /while True:/,
+    'la règle 4 ne boucle plus jusqu’au point fixe : retirer un fichier peut en condamner un autre');
+  assert.ok(pack4.includes('troues = renvois_morts(assets_dst, reference)'),
+    'la règle 4 n’est plus appelée');
+  assert.ok(pack4.indexOf('troues = renvois_morts') > pack4.indexOf('efface += retenir('),
+    'la règle 4 doit passer APRÈS la rétention, qui vient peut-être de retirer ce qu’une génération gardée réclamait');
+});
+
 test('la documentation ne promet pas de garde-fou inexistant', () => {
   // Le README annoncait publiquement une route `/api/loggia/call` protegee par
   // une « liste blanche fermee par defaut », et nommait les domaines refuses.
@@ -235,4 +323,61 @@ test('une URL venue d’une entité ne devient pas un lien sans contrôle', () =
   // seule ligne à garder juste plutôt qu'un href à ne pas oublier.
   assert.match(src, /notes: lienSur\(at\.release_url\)/,
     'l’URL de notes n’est plus filtrée là où elle entre');
+});
+
+test('aucun test ne prétend vérifier quelque chose sans rien vérifier', () => {
+  // Audit du 27/09. Quatre tests portaient un nom — « les mots ont leur
+  // traduction », « les mots de la liste existent en anglais » — et un corps
+  // qui lisait un fichier sans jamais rien en conclure. Ils passaient TOUJOURS,
+  // et comptaient dans le total.
+  //
+  // Un test vert qui ne vérifie rien est pire qu'un test absent : il donne
+  // l'impression que la question est gardée.
+  //
+  // Les aides qui assertent pour le compte d'un test sont nommées ici. Une
+  // nouvelle aide fera échouer ce test, qui la réclamera — c'est voulu.
+  const AIDES = /assert|\bok\(|\bko\(|expect\(|\.throws|\.rejects/;
+  const muets = [];
+  let total = 0;
+  for (const f of readdirSync(join(RACINE, 'tests')).filter(n => n.endsWith('.test.mjs'))) {
+    const s = readFileSync(join(RACINE, 'tests', f), 'utf8');
+    const depart = [...s.matchAll(/\btest\(\s*(['"`])([^'"`]*)\1\s*,/g)].map(m => ({ nom: m[2], i: m.index }));
+    total += depart.length;
+    depart.forEach((t, k) => {
+      const fin = k + 1 < depart.length ? depart[k + 1].i : s.length;
+      if (!AIDES.test(s.slice(t.i, fin))) muets.push(f + ' :: ' + t.nom);
+    });
+  }
+  assert.ok(total > 900, 'le repérage des tests ne trouve plus rien : le motif a dû changer');
+  assert.deepEqual(muets, [], 'des tests ne vérifient rien : ' + muets.join(', '));
+});
+
+test('ce qui a été retiré ne revient pas', () => {
+  // Audit du 27/09, point 8.
+  const pkg = JSON.parse(readFileSync(join(RACINE, 'package.json'), 'utf8'));
+  // `@bybas/weather-icons` était une dépendance de PRODUCTION qu'aucun fichier
+  // n'importait : ses dix-sept dessins ont été recopiés dans `src/assets/wx/`
+  // (voir `wxutil.jsx`). HACS la téléchargeait pour rien.
+  assert.ok(!Object.keys(pkg.dependencies || {}).includes('@bybas/weather-icons'),
+    'la dépendance des icônes météo est revenue : rien ne l’importe');
+  // Mais l'ATTRIBUTION reste due : les dessins sont toujours là, sous licence
+  // MIT. Retirer le crédit avec le paquet aurait été une faute.
+  assert.match(readFileSync(join(RACINE, 'site', 'legal', 'mentions-legales.html'), 'utf8'), /@bybas\/weather-icons/,
+    'le crédit des icônes météo a disparu des mentions légales, alors que les dessins sont toujours livrés');
+  assert.ok(readdirSync(join(RACINE, 'src', 'assets', 'wx')).length >= 17, 'les dessins météo ont disparu');
+  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  // `stag` rendait `undefined`, et son commentaire prétendait la garder « pour
+  // les ~200 appels existants ». Il en restait UN.
+  assert.ok(!/const stag = \(\) => undefined;/.test(app), '`stag` est revenue : elle ne rend rien');
+  assert.ok(!/\.\.\.stag\(/.test(app), 'un étalement de `stag` est revenu : il étale `undefined`');
+  // La durée de cycle du lave-vaisselle était ÉCRITE EN DUR, et la barre de
+  // progression comme le « ~X min restant » en découlaient — faux dès que le
+  // cycle ne fait pas cette durée. Choix de l'utilisateur : les deux partent,
+  // le mesuré reste (phase, durée écoulée, watts).
+  assert.ok(!/totalMin = 80/.test(app), 'la durée de cycle inventée du lave-vaisselle est revenue');
+  const i = app.indexOf("machines.lv = {");
+  assert.notEqual(i, -1, 'la carte du lave-vaisselle a disparu');
+  assert.match(app.slice(i, i + 420), /bar: null/, 'la barre de progression du lave-vaisselle est revenue');
+  assert.match(app.slice(i, i + 420), /extra: active \? \(Math\.round\(power\) \+ 'W'\) : null/,
+    'le « ~X min restant » est revenu : il se calculait sur une durée inventée');
 });

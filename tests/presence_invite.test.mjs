@@ -26,7 +26,3 @@ test('cote serveur : la maison n’est jamais vide, le coucher attend, et la cou
   const n = lire('custom_components/loggia/nuit.py');
   assert.ok(n.includes('from .presence import CLE as CLE_PRESENCE, invite_present') && n.includes('await self.regles.noter("nuit", "coucher", "retenir", n=0, motif="mode invite")'), 'le coucher attend, et le dit');
 });
-
-test('les mots ont leur traduction', () => {
-  const en = lire('src/langues/en.js');
-});

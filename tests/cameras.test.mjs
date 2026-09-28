@@ -141,3 +141,28 @@ test('l’Accueil et la fiche dessinent la meme tuile camera', () => {
   assert.ok(src.includes('function CameraTile({ c, agrandir = true })'), 'la tuile sait se passer de son bouton');
   assert.ok(src.includes('{live && agrandir && ('), 'le bouton d’agrandissement ne s’affiche que si on le demande');
 });
+
+test('changer de camera pendant la negociation ne laisse pas d’abonnement derriere', () => {
+  // Audit du 27/09. `startRtc` attend trois fois avant de tenir son
+  // abonnement : `iceServers`, `createOffer`, `setLocalDescription`, puis
+  // `subscribeMessage`. La garde existait déjà après la configuration ICE —
+  // son commentaire explique même le piège — mais pas après l'abonnement.
+  //
+  // Si l'on change de caméra entre-temps, le nettoyage de l'effet appelle
+  // `cleanupRtc` alors que `unsub` vaut encore `null` : il ne ferme que `pc`.
+  // L'abonnement arrive ensuite, et plus personne ne le fermera. Un passage
+  // rapide d'une caméra à l'autre en laissait un par passage — côté client
+  // comme, possiblement, côté Home Assistant.
+  const cam = readFileSync(join(RACINE, 'src', 'camera.jsx'), 'utf8');
+  const i = cam.indexOf("{ type: 'camera/webrtc/offer'");
+  assert.notEqual(i, -1, 'la négociation WebRTC a disparu');
+  const apres = cam.slice(i, i + 1200);
+  assert.match(apres, /if \(cancelled\) \{/,
+    'plus de garde après l’abonnement : il survivra au changement de caméra');
+  assert.match(apres, /try \{ unsub\(\); \}/, 'la garde ne ferme plus l’abonnement');
+  assert.match(apres, /try \{ pc\.close\(\); \}/, 'la garde ne ferme plus la connexion');
+  // `cleanupRtc` a pu être remis à `null` entre-temps : on ne s'appuie pas sur
+  // lui, on ferme les deux à la main.
+  assert.ok(!/if \(cancelled\) \{\s*cleanupRtc\(\)/.test(apres),
+    'la garde repasse par `cleanupRtc`, qui peut déjà être à `null`');
+});

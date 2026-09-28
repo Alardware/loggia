@@ -168,7 +168,3 @@ test('seules les feuilles à onglets gardent une hauteur fixe', () => {
   assert.ok(!CSS.includes('.o-sheet-fiche'), 'la hauteur unique de toutes les fiches est revenue');
   assert.ok(UI.includes("className={'o-sheet' + (opaque ? ' o-sheet-opaque' : '') + (onglets ? ' o-sheet-onglets' : '')}"));
 });
-
-test('les mots de la liste existent en anglais', () => {
-  const en = lire('src', 'langues', 'en.js');
-});

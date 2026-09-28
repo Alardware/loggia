@@ -198,6 +198,38 @@ class LoggiaNuit:
             )
             _LOGGER.info("Loggia nuit : extinction a %02d:%02d", h, m)
 
+        await self._async_reprendre_veilleuses()
+
+    async def _async_reprendre_veilleuses(self) -> None:
+        """Rearme les veilleuses DEJA allumees (audit du 27/09).
+
+        La veilleuse ne reagissait qu'a une TRANSITION vers « on ». Un
+        redemarrage de Home Assistant pendant qu'une veilleuse brule n'en
+        produit aucune : la minuterie n'etait jamais posee, et la lampe restait
+        allumee jusqu'au matin — l'exact contraire de ce que ce module promet.
+        `minuteurs.py` et `sirene.py` reprennent deja leurs rendez-vous au
+        demarrage ; la veilleuse ne le faisait pas.
+
+        Elle est la SEULE a pouvoir le faire. L'eclairage nocturne n'eteint que
+        ce qu'il a lui-meme allume (`self.allumees`), et cette liste ne vit
+        qu'en memoire : apres un redemarrage il ne peut plus prouver qu'une
+        lampe est a lui, et « une lampe deja allumee n'est pas a nous ». La
+        veilleuse, elle, eteint par definition ce qu'une MAIN a allume — toute
+        lampe de sa liste qui brule lui revient, sans rien avoir a se rappeler.
+
+        On repose une duree PLEINE : le temps deja ecoule est perdu avec la
+        memoire, et mieux vaut laisser bruler un peu trop que couper au nez de
+        quelqu'un. `_async_armer` garde toutes ses conditions — module actif,
+        lampe de la liste, plage du soir, pas de minuterie deja posee.
+        """
+        v = self.cfg.get("veilleuse") or {}
+        if not v.get("actif"):
+            return
+        for haid in sorted(set(v.get("lampes") or [])):
+            etat = self.hass.states.get(haid)
+            if etat is not None and str(getattr(etat, "state", "")).lower() == "on":
+                await self._async_armer(haid)
+
     def _declarer(self) -> None:
         """Declare au socle ce que la nuit pilote : les veilleuses, et toutes
         les lampes que l'extinction peut toucher. Rappele au coucher — les

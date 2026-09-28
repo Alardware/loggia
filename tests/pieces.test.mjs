@@ -71,6 +71,34 @@ test('la tablette pose sa mosaïque sur trois colonnes', () => {
     'une règle CSS impose de nouveau les colonnes : le calcul ne la voit pas');
 });
 
+test('la grille des pièces ne rebâtit pas son observateur à chaque rendu', () => {
+  // Audit du 27/09 : l'effet qui tenait le `ResizeObserver` n'avait AUCUN
+  // tableau de dépendances. `Dashboard` se rend à chaque tic de `useHass` —
+  // plusieurs fois par minute dans une vraie maison —, et il détruisait puis
+  // rebâtissait l'observateur en forçant un calcul de mise en page synchrone,
+  // à ce rythme-là.
+  //
+  // Déclarer des dépendances n'aurait pas suffi : la grille vit dans une
+  // SECTION de l'Accueil, elle arrive donc parfois après le premier rendu — on
+  // glisse jusqu'à sa page, on active la section. L'effet sans dépendances
+  // rattrapait ce cas par accident. Une `ref` de rappel le fait exprès.
+  assert.match(src, /const poserGrillePieces = useCallback\(\(el\) => \{/,
+    'la grille ne se pose plus par une ref de rappel');
+  assert.ok(src.includes('ref={poserGrillePieces}'),
+    'la grille n’utilise plus la ref de rappel : l’observateur ne suivra pas un montage tardif');
+  assert.ok(!src.includes('ref={piecesGrille}'),
+    'la ref directe est revenue — l’observateur se rebâtira à chaque rendu');
+  // Mémoïsée À VIDE : une ref de rappel qui change d'identité est rappelée par
+  // React à chaque rendu, soit exactement le défaut qu'on vient de retirer.
+  const i = src.indexOf('const poserGrillePieces = useCallback((el) => {');
+  assert.match(src.slice(i, i + 700), /\}, \[\]\);/,
+    'la ref de rappel n’est plus mémoïsée à vide : React la rappellera à chaque rendu');
+  // Et la mesure garde ses propres dépendances : changer de format doit
+  // remesurer, sans reposer l'observateur.
+  assert.match(src, /\}, \[etroitPieces, tactile, wide\]\);/,
+    'la mesure ne suit plus le format de l’écran');
+});
+
 test('chaque tuile pièce a sa cellule : colonne ET rangée', () => {
   /* `.grid-chips` coule sur des rangées de 88 px : une standard en occupe
    * deux, une puce une seule.
@@ -112,11 +140,20 @@ test('l’interrupteur d’une tuile pièce ne dépend pas de ses voisins', () =
   // standard (38 × 21) partage sa rangée avec les minis masquables ; le chip,
   // lui, n'utilise pas `space-between` et n'a jamais eu le défaut. On vise
   // donc le bon par sa taille, pas par son rôle.
+  // Depuis l'audit du 27/09, la ZONE touchable fait 24 de haut et la pastille
+  // en garde 21 : `marginLeft: 'auto'` vit donc sur l'enveloppe, la taille du
+  // dessin sur la pastille. On vérifie les deux, et qu'elles restent liées.
   const j = c.indexOf('width: 38, height: 21, borderRadius: 999');
-  assert.notEqual(j, -1, 'l’interrupteur du pied standard introuvable');
-  const style = c.slice(j, c.indexOf('}}', j));
-  assert.match(style, /marginLeft: 'auto'/,
+  assert.notEqual(j, -1, 'la pastille du pied standard introuvable');
+  const k = c.lastIndexOf('role="switch"', j);
+  assert.notEqual(k, -1, 'l’interrupteur du pied standard introuvable');
+  const enveloppe = c.slice(k, j);
+  assert.match(enveloppe, /marginLeft: 'auto'/,
     'sans marginLeft:auto, l’interrupteur repasse à gauche dès que les minis sont masqués');
+  assert.match(enveloppe, /height: 24/,
+    'la zone touchable retombe sous les 24 px que demande la règle');
+  assert.match(enveloppe, /margin: '-1\.5px 0'/,
+    'sans la marge négative, les trois pixels empruntés font descendre la rangée');
 });
 
 test('les minis ne cèdent que lorsque la place manque vraiment', () => {

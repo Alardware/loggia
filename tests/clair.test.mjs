@@ -22,7 +22,7 @@ const css = lire('src', 'index.css');
   /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
    * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
    * adresse — on relit donc le monolithe ET ce qui en est sorti. */
-const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx'].map(f => lire('src', f)).join(String.fromCharCode(10));
+const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10));
 
 const bloc = (debut) => { const i = css.indexOf(debut); return css.slice(i, css.indexOf('\n}', i)); };
 const jetons = (texte) => { const m = {}; for (const [, k, v] of texte.matchAll(/(--o-[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\b/g)) m[k] = v; return m; };
@@ -79,6 +79,34 @@ test('un îlot sombre garde les jetons sombres sous n’importe quel thème', ()
   assert.equal(jetons(ilot)['--o-bad'], SOMBRE['--o-bad']);
   assert.ok(app.includes(`<div className="o-sombre" role="button" aria-label={tr('Toucher pour réveiller')}`), 'la veille');
   assert.ok(app.includes("className={'o-sombre o-cam-tuile' + (c.online === false ? ' o-panne' : '')}"), 'la tuile caméra');
+});
+
+test('le thème est posé AVANT la première peinture', () => {
+  // Audit du 27/09 : le sombre est `:root`, le clair `html.loggia-light`, et
+  // `html` prend `var(--o-bg)`. La classe n'arrivait qu'avec React : tout
+  // écran réglé en clair s'allumait SOMBRE une fraction de seconde à chaque
+  // chargement. Un script en ligne dans `<head>` la pose avant.
+  const index = lire('index.html');
+  const i = index.indexOf('<script>');
+  assert.notEqual(i, -1, 'le script de thème a disparu d’index.html');
+  const amorce = index.slice(i, index.indexOf('</script>', i));
+  assert.ok(amorce.includes("classList.add('loggia-light')"), 'le script ne pose plus la classe');
+  // Il doit lire les MÊMES clés et les mêmes défauts qu'App.jsx, sinon il
+  // devinerait autre chose que ce que l'application appliquera ensuite.
+  assert.ok(amorce.includes("localStorage.getItem('loggia-mode')"), 'le script ne lit plus le mode enregistré');
+  assert.ok(/m !== 'light' && m !== 'dark' && m !== 'auto'/.test(amorce) && /= 'dark'/.test(amorce),
+    'le script ne retombe plus sur le sombre par défaut, comme App.jsx');
+  assert.ok(amorce.includes('prefers-color-scheme: light'), 'le mode « auto » n’interroge plus le système');
+  // Et il S'ABSTIENT quand il ne peut pas savoir : « suivre Home Assistant »
+  // ne se tranche qu'une fois HA joignable. Se tromper coûterait un éclair
+  // CLAIR sur un écran sombre, la nuit — plus cher que de ne rien faire.
+  assert.ok(/loggia-ha'\) === 'FOLLOW'\) return/.test(amorce),
+    'le script ne s’abstient plus quand le thème suit Home Assistant');
+  assert.ok(amorce.includes('try'), 'le script n’encaisse plus un stockage refusé');
+  // Le montage d'App.jsx lit la même clé avec le même repli : les deux
+  // doivent rester d'accord.
+  assert.ok(app.includes("localStorage.getItem('loggia-mode')") && app.includes("? m : 'dark'"),
+    'App.jsx ne lit plus `loggia-mode` de la même façon : le script d’amorce dirait autre chose');
 });
 
 test('« ne répond plus » se dit d’une seule façon : le liseré', () => {

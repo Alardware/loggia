@@ -74,7 +74,13 @@ test('la fiche : nom, icone, teinte, tuile compacte, entites — et un nom deja 
   ['NOM', 'ICÔNE', 'TEINTE', 'ENTITÉS', 'Tuile compacte', 'Ajouter une pièce', 'Modifier la pièce', 'Température', 'Humidité', 'CO₂', 'Lumières'].forEach(k => assert.ok(f.includes("tr('" + k + "')"), k));
   assert.ok(f.includes("tr('La pièce apparaîtra sur l’accueil et dans le sélecteur de pièces.')"), 'la phrase de la maquette');
   assert.ok(f.includes('ICONES_PIECE.slice(page * ICONES_PAR_PAGE, (page + 1) * ICONES_PAR_PAGE).map(') && f.includes('TEINTES_PIECE.map('), 'la grille d’icones, par page, et les puces de teinte');
-  assert.ok(f.includes("tr('Icônes précédentes')") && f.includes("tr('Icônes suivantes')") && f.includes('pages > 1 && (') && f.includes("aria-label={tr('Page {n}', { n: i + 1 })}"), 'la grille se pagine : fleches et points');
+  // Les points sont passés dans `PointsDePage` (audit du 27/09) : trois
+  // écrans les posaient à l'identique, et ils mesuraient 8 px — sous les 24
+  // que demande la règle. Le nom de chaque page vit donc là-bas, et c'est là
+  // qu'on va le vérifier.
+  assert.ok(f.includes("tr('Icônes précédentes')") && f.includes("tr('Icônes suivantes')") && f.includes('pages > 1 && (') && f.includes('<PointsDePage '), 'la grille se pagine : fleches et points');
+  assert.ok(src.includes('function PointsDePage(') && src.includes("aria-label={tr('Page {n}', { n: i + 1 })}"),
+    'les points de page ont perdu leur nom');
   assert.ok(f.includes('useState(Math.max(0, Math.floor(ICONES_PIECE.indexOf(icone) / ICONES_PAR_PAGE)))'), 'la fiche s’ouvre sur la page de l’icone choisie');
   const liste = src.match(/const ICONES_PIECE = \[([^\]]+)\]/);
   assert.equal([...liste[1].matchAll(/'([a-z0-9-]+)'/g)].length, 30, 'trente icones, trois pages de dix');

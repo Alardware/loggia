@@ -1,6 +1,6 @@
 """Porte le build Vite dans le composant, sans jeter ce que des clients lisent encore.
 
-Le frontend est servi depuis `custom_components/loggia/frontend/`. Deux regles
+Le frontend est servi depuis `custom_components/loggia/frontend/`. Trois regles
 tiennent tout ce fichier :
 
 1. Le CSS est INLINE dans `index.html`. Les caches iOS gardent volontiers un
@@ -15,6 +15,22 @@ tiennent tout ce fichier :
    version en poussait deux de plus, pour toujours (plan du 22/09, point M2).
    Deux suffisent : le cache d'un client ne saute qu'une version a la fois, et
    celui qui en a saute deux recharge la page.
+
+3. Ce que le build ne produit PLUS DU TOUT s'en va, lui, en entier. La regle 2
+   garde les deux derniers de chaque famille ; une famille que Vite a cessee de
+   produire ne redescend donc jamais sous deux, et restait pour toujours.
+
+   Mesure du 27/09 : `aspirateur-*.js`, `meteo-*.js`, `robot-*.js` (devenu
+   `ficherobot-*`) et `boot-*.css` (renomme `index-*.css`) tenaient 160 Ko dans
+   chaque installation, cites par aucun fichier du paquet — et reclamant
+   eux-memes six chunks absents du dossier : 404 garantis pour le client qui
+   les aurait demandes. Meme cause cote fichiers publics, ou la copie ne
+   regardait rien du tout : `public/fonts/` a perdu la variante PLEINE des
+   icones le 23/09, le paquet la livrait encore, 338 Ko pour rien.
+
+   La regle 2 protege le client d'HIER. Celui d'avant-hier est deja perdu par
+   elle — lui garder une famille morte ne le sauve pas, et la fait payer a tout
+   le monde, a chaque installation, pour toujours.
 
 Ce script vivait dans le dossier temporaire du build, que Windows nettoie. Il est
 au depot maintenant.
@@ -154,6 +170,138 @@ def copier_arbre(src, dst, garder=None):
     return n
 
 
+def bundles_morts(dossier, vivants):
+    """Les bundles du paquet dont le build courant ne produit plus l'equivalent.
+
+    `vivants` vient d'`atteignables` : tout ce que l'`index.html` du jour finit
+    par demander. Un fichier qui n'y est pas appartient soit a la generation
+    d'avant — qu'on garde (regle 2) —, soit a un module que Vite ne produit plus
+    du tout — et celui-la, plus personne ne le nommera jamais.
+
+    Le tri se fait FICHIER PAR FICHIER, et non par « famille » decoupee au
+    dernier tiret : un hash Vite peut lui-meme contenir un tiret. Le 27/09, ce
+    decoupage rangeait `demo-B6-lYSYp.js` (vivant) et `demo-DpsM1nrN.js` (la
+    generation d'avant) dans deux familles differentes, et faisait passer la
+    seconde pour morte.
+
+    On essaie donc TOUTES les coupures possibles du nom, de la plus longue a la
+    plus courte : si l'une d'elles est aussi le debut d'un fichier vivant de meme
+    extension, le module existe encore et le fichier reste. Le doute profite au
+    client : on ne retire que ce dont aucune coupure ne repond.
+
+    Rend une liste de noms. Vide quand `vivants` l'est ou vaut None : sans
+    reference sure on ne tranche pas, et l'on garde tout.
+    """
+    if not vivants:
+        return []
+    morts = []
+    for f in sorted(os.listdir(dossier)):
+        if f in vivants:
+            continue
+        suf = next((s for s in ('.js', '.css') if f.endswith(s)), None)
+        if suf is None:
+            continue
+        base = f[:-len(suf)]
+        coupures = [base[:i + 1] for i, c in enumerate(base) if c == '-']
+        if not coupures:
+            continue
+        vif = any(v.endswith(suf) and any(v.startswith(p) for p in coupures)
+                  for v in vivants)
+        if not vif:
+            morts.append(f)
+    return morts
+
+
+def renvois_morts(dossier, proteges):
+    """Regle 4 : un fichier garde qui en reclame un absent s'en va aussi.
+
+    La regle 2 garde les `GARDE` dernieres generations DE CHAQUE FAMILLE. Elle
+    suppose que les familles tournent ensemble — elles ne le font pas. Un
+    `wx3d-*` dont le contenu n'a pas bouge garde son empreinte pendant que
+    `boot-*`, qui embarque l'ecran, en change a chaque compilation. Au bout de
+    quelques versions, le `boot` de la generation precedente — garde — reclame
+    un `wx3d` de la generation d'avant — rattrape par la rotation, donc parti.
+
+    Mesure du 27/09 sur le paquet de la v3.76.0 publiee : **36 renvois morts**.
+    La generation N-1 existe pour servir le client au cache perime ; une
+    generation N-1 trouee ne sert personne, elle lui donne des 404.
+
+    On retire donc, jusqu'a point fixe, tout fichier garde dont une reference
+    manque — retirer l'un peut en condamner un autre. La generation VIVANTE est
+    protegee : si elle est trouee, c'est la compilation qui est fautive, et le
+    refus plus bas le dit deja.
+    """
+    empreinte = re.compile(
+        r'^[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)*-[A-Za-z0-9_-]{8}\.(?:js|css)$')
+    partis = []
+    while True:
+        presents = set(os.listdir(dossier))
+        tour = []
+        for f in sorted(presents):
+            if f in proteges or not f.endswith(('.js', '.css')):
+                continue
+            try:
+                with io.open(os.path.join(dossier, f), encoding='utf-8', errors='ignore') as fh:
+                    refs = re.findall(r'["\'/]([A-Za-z0-9._-]+\.(?:js|css))', fh.read())
+            except Exception:
+                continue
+            # Une reference n'est un renvoi de paquet que si elle porte une
+            # empreinte : `index.css` ou `panel.js` ne sont pas des bundles.
+            if any(empreinte.match(r) and r not in presents for r in refs):
+                tour.append(f)
+        if not tour:
+            return partis
+        for f in tour:
+            os.remove(os.path.join(dossier, f))
+        partis += tour
+
+
+def balayer_publics(dist, cible):
+    """Retire du paquet les fichiers publics que `public/` ne produit plus.
+
+    Vite recopie `public/` tel quel a la racine de `dist` ; le pack le reportait
+    sans jamais rien reprendre. Un fichier retire de `public/` restait donc livre
+    a vie — la variante pleine des icones, 338 Ko, cinq semaines apres son
+    retrait des sources.
+
+    Le miroir est sans danger ici : ces noms-la sont STABLES (`fonts/fonts.css`,
+    `logo.png`, `panel.js`), jamais haches. Aucun client, meme au cache le plus
+    perime, ne reclame un nom que la page ne porte plus ; et celui qui garderait
+    un html d'avant le retrait a de toute facon perdu ses bundles a la regle 2.
+
+    `assets` et `index.html` ne sont PAS concernes : ils ont leurs propres regles
+    (atteignabilite, retenue par famille, style inline).
+    """
+    intouchables = ('assets', 'index.html')
+    attendus = {f for f in os.listdir(dist) if f not in intouchables}
+    otes = []
+    for f in sorted(os.listdir(cible)):
+        if f in intouchables:
+            continue
+        chemin = os.path.join(cible, f)
+        if f not in attendus:
+            dossier = os.path.isdir(chemin)
+            if dossier:
+                shutil.rmtree(chemin)
+            else:
+                os.remove(chemin)
+            otes.append(f + '/' if dossier else f)
+            continue
+        if not os.path.isdir(chemin):
+            continue
+        source = os.path.join(dist, f)
+        if not os.path.isdir(source):
+            continue
+        for rep, _, fichiers in os.walk(chemin):
+            rel = os.path.relpath(rep, chemin)
+            miroir = source if rel == '.' else os.path.join(source, rel)
+            for g in sorted(fichiers):
+                if not os.path.exists(os.path.join(miroir, g)):
+                    os.remove(os.path.join(rep, g))
+                    otes.append((f + '/' + g).replace(os.sep, '/'))
+    return otes
+
+
 def main():
     if not os.path.isdir(DIST):
         print('build introuvable :', DIST)
@@ -169,8 +317,10 @@ def main():
     assets_dst = os.path.join(CIBLE, 'assets')
     os.makedirs(assets_dst, exist_ok=True)
 
-    # Ne recopier que ce qui sert : voir `atteignables`.
-    n = copier_arbre(assets_src, assets_dst, atteignables(DIST))
+    # Ne recopier que ce qui sert : voir `atteignables`. Le meme ensemble sert
+    # plus bas a reconnaitre les familles que le build ne produit plus (regle 3).
+    vivants = atteignables(DIST)
+    n = copier_arbre(assets_src, assets_dst, vivants)
 
     # Tout ce que Vite a copie depuis `public/` : polices, logo, images.
     autres = 0
@@ -183,6 +333,9 @@ def main():
         else:
             shutil.copyfile(chemin, os.path.join(CIBLE, f))
             autres += 1
+
+    # ... et retirer ce que `public/` ne contient plus (regle 3).
+    publics_otes = balayer_publics(DIST, CIBLE)
 
     with open(os.path.join(DIST, 'index.html'), encoding='utf-8') as f:
         html = f.read()
@@ -227,13 +380,24 @@ def main():
         for suf in ('.js', '.css'):
             if f.endswith(suf) and '-' in f[:-len(suf)]:
                 familles.add((f[:f[:-len(suf)].rindex('-') + 1], suf))
+    # Ce que le build ne produit plus du tout s'en va d'abord (regle 3) : la
+    # retenue ci-dessous n'a plus alors que des generations a departager.
+    morts = bundles_morts(assets_dst, vivants)
+    for f in morts:
+        os.remove(os.path.join(assets_dst, f))
     efface = []
     for prefixe, suffixe in sorted(familles):
         efface += retenir(assets_dst, prefixe, suffixe, reference)
+    # Regle 4, en DERNIER : les deux balayages ci-dessus viennent peut-etre de
+    # retirer ce qu'une generation gardee reclamait.
+    troues = renvois_morts(assets_dst, reference)
     print('bundle publie       :', ', '.join(sorted(f for f in reference if f.endswith('.js'))))
     print('assets copies       :', n)
     print('fichiers publics    :', autres)
     print('anciens bundles otes:', len(efface), efface if efface else '')
+    print('modules disparus    :', len(morts), morts if morts else '')
+    print('renvois morts otes  :', len(troues), troues if troues else '')
+    print('publics disparus    :', len(publics_otes), publics_otes if publics_otes else '')
     print('cible               :', CIBLE)
     return 0
 

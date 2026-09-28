@@ -25,7 +25,3 @@ test('la veille cote serveur ne lit que ce qui est designe', () => {
   assert.ok(p.includes('for haid in [h for h in (c.get("capteurs") or []) if isinstance(h, str)]:'), 'les capteurs designes, et eux seuls');
   assert.ok(!p.includes('capteurs_de(etats, "consommable'), 'pas de classe inventee');
 });
-
-test('les mots ont leur traduction', () => {
-  const en = lire('src/langues/en.js');
-});

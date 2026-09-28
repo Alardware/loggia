@@ -324,9 +324,24 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
      * cesse — de quoi vider le fil d'une entité qui n'en a pas. */
   }, [lie, ns]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* Fermer le flux en cours, s'il y en a un (audit du 27/09).
+   *
+   * `desabonnerRef` ne portait QUE le dernier abonnement, et la popup était le
+   * seul endroit qui le fermait : chaque question posée dans une même séance
+   * écrasait la référence de la précédente et laissait son abonnement vivant,
+   * avec toute sa fermeture — l'objet `ws`, les poseurs d'état, la réponse en
+   * cours. Dix questions, dix abonnements, et `annuler` n'en fermait aucun.
+   *
+   * Un seul flux à la fois, donc, et plus aucun après un arrêt. */
+  const fermerFlux = () => {
+    if (!desabonnerRef.current) return;
+    try { desabonnerRef.current(); } catch { /* déjà fermé */ }
+    desabonnerRef.current = null;
+  };
+
   // Un envoi en cours doit mourir avec la popup, sinon son flux continue de
   // remplir un état que plus personne ne regarde.
-  useEffect(() => () => { if (desabonnerRef.current) { try { desabonnerRef.current(); } catch { /* déjà fermé */ } } }, []);
+  useEffect(() => () => { fermerFlux(); }, []);
 
   /* Parler.
    *
@@ -529,8 +544,16 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
       }
     };
 
+    // Le tour précédent se referme AVANT d'en ouvrir un autre : voir
+    // `fermerFlux`. Sans cela, sa référence était simplement écrasée.
+    fermerFlux();
     try {
-      desabonnerRef.current = await ws.connection.subscribeMessage(surEvenement, message);
+      const defaire = await ws.connection.subscribeMessage(surEvenement, message);
+      /* Un tour plus récent est parti pendant l'attente — on a retapé, ou
+       * arrêté. Celui-ci n'a plus lieu d'être, et sa référence ne doit SURTOUT
+       * pas écraser la sienne : on le ferme ici, tout de suite. */
+      if (tour !== tourRef.current) { try { defaire(); } catch { /* déjà fermé */ } return; }
+      desabonnerRef.current = defaire;
     } catch (e) {
       setEtat('idle');
       setErreur((e && e.message) ? String(e.message) : tr('L’assistant n’a pas répondu.'));
@@ -546,6 +569,9 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
     tourRef.current += 1;
     vocalRef.current = false;
     couperLecture();
+    // Le flux aussi : bousculer `tourRef` faisait tomber ses événements dans
+    // le vide, mais l'abonnement restait ouvert (audit du 27/09).
+    fermerFlux();
     setEtat('idle');
     setMessages((l) => l.map((m, i) => (i === l.length - 1 && m.encours ? { ...m, encours: false } : m)));
     if (!ws || !messageRef.current) return;

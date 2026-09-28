@@ -241,3 +241,44 @@ test('aucun nom déclaré ne reste sans lecteur', async () => {
   assert.deepEqual(morts.sort(), [],
     'un nom déclaré n’est lu nulle part : un découpage a laissé son gravier');
 });
+
+test('le chemin chaud ne recalcule plus pour rien', () => {
+  // Audit du 27/09, point 7. Trois calculs repartaient à CHAQUE rendu :
+  // `deriveAccueil` (cent trente lignes — pièces, lumières, chauffage,
+  // volets, plantes, machines, alarme, caméras, médias), `deriveNotifs`, et le
+  // compte d'appareils de la barre latérale, qui boucle sur toutes les
+  // entités de la maison avec un test sur huit préfixes de domaine.
+  //
+  // Ce n'est pas le changement d'état qui coûtait : quand la maison bouge,
+  // refaire le calcul est juste. C'est tout le reste. Mesuré sur la
+  // démonstration, `hass` IDENTIQUE d'un bout à l'autre : un aller-retour en
+  // mode édition provoquait quatre recalculs complets des trois. Après :
+  // zéro, et quatre bascules de lampe en provoquent toujours quatre — le
+  // chemin légitime est intact.
+  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  assert.match(app, /const accueil = useMemo\(\(\) => \{/, '`deriveAccueil` est de nouveau appelée dans le rendu');
+  assert.match(app, /\}, \[view, activeRoom, hass, cfg, loggiaRuntime\.resolved, loggiaRuntime\.index\]\);/,
+    'les dépendances de l’Accueil ont changé : vérifier qu’elles restent COMPLÈTES');
+  assert.match(app, /const notifs = useMemo\(\(\) => \{/, '`deriveNotifs` est de nouveau appelée dans le rendu');
+  assert.match(app, /const nbAppareils = useMemo\(\(\) => \{/, 'le compte d’appareils reboucle à chaque rendu');
+  // La vue Objets sert CINQ entrées de menu. Sa chaîne — balayage complet des
+  // entités, tri, deux passes de comptage — repartait même quand seul un état
+  // LOCAL avait bougé : changer de puce de filtre rescannait la maison.
+  assert.match(app, /const tousObjets = useMemo\(\(\) => objetsDeLaMaison\(hass, ajoutes, epingles\), \[hass, ajoutes, epingles\]\);/,
+    'la liste des objets n’est plus mémoïsée');
+  for (const [quoi, motif] of [
+    ['le tri', /const derived = useMemo\(/],
+    ['la table par clé', /const parCle = useMemo\(/],
+    ['les puces', /const puces = useMemo\(\(\) => pucesObjets\(objets\), \[objets\]\);/],
+    ['les compteurs', /const stats = useMemo\(\(\) => statsObjets\(objets\), \[objets\]\);/],
+  ]) assert.match(app, motif, quoi + ' de la vue Objets n’est plus mémoïsé');
+  /* Et les ENTRÉES sont stabilisées par leur signature. Sans cela, `ajoutes`,
+   * `ordrePieces` et les épingles sont des valeurs neuves à chaque rendu :
+   * mémoïser dessus ne servirait à rien, tout en ajoutant des avertissements à
+   * l'inventaire ci-dessus — que ce fichier garde court exprès. */
+  for (const [quoi, motif] of [
+    ['les ajouts', /const ajoutes = useMemo\(\(\) => \(ajoutesSig \? ajoutesSig\.split\('\|'\) : \[\]\), \[ajoutesSig\]\);/],
+    ['l’ordre des pièces', /const ordrePieces = useMemo\(\(\) => \(ordreSig \? ordreSig\.split\('\|'\) : \[\]\), \[ordreSig\]\);/],
+    ['les épingles', /const epingles = useMemo\(\(\) => new Set\(epinglesSig \? epinglesSig\.split\('\|'\) : \[\]\), \[epinglesSig\]\);/],
+  ]) assert.match(app, motif, quoi + ' n’est plus stabilisé par sa signature : la mémoïsation ne sert plus à rien');
+});
