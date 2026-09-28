@@ -63,6 +63,45 @@ test('plus aucune carte ne tient son propre etat optimiste', () => {
   assert.ok(compter(APP, 'useOptimiste(') >= 18, 'des cartes ont perdu leur filet');
 });
 
+test('aucune signature ne lit une valeur declaree APRES elle', () => {
+  /* Le defaut que ce test existe pour empecher, et qui EST PARTI EN v3.77.0.
+   *
+   * La conversion des dix-huit etats optimistes a ete faite par un script :
+   * il a pose `useOptimiste(sig)` sur la ligne de DECLARATION, alors que le
+   * `useEffect` qu'il remplacait venait APRES les valeurs qu'il lisait. Trois
+   * signatures se sont retrouvees au-dessus de leur propre dependance —
+   * `etatSt` deux fois, `valeurPortion` une —, ce qui donne une zone morte
+   * temporelle : « Cannot access 'etatSt' before initialization », et la vue
+   * Objets tombait dans le garde-fou d'erreur des qu'une carte de chauffage
+   * s'affichait.
+   *
+   * NI le lint NI les tests ne l'ont vu : `const` hisse sa declaration sans
+   * l'initialiser, donc la syntaxe est valide et les tests lisent du TEXTE.
+   * Seul l'ecran l'a dit. Ce test met ce regard-la dans la suite. */
+  const lignes = APP.split('\n');
+  const fautes = [];
+  for (let i = 0; i < lignes.length; i++) {
+    const m = lignes[i].match(/useOptimiste\(([^;]*)\);/);
+    if (!m) continue;
+    // `z.target` lit une PROPRIETE : le `target` local d'apres est un autre nom.
+    const sig = m[1].replace(/\.\w+/g, '');
+    const noms = new Set((sig.match(/\b[a-zA-Z_]\w*\b/g) || [])
+      .filter(n => ['join', 'true', 'false', 'null', 'undefined'].indexOf(n) < 0));
+    for (const nom of noms) {
+      for (let k = i + 1; k < Math.min(i + 80, lignes.length); k++) {
+        if (/^function /.test(lignes[k])) break;
+        if (new RegExp('^\\s*const ' + nom + '\\b').test(lignes[k])) {
+          fautes.push('l.' + (i + 1) + ' lit « ' + nom + ' », déclaré l.' + (k + 1));
+          break;
+        }
+      }
+    }
+  }
+  assert.deepEqual(fautes, [],
+    'une signature d’état optimiste lit une valeur déclarée plus bas : le composant lèvera ' +
+    '« Cannot access … before initialization » au rendu — ' + fautes.join(' ; '));
+});
+
 test('la luminosite garde sa fenetre courte : 4 s, pas 6', () => {
   // L'echo Zigbee rejoue l'ancienne valeur ; attendre six secondes ferait
   // revenir la vieille luminosite sous le doigt.

@@ -2234,8 +2234,8 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const realTarget = a.temperature != null ? a.temperature : 20;
-  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
   const etatSt = st && st.state;
+  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
   const target = ov != null ? ov : realTarget;
   const mode = st ? st.state : 'off';
   const off = mode === 'off';
@@ -3105,8 +3105,8 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const st = S[id] || null;
   const a = (st && st.attributes) || {};
   const realTarget = a.temperature != null ? a.temperature : 20;
-  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
   const etatSt = st && st.state;
+  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
   const target = ov != null ? ov : realTarget;
   const cur = a.current_temperature;
   const mode = st ? st.state : 'off';
@@ -5562,8 +5562,8 @@ function FichePlante({ pl, onClose }) {
  * qui ne ferait rien. */
 function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, portion, feed, onRempli, ficheId, onClose }) {
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const [ovPortion, setOvPortion] = useOptimiste(valeurPortion);
   const valeurPortion = portion ? portion.valeur : null;
+  const [ovPortion, setOvPortion] = useOptimiste(valeurPortion);
   const pv = ovPortion != null ? ovPortion : valeurPortion;
   const poserPortion = (v) => { if (!portion) return; const nv = Math.max(portion.min, Math.min(portion.max, v)); setOvPortion(nv); call('number', 'set_value', { entity_id: portion.id, value: nv }); };
   const [appareil, setAppareil] = useState(false);
