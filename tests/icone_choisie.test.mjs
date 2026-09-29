@@ -137,3 +137,21 @@ test('les deux phrases de la section ont leur traduction', () => {
     assert.ok(en.includes("  '" + k + "':"), k + ' manque dans en.js');
   }
 });
+
+test('les cartes d’Énergie et de Sécurité aussi', () => {
+  /* « Le changement d’icône ne se fait pas partout : dans Énergie il y a des
+   * cartes où je le change mais rien, dans Sécurité pareil » (28/09).
+   *
+   * La fiche PROPOSE la grille dès que la carte porte un `entity_id` — un
+   * poste de consommation (`dev:sensor.…`), l’alarme, la sirène. Le choix se
+   * rangeait bien, et ces trois-là continuaient à dessiner le leur. */
+  for (const [quoi, bout] of [
+    ['le poste de consommation', '<GlypheCarte id={d.power} size={15}><Fi i={d.icon}'],
+    ['l’alarme', '<GlypheCarte id={id} size={15}><Fi i="shield-check"'],
+    ['la sirène', '<GlypheCarte id={id} size={16}><Fi i="bell-ring"'],
+  ]) assert.ok(app.includes(bout), quoi + ' : la carte dessine le sien sans demander l’icône choisie');
+  /* Un dessin maison prend la couleur du parent (`currentColor`) : la pastille
+   * du poste ne donnait que son fond, le tracé serait sorti noir. */
+  assert.ok(app.includes("background: hx(d.c, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center', color: d.c }}>"),
+    'la pastille du poste ne donne plus sa couleur au dessin choisi');
+});
