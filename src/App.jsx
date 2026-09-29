@@ -26,6 +26,7 @@ import { mergedProfile as profileOf, profiles as profileTable } from './profiles
 import { deviceCard, presentableDevices, presentationSummary, cleCamera } from './present.js';
 import { healthReport, healthText } from './health.js';
 import { probe as configProbe, reportLive as configReportLive, migrateFromLocalStorage, completerDepuisLocal, collectLocal, createConfig, brancherVidage, doitRelire, CONFIG_VERSION } from './config.js';
+import { poserEnAttente, purgerEnAttente, renvoyerEnAttente } from './enattente.js';
 import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
 import { isViewAvailable, viewReason } from './views.js';
@@ -9472,7 +9473,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
             <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 18, padding: '14px 15px' }}>
               {d.art && VIEW_ART[d.art] && <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 92, height: 92, backgroundImage: `url("${VIEW_ART[d.art]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.16, pointerEvents: 'none' }} />}
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: hx(d.c, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={d.icon} size={15} color={d.c} /></div>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: hx(d.c, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center', color: d.c }}><GlypheCarte id={d.power} size={15}><Fi i={d.icon} size={15} color={d.c} /></GlypheCarte></div>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: on ? 'var(--o-ok)' : 'var(--o-text3)' }} />
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
@@ -10816,7 +10817,7 @@ function CvSirene({ id, hass, label = null }) {
   return (
     <div className={'o-piece' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(on ? 'rgba(var(--o-bad-rgb),.16)' : 'var(--o-s1)', col)}><Fi i="bell-ring" size={16} /></span>
+        <span style={RM_ICO(on ? 'rgba(var(--o-bad-rgb),.16)' : 'var(--o-s1)', col)}><GlypheCarte id={id} size={16}><Fi i="bell-ring" size={16} /></GlypheCarte></span>
         {!mort && <RmBascule on={on} nom={nom} onToggle={() => call(on ? 'turn_off' : 'turn_on')} />}
       </div>
       <div style={{ marginTop: 10, flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -10870,7 +10871,7 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
       {/* GABARIT MAISON — règle dure : icône hg SEULE, état hd, TITRE SOUS
         * L'ICÔNE avec de l'air. Jamais côte à côte, maquette ou pas. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(col, .16), color: col }}><Fi i="shield-check" size={15} /></span>
+        <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(col, .16), color: col }}><GlypheCarte id={id} size={15}><Fi i="shield-check" size={15} /></GlypheCarte></span>
         <span style={{ fontSize: 11, fontWeight: 800, color: col }}>{txt}</span>
       </div>
       <div style={{ marginTop: 8, ...(sans ? { flex: 1, display: 'flex', flexDirection: 'column' } : {}) }}>
@@ -13245,6 +13246,11 @@ export default function App() {
   // Ecriture d'un reglage : serveur si le composant repond, localStorage sinon.
   // L'etat local est mis a jour tout de suite, sans attendre l'aller-retour.
   const saveCfg = useCallback((patch) => {
+    /* Au carnet AVANT l'envoi (28/09) : une page actualisee pendant
+     * l'aller-retour, ou un serveur qui redemarre, laissait le reglage dans ce
+     * seul navigateur — et la valeur du serveur, plus ancienne, revenait au
+     * chargement suivant. `enattente.js` le renvoie alors. */
+    const marques = poserEnAttente(patch);
     setServerCfg(c => {
       const n = { ...c };
       Object.keys(patch).forEach(k => { if (patch[k] == null) delete n[k]; else n[k] = patch[k]; });
@@ -13260,7 +13266,7 @@ export default function App() {
     };
     const h = getHass();
     if (h && h.callWS) {
-      h.callWS({ type: 'loggia/config/set', config: patch }).catch((e) => {
+      h.callWS({ type: 'loggia/config/set', config: patch }).then(() => purgerEnAttente(marques)).catch((e) => {
         local();
         /* Un serveur ABSENT est un cas normal : le repli local suffit, et l'on
          * n'alarme pas qui n'a pas installe le composant.
@@ -13384,6 +13390,17 @@ export default function App() {
           .then(u => { if (!alive) { try { u(); } catch {} } else desabonner = u; })
           .catch(() => { /* composant ancien : sans suivi, comme avant */ });
       }
+      /* Ce qui n'etait jamais arrive part MAINTENANT, avant tout le reste :
+       * le carnet porte des valeurs plus recentes que celles du serveur, et
+       * c'est la seule occasion de les lui donner. Un refus applicatif y
+       * renonce de lui-meme (`enattente.js`), sans retenter a chaque ouverture. */
+      renvoyerEnAttente(h)
+        .then(r => {
+          if (!alive || !r.cles.length) return;
+          console.info('Loggia : %d reglage(s) renvoyes au serveur', r.cles.length, r.cles);
+          return configProbe(h).then(frais => { if (alive && frais.available) setServerCfg(frais.config || {}); });
+        })
+        .catch(() => { /* le carnet garde tout : on retentera au prochain demarrage */ });
       // Un reglage fait avant l'arrivee du composant n'existe que dans ce
       // navigateur. On le confie au serveur pour que les autres appareils le
       // voient — depuis un compte administrateur seulement, car lui seul ecrit

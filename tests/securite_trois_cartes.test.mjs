@@ -56,7 +56,7 @@ test('la carte Alarme du catalogue porte le message entre le nom et les boutons'
 
 test('la carte Sirene : gabarit maison, bascule, tuiles d’apres les attributs seulement, test sonore', () => {
   const c = bloc('function CvSirene(', NL + '}');
-  assert.ok(c.includes('<span style={RM_ICO(on ? \'rgba(var(--o-bad-rgb),.16)\' : \'var(--o-s1)\', col)}><Fi i="bell-ring" size={16} /></span>') && c.includes("{!mort && <RmBascule on={on} nom={nom} onToggle={() => call(on ? 'turn_off' : 'turn_on')} />}") && c.includes('<div style={RM_NAME}>{nom}</div>'), 'icone en haut a gauche, bascule a droite, nom sous l’icone');
+  assert.ok(c.includes('<span style={RM_ICO(on ? \'rgba(var(--o-bad-rgb),.16)\' : \'var(--o-s1)\', col)}><GlypheCarte id={id} size={16}><Fi i="bell-ring" size={16} /></GlypheCarte></span>') && c.includes("{!mort && <RmBascule on={on} nom={nom} onToggle={() => call(on ? 'turn_off' : 'turn_on')} />}") && c.includes('<div style={RM_NAME}>{nom}</div>'), 'icone en haut a gauche, bascule a droite, nom sous l’icone');
   assert.ok(c.includes("{erreur || (mort ? tr('Indisponible') : on ? tr('Sirène active') : tr('Sirène au repos'))}"), 'l’etat, rouge quand elle sonne — ou ce qui a empeche le test');
   assert.ok(c.includes("if (Array.isArray(a.available_tones) && a.available_tones.length) tuiles.push([tr('Sonneries'), String(a.available_tones.length)]);") && c.includes("if (typeof a.volume_level === 'number') tuiles.push([tr('Volume'), Math.round(a.volume_level * 100) + ' %']);"), 'les tuiles ne disent que ce que l’entite expose');
   assert.ok(!c.includes('dB') && !c.includes('entrée'), 'ni decibels ni delai d’entree inventes');

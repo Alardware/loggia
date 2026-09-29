@@ -26,7 +26,11 @@ const WS_DELETE = 'loggia/config/delete';
  * etait bien reel — un code different sur le PC, la tablette et le telephone,
  * et un quatrieme entre l'acces local et l'acces distant, qui n'ont pas la
  * meme origine. Il suit desormais la maison, comme le reste. */
-export const LOCAL_ONLY_KEYS = new Set([]);
+/* `loggia_enattente` est le carnet des reglages jamais arrives au serveur
+ * (voir `enattente.js`) : il decrit un incident de transport de CET
+ * appareil, pas un reglage. Il n'a rien a faire ni dans un export, ni dans
+ * la configuration de la maison. */
+export const LOCAL_ONLY_KEYS = new Set(['loggia_enattente']);
 
 // Prefixes reconnus comme appartenant a Loggia dans le localStorage.
 const KEY_PREFIXES = ['loggia_', 'loggia-'];
