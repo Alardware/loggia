@@ -2415,6 +2415,4 @@ export default {
   'Borne de recharge': 'Charging station',
   'Compresseur': 'Compressor',
   'Branchée': 'Plugged in',
-  // — le fer a repasser (issue #6, Seba882)
-  'Fer à repasser': 'Iron',
 };

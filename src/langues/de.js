@@ -2376,6 +2376,4 @@ export default {
   'Borne de recharge': 'Ladestation',
   'Compresseur': 'Kompressor',
   'Branchée': 'Angeschlossen',
-  // — le fer a repasser (issue #6, Seba882)
-  'Fer à repasser': 'Bügeleisen',
 };
