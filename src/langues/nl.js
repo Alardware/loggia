@@ -2376,4 +2376,6 @@ export default {
   'Borne de recharge': 'Laadpaal',
   'Compresseur': 'Compressor',
   'Branchée': 'Aangesloten',
+  // — le fer a repasser (issue #6, Seba882)
+  'Fer à repasser': 'Strijkijzer',
 };

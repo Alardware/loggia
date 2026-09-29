@@ -2381,4 +2381,6 @@ export default {
   'Borne de recharge': 'Stacja ładowania',
   'Compresseur': 'Sprężarka',
   'Branchée': 'Podłączona',
+  // — le fer a repasser (issue #6, Seba882)
+  'Fer à repasser': 'Żelazko',
 };

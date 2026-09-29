@@ -42,6 +42,34 @@ test('ce qu’on ne reconnaît pas reste une prise, et un choix explicite prime'
   assert.equal(typeDePrise('Prise Séjour', 'inconnu'), 'prise', 'un type qui n’existe pas est ignoré');
 });
 
+test('un mot court ne se cache plus dans un autre', () => {
+  /* Le defaut vu par Seba882 (issue #6, 29/09) a propos du fer : « `iron` est
+   * un mot court qui se cache dans d'autres, alors que les autres entrees de
+   * `MOTS_PRISE` se contentent d'un `indexOf` ». C'etait vrai, et ca valait
+   * pour d'autres : `environnement` contient `iron`, `boxe` contient `box`,
+   * `television` contient `tele`. La recherche compare des mots entiers. */
+  assert.equal(typeDePrise('Prise environnement bureau'), 'prise', '« environnement » contient « iron »');
+  assert.equal(typeDePrise('Salle de boxe'), 'prise', '« boxe » contient « box »');
+  assert.equal(typeDePrise('Prise telephone'), 'prise', '« telephone » contient « tele »');
+  assert.equal(typeDePrise('Prise pcb atelier'), 'prise', '« pcb » contient « pc »');
+  // Et les sigles marchent sans qu'on doive les entourer d'espaces a la main.
+  assert.equal(typeDePrise('Prise LV'), 'lv');
+  assert.equal(typeDePrise('Prise 3', null, 'switch.ll_buanderie'), 'll');
+});
+
+test('le fer a repasser, et sa veille qui compte', () => {
+  // « Un fer ne consomme rien ou tire 2 000 W, il n'y a pas d'entre-deux. »
+  assert.equal(typeDePrise('Fer à repasser'), 'fer');
+  assert.equal(typeDePrise('Prise fer'), 'fer');
+  assert.equal(typeDePrise('Iron'), 'fer');
+  assert.equal(typeDePrise('Centrale vapeur'), 'fer');
+  assert.equal(typeDePrise('Prise 2', null, 'switch.repassage'), 'fer');
+  assert.equal(motDuMode('fer', 'marche'), 'Chauffe');
+  assert.equal(motDuMode('fer', 'veille'), 'En veille');
+  assert.equal(NOMS_PRISE().fer, 'Fer à repasser');
+  assert.equal(TYPES_PRISE.fer.ico, 'iron');
+});
+
 test('l’identifiant compte quand le nom ne dit rien', () => {
   // Une prise peut s'appeler « Prise 3 » et s'appeler `switch.lave_vaisselle`
   // dessous : c'est le cas signale le 26/09.

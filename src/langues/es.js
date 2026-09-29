@@ -2376,4 +2376,6 @@ export default {
   'Borne de recharge': 'Punto de recarga',
   'Compresseur': 'Compresor',
   'Branchée': 'Conectada',
+  // — le fer a repasser (issue #6, Seba882)
+  'Fer à repasser': 'Plancha',
 };

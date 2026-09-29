@@ -45,6 +45,11 @@ export const TYPES_PRISE = {
   lv: { col: 'var(--o-piece-bain)', rgb: 'var(--o-piece-bain-rgb)', ico: 'dishwasher' },
   ll: { col: 'var(--o-piece-tendre)', rgb: 'var(--o-piece-tendre-rgb)', ico: 'washer' },
   sl: { col: 'var(--o-gold)', rgb: 'var(--o-gold-rgb)', ico: 'dryer' },
+  /* Le fer, demande par Seba882 (issue #6, 29/09) : « un fer sur prise
+   * commandee, c'est souvent la raison meme pour laquelle la prise est la —
+   * verifier depuis le travail qu'il est bien eteint ». Et la veille lui va
+   * mieux qu'a tout le reste : un fer ne consomme rien, ou tire 2 000 W. */
+  fer: { col: 'var(--o-orange)', rgb: 'var(--o-orange-rgb)', ico: 'iron', marche: 'chauffe' },
   frigo: { col: 'var(--o-cold)', rgb: 'var(--o-cold-rgb)', ico: 'fridge', marche: 'compresseur', veille: 'repos' },
   tv: { col: 'var(--o-piece-chambre)', rgb: 'var(--o-piece-chambre-rgb)', ico: 'tv-set' },
   cafe: { col: 'var(--o-warn)', rgb: 'var(--o-warn-rgb)', ico: 'coffee-machine', marche: 'chauffe' },
@@ -62,6 +67,7 @@ export const NOMS_PRISE = () => ({
   lv: tr('Lave-vaisselle'),
   ll: tr('Lave-linge'),
   sl: tr('Sèche-linge'),
+  fer: tr('Fer à repasser'),
   frigo: tr('Réfrigérateur'),
   tv: tr('Télévision'),
   cafe: tr('Cafetière'),
@@ -76,14 +82,15 @@ export const NOMS_PRISE = () => ({
  *  nomment leurs prises. L'ORDRE compte : « sèche-linge » avant « linge », et
  *  « lave-vaisselle » avant « lave ». */
 const MOTS_PRISE = [
-  ['lv', ['lave vaisselle', 'lave-vaisselle', 'lave_vaisselle', 'lavevaisselle', 'dishwasher', 'vaisselle', ' lv ']],
-  ['sl', ['seche linge', 'seche-linge', 'seche_linge', 'sechelinge', 'dryer', 'tumble', ' sl ']],
-  ['ll', ['lave linge', 'lave-linge', 'lave_linge', 'lavelinge', 'machine a laver', 'washer', 'washing', 'lessive', ' ll ']],
+  ['lv', ['lave vaisselle', 'lavevaisselle', 'dishwasher', 'vaisselle', 'lv']],
+  ['sl', ['seche linge', 'sechelinge', 'dryer', 'tumble', 'sl']],
+  ['ll', ['lave linge', 'lavelinge', 'machine a laver', 'washer', 'washing', 'lessive', 'll']],
+  ['fer', ['fer a repasser', 'fer', 'repassage', 'centrale vapeur', 'iron']],
   ['frigo', ['frigo', 'refrigerateur', 'fridge', 'refrigerator', 'congelateur', 'freezer']],
   ['cafe', ['cafetiere', 'machine a cafe', 'coffee', 'expresso', 'espresso', 'percolateur']],
   ['ve', ['borne', 'recharge', 'wallbox', 'chargeur voiture', 'voiture electrique', 'ev charger']],
   ['nas', ['nas', 'synology', 'serveur', 'server', 'homelab', 'unraid']],
-  ['pc', ['pc ', 'ordinateur', 'computer', 'imac', 'macbook', 'desktop', 'tour ', 'workstation']],
+  ['pc', ['pc', 'ordinateur', 'computer', 'imac', 'macbook', 'desktop', 'tour', 'workstation']],
   ['tv', ['tv', 'tele', 'television', 'televiseur', 'oled', 'videoprojecteur', 'projecteur']],
   ['box', ['box', 'routeur', 'router', 'fibre', 'livebox', 'freebox', 'bbox', 'modem']],
   ['radia', ['radiateur', 'convecteur', 'chauffage', 'seche serviette', 'heater', 'radiator']],
@@ -107,11 +114,20 @@ const aplati = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').t
  */
 export function typeDePrise(nom, impose = null, indice = '') {
   if (impose && TYPES_PRISE[impose]) return impose;
-  // Le nom AFFICHE, puis l'identifiant : une prise peut s'appeler « Prise 3 »
-  // et s'appeler `switch.lave_vaisselle` dessous. Les deux comptent.
-  const n = ' ' + aplati(nom) + ' ' + aplati(indice).replace(/[._-]/g, ' ') + ' ';
-  for (const [type, mots] of MOTS_PRISE) {
-    for (const m of mots) if (n.indexOf(m) >= 0) return type;
+  /* Le nom AFFICHE, puis l'identifiant : une prise peut s'appeler « Prise 3 »
+   * et s'appeler `switch.lave_vaisselle` dessous. Les deux comptent.
+   *
+   * La recherche se fait mot par mot, entier, depuis le 29/09. Elle se contentait
+   * d'un `indexOf`, ce qui allait tant que les mots étaient longs — puis il a
+   * fallu écrire ` lv `, ` ll `, ` sl ` avec leurs espaces, à la main, sans en
+   * tirer la règle. Seba882 l'a dite à propos du fer : « `iron` est un mot
+   * court qui se cache dans d'autres ». `environnement` contient `iron`,
+   * `boxe` contient `box`, `television` contient `tele`. On sépare donc sur
+   * tout ce qui n'est ni lettre ni chiffre, et l'on compare des mots. */
+  const mots = (aplati(nom) + ' ' + aplati(indice)).split(/[^a-z0-9]+/).filter(Boolean);
+  const n = ' ' + mots.join(' ') + ' ';
+  for (const [type, cles] of MOTS_PRISE) {
+    for (const c of cles) if (n.indexOf(' ' + c + ' ') >= 0) return type;
   }
   return 'prise';
 }
