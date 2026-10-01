@@ -84,10 +84,17 @@ test('un seul type de carte, le standard : plus de CARTE dans la fiche, plus de 
 });
 
 test('des couleurs dans la fiche : l’icone porte la teinte du domaine, la piece la sienne', () => {
+  /* Depuis la maquette du 29/09, le domaine et la piece sont des MENUS et non
+   * plus des puces : quinze domaines dont deux se choisissent faisaient treize
+   * boutons eteints, et douze pieces quatre rangees. La couleur, elle, n'a pas
+   * bouge — chaque ligne porte celle de son domaine ou de sa piece, et la
+   * ligne CHOISIE passe en accent plein, texte et icone en blanc. */
   const f = bloc('function CardEditSheet(', NL + '}');
-  assert.ok(f.includes('puce(on, possible, teinteRgb(dm.rgb))'), 'la puce du domaine se teinte');
-  assert.ok(f.includes("color={'rgb(' + dm.rgb + ')'}"), 'l’icone du domaine est coloree');
-  assert.ok(f.includes('habillagePiece(p, zone && zone.icon)') && f.includes('const couleur = hp.col;'), 'la piece prend son icone et sa couleur — celle de l’habillage, teinte choisie comprise');
+  assert.ok(f.includes('<ListeChoix value={domaineChoisi}') && f.includes('options={optionsDomaine}'), 'le domaine est un menu');
+  assert.ok(f.includes("const c = choisi ? '#fff' : 'rgb(' + dm.rgb + ')';"), 'l’icone du domaine est coloree, blanche sur la ligne choisie');
+  assert.ok(f.includes('<ListeChoix value={choixPiece}') && f.includes('options={optionsPiece}'), 'la piece aussi');
+  assert.ok(f.includes('habillagePiece(p, zone && zone.icon)') && f.includes('const couleur = hp.col;')
+    && f.includes("color: p === choixPiece ? '#fff' : couleur"), 'la piece prend son icone et sa couleur — celle de l’habillage, teinte choisie comprise');
 });
 
 test('Accueil et Energie ont le meme bandeau, et la carte suit le doigt partout', () => {
@@ -118,4 +125,24 @@ test('la taille : compacte (une rangee de 88 px) ou standard (deux), rangee dans
   assert.ok(f.includes("tr('Carte compacte')") && f.includes('onToggle={() => ed.basculerCompact(id)}'), 'la fiche a la bascule aussi');
   const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
   assert.ok(css.includes('.grid-dense > .o-cvrow1 { grid-row: span 1; }') && css.includes('.grid-dense { grid-auto-flow: row dense; grid-auto-rows: 88px; }'), 'une rangee = 88 px');
+});
+
+test('un segment, pas deux boutons : un rail, deux moities jointes', () => {
+  /* Capture du 29/09, deux fois de suite : « pourquoi tu veux pas mettre comme
+   * ça ». Deux boutons cote a cote, chacun avec son lisere et un ecart entre
+   * eux, se lisent comme deux reglages ; un segment, c'est UN rail, et la
+   * moitie choisie posee dedans en accent plein. La largeur d'une carte et les
+   * onglets d'un appareil partagent donc le meme composant. */
+  const seg = bloc('function Segment(', NL + '}');
+  assert.ok(seg.includes("padding: 3, gap: 3, borderRadius: 12, background: 'var(--o-s1)'") && seg.includes("border: 'var(--o-bw,1px) solid var(--o-bd2)'"),
+    'le rail a perdu son fond ou son bord unique');
+  assert.ok(seg.includes("border: 'none'") && seg.includes("background: on ? 'var(--o-accent-fond)' : 'transparent'") && seg.includes("color: on ? '#fff'"),
+    'la moitie choisie n’est plus en accent plein, ou les moities ont repris un lisere');
+  assert.ok(seg.includes('if (!on) onChange(o.id);'), 'toucher la moitie deja choisie la rejoue');
+  /* Le segment Trait / Plein du 29/09 a ete retire le 30/09 — « tu as laisse
+   * le bouton, enleve-le ». L'etiquette « ICÔNE » redevient donc seule. */
+  const c = bloc('function ChoixIcone(', NL + '}');
+  assert.ok(!c.includes('Segment'), 'le style de l’icone est revenu dans le selecteur');
+  const f = bloc('function CardEditSheet(', NL + '}');
+  assert.ok(f.includes("<Segment grandir value={!!ed.estLarge(id)}"), 'la largeur n’est plus un segment, ou ne prend plus toute la largeur');
 });

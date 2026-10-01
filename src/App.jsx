@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext, cloneElement, lazy, Suspense, Fragment } from 'react';
-import { formatEcran, vueFormat, patchFormat, echangerPartout, ordonnerSelon, ordreDuFormat } from './disposition.js';
+import { useState, useEffect, useRef, useMemo, useCallback, useId, createContext, useContext, cloneElement, lazy, Suspense, Fragment } from 'react';
+import { formatEcran, vueFormat, patchFormat, echangerPartout, ordonnerSelon, ordreDuFormat, vuePiecesDe, poserVuePieces } from './disposition.js';
 // Les deux fonds animes tirent three.js : 448 Ko a analyser, pour un decor. En
 // import direct, ce cout etait paye a CHAQUE ouverture, meme par quelqu'un qui
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
@@ -42,7 +42,11 @@ import { BarreConfort } from './barreconfort.jsx';
 import { HorlogeRail, CalendrierRail, FeuilleVilles, Co2Rail } from './widgetsrail.jsx';
 import { pireCapteur, seuilCo2, ventilationVeille, voletsDeLaZone, actionAerer } from './air.js';
 import { TYPES_PRISE, NOMS_PRISE, typeDePrise, modePrise, motDuMode, animationPrise, couleurPrise, libelleType } from './prises.js';
-import { DESSINS_CAT, FONTE_CAT } from './dessins.js';
+import { DESSINS_CAT, FONTE_CAT, NOMS_DESSINS } from './dessins.js';
+import { applisDe, appelPourLancer, appliCourante, telecommandeDe } from './applis.js';
+import { entreeFavorite, memeFavori, basculerFavori, appelPourJouer, phraseAlexa, cibleAlexa, TYPE_PHRASE } from './favlecture.js';
+import { integrationDe, telecommandePour, appelPourTouche } from './telecommande.js';
+import { marqueDe } from './marques.js';
 import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, villesDe } from './horloge.js';
 import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile } from './confort.js';
 import { pilesMaison } from './piles.js';
@@ -2616,6 +2620,121 @@ function FeuilleHistorique({ entrees, onRestaurer, onOublier, onClose }) {
   );
 }
 
+/* Les favoris de lecture se rangent PAR LECTEUR, et dans le navigateur de
+ * celui qui regarde : un `media_content_id` est propre à l'intégration qui l'a
+ * émis, et ce classement est une commodité personnelle — son absence ne casse
+ * rien, comme pour les dernières applications lancées. */
+const CLE_FAVLECTURE = 'loggia_favlecture';
+function favorisLecture(cle) {
+  try {
+    const table = JSON.parse(localStorage.getItem(CLE_FAVLECTURE) || '{}');
+    const v = table && typeof table === 'object' ? table[cle] : null;
+    return Array.isArray(v) ? v.filter(x => x && typeof x.i === 'string' && typeof x.c === 'string') : [];
+  } catch { return []; }
+}
+function noterFavori(cle, entree) {
+  const suite = basculerFavori(favorisLecture(cle), entree);
+  try {
+    const brut = JSON.parse(localStorage.getItem(CLE_FAVLECTURE) || '{}');
+    const table = (brut && typeof brut === 'object' && !Array.isArray(brut)) ? brut : {};
+    if (suite.length) table[cle] = suite; else delete table[cle];
+    localStorage.setItem(CLE_FAVLECTURE, JSON.stringify(table));
+  } catch { /* stockage plein ou refusé : on perd le raccourci, pas la lecture */ }
+  return suite;
+}
+
+/**
+ * La phrase pour un Echo.
+ *
+ * Une enceinte Alexa ne sait pas `browse_media` : « Parcourir » ne lui trouve
+ * rien, et il n'y a donc rien à mettre en favori par ce chemin. Ce qu'elle sait
+ * faire, c'est exécuter une phrase — celle qu'on lui dirait à voix haute.
+ *
+ * La phrase est CELLE DE L'UTILISATEUR, dans sa langue et avec ses mots : c'est
+ * son Alexa qui l'écoute. Rien n'est traduit, complété, ni proposé d'office.
+ */
+function PhraseAlexa({ id, cible, hass, onGarder }) {
+  const [texte, setTexte] = useState('');
+  const phrase = phraseAlexa(texte);
+  const envoyer = () => {
+    const appel = appelPourJouer(phrase, cible);
+    if (!appel || !hass || !hass.callService) return;
+    hass.callService(appel.domaine, appel.service, appel.data);
+    setTexte('');
+  };
+  const garder = () => { if (!phrase) return; noterFavori(id, phrase); setTexte(''); if (onGarder) onGarder(); };
+  const rond = (actif) => ({ width: 42, height: 42, flexShrink: 0, borderRadius: 12, border: 'none', cursor: actif ? 'pointer' : 'default',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: actif ? 1 : .45 });
+  return (
+    <div style={{ marginTop: 14 }}>
+      <label htmlFor={'o-alexa-' + id} style={{ display: 'block', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '0 2px 7px' }}>{tr('DIRE À ALEXA')}</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input id={'o-alexa-' + id} value={texte} onChange={(e) => setTexte(e.target.value)} spellCheck={false}
+          onKeyDown={(e) => { if (e.key === 'Enter') envoyer(); }}
+          placeholder={tr('mets ma playlist du soir')}
+          style={{ flex: 1, minWidth: 0, height: 42, padding: '0 12px', borderRadius: 12, background: 'var(--o-s1)',
+            border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }} />
+        <button onClick={garder} disabled={!phrase} title={tr('Garder en favori')} aria-label={tr('Garder en favori')}
+          style={{ ...rond(!!phrase), background: 'var(--o-s1)', color: 'var(--o-gold)' }}>
+          <Ico name="star" size={15} />
+        </button>
+        <button onClick={envoyer} disabled={!phrase} title={tr('Envoyer')} aria-label={tr('Envoyer')}
+          style={{ ...rond(!!phrase), background: 'var(--o-accent-fond)', color: '#fff' }}>
+          <Fi i="paper-plane" size={15} />
+        </button>
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '7px 2px 0' }}>
+        {tr('Ce que vous diriez après « Alexa ». Une enceinte Echo ne sait pas parcourir sa bibliothèque : la phrase est le seul chemin.')}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Les favoris de ce lecteur : une playlist en une touche.
+ *
+ * Rien quand il n'y en a pas. Une rangée vide qui dirait « mettez des
+ * favoris » tiendrait la place d'une carte pour ne rien apprendre — l'étoile
+ * du navigateur, elle, se voit au moment où elle sert.
+ */
+function FavorisLecture({ id, hass }) {
+  const liste = favorisLecture(id);
+  if (!liste.length) return null;
+  const jouer = (f) => {
+    /* Une PHRASE part chez la sœur qui sait l'exécuter, pas chez l'entité de la
+     * carte : voir `cibleAlexa`. Un média, lui, se rejoue sur place. */
+    const vers = f.c === TYPE_PHRASE
+      ? (cibleAlexa(id, (hass && hass.states) || {}, LOGGIA_INDEX) || id)
+      : id;
+    const appel = appelPourJouer(f, vers);
+    if (!appel || !hass || !hass.callService) return;
+    hass.callService(appel.domaine, appel.service, appel.data);
+  };
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, margin: '0 2px 8px' }}>
+        <Ico name="star" size={12} style={{ color: 'var(--o-gold)' }} />
+        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('FAVORIS')}</span>
+      </div>
+      {/* Une rangée qui DÉFILE plutôt qu'une grille qui s'allonge : la fiche
+        * garde sa hauteur quel que soit le nombre de favoris. */}
+      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, margin: '0 -4px', paddingLeft: 4, paddingRight: 4 }}>
+        {liste.map((f) => (
+          <button key={f.c + f.i} onClick={() => jouer(f)} title={f.t}
+            style={{ width: 96, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 6px',
+              borderRadius: 14, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', cursor: 'pointer', fontFamily: 'inherit' }}>
+            {f.v
+              ? <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 10, backgroundImage: 'url("' + f.v + '")', backgroundSize: 'cover', backgroundPosition: 'center' }} />
+              : <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--o-s2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)' }}>
+                <Fi i={f.c === 'custom' ? 'comment' : (MEDIA_ICONES[f.c] || 'list')} size={15} /></span>}
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.t}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* Le navigateur de medias : ce que CE lecteur sait jouer.
  *
  * Home Assistant expose l'arbre par lecteur — un Chromecast propose les
@@ -2643,6 +2762,7 @@ function NavigateurMedias({ id, hass, onClose }) {
   const [contenu, setContenu] = useState(null);
   const [etat, setEtat] = useState('charge');   // charge | pret | vide | erreur
   const [envoi, setEnvoi] = useState(null);
+  const [favoris, setFavoris] = useState(() => favorisLecture(id));
 
   const niveau = pile[pile.length - 1];
   useEffect(() => {
@@ -2709,12 +2829,21 @@ function NavigateurMedias({ id, hass, onClose }) {
               const jouable = !c.can_expand && c.can_play;
               const parti = envoi === c.media_content_id;
               const utile = c.can_expand || c.can_play;
+              /* L'étoile ne peut pas vivre DANS la rangée : un bouton dans un
+                * bouton n'est pas du HTML valide, et le clavier n'en atteindrait
+                * qu'un seul. La rangée est donc une boîte, et les deux gestes y
+                * sont côte à côte. */
+              const gardable = entreeFavorite(c);
+              const garde = !!gardable && favoris.some(x => memeFavori(x, gardable));
               return (
-                <button key={(c.media_content_id || '') + i} onClick={() => ouvrir(c)} disabled={!utile}
-                  style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', minHeight: 52, borderRadius: 13,
-                    border: 'none', background: parti ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', color: 'var(--o-text1)',
-                    cursor: utile ? 'pointer' : 'default', textAlign: 'left', width: '100%',
-                    opacity: utile ? 1 : .55, transition: 'background .2s' }}>
+                <div key={(c.media_content_id || '') + i}
+                  style={{ display: 'flex', alignItems: 'center', borderRadius: 13, overflow: 'hidden',
+                    background: parti ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', transition: 'background .2s' }}>
+                <button onClick={() => ouvrir(c)} disabled={!utile}
+                  style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', minHeight: 52,
+                    border: 'none', background: 'transparent', color: 'var(--o-text1)',
+                    cursor: utile ? 'pointer' : 'default', textAlign: 'left', flex: 1, minWidth: 0,
+                    opacity: utile ? 1 : .55 }}>
                   {/* La vignette quand elle existe : une pochette reconnait un
                     * album plus vite que son titre. */}
                   {c.thumbnail
@@ -2727,6 +2856,16 @@ function NavigateurMedias({ id, hass, onClose }) {
                     ? <Fi i="angle-right" size={13} style={{ opacity: .65, flexShrink: 0 }} />
                     : jouable ? <Fi i="play" size={12} style={{ flexShrink: 0 }} /> : null}
                 </button>
+                {gardable && (
+                  <button onClick={() => setFavoris(noterFavori(id, gardable))} aria-pressed={garde}
+                    aria-label={garde ? tr('Retirer des favoris') : tr('Ajouter aux favoris')}
+                    title={garde ? tr('Retirer des favoris') : tr('Ajouter aux favoris')}
+                    style={{ width: 44, alignSelf: 'stretch', border: 'none', background: 'transparent', cursor: 'pointer',
+                      color: garde ? 'var(--o-gold)' : 'var(--o-text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Ico name="star" size={14} />
+                  </button>
+                )}
+                </div>
               );
             })}
           </div>
@@ -2736,8 +2875,221 @@ function NavigateurMedias({ id, hass, onClose }) {
   );
 }
 
+/* LES APPLICATIONS D'UNE TÉLÉVISION CONNECTÉE (30/09).
+ *
+ * « Il faudrait que cela fonctionne aussi pour les autres supports de
+ * streaming vidéo autre que l'Apple TV, comme Android TV. »
+ *
+ * Tout ce qui décide vit dans `applis.js`, qui est pur et testé : par où
+ * lancer, sur quelle entité, et quoi souligner. Ici on ne fait que montrer.
+ *
+ * Les DERNIÈRES lancées passent devant — la grille tient huit tuiles, et une
+ * télévision en propose parfois trente. Le reste attend derrière un chevron,
+ * comme sur la maquette. Ce classement est une commodité de celui qui regarde,
+ * il reste donc dans son navigateur et son absence ne casse rien.
+ */
+const CLE_APPLIS = 'loggia_appsrecentes';
+const APPLIS_EN_TETE = 8;
+function applisRecentes(cle) {
+  try {
+    const t = JSON.parse(localStorage.getItem(CLE_APPLIS) || '{}');
+    const v = t && typeof t === 'object' ? t[cle] : null;
+    return Array.isArray(v) ? v.filter(x => typeof x === 'string').slice(0, APPLIS_EN_TETE) : [];
+  } catch { return []; }
+}
+function noterAppli(cle, nom) {
+  try {
+    const t = JSON.parse(localStorage.getItem(CLE_APPLIS) || '{}');
+    const table = (t && typeof t === 'object' && !Array.isArray(t)) ? t : {};
+    table[cle] = [nom, ...applisRecentes(cle).filter(x => x !== nom)].slice(0, APPLIS_EN_TETE);
+    localStorage.setItem(CLE_APPLIS, JSON.stringify(table));
+    return table[cle];
+  } catch { return applisRecentes(cle); }
+}
+/* Le badge d'une application : ses initiales. Aucune fonte n'a les logos, et
+ * Home Assistant ne donne pas d'icône — seulement un nom. « Disney+ » devient
+ * « D+ », « Prime Video » devient « PV », « Netflix » devient « N ». */
+function initialesAppli(nom) {
+  const mots = String(nom || '').trim().split(/\s+/).filter(Boolean);
+  if (!mots.length) return '?';
+  const un = mots[0];
+  if (mots.length === 1) return /[+\d]$/.test(un) ? (un.charAt(0) + un.slice(-1)).toUpperCase() : un.charAt(0).toUpperCase();
+  return (mots[0].charAt(0) + mots[1].charAt(0)).toUpperCase();
+}
+
+/* Le dessin d'une touche. Une flèche, un rond, un mot — jamais une icône
+ * inventée : ce que la télécommande sait faire vient de sa table. */
+const DESSIN_TOUCHE = {
+  haut: 'angle-small-up', bas: 'angle-small-down', gauche: 'angle-small-left', droite: 'angle-small-right',
+  retour: 'arrow-left', accueil: 'home', menu: 'menu-burger', info: 'info',
+  lecture: 'play-pause', precedent: 'rewind', suivant: 'forward',
+  vol_moins: 'volume-down', vol_plus: 'volume-up', muet: 'volume-mute',
+};
+const NOMS_TOUCHES = () => ({
+  haut: tr('Haut'), bas: tr('Bas'), gauche: tr('Gauche'), droite: tr('Droite'), ok: tr('OK'),
+  retour: tr('Retour'), accueil: tr('Accueil'), menu: tr('Menu'), info: tr('Info'),
+  lecture: tr('Lecture ou pause'), precedent: tr('Reculer'), suivant: tr('Avancer'),
+  vol_moins: tr('Baisser le son'), vol_plus: tr('Monter le son'), muet: tr('Couper le son'),
+});
+
+function ApplisAppareil({ id, hass }) {
+  const S = (hass && hass.states) || {};
+  const choix = applisDe(id, S, LOGGIA_INDEX);
+  const integration = integrationDe(id, LOGGIA_INDEX);
+  const tele = telecommandePour(integration, telecommandeDe(id, S, LOGGIA_INDEX));
+  const [recentes, setRecentes] = useState(() => applisRecentes(id));
+  /* Ce qu'on vient de lancer, et ce que l'appareil annonçait à ce moment-là.
+   * `appliCourante` s'en sert pour départager : voir sa remarque. */
+  const [lancee, setLancee] = useState(null);
+  const [tout, setTout] = useState(false);
+  const [onglet, setOnglet] = useState('applis');
+  if (!choix && !tele) return null;
+  // Un appareil qui n'a QUE l'un des deux n'a pas besoin d'un segment.
+  const vue = (!choix && tele) ? 'tele' : (!tele ? 'applis' : onglet);
+
+  const lancer = (nom) => {
+    const appel = appelPourLancer(choix, nom);
+    if (!appel || !hass || !hass.callService) return;
+    hass.callService(appel.domaine, appel.service, appel.data);
+    setLancee({ nom, avant: choix.courante });
+    setRecentes(noterAppli(id, nom));
+  };
+  const toucher = (geste) => {
+    const appel = appelPourTouche(integration, geste, { telecommande: telecommandeDe(id, S, LOGGIA_INDEX), lecteur: id });
+    if (!appel || !hass || !hass.callService) return;
+    hass.callService(appel.domaine, appel.service, appel.data);
+  };
+  /* LA VEILLE ne passe pas par la table des touches : `media_player.turn_on`
+   * et `turn_off` s'écrivent pareil partout, et le lecteur annonce lui-même
+   * s'il les connaît — les bits 128 et 256. Rien à traduire par intégration,
+   * donc rien à se tromper. */
+  const bitsLecteur = Number(((S[id] || {}).attributes || {}).supported_features) || 0;
+  const saitVeille = !!(bitsLecteur & 128) || !!(bitsLecteur & 256);
+  const allume = !!(S[id] && S[id].state !== 'off' && S[id].state !== 'unavailable' && S[id].state !== 'standby');
+  const veiller = () => {
+    if (!saitVeille || !hass || !hass.callService) return;
+    hass.callService('media_player', allume ? 'turn_off' : 'turn_on', { entity_id: id });
+  };
+
+  // Les dernières lancées d'abord, puis le reste dans l'ordre de l'appareil.
+  const vues = new Set();
+  const ordre = [];
+  if (choix) {
+    for (const n of recentes) if (choix.liste.indexOf(n) >= 0 && !vues.has(n)) { vues.add(n); ordre.push(n); }
+    for (const n of choix.liste) if (!vues.has(n)) { vues.add(n); ordre.push(n); }
+  }
+  const devant = ordre.slice(0, APPLIS_EN_TETE);
+  const reste = ordre.slice(APPLIS_EN_TETE);
+
+  const enCours = appliCourante(choix, lancee);
+  const tuile = (nom) => {
+    const on = !!enCours && nom === enCours;
+    return (
+      <button key={nom} onClick={() => lancer(nom)} aria-pressed={!!on} title={nom}
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 6px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
+          border: 'var(--o-bw,1px) solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)' }}>
+        {/* Le LOGO quand on reconnaît la marque, les initiales sinon. Un nom
+          * inconnu ne reçoit pas un logo approchant : les initiales, elles, ne
+          * se trompent jamais de marque. */}
+        <span style={{ width: 34, height: 34, borderRadius: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800,
+          background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>
+          {marqueDe(nom) ? <Ico name={marqueDe(nom)} size={19} /> : initialesAppli(nom)}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom}</span>
+      </button>
+    );
+  };
+
+  const noms = NOMS_TOUCHES();
+  const sait = (g) => !!tele && tele.gestes.indexOf(g) >= 0;
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      {choix && tele && (
+        <div style={{ marginBottom: 12 }}>
+          <Segment grandir value={onglet} onChange={setOnglet} label={tr('Applications ou télécommande')}
+            options={[{ id: 'applis', label: tr('Applications') }, { id: 'tele', label: tr('Télécommande') }]} />
+        </div>
+      )}
+
+      {vue === 'applis' && choix && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, margin: '0 2px 8px' }}>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('APPLICATIONS')}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Lance l’app et allume la TV')}</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>{devant.map(tuile)}</div>
+          {reste.length > 0 && (
+            <>
+              <button onClick={() => setTout(v => !v)} aria-expanded={tout}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', marginTop: 12, padding: '4px 2px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('TOUTES LES APPLICATIONS')}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{ordre.length}</span>
+                <span style={{ flex: 1 }} />
+                <span style={{ display: 'inline-flex', color: 'var(--o-text3)', transition: 'transform .18s', transform: tout ? 'rotate(180deg)' : 'none' }}><Fi i="angle-small-down" size={14} /></span>
+              </button>
+              {tout && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, marginTop: 4 }}>{reste.map(tuile)}</div>}
+            </>
+          )}
+        </>
+      )}
+
+      {/* LE PAVÉ, d'après la maquette du 30/09 : un DISQUE, les flèches
+        * posées dessus sans cadre, et l'anneau du OK au milieu. Les quatre
+        * boutons du bas portent leur nom — « la télécommande c'est pas pareil,
+        * il manque le rond et les flèches n'ont pas de cadre ».
+        *
+        * Ce que cette télécommande ignore ne s'affiche pas : Samsung ne recule
+        * pas d'une piste, Roku n'a pas de menu, Apple TV n'a pas d'info. */}
+      {vue === 'tele' && tele && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '0 2px 12px' }}>{tr('TÉLÉCOMMANDE')}</div>
+          <div style={{ position: 'relative', width: 218, height: 218, margin: '0 auto', borderRadius: '50%', background: 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {[['haut', { top: 10, left: '50%', transform: 'translateX(-50%)' }],
+              ['bas', { bottom: 10, left: '50%', transform: 'translateX(-50%)' }],
+              ['gauche', { left: 10, top: '50%', transform: 'translateY(-50%)' }],
+              ['droite', { right: 10, top: '50%', transform: 'translateY(-50%)' }]].map(([g, pos]) => (sait(g) ? (
+                <button key={g} onClick={() => toucher(g)} aria-label={noms[g]} title={noms[g]}
+                  style={{ position: 'absolute', ...pos, width: 46, height: 46, padding: 0, border: 'none', background: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Fi i={DESSIN_TOUCHE[g]} size={22} />
+                </button>
+              ) : null))}
+            {sait('ok') && (
+              <button onClick={() => toucher('ok')} aria-label={noms.ok}
+                style={{ width: 96, height: 96, borderRadius: '50%', border: 'none', background: 'var(--o-s2)', color: 'var(--o-text)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: 800 }}>{noms.ok}</button>
+            )}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, marginTop: 16 }}>
+            {['retour', 'accueil', 'lecture'].filter(sait).map(g => (
+              <button key={g} onClick={() => toucher(g)} title={noms[g]}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 4px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
+                  border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)' }}>
+                <Fi i={DESSIN_TOUCHE[g]} size={17} />
+                {/* Le mot sous le bouton reste COURT — « Lecture », pas
+                  * « Lecture ou pause » : quatre boutons se partagent la
+                  * largeur. Le nom entier reste dans l'infobulle et pour les
+                  * lecteurs d'écran. */}
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{g === 'lecture' ? tr('Lecture') : noms[g]}</span>
+              </button>
+            ))}
+            {saitVeille && (
+              <button onClick={veiller} title={tr('Veille')}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 4px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
+                  border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)' }}>
+                <Fi i="power" size={17} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Veille')}</span>
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function RoomMediaSheet({ id, hass, onClose }) {
   const [parcourir, setParcourir] = useState(false);
+  // Ce que l'etoile vient d'ecrire : la rangee des favoris se remonte dessus.
+  const [revFavoris, setRevFavoris] = useState(0);
   const S = (hass && hass.states) || null;
   const np = mpRead(S, id);
   const [, tick] = useState(0);
@@ -2787,15 +3139,20 @@ function RoomMediaSheet({ id, hass, onClose }) {
     <>
     <BottomSheet onClose={onClose}>
       {() => (<>
-        <div style={{ position: 'relative', margin: '-10px -22px 0', borderRadius: '20px 20px 0 0', overflow: 'hidden' }}>
+        {/* Jusqu'au BORD de la feuille, et au même arrondi qu'elle (26, pas
+          * 20) — « les bandeaux en haut et en bas, c'est pas terrible » (30/09).
+          * Il restait 17 px de fond sombre au-dessus de la pochette : la
+          * poignée (25 px de haut, 2 de marge) plus les 10 px de la feuille,
+          * dont le panneau n'en reprenait que 10. D'où -27. */}
+        <div style={{ position: 'relative', margin: '-27px -22px 0', borderRadius: '26px 26px 0 0', overflow: 'hidden' }}>
           {onArt && <>
             <img src={np.art} alt="" aria-hidden onError={() => setArtErr(np.art)} style={{ position: 'absolute', inset: -30, width: 'calc(100% + 60px)', height: 'calc(100% + 60px)', objectFit: 'cover', filter: 'blur(30px) saturate(1.08)', transform: 'scale(1.08)', opacity: .9 }} />
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(9,12,19,.2), rgba(9,12,19,.8) 45%, rgba(9,12,19,.95))' }} />
             <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 85%, ${AA(.22)}, transparent 36%)`, mixBlendMode: 'screen' }} />
           </>}
-          <div style={{ position: 'relative', padding: '10px 22px 20px' }}>
+          <div style={{ position: 'relative', padding: '30px 22px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-              <span style={{ flex: 1, fontSize: 12, fontWeight: 800, color: tSub, letterSpacing: '.03em' }}>{(medPlayers().find(p => p.haid === id) || {}).name || id}</span>
+              <span style={{ flex: 1, fontSize: 12, fontWeight: 800, color: tSub, letterSpacing: '.03em' }}>{(medPlayers().find(p => p.haid === id) || {}).name || (((S && S[id]) || {}).attributes || {}).friendly_name || id}</span>
               <BoutonEpingle id={id} />
               {np.source && <span style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(255,255,255,.94)', color: '#15181f', fontSize: 11, fontWeight: 800 }}>{np.source}</span>}
               <CroixFeuille style={onArt ? { background: 'rgba(255,255,255,.16)', color: tMain } : null} />
@@ -2848,6 +3205,14 @@ function RoomMediaSheet({ id, hass, onClose }) {
               </div>
               <button onClick={() => commander(hass, id, 'mute', !np.muted)} title={tr('Couper le son')} style={{ ...glass(38, 13), ...(np.muted ? { background: 'rgba(239,68,68,.3)', border: '1px solid rgba(239,68,68,.5)', color: '#fff' } : {}) }}><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M11 5L6 9H2v6h4l5 4z" />{np.muted ? <path d="M22 9l-6 6M16 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />}</svg></button>
             </div>
+            <ApplisAppareil id={id} hass={hass} />
+            {/* L'entite de la carte n'est pas toujours celle qui sait parler :
+              * voir `cibleAlexa`. On montre le champ des qu'une sœur existe. */}
+            {!!cibleAlexa(id, S || {}, LOGGIA_INDEX) && (
+              <PhraseAlexa id={id} cible={cibleAlexa(id, S || {}, LOGGIA_INDEX)} hass={hass}
+                onGarder={() => setRevFavoris(n => n + 1)} />
+            )}
+            <FavorisLecture key={'fav' + parcourir + '-' + revFavoris} id={id} hass={hass} />
             {/* Parcourir : un lecteur ne sert a rien tant qu'on ne peut lui
               * donner que ce que quelqu'un d'autre a lance. */}
             <button onClick={() => setParcourir(true)}
@@ -2927,31 +3292,6 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
  * meme dans toutes les feuilles : CroixFeuille) ; puis
  * une commande principale, des puces, et des RANGEES : un titre, une phrase
  * qui dit ce que ca fait, et a droite la valeur, la bascule ou le bouton. */
-/* Une rangée de points de page, au gabarit tactile (audit du 27/09).
- *
- * Le point mesure 8 px : bien trop petit pour un doigt — la règle en demande
- * 24 (WCAG 2.5.8), et sur une tablette murale, une main qui tremble n'en vise
- * aucun. On garde le POINT tel quel et on agrandit ce qui l'entoure, avec une
- * marge verticale négative pour que la rangée ne grandisse pas d'un pixel.
- *
- * Les points se touchent alors sans se chevaucher : leurs centres sont à 24,
- * l'écart exact que la règle demande. Les flèches voisines gardent leur place,
- * la rangée qui les sépare garde son `gap`.
- *
- * Trois écrans posaient ces points — deux d'entre eux à l'octet près. */
-function PointsDePage({ n, courant, onChoisir, couleur = 'var(--o-accent-fond)' }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center' }}>
-      {Array.from({ length: n }, (_, i) => (
-        <button key={i} type="button" aria-label={tr('Page {n}', { n: i + 1 })} aria-pressed={i === courant} onClick={() => onChoisir(i)}
-          style={{ width: 24, height: 24, margin: '-8px 0', padding: 0, border: 'none', background: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span aria-hidden="true" style={{ display: 'block', width: 8, height: 8, borderRadius: 4, background: i === courant ? couleur : 'var(--o-bd2)' }} />
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function FicheEntete({ titre, sous, id = null, droite = null }) {
   /* C'est cette ligne qui NOMME la feuille : sans elle, un lecteur d'écran
    * annonce « dialogue » et rien d'autre à l'ouverture de n'importe quelle
@@ -3732,22 +4072,116 @@ const GROUPES_ICONES = {
   plante: { dessins: ['maison'], fonte: [] },
   animaux: { dessins: ['maison'], fonte: [] },
 };
-/** Toutes les icônes, celles du groupe d'abord, sans doublon et sans perte. */
-function iconesPour(domaine) {
+/* ── LA GRILLE PAR FAMILLES (29/09, maquette « Modifier l'entité ») ──────────
+ *
+ * Deux cents icônes en pages de dix faisaient vingt-cinq pages : on feuillette,
+ * on ne cherche pas. La maquette les range par FAMILLE sur une bande qui
+ * défile, met devant celles qui vont avec la carte — « Suggérées » — et ouvre
+ * un champ de recherche au-dessus.
+ *
+ * `sug` et `recent` ne sont pas des familles du catalogue, elles se calculent.
+ * `tout` est la bibliothèque entière, en dernier : on y va quand on sait qu'on
+ * cherche ailleurs que dans sa famille. */
+const FAMILLES_ICONES = [
+  ['sug', 'star'], ['recent', 'time-past'], ['electro', 'apps'], ['multimedia', 'tv-music'], ['streaming', 'play-alt'],
+  ['eclairage', 'bulb'], ['ouvrants', 'blinds'], ['climat', 'flame'], ['securite', 'shield'],
+  ['iot', 'user-robot'], ['cuisine', 'utensils'], ['energie', 'bolt'], ['reseau', 'wifi-alt'],
+  ['maison', 'leaf'], ['pieces', 'house-chimney'], ['mobilite', 'car-side'], ['meteo', 'cloud-sun'],
+  ['temps', 'hourglass'], ['tout', 'apps'],
+];
+/** Le nom de chaque famille, dans la langue affichée — et sa version courte,
+ *  celle qui tient sous l'icône de la bande. */
+const NOMS_FAMILLES_ICONES = () => ({
+  sug: [tr('Suggérées'), tr('Suggérées')], recent: [tr('Récentes'), tr('Récentes')],
+  electro: [tr('Électroménager'), tr('Électro')], multimedia: [tr('Multimédia'), tr('Multimédia')],
+  streaming: [tr('Services de streaming'), tr('Streaming')],
+  eclairage: [tr('Éclairage'), tr('Lumière')], ouvrants: [tr('Ouvrants'), tr('Ouvrants')],
+  climat: [tr('Chauffage'), tr('Chauffage')], securite: [tr('Sécurité'), tr('Sécurité')],
+  iot: [tr('Objets connectés'), tr('Objets')], cuisine: [tr('Cuisine et entretien'), tr('Cuisine')],
+  energie: [tr('Énergie'), tr('Énergie')], reseau: [tr('Réseau'), tr('Réseau')],
+  maison: [tr('Maison et jardin'), tr('Jardin')], pieces: [tr('Pièces'), tr('Pièces')],
+  mobilite: [tr('Mobilité'), tr('Mobilité')], meteo: [tr('Météo'), tr('Météo')],
+  temps: [tr('Temps'), tr('Temps')], tout: [tr('Bibliothèque'), tr('Tout')],
+});
+/* Les SUGGÉRÉES : uniquement les familles du domaine de la carte, et rien
+ * derrière. C'est la différence avec `iconesPour`, qui fait suivre toute la
+ * bibliothèque — utile quand la grille était l'unique entrée, encombrant
+ * maintenant qu'une bande de familles et une recherche sont là. */
+function iconesSuggerees(domaine) {
   const g = GROUPES_ICONES[domaine] || { dessins: [], fonte: [] };
   const vues = new Set();
   const out = [];
   const pousser = (liste) => { for (const n of (liste || [])) { if (!vues.has(n)) { vues.add(n); out.push(n); } } };
   g.dessins.forEach(c => pousser(DESSINS_CAT[c]));
   g.fonte.forEach(c => pousser(FONTE_CAT[c]));
+  return out;
+}
+/** Les icônes d'une famille : ses dessins, puis ses glyphes de police. */
+function iconesFamille(cle) {
+  if (cle === 'tout') return toutesLesIcones();
+  const vues = new Set();
+  const out = [];
+  const pousser = (liste) => { for (const n of (liste || [])) { if (!vues.has(n)) { vues.add(n); out.push(n); } } };
+  pousser(DESSINS_CAT[cle]);
+  pousser(FONTE_CAT[cle]);
+  return out;
+}
+/** La bibliothèque entière, calculée une fois : les dessins d'abord. */
+let TOUTES_ICONES = null;
+function toutesLesIcones() {
+  if (TOUTES_ICONES) return TOUTES_ICONES;
+  const vues = new Set();
+  const out = [];
+  const pousser = (liste) => { for (const n of (liste || [])) { if (!vues.has(n)) { vues.add(n); out.push(n); } } };
   Object.values(DESSINS_CAT).forEach(pousser);
   Object.values(FONTE_CAT).forEach(pousser);
+  TOUTES_ICONES = out;
   return out;
+}
+/* Le nom d'une icône. Un dessin a le sien, venu du catalogue — « Lave-linge »,
+ * « Tambour ». Un glyphe de police n'a que son identifiant : on le rend
+ * lisible, sans lui inventer une traduction. */
+function nomIcone(cle) {
+  const n = NOMS_DESSINS[cle];
+  return n ? n[0] : cle.replace(/-/g, ' ');
+}
+function legendeIcone(cle) {
+  const n = NOMS_DESSINS[cle];
+  return n ? n[1] : '';
+}
+/** Sans accents, sans casse : « Réfrigérateur » se trouve en tapant « refri ». */
+const aplatiIcone = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+/** Ce que la recherche trouve : la clé, le nom du dessin, sa légende. */
+function chercherIcones(q) {
+  const t = aplatiIcone(q).trim();
+  if (!t) return [];
+  return toutesLesIcones().filter(c => aplatiIcone(c).indexOf(t) >= 0
+    || aplatiIcone(nomIcone(c)).indexOf(t) >= 0
+    || aplatiIcone(legendeIcone(c)).indexOf(t) >= 0);
+}
+/* Les dernières icônes choisies. Elles ne sont PAS de la configuration de la
+ * maison : c'est une commodité de celui qui règle, ici et maintenant. Elle
+ * reste donc dans son navigateur, et son absence ne casse rien. */
+const CLE_RECENTES = 'loggia_icorecents';
+function iconesRecentes() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CLE_RECENTES) || '[]');
+    return Array.isArray(v) ? v.filter(x => typeof x === 'string').slice(0, 12) : [];
+  } catch { return []; }
+}
+function noterIconeRecente(cle) {
+  try {
+    const l = [cle, ...iconesRecentes().filter(x => x !== cle)].slice(0, 12);
+    localStorage.setItem(CLE_RECENTES, JSON.stringify(l));
+    return l;
+  } catch { return iconesRecentes(); }
 }
 /** Le glyphe choisi pour cette entité, ou `null` — rien n'est deviné ici. */
 function iconeChoisie(id) {
   const v = iconesCfg()[id];
-  return (typeof v === 'string' && v) ? v : null;
+  if (typeof v === 'string' && v) return v;
+  // Depuis le style PLEIN (29/09), une entree peut etre un objet `{ n, s }`.
+  return (v && typeof v === 'object' && typeof v.n === 'string' && v.n) ? v.n : null;
 }
 /** Poser un glyphe, ou l'enlever (`null`) pour revenir au défaut. */
 function declarerIcone(id, glyphe) {
@@ -3762,6 +4196,142 @@ function declarerIcone(id, glyphe) {
  * l'identifiant, l'epingle de l'accueil ; puis, en dessous, la carte du
  * catalogue et la largeur — les reglages d'avant, toujours la. Pas d'« etat de
  * depart » : Loggia n'invente pas ce que Home Assistant n'a pas encore dit. */
+/* LE SÉLECTEUR D'ICÔNE, le même partout (29/09).
+ *
+ * Il vivait dans la fiche d'une entité ; la fiche d'une PIÈCE et celle d'un
+ * SCÉNARIO gardaient l'ancienne grille paginée — « sauf par l'accueil, c'est
+ * toujours l'ancien système ». Trois grilles pour un seul geste, dont deux
+ * proposaient trente icônes quand la bibliothèque en a cinq cents.
+ *
+ * `suggerees` est ce que la fiche mettait devant : les icônes de pièces pour
+ * une pièce, celles des scénarios pour un scénario, celles du domaine pour une
+ * entité. Le reste de la bibliothèque suit, par famille, comme ailleurs.
+ */
+function ChoixIcone({ valeur, onChoisir, suggerees }) {
+  const [q, setQ] = useState('');
+  const [fam, setFam] = useState('sug');
+  const [recentes, setRecentes] = useState(() => iconesRecentes());
+  const [apercu, setApercu] = useState(null);
+  const bande = useRef(null);
+  const id = 'o-icoq-' + useId();
+
+  const cherche = q.trim().length > 0;
+  const liste = useMemo(() => {
+    if (cherche) return chercherIcones(q);
+    if (fam === 'sug') return suggerees;
+    if (fam === 'recent') return recentes;
+    return iconesFamille(fam);
+  }, [cherche, q, fam, suggerees, recentes]);
+  const noms = NOMS_FAMILLES_ICONES();
+  const familles = FAMILLES_ICONES.filter(([k]) => (k === 'sug' || k === 'tout')
+    || (k === 'recent' ? recentes.length > 0 : iconesFamille(k).length > 0));
+  const glisser = (sens) => {
+    const el = bande.current;
+    if (el) el.scrollBy({ left: sens * el.clientWidth * 0.8, behavior: 'smooth' });
+  };
+  const poser = (ic) => { onChoisir(ic); if (ic) setRecentes(noterIconeRecente(ic)); };
+  // Les deux fleches de la bande : la HAUTEUR de la bande, pas celle d'un
+  // bouton rond — sinon elles flottent a cote d'elle.
+  const fleche = { width: 30, height: 56, padding: 0, flexShrink: 0, borderRadius: 12, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
+
+  return (
+    <>
+      <label htmlFor={id} style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', display: 'block', margin: '14px 2px 7px' }}>{tr('ICÔNE')}</label>
+
+      {/* On CHERCHE avant de feuilleter : « lave » trouve le lave-vaisselle,
+        * dont la clé est `dishwasher`. La recherche passe devant la famille
+        * ouverte et fouille toute la bibliothèque. */}
+      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 42, padding: '0 12px', borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+        <Fi i="search" size={13} color="var(--o-text3)" />
+        <input id={id} value={q} onChange={(e) => setQ(e.target.value)} spellCheck={false} autoComplete="off"
+          placeholder={tr('Rechercher : lave, lampe, volet…')}
+          style={{ flex: 1, minWidth: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--o-text)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }} />
+        {cherche && (
+          <button aria-label={tr('Effacer la recherche')} onClick={() => setQ('')}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, padding: 0, borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--o-s2)', color: 'var(--o-text2)' }}><Fi i="cross-small" size={12} /></button>
+        )}
+      </div>
+
+      {/* LA BANDE DES FAMILLES. Elle défile — à la souris par les deux flèches,
+        * au doigt en la poussant. « Suggérées » d'abord : celles qui vont avec
+        * ce qu'on règle. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+        <button aria-label={tr('Familles précédentes')} onClick={() => glisser(-1)} style={fleche}><Fi i="angle-small-left" size={14} /></button>
+        <div ref={bande} style={{ flex: 1, minWidth: 0, display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', padding: 2 }}>
+          {familles.map(([k, ico]) => {
+            const on = !cherche && k === fam;
+            const n = k === 'sug' ? suggerees.length : k === 'recent' ? recentes.length : iconesFamille(k).length;
+            return (
+              <button key={k} aria-pressed={on} title={noms[k][0] + ' · ' + trN(n, tr('{n} icône'), tr('{n} icônes'))}
+                onClick={() => { setFam(k); setQ(''); }}
+                style={{ flexShrink: 0, minWidth: 64, height: 56, padding: '0 8px', borderRadius: 12, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, fontFamily: 'inherit', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' }}>
+                <Fi i={ico} size={16} />
+                <span style={{ fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap' }}>{noms[k][1]}</span>
+              </button>
+            );
+          })}
+        </div>
+        <button aria-label={tr('Familles suivantes')} onClick={() => glisser(1)} style={fleche}><Fi i="angle-small-right" size={14} /></button>
+      </div>
+
+      {/* La grille remplit la largeur qu'elle a, et défile chez elle : une
+        * famille de trois cents glyphes ne pousse pas le reste de la fiche
+        * hors de l'écran. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(52px, 1fr))', gap: 8, marginTop: 8, maxHeight: 244, overflowY: 'auto', padding: 2 }}>
+        {liste.map(ic => { const on = ic === valeur; return (
+          <button key={ic} aria-pressed={on} aria-label={nomIcone(ic)} title={nomIcone(ic)} onClick={() => poser(ic)}
+            onMouseEnter={() => setApercu(ic)} onMouseLeave={() => setApercu(null)}
+            onFocus={() => setApercu(ic)} onBlur={() => setApercu(null)}
+            style={{ height: 52, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>
+            {/* Un appareil dessiné bouge. Encore faut-il pouvoir le voir : il
+              * s'anime sous le curseur, au clavier quand il prend le focus, et
+              * une fois choisi — au doigt, c'est le seul moment où l'on peut le
+              * regarder. */}
+            <Ico name={ic} size={20} anime={on || apercu === ic} />
+          </button>
+        ); })}
+      </div>
+      {liste.length === 0 && (
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', margin: '8px 2px 0' }}>
+          {cherche ? tr('Aucune icône pour « {q} ».', { q: q.trim() }) : tr('Aucune icône choisie récemment.')}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', margin: '8px 2px 0' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>
+          {valeur ? nomIcone(valeur) + (legendeIcone(valeur) ? ' · ' + legendeIcone(valeur) : '') : ''}
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>
+          {cherche
+            ? trN(liste.length, tr('{n} résultat'), tr('{n} résultats'))
+            : trN(liste.length, tr('{n} icône'), tr('{n} icônes')) + ' · ' + (fam === 'sug' ? tr('pour cette carte') : noms[fam][0])}
+        </span>
+      </div>
+    </>
+  );
+}
+
+/* UN segment, pas deux boutons (captures du 29/09).
+ *
+ * Deux boutons cote a cote, chacun avec son liseré et un écart entre eux, se
+ * lisent comme deux réglages. Un segment, c'est UN rail — un seul bord, un seul
+ * fond — et la moitié choisie posée dedans, en accent plein. C'est la forme des
+ * captures, pour « Trait / Plein » comme pour « Simple / Double ».
+ *
+ * `grandir` : le segment prend toute la largeur, comme celui de LARGEUR. */
+function Segment({ value, options, onChange, grandir = false, label = null }) {
+  return (
+    <div role="group" aria-label={label || undefined}
+      style={{ display: grandir ? 'flex' : 'inline-flex', width: grandir ? '100%' : undefined, boxSizing: 'border-box', padding: 3, gap: 3, borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+      {options.map(o => { const on = o.id === value; return (
+        <button key={String(o.id)} aria-pressed={on} onClick={() => { if (!on) onChange(o.id); }}
+          style={{ flex: grandir ? 1 : undefined, height: grandir ? 38 : 30, padding: '0 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: grandir ? 13 : 12.5, fontWeight: 700, background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          {o.ico ? <Fi i={o.ico} size={13} /> : null}{o.label}</button>
+      ); })}
+    </div>
+  );
+}
+
 function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   const [val, setVal] = useState(ed.labelOf(id) || '');
   const estSection = id.indexOf('sect:') === 0;
@@ -3782,12 +4352,8 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   const [lumiere, setLumiere] = useState(estPrise && cvEstLumiere(brut));
   // L'icone choisie : `null` = celle que Loggia devine (26/09).
   const [monIcone, setMonIcone] = useState(() => iconeChoisie(brut));
-  const [pageIcone, setPageIcone] = useState(() => 0);
-  const [apercuIcone, setApercuIcone] = useState(null);
-  // La grille suit la categorie de la carte, et se refait si on bascule une
-  // prise en lumiere : c'est le meme `domaineChoisi` que les puces au-dessus.
-  const listeIcones = iconesPour(estZone ? 'chauffage' : estPrise ? (lumiere ? 'lumiere' : 'prise') : domaine);
-  const pagesIcone = Math.max(1, Math.ceil(listeIcones.length / ICONES_PAR_PAGE));
+  // L'apercu en tete : on allume pour voir bouger l'appareil qu'on choisit.
+  const [apercuAllume, setApercuAllume] = useState(true);
   const pieces = estEntite ? piecesDeLaMaison() : [];
   const pieceActuelle = estEntite ? (piece || pieceDeLEntite(hass, brut)) : null;
   const [choixPiece, setChoixPiece] = useState(pieceActuelle);
@@ -3816,19 +4382,65 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   // plus au clavier. L'anneau d'accent revient, ici comme ailleurs.
   const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 };
   const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
-  // Une puce coloree : l'icone porte la teinte du domaine ou de la piece, la
-  // puce choisie la reprend en fond et en bord (retour user du 14/09 :
-  // « manque de couleurs dans l'edition, les icones c'est plus sympa »).
-  const puce = (on, possible, t) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: possible ? 'pointer' : 'default', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? t.bord : 'var(--o-bd2)'), background: on ? t.fond : 'var(--o-s1)', color: on ? t.texte : 'var(--o-text1)', opacity: (on || possible) ? 1 : .45 });
-  const teinteRgb = (rgb) => ({ bord: 'rgba(' + rgb + ',.5)', fond: 'rgba(' + rgb + ',.14)', texte: 'rgb(' + rgb + ')' });
-  const pageurIcone = (possible) => ({ width: 28, height: 28, padding: 0, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: possible ? 'pointer' : 'default', opacity: possible ? 1 : .35, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' });
+  /* Les puces colorées du domaine, de la pièce et de la largeur ont vécu du
+   * 14/09 au 29/09 — « manque de couleurs dans l'édition ». La couleur reste,
+   * mais portée par les lignes des menus et par les segments, qui n'ont plus
+   * besoin de ces deux aides. */
   const domaineChoisi = estPrise ? (lumiere ? 'lumiere' : 'prise') : domaine;
+  /* La grille suit la catégorie de la carte, et se refait si l'on bascule une
+   * prise en lumière. Une RECHERCHE passe devant la famille : on cherche dans
+   * toute la bibliothèque, pas seulement sous l'onglet ouvert. */
+  const domIcone = estZone ? 'chauffage' : domaineChoisi;
+  const listeSuggerees = useMemo(() => iconesSuggerees(domIcone), [domIcone]);
+  /* Toucher l'icone DEJA choisie la rend au defaut : c'est le seul moyen de
+   * revenir a ce que Loggia devine, et il n'existe que pour une entite — une
+   * piece et un scenario en ont toujours une. */
+  const choisirIcone = (ic) => setMonIcone(ic === monIcone ? null : ic);
+  /* La ligne d'un menu a la forme du champ NOM au-dessus : un réglage ne
+   * change pas de boîte selon qu'on y tape ou qu'on y choisit. */
+  const ligneMenu = { width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10, height: 44, padding: '0 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700 };
+  /* L'icône du domaine porte SA teinte — sauf sur la ligne choisie, qui est
+   * en accent plein : là, tout passe en blanc, comme partout ailleurs. */
+  const glypheDomaine = (dm, choisi) => {
+    if (!dm) return null;
+    const c = choisi ? '#fff' : 'rgb(' + dm.rgb + ')';
+    return <span style={{ display: 'inline-flex', color: c }}>{dm.prise ? <PlugIcon size={13} /> : dm.ico ? <Ico name={dm.ico} size={14} color={c} /> : <Fi i={dm.fi} size={13} color={c} />}</span>;
+  };
+  const tousDomaines = DOMAINES_EDITION();
+  const domActuel = tousDomaines.find(d => d.id === domaineChoisi) || null;
+  // Deux options, pas quinze : ce sont les deux seules qui se choisissent.
+  const optionsDomaine = tousDomaines.filter(d => d.id === 'prise' || d.id === 'lumiere').map(d => ({ id: d.id, label: d.label, ico: glypheDomaine(d, d.id === domaineChoisi) }));
+  const optionsPiece = pieces.map(p => {
+    // L'icone et la couleur de la piece : celles de sa carte a l'Accueil.
+    const zone = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).find(z => z && z.name === p);
+    const hp = habillagePiece(p, zone && zone.icon);
+    const couleur = hp.col;
+    return { id: p, label: p, ico: cloneElement(hp.icon, { size: 14, color: p === choixPiece ? '#fff' : couleur }) };
+  });
+  /* L'APERÇU, en tête de la fiche. Un appareil dessiné porte son mouvement :
+   * sans l'allumer, on choisit une icône sans jamais voir ce qu'elle fait.
+   * L'interrupteur ne commande rien dans la maison — il n'allume que
+   * l'aperçu. Sans icône choisie, il montre celle du domaine. */
+  const icoApercu = monIcone || (domActuel && domActuel.ico) || null;
 
   return (
     <BottomSheet onClose={onClose}>
       {close => (
         <div style={{ padding: '0 0 8px' }}>
           <TitreFeuille style={{ fontSize: 15, fontWeight: 800 }}>{estSection ? tr('Modifier le titre') : tr('Modifier l’entité')}</TitreFeuille>
+
+          {peutChoisirIcone && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, padding: 12, borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+              <span style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: apercuAllume ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: apercuAllume ? '#fff' : 'var(--o-text2)' }}>
+                {icoApercu ? <Ico name={icoApercu} size={24} anime={apercuAllume} /> : <PlugIcon size={22} />}
+              </span>
+              <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--o-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val.trim() || origine || nom}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('L’aperçu ne commande rien : il montre le dessin en mouvement.')}</span>
+              </span>
+              <RmBascule on={apercuAllume} nom={tr('Allumer l’aperçu')} onToggle={() => setApercuAllume(v => !v)} couleur="var(--o-accent)" />
+            </div>
+          )}
 
           <label htmlFor={nomId} style={etiquette}>{tr('NOM')}</label>
           {/* `control-has-associated-label` ne suit pas `htmlFor` : l'etiquette
@@ -3843,17 +4455,17 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
           {estEntite && (
             <>
               <div style={etiquette}>{tr('DOMAINE')}</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {DOMAINES_EDITION().map(dm => {
-                  const on = dm.id === domaineChoisi;
-                  const possible = estPrise && (dm.id === 'lumiere' || dm.id === 'prise');
-                  return (
-                    <button key={dm.id} aria-pressed={on} aria-disabled={!possible} onClick={() => { if (possible) setLumiere(dm.id === 'lumiere'); }} style={puce(on, possible, teinteRgb(dm.rgb))}>
-                      <span style={{ display: 'inline-flex', color: 'rgb(' + dm.rgb + ')' }}>{dm.prise ? <PlugIcon size={12} /> : dm.ico ? <Ico name={dm.ico} size={13} color={'rgb(' + dm.rgb + ')'} /> : <Fi i={dm.fi} size={12} color={'rgb(' + dm.rgb + ')'} />}</span>{dm.label}
-                    </button>
-                  );
-                })}
-              </div>
+              {/* Un MENU, pas quinze puces (maquette du 29/09). Quinze domaines
+                * dont deux seulement se choisissent, c'était treize boutons
+                * éteints pour rien. Le menu ne montre que ce qui se choisit :
+                * une prise peut se déclarer lumière, le reste vient de Home
+                * Assistant et ne se discute pas. */}
+              {estPrise
+                ? <ListeChoix value={domaineChoisi} label={tr('Domaine')} onChange={(v) => setLumiere(v === 'lumiere')} style={ligneMenu} options={optionsDomaine} />
+                : <div style={{ ...ligneMenu, cursor: 'default' }}>
+                    <span style={{ display: 'inline-flex', flexShrink: 0 }}>{glypheDomaine(domActuel, false)}</span>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{domActuel ? domActuel.label : ''}</span>
+                  </div>}
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>
                 {estPrise ? tr('Une prise peut se déclarer lumière : elle prend alors la carte et le filtre des lampes.') : tr('Le domaine vient de Home Assistant.')}
               </div>
@@ -3871,32 +4483,8 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
             * domaine, qui ne vaut que pour une entité. */}
           {peutChoisirIcone && (
             <>
-              <div style={etiquette}>{tr('ICÔNE')}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-                {listeIcones.slice(pageIcone * ICONES_PAR_PAGE, (pageIcone + 1) * ICONES_PAR_PAGE).map(ic => { const on = ic === monIcone; return (
-                  <button key={ic} aria-pressed={on} aria-label={ic} onClick={() => setMonIcone(on ? null : ic)}
-                    onMouseEnter={() => setApercuIcone(ic)} onMouseLeave={() => setApercuIcone(null)}
-                    onFocus={() => setApercuIcone(ic)} onBlur={() => setApercuIcone(null)}
-                    style={{ height: 46, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'var(--o-bw,1px) solid ' + (on ? 'var(--o-accent-fond)' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>
-                    {/* Un appareil dessiné bouge. Encore faut-il pouvoir le
-                      * voir : il s'anime sous le curseur, au clavier quand il
-                      * prend le focus, et une fois choisi — au doigt, c'est le
-                      * seul moment où l'on peut le regarder. */}
-                    <Ico name={ic} size={18} anime={on || apercuIcone === ic} />
-                  </button>
-                ); })}
-              </div>
-              {/* Deux cent cinquante icônes font vingt-cinq pages : une rangée
-                * de vingt-cinq points ne se vise pas. Au-delà de huit, les
-                * points cèdent la place au compte. */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
-                <button aria-label={tr('Icônes précédentes')} disabled={pageIcone === 0} onClick={() => setPageIcone(p => Math.max(0, p - 1))} style={pageurIcone(pageIcone > 0)}><Fi i="angle-small-left" size={14} /></button>
-                {pagesIcone <= 8
-                  ? <PointsDePage n={pagesIcone} courant={pageIcone} onChoisir={setPageIcone} />
-                  : <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', fontVariantNumeric: 'tabular-nums' }}>{tr('Page {n}', { n: pageIcone + 1 })} / {pagesIcone}</span>}
-                <button aria-label={tr('Icônes suivantes')} disabled={pageIcone >= pagesIcone - 1} onClick={() => setPageIcone(p => Math.min(pagesIcone - 1, p + 1))} style={pageurIcone(pageIcone < pagesIcone - 1)}><Fi i="angle-small-right" size={14} /></button>
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '8px 2px 0' }}>
+              <ChoixIcone valeur={monIcone} onChoisir={choisirIcone} suggerees={listeSuggerees} />
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>
                 {monIcone ? tr('Seul le dessin change : la famille, le filtre et la carte restent les mêmes.') : tr('Aucune icône choisie : Loggia garde celle qu’il devine.')}
               </div>
             </>
@@ -3905,20 +4493,10 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
           {estEntite && pieces.length > 0 && (
             <>
               <div style={etiquette}>{tr('PIÈCE')}</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {pieces.map(p => {
-                  const on = p === choixPiece;
-                  // L'icone et la couleur de la piece : celles de sa carte a l'Accueil.
-                  const zone = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).find(z => z && z.name === p);
-                  const hp = habillagePiece(p, zone && zone.icon);
-                  const couleur = hp.col;
-                  return (
-                    <button key={p} aria-pressed={on} onClick={() => setChoixPiece(p)} style={puce(on, true, { bord: couleur, fond: hp.bg, texte: couleur })}>
-                      {cloneElement(hp.icon, { size: 13 })}{p}
-                    </button>
-                  );
-                })}
-              </div>
+              {/* Une maison de douze pièces faisait douze puces sur quatre
+                * lignes : le menu les tient sur une, avec l'icône et la teinte
+                * de chacune — celles de sa carte à l'Accueil. */}
+              <ListeChoix value={choixPiece} label={tr('Pièce')} onChange={setChoixPiece} style={ligneMenu} options={optionsPiece} />
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('Changer de pièce la déplace d’une grille à l’autre ; Home Assistant n’est pas modifié.')}</div>
             </>
           )}
@@ -3942,11 +4520,8 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
           {!estSection && ed.estLarge && (
             <>
               <div style={etiquette}>{tr('LARGEUR')}</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {[[false, tr('Simple')], [true, tr('Double')]].map(([lg, lbl2]) => { const on = ed.estLarge(id) === lg; return (
-                  <button key={lbl2} aria-pressed={on} onClick={() => { if (!on) ed.basculerLarge(id); }} style={{ ...puce(on, true, teinteRgb('var(--o-accent-rgb)')), flex: 1, justifyContent: 'center' }}>{lbl2}</button>
-                ); })}
-              </div>
+              <Segment grandir value={!!ed.estLarge(id)} onChange={() => ed.basculerLarge(id)} label={tr('Largeur')}
+                options={[{ id: false, label: tr('Simple') }, { id: true, label: tr('Double') }]} />
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('Double : la carte prend deux emplacements côte à côte.')}</div>
             </>
           )}
@@ -4444,6 +5019,24 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
  * dire ce qui compte. Une entité épinglée remonte en tête de fiche ET s'invite
  * sur la carte de son appareil. Partagé maison via la configuration (cfgSet). */
 const lireEpingles = () => { const v = cfgVal('loggia_epingles', null); return Array.isArray(v) ? v : []; };
+/* Épingler ou désépingler — en RELISANT la maison au moment d'écrire.
+ *
+ * Trois écrans posaient la punaise, chacun avec sa copie de la liste prise à
+ * l'ouverture. Deux fiches ouvertes, une épingle ajoutée dans l'une : la
+ * seconde écrivait ensuite sa liste d'avant, et l'épingle disparaissait sans
+ * un mot. L'état local reste, pour que la punaise réponde tout de suite ; mais
+ * ce qui part vers la maison se calcule sur ce que la maison a, pas sur ce
+ * qu'un écran croyait avoir.
+ *
+ * Un favori peut être une chaîne (carte compacte) ou une entrée typée
+ * `{t, id}` depuis que la section s'édite : on compare donc l'ENTITÉ, jamais
+ * l'entrée. */
+function basculerEpingle(id) {
+  const eps = lireEpingles();
+  const suiv = eps.some(x => cvId(x) === id) ? eps.filter(x => cvId(x) !== id) : eps.concat(id);
+  cfgSet({ loggia_epingles: suiv.length ? suiv : null });
+  return suiv;
+}
 /* La punaise des FICHES DE DOMAINE (lumière, volet, climat, média, capteur) :
  * épingle l'entité de la fiche — favoris de l'accueil et carte de l'appareil.
  * La fiche appareil universelle a la sienne, ligne par ligne. */
@@ -4452,7 +5045,7 @@ function BoutonEpingle({ id }) {
   // Un favori peut être une chaîne (carte compacte) ou une entrée typée
   // {t, id} depuis que la section s'édite : on compare donc l'ENTITÉ.
   const on = eps.some(x => cvId(x) === id);
-  const tap = () => { const s = on ? eps.filter(x => cvId(x) !== id) : eps.concat(id); setEps(s); cfgSet({ loggia_epingles: s.length ? s : null }); };
+  const tap = () => setEps(basculerEpingle(id));
   return (
     <button onClick={tap} title={on ? tr('Désépingler') : tr('Épingler sur la carte')} aria-pressed={on}
       style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'rgba(var(--o-accent-rgb),.18)' : 'var(--o-s1)', color: on ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>
@@ -4645,12 +5238,7 @@ function FicheAppareil({ id, hass, onClose }) {
   const [diagOuvert, setDiagOuvert] = useState(false);
   // Épingles : état local pour un retour visuel immédiat, cfgSet pour la maison.
   const [eps, setEps] = useState(lireEpingles);
-  const basculer = (eid) => {
-    // Comparaison par ENTITÉ : un favori peut être une entrée typée.
-    const suiv = eps.some(x => cvId(x) === eid) ? eps.filter(x => cvId(x) !== eid) : eps.concat(eid);
-    setEps(suiv);
-    cfgSet({ loggia_epingles: suiv.length ? suiv : null });
-  };
+  const basculer = (eid) => setEps(basculerEpingle(eid));
   const S = (hass && hass.states) || {};
   const meta = index && index.entityMeta ? index.entityMeta.get(id) : null;
   const devId = meta && meta.deviceId;
@@ -4675,8 +5263,13 @@ function FicheAppareil({ id, hass, onClose }) {
     .sort((a, b) => (a.id === id ? -1 : 0) - (b.id === id ? -1 : 0));
   const restantes = soeurs.filter(x => pilotables.indexOf(x) < 0);
   // Les épinglées quittent leur section : elles vivent en tête, pas en double.
-  const epinglees = restantes.filter(x => eps.indexOf(x.id) >= 0);
-  const libres = restantes.filter(x => eps.indexOf(x.id) < 0);
+  /* La lecture compare l'ENTITÉ, comme l'écriture le faisait déjà. Avec
+   * `indexOf`, une épingle au format `{t, id}` ne se reconnaissait pas : la
+   * ligne s'affichait « non épinglée », et le clic pour l'épingler la
+   * RETIRAIT — `basculer`, lui, la trouvait. */
+  const estEpinglee = (eid) => eps.some(x => cvId(x) === eid);
+  const epinglees = restantes.filter(x => estEpinglee(x.id));
+  const libres = restantes.filter(x => !estEpinglee(x.id));
   const principal = libres.filter(x => !x.m.category);
   const config = libres.filter(x => x.m.category === 'config');
   const diag = libres.filter(x => x.m.category === 'diagnostic');
@@ -4695,7 +5288,7 @@ function FicheAppareil({ id, hass, onClose }) {
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{titre2 + (ouvert ? '' : ' · ' + liste.length)}</span>
           <Fi i={ouvert ? 'angle-up' : 'angle-down'} size={11} color="var(--o-text3)" />
         </button>
-        {ouvert && liste.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={H} nom={nomCourt(x)} surEpingle={basculer} epingle={eps.indexOf(x.id) >= 0} />)}
+        {ouvert && liste.sort(triNom).map(x => <LigneEntite key={x.id} id={x.id} hass={H} nom={nomCourt(x)} surEpingle={basculer} epingle={estEpinglee(x.id)} />)}
       </>
     );
   };
@@ -5965,7 +6558,6 @@ const ICONES_PIECE = [
   'garage', 'car', 'door-open', 'computer', 'gamepad', 'book', 'coffee', 'baby-carriage', 'flower-tulip', 'leaf',
   'sun', 'umbrella-beach', 'swimmer', 'gym', 'music-alt', 'film', 'hammer', 'box', 'bolt', 'flame',
 ];
-const ICONES_PAR_PAGE = 10;
 
 /** Le modele de piece le plus proche d'un nom, ou null. */
 function modeleDePiece(nom) {
@@ -6134,8 +6726,6 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
   const [icone, setIcone] = useState(actuel ? actuel.glyphe : 'home');
   const [teinte, setTeinte] = useState(actuel ? actuel.teinte : 'accent');
   // La grille d'icones, par pages de dix : on ouvre sur celle de l'icone choisie.
-  const pages = Math.ceil(ICONES_PIECE.length / ICONES_PAR_PAGE);
-  const [page, setPage] = useState(Math.max(0, Math.floor(ICONES_PIECE.indexOf(icone) / ICONES_PAR_PAGE)));
   const [compacte, setCompacte] = useState(!!compacteInit);
   const [temp, setTemp] = useState(h.temp || '');
   const [hum, setHum] = useState(h.humidity || '');
@@ -6163,7 +6753,6 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
   const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
   const note = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' };
   const puce = (on, x) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + x.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + x.rgb + ',.14)' : 'var(--o-s1)', color: on ? x.col : 'var(--o-text1)' });
-  const pageur = (possible) => ({ width: 28, height: 28, padding: 0, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: possible ? 'pointer' : 'default', opacity: possible ? 1 : .35, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' });
   const entites = [['o-piece-temp', tr('Température'), temp, setTemp, 'temperature'], ['o-piece-hum', tr('Humidité'), hum, setHum, 'humidity'], ['o-piece-co2', tr('CO₂'), co2, setCo2, 'carbon_dioxide']];
 
   return (
@@ -6179,22 +6768,7 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
             onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} autoFocus />
           {doublon && <div style={{ ...note, color: 'var(--o-bad)' }}>{tr('Une pièce porte déjà ce nom.')}</div>}
 
-          <div style={etiquette}>{tr('ICÔNE')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-            {ICONES_PIECE.slice(page * ICONES_PAR_PAGE, (page + 1) * ICONES_PAR_PAGE).map(ic => { const on = ic === icone; return (
-              <button key={ic} aria-pressed={on} aria-label={ic} onClick={() => setIcone(ic)}
-                style={{ height: 46, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + t.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + t.rgb + ',.14)' : 'var(--o-s1)' }}>
-                <Ico name={ic} size={20} color={on ? t.col : 'var(--o-text1)'} />
-              </button>
-            ); })}
-          </div>
-          {pages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
-              <button aria-label={tr('Icônes précédentes')} disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={pageur(page > 0)}><Fi i="angle-small-left" size={14} /></button>
-              <PointsDePage n={pages} courant={page} onChoisir={setPage} couleur={t.col} />
-              <button aria-label={tr('Icônes suivantes')} disabled={page === pages - 1} onClick={() => setPage(p => Math.min(pages - 1, p + 1))} style={pageur(page < pages - 1)}><Fi i="angle-small-right" size={14} /></button>
-            </div>
-          )}
+          <ChoixIcone valeur={icone} onChoisir={setIcone} suggerees={ICONES_PIECE} />
 
           <div style={etiquette}>{tr('TEINTE')}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -6660,6 +7234,21 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
    * telephone fige sur un vieil etat sans que personne ne le voie.
    */
   const formatGrille = formatEcran(tactile, wide);
+  /* Les pieces en CARTES ou en PLAN (30/09, retenu le 01/10). Le plan n'existe
+   * pas encore : le bouton est la, la place est prise, et on le dit franchement
+   * plutot que de dessiner un faux.
+   *
+   * Le choix se GARDE desormais, par type d'ecran et dans la maison : « un
+   * reglage pourrait etre bien pour afficher de preference soit les pieces soit
+   * le plan par defaut ». Pas de reglage en double dans Parametres — la bascule
+   * de l'Accueil EST le reglage, elle se souvient. */
+  const [vuePiecesCfg, setVuePiecesCfg] = useState(() => cfgVal('loggia_vuepieces', null));
+  const vuePieces = vuePiecesDe(vuePiecesCfg, formatGrille);
+  const setVuePieces = (id) => {
+    const n = poserVuePieces(vuePiecesCfg, formatGrille, id);
+    setVuePiecesCfg(n);
+    cfgSet({ loggia_vuepieces: n });
+  };
   const grillePropre = formatGrille !== 'pc' && !!(accL.formats || {})[formatGrille];
   const grille = grillePropre ? accL.formats[formatGrille] : accL;
   const saveGrille = (g) => {
@@ -7125,7 +7714,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     out.live = r; // valeurs brutes + entity ids → popup confort
     return out;
   });
-  const avatars = (a && a.people) ? a.people.map(p => ({ img: p.img, title: `${p.name} · ${p.home ? tr('Présent') : 'Absent'}`, dim: !p.home })) : [{ grad: 'linear-gradient(135deg,var(--o-rose),var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,var(--o-lampe-b),var(--o-bad))' }];
+  const avatars = (a && a.people) ? a.people.map(p => ({ img: p.img, title: `${p.name} · ${p.home ? tr('Présent') : tr('Absent')}`, dim: !p.home })) : [{ grad: 'linear-gradient(135deg,var(--o-rose),var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,var(--o-lampe-b),var(--o-bad))' }];
   // ── Salutation contextuelle ──────────────────────────────────────────────
   // L'heure donne le bonjour ; la maison donne les faits — lumières allumées,
   // ouvrants ouverts, état de l'alarme. Sans HA, des faits d'exemple gardent
@@ -7666,9 +8255,16 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
         {(() => {
           const inner = pieces;
           const piecesHeader = (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            /* Plus d'air sous CET en-tête que sous les autres (30/09) : le
+               segment le rend plus haut, et la première carte venait presque
+               le toucher — « là c'est presque collé ». */
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
               <h2 style={sectionTitle}>{tr('Pièces')}</h2>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('{n} pièces', { n: inner.length })}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{tr('{n} pièces', { n: inner.length })}</span>
+                <Segment value={vuePieces} onChange={setVuePieces} label={tr('Affichage des pièces')}
+                  options={[{ id: 'cartes', label: tr('Cartes'), ico: 'apps' }, { id: 'plan', label: tr('Plan'), ico: 'home' }]} />
+              </div>
             </div>
           );
           /* OÙ chaque carte se pose (23/09) : une cellule, colonne et rangée,
@@ -7854,7 +8450,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           );
           const railAgenda = calRailId ? railPanel(tr('Agenda'), sousAg, nAuj ? (nAuj > 1 ? tr('{n} AUJOURD’HUI', { n: nAuj }) : tr('1 AUJOURD’HUI')) : tr('RIEN AUJOURD’HUI'), nAuj ? '79,140,255' : OKRGB, [bandeAg, ...lignesAg]) : null;
           const camsHeader = (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            /* Même air que sous l'en-tête des Pièces (30/09) : un menu rend la
+               ligne plus haute qu'un simple titre, et la première tuile venait
+               la toucher. */
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <h2 style={sectionTitle}>{tr('Caméras')}</h2>
               <span style={{ flex: 1 }} />
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{a ? tr('{n} en ligne', { n: a.camOnline }) : tr('{n} caméras', { n: cams.length })}</span>
@@ -7872,7 +8471,15 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             // d'outils) : la section reste donc vivante en mode édition.
             favoris: <FavorisAccueil hass={dashHass} edit={editMode} />,
             scenes: <ScenariosAccueil hass={dashHass} edit={editMode} onNav={onNav} />,
-            pieces: <>{piecesHeader}{piecesGrid}</>,
+            /* Le plan n'est pas dessine : on garde sa place et on l'annonce.
+             * Pas de faux plan, pas de carte grisee — juste la phrase. */
+            pieces: <>{piecesHeader}{vuePieces === 'plan' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 220, padding: 24, borderRadius: 16, background: 'var(--o-s1)', border: '1px dashed var(--o-bd2)', textAlign: 'center' }}>
+                <span style={{ display: 'inline-flex', color: 'var(--o-text3)' }}><Fi i="home" size={26} /></span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--o-text1)' }}>{tr('Le plan de la maison arrive prochainement.')}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)', maxWidth: 360 }}>{tr('En attendant, « Cartes » montre les mêmes pièces.')}</span>
+              </div>
+            ) : piecesGrid}</>,
             cameras: cams.length > 0 ? <>{camsHeader}{camsGrid}</> : null,
           };
           // « A surveiller » en tete du rail — sur le cote avec En ce moment et
@@ -8082,7 +8689,11 @@ const HUE_SCENES = {
     { name: 'Pandemonium', uuid: '0cbcc8ed-5474-471c-b3c1-45b4acc555b1', colors: [[190,0,255],[216,161,255],[250,55,255],[206,91,255],[205,154,255]], brightness: 50 },
     { name: 'Phantom', uuid: 'd824598f-0c09-4e67-beb2-972a8d5813e2', colors: [[117,185,192],[229,138,95],[52,191,235],[73,180,255],[206,152,137]], brightness: 40 },
   ] },
-  winter: { label: 'Fêtes d\'hiver', scenes: [
+  /* Guillemets DOUBLES, et la cle au catalogue. Le libelle passe par `tr()`
+   * a l'affichage (`HUE_CATS()`), mais l'argument est une VARIABLE : le filet
+   * i18n, qui ne lit que des litteraux, ne pouvait pas le reclamer. Il
+   * sortait donc en francais dans les six autres langues. */
+  winter: { label: "Fêtes d'hiver", scenes: [
     { name: 'Snow sparkle', uuid: '6a794ffd-3564-493d-a9ad-a1abcec8b81c', colors: [[32,197,168],[143,151,255],[143,0,255],[228,139,63],[255,104,26]], brightness: 39 },
     { name: 'Under the tree', uuid: '85b8bc42-c564-4661-b058-f4e5792a6a6c', colors: [[255,57,32],[59,198,125],[9,202,63],[205,157,42],[230,138,95]], brightness: 40 },
     { name: 'Nutcracker', uuid: '33c32d2a-e5ad-4b26-8e6f-07090b4c6487', colors: [[59,189,255],[186,166,74],[217,149,34],[106,148,255],[74,196,139]], brightness: 40 },
@@ -8394,8 +9005,6 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
   const [s, setS] = useState(() => scenario ? { ...scenario, nom: scenario.nom || '', actions: (scenario.actions || []).map(a => ({ ...a })) } : scenarioVide());
   const maj = (patch) => setS(v => ({ ...v, ...patch }));
   const [nature, setNature] = useState(scenario && scenario.lien ? 'lie' : 'compose');
-  const pages = Math.ceil(ICONES_SCENARIO.length / ICONES_PAR_PAGE);
-  const [page, setPage] = useState(Math.max(0, Math.floor(ICONES_SCENARIO.indexOf(s.icone) / ICONES_PAR_PAGE)));
   const [err, setErr] = useState('');
   const [attente, setAttente] = useState(false);
   const t = teinteScenario(s);
@@ -8408,7 +9017,6 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
   const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
   const note = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' };
   const puce = (on, x) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + x.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + x.rgb + ',.14)' : 'var(--o-s1)', color: on ? x.col : 'var(--o-text1)' });
-  const pageur = (possible) => ({ width: 28, height: 28, padding: 0, borderRadius: 9, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: possible ? 'pointer' : 'default', opacity: possible ? 1 : .35, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' });
   const secondaire = { padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' };
   const majAction = (i, patch) => setS(v => ({ ...v, actions: v.actions.map((a, k) => k === i ? { ...a, ...patch } : a) }));
   const retirerAction = (i) => setS(v => ({ ...v, actions: v.actions.filter((_, k) => k !== i) }));
@@ -8439,22 +9047,9 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
           <input id="o-scn-nom" value={s.nom} onChange={(e) => maj({ nom: e.target.value })} placeholder={nomIntegre || tr('Apéro, Sieste, Devoirs…')}
             onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} autoFocus={!existant} />
 
-          <div style={etiquette}>{tr('ICÔNE')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-            {ICONES_SCENARIO.slice(page * ICONES_PAR_PAGE, (page + 1) * ICONES_PAR_PAGE).map(ic => { const on = ic === s.icone; return (
-              <button key={ic} aria-pressed={on} aria-label={ic} onClick={() => maj({ icone: ic })}
-                style={{ height: 46, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + t.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + t.rgb + ',.14)' : 'var(--o-s1)' }}>
-                <Ico name={ic} size={20} color={on ? t.col : 'var(--o-text1)'} />
-              </button>
-            ); })}
-          </div>
-          {pages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 8 }}>
-              <button aria-label={tr('Icônes précédentes')} disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={pageur(page > 0)}><Fi i="angle-small-left" size={14} /></button>
-              <PointsDePage n={pages} courant={page} onChoisir={setPage} couleur={t.col} />
-              <button aria-label={tr('Icônes suivantes')} disabled={page === pages - 1} onClick={() => setPage(p => Math.min(pages - 1, p + 1))} style={pageur(page < pages - 1)}><Fi i="angle-small-right" size={14} /></button>
-            </div>
-          )}
+          {/* Un scenario garde son icone cote serveur : pas de trait/plein ici,
+            * mais la bibliotheque entiere au lieu des quarante d'avant. */}
+          <ChoixIcone valeur={s.icone} onChoisir={(ic) => maj({ icone: ic })} suggerees={ICONES_SCENARIO} />
 
           <div style={etiquette}>{tr('TEINTE')}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -9099,29 +9694,86 @@ const EN_LAYOUT_KEY = 'loggia_enlayout';
  * exporte), et le survol donne l'heure et les valeurs, comme le tableau de
  * bord Énergie de Home Assistant.
  */
+/* Moins de points que de pixels, sans perdre les pics (audit du 29/09).
+ *
+ * Vingt-quatre heures de relevés font des milliers de points pour trois cents
+ * pixels de large : on en dessinait donc des dizaines par colonne, pour un
+ * tracé identique.
+ *
+ * On garde le plus BAS et le plus HAUT de chaque tranche, pas un point au
+ * hasard : prendre un point sur vingt raboterait justement les pointes de
+ * consommation, qui sont ce qu'on vient regarder. Les deux sortent dans
+ * l'ordre du temps, sinon le trait ferait des allers-retours.
+ */
+function sousEchantillonner(pts, colonnes) {
+  if (!Array.isArray(pts) || pts.length <= colonnes * 2) return pts;
+  const taille = Math.ceil(pts.length / colonnes);
+  const out = [];
+  for (let i = 0; i < pts.length; i += taille) {
+    const fin = Math.min(i + taille, pts.length);
+    let lo = pts[i], hi = pts[i];
+    for (let k = i + 1; k < fin; k += 1) {
+      if (pts[k].v < lo.v) lo = pts[k];
+      if (pts[k].v > hi.v) hi = pts[k];
+    }
+    if (lo === hi) out.push(lo);
+    else if (lo.t <= hi.t) { out.push(lo); out.push(hi); }
+    else { out.push(hi); out.push(lo); }
+  }
+  // Les deux bouts restent les vrais bouts : l'aire se referme dessus.
+  if (out[0] !== pts[0]) out.unshift(pts[0]);
+  if (out[out.length - 1] !== pts[pts.length - 1]) out.push(pts[pts.length - 1]);
+  return out;
+}
+
 function EnPuissances({ series, h = 190 }) {
   const [survol, setSurvol] = useState(null);
-  const vives = (series || []).filter(s => s.pts && s.pts.length > 1);
-  if (!vives.length) return <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('historique indisponible')}</div>;
-  // Fenêtre commune : du plus ancien point au plus récent, toutes séries mêlées.
-  const tous = vives.flatMap(s => s.pts);
-  const t0 = Math.min(...tous.map(p => p.t)), t1 = Math.max(...tous.map(p => p.t));
-  const dt = (t1 - t0) || 1;
-  const vals = tous.map(p => p.v);
-  const haut = Math.max(0, ...vals), bas = Math.min(0, ...vals);
-  const span = (haut - bas) || 1;
   const W = 320, PAD = 8;
-  const x = (t) => ((t - t0) / dt) * W;
-  const y = (v) => PAD + (1 - (v - bas) / span) * (h - PAD * 2);
-  const yZero = y(0);
-  const chemin = (pts) => 'M ' + pts.map(p => x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' L ');
-  // Repères d'heures : quatre traits, c'est assez pour situer sans charger.
-  const heures = [0, .25, .5, .75, 1].map(f => ({ f, d: new Date(t0 + dt * f) }));
+  /* TOUT le calcul se fait une fois par jeu de données, et non plus à chaque
+   * rendu. Le survol change soixante fois par seconde quand la souris traverse
+   * la carte ; il refaisait avec lui les bornes, l'échelle et les tracés de
+   * toutes les séries. Seules la ligne verticale et la bulle en dépendent. */
+  const g = useMemo(() => {
+    const vives = (series || []).filter(s => s.pts && s.pts.length > 1);
+    if (!vives.length) return null;
+    /* Les bornes en UNE passe. `Math.min(...tableau)` passe le tableau en
+     * arguments : au-delà de quelques dizaines de milliers de points, le
+     * navigateur lève une `RangeError` — Safari cède le premier. Une boucle
+     * n'a pas de limite, et lit chaque point une seule fois. */
+    let t0 = Infinity, t1 = -Infinity, haut = 0, bas = 0;
+    for (const s of vives) {
+      for (const p of s.pts) {
+        if (p.t < t0) t0 = p.t;
+        if (p.t > t1) t1 = p.t;
+        if (p.v > haut) haut = p.v;
+        if (p.v < bas) bas = p.v;
+      }
+    }
+    const dt = (t1 - t0) || 1;
+    const span = (haut - bas) || 1;
+    const x = (t) => ((t - t0) / dt) * W;
+    const y = (v) => PAD + (1 - (v - bas) / span) * (h - PAD * 2);
+    const chemin = (pts) => 'M ' + pts.map(p => x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' L ');
+    const yZero = y(0);
+    const traces = vives.map(s => {
+      const pts = sousEchantillonner(s.pts, W);
+      const d = chemin(pts);
+      return { nom: s.nom, couleur: s.couleur, d,
+               aire: d + ' L ' + x(pts[pts.length - 1].t) + ' ' + yZero + ' L ' + x(pts[0].t) + ' ' + yZero + ' Z' };
+    });
+    // Repères d'heures : quatre traits, c'est assez pour situer sans charger.
+    const heures = [0, .25, .5, .75, 1].map(f => ({ f, d: new Date(t0 + dt * f) }));
+    return { vives, t0, dt, yZero, traces, heures };
+  }, [series, h]);
+  if (!g) return <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('historique indisponible')}</div>;
+  const { vives, t0, dt, yZero, traces, heures } = g;
   const surPointeur = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     if (!r.width) return;
     const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
     const t = t0 + dt * f;
+    // La valeur montrée se lit sur les points d'ORIGINE : on a allégé le
+    // tracé, pas la mesure.
     setSurvol({ f, t, vals: vives.map(s => ({ nom: s.nom, couleur: s.couleur, v: prochePoint(s.pts, t) })) });
   };
   return (
@@ -9134,10 +9786,10 @@ function EnPuissances({ series, h = 190 }) {
         viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height: h, display: 'block', overflow: 'visible' }}>
         {[0, .5, 1].map(f => <line key={f} x1="0" x2={W} y1={PAD + f * (h - PAD * 2)} y2={PAD + f * (h - PAD * 2)} stroke="var(--o-bd3)" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
         <line x1="0" x2={W} y1={yZero} y2={yZero} stroke="var(--o-text3)" strokeWidth="1" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-        {vives.map(s => (
+        {traces.map(s => (
           <g key={s.nom}>
-            <path d={`${chemin(s.pts)} L ${x(s.pts[s.pts.length - 1].t)} ${yZero} L ${x(s.pts[0].t)} ${yZero} Z`} fill={s.couleur} opacity=".14" />
-            <path d={chemin(s.pts)} fill="none" stroke={s.couleur} strokeWidth="1.7" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+            <path d={s.aire} fill={s.couleur} opacity=".14" />
+            <path d={s.d} fill="none" stroke={s.couleur} strokeWidth="1.7" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
           </g>
         ))}
         {survol && <line x1={survol.f * W} x2={survol.f * W} y1="0" y2={h} stroke="var(--o-accent)" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />}
@@ -10148,7 +10800,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   else if (dom === 'binary_sensor') stateTxt = s === 'on' ? tr('Détecté') : 'RAS';
   else if (dom === 'vacuum' || dom === 'lawn_mower') stateTxt = ({ docked: tr('Sur la base'), cleaning: tr('Nettoyage'), mowing: tr('Tonte'), returning: tr('Retour à la base'), paused: tr('En pause'), idle: tr('Inactif'), error: tr('Erreur') })[s] || String(s);
   else if (dom === 'valve') stateTxt = s === 'open' ? tr('Ouvert') : s === 'closed' ? tr('Fermé') : String(s);
-  else if (dom === 'person') stateTxt = s === 'home' ? tr('Présent') : 'Absent';
+  else if (dom === 'person') stateTxt = s === 'home' ? tr('Présent') : tr('Absent');
   else if (dom === 'sensor') stateTxt = (isNaN(parseFloat(s)) ? s : parseFloat(s)) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
   else if (runnable || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—'; // scene/script/button : état = date de dernière exécution
   else stateTxt = String(s);
@@ -10163,7 +10815,9 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
       style={{ position: 'relative', background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
       <div className="o-cvrow" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: dense ? 9 : 11 }}>
-        <span style={{ width: dense ? 34 : 40, height: dense ? 34 : 40, borderRadius: dense ? 10 : 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinteLu || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{ico ? <Fi i={ico} size={dense ? 15 : 17} /> : <PlugIcon size={dense ? 15 : 17} />}</span>
+        <span style={{ width: dense ? 34 : 40, height: dense ? 34 : 40, borderRadius: dense ? 10 : 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinteLu || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{/* `Ico` et non `Fi` : une icone CHOISIE peut etre un dessin, que `Fi`
+                  * aurait cherche dans la police et rendu vide. */}
+          {ico ? <Ico name={ico} size={dense ? 15 : 17} /> : <PlugIcon size={dense ? 15 : 17} />}</span>
         <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
           <div style={{ fontSize: 12, fontWeight: 600, color: on ? (teinte ? teinteTxt : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -10481,7 +11135,7 @@ function CvPerson({ id, hass }) {
         <span style={{ position: 'absolute', right: -1, bottom: -1, width: 14, height: 14, borderRadius: '50%', background: home ? 'var(--o-ok)' : 'var(--o-text3)', border: '2.5px solid var(--o-surfA)' }} />
       </span>
       <span style={{ fontSize: 14, fontWeight: 800 }}>{nom}</span>
-      <span style={{ fontSize: 12, fontWeight: 700, color: home ? 'var(--o-ok)' : 'var(--o-text3)' }}>{home ? tr('Présent') : 'Absent'}{st && st.last_changed ? ' · ' + relTime(st.last_changed).toLowerCase() : ''}</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color: home ? 'var(--o-ok)' : 'var(--o-text3)' }}>{home ? tr('Présent') : tr('Absent')}{st && st.last_changed ? ' · ' + relTime(st.last_changed).toLowerCase() : ''}</span>
     </div>
   );
 }
@@ -10526,7 +11180,7 @@ function chipTexte(id, st) {
   if (d === 'cover') return a.current_position != null ? a.current_position + ' %' : (s === 'open' ? tr('Ouvert') : tr('Fermé'));
   if (d === 'media_player') return s === 'playing' ? (a.media_title || tr('Lecture')) : '';
   if (d === 'alarm_control_panel') return s === 'disarmed' ? tr('Désarmée') : s === 'triggered' ? tr('ALERTE') : tr('Armée');
-  if (d === 'person' || d === 'device_tracker') return s === 'home' ? tr('Présent') : 'Absent';
+  if (d === 'person' || d === 'device_tracker') return s === 'home' ? tr('Présent') : tr('Absent');
   if (d === 'binary_sensor') return '';
   if (d === 'sensor') { const n = parseFloat(s); return (isNaN(n) ? String(s) : Math.round(n * 10) / 10) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''); }
   if (d === 'lock') return s === 'locked' ? tr('Verrouillée') : tr('Déverrouillée');

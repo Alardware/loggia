@@ -14,7 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -86,18 +86,23 @@ test('chaque icône de pièce est rendable', () => {
 });
 
 test('la police PLEINE n’est ni chargée ni employée, et l’attente est bornée', () => {
-  /* 151 Ko de CSS et 188 Ko de police, en feuille BLOQUANTE, pour zéro classe
-   * utilisée : toutes les icones de Loggia sont baties en `fi fi-rr-`. Retirée
-   * le 23/09 (plan M3). Ce test empêche de la remettre par distraction — et
-   * d’écrire une classe `fi-sr-` qui ne s’afficherait plus. */
+  /* 147 Ko de feuille et 188 Ko de police pour une variante de glyphe : elle
+   * avait été retirée le 23/09 (plan M3), revenue le 29/09 pour le style
+   * « Plein », et RE-retirée le 30/09 — « retire solid, juste regular ».
+   *
+   * Le style « Plein » reste, mais il ne concerne plus que les DESSINS : il se
+   * calcule à partir du trait (`src/plein.js`) et ne coûte pas un octet. Un
+   * glyphe de police garde son trait, quel que soit le style demandé. */
   const index = readFileSync(join(RACINE, 'index.html'), 'utf8');
   /* On cherche la BALISE, pas le mot : la remarque qui explique le retrait
    * nomme la police, et se faisait prendre pour elle. */
   const feuilles = [...index.matchAll(/<link[^>]+href="([^"]+)"/g)].map(m => m[1]);
   assert.ok(!feuilles.some(f => /uicons-solid/.test(f)), 'la police pleine est à nouveau chargée');
   assert.ok(feuilles.some(f => /uicons-regular-rounded\.css/.test(f)), 'la police des icones a disparu');
-  assert.ok(!/fi-sr-/.test(src.replace(/\/\*[\s\S]*?\*\//g, '')),
-    'une classe `fi-sr-` est apparue : sa police n’est plus là');
+
+  const ico = readFileSync(join(RACINE, 'src', 'icones.jsx'), 'utf8');
+  assert.ok(!/fi-sr-/.test(ico.replace(/\/\*[\s\S]*?\*\//g, '')), 'une classe `fi-sr-` est revenue : sa police n’est plus là');
+  assert.ok(!existsSync(join(RACINE, 'public', 'fonts', 'uicons-solid-rounded.woff2')), 'le fichier de la police pleine est revenu');
 
   /* `block` et non `swap` : le repli d’une police d’icones dessine des carrés
    * vides. Sans cette ligne, l’attente n’était bornée par rien. */

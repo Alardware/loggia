@@ -700,3 +700,53 @@ def test_l_interrupteur_est_ecoute_et_declare_au_socle(creer, monkeypatch):
     assert ["input_boolean.invite", "person.a"] in suivis
     assert "input_boolean.invite" in p.regles._pilotees.get("presence", set())
     assert lancer(p.async_etat())["invite"] == {"entite": "input_boolean.invite", "present": True, "coupure_prevue": False}
+
+
+def test_des_telephones_muets_ne_valent_pas_un_retour(module):
+    """L'alarme ne se desarme pas parce qu'on ne sait plus ou sont les gens.
+
+    Le trou vient de ce que `tous_absents` rend `False` pour deux raisons tres
+    differentes : quelqu'un est la, ou aucun telephone ne repond. Le retour,
+    qui DESARME l'alarme, lisait ce `False` comme un retour — une maison armee
+    et vide se desarmait donc seule des que la box tombait (audit du 29/09).
+
+    `quelquun_est_la` repond a la question INVERSE et demande un `home` franc :
+    les deux fonctions disent « non » quand on ne sait pas, et on ne fait rien.
+    """
+    personnes = ["person.a", "person.b"]
+
+    # Personne : la maison est vide, et personne n'est rentre.
+    dehors = {"person.a": FauxEtat("not_home"),
+              "person.b": FauxEtat("not_home")}
+    assert module.tous_absents(dehors, personnes) is True
+    assert module.quelquun_est_la(dehors, personnes) is False
+
+    # Quelqu'un rentre : la maison n'est plus vide, et le retour est FRANC.
+    rentre = dict(dehors)
+    rentre["person.a"] = FauxEtat("home")
+    assert module.tous_absents(rentre, personnes) is False
+    assert module.quelquun_est_la(rentre, personnes) is True
+
+    # Les telephones se taisent : ni vide, NI rentre. C'est tout le correctif.
+    muets = {"person.a": FauxEtat("unavailable"),
+             "person.b": FauxEtat("unknown")}
+    assert module.tous_absents(muets, personnes) is False
+    assert module.quelquun_est_la(muets, personnes) is False
+
+    # Disparus de Home Assistant : pareil.
+    assert module.quelquun_est_la({}, personnes) is False
+    assert module.quelquun_est_la(dehors, []) is False
+
+
+def test_le_retour_exige_un_signe_franc_dans_l_evaluation():
+    """Et la regle est bien CABLEE dans l'evaluation, pas seulement disponible.
+
+    On lit le code : un test de bout en bout demanderait une boucle
+    d'evenements, alors que ce qui doit etre garanti tient en une ligne — le
+    retour est sous `rentre`, et `rentre` demande un `home` ou le mode invite.
+    """
+    import pathlib
+    racine = pathlib.Path(__file__).resolve().parents[2]
+    src = (racine / "custom_components" / "loggia" / "presence.py").read_text(encoding="utf-8")
+    assert 'rentre = quelquun_est_la(etats, self.cfg.get("personnes")) or invite' in src
+    assert "if self.dehors and rentre:" in src, "le retour ne demande plus de signe franc"
