@@ -26,10 +26,17 @@ test('le choix se range dans la maison, et voyage avec elle', () => {
 
 test('poser une icone, et la rendre', () => {
   const f = app.slice(app.indexOf('function declarerIcone('), app.indexOf('\n}', app.indexOf('function declarerIcone(')));
-  assert.ok(f.includes('if (glyphe) m[id] = glyphe; else delete m[id];'), 'sans glyphe, l’entree s’efface — on revient au defaut');
+  assert.ok(f.includes("if (glyphe) m[id] = glyphe; else delete m[id];"), 'sans glyphe, l’entree s’efface — on revient au defaut');
+  /* Une icone choisie est une CHAINE, et rien d'autre. Le style « Plein » du
+   * 29/09 en faisait un objet `{ n, s }` ; il a ete retire le 30/09 — « tu as
+   * laisse le bouton, enleve-le ». On n'ecrit donc plus que la chaine, mais on
+   * relit encore l'objet : une installation en a peut-etre enregistre. */
+  const lu = app.slice(app.indexOf('function iconeChoisie('), app.indexOf('\n}', app.indexOf('function iconeChoisie(')));
+  assert.ok(lu.includes("if (typeof v === 'string' && v) return v;"), 'une icone deja choisie ne se relit plus');
+  assert.ok(lu.includes("typeof v.n === 'string'"), 'le nouveau format ne se relit pas');
   assert.ok(f.includes('cfgSet({ loggia_icones: Object.keys(m).length ? m : null })'), 'une table vide s’efface, elle ne se garde pas');
   const l = app.slice(app.indexOf('function iconeChoisie('), app.indexOf('\n}', app.indexOf('function iconeChoisie(')));
-  assert.ok(l.includes("return (typeof v === 'string' && v) ? v : null;"), 'rien n’est devine ici : une valeur absente ou abimee rend null');
+  assert.ok(lu.includes("return (v && typeof v === 'object' && typeof v.n === 'string' && v.n) ? v.n : null;"), 'rien n’est devine ici : une valeur absente ou abimee rend null');
 });
 
 test('le choix passe devant la devinette, sur TOUTES les cartes', () => {
@@ -66,21 +73,34 @@ test('la grille suit la catégorie de la carte', () => {
     for (const g of [...m[1].matchAll(/'([a-z]+)'/g)].map(x => x[1])) assert.ok(groupesDessin.has(g), 'groupe dessiné inconnu : ' + g);
     for (const g of [...m[2].matchAll(/'([a-z]+)'/g)].map(x => x[1])) assert.ok(groupesFonte.has(g), 'groupe de police inconnu : ' + g);
   }
-  // Rien ne se perd : le reste suit, sans doublon.
-  const f = app.slice(app.indexOf('function iconesPour('), app.indexOf('\n}', app.indexOf('function iconesPour(')));
-  assert.ok(f.includes('Object.values(DESSINS_CAT).forEach(pousser);') && f.includes('Object.values(FONTE_CAT).forEach(pousser);'), 'les autres icônes ont disparu de la grille');
+  /* Les SUGGÉRÉES ne montrent QUE les familles du domaine (29/09). Tant que la
+   * grille était l'unique entrée, il fallait bien faire suivre le reste
+   * derrière ; depuis qu'une bande de familles et une recherche existent, ce
+   * reste ne fait plus que noyer les vingt icônes qu'on est venu chercher. */
+  const f = app.slice(app.indexOf('function iconesSuggerees('), app.indexOf('\n}', app.indexOf('function iconesSuggerees(')));
+  assert.ok(f.includes('g.dessins.forEach(c => pousser(DESSINS_CAT[c]));') && f.includes('g.fonte.forEach(c => pousser(FONTE_CAT[c]));'), 'les suggérées ne suivent plus le domaine');
+  assert.ok(!f.includes('Object.values(DESSINS_CAT)'), 'les suggérées font encore suivre toute la bibliothèque');
   assert.ok(f.includes('if (!vues.has(n))'), 'une icône peut désormais figurer deux fois');
+  // Rien ne se perd : la bibliothèque entière reste là, sous « Tout ».
+  assert.ok(app.includes("if (cle === 'tout') return toutesLesIcones();"), 'la bibliothèque entière n’est plus joignable');
+  const t = app.slice(app.indexOf('function toutesLesIcones('), app.indexOf('\n}', app.indexOf('function toutesLesIcones(')));
+  assert.ok(t.includes('Object.values(DESSINS_CAT).forEach(pousser);') && t.includes('Object.values(FONTE_CAT).forEach(pousser);'), '« Tout » ne montre plus tout');
   // Et la grille se refait quand une prise se déclare lumière.
   /* Une ZONE — un radiateur en fil pilote — n'a pas d'`entity_id` : sa carte
    * porte une clé `zone:…`. Elle avait donc perdu la section entière, qui
    * vivait sous la condition du domaine : « les radiateurs, impossible de
    * changer l'icône, je n'ai pas l'option » (27/09). Elle part du chauffage. */
-  assert.ok(app.includes("iconesPour(estZone ? 'chauffage' : estPrise ? (lumiere ? 'lumiere' : 'prise') : domaine)"), 'la grille ne suit plus le domaine choisi');
+  assert.ok(app.includes("const domIcone = estZone ? 'chauffage' : domaineChoisi;"), 'la grille ne suit plus le domaine choisi');
+  assert.ok(app.includes('const listeSuggerees = useMemo(() => iconesSuggerees(domIcone), [domIcone]);')
+    && app.includes('<ChoixIcone valeur={monIcone} onChoisir={choisirIcone} suggerees={listeSuggerees}'), '« Suggérées » ne suit plus la carte');
   assert.ok(app.includes("const estZone = brut.indexOf('zone:') === 0;") && app.includes('const peutChoisirIcone = estEntite || estZone;'), 'une carte de zone ne peut plus choisir son icône');
   assert.ok(app.includes('{peutChoisirIcone && ('), 'la section ICÔNE est repassée sous la condition des seules entités');
   assert.ok(app.includes("<GlypheCarte id={'zone:' + zone.id} size={17}>"), 'la carte du fil pilote ignore l’icône choisie');
-  // Vingt-cinq points ne se visent pas : au-delà de huit pages, un compte.
-  assert.ok(app.includes('pagesIcone <= 8'), 'la pagination redevient une rangée de points interminable');
+  /* Vingt-cinq points ne se visent pas. On avait d'abord remplacé les points
+   * par un compte au-delà de huit pages ; le 29/09, la pagination de cette
+   * fiche disparaît tout court — voir « la fiche cherche, range par famille ».
+   * Reste un compte, mais d'icônes, pas de pages. */
+  assert.ok(app.includes("trN(liste.length, tr('{n} icône'), tr('{n} icônes'))"), 'la grille ne dit plus combien elle montre');
 
   // L'électroménager reste dessiné, et chaque nom cité a bien son tracé.
   for (const n of ['washer', 'dryer', 'dishwasher', 'fridge', 'oven', 'microwave']) {
@@ -88,9 +108,14 @@ test('la grille suit la catégorie de la carte', () => {
   }
   // La grille rend `Ico` : elle seule connaît les trois sources. Et le dessin
   // s'anime sous le curseur, au focus, ou une fois choisi.
-  assert.ok(app.includes('<Ico name={ic} size={18} anime={on || apercuIcone === ic} />'), 'la grille ne dessine plus les icônes maison, ou n’en montre plus le mouvement');
-  assert.ok(app.includes('onMouseEnter={() => setApercuIcone(ic)} onMouseLeave={() => setApercuIcone(null)}'), 'l’aperçu au survol a disparu');
-  assert.ok(app.includes('onClick={() => setMonIcone(on ? null : ic)}'), 'on ne peut plus revenir au defaut d’un second appui');
+  assert.ok(app.includes('<Ico name={ic} size={20} anime={on || apercu === ic} />'), 'la grille ne dessine plus les icônes maison, ou n’en montre plus le mouvement');
+  assert.ok(app.includes('onMouseEnter={() => setApercu(ic)} onMouseLeave={() => setApercu(null)}'), 'l’aperçu au survol a disparu');
+  // Toucher l'icône allumée la rend au défaut — et la choisir la note parmi
+  // les dernières, ce qui fait de `choisirIcone` un passage obligé (29/09).
+  assert.ok(app.includes('const choisirIcone = (ic) => setMonIcone(ic === monIcone ? null : ic);'), 'on ne peut plus revenir au defaut d’un second appui');
+  /* Les dernières choisies sont notées par le sélecteur lui-même : les trois
+   * fiches en profitent sans avoir à y penser. */
+  assert.ok(app.includes('const poser = (ic) => { onChoisir(ic); if (ic) setRecentes(noterIconeRecente(ic)); };'), 'un choix ne rejoint plus les dernières');
   assert.ok(app.includes("background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>"), 'la puce choisie n’est plus en bleu plein');
   assert.ok(app.includes('if (peutChoisirIcone && monIcone !== iconeChoisie(brut)) { declarerIcone(brut, monIcone);'), 'la fiche n’enregistre plus le choix');
 });
@@ -154,4 +179,53 @@ test('les cartes d’Énergie et de Sécurité aussi', () => {
    * du poste ne donnait que son fond, le tracé serait sorti noir. */
   assert.ok(app.includes("background: hx(d.c, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center', color: d.c }}>"),
     'la pastille du poste ne donne plus sa couleur au dessin choisi');
+});
+
+test('la fiche cherche, range par famille, et se souvient des dernières', () => {
+  /* Maquette du 29/09. La grille tenait en pages de dix : deux cents icônes
+   * faisaient vingt pages, et l'on feuilletait au lieu de chercher. Trois
+   * entrées la remplacent — une recherche, une bande de familles, les
+   * dernières choisies — et la pagination s'en va de cette fiche (les pièces
+   * et les scénarios, eux, gardent leur trentaine et leurs points). */
+  /* Le selecteur est un composant partage depuis le 29/09 : la fiche d'une
+   * entite, celle d'une piece et celle d'un scenario le posent toutes les
+   * trois — « sauf par l'accueil, c'est toujours l'ancien systeme ». */
+  const f = app.slice(app.indexOf('function ChoixIcone('), app.indexOf('\nfunction ', app.indexOf('function ChoixIcone(') + 10));
+  assert.ok(!app.includes('ICONES_PAR_PAGE'), 'une grille d’icônes pagine encore');
+  assert.ok(f.includes("tr('Rechercher : lave, lampe, volet…')"), 'pas de champ de recherche');
+  assert.ok(f.includes("tr('Familles précédentes')") && f.includes("tr('Familles suivantes')"), 'la bande des familles n’a pas ses deux flèches');
+  assert.ok(f.includes("gridTemplateColumns: 'repeat(auto-fill, minmax(52px, 1fr))'"), 'la grille ne remplit plus la largeur qu’elle a');
+  assert.ok(f.includes('maxHeight: 244, overflowY: \'auto\''), 'la grille ne défile plus chez elle : elle pousse la fiche hors de l’écran');
+  for (const [quoi, bout] of [
+    ['une pièce', '<ChoixIcone valeur={icone} onChoisir={setIcone} suggerees={ICONES_PIECE}'],
+    ['un scénario', '<ChoixIcone valeur={s.icone} onChoisir={(ic) => maj({ icone: ic })} suggerees={ICONES_SCENARIO} />'],
+  ]) assert.ok(app.includes(bout), 'la fiche d’' + quoi + ' garde l’ancienne grille');
+
+  /* La recherche cherche dans TOUTE la bibliothèque, et passe devant la
+   * famille ouverte : on tape « lave » sans se demander sous quel onglet le
+   * lave-vaisselle a été rangé. */
+  assert.ok(f.includes('if (cherche) return chercherIcones(q);'), 'la recherche ne passe pas devant la famille');
+  const c = app.slice(app.indexOf('function chercherIcones('), app.indexOf('\n}', app.indexOf('function chercherIcones(')));
+  assert.ok(c.includes('aplatiIcone(nomIcone(c))') && c.includes('aplatiIcone(legendeIcone(c))'),
+    'la recherche ignore le nom du dessin : « lave » ne trouverait pas `dishwasher`');
+
+  /* Les dernières choisies vivent dans le NAVIGATEUR : c'est la commodité de
+   * celui qui règle, pas un réglage de la maison — elles n'ont donc rien à
+   * faire dans la configuration partagée. */
+  assert.ok(app.includes("const CLE_RECENTES = 'loggia_icorecents';"), 'les dernières choisies n’ont pas de rangement');
+  assert.ok(!readFileSync(join(RACINE, 'src', 'state.js'), 'utf8').includes('loggia_icorecents'),
+    'les dernières choisies sont passées dans la configuration de la maison');
+  const r = app.slice(app.indexOf('function noterIconeRecente('), app.indexOf('\n}', app.indexOf('function noterIconeRecente(')));
+  assert.ok(r.includes('.slice(0, 12)') && r.includes('try {'), 'la liste n’est pas bornée, ou un navigateur sans stockage casserait la fiche');
+});
+
+test('l’aperçu de la fiche montre le dessin en mouvement, et ne commande rien', () => {
+  /* Un appareil dessiné porte son mouvement, mais la grille le fige : sans
+   * aperçu, on choisit une icône sans jamais voir ce qu'elle fait. La bascule
+   * n'allume que l'aperçu — elle ne touche pas à la maison. */
+  const f = app.slice(app.indexOf('function CardEditSheet('), app.indexOf('\nfunction ', app.indexOf('function CardEditSheet(') + 10));
+  assert.ok(f.includes("tr('L’aperçu ne commande rien : il montre le dessin en mouvement.')"), 'l’aperçu ne dit pas qu’il ne commande rien');
+  assert.ok(f.includes('<Ico name={icoApercu} size={24} anime={apercuAllume} />'), 'l’aperçu ne s’anime pas');
+  assert.ok(f.includes('const icoApercu = monIcone || (domActuel && domActuel.ico) || null;'), 'sans icône choisie, l’aperçu ne retombe pas sur celle du domaine');
+  assert.ok(!f.includes('onToggle={() => setApercuAllume') || !f.includes('hass.callService'), 'l’aperçu commande la maison');
 });

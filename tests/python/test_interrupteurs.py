@@ -422,3 +422,34 @@ def test_l_etat_dit_l_ecoute(creer):
     assert etat["ecoute"]["active"] is True
     ecouteur.ecouter(0)
     assert lancer(ecouteur.async_etat())["ecoute"] == {"active": False, "reste": 0}
+
+
+def test_un_bouton_sans_fil_n_ouvre_ni_serrure_ni_alarme(module, creer):
+    """La barriere que les scenarios avaient deja (audit du 29/09).
+
+    Un geste affecte partait tel quel vers `hass.services.async_call`, sans
+    aucun filtre. Un `lock.unlock` pose sur un bouton s'executait donc sur
+    simple message du broker.
+
+    On refuse le GESTE, pas le domaine : verrouiller et armer ferment la
+    maison, ils restent permis. Seul ce qui l'OUVRE est ecarte.
+    """
+    assert "lock.lock" not in module.GESTES_REFUSES
+    assert "alarm_control_panel.alarm_arm_away" not in module.GESTES_REFUSES
+
+    i = creer({"zigbee2mqtt/bouton": {"nom": "Bouton", "actions": {
+        "single": [
+            {"service": "lock.unlock", "data": {"entity_id": "lock.porte"}},
+            {"service": "alarm_control_panel.alarm_disarm", "data": {}},
+            {"service": "lock.lock", "data": {"entity_id": "lock.porte"}},
+            {"service": "light.toggle", "data": {"entity_id": "light.entree"}},
+        ],
+    }}})
+    lancer(i._async_executer("zigbee2mqtt/bouton", "single"))
+
+    faits = [(d, s) for d, s, _ in i.hass.services.appels]
+    assert ("lock", "unlock") not in faits, "la serrure s’ouvre sur un message du broker"
+    assert ("alarm_control_panel", "alarm_disarm") not in faits, "l’alarme se desarme sur un message du broker"
+    # Et ce qui ferme, ou ce qui n'ouvre rien, passe toujours.
+    assert ("lock", "lock") in faits
+    assert ("light", "toggle") in faits

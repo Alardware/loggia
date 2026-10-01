@@ -11,8 +11,17 @@ import { tr } from './i18n.js';
 export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = 'cover', alt = '' }) {
   const [src, setSrc] = useState(null);
   const token = hass && hass.auth && hass.auth.data ? hass.auth.data.access_token : null;
+  /* Le jeton se LIT au moment de l'appel, il n'est plus une dependance.
+   *
+   * Home Assistant renouvelle son jeton d'acces periodiquement — de l'ordre
+   * d'une demi-heure. Tant qu'il figurait dans les dependances, chaque
+   * renouvellement coupait la boucle et la relancait. Ici cela ne coutait
+   * qu'un tour perdu ; sur le direct plus bas, cela rendait l'ecran noir. */
+  const jeton = useRef(token);
+  jeton.current = token;
+  const authentifie = !!token;
   useEffect(() => {
-    if (!haid || !token) { setSrc(null); return; }
+    if (!haid || !authentifie) { setSrc(null); return; }
     let alive = true, last = null, tour = 0;
     const endpoint = kind === 'image' ? 'image_proxy' : 'camera_proxy';
     const fetchSnap = async () => {
@@ -21,7 +30,7 @@ export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = '
        * perimee a l'ecran ; les vignettes semblaient reculer dans le temps. */
       const mien = ++tour;
       try {
-        const res = await fetch(`/api/${endpoint}/${haid}`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`/api/${endpoint}/${haid}`, { headers: { Authorization: `Bearer ${jeton.current}` } });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const blob = await res.blob();
         if (!alive || mien !== tour) return;
@@ -33,7 +42,7 @@ export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = '
     fetchSnap();
     const id = setInterval(fetchSnap, refreshMs);
     return () => { alive = false; clearInterval(id); if (last) URL.revokeObjectURL(last); };
-  }, [haid, token, refreshMs, kind]);
+  }, [haid, authentifie, refreshMs, kind]);
   if (!src) return null;
   return <img src={src} alt={alt} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit }} />;
 }
@@ -77,11 +86,25 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
   const imgRef = useRef(null);
   const [mode, setMode] = useState('loading'); // loading | video | mjpeg | snap | off
   const token = hass && hass.auth && hass.auth.data ? hass.auth.data.access_token : null;
+  /* LE DIRECT NE REPART PAS PARCE QUE LE JETON A CHANGE (audit du 29/09).
+   *
+   * La camera murale devenait noire toutes les demi-heures environ. Ce n'etait
+   * ni le reseau ni la camera : Home Assistant renouvelle son jeton d'acces,
+   * `token` changeait, l'effet se rejouait, et TOUTE la negociation WebRTC
+   * recommencait — session fermee, piste perdue, ecran noir le temps d'en
+   * rouvrir une.
+   *
+   * Or cet effet ne se sert jamais de la VALEUR du jeton : il verifie
+   * seulement qu'on est authentifie, et tout ce qui a besoin d'etre signe
+   * passe par `conn`, qui, lui, ne change pas a chaque renouvellement. Une
+   * dependance sur un booleen suffit donc, et elle ne bascule qu'a la
+   * connexion ou a la deconnexion. */
+  const authentifie = !!token;
   const conn = hass && hass.connection ? hass.connection : null;
   useEffect(() => {
     let cancelled = false, cleanupRtc = null;
     setMode('loading');
-    if (!online || !token || !conn) { setMode('off'); return; }
+    if (!online || !authentifie || !conn) { setMode('off'); return; }
     /* Un flux qui a réussi à se connecter peut mourir en route — la 5G
      * capricieuse gèle la vidéo sans la fermer, et l'image figée a l'air d'un
      * direct. Sans nouvelle frame décodée pendant trois relevés (9 s), on
@@ -197,7 +220,7 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
     const vidCapture = vidRef.current;
     const imgCapture = imgRef.current;
     return () => { cancelled = true; clearInterval(gelIv); if (cleanupRtc) { try { cleanupRtc(); } catch {} } const v = vidCapture; if (v) { try { v.pause(); } catch {} try { v.srcObject = null; } catch {} v.removeAttribute('src'); try { v.load(); } catch {} } const im = imgCapture; if (im) { im.onerror = null; im.removeAttribute('src'); } };
-  }, [haid, online, token, conn]);
+  }, [haid, online, authentifie, conn]);
   const cover = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' };
   if (mode === 'off') return null; // repli sur le fond gradient de la tuile
   /* Le flux porte le NOM de la caméra (20/09) : une image sans texte ne dit

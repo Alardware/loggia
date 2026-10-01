@@ -27,7 +27,7 @@ test('les teintes : six jetons, chacun avec son rgb, et rien de libre', () => {
 test('l’habillage : l’icone choisie prime, la teinte choisie s’applique en entier, et il dit sa couleur', () => {
   const h = bloc('function habillagePiece(', NL + '}');
   assert.ok(h.includes("const glyphe = perso.icon || uiconDeMdi(mdi) || (modele && modele.icon && modele.icon.props && modele.icon.props.name) || 'home';"), 'fiche > zone Home Assistant > modele > maison');
-  assert.ok(h.includes("bg: propre ? 'rgba(' + teinte.rgb + ',.16)' : modele.bg,") && h.includes('tc: propre ? teinte.col : modele.tc,') && h.includes('icon: <Ico name={glyphe} color={teinte.col} size={22} />'), 'lavis, releve et icone : la teinte en entier');
+  assert.ok(h.includes("bg: propre ? 'rgba(' + teinte.rgb + ',.16)' : modele.bg,") && h.includes('tc: propre ? teinte.col : modele.tc,') && h.includes("icon: <Ico name={glyphe} color={teinte.col} size={22} />"), 'lavis, releve et icone : la teinte en entier');
   assert.ok(h.includes('col: teinte.col,') && h.includes('rgb: teinte.rgb,') && h.includes('glyphe,') && h.includes('teinte: teinte.id,'), 'l’habillage dit sa couleur, son glyphe et sa teinte');
   const t = bloc('function teinteDePiece(', NL + '}');
   assert.ok(t.includes('const col = couleurDePiece(modele);') && t.includes('TEINTES_PIECE[0]'), 'sans choix : le modele, sinon l’accent');
@@ -39,7 +39,8 @@ test('la couleur de l’habillage sert partout : barre des pieces, fiche entite,
   const nav = bloc('function RoomNav(', NL + '}');
   assert.ok(nav.includes('col: p.col }') && !nav.includes('couleurDePiece(modeleDePiece('), 'la barre des pieces');
   const f = bloc('function CardEditSheet(', NL + '}');
-  assert.ok(f.includes('const couleur = hp.col;'), 'les puces de piece de la fiche entite');
+  // Les puces de piece sont devenues un MENU le 29/09 ; la couleur y reste.
+  assert.ok(f.includes('const couleur = hp.col;') && f.includes("color: p === choixPiece ? '#fff' : couleur"), 'les lignes de piece du menu de la fiche entite');
   assert.ok(src.includes('const base = habillagePiece(activeRoom, lv && lv.icon);') && !src.includes('PIECES.find(p => p.name === activeRoom)'), 'l’en-tete de la vue piece passe par l’habillage');
 });
 
@@ -71,20 +72,17 @@ test('l’Accueil : la carte d’edition remplace la tuile, la case d’ajout fe
 
 test('la fiche : nom, icone, teinte, tuile compacte, entites — et un nom deja pris ne s’enregistre pas', () => {
   const f = bloc('function FichePiece(', NL + '}');
-  ['NOM', 'ICÔNE', 'TEINTE', 'ENTITÉS', 'Tuile compacte', 'Ajouter une pièce', 'Modifier la pièce', 'Température', 'Humidité', 'CO₂', 'Lumières'].forEach(k => assert.ok(f.includes("tr('" + k + "')"), k));
+  // « ICÔNE » est l'etiquette du selecteur partage, pas de la fiche.
+  ['NOM', 'TEINTE', 'ENTITÉS', 'Tuile compacte', 'Ajouter une pièce', 'Modifier la pièce', 'Température', 'Humidité', 'CO₂', 'Lumières'].forEach(k => assert.ok(f.includes("tr('" + k + "')"), k));
   assert.ok(f.includes("tr('La pièce apparaîtra sur l’accueil et dans le sélecteur de pièces.')"), 'la phrase de la maquette');
-  assert.ok(f.includes('ICONES_PIECE.slice(page * ICONES_PAR_PAGE, (page + 1) * ICONES_PAR_PAGE).map(') && f.includes('TEINTES_PIECE.map('), 'la grille d’icones, par page, et les puces de teinte');
-  // Les points sont passés dans `PointsDePage` (audit du 27/09) : trois
-  // écrans les posaient à l'identique, et ils mesuraient 8 px — sous les 24
-  // que demande la règle. Le nom de chaque page vit donc là-bas, et c'est là
-  // qu'on va le vérifier.
-  assert.ok(f.includes("tr('Icônes précédentes')") && f.includes("tr('Icônes suivantes')") && f.includes('pages > 1 && (') && f.includes('<PointsDePage '), 'la grille se pagine : fleches et points');
-  assert.ok(src.includes('function PointsDePage(') && src.includes("aria-label={tr('Page {n}', { n: i + 1 })}"),
-    'les points de page ont perdu leur nom');
-  assert.ok(f.includes('useState(Math.max(0, Math.floor(ICONES_PIECE.indexOf(icone) / ICONES_PAR_PAGE)))'), 'la fiche s’ouvre sur la page de l’icone choisie');
+  /* La fiche d'une piece a le MEME selecteur qu'une entite depuis le 29/09 —
+   * « sauf par l'accueil, c'est toujours l'ancien systeme ». Ses trente icones
+   * restent, mais comme SUGGEREES : la bibliotheque entiere suit derriere, par
+   * famille, avec la recherche. */
+  assert.ok(f.includes('<ChoixIcone valeur={icone} onChoisir={setIcone} suggerees={ICONES_PIECE}') && f.includes('TEINTES_PIECE.map('), 'le selecteur d’icones et les puces de teinte');
+  assert.ok(!f.includes('ICONES_PAR_PAGE'), 'la fiche d’une piece pagine encore sa grille');
   const liste = src.match(/const ICONES_PIECE = \[([^\]]+)\]/);
-  assert.equal([...liste[1].matchAll(/'([a-z0-9-]+)'/g)].length, 30, 'trente icones, trois pages de dix');
-  assert.ok(src.includes('const ICONES_PAR_PAGE = 10;'), 'deux lignes de cinq par page');
+  assert.equal([...liste[1].matchAll(/'([a-z0-9-]+)'/g)].length, 30, 'trente icones suggerees pour une piece');
   assert.ok(f.includes("const doublon = !!propre && propre !== nom && pieces.some(r => r.room === propre);") && f.includes('disabled={!valide}'), 'pas deux pieces du meme nom');
   ['temperature', 'humidity', 'carbon_dioxide'].forEach(c => assert.ok(f.includes("'" + c + "'"), 'les capteurs proposes par device_class ' + c));
   assert.ok(f.includes('<ChampSuggere id={id} label={lbl} value={v} onChange={set}') && f.includes('suggestions={capteurs(classe).map('), 'une liste de suggestions par capteur, aux couleurs du thème');

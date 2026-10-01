@@ -87,3 +87,23 @@ test('la sirene : reconnue meme en interrupteur, choisie si configuree, pilotee 
   assert.ok(c.includes("const dom = String(id).split('.')[0];") && c.includes('commanderService(hass, id, dom, svc,') && c.includes("hass.callWS({ type: 'loggia/sirene/tester', entity_id: id })") && !c.includes('SIRENE_DUREE'), 'un switch s’allume comme un switch ; les trois secondes sont tenues par Home Assistant');
   assert.ok(src.includes("securite: [...secBaseKeys(), 'camera.', 'siren.', 'switch.', ...secKeys,"), 'les interrupteurs sont relus sur la vue');
 });
+
+test('les pieces : cartes ou plan, et le plan dit franchement qu’il n’existe pas', () => {
+  /* « Je voudrais ajouter plus tard le plan de la maison avec la possibilité
+   * de switcher ; pour le moment ajoute le bouton, et à la place du plan mets
+   * une phrase du genre "arrive prochainement" » (30/09).
+   *
+   * Le bouton est donc la, et la place du plan aussi — mais rien n'y est
+   * dessine. Pas de faux plan, pas de capture grisee : la phrase. */
+  assert.ok(home.includes("<Segment value={vuePieces} onChange={setVuePieces}"), 'le choix cartes / plan a disparu de l’en-tete des pieces');
+  assert.ok(home.includes("options={[{ id: 'cartes', label: tr('Cartes'), ico: 'apps' }, { id: 'plan', label: tr('Plan'), ico: 'home' }]}"), 'les deux moities du choix, avec leur icone');
+  /* L'Accueil ouvre sur les CARTES, et s'en souvient depuis le 01/10 : le
+   * choix se range par type d'ecran, comme les cameras. Sans rien d'enregistre,
+   * ce sont les cartes — c'est `vuePiecesDe` qui le garantit. */
+  assert.ok(home.includes('const vuePieces = vuePiecesDe(vuePiecesCfg, formatGrille);'), 'l’Accueil ne lit plus le choix enregistre');
+  assert.ok(home.includes("cfgSet({ loggia_vuepieces: n });"), 'le choix ne se garde plus');
+  assert.ok(home.includes("vuePieces === 'plan' ? (") && home.includes("tr('Le plan de la maison arrive prochainement.')"), 'le plan ne dit plus qu’il n’existe pas encore');
+  assert.ok(home.includes("tr('En attendant, « Cartes » montre les mêmes pièces.')"), 'la phrase qui renvoie aux cartes a disparu');
+  // Et les trois mots ont leur traduction, sinon ils sortiraient en francais.
+  ['Cartes', 'Plan', 'Le plan de la maison arrive prochainement.'].forEach(k => assert.ok(en.includes("'" + k + "':"), k + ' n’est pas traduit'));
+});

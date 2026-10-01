@@ -318,6 +318,21 @@ function etatsInitiaux() {
     'sensor.vigilance_meteo': s('Jaune', { friendly_name: 'Vigilance météo', vent_violent: 'Jaune', orages: 'Jaune' }),
     'person.camille': s('home', { friendly_name: 'Camille' }),
     'person.alex': s('not_home', { friendly_name: 'Alex' }),
+    /* Un appareil de streaming, pour que la grille d'applications ait de
+     * quoi se montrer. Les valeurs sont celles d'une vraie Apple TV :
+     * 450487 = les bits de lecture, plus SELECT_SOURCE et BROWSE_MEDIA. */
+    // Sa telecommande : une entite a part, sur le MEME appareil. C'est par
+    // la que passent les touches, et c'est l'unique chemin d'un Android TV.
+    'remote.tv_salon': s('on', { friendly_name: 'TV du salon', supported_features: 0 }),
+    /* Un Echo : il ne sait PAS parcourir sa bibliothèque (`alexa_media` n'expose
+     * aucun arbre), et c'est tout l'intérêt — la fiche montre alors la phrase,
+     * le seul chemin pour lui demander une playlist. */
+    'media_player.echo_cuisine': s('idle', { friendly_name: 'Echo de la cuisine', supported_features: 5644 }),
+    'media_player.tv_salon': s('playing', { friendly_name: 'TV du salon', supported_features: 450487,
+      source_list: ['Netflix', 'Disney+', 'YouTube', 'Prime Video', 'Free TV', 'Plex', 'Musique', 'Photos', 'Arcade', 'App Store', 'Crunchyroll'],
+      app_name: 'Netflix', app_id: 'com.netflix.Netflix',
+      media_title: 'Stranger Things', media_artist: 'S4 - E1', media_duration: 4672, media_position: 1591,
+      media_position_updated_at: new Date().toISOString(), volume_level: .4 }),
     'media_player.salon': s('playing', { friendly_name: 'Enceinte salon', media_title: 'Clair de Lune', media_artist: 'Debussy', volume_level: .35, supported_features: 20925, entity_picture: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E' }),
     // Un vrai robot annonce ce qu'il sait faire : sans supported_features ni
     // liste de vitesses, la fiche n'avait ni boutons ni selecteur a montrer.
@@ -464,7 +479,7 @@ const SCN_INTEGRES = [
   { id: 'tout_eteindre', icone: 'power', teinte: 'gris', actions: [SCN_A('lumieres', 'eteindre'), SCN_A('medias', 'eteindre')] },
 ];
 const SCN_PIECE = {
-  'light.salon': 'Salon', 'cover.salon': 'Salon', 'cover.volet_salon': 'Salon', 'media_player.salon': 'Salon', 'media_player.enceinte_salon': 'Salon', 'climate.salon': 'Salon',
+  'light.salon': 'Salon', 'cover.salon': 'Salon', 'cover.volet_salon': 'Salon', 'media_player.salon': 'Salon', 'media_player.tv_salon': 'Salon', 'media_player.enceinte_salon': 'Salon', 'media_player.echo_cuisine': 'Cuisine', 'climate.salon': 'Salon',
   'light.cuisine': 'Cuisine', 'cover.cuisine': 'Cuisine', 'cover.volet_cuisine': 'Cuisine',
   'light.chambre': 'Chambre', 'cover.chambre': 'Chambre', 'cover.volet_chambre': 'Chambre', 'climate.chambre': 'Chambre',
   'light.bureau': 'Bureau', 'light.entree': 'Entrée', 'lock.porte_entree': 'Entrée', 'light.sdb': 'Salle de bain',
@@ -879,8 +894,8 @@ function indexDemo(states) {
   ];
   const ZONE_DE = {
     salon: ['light.salon', 'media_player.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_co2', 'sensor.salon_bruit', 'cover.salon', 'cover.volet_salon',
-            'binary_sensor.fenetre_salon', 'switch.radiateur_salon', 'media_player.enceinte_salon', 'binary_sensor.detecteur_co_salon'],
-    cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine', 'cover.volet_cuisine', 'binary_sensor.detecteur_fumee', 'binary_sensor.fuite_evier', 'valve.arrivee_eau'],
+            'binary_sensor.fenetre_salon', 'switch.radiateur_salon', 'media_player.enceinte_salon', 'media_player.tv_salon', 'remote.tv_salon', 'binary_sensor.detecteur_co_salon'],
+    cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine', 'cover.volet_cuisine', 'binary_sensor.detecteur_fumee', 'binary_sensor.fuite_evier', 'valve.arrivee_eau', 'media_player.echo_cuisine'],
     chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'sensor.chambre_co2', 'cover.chambre', 'cover.volet_chambre',
               'binary_sensor.fenetre_chambre', 'switch.radiateur_chambre'],
     bureau: ['light.bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite', 'sensor.bureau_co2'],
@@ -891,7 +906,9 @@ function indexDemo(states) {
   };
   // La camera de l'entree et ses reglages forment UN appareil : c'est par lui
   // que la fiche retrouve les interrupteurs d'une camera.
-  const APPAREIL_DE = (id) => /^(camera\.entree$|switch\.camera_entree_|binary_sensor\.camera_entree_)/.test(id) ? 'cam_entree' : null;
+  const APPAREIL_DE = (id) => (id === 'media_player.echo_cuisine' ? 'echo_cuisine'
+    : /^(media_player|remote)\.tv_salon$/.test(id) ? 'tv_salon'
+    : /^(camera\.entree$|switch\.camera_entree_|binary_sensor\.camera_entree_)/.test(id) ? 'cam_entree' : null);
   const entities = [];
   Object.keys(ZONE_DE).forEach(zone => {
     ZONE_DE[zone].forEach(id => {
@@ -954,7 +971,9 @@ function indexDemo(states) {
   return {
     version: 1,
     areas: ZONES.map(([id, name]) => ({ id, name, floor: null, icon: null })),
-    devices: [{ id: 'cam_entree', name: 'Caméra entrée', area: 'entree', manufacturer: 'Démo', model: 'Caméra', firmware: null, via: null, entry_type: null, integration: 'demo' },
+    devices: [{ id: 'tv_salon', name: 'TV du salon', area: 'salon', manufacturer: 'Démo', model: 'Boîtier TV', firmware: null, via: null, entry_type: null, integration: 'apple_tv' },
+      { id: 'echo_cuisine', name: 'Echo de la cuisine', area: 'cuisine', manufacturer: 'Démo', model: 'Enceinte', firmware: null, via: null, entry_type: null, integration: 'alexa_media' },
+      { id: 'cam_entree', name: 'Caméra entrée', area: 'entree', manufacturer: 'Démo', model: 'Caméra', firmware: null, via: null, entry_type: null, integration: 'demo' },
       { id: 'sysmon', name: 'System Monitor', area: null, manufacturer: 'Démo', model: 'System Monitor', firmware: null, via: null, entry_type: 'service', integration: 'systemmonitor' },
       { id: 'robot_aspirateur', name: 'Aspirateur', area: null, manufacturer: 'Démo', model: 'Orbit V3', firmware: null, via: null, entry_type: null, integration: 'ecovacs' },
       { id: 'robot_tondeuse', name: 'Tondeuse', area: null, manufacturer: 'Démo', model: 'Meadow M2', firmware: null, via: null, entry_type: null, integration: 'mammotion' }],

@@ -78,6 +78,26 @@ ANTI_REBOND_S = 0.6
 ECOUTE_S = 300
 ECOUTE_MAX_S = 900
 
+# LES TROIS GESTES QU'UN BOUTON SANS FIL NE FERA PAS (audit du 29/09/2026).
+#
+# Un geste affecte partait tel quel vers `hass.services.async_call`, sans
+# aucun filtre — la ou les scenarios passent deja par `filtrer_autorisees`.
+# Un `lock.unlock` affecte a un bouton s'executait donc sur simple message du
+# broker. Il faut certes deja l'acces au broker pour l'envoyer, mais c'est
+# precisement la barriere qu'on ne veut pas voir tomber seule.
+#
+# On refuse le GESTE, pas le domaine : verrouiller et armer restent permis, ce
+# sont des gestes qui ferment. Seul ce qui OUVRE la maison est ecarte.
+#
+# Un `script.*` affecte a un bouton peut evidemment appeler ce qu'il veut :
+# c'est le script de l'utilisateur, ecrit et choisi par lui, pas un message
+# venu du reseau. Cette liste n'est pas une prison, c'est une barriere.
+GESTES_REFUSES = frozenset({
+    "lock.unlock",
+    "lock.open",
+    "alarm_control_panel.alarm_disarm",
+})
+
 
 def _cle_appareil(source: str, identifiant: str) -> str:
     """Identifie un interrupteur, toutes sources confondues."""
@@ -281,6 +301,15 @@ class LoggiaInterrupteurs:
                 )
                 continue
             domaine, nom_service = service.split(".", 1)
+            if service in GESTES_REFUSES:
+                # Un appui venu du broker n'ouvre pas la maison (audit du
+                # 29/09/2026). Le refus est trace : sinon un bouton reste muet
+                # sans qu'on sache pourquoi.
+                _LOGGER.warning(
+                    "Loggia : %s refuse pour %s / %s — un bouton sans fil "
+                    "n'ouvre ni une serrure ni une alarme", service, cle, action
+                )
+                continue
             data = geste.get("data")
             try:
                 await self.hass.services.async_call(

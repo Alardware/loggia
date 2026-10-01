@@ -218,7 +218,7 @@ def maison():
     return {
         "light.salon": FauxEtat("light.salon", "on", {"brightness": 80}),
         "light.couloir": FauxEtat("light.couloir", "off"),
-        "cover.salon": FauxEtat("cover.salon", "closed", {"current_position": 0}),
+        "cover.salon": FauxEtat("cover.salon", "closed", {"device_class": "shutter", "current_position": 0}),
         "cover.garage": FauxEtat("cover.garage", "closed", {"device_class": "garage"}),
         "valve.eau": FauxEtat("valve.eau", "open", {"device_class": "water"}),
     }
@@ -324,7 +324,7 @@ def test_le_second_danger_ne_retient_pas_l_etat_du_premier(creer):
     lancer(a._reagir(FUMEE, "fumee"))
     # Home Assistant a applique : tout est a 100 % et ouvert.
     a._hass.states.table["light.couloir"] = FauxEtat("light.couloir", "on", {"brightness": 255})
-    a._hass.states.table["cover.salon"] = FauxEtat("cover.salon", "open", {"current_position": 100})
+    a._hass.states.table["cover.salon"] = FauxEtat("cover.salon", "open", {"device_class": "shutter", "current_position": 100})
     lancer(a._reagir(GAZ, "gaz"))
     assert a._avant["light.couloir"]["state"] == "off"
     assert a._avant["cover.salon"]["position"] == 0
@@ -364,7 +364,7 @@ def test_la_vanne_reste_coupee_et_le_journal_le_dit(creer):
 def test_ce_qui_etait_deja_a_fond_n_est_pas_rendu(creer):
     etats = maison()
     etats["light.salon"] = FauxEtat("light.salon", "on", {"brightness": 255})
-    etats["cover.salon"] = FauxEtat("cover.salon", "open", {"current_position": 100})
+    etats["cover.salon"] = FauxEtat("cover.salon", "open", {"device_class": "shutter", "current_position": 100})
     a = creer(etats=etats)
     lancer(a._reagir(FUMEE, "fumee"))
     a._hass.services.appels.clear()
@@ -374,7 +374,7 @@ def test_ce_qui_etait_deja_a_fond_n_est_pas_rendu(creer):
 
 def test_un_volet_a_mi_hauteur_retrouve_sa_hauteur(creer):
     etats = maison()
-    etats["cover.salon"] = FauxEtat("cover.salon", "open", {"current_position": 40})
+    etats["cover.salon"] = FauxEtat("cover.salon", "open", {"device_class": "shutter", "current_position": 40})
     a = creer(etats=etats)
     lancer(a._reagir(GAZ, "gaz"))
     a._hass.services.appels.clear()
@@ -460,3 +460,30 @@ def test_un_capteur_muet_sans_danger_ne_fait_rien(creer):
     muet = FauxEtat(FUMEE.entity_id, "unavailable", dict(FUMEE.attributes))
     a._on_state(FauxEvenement(muet, FauxEtat(FUMEE.entity_id, "off", dict(FUMEE.attributes))))
     assert a._hass.taches == [] and a._hass.services.appels == []
+
+
+def test_un_ouvrant_sans_classe_ne_s_ouvre_pas_sur_une_alerte(module, creer):
+    """Ce qu'on ne sait pas nommer reste ferme (audit du 29/09).
+
+    Le filtre ecartait trois noms — garage, portail, porte. Un portail dont la
+    classe n'est pas renseignee vaut `None`, qui n'est aucun des trois : il
+    passait, et une fausse alerte fumee l'ouvrait au milieu de la nuit. Or
+    beaucoup de portails n'ont pas de classe declaree.
+
+    Le filtre nomme desormais ce qu'il OUVRE. Ne pas remonter un volet mal
+    declare se repare en lui donnant sa classe ; ouvrir un portail, non.
+    """
+    assert "garage" not in module.VOLETS_CLASSES
+    assert "gate" not in module.VOLETS_CLASSES
+    assert "door" not in module.VOLETS_CLASSES
+    assert "shutter" in module.VOLETS_CLASSES and "blind" in module.VOLETS_CLASSES
+
+    a = creer()
+    a._hass.states.table = {
+        "cover.volet": FauxEtat("cover.volet", "closed", {"device_class": "shutter"}),
+        "cover.portail": FauxEtat("cover.portail", "closed", {"device_class": "gate"}),
+        "cover.inconnu": FauxEtat("cover.inconnu", "closed", {}),
+    }
+    assert a._entites("cover", module.VOLETS_CLASSES) == ["cover.volet"]
+    # Sans classes demandees, tout le domaine repond — les lumieres, la vanne.
+    assert a._entites("cover") == ["cover.inconnu", "cover.portail", "cover.volet"]

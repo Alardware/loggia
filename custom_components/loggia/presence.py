@@ -116,6 +116,29 @@ def tous_absents(etats: dict, personnes) -> bool:
     return vus > 0
 
 
+def quelquun_est_la(etats: dict, personnes) -> bool:
+    """Quelqu'un est-il RENTRE ? Il faut un `home` franc.
+
+    C'est la question inverse de `tous_absents`, et ce n'en est surtout pas la
+    negation. Les deux repondent « non » quand plus aucun telephone ne repond :
+    la maison n'est alors ni declaree vide, ni declaree habitee — on ne sait
+    pas, et on ne fait rien.
+
+    La distinction n'est pas theorique. `tous_absents` rend `False` aussi bien
+    parce que quelqu'un est la que parce qu'on n'en sait rien ; le retour, qui
+    DESARME l'alarme, lisait ce `False` comme un retour. Une maison armee et
+    vide se desarmait donc toute seule des que la box tombait et que les
+    telephones cessaient d'etre joignables (audit du 29/09/2026).
+    """
+    for haid in personnes or []:
+        st = etats.get(haid)
+        if st is None:
+            continue
+        if str(getattr(st, "state", "")).lower() == "home":
+            return True
+    return False
+
+
 def invite_present(etats, entite) -> bool:
     """Le mode invite est-il allume ? Seul un `on` franc compte : un
     interrupteur muet ou absent ne garde personne."""
@@ -286,16 +309,21 @@ class LoggiaPresence:
         if not self.cfg.get("actif"):
             return
         self._declarer()
-        absents = tous_absents(self._etats(), self.cfg.get("personnes"))
+        etats = self._etats()
+        absents = tous_absents(etats, self.cfg.get("personnes"))
         invite = self._invite_present()
         # Le mode invite (ADR 0016) : quelqu'un garde la maison sans telephone
         # suivi. Allume, la maison n'est jamais vide.
         vide = absents and not invite
+        # Le RETOUR demande un signe FRANC — un `home`, ou le mode invite —, et
+        # non plus la simple absence de signe : sans telephone joignable, la
+        # maison restait « rentree » et l'alarme se desarmait toute seule.
+        rentre = quelquun_est_la(etats, self.cfg.get("personnes")) or invite
         if vide and not self.dehors:
             await self._async_armer_depart()
         elif not vide:
             self._desarmer()
-            if self.dehors:
+            if self.dehors and rentre:
                 self.dehors = False
                 await self._async_retour()
         # Un habitant RENTRE pendant le mode invite : le mode se coupera seul

@@ -97,3 +97,31 @@ export function ordreDuFormat(ordres, format) {
   const o = ordres[format];
   return Array.isArray(o) && o.length ? o : null;
 }
+
+/* ── CARTES ou PLAN sur l'Accueil (01/10) ─────────────────────────────────────
+ *
+ * « Pour l'accueil un réglage pourrait être bien pour afficher de préférence
+ * soit les pièces soit le plan par défaut. »
+ *
+ * Le choix suit le TYPE d'écran, comme tout ce qui se range ici : un plan a du
+ * sens sur un grand écran et beaucoup moins sur un téléphone, où l'on cherche
+ * une pièce du pouce. Il vit dans la configuration de la maison, pas dans le
+ * navigateur — c'est un réglage de la maison, pas de l'appareil.
+ *
+ * Il n'y a PAS de réglage en double dans Paramètres : la bascule de l'Accueil
+ * est le réglage. Elle se souvient, voilà tout.
+ */
+
+/** L'affichage choisi pour ce format — `cartes` tant que rien ne dit l'autre. */
+export function vuePiecesDe(v, format) {
+  const o = (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+  return o[format] === 'plan' ? 'plan' : 'cartes';
+}
+
+/** Le choix rangé à sa place. Comme pour les caméras, une configuration ne
+ *  garde que ce qui s'écarte du défaut, et un objet vide s'efface. */
+export function poserVuePieces(v, format, id) {
+  const o = { ...((v && typeof v === 'object' && !Array.isArray(v)) ? v : {}) };
+  if (id === 'plan') o[format] = 'plan'; else delete o[format];
+  return Object.keys(o).length ? o : null;
+}
