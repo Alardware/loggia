@@ -1,7 +1,6 @@
 # 0102 — Ce qui recalculait pour rien
 
-Date : 27/09/2026. Statut : appliqué (local). Aucun redémarrage de Home
-Assistant ; `index.html` ne change pas, mais `src/` oui — **le paquet est
+Date : 27/09/2026. Statut : appliqué (local). **Redémarrage de Home Assistant requis** ; `index.html` ne change pas, mais `src/` oui — **le paquet est
 rebâti**. Septième point de l'audit du 27/09.
 
 ## Ce qui coûtait, et ce qui ne coûtait pas

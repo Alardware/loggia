@@ -45,6 +45,15 @@ export const TYPES_PRISE = {
   lv: { col: 'var(--o-piece-bain)', rgb: 'var(--o-piece-bain-rgb)', ico: 'dishwasher' },
   ll: { col: 'var(--o-piece-tendre)', rgb: 'var(--o-piece-tendre-rgb)', ico: 'washer' },
   sl: { col: 'var(--o-gold)', rgb: 'var(--o-gold-rgb)', ico: 'dryer' },
+  /* Le fer, demande par Seba882 (issue #6) : « un fer sur prise commandée,
+   * c'est souvent la raison même pour laquelle la prise est là — vérifier
+   * depuis le travail qu'il est bien éteint ». Et la veille lui va mieux qu'à
+   * tout le reste : un fer ne consomme rien, ou tire 2 000 W.
+   *
+   * Il était parti avec le revert de la première v3.78.0 et n'était jamais
+   * revenu — son DESSIN est rentré avec le catalogue du 30/09, mais rien ne le
+   * reconnaissait plus. Une prise nommée « fer à repasser » restait générique. */
+  fer: { col: 'var(--o-orange)', rgb: 'var(--o-orange-rgb)', ico: 'iron', marche: 'chauffe' },
   frigo: { col: 'var(--o-cold)', rgb: 'var(--o-cold-rgb)', ico: 'fridge', marche: 'compresseur', veille: 'repos' },
   tv: { col: 'var(--o-piece-chambre)', rgb: 'var(--o-piece-chambre-rgb)', ico: 'tv-set' },
   cafe: { col: 'var(--o-warn)', rgb: 'var(--o-warn-rgb)', ico: 'coffee-machine', marche: 'chauffe' },
@@ -62,6 +71,7 @@ export const NOMS_PRISE = () => ({
   lv: tr('Lave-vaisselle'),
   ll: tr('Lave-linge'),
   sl: tr('Sèche-linge'),
+  fer: tr('Fer à repasser'),
   frigo: tr('Réfrigérateur'),
   tv: tr('Télévision'),
   cafe: tr('Cafetière'),
@@ -89,6 +99,7 @@ const MOTS_PRISE = [
   ['lv', ['lave vaisselle', 'lavevaisselle', 'dishwasher', 'vaisselle', 'zmywarka', 'lv']],
   ['sl', ['seche linge', 'sechelinge', 'dryer', 'tumble', 'suszarka', 'sl']],
   ['ll', ['lave linge', 'lavelinge', 'machine a laver', 'washer', 'washing', 'lessive', 'pralka', 'll']],
+  ['fer', ['fer a repasser', 'fer', 'repassage', 'centrale vapeur', 'iron', 'zelazko']],
   ['frigo', ['frigo', 'refrigerateur', 'fridge', 'refrigerator', 'congelateur', 'freezer', 'lodowka', 'zamrazarka', 'chlodziarka']],
   ['cafe', ['cafetiere', 'machine a cafe', 'coffee', 'expresso', 'espresso', 'percolateur', 'ekspres']],
   ['ve', ['borne', 'recharge', 'wallbox', 'chargeur voiture', 'voiture electrique', 'ev charger', 'stacja ladowania']],

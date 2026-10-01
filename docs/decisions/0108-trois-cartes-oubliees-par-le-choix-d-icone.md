@@ -1,7 +1,7 @@
 # 0108 — Trois cartes oubliées par le choix d'icône
 
-Date : 28/09/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**. Suite directe de l'ADR 0095.
+Date : 28/09/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti. Suite directe de l'ADR 0095.
 
 ## Le retour
 

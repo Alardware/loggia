@@ -1,7 +1,6 @@
 # 0101 — Ce qui se lit, et ce qui se vise
 
-Date : 27/09/2026. Statut : appliqué (local). Aucun redémarrage de Home
-Assistant ; `index.html` ne change pas, mais `src/` oui — **le paquet est
+Date : 27/09/2026. Statut : appliqué (local). **Redémarrage de Home Assistant requis** ; `index.html` ne change pas, mais `src/` oui — **le paquet est
 rebâti**. Sixième point de l'audit du 27/09.
 
 Quatre correctifs d'accessibilité. Les trois premiers ne se voient pas du tout

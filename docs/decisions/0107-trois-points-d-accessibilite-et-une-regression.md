@@ -1,7 +1,7 @@
 # 0107 — Trois points d'accessibilité, et une régression trouvée en les vérifiant
 
-Date : 28/09/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**. Version **3.77.1**.
+Date : 28/09/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti. Version **3.77.1**.
 
 ## D'abord la régression, parce qu'elle est partie chez les utilisateurs
 

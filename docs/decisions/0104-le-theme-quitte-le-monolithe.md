@@ -1,7 +1,6 @@
 # 0104 — Le thème quitte le monolithe
 
-Date : 27/09/2026. Statut : appliqué (local). Aucun redémarrage de Home
-Assistant ; `src/` change — **le paquet est rebâti**. Neuvième et dernier point
+Date : 27/09/2026. Statut : appliqué (local). **Redémarrage de Home Assistant requis** ; `src/` change — **le paquet est rebâti**. Neuvième et dernier point
 de l'audit du 27/09, et première étape du découpage d'`App.jsx`.
 
 ## Ce qui part, et pourquoi celui-là d'abord

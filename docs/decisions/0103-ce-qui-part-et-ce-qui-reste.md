@@ -1,7 +1,6 @@
 # 0103 — Ce qui part, et ce qui reste
 
-Date : 27/09/2026. Statut : appliqué (local). Aucun redémarrage de Home
-Assistant ; `src/` change — **le paquet est rebâti**. Huitième point de l'audit
+Date : 27/09/2026. Statut : appliqué (local). **Redémarrage de Home Assistant requis** ; `src/` change — **le paquet est rebâti**. Huitième point de l'audit
 du 27/09.
 
 ## La bibliothèque Hue RESTE — et l'audit avait tort

@@ -1,7 +1,6 @@
 # 0099 — Deux défauts qu'on voit : des mots coupés, et un éclair sombre
 
-Date : 27/09/2026. Statut : appliqué (local). Aucun redémarrage de Home
-Assistant — le composant ne change pas, mais `index.html` change, donc **le
+Date : 27/09/2026. Statut : appliqué (local). **Redémarrage de Home Assistant requis** — le composant ne change pas, mais `index.html` change, donc **le
 paquet est rebâti** (`npm run build` + `pack_frontend.py`). Quatrième point de
 l'audit du 27/09.
 

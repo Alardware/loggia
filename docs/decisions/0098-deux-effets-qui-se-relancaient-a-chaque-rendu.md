@@ -1,7 +1,6 @@
 # 0098 — Deux effets qui se relançaient à chaque rendu
 
-Date : 27/09/2026. Statut : appliqué (local). Aucun redémarrage de Home
-Assistant : le composant ne change pas, un rechargement de page suffit.
+Date : 27/09/2026. Statut : appliqué (local). **Redémarrage de Home Assistant requis** : le composant ne change pas, un rechargement de page suffit.
 Troisième point de l'audit du 27/09.
 
 `Dashboard` portait deux `useEffect` **sans aucun tableau de dépendances**.

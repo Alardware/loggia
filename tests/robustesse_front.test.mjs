@@ -81,7 +81,13 @@ test('deux appuis rapprochés sur Distribuer ne font qu’une ration', () => {
 
 test('l’écoute des rejets reste dans la fenêtre du panneau, et parle la langue choisie', () => {
   assert.ok(!app.includes('topW'), 'plus d’écoute sur window.top');
-  assert.ok(app.includes("? tr('Réglage non enregistré — il appartient à la maison"));
+  /* Le serveur NOMME les reglages refuses ; le message les jetait, et l'on
+   * subissait un avertissement sans pouvoir agir (01/10). La forme sans nom
+   * reste, pour un refus qui n'en donnerait aucun. */
+  assert.ok(app.includes("« {k} » non enregistré"), 'le refus ne nomme plus le reglage');
+  assert.ok(app.includes("tr('Réglage non enregistré — il appartient à la maison"), 'le repli sans nom a disparu');
+  // Et le MEME refus ne se redit pas : plusieurs cles refusees, un seul bandeau.
+  assert.ok(app.includes('if (texte === dernierToast.current) return;'), 'le meme refus se repete de nouveau');
   assert.ok(app.includes("tr('Commande non exécutée — Home Assistant a refusé ou n’a pas répondu')"));
   assert.ok(app.includes("r.code === 'scenario_incomplet' ? String(r.message)"));
 });

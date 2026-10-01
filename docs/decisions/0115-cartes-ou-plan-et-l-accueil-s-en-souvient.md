@@ -1,7 +1,7 @@
 # 0115 — Cartes ou plan, et l'Accueil s'en souvient
 
-Date : 01/10/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**.
+Date : 01/10/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti.
 
 La section Pièces de l'Accueil porte une bascule **Cartes / Plan**. Le plan
 n'existe pas encore : le bouton est là, la place est prise, et l'écran le dit
