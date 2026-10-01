@@ -139,6 +139,10 @@ test('l’Accueil et la vue Securite lisent la resolution et le journal — jama
 
 test('la demo a de quoi le montrer, et les mots ont leur traduction', () => {
   assert.ok(demo.includes("'binary_sensor.camera_entree_mouvement': s('off', { friendly_name: 'Caméra entrée Mouvement', device_class: 'motion' }),") && demo.includes("'binary_sensor.camera_entree_personne': s('off', { friendly_name: 'Caméra entrée Personne' }),"), 'deux detecteurs sur la camera de l’entree');
-  assert.ok(demo.includes("const APPAREIL_DE = (id) => /^(camera\\.entree$|switch\\.camera_entree_|binary_sensor\\.camera_entree_)/.test(id) ? 'cam_entree' : null;"), 'du meme appareil : c’est ainsi que la resolution les retrouve');
+  /* La caméra n'est plus seule à former un appareil : la TV du salon et sa
+   * télécommande en forment un aussi depuis le 30/09. On vérifie donc que la
+   * caméra y est encore, pas que la ligne n'a pas bougé. */
+  assert.ok(demo.includes("camera\\.entree$|switch\\.camera_entree_|binary_sensor\\.camera_entree_")
+    && demo.includes("'cam_entree' : null)"), 'du meme appareil : c’est ainsi que la resolution les retrouve');
   assert.ok(demo.includes("if (msg && msg.type === 'logbook/event_stream') {") && demo.includes("entity_id: 'binary_sensor.camera_entree_mouvement', state: 'on'"), 'un journal qui les a vus declencher');
 });

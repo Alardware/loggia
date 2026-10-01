@@ -184,11 +184,9 @@ test('rien ne se vise sous 24 px', () => {
   // point de 8 px — et ces points-là changent de page. Mesuré après
   // correction : zéro cible sous 24 px sur six vues, à 390 comme à 1280.
   const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
-  // Les points de page : un seul composant pour les trois écrans qui les
-  // posaient, 24 de zone pour 8 de dessin, et des centres à 24 — l'écart exact
-  // que demande la règle quand les cibles se touchent.
-  assert.match(app, /function PointsDePage\(\{ n, courant, onChoisir, couleur/, 'les points de page n’ont plus de composant');
-  assert.match(app, /width: 24, height: 24, margin: '-8px 0'/, 'le point de page a reperdu sa zone de 24');
+  /* Les points de page des grilles d'icones ont disparu le 29/09 : la grille
+   * cherche et se range par famille, elle ne se feuillette plus. Ce qui reste
+   * a verifier, c'est qu'aucun point de 8 px ne revienne a decouvert. */
   assert.ok(!/width: 8, height: 8, padding: 0, borderRadius: 4/.test(app), 'un point de 8 px est revenu à découvert');
   // Les deux points de page de l'Accueil : gabarit 24, rangée toujours à 6.
   assert.match(app, /minWidth: 24, height: 24, margin: '-9px 0'/, 'les points de l’Accueil ont reperdu leur zone');

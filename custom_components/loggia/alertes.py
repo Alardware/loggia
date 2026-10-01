@@ -70,8 +70,17 @@ ARMEE = ("armed_away", "armed_home", "armed_night", "armed_vacation")
 LUMIERES = ("fumee", "co", "alarme")   # pas le gaz : un relais qui claque est une etincelle
 VOLETS = ("fumee", "co", "gaz")
 VANNE = ("fuite",)
-# Une porte de garage, un portail, une porte : pas des volets, on ne les ouvre pas.
-PAS_UN_VOLET = ("garage", "gate", "door")
+# Ce qu'on REMONTE sur un danger — et non plus ce qu'on evite.
+#
+# La liste disait « ni garage, ni portail, ni porte ». Un portail dont la
+# classe n'est pas renseignee vaut `None`, qui n'est aucun de ces trois noms :
+# il passait le filtre et s'ouvrait sur une fausse alerte fumee (audit du
+# 29/09/2026). Or beaucoup de portails n'ont pas de classe declaree.
+#
+# On nomme donc ce qu'on ouvre. Ce qu'on ne sait pas nommer reste ferme : ne
+# pas remonter un volet mal declare se repare en lui donnant sa classe ;
+# ouvrir un portail au milieu de la nuit, non.
+VOLETS_CLASSES = ("shutter", "blind", "curtain", "shade", "awning", "window")
 # En tete de l'echelle : au-dessus du vent, au-dessus de tout — sauf une main.
 PRIORITE = niveau("surete", 19)
 ACTIONS_DEFAUT: dict[str, Any] = {"actif": True, "lumieres": True, "volets": True,
@@ -149,8 +158,13 @@ class LoggiaAlertes:
                     actions[k] = v
         return actions
 
-    def _entites(self, domaine: str, sauf_classes=()) -> list:
-        """Les entites joignables d'un domaine, moins certaines classes."""
+    def _entites(self, domaine: str, classes=None) -> list:
+        """Les entites joignables d'un domaine.
+
+        `classes` restreint aux `device_class` nommees ; sans elle, tout le
+        domaine. Un filtre POSITIF : ce qui n'a pas de classe declaree n'est
+        pas retenu quand on en demande une.
+        """
         try:
             etats = self._hass.states.async_all(domaine)
         except Exception:  # noqa: BLE001
@@ -159,7 +173,8 @@ class LoggiaAlertes:
             return []
         return sorted(s.entity_id for s in etats
                       if s.state not in ("unavailable", "unknown")
-                      and (s.attributes or {}).get("device_class") not in sauf_classes)
+                      and (classes is None
+                           or (s.attributes or {}).get("device_class") in classes))
 
     def _retenir(self, haids) -> None:
         """L'etat d'AVANT, pour le rendre quand le danger passe — une fois : un
@@ -201,7 +216,7 @@ class LoggiaAlertes:
                                         {"brightness_pct": 100}, quoi="allumer", motif=motif,
                                         priorite=PRIORITE, tenir=True)
         if actions.get("volets") and cat in VOLETS:
-            volets = self._entites("cover", PAS_UN_VOLET)
+            volets = self._entites("cover", VOLETS_CLASSES)
             if volets:
                 self._retenir(volets)
                 await self._regles.agir("alertes", "danger", "cover", "open_cover", volets,

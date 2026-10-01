@@ -56,5 +56,7 @@ export function Ico({ name, size = 20, color = 'currentColor', style, anime = fa
     );
   }
   if (CUSTOM_SVG[name]) return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" style={style}><path d={CUSTOM_SVG[name]} fill={color} /></svg>;
+  /* Une seule graisse depuis le 30/09, à la demande — « retire solid, juste
+   * regular », puis le sélecteur Trait / Plein lui-même. */
   return <i aria-hidden="true" className={'fi fi-rr-' + (FI_MAP[name] || name)} style={{ fontSize: size, color, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...style }} />;
 }

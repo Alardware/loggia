@@ -497,8 +497,11 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
           }
         }}
         onAnimationEnd={(e) => { if (closing && e.target === e.currentTarget) { clearTimeout(filet.current); onClose(); } }}
-        style={{ position: 'fixed', left: '50%', bottom: 0, transform: 'translate(-50%,0)', width: 'min(480px,100%)', maxHeight: '88vh', overflowY: 'auto', background: opaque ? 'linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg)' : 'var(--o-surfA)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', borderLeft: 'var(--o-bw,1px) solid var(--o-bd1)', borderRight: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: '26px 26px 0 0', padding: '10px 22px calc(24px + var(--o-safe-bottom,0px))', boxShadow: '0 -10px 50px rgba(0,0,0,.35)', animation: closing ? 'o-sheetOut .3s cubic-bezier(.32,.72,.25,1) forwards' : 'o-sheetIn .46s cubic-bezier(.22,1.28,.36,1)' }}>
-        <div onPointerDown={dragClose} style={{ touchAction: 'none', cursor: 'grab', padding: '8px 60px 12px', margin: '-10px auto 2px', width: 'fit-content' }}>
+        style={{ position: 'fixed', left: '50%', bottom: 0, transform: 'translate(-50%,0)', width: 'min(480px,100%)', maxHeight: '88vh', overflowY: 'auto', background: opaque ? 'linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg)' : 'var(--o-surfA)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', borderLeft: 'var(--o-bw,1px) solid var(--o-bd1)', borderRight: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: '26px 26px 0 0', padding: '10px 22px calc(16px + var(--o-safe-bottom,0px))', boxShadow: '0 -10px 50px rgba(0,0,0,.35)', animation: closing ? 'o-sheetOut .3s cubic-bezier(.32,.72,.25,1) forwards' : 'o-sheetIn .46s cubic-bezier(.22,1.28,.36,1)' }}>
+        {/* `relative` et un plan au-dessus : une feuille dont l'en-tête monte
+          * jusqu'au bord (la fiche d'un lecteur, dont la pochette déborde)
+          * passerait sinon par-dessus la poignée, qui disparaîtrait. */}
+        <div onPointerDown={dragClose} style={{ position: 'relative', zIndex: 2, touchAction: 'none', cursor: 'grab', padding: '8px 60px 12px', margin: '-10px auto 2px', width: 'fit-content' }}>
           <div style={{ width: 38, height: 5, borderRadius: 4, background: 'var(--o-bd1)', margin: '0 auto' }} />
         </div>
         {/* La croix vit sur la ligne d'en-tête de chaque feuille (`CroixFeuille`,

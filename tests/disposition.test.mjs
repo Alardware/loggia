@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { formatEcran, vueFormat, patchFormat, echangerPartout, CLES_DISPOSITION, ordonnerSelon, ordreDuFormat } from '../src/disposition.js';
+import { formatEcran, vueFormat, patchFormat, echangerPartout, CLES_DISPOSITION, ordonnerSelon, ordreDuFormat, vuePiecesDe, poserVuePieces } from '../src/disposition.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
@@ -128,4 +128,25 @@ test('la vue et l’Accueil rangent les scénarios par type d’écran', () => {
   assert.ok(h.includes('SCN_ETAT = { ...etat, scenarios: tous }'), 'la veille et la recherche garderaient l’ordre du composant');
   assert.ok(app.includes('const liste = scenariosAccueil(sc.tous);'), 'la rangée de l’Accueil');
   assert.ok(app.includes('sc.ordonner(ids).catch(() => {});') && !app.includes('sc.enregistrer({ ordre: ids })'), 'les flèches de la vue');
+});
+
+test('l’Accueil se souvient : cartes ou plan, par type d’écran', () => {
+  /* « Pour l'accueil un réglage pourrait être bien pour afficher de préférence
+   * soit les pièces soit le plan par défaut » (01/10). Le choix suit l'ÉCRAN,
+   * comme le reste : un plan vaut sur un grand écran, beaucoup moins sur un
+   * téléphone où l'on cherche une pièce du pouce. */
+  assert.equal(vuePiecesDe(null, 'pc'), 'cartes', 'sans réglage, les cartes');
+  assert.equal(vuePiecesDe({ pc: 'plan' }, 'pc'), 'plan');
+  assert.equal(vuePiecesDe({ pc: 'plan' }, 'mobile'), 'cartes', 'le téléphone ne suit pas l’ordinateur');
+  // Rien d'abime ne passe pour un choix.
+  assert.equal(vuePiecesDe({ pc: 'carte' }, 'pc'), 'cartes');
+  assert.equal(vuePiecesDe(['plan'], 'pc'), 'cartes');
+
+  /* Une configuration ne garde que ce qui S'ÉCARTE du défaut : revenir aux
+   * cartes efface l'entrée, et la dernière effacée efface l'objet. */
+  assert.deepEqual(poserVuePieces(null, 'pc', 'plan'), { pc: 'plan' });
+  assert.deepEqual(poserVuePieces({ pc: 'plan' }, 'mobile', 'plan'), { pc: 'plan', mobile: 'plan' });
+  assert.deepEqual(poserVuePieces({ pc: 'plan', mobile: 'plan' }, 'mobile', 'cartes'), { pc: 'plan' });
+  assert.equal(poserVuePieces({ pc: 'plan' }, 'pc', 'cartes'), null, 'plus rien à garder : la clé s’efface');
+  assert.equal(poserVuePieces(null, 'pc', 'cartes'), null);
 });

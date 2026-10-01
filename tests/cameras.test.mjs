@@ -166,3 +166,34 @@ test('changer de camera pendant la negociation ne laisse pas d’abonnement derr
   assert.ok(!/if \(cancelled\) \{\s*cleanupRtc\(\)/.test(apres),
     'la garde repasse par `cleanupRtc`, qui peut déjà être à `null`');
 });
+
+test('le direct ne repart pas parce que le jeton a change', () => {
+  /* La camera murale devenait noire toutes les demi-heures environ (audit du
+   * 29/09). Ce n'etait ni le reseau ni la camera : Home Assistant renouvelle
+   * son jeton d'acces, `token` figurait dans les dependances de l'effet, et
+   * TOUTE la negociation WebRTC recommencait — session fermee, piste perdue,
+   * ecran noir le temps d'en rouvrir une.
+   *
+   * L'effet ne se sert jamais de la VALEUR du jeton : il verifie seulement
+   * qu'on est authentifie. Une dependance sur un booleen suffit, et elle ne
+   * bascule qu'a la connexion ou a la deconnexion. */
+  const cam = readFileSync(join(RACINE, 'src', 'camera.jsx'), 'utf8');
+  assert.ok(cam.includes('const authentifie = !!token;'), 'le jeton n’est plus reduit a « authentifie ou pas »');
+  assert.ok(cam.includes('}, [haid, online, authentifie, conn]);'), 'le direct depend a nouveau de la valeur du jeton');
+  assert.ok(!/\}, \[[^\]]*\btoken\b[^\]]*\]/.test(cam), 'un effet depend encore de la valeur du jeton');
+
+  /* La vignette, elle, a besoin du jeton COURANT pour signer son appel : il se
+   * lit dans une reference au moment du `fetch`, ce qui la laisse hors des
+   * dependances sans jamais envoyer un jeton perime. */
+  assert.ok(cam.includes('jeton.current = token;') && cam.includes('Bearer ${jeton.current}'),
+    'la vignette n’envoie plus le jeton courant');
+  assert.ok(cam.includes('}, [haid, authentifie, refreshMs, kind]);'), 'la boucle de vignette repart sur chaque renouvellement');
+});
+
+test('« Absent » se traduit, comme « Présent » juste à côté', () => {
+  /* Quatre endroits ecrivaient `tr('Présent') : 'Absent'` : le premier mot
+   * traduit, le second en clair. Le filet i18n ne les voyait pas — ce sont des
+   * expressions, pas des noeuds de texte JSX (audit du 29/09). */
+  assert.ok(!/tr\('Présent'\)\s*:\s*'Absent'/.test(src), 'un « Absent » est reste en clair');
+  assert.equal((src.match(/tr\('Absent'\)/g) || []).length >= 4, true, 'les quatre « Absent » ne passent plus par tr()');
+});

@@ -249,3 +249,24 @@ test('une teinte se pilote, et se rend', () => {
   assert.ok(SRC.includes("teinte = 'base', remplir = false }) {"), 'le composant ne prend plus de teinte');
   assert.ok(SRC.includes('useEffect(() => { if (orbeRef.current) orbeRef.current.setTeinte(teinte); }, [teinte]);'));
 });
+
+test('la taille du canevas se compare comme three la calcule', () => {
+  /* L'orbe reconstruisait ses cibles de rendu SOIXANTE FOIS PAR SECONDE sur
+   * tablette et telephone (audit du 29/09).
+   *
+   * La boucle demande a chaque image : le canevas correspond-il encore a son
+   * hote ? Elle recalculait la taille avec `Math.round`, quand `setSize` de
+   * three pose `Math.floor(taille * pixelRatio)`. Sur tout DPR non entier —
+   * 1,25 et 1,5, soit le cas courant —, les deux se contredisaient d'un pixel :
+   * la comparaison echouait toujours, et `resize()` repartait pour rien.
+   *
+   * Le DPR est plafonne a 1,5 : les deux valeurs a risque sont donc
+   * exactement celles qu'on rencontre. */
+  assert.ok(SRC.includes('const cw = Math.floor(stage.clientWidth*DPR), ch = Math.floor(stage.clientHeight*DPR);'),
+    'la comparaison ne calcule plus comme three : resize() repart a chaque image');
+  assert.ok(SRC.includes('renderer.setPixelRatio(DPR);'), 'le pixelRatio n’est plus celui qu’on compare');
+  // Et la demonstration par l'exemple : 185 px a 1,5, c'est 277 pour three.
+  const DPR = 1.5, w = 185;
+  assert.equal(Math.floor(w * DPR), 277);
+  assert.equal(Math.round(w * DPR), 278, 'sans ce correctif, un pixel d’ecart a chaque image');
+});

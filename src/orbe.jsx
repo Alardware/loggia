@@ -732,7 +732,18 @@ function creerOrbe(hote) {
   function frame(){
     if (!vivant) return;
     requestAnimationFrame(frame);
-    const cw = Math.round(stage.clientWidth*DPR), ch = Math.round(stage.clientHeight*DPR);
+    /* `Math.floor`, et pas `Math.round` (audit du 29/09).
+     *
+     * Cette ligne demande : la taille du canevas correspond-elle encore a son
+     * hote ? Elle la recalculait a sa facon, alors que three, lui, pose
+     * `Math.floor(taille * pixelRatio)` dans `setSize`. Sur tout DPR non
+     * entier — 1,25 et 1,5, soit le cas courant sur tablette et telephone —,
+     * les deux se contredisaient d'un pixel : la comparaison echouait a chaque
+     * image, `resize()` repartait, et l'orbe reconstruisait ses cibles de rendu
+     * SOIXANTE FOIS PAR SECONDE sans que rien n'ait bouge.
+     *
+     * On calcule donc comme three calcule, sinon on ne compare rien. */
+    const cw = Math.floor(stage.clientWidth*DPR), ch = Math.floor(stage.clientHeight*DPR);
     if (cv.width !== cw || cv.height !== ch) resize();
     if (!rtScene) return;
 
