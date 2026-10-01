@@ -69,7 +69,7 @@ const VERIFIE = {
     'hass', 'hass', 'hass',
     'hass and live', 'hass, ids, and metrics', 'hidden', 'keys and noisyKeys',
     'loggiaRuntime.index', 'noms', 'seulement',
-    'vuSig', 'vuesAutorisees',
+    'vuesAutorisees',
   ],
   'src/historique.jsx': ['hass', 'ids'],
   /* `src/views/systeme.jsx` figurait ici avec « HIST_IDS, SYS.host.online, and
@@ -259,7 +259,7 @@ test('le chemin chaud ne recalcule plus pour rien', () => {
   assert.match(app, /const accueil = useMemo\(\(\) => \{/, '`deriveAccueil` est de nouveau appelée dans le rendu');
   assert.match(app, /\}, \[view, activeRoom, hass, cfg, loggiaRuntime\.resolved, loggiaRuntime\.index\]\);/,
     'les dépendances de l’Accueil ont changé : vérifier qu’elles restent COMPLÈTES');
-  assert.match(app, /const notifs = useMemo\(\(\) => \{/, '`deriveNotifs` est de nouveau appelée dans le rendu');
+  assert.match(app, /const vivantes = useMemo\(\(\) => \{/, '`deriveNotifs` est de nouveau appelée dans le rendu');
   assert.match(app, /const nbAppareils = useMemo\(\(\) => \{/, 'le compte d’appareils reboucle à chaque rendu');
   // La vue Objets sert CINQ entrées de menu. Sa chaîne — balayage complet des
   // entités, tri, deux passes de comptage — repartait même quand seul un état

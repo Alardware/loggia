@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback, useId, createContext, useContext, cloneElement, lazy, Suspense, Fragment } from 'react';
 import { formatEcran, vueFormat, patchFormat, echangerPartout, ordonnerSelon, ordreDuFormat, vuePiecesDe, poserVuePieces } from './disposition.js';
+import { fondre, nonLues as journalNonLues, marquerLues } from './journal.js';
 // Les deux fonds animes tirent three.js : 448 Ko a analyser, pour un decor. En
 // import direct, ce cout etait paye a CHAQUE ouverture, meme par quelqu'un qui
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
@@ -315,12 +316,12 @@ function FeuilleNotifications({ notifs, onClose }) {
       {notifs.length ? (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {notifs.map((n, i) => (
-            <div key={i} style={{ display: 'flex', gap: 12, padding: '11px 2px', borderBottom: i < notifs.length - 1 ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none' }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: n[0], marginTop: 5, flexShrink: 0 }} />
+            <div key={n.k} style={{ display: 'flex', gap: 12, padding: '11px 2px', borderBottom: i < notifs.length - 1 ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none', opacity: n.lu ? .62 : 1 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: n.c, marginTop: 5, flexShrink: 0 }} />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{n[1]}</div>
-                <div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{n[2]}</div>
-                {n[3] && <div style={{ fontSize: 11, color: 'var(--o-text3)', marginTop: 2 }}>{n[3]}</div>}
+                <div style={{ fontSize: 13.5, fontWeight: n.lu ? 600 : 700 }}>{n.t}</div>
+                <div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{n.m}</div>
+                <div style={{ fontSize: 11, color: 'var(--o-text3)', marginTop: 2 }}>{ilYa(n.ts)}</div>
               </div>
             </div>
           ))}
@@ -331,18 +332,16 @@ function FeuilleNotifications({ notifs, onClose }) {
 }
 
 function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAutorisees = null, editMode = false, onToggleEdit = null,
-  tactile = false, users = [], userIdx = 0, onSwitchUser = null, notifs = [] }) {
+  tactile = false, users = [], userIdx = 0, onSwitchUser = null, notifs = [], onLireNotifs = null }) {
   const [profilsOuverts, setProfilsOuverts] = useState(false);
   const [notifsOuvertes, setNotifsOuvertes] = useState(false);
   const profilActif = users[userIdx] || users[0] || { name: 'Administrateur', role: 'Admin' };
   /* Vu = persisté par appareil, MÊME clé que la cloche du bandeau : ce sont
    * deux portes sur la même chose, un point rouge éteint d'un côté ne doit pas
    * se rallumer de l'autre. */
-  const [vuSig, setVuSig] = useState(() => { try { return localStorage.getItem('loggia-notifsvues') || ''; } catch { return ''; } });
-  const nsig = notifs.map(n => '' + n[1] + n[2]).join('|');
-  const nonVues = notifs.length > 0 && nsig !== vuSig;
-  const marquerVues = () => { setVuSig(nsig); try { localStorage.setItem('loggia-notifsvues', nsig); } catch {} };
-  const ligneTiroir = { display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'var(--o-bw,1px) solid var(--o-bd3)', background: 'var(--o-s1)', color: 'var(--o-text1)', textAlign: 'left', width: '100%' };
+  const nbNonVues = journalNonLues(notifs);
+  const nonVues = nbNonVues > 0;
+  const marquerVues = () => { if (onLireNotifs) onLireNotifs(); };
   // Permissions par profil : `null` = tout (admins et profils sans restriction).
   const permis = (vid) => !vuesAutorisees || vid === 'accueil' || vid === 'parametres' || vuesAutorisees.has(vid);
   // Une vue que l'installation ne peut pas remplir ne figure pas dans le menu.
@@ -442,47 +441,73 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
         </div>
       )}
       {NAV.filter(g => g.reglages).map(groupeNav)}
-      {/* Profil et notifications : AU-DESSUS du séparateur, et au tactile
-        * seulement — sur ordinateur ils vivent en haut à droite, et les
-        * répéter ici serait un réglage en double. */}
-      {/* Même respiration que « Mode édition » et « Alarme » dessous : le même
-        * écart de 8, et une marge basse de 14 pour ne pas venir poser le
-        * bouton SUR le trait du séparateur (retour du 25/09). */}
-      {tactile && (users.length > 0 || notifs.length > 0) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto', paddingTop: 10, paddingBottom: 14 }}>
-          {users.length > 0 && (
-            <button onClick={() => setProfilsOuverts(true)} aria-haspopup="dialog"
-              style={{ ...ligneTiroir, gap: 10 }}>
-              {/* 17 px, pas 28 : la pastille dictait la hauteur de la rangée,
-                * qui dépassait ses trois voisines de onze pixels. À 17 elle
-                * tient dans la ligne de texte, et les quatre font 37. */}
-              <span style={{ width: 17, height: 17, borderRadius: '50%', background: userBg(profilActif), flexShrink: 0 }} />
-              <span className="o-side-text" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomProfil(profilActif.name)}</span>
-              <svg className="o-side-text" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: .6 }}><path d="M9 18l6-6-6-6" /></svg>
-            </button>
-          )}
-          <button onClick={() => { setNotifsOuvertes(true); marquerVues(); }} aria-haspopup="dialog"
-            aria-label={tr('Notifications') + (nonVues ? ' · ' + trN(notifs.length, tr('{n} non lue'), tr('{n} non lues')) : '')}
-            style={ligneTiroir}>
-            <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
-              <Fi i="bell" size={13} />
-              {nonVues && <span aria-hidden="true" style={{ position: 'absolute', top: -2, right: -3, width: 7, height: 7, borderRadius: '50%', background: 'var(--o-bad)' }} />}
-            </span>
-            <span className="o-side-text" style={{ flex: 1, minWidth: 0 }}>{tr('Notifications')}</span>
-          </button>
-        </div>
+      {/* Le bas du rail pousse vers le bas : la liste respire, l'état et
+        * l'identité se posent au pied. */}
+      <div style={{ flex: 1, minHeight: 10 }} />
+      {/* MODE ÉDITION : AU-DESSUS du trait, comme avant — « redescends le bouton
+        * édition où il était », puis « passe-le au-dessus de la ligne
+        * séparateur » (01/10). La maquette 1a le faisait monter dans la liste ;
+        * essayé, et il y laissait un grand vide sous lui, la liste étant plus
+        * courte que le rail.
+        *
+        * Une marge basse de 14, pour ne pas venir se poser SUR le trait — le
+        * même retour que le 25/09, au même endroit.
+        *
+        * NI bordure NI fond : il n'en avait plus depuis qu'il était passé dans
+        * la liste, et les lui rendre n'avait été demandé par personne — « je te
+        * l'ai pas demandé, juste de redescendre le bouton ». Il se lit comme une
+        * ligne de menu, et son mot change quand il est actif.
+        *
+        * Le crayon du bandeau du haut n'existe pas quand ce bandeau est masqué
+        * (aperçu tactile) : c'est la seule porte qui reste. */}
+      {onToggleEdit && (
+        <button onClick={onToggleEdit} aria-pressed={editMode}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 13px', marginBottom: 14, borderRadius: 16, cursor: 'pointer', fontSize: 13, fontWeight: editMode ? 700 : 600, border: 'none', background: 'transparent', color: editMode ? 'var(--o-accent-soft)' : 'var(--o-text1)', textAlign: 'left', fontFamily: 'inherit' }}>
+          <Fi i="pencil" color={editMode ? 'var(--o-accent-soft)' : undefined} /><span className="o-side-text">{editMode ? tr('Quitter l’édition') : tr('Mode édition')}</span>
+        </button>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: tactile && (users.length > 0 || notifs.length > 0) ? 0 : 'auto', paddingTop: 14, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-        {/* Mode édition depuis le tiroir : le crayon du bandeau du haut
-          * n'existe plus quand le bandeau est masqué (aperçu tactile). */}
-        {onToggleEdit && (
-          <button onClick={onToggleEdit} aria-pressed={editMode}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (editMode ? 'rgba(var(--o-accent-rgb),.45)' : 'var(--o-bd2)'), background: editMode ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: editMode ? 'var(--o-accent-soft)' : 'var(--o-text1)' }}>
-            <Fi i="pencil" size={13} /><span className="o-side-text">{editMode ? tr('Quitter l’édition') : tr('Mode édition')}</span>
-          </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 14, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 16, background: `rgba(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'},.16)` }}><svg width="16" height="16" viewBox="0 0 24 24" fill={`rgb(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'})`}><path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5z" /></svg><span className="o-side-text" style={{ fontSize: 12, fontWeight: 700, color: `rgb(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'})` }}><FlipText text={ha ? ha.alarmTxt : 'Alarme · …'} /></span></div>
+        {/* LA CARTE COMPTE (maquette 1a), au tactile seulement : l'identité et
+          * la cloche dans un seul bloc, parce que les notifications
+          * s'adressent à CELUI qui est connecté. Elles avaient une ligne à
+          * elles, vide de sens ; sur la pastille, leur nombre en a un.
+          *
+          * DEUX boutons voisins, et non une carte avec une zone cachée à
+          * droite : ouvrir son profil et ouvrir ses notifications sont deux
+          * destinations, et chacune garde sa cible au doigt (44 px). */}
+        {tactile && (users.length > 0 || notifs.length > 0) ? (
+          <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, padding: 6, borderRadius: 18, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+            <button onClick={() => setProfilsOuverts(true)} aria-haspopup="dialog"
+              aria-label={nomProfil(profilActif.name) + ' · ' + (ha && !ha.online ? tr('Home Assistant · Hors ligne') : tr('Home Assistant · En ligne'))}
+              style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, padding: 6, minHeight: 44, borderRadius: 13, border: 'none', background: 'transparent', color: 'var(--o-text)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+              <span style={{ width: 32, height: 32, borderRadius: '50%', background: userBg(profilActif), flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>{(nomProfil(profilActif.name) || '?').charAt(0).toUpperCase()}</span>
+              <span className="o-side-text" style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomProfil(profilActif.name)}</span>
+                {/* « Home Assistant · En ligne » se coupait en deux dans la
+                  * largeur du tiroir, et le mot cassait au milieu. La phrase
+                  * entière reste dans l'étiquette du bouton, pour qui écoute ;
+                  * à l'œil, deux mots suffisent — cette carte EST le compte, et
+                  * la seule liaison qu'elle puisse décrire est celle-là. Le
+                  * point ne porte donc pas l'information tout seul. */}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', color: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-text3)' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)' }} />
+                  {ha && !ha.online ? tr('Hors ligne') : tr('En ligne')}
+                </span>
+              </span>
+            </button>
+            <button onClick={() => { setNotifsOuvertes(true); marquerVues(); }} aria-haspopup="dialog"
+              aria-label={tr('Notifications') + (nonVues ? ' · ' + trN(notifs.length, tr('{n} non lue'), tr('{n} non lues')) : '')}
+              style={{ width: 44, minHeight: 44, flexShrink: 0, borderRadius: 14, border: 'none', background: 'var(--o-s2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              <Fi i="bell" size={15} />
+              {nonVues && (
+                <span aria-hidden="true" style={{ position: 'absolute', top: 5, right: 5, minWidth: 15, height: 15, padding: '0 4px', borderRadius: 8, background: 'var(--o-bad)', color: '#fff', fontSize: 9.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{nbNonVues > 9 ? '9+' : nbNonVues}</span>
+              )}
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 0' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: ha && !ha.online ? '0 0 7px var(--o-bad)' : '0 0 7px var(--o-ok)', animation: ha && !ha.online ? 'pulse 1.2s infinite' : 'none' }} /><div className="o-side-text" style={{ lineHeight: 1.2 }}><div style={{ fontSize: 12, fontWeight: 700, color: ha && !ha.online ? 'var(--o-bad)' : undefined }}>{ha && !ha.online ? tr('Home Assistant · Hors ligne') : tr('Home Assistant · En ligne')}</div><div style={{ fontSize: 10, color: 'var(--o-text3)', fontWeight: 600 }}>{haHost()}</div></div></div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 10, background: `rgba(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'},.1)`, border: `1px solid rgba(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'},.22)` }}><svg width="16" height="16" viewBox="0 0 24 24" fill={`rgb(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'})`}><path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5z" /></svg><span className="o-side-text" style={{ fontSize: 12, fontWeight: 700, color: `rgb(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'})` }}><FlipText text={ha ? ha.alarmTxt : 'Alarme · …'} /></span></div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 0' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: ha && !ha.online ? '0 0 7px var(--o-bad)' : '0 0 7px var(--o-ok)', animation: ha && !ha.online ? 'pulse 1.2s infinite' : 'none' }} /><div className="o-side-text" style={{ lineHeight: 1.2 }}><div style={{ fontSize: 12, fontWeight: 700, color: ha && !ha.online ? 'var(--o-bad)' : undefined }}>{ha && !ha.online ? tr('Home Assistant · Hors ligne') : tr('Home Assistant · En ligne')}</div><div style={{ fontSize: 10, color: 'var(--o-text3)', fontWeight: 600 }}>{haHost()}</div></div></div>
       </div>
     </aside>
     {/* HORS de l'aside : son `transform` (le tiroir qui glisse) en ferait le
@@ -595,8 +620,22 @@ function useOptimiste(reel, delai = OPTIMISTE_MS) {
   const [ov, setOv] = useState(null);
   const minuteur = useRef(0);
   useEffect(() => () => clearTimeout(minuteur.current), []);
-  // L'etat reel a repondu : le filet n'a plus de raison d'attendre.
-  useEffect(() => { clearTimeout(minuteur.current); setOv(null); }, [reel]);
+  /* L'etat reel a REPONDU : le filet n'a plus de raison d'attendre.
+   *
+   * Mais « je ne sais pas » n'est pas une reponse. Une carte de piece rend
+   * `null` quand la liste de ses plafonniers est momentanement vide ; l'effet
+   * se declenchait quand meme et jetait l'optimiste. L'affichage retombait
+   * alors sur un compteur lui aussi vide — donc ETEINT —, puis remontait tout
+   * seul des que la liste revenait. Repete, cela fait clignoter la bascule
+   * (retour du 01/10 : « le toggle change d'etat plusieurs fois de suite »,
+   * alors que la lampe, elle, reste allumee).
+   *
+   * On n'efface donc que sur une VALEUR. Le minuteur reste le filet : un
+   * optimiste qui n'obtient jamais de reponse expire quand meme. */
+  useEffect(() => {
+    if (reel == null) return;
+    clearTimeout(minuteur.current); setOv(null);
+  }, [reel]);
   const poser = useCallback((v) => {
     setOv(v);
     clearTimeout(minuteur.current);
@@ -780,7 +819,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
 
 function Header() {
   const ctx = useContext(HeaderCtx) || {};
-  const { onToggleTheme, onToggleNav, onNav, editMode, onToggleEdit, users = [], userIdx = 0, onSwitchUser, peutEditer = false, droits = [], notifs = [], customViews = [], rooms = [], onAssistant = null, onDictee = null, hass: hassCtx = null } = ctx;
+  const { onToggleTheme, onToggleNav, onNav, editMode, onToggleEdit, users = [], userIdx = 0, onSwitchUser, peutEditer = false, droits = [], notifs = [], onLireNotifs = null, customViews = [], rooms = [], onAssistant = null, onDictee = null, hass: hassCtx = null } = ctx;
   const cur = users[userIdx] || { name: 'Administrateur', role: 'Admin', grad: 'linear-gradient(135deg,var(--o-lampe-b),var(--o-bad))' };
   const curBg = userBg(cur);
   const hbtn = { width: 42, height: 42, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 };
@@ -804,10 +843,10 @@ function Header() {
   // que le clic qui SUIT un appui long ne navigue pas en plus d'avoir éteint.
   const chipTimer = useRef(0);
   useEffect(() => () => clearTimeout(chipTimer.current), []);
-  /* Vu = PERSISTÉ (par appareil) : l'ancien état React s'évaporait à chaque
-   * rechargement et le point rouge revenait pour des notifications déjà lues.
-   * On retient la signature du contenu lu ; ouvrir le panneau marque tout vu. */
-  const [vuSig, setVuSig] = useState(() => { try { return localStorage.getItem('loggia-notifsvues') || ''; } catch { return ''; } });
+  /* « Lu » vit désormais DANS le journal, une entrée à la fois (01/10). La
+   * signature du contenu ne savait pas distinguer « deux alertes dont une déjà
+   * lue » de « deux alertes neuves » : elle changeait, et tout redevenait non
+   * lu. */
   const [bellRing, setBellRing] = useState(false);
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => { const iv = setInterval(() => setClock(new Date()), 30000); return () => clearInterval(iv); }, []);
@@ -815,15 +854,15 @@ function Header() {
   const dateStr = capit(clock.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }));
   const timeStr = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const hasNotif = notifs.length > 0;
-  // Signature du contenu (hors temps relatif) : compare au « vu » persisté.
-  const nsig = notifs.map(n => '' + n[1] + n[2]).join('|');
-  const nonVues = hasNotif && nsig !== vuSig;
-  const marquerVues = () => { setVuSig(nsig); try { localStorage.setItem('loggia-notifsvues', nsig); } catch {} };
+  const nbNonVues = journalNonLues(notifs);
+  const nonVues = nbNonVues > 0;
+  const marquerVues = () => { if (onLireNotifs) onLireNotifs(); };
+  const nsig = notifs.filter(n => !n.lu).map(n => n.k).join('|');
   const nsigPrev = useRef(nsig);
   useEffect(() => {
-    // La cloche ne tinte que pour du contenu jamais lu — pas pour une signature
-    // qui bouge sur des notifications déjà vues.
-    if (nsig && nsig !== nsigPrev.current && nsig !== vuSig) { setBellRing(true); const t = setTimeout(() => setBellRing(false), 900); nsigPrev.current = nsig; return () => clearTimeout(t); }
+    /* La cloche ne tinte que pour du NEUF. `nsig` ne liste plus que les
+     * entrées non lues : marquer tout lu la vide, et rien ne tinte. */
+    if (nsig && nsig !== nsigPrev.current) { setBellRing(true); const t = setTimeout(() => setBellRing(false), 900); nsigPrev.current = nsig; return () => clearTimeout(t); }
     nsigPrev.current = nsig;
   }, [nsig]);
   /* Les deux menus de l'en-tête se refermaient au CLIC DEHORS, et à rien
@@ -900,7 +939,7 @@ function Header() {
             <div style={{ padding: '12px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 14 }}>{tr('Notifications')}</span><span onClick={marquerVues} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); marquerVues(); } }} style={{ fontSize: 12, color: 'var(--o-accent-soft)', cursor: 'pointer', fontWeight: 600 }}>{tr('Tout lire')}</span></div>
             <div style={{ maxHeight: 300, overflowY: 'auto' }}>
               {hasNotif ? notifs.map((n, i) => (
-                <div key={i} style={{ display: 'flex', gap: 12, padding: '11px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: n[0], marginTop: 5, flexShrink: 0 }} /><div style={{ minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700 }}>{n[1]}</div><div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{n[2]}</div>{n[3] && <div style={{ fontSize: 11, color: 'var(--o-text3)', marginTop: 2 }}>{n[3]}</div>}</div></div>
+                <div key={n.k} style={{ display: 'flex', gap: 12, padding: '11px 14px', borderBottom: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: n.lu ? .62 : 1 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: n.c, marginTop: 5, flexShrink: 0 }} /><div style={{ minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: n.lu ? 600 : 700 }}>{n.t}</div><div style={{ fontSize: 12, color: 'var(--o-text2)' }}>{n.m}</div><div style={{ fontSize: 11, color: 'var(--o-text3)', marginTop: 2 }}>{ilYa(n.ts)}</div></div></div>
               )) : <div style={{ padding: '22px 14px', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucune notification')}</div>}
             </div>
           </div>
@@ -1033,7 +1072,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
     const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
     // La ligne d'etat (ADR 0029) : un probleme, sinon l'activite, sinon le calme.
     const amb = lights ? ambiancePiece({ lumieres: n, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
-    const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
+    const on = ov != null ? ov : (realOn != null ? realOn : n > 0);
     const canToggle = !!(mains && mains.length && onToggleLights);
     const temp = p.live && p.live.temp != null ? (Math.round(p.live.temp * 10) / 10).toLocaleString(locale()) + '°' : null;
     const etat = amb ? amb.texte : '—';
@@ -1077,7 +1116,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
     const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
     // La ligne d'etat (ADR 0029) : un probleme, sinon l'activite, sinon le calme.
     const amb = lights ? ambiancePiece({ lumieres: n, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
-    const on = realOn != null ? (ov != null ? ov : realOn) : n > 0;
+    const on = ov != null ? ov : (realOn != null ? realOn : n > 0);
     const canToggle = !!(mains && mains.length && onToggleLights);
     return (
       /* La carte n'est PLUS un `role="button"` qui englobe tout (23/09, plan
@@ -13736,11 +13775,10 @@ function MobileNav({ view, onNav, onMenu, onAssistant = null, onDictee = null, h
 // Notifications dynamiques dérivées de l'état HA réel (avec temps relatif via last_changed).
 function deriveNotifs(hass) {
   const S = hass && hass.states; if (!S) return [];
-  const out = [], now = Date.now();
-  const rel = (id) => { try { const e = S[id]; const t = e && (e.last_changed || e.last_updated); if (!t) return ''; const m = (now - new Date(t).getTime()) / 60000; if (m < 1) return tr("à l'instant"); if (m < 60) return tr('Il y a {n} min', { n: Math.round(m) }); if (m < 1440) return tr('Il y a {n} h', { n: Math.round(m / 60) }); return tr('Il y a {n} j', { n: Math.round(m / 1440) }); } catch { return ''; } };
+  const out = [];
   const stOf = (id) => (S[id] && S[id].state) || null;
   const numOf = (id) => { const v = parseFloat(stOf(id)); return isNaN(v) ? null : v; };
-  for (const id in S) { if (id.indexOf('alarm_control_panel.') === 0 && S[id].state === 'triggered') { out.push(['var(--o-bad)', tr('Alarme'), tr('Intrusion détectée'), rel(id)]); break; } }
+  for (const id in S) { if (id.indexOf('alarm_control_panel.') === 0 && S[id].state === 'triggered') { out.push({ k: 'alarme:' + id, c: 'var(--o-bad)', t: tr('Alarme'), m: tr('Intrusion détectée') }); break; } }
   /* Alertes sûreté, sans aucune configuration : tout binary_sensor dont la
    * device_class désigne un danger passe en tête de liste dès qu'il est `on`.
    * La device_class est un standard HA, multilingue par nature — c'est elle
@@ -13776,25 +13814,65 @@ function deriveNotifs(hass) {
     const nom = a.friendly_name || id;
     if (a.device_class === 'safety' && (a.awareness_level != null || /meteoalarm/i.test(id) || /meteoalarm/i.test(a.attribution || ''))) {
       const grave = a.severity === 'Severe' || a.severity === 'Extreme';
-      out.push([grave ? 'var(--o-bad)' : 'var(--o-warn)', tr('Vigilance météo'), a.event || a.headline || tr('Alerte météo en cours'), rel(id)]);
+      out.push({ k: 'meteo:' + id + ':' + (a.event || a.headline || ''), c: grave ? 'var(--o-bad)' : 'var(--o-warn)', t: tr('Vigilance météo'), m: a.event || a.headline || tr('Alerte météo en cours') });
       continue;
     }
     if (a.device_class === 'moisture' && estPlante(id)) continue;
-    surete.push(['var(--o-bad)', tr(duo[0]), tr(duo[1]) + ' · ' + nom, rel(id)]);
+    surete.push({ k: 'surete:' + id, c: 'var(--o-bad)', t: tr(duo[0]), m: tr(duo[1]) + ' · ' + nom });
   }
   out.unshift(...surete.slice(0, 4)); // les dangers d'abord, avant même l'alarme
   const mid = mowerId(S), mchg = mowerSensor(S, 'charging');
   const mow = mid ? stOf(mid) : null;
-  if (mow === 'returning') out.push(['var(--o-accent-soft)', tr('Tondeuse'), tr('Retour à la base'), rel(mid)]);
-  else if (mchg && stOf(mchg) === 'on') out.push(['var(--o-ok)', tr('Tondeuse'), tr('En charge'), rel(mchg)]);
+  if (mow === 'returning') out.push({ k: 'tondeuse:retour', c: 'var(--o-accent-soft)', t: tr('Tondeuse'), m: tr('Retour à la base') });
+  else if (mchg && stOf(mchg) === 'on') out.push({ k: 'tondeuse:charge', c: 'var(--o-ok)', t: tr('Tondeuse'), m: tr('En charge') });
   const surId = enHaids().surplusNow || enHaids().injectionJour;
   const sur = surId ? numOf(surId) : null;
-  if (sur != null && sur > 100) out.push(['var(--o-accent-soft)', tr('Énergie'), tr('Surplus solaire — export réseau'), rel(surId)]);
+  if (sur != null && sur > 100) out.push({ k: 'energie:surplus', c: 'var(--o-accent-soft)', t: tr('Énergie'), m: tr('Surplus solaire — export réseau') });
   const lv = numOf(notifIds().dishwasher);
-  if (lv != null && lv > 100) out.push(['var(--o-accent)', tr('Lave-vaisselle'), tr('Cycle en cours'), rel(notifIds().dishwasher)]);
+  if (lv != null && lv > 100) out.push({ k: 'lv:cycle', c: 'var(--o-accent)', t: tr('Lave-vaisselle'), m: tr('Cycle en cours') });
   const bins = stOf(notifIds().bins);
-  if (bins && bins !== 'unknown' && bins !== 'unavailable') out.push(['var(--o-warn)', tr('Poubelles'), tr('Prochain ramassage : {d}', { d: bins }), rel(notifIds().bins)]);
-  return out.slice(0, 8);
+  if (bins && bins !== 'unknown' && bins !== 'unavailable') out.push({ k: 'poubelles:' + bins, c: 'var(--o-warn)', t: tr('Poubelles'), m: tr('Prochain ramassage : {d}', { d: bins }) });
+
+  /* DEUX SOURCES DE PLUS (01/10). Elles existent dans toute installation, sans
+   * la moindre configuration, et personne ne les disait : cinq mises à jour en
+   * attente et une pile à plat sur l'installation d'essai.
+   *
+   * Une par entité, et non un total : « 5 mises à jour » changerait de texte à
+   * chaque installation, donc de clé, donc rentrerait à neuf dans le journal.
+   * Une par entité entre une fois, se marque lue, et s'en va.
+   *
+   * Ce qui n'y entre PAS : les entités indisponibles. Il y en a 912 sur
+   * l'installation d'essai — c'est du bruit, pas un point d'attention, et la
+   * règle est posée depuis le 19/09. */
+  for (const id in S) {
+    if (id.indexOf('update.') !== 0) continue;
+    const e = S[id]; if (!e || e.state !== 'on') continue;
+    const a = e.attributes || {};
+    const v = a.latest_version ? ' ' + a.latest_version : '';
+    out.push({ k: 'maj:' + id + ':' + (a.latest_version || ''), c: 'var(--o-accent-soft)', t: tr('Mise à jour'), m: (a.title || a.friendly_name || id) + v });
+  }
+  for (const id in S) {
+    const e = S[id]; if (!e) continue;
+    const a = e.attributes || {};
+    if (a.device_class !== 'battery') continue;
+    const n = parseFloat(e.state);
+    if (isNaN(n) || n > SEUIL_PILE) continue;
+    out.push({ k: 'pile:' + id, c: 'var(--o-warn)', t: tr('Pile faible'), m: (a.friendly_name || id) + ' · ' + Math.round(n) + ' %' });
+  }
+  return out;
+}
+
+/** En dessous, la pile se change bientôt. Au-dessus, elle vit sa vie. */
+const SEUIL_PILE = 20;
+
+/** Depuis quand elle est là. Le journal porte l'heure d'ARRIVÉE : c'est elle
+ *  qui compte, pas le dernier soubresaut de l'entité. */
+function ilYa(ts) {
+  const m = (Date.now() - ts) / 60000;
+  if (!isFinite(m) || m < 1) return tr('à l’instant');
+  if (m < 60) return tr('Il y a {n} min', { n: Math.round(m) });
+  if (m < 1440) return tr('Il y a {n} h', { n: Math.round(m / 60) });
+  return tr('Il y a {n} j', { n: Math.round(m / 1440) });
 }
 
 export default function App() {
@@ -14285,7 +14363,23 @@ export default function App() {
     volets: [...voletKeys(), 'cover.', ...cfgKeys('covers')],
     energie: [...enKeys(), cfg.energy.consoNow, cfg.energy.solarOutput],
     croquettes: croqKeys(), medias: medKeys(),
-    objets: [...vacKeys, 'lawn_mower.', ...mowerKeys(), ...croqKeys(), ...medKeys(), ...plantKeys()],
+    /* La vue Objets montre TOUS les appareils, et elle n'en surveillait que
+     * cinq familles. Un interrupteur qu'on bascule ne changeait donc aucune
+     * signature : le parent ne se redessinait pas, la carte gardait l'objet
+     * `hass` capture avant la commande, et son minuteur de 6 s la redessinait
+     * SEULE — avec l'etat d'avant. La bascule revenait a son point de depart
+     * six secondes apres l'appui, puis se recalait au premier mouvement d'un
+     * aspirateur ou d'une plante (mesure du 01/10 : 6 007 ms, soit le
+     * minuteur a la milliseconde pres).
+     *
+     * On surveille donc les domaines qu'elle COMMANDE, par prefixe. Ceux-la
+     * ne bougent que si quelqu'un agit : aucun bavardage. `sensor.` et
+     * `binary_sensor.` restent DEHORS — ils jitterent en permanence et
+     * redessineraient tout l'ecran toutes les deux secondes, alors qu'une
+     * mesure en retard ne ment pas, contrairement a une bascule. */
+    objets: [...vacKeys, 'lawn_mower.', ...mowerKeys(), ...croqKeys(), ...medKeys(), ...plantKeys(),
+      'light.', 'switch.', 'cover.', 'climate.', 'media_player.', 'fan.', 'lock.',
+      'humidifier.', 'valve.', 'siren.', 'water_heater.', 'input_boolean.'],
     securite: [...secBaseKeys(), 'camera.', 'siren.', 'switch.', ...secKeys, ...(cfg.cams || []).map(c => c.haid)],
     // `update.` : le panneau Versions lit les entités de mise à jour en direct (ADR 0037).
     systeme: [...sysKeys(), ...cfgKeys('system'), 'update.'],
@@ -14432,9 +14526,64 @@ export default function App() {
       return a;
     } catch (e) { console.error('deriveAccueil', e); return null; }
   }, [view, activeRoom, hass, cfg, loggiaRuntime.resolved, loggiaRuntime.index]);
-  const notifs = useMemo(() => {
+  /* Ce que l'instant présent justifie. À lui seul, ce n'est pas une
+   * notification : c'est un état. Le journal en fait un événement. */
+  const vivantes = useMemo(() => {
     try { return deriveNotifs(hass); } catch (e) { console.error('deriveNotifs', e); return []; }
   }, [hass]);
+
+  /* LES NOTIFICATIONS PERSISTANTES DE HOME ASSISTANT (01/10).
+   *
+   * C'est le canal prévu pour cela : intégrations en échec, appareils
+   * découverts, messages de scripts, redémarrage requis. Loggia ne les
+   * regardait pas — d'où « il n'y a rien ou presque qui remonte ici ».
+   *
+   * On s'ABONNE, on ne sonde pas : le serveur envoie l'état courant à
+   * l'abonnement, puis chaque ajout et chaque retrait. */
+  const [persistantes, setPersistantes] = useState([]);
+  const conn = hass && hass.connection;
+  useEffect(() => {
+    if (!conn || typeof conn.subscribeMessage !== 'function') return undefined;
+    let vivant = true, desabonner = null;
+    const table = new Map();
+    const poser = () => setPersistantes([...table.values()].map(x => ({
+      k: 'ha:' + (x.notification_id || x.title || ''),
+      c: 'var(--o-accent-soft)',
+      // Un nom propre ne se traduit pas ; sans titre, l'identifiant dit au
+      // moins de quoi il s'agit.
+      t: x.title || x.notification_id || '',
+      m: x.message || '',
+    })));
+    conn.subscribeMessage((msg) => {
+      if (!vivant || !msg) return;
+      const liste = msg.notifications || {};
+      if (msg.type === 'removed') { for (const id in liste) table.delete(id); }
+      else { for (const id in liste) table.set(id, liste[id]); }
+      poser();
+    }, { type: 'persistent_notification/subscribe' })
+      .then(u => { if (!vivant) { try { u(); } catch { /* deja parti */ } } else desabonner = u; })
+      .catch(() => { /* serveur ancien : on s'en passe, le reste tient */ });
+    return () => { vivant = false; if (desabonner) { try { desabonner(); } catch { /* deja parti */ } } };
+  }, [conn]);
+
+  /* LA MÉMOIRE. Un événement entre une fois, reste après la fin de ce qui l'a
+   * causé, et se marque lu. Dans le NAVIGATEUR : « lu » est propre à celui qui
+   * regarde, et marquer lu chez soi ne doit pas éteindre l'alerte sur la
+   * tablette du couloir. */
+  const [journal, setJournal] = useState(() => {
+    try { const v = JSON.parse(localStorage.getItem('loggia_journal') || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+  });
+  const rangerJournal = useCallback((suite) => {
+    try { localStorage.setItem('loggia_journal', JSON.stringify(suite)); } catch { /* stockage plein : on perd la memoire, pas l'alerte */ }
+    return suite;
+  }, []);
+  useEffect(() => {
+    setJournal(j => { const n = fondre(j, [...vivantes, ...persistantes], Date.now()); return n === j ? j : rangerJournal(n); });
+  }, [vivantes, persistantes, rangerJournal]);
+  const notifs = journal;
+  const lireNotifs = useCallback(() => {
+    setJournal(j => { const n = marquerLues(j); return n === j ? j : rangerJournal(n); });
+  }, [rangerJournal]);
   /* Le compte d'appareils de la barre latérale — TOUJOURS montée, quelle que
    * soit la vue — bouclait sur TOUTES les entités de la maison à chaque rendu
    * d'`App()`, avec un test sur huit préfixes de domaine. Le coût est
@@ -14747,7 +14896,7 @@ export default function App() {
   return (
     <LoggiaContext.Provider value={loggiaRuntime}>
     {showOnboarding && <Suspense fallback={null}><Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} /></Suspense>}
-    <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, peutEditer, droits, notifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn, onAssistant: assistantNs ? () => setAssistantOuvert(true) : null, onDictee: assistantNs ? poserQuestion : null, hass }}>
+    <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, peutEditer, droits, notifs, onLireNotifs: lireNotifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn, onAssistant: assistantNs ? () => setAssistantOuvert(true) : null, onDictee: assistantNs ? poserQuestion : null, hass }}>
     <div className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)',
       // isolate : notre propre contexte d'empilement. Sans lui, le z-index
       // négatif du calque photo l'envoie sous le fond OPAQUE de tout wrapper
@@ -14768,7 +14917,7 @@ export default function App() {
       {haLost && <div role="alert" style={BANDEAU_ALERTE}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {!haLost && discovery.echec && <div role="alert" style={BANDEAU_ALERTE}>{tr('La découverte de la maison a été interrompue — recharge la page')}</div>}
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 14, padding: '10px 16px', fontSize: 12, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
-      <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={peutEditer ? () => setEditMode(e => !e) : null} tactile={tactile} users={users} userIdx={userIdx} onSwitchUser={switchUser} notifs={notifs} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={(() => {
+      <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={peutEditer ? () => setEditMode(e => !e) : null} tactile={tactile} users={users} userIdx={userIdx} onSwitchUser={switchUser} notifs={notifs} onLireNotifs={lireNotifs} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={(() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
         const devCount = nbAppareils;
         const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null;

@@ -30,36 +30,56 @@ test('le bandeau du haut reste masque au tactile : c’est la raison d’etre de
     'si le bandeau revenait, les rangees du tiroir feraient double emploi');
 });
 
-test('le tiroir porte le profil et la cloche, au TACTILE seulement', () => {
+test('le pied du tiroir : UNE carte compte, deux boutons', () => {
+  /* Maquette 1a (01/10). Quatre blocs de meme poids disaient quatre choses de
+   * natures differentes — une identite, un flux, un mode, un etat — et rien ne
+   * les hierarchisait. Le pied porte desormais trois natures, trois
+   * traitements : la navigation en liste, l'etat en bandeau colore, l'identite
+   * en carte.
+   *
+   * La cloche vit SUR l'identite : les notifications s'adressent a celui qui
+   * est connecte. Elles avaient une ligne a elles, vide de sens ; sur la
+   * pastille, leur nombre en a un. */
   const side = bloc('function Sidebar(', NL + '/* ── Recherche globale');
-  assert.match(side, /\{tactile && \(users\.length > 0 \|\| notifs\.length > 0\) && \(/,
-    'les rangees ne se rendent pas hors tactile — sur PC elles seraient un reglage en double');
+  assert.match(side, /\{tactile && \(users\.length > 0 \|\| notifs\.length > 0\) \? \(/,
+    'la carte compte ne se rend plus hors tactile — sur PC elle serait un reglage en double');
   assert.ok(side.includes('setProfilsOuverts(true)') && side.includes('setNotifsOuvertes(true)'),
-    'les deux rangees ouvrent chacune sa feuille');
-  // L'ordre compte : AU-DESSUS du separateur, donc avant le bloc de pied.
-  const iRangees = side.indexOf('{tactile && (users.length > 0');
-  const iPied = side.indexOf('Mode édition depuis le tiroir');
-  assert.ok(iRangees > 0 && iRangees < iPied,
-    'les rangees passent avant « Mode edition », pas apres');
+    'les deux boutons ouvrent chacun sa feuille');
+
+  /* DEUX boutons voisins, et non une carte avec une zone cachee a droite :
+   * ouvrir son profil et ouvrir ses notifications sont deux destinations. */
+  const carte = side.slice(side.indexOf('LA CARTE COMPTE'), side.indexOf('</div>', side.indexOf('LA CARTE COMPTE')) + 600);
+  assert.equal(carte.split('<button').length - 1, 2, 'la carte compte n’a plus exactement deux boutons');
+  assert.equal(carte.split('minHeight: 44').length - 1, 2, 'un des deux boutons est passe sous 44 px au doigt');
+
+  // Le compte des non lues se LIT : une pastille muette ne disait rien.
+  assert.ok(side.includes("nbNonVues > 9 ? '9+' : nbNonVues"), 'la pastille ne porte plus le nombre de NON LUES');
 });
 
-test('les deux rangees respirent comme « Mode edition » et « Alarme » dessous', () => {
-  /* Retour du 25/09 : « le bouton notification est litteralement pose sur le
-   * separateur et l'espace entre les 2 boutons est trop mince ». C'etait vrai
-   * trois fois — ecart de 4 au lieu de 8, aucune marge basse (le bouton
-   * touchait le trait), et une pastille de 28 px qui faisait depasser la
-   * rangee profil de onze pixels.
+test('« Mode edition » reste au PIED du tiroir', () => {
+  /* La maquette 1a le faisait monter dans la liste, sous Systeme. Essaye le
+   * 01/10, et refuse le jour meme : la liste est plus courte que le rail, et il
+   * laissait un grand vide sous lui — « redescends le bouton edition ou il
+   * etait avant ».
    *
-   * MESURE au telephone, apres correction : les quatre rangees font 37 px,
-   * les ecarts valent 8, et il reste 14 px avant le trait pour 15 apres. */
+   * Il garde en revanche l'arrondi de ses voisins : 16, comme le bandeau
+   * d'alarme et la carte compte. */
   const side = bloc('function Sidebar(', NL + '/* ── Recherche globale');
-  assert.ok(side.includes("gap: 8, marginTop: 'auto', paddingTop: 10, paddingBottom: 14 }}"),
-    'le bloc des deux rangees a perdu son ecart de 8 ou sa marge basse de 14');
-  assert.ok(side.includes("width: 17, height: 17, borderRadius: '50%', background: userBg(profilActif)"),
-    'la pastille du profil dicte de nouveau la hauteur de sa rangee');
-  // Le bloc d'en dessous, celui qui sert de reference.
-  assert.ok(side.includes("gap: 8, marginTop: tactile && (users.length > 0 || notifs.length > 0) ? 0 : 'auto', paddingTop: 14"),
-    'la reference a change : remesurer les deux blocs ensemble');
+  const iTrait = side.indexOf("borderTop: 'var(--o-bw,1px) solid var(--o-bd3)'");
+  const iEdition = side.indexOf('aria-pressed={editMode}');
+  // AU-DESSUS du trait, pas dans le bloc qu'il ouvre.
+  assert.ok(iEdition > 0 && iEdition < iTrait, '« Mode edition » est repasse SOUS la ligne separateur');
+  assert.ok(side.includes('marginBottom: 14'), 'il se pose de nouveau SUR le trait, sans marge');
+  assert.ok(side.indexOf('NAV.filter(g => g.reglages)') < iEdition, 'il est remonte dans la liste');
+  assert.ok(!side.includes('MODE EDITION dans la liste'), 'la version en liste est revenue');
+  /* NI bordure NI fond : il n'en avait plus depuis son passage dans la liste,
+   * et les lui rendre n'avait ete demande par personne. */
+  const bout = side.slice(iEdition - 400, iEdition + 400);
+  assert.ok(bout.includes("border: 'none'") && bout.includes("background: 'transparent'"),
+    'le bouton edition a repris un cadre que personne n’a demande');
+  // Les trois blocs du pied partagent leur arrondi.
+  assert.equal(side.split('borderRadius: 16').length - 1, 2, 'l’edition et l’alarme n’ont plus le meme arrondi');
+  assert.ok(side.includes('borderRadius: 18'), 'la carte compte a perdu le sien');
 });
 
 test('la bascule passe par onSwitchUser — donc par le code pour un Admin', () => {
@@ -83,11 +103,20 @@ test('les feuilles sont rendues HORS de l’aside', () => {
   assert.ok(side.indexOf('<FeuilleNotifications') > iFin, 'la feuille des notifications sort de l’aside');
 });
 
-test('la cloche du tiroir et celle du bandeau partagent leur « vu »', () => {
+test('« lu » vit dans le journal, et les deux cloches le partagent', () => {
+  /* Avant le 01/10, « vu » etait une SIGNATURE du contenu, rangee a part. Elle
+   * ne savait pas distinguer « deux alertes dont une deja lue » de « deux
+   * alertes neuves » : elle changeait, et tout redevenait non lu.
+   *
+   * Desormais chaque entree porte son `lu`, le journal est unique, et les deux
+   * cloches lisent le meme. */
   const side = bloc('function Sidebar(', NL + '/* ── Recherche globale');
-  assert.ok(side.includes("localStorage.getItem('loggia-notifsvues')") && side.includes("localStorage.setItem('loggia-notifsvues', nsig)"),
-    'meme cle que le bandeau : un point rouge eteint d’un cote ne se rallume pas de l’autre');
-  assert.ok(side.includes("notifs.map(n => '' + n[1] + n[2]).join('|')"), 'meme signature du contenu');
+  assert.ok(!side.includes('loggia-notifsvues'), 'la signature du contenu est revenue a cote du journal');
+  assert.ok(side.includes('journalNonLues(notifs)'), 'le tiroir ne compte plus les non lues depuis le journal');
+  assert.ok(side.includes('if (onLireNotifs) onLireNotifs();'), 'ouvrir la feuille ne marque plus lu');
+  // Et la barre du haut passe par le MEME chemin.
+  assert.equal(src.split('journalNonLues(notifs)').length - 1, 2, 'les deux cloches ne comptent plus pareil');
+  assert.ok(src.includes('onLireNotifs: lireNotifs'), 'la barre du haut ne recoit plus de quoi marquer lu');
 });
 
 test('la reconnaissance automatique ne bascule pas vers un Admin sans droit HA', () => {

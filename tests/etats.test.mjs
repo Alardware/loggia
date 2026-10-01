@@ -79,8 +79,7 @@ test('plus de couleur d’état en dur : les jetons du thème, lisibles en clair
   assert.equal(compter(app, "'#f87171'"), 0, '#f87171');
   assert.equal(compter(app, "248,113,113"), 0, 'rgb rouge en dur');
   // Les notifications disent leur niveau par le jeton, et l’ambiance les relit ainsi.
-  assert.ok(app.includes("filter(n => n && n[0] === 'var(--o-bad)')"));
-  assert.ok(app.includes("out.push(['var(--o-bad)', tr('Alarme'), tr('Intrusion détectée'), rel(id)]);"));
+  assert.ok(app.includes("c: 'var(--o-bad)', t: tr('Alarme'), m: tr('Intrusion détectée')"));
   // La barre latérale : l'alarme en jetons rgb.
   assert.ok(app.includes("{ t: tr('ALARME DÉCLENCHÉE'), c: 'var(--o-bad-rgb)' }"));
   assert.ok(app.includes("{ t: tr('Alarme désarmée'), c: 'var(--o-ok-rgb)' }"));

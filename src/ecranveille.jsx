@@ -131,7 +131,7 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, li
   const hm = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const capit = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   const dateStr = capit(clock.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }));
-  const rouges = (notifs || []).filter(n => n && n[0] === 'var(--o-bad)').slice(0, 3);
+  const rouges = (notifs || []).filter(n => n && n.c === 'var(--o-bad)').slice(0, 3);
   const chip = { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)', fontSize: 14, fontWeight: 700, color: '#aeb9cc' };
   const pt = (c) => <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: c, boxShadow: '0 0 8px ' + c }} />;
   return (
@@ -164,7 +164,7 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, li
       </div>
       {rouges.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14, alignItems: 'center' }}>
-          {rouges.map((n, i) => <span key={i} style={{ ...chip, color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.3)', background: 'rgba(var(--o-bad-rgb),.08)' }}>{pt('var(--o-bad)')}{n[1]} · {n[2]}</span>)}
+          {rouges.map((n) => <span key={n.k} style={{ ...chip, color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.3)', background: 'rgba(var(--o-bad-rgb),.08)' }}>{pt('var(--o-bad)')}{n.t} · {n.m}</span>)}
         </div>
       )}
       {/* Scènes rapides SANS réveiller : le pointeur est stoppé avant d'atteindre
