@@ -21,7 +21,12 @@ export function BarreConfort({ confort, onOpen }) {
   if (!confort) return null;
   const { indice, verdict, mesures } = confort;
   return (
-    <div className="o-confort" style={{ '--conf-n': mesures.length }}
+    /* DEUX mesures ou moins : les tuiles restent EN LIGNE, icone a cote du
+     * texte, au lieu de se mettre en colonne au telephone. Avec quatre
+     * pastilles sur 375 px la colonne s'impose ; avec deux, la place ne manque
+     * pas et l'empilement fabriquait des tuiles hautes et vides (maquette 2a,
+     * 01/10). Le compte decide, pas la largeur seule. */
+    <div className={'o-confort' + (mesures.length <= 2 ? ' o-confort-peu' : '')} style={{ '--conf-n': mesures.length }}
       role="button" tabIndex={0} aria-label={tr('Historique du confort')}
       onClick={onOpen} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}>
       <div className="o-confort-indice">

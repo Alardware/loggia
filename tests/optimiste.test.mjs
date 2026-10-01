@@ -42,9 +42,21 @@ test('le filet de securite est un SEUL mecanisme, et il expire', () => {
   // Le minuteur : sans lui, un etat reel qui ne bouge jamais fige l'affichage.
   assert.match(hook, /minuteur\.current = setTimeout\(\(\) => setOv\(null\), delai\)/,
     'l’etat optimiste ne s’efface plus tout seul : un affichage faux tiendrait jusqu’au changement de page');
-  // L'etat reel reste prioritaire : quand la maison repond, on la croit.
-  assert.match(hook, /useEffect\(\(\) => \{ clearTimeout\(minuteur\.current\); setOv\(null\); \}, \[reel\]\)/,
+  /* L'etat reel reste prioritaire : quand la maison repond, on la croit. Mais
+   * « je ne sais pas » n'est PAS une reponse (01/10) : une carte de piece rend
+   * `null` quand la liste de ses plafonniers se vide un instant, et l'optimiste
+   * se faisait jeter — la bascule retombait sur eteint, puis remontait seule.
+   * Repete, cela la fait clignoter pendant que la lampe, elle, ne bouge pas. */
+  assert.match(hook, /if \(reel == null\) return;/,
+    'un etat reel inconnu vide de nouveau l’optimiste');
+  assert.ok(hook.includes('clearTimeout(minuteur.current); setOv(null);'),
     'l’etat reel ne vide plus l’etat optimiste');
+
+  /* Et les deux gabarits de carte de piece laissent l'optimiste PASSER DEVANT :
+   * sans cela, le correctif du hook ne servirait a rien chez elles — elles
+   * retombaient sur un compteur de lampes qui, liste vide, dit zero. */
+  assert.equal(compter(APP, 'ov != null ? ov : (realOn != null ? realOn : n > 0)'), 2,
+    'une carte de piece retombe sur son compteur avant de regarder l’optimiste');
   // Et le minuteur meurt avec la carte, sinon il ecrit dans un composant demonte.
   assert.ok(hook.includes('useEffect(() => () => clearTimeout(minuteur.current), []);'), 'le minuteur survit au demontage');
 });
@@ -154,4 +166,28 @@ test('le seuil se regle, et il se regle dans la page des volets', () => {
   // Et il est JOIGNABLE : branche dans la page, pas seulement exporte.
   assert.ok(PAR.includes('import { VoletsReglages, VoletsAffichage }'), 'le reglage n’est plus importe');
   assert.ok(PAR.includes('<VoletsAffichage cardSt={cardSt} />'), 'le reglage n’est plus rendu');
+});
+
+test('une vue surveille ce qu’elle COMMANDE, pas seulement ses spécialités', () => {
+  /* Mesure du 01/10, sur l'installation réelle, avec un observateur posé sur la
+   * bascule : même nœud du début à la fin (donc aucun remontage de React), et
+   * l'état repasse à « éteint » **6 007 ms** après l'appui — le minuteur
+   * d'`useOptimiste` à la milliseconde près.
+   *
+   * Cause : `useHass` ne redessine que si la signature d'une LISTE d'entités
+   * surveillées bouge. La vue Objets montre tous les appareils et n'en
+   * surveillait que cinq familles. Basculer une lampe ne changeait donc rien :
+   * le parent ne se redessinait pas, la carte gardait l'objet `hass` d'avant la
+   * commande, et son propre minuteur la redessinait SEULE avec cet état périmé.
+   *
+   * `sensor.` et `binary_sensor.` restent volontairement dehors : ils jitterent
+   * en continu. Une mesure en retard ne ment pas ; une bascule, si. */
+  const i = APP.indexOf('const VIEW_HAKEYS');
+  const bloc = APP.slice(i, APP.indexOf('\n  };', i));
+  const ligne = bloc.slice(bloc.indexOf('objets:'), bloc.indexOf('securite:'));
+  for (const d of ['light.', 'switch.', 'cover.', 'climate.', 'media_player.']) {
+    assert.ok(ligne.includes("'" + d + "'"), 'la vue Objets ne suit plus ' + d + ' : ses bascules mentiront 6 s');
+  }
+  assert.ok(!ligne.includes("'sensor.'") && !ligne.includes("'binary_sensor.'"),
+    'un domaine qui jitte est revenu dans la liste : tout l’écran se redessinerait toutes les 2 s');
 });

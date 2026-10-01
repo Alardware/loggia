@@ -183,3 +183,26 @@ test('la barre a la hauteur de celle des scenarios (retour du 18/09)', () => {
   assert.ok(css.includes('.o-confort-ico { width: 27px; height: 27px;'));
   assert.ok(css.includes('.o-confort-nom { font-size: 10.5px; line-height: 1.15;') && css.includes('.o-confort-val { display: flex; align-items: center; gap: 6px; margin-top: 1px; font-size: 12.5px; line-height: 1.2;'), 'le nom au-dessus de la valeur, en petit');
 });
+
+test('deux mesures ou moins : les tuiles restent EN LIGNE', () => {
+  /* Maquette 2a (01/10). L'empilement au téléphone — icône au-dessus, valeur
+   * dessous — sert à tenir QUATRE pastilles sur 375 px. À deux, il ne fabrique
+   * que des tuiles hautes et vides, alors que la place ne manque pas.
+   *
+   * C'est le NOMBRE de mesures qui décide, pas la largeur seule : une pièce
+   * avec un thermomètre et un hygromètre n'a aucune raison de s'empiler là où
+   * une pièce à quatre capteurs le doit. */
+  const bc = readFileSync(join(RACINE, 'src', 'barreconfort.jsx'), 'utf8');
+  assert.ok(bc.includes("mesures.length <= 2 ? ' o-confort-peu' : ''"),
+    'la barre ne distingue plus le cas « peu de mesures »');
+
+  const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
+  const petit = css.slice(css.indexOf('@media (max-width: 560px)'));
+  assert.match(petit, /\.o-confort-mesure \{ flex-direction: column;/,
+    'l’empilement des quatre pastilles a disparu');
+  assert.match(petit, /\.o-confort-peu \.o-confort-mesure \{ flex-direction: row;/,
+    'à deux mesures, les tuiles s’empilent de nouveau');
+  // L'ordre compte : la regle particuliere doit SUIVRE la generale.
+  assert.ok(petit.indexOf('.o-confort-mesure { flex-direction: column;') < petit.indexOf('.o-confort-peu .o-confort-mesure'),
+    'la règle des deux mesures passe avant la générale : elle serait écrasée');
+});
