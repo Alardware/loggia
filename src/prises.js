@@ -72,27 +72,55 @@ export const NOMS_PRISE = () => ({
   prise: tr('Prise'),
 });
 
-/** Les mots qui trahissent un appareil, dans les deux langues où les gens
- *  nomment leurs prises. L'ORDRE compte : « sèche-linge » avant « linge », et
- *  « lave-vaisselle » avant « lave ». */
+/** Les mots qui trahissent un appareil. L'ORDRE compte : « sèche-linge » avant
+ *  « linge », et « lave-vaisselle » avant « lave ».
+ *
+ *  Le polonais s'ajoute au français et à l'anglais. Deux mots y demandent la
+ *  même prudence d'ordre que « sèche-linge » : `suszarka` désigne aussi bien un
+ *  sèche-linge qu'un sèche-cheveux, et vient donc AVANT `pralka` — une prise
+ *  nommée « suszarka » est plus souvent un sèche-linge qu'autre chose, mais ne
+ *  doit jamais passer pour un lave-linge. `ekspres` est le mot courant pour la
+ *  machine à café ; il ne veut rien dire d'autre sur une prise.
+ *
+ *  Les accents polonais se réduisent comme les français (`lodówka` → `lodowka`)
+ *  une fois le `ł` traité dans `aplati` — les mots s'écrivent donc à plat ici.
+ */
 const MOTS_PRISE = [
-  ['lv', ['lave vaisselle', 'lave-vaisselle', 'lave_vaisselle', 'lavevaisselle', 'dishwasher', 'vaisselle', ' lv ']],
-  ['sl', ['seche linge', 'seche-linge', 'seche_linge', 'sechelinge', 'dryer', 'tumble', ' sl ']],
-  ['ll', ['lave linge', 'lave-linge', 'lave_linge', 'lavelinge', 'machine a laver', 'washer', 'washing', 'lessive', ' ll ']],
-  ['frigo', ['frigo', 'refrigerateur', 'fridge', 'refrigerator', 'congelateur', 'freezer']],
-  ['cafe', ['cafetiere', 'machine a cafe', 'coffee', 'expresso', 'espresso', 'percolateur']],
-  ['ve', ['borne', 'recharge', 'wallbox', 'chargeur voiture', 'voiture electrique', 'ev charger']],
-  ['nas', ['nas', 'synology', 'serveur', 'server', 'homelab', 'unraid']],
-  ['pc', ['pc ', 'ordinateur', 'computer', 'imac', 'macbook', 'desktop', 'tour ', 'workstation']],
-  ['tv', ['tv', 'tele', 'television', 'televiseur', 'oled', 'videoprojecteur', 'projecteur']],
+  ['lv', ['lave vaisselle', 'lavevaisselle', 'dishwasher', 'vaisselle', 'zmywarka', 'lv']],
+  ['sl', ['seche linge', 'sechelinge', 'dryer', 'tumble', 'suszarka', 'sl']],
+  ['ll', ['lave linge', 'lavelinge', 'machine a laver', 'washer', 'washing', 'lessive', 'pralka', 'll']],
+  ['frigo', ['frigo', 'refrigerateur', 'fridge', 'refrigerator', 'congelateur', 'freezer', 'lodowka', 'zamrazarka', 'chlodziarka']],
+  ['cafe', ['cafetiere', 'machine a cafe', 'coffee', 'expresso', 'espresso', 'percolateur', 'ekspres']],
+  ['ve', ['borne', 'recharge', 'wallbox', 'chargeur voiture', 'voiture electrique', 'ev charger', 'stacja ladowania']],
+  ['nas', ['nas', 'synology', 'serveur', 'server', 'homelab', 'unraid', 'serwer']],
+  ['pc', ['pc', 'ordinateur', 'computer', 'imac', 'macbook', 'desktop', 'tour', 'workstation', 'komputer']],
+  ['tv', ['tv', 'tele', 'television', 'televiseur', 'oled', 'videoprojecteur', 'projecteur', 'telewizor']],
   ['box', ['box', 'routeur', 'router', 'fibre', 'livebox', 'freebox', 'bbox', 'modem']],
-  ['radia', ['radiateur', 'convecteur', 'chauffage', 'seche serviette', 'heater', 'radiator']],
-  ['siren', ['sirene', 'siren', 'alarme sonore']],
+  ['radia', ['radiateur', 'convecteur', 'chauffage', 'seche serviette', 'heater', 'radiator', 'grzejnik', 'kaloryfer', 'ogrzewanie']],
+  ['siren', ['sirene', 'siren', 'alarme sonore', 'syrena']],
 ];
+
+/** Le nom reduit a ses MOTS, separes par une espace, borne aux deux bouts.
+ *
+ *  Compare en sous-chaine, `iron` se cache dans « environnement », `box` dans
+ *  « boxe », `tele` dans « telephone ». Decouper sur tout ce qui n'est ni
+ *  lettre ni chiffre regle le cas general — et rend inutiles les espaces qu'il
+ *  fallait ecrire a la main dans ` lv `, ` ll `, ` sl `.
+ *
+ *  Les mots composes marchent pareil : « lave vaisselle » se retrouve tel quel
+ *  dans « prise lave vaisselle cuisine », separateurs normalises des deux
+ *  cotes.
+ */
+const enMots = (s) => ' ' + aplati(s).replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
 
 /** Sans accents, sans casse : « Prise Réfrigérateur » et « prise refrigerateur »
  *  doivent se reconnaître pareil. */
-const aplati = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const aplati = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+  // Le « l barre » polonais n'a PAS de decomposition NFD : `ł` reste `ł` la ou
+  // `ó` devient `o`. Sans cette ligne, « chłodziarka » se couperait en deux au
+  // decoupage en mots.
+  .replace(/ł/g, 'l').replace(/Ł/g, 'L')
+  .toLowerCase();
 
 /**
  * L'appareil derrière une prise, d'après son nom.
@@ -109,9 +137,9 @@ export function typeDePrise(nom, impose = null, indice = '') {
   if (impose && TYPES_PRISE[impose]) return impose;
   // Le nom AFFICHE, puis l'identifiant : une prise peut s'appeler « Prise 3 »
   // et s'appeler `switch.lave_vaisselle` dessous. Les deux comptent.
-  const n = ' ' + aplati(nom) + ' ' + aplati(indice).replace(/[._-]/g, ' ') + ' ';
+  const n = enMots(aplati(nom) + ' ' + aplati(indice));
   for (const [type, mots] of MOTS_PRISE) {
-    for (const m of mots) if (n.indexOf(m) >= 0) return type;
+    for (const m of mots) if (n.indexOf(enMots(m)) >= 0) return type;
   }
   return 'prise';
 }

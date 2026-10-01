@@ -17,6 +17,34 @@ import { TYPES_PRISE, NOMS_PRISE, typeDePrise, modePrise, motDuMode, animationPr
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+test('les mots se comparent ENTIERS, pas en sous-chaîne', () => {
+  // Le piege general : un mot court se cache dans un mot long. Compare en
+  // sous-chaine, « telephone » contenait « tele », « boxe » contenait « box »,
+  // et « environnement » contiendra « iron » le jour ou un fer arrivera.
+  assert.equal(typeDePrise('Telephone salon'), 'prise', 'un téléphone n’est pas une télé');
+  assert.equal(typeDePrise('Sac de boxe'), 'prise', 'un sac de boxe n’est pas une box');
+  assert.equal(typeDePrise('Environnement bureau'), 'prise');
+  // Et le mot entier continue de se reconnaitre, colle a n'importe quel separateur.
+  assert.equal(typeDePrise('TV-salon'), 'tv');
+  assert.equal(typeDePrise('switch.prise_tv_chambre', null, 'switch.prise_tv_chambre'), 'tv');
+  assert.equal(typeDePrise('Prise LV'), 'lv', 'les abréviations n’ont plus besoin d’espaces écrites à la main');
+});
+
+test('le polonais se reconnaît comme le français', () => {
+  // L'interface parle sept langues depuis la 3.72 ; les noms de prises aussi.
+  assert.equal(typeDePrise('Pralka'), 'll');
+  assert.equal(typeDePrise('Zmywarka kuchnia'), 'lv');
+  assert.equal(typeDePrise('Lodówka'), 'frigo', 'les accents polonais tombent comme les français');
+  assert.equal(typeDePrise('Chłodziarka'), 'frigo', 'le « ł » n’a pas de décomposition NFD — il est traité à part');
+  assert.equal(typeDePrise('Ekspres do kawy'), 'cafe');
+  assert.equal(typeDePrise('Telewizor salon'), 'tv');
+  assert.equal(typeDePrise('Grzejnik łazienka'), 'radia');
+  assert.equal(typeDePrise('Syrena'), 'siren');
+  // Le piege polonais : « suszarka » est aussi un seche-CHEVEUX. Il passe donc
+  // en seche-linge, jamais en lave-linge.
+  assert.equal(typeDePrise('Suszarka'), 'sl');
+});
+
 test('l’appareil se reconnaît à son nom, pièges compris', () => {
   assert.equal(typeDePrise('Prise Lave-vaisselle'), 'lv');
   assert.equal(typeDePrise('Prise lave vaisselle cuisine'), 'lv');
