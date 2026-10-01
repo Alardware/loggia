@@ -1,7 +1,7 @@
 # 0120 — Le pied du rail, et ce qu'une maquette ne dit pas
 
-Date : 01/10/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**.
+Date : 01/10/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti.
 
 Quatre maquettes proposées, la **1a** retenue.
 

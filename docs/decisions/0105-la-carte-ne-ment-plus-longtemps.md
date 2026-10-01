@@ -1,7 +1,7 @@
 # 0105 — La carte ne ment plus longtemps
 
-Date : 27/09/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**. Dixième point, ajouté à l'audit du
+Date : 27/09/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti. Dixième point, ajouté à l'audit du
 27/09 par deux retours pendant la mise en production.
 
 ## Le retour, et pourquoi il se lisait à l'envers

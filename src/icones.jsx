@@ -37,8 +37,23 @@ const CUSTOM_SVG = {
   'teddy-bear': 'm6.172,5.189c-.112.42-.172.859-.172,1.311,0,3.038,2.686,5.5,6,5.5s6-2.462,6-5.5c0-.461-.062-.908-.179-1.336.145-.07.297-.193.463-.381,1.05-1.195.933-3.015-.262-4.066-1.195-1.05-3.015-.933-4.066.262-.081.092-.147.179-.2.261-.556-.156-1.145-.24-1.756-.24-.616,0-1.21.085-1.769.243-.067-.123-.169-.256-.313-.399-1.125-1.125-2.949-1.125-4.074,0-1.125,1.125-1.125,2.949,0,4.074.117.117.225.206.328.271Zm5.828,1.811c.828,0,1.5.448,1.5,1s-.672,1-1.5,1-1.5-.448-1.5-1,.672-1,1.5-1Zm-5.629,12.286s1.571,2.095,1.571,4.714h-1.562c-1.978,0-3.841-.932-5.028-2.514l-.775-1.033c-.822-1.096-.782-2.686.226-3.612,1.16-1.066,2.953-.878,3.875.351l1.693,2.095Zm17.053,1.165l-.776,1.035c-1.187,1.583-3.05,2.514-5.028,2.514h-1.583c0-3.667,1.531-4.897,1.531-4.897l1.755-1.912c.922-1.229,2.716-1.416,3.876-.35,1.008.926,1.047,2.515.226,3.609Zm-9.388,3.549h-4.093c0-3.194-1.77-5.646-2.016-5.971l-1.648-2.039c-.782-1.042-1.975-1.708-3.272-1.828-.149-.014-.297-.019-.445-.018l-2.036-2.953c-.868-1.157-.633-2.799.524-3.667.909-.682,2.117-.683,3.014-.091.491,3.697,3.864,6.567,7.938,6.567s7.447-2.87,7.938-6.567c.897-.592,2.105-.59,3.014.091,1.157.868,1.392,2.51.524,3.667l-2.036,2.953c-.148,0-.297.006-.445.02-1.26.115-2.422.747-3.204,1.737l-1.631,1.778c-.583.544-2.124,2.355-2.124,6.321Z',
   'bed-alt': 'M0,12V6C0,3.243,2.243,1,5,1h14c2.757,0,5,2.243,5,5v6h-3v-1c0-2.206-1.794-4-4-4h-2c-1.2,0-2.266,.542-3,1.382-.734-.84-1.8-1.382-3-1.382h-2c-2.206,0-4,1.794-4,4v1H0Zm9-3h-2c-1.103,0-2,.897-2,2v1h6v-1c0-1.103-.897-2-2-2Zm10,2c0-1.103-.897-2-2-2h-2c-1.103,0-2,.897-2,2v1h6v-1ZM0,14v6c0,.553,.448,1,1,1s1-.447,1-1v-2H22v2c0,.553,.447,1,1,1s1-.447,1-1v-6H0Z',
 };
-// Mappe les clés "machine" vers les noms Flaticon (pour celles dispo en webfont)
-const FI_MAP = { mower: 'tractor', trash: 'trash', 'trash-full': 'trash-clock', battery: 'battery-full', 'battery-charging': 'battery-bolt', timer: 'clock' };
+/* Mappe les clés « machine » vers les noms Flaticon (pour celles dispo en
+ * webfont), et RATTRAPE les dessins retirés du catalogue.
+ *
+ * Un nom qu'aucune des trois sources ne connaît n'affiche RIEN : pas de carré,
+ * pas de point d'interrogation. L'erreur est donc invisible en lecture de code
+ * et ne se voit qu'à l'écran, chez celui qui avait fait le choix.
+ *
+ * Le catalogue du 30/09 a retiré trois dessins. Ils ne sont plus cités nulle
+ * part dans le code — mais ils survivent dans les choix enregistrés
+ * (`loggia_icones`), et ceux-là, personne ne les migre. Chaque retrait doit
+ * donc laisser une ligne ici, sinon il éteint silencieusement une carte. */
+const FI_MAP = {
+  mower: 'tractor', trash: 'trash', 'trash-full': 'trash-clock',
+  battery: 'battery-full', 'battery-charging': 'battery-bolt', timer: 'clock',
+  // Retirés du catalogue le 30/09 : un voisin neutre, jamais une marque.
+  'smart-speaker': 'speaker', 'voice-assistant': 'microphone', 'smart-display': 'screen',
+};
 // Icône universelle : SVG custom si dispo, sinon glyphe Flaticon UICons.
 export function Ico({ name, size = 20, color = 'currentColor', style, anime = false }) {
   /* Le dessin d'abord. Son corps est du balisage, pas un attribut : un appareil

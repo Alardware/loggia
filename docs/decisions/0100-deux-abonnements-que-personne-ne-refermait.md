@@ -1,7 +1,6 @@
 # 0100 — Deux abonnements que personne ne refermait
 
-Date : 27/09/2026. Statut : appliqué (local). Aucun redémarrage de Home
-Assistant, aucun changement d'`index.html` : un rechargement de page suffit.
+Date : 27/09/2026. Statut : appliqué (local). **Redémarrage de Home Assistant requis**, aucun changement d'`index.html` : un rechargement de page suffit.
 Cinquième point de l'audit du 27/09.
 
 Deux fuites d'abonnement WebSocket, de la même famille que l'écoute du bus de

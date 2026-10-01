@@ -1,7 +1,7 @@
 # 0116 — Une playlist en une touche, et une phrase pour l'Echo
 
-Date : 01/10/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**.
+Date : 01/10/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti.
 
 « Qu'en est-il des playlists pour la musique ? »
 

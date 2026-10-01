@@ -546,3 +546,64 @@ def test_les_modules_n_alertent_pas_les_ecrans_et_sans_home_assistant_rien_ne_pa
     sans = creer_store({"users": {}, "shared": {}, "migrated": True})
     lancer(sans.async_set_user("u1", {"loggia_rooms": ["Salon"]}, is_admin=True))
     assert envois == []
+
+
+def test_un_compte_ordinaire_range_ses_cartes(creer_store, store_module):
+    """L'agencement n'est pas un privilege d'administrateur (01/10).
+
+    « Meme si je ne suis pas administrateur je dois pouvoir enregistrer ma
+    disposition des cartes, ce n'est pas un privilege admin. »
+
+    Le refus se voyait a l'ecran : le bouton de taille d'une carte semblait
+    mort — il agissait, mais `loggia_accueil` repartait refuse et la carte
+    reprenait sa taille des que la configuration revenait du serveur. Et un
+    message tombait a chaque sortie du mode edition.
+    """
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    lancer(magasin.async_set_user(
+        "famille",
+        {
+            "loggia_accueil": {"main": ["pieces"]},
+            "loggia_histo": [],
+            "loggia_camdispo": {"pc": 3},
+            "loggia-theme": "iOS",
+        },
+        is_admin=False,
+    ))
+    data = lancer(magasin._load())
+    # Dans le COMMUN, pas dans un coin du compte : l'agencement reste celui de
+    # la maison. Range ailleurs, il l'emporterait a la lecture pour ce compte
+    # seul, et l'ecran se figerait sur l'agencement du jour ou il a servi.
+    assert data["shared"]["loggia_accueil"] == {"main": ["pieces"]}
+    assert data["shared"]["loggia-theme"] == "iOS"
+    assert data["users"].get("famille", {}) == {}, "une ombre a ete laissee dans sa section"
+
+
+def test_la_configuration_de_la_maison_reste_reservee(creer_store, store_module):
+    """La frontiere a bouge, elle n'a pas disparu.
+
+    Ce qui DECIDE — les pieces, les appareils, les cameras, l'alarme, et les
+    profils qui portent les roles — demande toujours un administrateur. Une
+    erreur la casse le dashboard de tout le foyer.
+    """
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    for cle in ("loggia_rooms", "loggia_users", "loggia_cameras", "loggia_alarm"):
+        with pytest.raises(store_module.MaisonReserveeError):
+            lancer(magasin.async_set_user("intrus", {cle: ["x"]}, is_admin=False))
+    assert lancer(magasin._load())["shared"] == {}
+
+
+def test_aucune_cle_ouverte_ne_porte_un_role(store_module):
+    """Le garde-fou de la liste elle-meme : on peut y ajouter une cle par
+    inadvertance, et personne ne le verrait avant qu'un compte ordinaire s'en
+    serve. Celles qui portent des droits ou la configuration en restent
+    dehors, nommement."""
+    interdites = {
+        "loggia_users", "loggia_rooms", "loggia_cameras", "loggia_medias",
+        "loggia_alarm", "loggia_people", "loggia_customviews",
+        "loggia_energyHaids", "loggia_switchlights", "loggia_assistant",
+    }
+    assert not (store_module.OUVERTES_A_TOUS & interdites), (
+        "une cle de configuration est devenue ouverte a tous : "
+        + ", ".join(sorted(store_module.OUVERTES_A_TOUS & interdites))
+    )

@@ -1,7 +1,7 @@
 # 0117 — Les bandeaux d'une feuille
 
-Date : 01/10/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**.
+Date : 01/10/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti.
 
 « Ce qui me gêne ici c'est les bandeaux en haut et en bas, c'est pas terrible. »
 

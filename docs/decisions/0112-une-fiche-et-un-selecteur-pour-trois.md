@@ -1,7 +1,7 @@
 # 0112 — Une fiche, et un sélecteur pour trois
 
-Date : 30/09/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**.
+Date : 30/09/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti.
 
 « Il y a la nouvelle interface de personnalisation des entités, plus les
 icônes. » La fiche « Modifier l'entité » a été refaite d'après les maquettes, et

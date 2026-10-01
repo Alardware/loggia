@@ -1,7 +1,7 @@
 # 0113 — Le catalogue grandit, une graisse s'en va
 
-Date : 30/09/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**.
+Date : 30/09/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti.
 
 ## Le catalogue passe à 212 dessins
 

@@ -1,7 +1,7 @@
 # 0122 — Deux capteurs ne s'empilent pas
 
-Date : 01/10/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**.
+Date : 01/10/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti.
 
 La barre de confort d'une pièce (ADR 0039) empile ses pastilles au téléphone :
 icône au-dessus, valeur dessous. Cet empilement existe pour tenir **quatre**

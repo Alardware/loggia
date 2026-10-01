@@ -1,7 +1,7 @@
 # 0119 — La bascule qui mentait six secondes
 
-Date : 01/10/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**.
+Date : 01/10/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti.
 
 « Si j'allume une lumière, OK ça fonctionne ; je l'éteins, OK aussi, sauf que
 le toggle se remet sur ON au bout de quelques secondes. » Puis : « ça le fait

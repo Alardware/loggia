@@ -1,7 +1,7 @@
 # 0106 — Le paquet ne promet plus de fichiers absents
 
-Date : 27/09/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-seul le paquet livré change. Trouvé pendant la vérification finale de la
+Date : 27/09/2026. Statut : appliqué. **Redémarrage de Home Assistant
+requis** (mise à jour d'un composant personnalisé) ; seul le paquet livré change. Trouvé pendant la vérification finale de la
 v3.77.0, **par le garde-fou que le point 1 avait lui-même posé**.
 
 ## Ce que le point 1 avait réparé, et ce qu'il avait laissé

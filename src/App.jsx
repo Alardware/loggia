@@ -5679,8 +5679,18 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
       <Header />
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} toutes={() => { ed.reset(); unhideAll(); }} />}
+        {/* Le titre d'une pièce se pose à la MEME hauteur que la salutation de
+          * l'Accueil (01/10). Mesuré sur l'installation : la salutation tombe à
+          * +40 px du haut du contenu — 26 px de marge, plus les 14 px que la
+          * bannière s'ajoute en dedans. D'où CES 14 px ici, et non un padding
+          * plus grand : sous 760 px, `.loggia-content` est repassé à 16 px par
+          * un `!important`, et un padding inscrit à la main n'alignerait plus
+          * rien. Une marge, elle, suit les deux écrans.
+          *
+          * Elle ne vaut que si le titre arrive EN PREMIER : en édition, le
+          * bandeau passe devant. */}
         {/* titre + navigation entre pièces + pastille de confort, sur une même ligne */}
-        <div className="o-room-head" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div className="o-room-head" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginTop: edit ? 0 : 14 }}>
           <div style={{ minWidth: 0, flexShrink: 0 }}>
             <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{room}</h1>
             <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>
@@ -6699,6 +6709,19 @@ function supprimerPiece(nom) {
  * Supprimer ecrit la configuration : il demande un second appui. Le glisser
  * reste a l'enveloppe (`debutPiece` ignore les boutons). */
 function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille }) {
+  /* Au DOIGT, le conteneur de la carte glisse (`cursor: grab`, un gestionnaire
+   * de pointeur sur la cellule). Sans arreter l'evenement ici, il capture le
+   * pointeur avant le bouton, et l'appui ne devient jamais un clic : « le
+   * bouton pour agrandir ou retrecir fonctionne mal en tactile, comme si la
+   * zone qui englobe les cartes prenait le dessus » (01/10).
+   *
+   * La carte d'Appareils le faisait depuis toujours — `data-drag-ui` + l'arret
+   * du `pointerdown` — et celle des pieces ne l'avait jamais eu. D'ou « dans
+   * Appareils ça fonctionne correctement ».
+   *
+   * `data-drag-ui` sert en plus au fantome du glisser : ces boutons en sont
+   * retires, pour qu'on ne traine pas une carte avec ses commandes dessus. */
+  const stop = (e) => e.stopPropagation();
   const [confirme, setConfirme] = useState(false);
   useEffect(() => { if (!confirme) return undefined; const t = setTimeout(() => setConfirme(false), 4000); return () => clearTimeout(t); }, [confirme]);
   const live = p.live || {};
@@ -6708,7 +6731,7 @@ function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille }) {
   const rouge = confirme ? { background: 'rgba(var(--o-bad-rgb),.16)', borderColor: 'var(--o-bad)' } : {};
   const icone = <span style={RM_ICO('rgba(' + p.rgb + ',.16)', p.col)}>{cloneElement(p.icon, { size: 17 })}</span>;
   const taille = (
-    <button onClick={onTaille} aria-pressed={!compacte} title={compacte ? tr('Deux rangées') : tr('Une rangée')}
+    <button data-drag-ui="1" onPointerDown={stop} onClick={onTaille} aria-pressed={!compacte} title={compacte ? tr('Deux rangées') : tr('Une rangée')}
       aria-label={(compacte ? tr('Deux rangées') : tr('Une rangée')) + ' · ' + p.name} style={BOUTON_COIN}><Fi i="resize" size={13} /></button>
   );
   const lavis = 'linear-gradient(180deg,transparent 28%,rgba(' + p.rgb + ',.14)), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
@@ -6725,8 +6748,8 @@ function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille }) {
           {taille}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={onModifier} style={{ ...boutonEdition(false), ...serre }}>{tr('Modifier')}</button>
-          <button onClick={supprimer} style={{ ...boutonEdition(true), ...serre, ...rouge }}>{confirme ? tr('Confirmer ?') : tr('Supprimer')}</button>
+          <button data-drag-ui="1" onPointerDown={stop} onClick={onModifier} style={{ ...boutonEdition(false), ...serre }}>{tr('Modifier')}</button>
+          <button data-drag-ui="1" onPointerDown={stop} onClick={supprimer} style={{ ...boutonEdition(true), ...serre, ...rouge }}>{confirme ? tr('Confirmer ?') : tr('Supprimer')}</button>
         </div>
       </div>
     );
@@ -6742,8 +6765,8 @@ function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille }) {
         <div style={{ ...RM_SUB, color: p.col }}>{sous}</div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button onClick={onModifier} style={boutonEdition(false)}>{tr('Modifier')}</button>
-        <button onClick={supprimer} style={{ ...boutonEdition(true), ...rouge }}>{confirme ? tr('Confirmer ?') : tr('Supprimer')}</button>
+        <button data-drag-ui="1" onPointerDown={stop} onClick={onModifier} style={boutonEdition(false)}>{tr('Modifier')}</button>
+        <button data-drag-ui="1" onPointerDown={stop} onClick={supprimer} style={{ ...boutonEdition(true), ...rouge }}>{confirme ? tr('Confirmer ?') : tr('Supprimer')}</button>
       </div>
     </div>
   );
@@ -14466,6 +14489,8 @@ export default function App() {
    * vide, sinon la moitié des commandes du dashboard échouerait sans un mot. */
   const [toast, setToast] = useState(null);
   const toastTRef = useRef(0);
+  // Le dernier message montre : le meme refus ne se redit pas.
+  const dernierToast = useRef(null);
   useEffect(() => {
     const h = (ev) => {
       const r = ev && ev.reason;
@@ -14481,13 +14506,27 @@ export default function App() {
        * changer » — faux pour le second, où le code suffit. Le composant dit
        * lequel dans son motif. */
       const codeAdmin = r && r.code === 'not_admin' && /code administrateur/i.test(String(r.message || ''));
-      setToast(codeAdmin
+      /* Le serveur NOMME les reglages refuses (« reglages reserves aux
+       * administrateurs Home Assistant : loggia_rooms ») ; le message les
+       * jetait. On ne pouvait ni savoir ce qui n'avait pas pris, ni le dire —
+       * d'ou un avertissement qu'on subit sans pouvoir agir (01/10). */
+      const cles = (String((r && r.message) || '').split(':')[1] || '').trim();
+      const texte = codeAdmin
         ? tr('Profil non changé — le code administrateur est requis')
         : r && r.code === 'not_admin'
-          ? tr('Réglage non enregistré — il appartient à la maison, et seul un administrateur Home Assistant peut le changer')
+          ? (cles
+            ? tr('« {k} » non enregistré — ce réglage appartient à la maison, et seul un administrateur Home Assistant peut le changer', { k: cles })
+            : tr('Réglage non enregistré — il appartient à la maison, et seul un administrateur Home Assistant peut le changer'))
           : r && r.code === 'scenario_incomplet' ? String(r.message)
-          : tr('Commande non exécutée — Home Assistant a refusé ou n’a pas répondu'));
-      clearTimeout(toastTRef.current); toastTRef.current = setTimeout(() => setToast(null), 4000);
+          : tr('Commande non exécutée — Home Assistant a refusé ou n’a pas répondu');
+      /* LE MEME refus ne se redit pas. Une ecriture refusee peut partir
+       * plusieurs fois — plusieurs cartes, plusieurs cles — et le bandeau
+       * revenait autant de fois, sans rien apprendre de plus. */
+      if (texte === dernierToast.current) return;
+      dernierToast.current = texte;
+      setToast(texte);
+      clearTimeout(toastTRef.current);
+      toastTRef.current = setTimeout(() => { setToast(null); dernierToast.current = null; }, 5000);
     };
     // Cette fenêtre seulement : le panneau n'est pas une iframe, et écouter la
     // fenêtre parente aurait affiché ici les rejets de Home Assistant même

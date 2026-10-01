@@ -76,3 +76,26 @@ test('le champ d’entité retrouve sa bordure quand l’entité redevient valid
     'le champ retombe sur undefined : il perdrait sa bordure au lieu de retrouver la normale');
   assert.ok(!/borderColor/.test(bloc), 'le champ recolore de nouveau par la propriété détaillée');
 });
+
+test('aucun commentaire de la feuille de style ne se referme deux fois', () => {
+  /* Le 01/10, un bloc de commentaire a reçu une seconde marque de fermeture : tout ce qui
+   * suivait a cessé d'être du CSS, et la mise en page d'une vue entière est
+   * tombée en silence. Vite ne dit rien, le navigateur non plus — il saute ce
+   * qu'il ne comprend pas. Seul un compte le voit.
+   *
+   * Les deux marques doivent être en nombre égal, et jamais imbriquées : en
+   * CSS un commentaire ne s'ouvre pas dans un autre, la premiere fermeture rencontree ferme. */
+  const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
+  let ouverts = 0, ligne = 1;
+  for (let i = 0; i < css.length - 1; i++) {
+    if (css[i] === '\n') { ligne++; continue; }
+    if (css[i] === '/' && css[i + 1] === '*') {
+      assert.equal(ouverts, 0, `commentaire ouvert dans un commentaire, ligne ${ligne}`);
+      ouverts = 1; i++;
+    } else if (css[i] === '*' && css[i + 1] === '/') {
+      assert.equal(ouverts, 1, `fermeture de commentaire sans ouverture, ligne ${ligne} : tout le CSS qui suit est perdu`);
+      ouverts = 0; i++;
+    }
+  }
+  assert.equal(ouverts, 0, 'un commentaire reste ouvert jusqu’à la fin du fichier');
+});

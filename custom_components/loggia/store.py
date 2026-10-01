@@ -80,6 +80,26 @@ PERSONAL_SUFFIXES: tuple[str, ...] = ("panel",)
 
 # Cles de la maison qu un compte ordinaire a le droit d ecrire.
 #
+# OU PASSE LA FRONTIERE (01/10)
+#
+# « Meme si je ne suis pas administrateur je dois pouvoir enregistrer ma
+# disposition des cartes, ce n est pas un privilege admin. » Il a raison, et la
+# ligne etait mal tracee : elle separait ce qui est COMMUN de ce qui est propre
+# a un appareil, alors que la vraie question est ce qu une erreur coute.
+#
+# Reste reserve aux administrateurs ce qui CONFIGURE la maison : quelles
+# pieces, quels appareils, quelles cameras, quels profils, quelle alarme. S y
+# tromper casse le dashboard de tout le foyer, et il faut un compte qui en
+# reponde. `loggia_users` surtout, qui porte les roles : c etait le vrai
+# danger, et il ne bouge pas.
+#
+# Sont ouverts a tous l AGENCEMENT et l APPARENCE. Ils ne cassent rien : on
+# deplace des cartes, on change un theme. Au pire quelqu un range autrement, et
+# le suivant range a nouveau — exactement ce que deux administrateurs peuvent
+# deja se faire. Les refuser n ajoutait aucune securite ; ca rendait seulement
+# le dashboard inutilisable depuis un compte ordinaire, avec un refus a chaque
+# sortie du mode edition.
+#
 # `loggia_active_user` dit QUI se sert du dashboard en ce moment. Elle
 # appartient a la maison depuis le 03/09 — on veut se retrouver au meme
 # endroit quel que soit l ecran que l on prend — mais la refuser aux comptes
@@ -88,9 +108,40 @@ PERSONAL_SUFFIXES: tuple[str, ...] = ("panel",)
 #
 # Ce n est pas une porte derobee. Les profils Loggia ne sont pas une frontiere
 # de securite : ils ne changent rien aux droits Home Assistant, et le composant
-# le dit deja ailleurs. Surtout, `loggia_users` reste refuse — personne ne se
-# donne un role en ecrivant, ce qui etait le vrai danger.
-OUVERTES_A_TOUS: frozenset[str] = frozenset({"loggia_active_user"})
+# le dit deja ailleurs.
+
+# Ou se posent les cartes, dans quel ordre, de quelle taille, et par format
+# d ecran. `loggia_histo` archive ces memes agencements : le separer de ce
+# qu il archive ferait echouer une sortie d edition sur deux.
+AGENCEMENT: frozenset[str] = frozenset(
+    {
+        "loggia_accueil",
+        "loggia_histo",
+        "loggia_roomlayout",
+        "loggia_objlayout",
+        "loggia_coverlayout",
+        "loggia_enlayout",
+        "loggia_seclayout",
+        "loggia_camdispo",
+        "loggia_vuepieces",
+        "loggia_scnordre",
+        "loggia_epingles",
+    }
+)
+
+# Ce a quoi le dashboard ressemble. Rien ici ne decide de ce qu il COMMANDE.
+APPARENCE: frozenset[str] = frozenset(
+    {
+        "loggia_look",
+        "loggia-theme",
+        "loggia-mode",
+        "loggia-navbar",
+        "loggia-wxfx",
+        "loggia-langue",
+    }
+)
+
+OUVERTES_A_TOUS: frozenset[str] = frozenset({"loggia_active_user"}) | AGENCEMENT | APPARENCE
 
 # Le signal aux ecrans abonnes (ADR 0067) : le compte et les cles qui ont
 # change, jamais les valeurs. Par le repartiteur interne, pas par le bus —

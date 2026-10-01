@@ -76,7 +76,7 @@ paresseuses — exactement la méprise de `HUE_CATS()` la veille.
 
 ## Conséquences
 
-- **Aucun redémarrage de Home Assistant** : rien du composant ne change, tout
+- **Redémarrage de Home Assistant requis** : toute mise à jour du composant en demande un, tout
   est dans l'interface. Un rechargement de page suffit.
 - Sur une installation réelle, le seul changement visible est l'icône d'une
   pièce dont le nom n'est ni français ni anglais. Rien n'a été retiré des mots

@@ -1,7 +1,7 @@
 # 0114 — Les applications d'un appareil, et sa télécommande
 
-Date : 30/09/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**.
+Date : 30/09/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti.
 
 « Il faudrait que cela fonctionne aussi pour les autres supports de streaming
 vidéo autre que l'Apple TV, comme Android TV. »

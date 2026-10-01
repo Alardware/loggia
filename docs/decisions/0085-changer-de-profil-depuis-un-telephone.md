@@ -77,7 +77,7 @@ un test le tient.
 
 ## Conséquences
 
-- **Aucun redémarrage de Home Assistant** : rien ne change dans le composant.
+- **Redémarrage de Home Assistant requis** : toute mise à jour du composant en demande un.
 - Trois textes nouveaux, traduits dans les six langues. Le garde-fou de l'ADR
   0084 les a nommés tout seul, avant que j'y pense.
 - Un profil sans droit d'édition n'affiche plus « Mode édition » dans le tiroir

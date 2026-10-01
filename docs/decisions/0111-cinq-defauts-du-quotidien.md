@@ -1,7 +1,7 @@
 # 0111 — Cinq défauts du quotidien
 
-Date : 30/09/2026. Statut : appliqué. Aucun redémarrage de Home Assistant ;
-`src/` change — **le paquet est rebâti**.
+Date : 30/09/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
+(mise à jour d'un composant personnalisé) ; le paquet est rebâti.
 
 Suite de l'audit du 29/09/2026, après les trois points de sûreté de la
 [décision 0110](0110-ne-pas-agir-sur-ce-qu-on-ignore.md). Ceux-ci ne mettent

@@ -104,3 +104,21 @@ test('Parametres ne perd ni l’icone ni la teinte a l’enregistrement', () => 
   assert.ok(par.includes("icon: r.icon || null, teinte: r.teinte || null, temp:"), 'lues avec la piece');
   assert.ok(par.includes("...(r.icon ? { icon: r.icon } : {}), ...(r.teinte ? { teinte: r.teinte } : {}), haid: {"), 'reecrites avec elle');
 });
+
+test('les boutons d’une carte de pièce survivent au glisser, comme ceux d’Appareils', () => {
+  /* « Le bouton pour agrandir ou rétrécir la carte des pièces sur l'accueil
+   * fonctionne mal en tactile, comme si la zone qui englobe les cartes prenait
+   * le dessus — car dans Appareils ça fonctionne correctement » (01/10).
+   *
+   * C'était exact, et la comparaison qu'il fait est le diagnostic : la carte
+   * d'Appareils arrête le `pointerdown` sur chacun de ses boutons, celle des
+   * pièces ne l'avait jamais fait. Au doigt, le conteneur capture alors le
+   * pointeur et l'appui ne devient jamais un clic. */
+  const carte = src.slice(src.indexOf('function CartePieceEdition('), src.indexOf('\nfunction ', src.indexOf('function CartePieceEdition(') + 10));
+  assert.ok(carte.includes('const stop = (e) => e.stopPropagation();'), 'la carte de pièce n’arrête plus le pointeur');
+  // Les TROIS boutons : taille, Modifier, Supprimer — dans les deux gabarits.
+  assert.equal(carte.split('onPointerDown={stop}').length - 1, 5,
+    'un bouton de la carte de pièce a perdu son arrêt de pointeur');
+  assert.equal(carte.split('data-drag-ui="1"').length - 1, 5,
+    'un bouton se traînerait de nouveau sur le fantôme du glisser');
+});

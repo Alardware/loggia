@@ -108,3 +108,21 @@ test('la police PLEINE n’est ni chargée ni employée, et l’attente est born
    * vides. Sans cette ligne, l’attente n’était bornée par rien. */
   assert.match(css, /font-display:\s*block/, 'l’attente de la police n’est plus bornée');
 });
+
+test('un dessin RETIRÉ du catalogue ne laisse pas une carte vide', () => {
+  /* Le catalogue du 30/09 a retiré `smart-speaker`, `voice-assistant` et
+   * `smart-display`. Ils ne sont plus cités nulle part dans le code — mais ils
+   * survivent dans les choix enregistrés des utilisateurs, et personne ne les
+   * migre. Un nom qu'aucune des trois sources ne connaît n'affiche RIEN : pas
+   * de carré, pas de point d'interrogation. La carte s'éteint en silence.
+   *
+   * Chaque retrait doit donc laisser une ligne dans `FI_MAP`. */
+  for (const retire of ['smart-speaker', 'voice-assistant', 'smart-display']) {
+    assert.equal(CUSTOM.has(retire), false, retire + ' : il est revenu, la ligne de rattrapage ne sert plus');
+    assert.equal(rendable(retire), true, retire + ' : un choix enregistré n’affiche plus rien');
+  }
+  // Et le rattrapage vise un voisin NEUTRE, jamais une marque.
+  for (const marque of ['alexa', 'google-home', 'homepod']) {
+    assert.ok(!Object.values(ALIAS).includes(marque), 'un retrait pointe vers la marque ' + marque);
+  }
+});

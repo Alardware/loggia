@@ -79,7 +79,7 @@ leur voile sombre dépend de l'image et ne se calcule pas d'avance.
 
 ## Conséquences
 
-- **Aucun redémarrage de Home Assistant** : rien du composant ne change.
+- **Redémarrage de Home Assistant requis** : toute mise à jour du composant en demande un.
 - Le premier rendu ne bloque plus sur 339 Ko inutiles.
 - Un thème dont une teinte d'état est vive verra son compagnon légèrement
   assombri. C'est le seul changement visible sur une installation.
