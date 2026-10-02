@@ -8,6 +8,7 @@ import { fondre, nonLues as journalNonLues, marquerLues } from './journal.js';
 import { WX_PRESETS } from './wxpresets.js';
 import { lisibleSurLavis } from './contraste.js';
 import { LAVIS, SAFE_NOLOOK, applyTheme, lav, readLook, signatureHaTheme } from './theme.js';
+import { uniteTemp, versCelsius, deCelsius, uniteVent, versKmh } from './unites.js';
 // Le mode clair, lu sur la racine : les couleurs d'appareils s'y assombrissent.
 const estClair = () => typeof document !== 'undefined' && document.documentElement.classList.contains('loggia-light');
 const WeatherGL = lazy(() => import('./wx3d.jsx'));
@@ -97,6 +98,12 @@ import energySolarImg from './assets/energy/solar.webp';
 import energyEvImg from './assets/energy/ev-car-home.webp';
 import energyBatImg from './assets/energy/battery.webp';
 import { tr, trN, trHA, preparerLangue, locale, nomProfil } from './i18n.js';
+// Decimales a la francaise partout : un Americain ou un Polonais lisait un
+// nombre ecrit dans une convention qui n'est pas la sienne. `toLocaleString`
+// choisit lui-meme la virgule ou le point, selon la langue active.
+const dec = (n, d) => Number(n).toLocaleString(locale(), { minimumFractionDigits: d, maximumFractionDigits: d });
+// Meme chose, sans forcer les decimales a zero : 21 reste « 21 », pas « 21,0 ».
+const decMax = (n, d) => Number(n).toLocaleString(locale(), { maximumFractionDigits: d });
 
 /* ── Briques d'affichage, au niveau du module ────────────────────────────────
  *
@@ -535,7 +542,7 @@ function Num({ v, d = 0, prefix = '', suffix = '', fallback = '—', fmt }) {
   // zeros qui passaient pour des mesures.
   const a = (typeof v === 'number' && isFinite(v)) ? v : null;
   if (a == null) return <>{fallback}</>;
-  const txt = fmt ? fmt(a) : (d > 0 ? a.toFixed(d).replace('.', ',') : String(Math.round(a)));
+  const txt = fmt ? fmt(a) : (d > 0 ? dec(a, d) : String(Math.round(a)));
   return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{prefix}{txt}{suffix}</span>;
 }
 function kbSlider(label, value, commit, { min = 0, max = 100, step = 5, unit = '%' } = {}) {
@@ -1243,20 +1250,22 @@ const COMFORT = {
   bruit: { key: 'bruit', label: tr('Bruit'), ico: 'volume', ...echelleFiche('bruit'), verdict: v => verdictMesure('bruit', v) },
 };
 const cf_pct = (v, m) => Math.max(0, Math.min(100, (v - m.min) / (m.max - m.min) * 100));
-const cf_big = (v, m) => m.key === 'temp' ? v.toFixed(1).replace('.', ',') + ' °C' : m.key === 'hum' ? Math.round(v) + ' %' : m.key === 'bruit' ? Math.round(v) + ' dB' : Math.round(v) + ' ppm';
-const cf_tag = (v, m) => m.key === 'temp' ? Math.round(v) + '°C' : m.key === 'hum' ? Math.round(v) + '%' : m.key === 'bruit' ? Math.round(v) + ' dB' : Math.round(v) + ' ppm';
+// `v` est TOUJOURS en Celsius (c'est ce que verdictMesure/indiceConfort et l'échelle de la
+// barre attendent) : seule la température se reconvertit vers l'unité réelle à l'affichage.
+const cf_big = (v, m, uniteT = 'C') => m.key === 'temp' ? dec(deCelsius(v, uniteT), 1) + ' °' + uniteT : m.key === 'hum' ? Math.round(v) + ' %' : m.key === 'bruit' ? Math.round(v) + ' dB' : Math.round(v) + ' ppm';
+const cf_tag = (v, m, uniteT = 'C') => m.key === 'temp' ? Math.round(deCelsius(v, uniteT)) + '°' + uniteT : m.key === 'hum' ? Math.round(v) + '%' : m.key === 'bruit' ? Math.round(v) + ' dB' : Math.round(v) + ' ppm';
 // Sévérité par couleur de verdict (tokens theme-aware). Trop froid (--o-cold, <16°) = rank 2 → jamais « Sain ».
 const cf_rank = { 'var(--o-ok)': 0, 'var(--o-accent-soft)': 1, 'var(--o-cold)': 2, 'var(--o-warn)': 2, 'var(--o-warn2)': 3, 'var(--o-bad)': 4 };
 
 // Barre dégradée + bulle marqueur sur la valeur + ticks (reproduit l'appli air-quality de référence).
-function ComfortBar({ m, value }) {
+function ComfortBar({ m, value, uniteT = 'C' }) {
   const pct = cf_pct(value, m);
   return (
     <div>
       <div style={{ position: 'relative', height: 24 }}>
         <div style={{ position: 'absolute', left: `clamp(28px, ${pct}%, calc(100% - 28px))`, bottom: 0, transform: 'translateX(-50%)', transition: 'left .55s cubic-bezier(.23,1,.32,1)', willChange: 'left' }}>
           <span style={{ position: 'relative', display: 'block', background: 'var(--o-text)', color: 'var(--o-bg)', fontSize: 11, fontWeight: 800, padding: '2px 7px', borderRadius: 10, whiteSpace: 'nowrap' }}>
-            {cf_tag(value, m)}
+            {cf_tag(value, m, uniteT)}
             <span style={{ position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: '4px solid var(--o-text)' }} />
           </span>
         </div>
@@ -1264,7 +1273,9 @@ function ComfortBar({ m, value }) {
       <div style={{ height: 13, borderRadius: 10, background: m.grad, marginTop: 3 }} />
       <div style={{ position: 'relative', height: 15, marginTop: 5 }}>
         {m.ticks.map((t, i) => (
-          <span key={t} style={{ position: 'absolute', left: cf_pct(m.tickV[i], m) + '%', transform: 'translateX(-50%)', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{t}</span>
+          <span key={t} style={{ position: 'absolute', left: cf_pct(m.tickV[i], m) + '%', transform: 'translateX(-50%)', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>
+            {m.key === 'temp' ? Math.round(deCelsius(m.tickV[i], uniteT)) + '°' : t}
+          </span>
         ))}
       </div>
     </div>
@@ -1291,8 +1302,13 @@ function Sparkline({ points, color }) {
 function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
   const live = piece.live || null;
   const parseNum = (s) => { if (s == null) return null; const n = parseFloat(String(s).replace(',', '.')); return isNaN(n) ? null : n; };
+  // `vals.temp` est converti en Celsius tout de suite : verdictMesure, indiceConfort et
+  // l'échelle de la barre (14-30) raisonnent tous en Celsius. Seul `uniteT` (affichage) suit
+  // l'unité réelle du capteur.
+  const tempBrut = live && live.temp != null ? live.temp : parseNum(piece.temp);
+  const uniteT = uniteTemp(live && live.tempId && hass && hass.states && hass.states[live.tempId] ? hass.states[live.tempId].attributes : null, hass);
   const vals = {
-    temp: live && live.temp != null ? live.temp : parseNum(piece.temp),
+    temp: versCelsius(tempBrut, uniteT),
     hum: live && live.hum != null ? live.hum : parseNum(piece.hum),
     co2: live && live.co2 != null ? live.co2 : parseNum(piece.badge),
     // Le bruit ne vit pas dans la configuration des pièces : la vue le trouve dans la zone (ADR 0039).
@@ -1303,7 +1319,7 @@ function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
   const verdicts = metrics.map(m => ({ m, vd: m.verdict(vals[m.key]) }));
   const worst = verdicts.reduce((a, b) => (cf_rank[b.vd.c] || 0) > (cf_rank[a.vd.c] || 0) ? b : a, verdicts[0]);
   // Le mot de la fiche est celui de la barre : l'indice de confort (ADR 0039).
-  const confort = indiceConfort(vals);
+  const confort = indiceConfort(vals, uniteT);
   const overall = confort ? confort.verdict : { t: '—', c: 'var(--o-text2)' };
   const advice = !verdicts.length ? tr('Aucune donnée capteur pour cette pièce.')
     : (cf_rank[worst.vd.c] <= 1 ? tr('Conditions idéales dans cette pièce.')
@@ -1355,11 +1371,11 @@ function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
                     <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(vd.c, .16), color: vd.c }}><Fi i={m.ico} size={16} /></span>
                     <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--o-text)' }}>{m.label}</span>
                     <span style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                      <span style={{ fontSize: 19, fontWeight: 800, color: 'var(--o-text)' }}>{cf_big(v, m)}</span>
+                      <span style={{ fontSize: 19, fontWeight: 800, color: 'var(--o-text)' }}>{cf_big(v, m, uniteT)}</span>
                       <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: vd.c, marginTop: 1 }}>{vd.t}</span>
                     </span>
                   </div>
-                  <ComfortBar m={m} value={v} />
+                  <ComfortBar m={m} value={v} uniteT={uniteT} />
                   <div style={{ marginTop: 14 }}>
                     {histState === 'loading'
                       ? <div style={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr("Chargement de l'historique…")}</div>
@@ -1376,7 +1392,10 @@ function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
 }
 
 // Conseils météo pour la tuile Extérieur (pas de "verdict à surveiller" — on ne contrôle pas le dehors).
-function outdoorTips(mode, temp, wind, isNight, rainProb) {
+// `temp` et `wind` arrivent déjà convertis en Celsius et km/h : les seuils ci-dessous
+// comparent toujours le même repère, quelle que soit l'unité de l'installation.
+// `windAffiche`/`uniteV` restent dans l'unité réelle, pour ne pas mentir au lecteur.
+function outdoorTips(mode, temp, wind, isNight, rainProb, windAffiche, uniteV) {
   const T = [];
   if (mode === 'rain') T.push(['raindrops', 'var(--o-cyan)', tr('Pluie prévue, prends un parapluie')]);
   else if (rainProb != null && rainProb >= 50) T.push(['raindrops', 'var(--o-cyan)', tr('Risque de pluie ({p} %), parapluie conseillé', { p: rainProb })]);
@@ -1389,7 +1408,7 @@ function outdoorTips(mode, temp, wind, isNight, rainProb) {
     else if (temp >= 25) T.push(['sun', 'var(--o-lampe)', tr('Il fait chaud, vêtements légers conseillés')]);
   }
   if ((mode === 'sun' || mode === 'partly') && !isNight && temp != null && temp >= 22) T.push(['sun', 'var(--o-gold)', tr('Grand soleil, crème solaire et lunettes')]);
-  if (wind != null && wind >= 30) T.push(['wind', '#9fb4d6', tr('Vent fort ({v} km/h), sois prudent', { v: Math.round(wind) })]);
+  if (wind != null && wind >= 30) T.push(['wind', '#9fb4d6', tr('Vent fort ({v} {u}), sois prudent', { v: Math.round(windAffiche != null ? windAffiche : wind), u: uniteV || 'km/h' })]);
   if (isNight) T.push(['moon-stars', '#aeb9e0', tr('Nuit tombée, pense à l’éclairage extérieur')]);
   if (!T.length) T.push(['sun', 'var(--o-ok)', tr('Conditions agréables, profite du dehors')]);
   return T;
@@ -1403,6 +1422,9 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
   const wId = weatherEntity(hass);
   const wa = (wId && hass && hass.states && hass.states[wId] && hass.states[wId].attributes) || {};
   const wind = wa.wind_speed != null ? wa.wind_speed : null;
+  // L'unité réelle de l'installation (°F, mph...) : jamais supposée en Celsius/km-h.
+  const tUnite = uniteTemp(wa, hass);
+  const vUnite = uniteVent(wa);
   // L'attribut weather.forecast n'existe plus (HA ≥2024.3) → prévision via le service get_forecasts.
   const [rainProb, setRainProb] = useState(null);
   useEffect(() => {
@@ -1421,7 +1443,7 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
     return () => { alive = false; };
   }, [piece.name, wId]);
   const isNight = mode === 'night';
-  const tips = outdoorTips(mode, temp, wind, isNight, rainProb);
+  const tips = outdoorTips(mode, versCelsius(temp, tUnite), versKmh(wind, vUnite), isNight, rainProb, wind, vUnite);
 
   const [pts, setPts] = useState(null);
   const [hs, setHs] = useState('loading');
@@ -1452,12 +1474,12 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '8px 0 2px' }}>
           <WeatherIco wx={mode || 'clouds'} size={64} />
-          <div style={{ fontSize: 38, fontWeight: 800, letterSpacing: '-.02em', marginTop: 4, color: 'var(--o-text)' }}>{temp != null ? Math.round(temp) : '—'}<span style={{ fontSize: 19, fontWeight: 600, opacity: .8 }}>°C</span></div>
+          <div style={{ fontSize: 38, fontWeight: 800, letterSpacing: '-.02em', marginTop: 4, color: 'var(--o-text)' }}>{temp != null ? Math.round(temp) : '—'}<span style={{ fontSize: 19, fontWeight: 600, opacity: .8 }}>°{tUnite}</span></div>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--o-text2)' }}>{label || '—'}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', margin: '14px 0 4px' }}>
           {chip('humidity', hum != null ? Math.round(hum) + ' %' : null)}
-          {chip('wind', wind != null ? Math.round(wind) + ' km/h' : null)}
+          {chip('wind', wind != null ? Math.round(wind) + ' ' + vUnite : null)}
           {chip('sunset', sunset ? 'Coucher ' + sunset : null)}
         </div>
         <div style={{ ...hd, margin: '18px 0 10px' }}>{tr('RECOMMANDATIONS')}</div>
@@ -1826,8 +1848,8 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
     const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN;
     return isNaN(n) ? null : n;
   })();
-  const fmtW = (w) => w >= 1000 ? (Math.round(w / 100) / 10).toFixed(1).replace('.', ',') + ' kW' : Math.round(w) + ' W';
-  const fmtN = (n) => (Math.round(n * 10) / 10).toString().replace('.', ',');
+  const fmtW = (w) => w >= 1000 ? dec(Math.round(w / 100) / 10, 1) + ' kW' : Math.round(w) + ' W';
+  const fmtN = (n) => decMax(Math.round(n * 10) / 10, 1);
   /* LA PRISE DIT CE QU'ELLE ALIMENTE (26/09).
    *
    * Une prise commandée ne publie que `on`/`off` : toutes portaient le même
@@ -1879,7 +1901,9 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
     mesure = isNaN(n) ? { v: String(s), u: '' } : { v: fmtN(n), u: unite };
     const cle = isNaN(n) ? null : cleMesure(a.device_class);
     if (cle) {
-      jauge = jaugeMesure(cle, n);
+      // jaugeMesure (confort.js) attend du Celsius : un capteur de temperature en
+      // Fahrenheit y entrait brut, et finissait toujours « TROP CHAUD » au rouge.
+      jauge = jaugeMesure(cle, cle === 'temp' ? versCelsius(n, uniteTemp(a, hass)) : n);
       sub = (cle === 'co2' ? tr('Qualité d’air') : MESURES_NOMS()[a.device_class]) + ' · ' + jauge.verdict.t.toLocaleUpperCase(locale());
       couleur = jauge.verdict.c;
       // Le CO2 allume sa carte, comme avant : lavis, icone et valeur dans la
@@ -2142,7 +2166,7 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onO
 
 /* Capteur de plante, même gabarit : pousse en haut à gauche, HUMIDITÉ en haut
  * à droite (à la couleur du verdict), nom et verdict sous l'icône. */
-function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, cond, temp, img = null, onOpen, chip = false, rgb = 'var(--o-ok-rgb)' }) {
+function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, cond, temp, uniteTemp: uniteT = 'C', img = null, onOpen, chip = false, rgb = 'var(--o-ok-rgb)' }) {
   // L'icône pousse du gabarit maison ; l'illustration de la plante vit en
   // FILIGRANE au fond de la carte, comme sur la vue Objets.
   const portrait = (taille) => (
@@ -2194,7 +2218,7 @@ function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px 14px', marginTop: 10 }}>
           {hum != null && jauge('raindrops', verdictCol || 'var(--o-ok)', hum, tr('Humidité') + ' ' + Math.round(hum) + ' %')}
           {lux != null && jauge('brightness', 'var(--o-warn)', lux / 10, tr('Luminosité') + ' ' + Math.round(lux) + ' lx')}
-          {temp != null && jauge('thermometer-half', 'var(--o-orange)', temp / 0.35, Math.round(temp) + ' °C')}
+          {temp != null && jauge('thermometer-half', 'var(--o-orange)', temp / 0.35, Math.round(deCelsius(temp, uniteT)) + ' °' + uniteT)}
           {cond != null && jauge('leaf', 'var(--o-ok)', cond / 20, Math.round(cond) + ' µS/cm')}
         </div>
       </div>
@@ -2293,6 +2317,10 @@ const RM_TMIN = 5, RM_TMAX = 30;
 function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
+  // target vient deja de l'entite dans l'unite reelle de l'installation (HA ne
+  // propose pas de consigne en Celsius sur un thermostat regle en Fahrenheit) :
+  // seul le symbole affiche etait fige en dur.
+  const uT = uniteTemp(a, hass);
   const realTarget = a.temperature != null ? a.temperature : 20;
   const etatSt = st && st.state;
   const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
@@ -2317,7 +2345,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   // Nom SOUS l'icône, état en sous-titre (maquettes du 14/09) : « Chauffe ·
   // consigne 19,0 °C ». Le gros chiffre vit dans la fiche.
   // La consigne, entre les deux boutons qui la bougent : « 19 °C », « 19,5 °C ».
-  const consigne = (Number.isInteger(Number(target)) ? String(Number(target)) : Number(target).toFixed(1).replace('.', ',')) + ' °C';
+  const consigne = decMax(Number(target), 1) + ' °' + uT;
   const sub = mort ? tr('Indisponible') : !marche ? tr('Éteint') : heating ? tr('Chauffe') : cooling ? tr('Refroidit') : tr('Au repos');
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
@@ -2403,12 +2431,15 @@ function pilotFamille(option) {
 function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const S = (hass && hass.states) || null;
   const z = readZone(S, zone);
+  const uT = uniteTemp(null, hass);
   const [ov, setOv] = useOptimiste([z.target, z.mode].join('|'));
-  const target = ov != null ? ov : (z.target != null ? z.target : 19);
+  const target = ov != null ? ov : (z.target != null ? z.target : Math.round(deCelsius(19, uT)));
   const off = z.mode === 'off';
   const heating = !off && z.current != null && z.current < target;
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const setT = (d) => { const v = Math.max(5, Math.min(30, Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
+  // Bornes de repli en Celsius (RM_TMIN/RM_TMAX), reconverties vers l'unite reelle :
+  // aucune entite ne borne un input_number, rien d'autre ne protege ce cadran.
+  const setT = (d) => { const v = Math.max(deCelsius(RM_TMIN, uT), Math.min(deCelsius(RM_TMAX, uT), Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
   const options = zoneModes(S, zone);
   const poserMode = (m) => {
     if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', m);
@@ -2424,7 +2455,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const nom = titre || zone.name;
   const mort = !!(estClimate(zone) && (!S || !S[zone.haid] || S[zone.haid].state === 'unavailable'));
   // La consigne, entre les deux boutons qui la bougent : « 19 °C », « 19,5 °C ».
-  const consigne = (Number.isInteger(Number(target)) ? String(Number(target)) : Number(target).toFixed(1).replace('.', ',')) + ' °C';
+  const consigne = decMax(Number(target), 1) + ' °' + uT;
   const sub = !marche ? tr('Éteint') : heating ? tr('Chauffe') : tr('Au repos');
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(zone.id); } }} onClick={() => onOpen && onOpen(zone.id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
@@ -2456,16 +2487,18 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
 function RoomPilotSheet({ zone, hass, onClose }) {
   const S = (hass && hass.states) || null;
   const z = readZone(S, zone);
+  const uT = uniteTemp(null, hass);
   const [ov, setOv] = useOptimiste([z.target, z.mode, z.auto].join('|'));
-  const target = ov != null ? ov : (z.target != null ? z.target : 19);
+  const target = ov != null ? ov : (z.target != null ? z.target : Math.round(deCelsius(19, uT)));
   const off = z.mode === 'off';
   const heating = !off && z.current != null && z.current < target;
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const setT = (d) => { const v = Math.max(5, Math.min(30, Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
+  const tMinReel = deCelsius(RM_TMIN, uT), tMaxReel = deCelsius(RM_TMAX, uT);
+  const setT = (d) => { const v = Math.max(tMinReel, Math.min(tMaxReel, Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
   // La température vécue : le capteur de la zone s'il existe (état numérique, requête légère),
   // sinon l'attribut current_temperature du climate.
   const ptsTemp = useHistorique24(hass, zone.tempSensor || (estClimate(zone) ? zone.haid : null), zone.tempSensor ? null : 'current_temperature');
-  const pct = Math.max(0, Math.min(1, (target - RM_TMIN) / (RM_TMAX - RM_TMIN)));
+  const pct = Math.max(0, Math.min(1, (target - tMinReel) / (tMaxReel - tMinReel)));
   const R = 54, ARC = 2 * Math.PI * R * 0.75;
   const col = off ? 'var(--o-text3)' : 'var(--o-warn)';
   return (
@@ -2597,7 +2630,7 @@ function quandVersion(ts) {
     }
     // Au-dela d'une semaine, « il y a 3 semaines » situe moins bien qu'une date.
     return new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(ts));
-  } catch { return new Date(ts).toLocaleString(); }
+  } catch { return new Date(ts).toLocaleString(locale()); }
 }
 
 /** Ce qu'une version contient, en clair.
@@ -3500,6 +3533,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const S = (hass && hass.states) || {};
   const st = S[id] || null;
   const a = (st && st.attributes) || {};
+  const uT = uniteTemp(a, hass);
   const realTarget = a.temperature != null ? a.temperature : 20;
   const etatSt = st && st.state;
   const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
@@ -3517,7 +3551,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
   // Les bornes viennent de l'entite, pas d'une constante ; on affiche ce qui
   // a ete envoye, pas ce qui a ete demande.
   const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
-  const fmt = (t) => Number(t).toFixed(1).replace('.', ',') + ' °C';
+  const fmt = (t) => dec(Number(t), 1) + ' °' + uT;
   const nom = a.friendly_name || id;
   const zone = zoneDe(id);
   const etatTxt = !marche ? tr('Éteint') : heating ? tr('Chauffe') : cooling ? tr('Refroidit') : tr('Au repos');
@@ -3534,7 +3568,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
-        <FicheEntete titre={nom} sous={[zone, etatTxt, tr('consigne {t} °C', { t: Number(target).toFixed(1).replace('.', ',') })].filter(Boolean).join(' · ')} id={id} />
+        <FicheEntete titre={nom} sous={[zone, etatTxt, tr('consigne {t} °{u}', { t: dec(Number(target), 1), u: uT })].filter(Boolean).join(' · ')} id={id} />
         <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, background: 'var(--o-s1)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('CONSIGNE')}</div>
@@ -3640,7 +3674,7 @@ function RoomSwitchSheet({ id, hass, onClose }) {
   const capteur = (dc) => { const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: dc }); const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN; return isNaN(n) ? null : { n, u: (S[sid].attributes || {}).unit_of_measurement || '' }; };
   const puissance = capteur('power');
   const energie = capteur('energy');
-  const fmt = (c) => (Math.round(c.n * 10) / 10).toString().replace('.', ',') + (c.u ? ' ' + c.u : '');
+  const fmt = (c) => decMax(Math.round(c.n * 10) / 10, 1) + (c.u ? ' ' + c.u : '');
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
@@ -3757,7 +3791,7 @@ function RoomNav({ room, onNav, hass }) {
           <button key={r.name} data-room-active={on ? '1' : undefined} onClick={() => onNav('room:' + r.name)} style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background .18s, border-color .18s', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>
             {r.icon ? <span style={{ display: 'flex', width: 15, height: 15, alignItems: 'center', justifyContent: 'center' }}>{cloneElement(r.icon, { size: 15, color: on ? '#fff' : 'var(--o-text3)' })}</span> : <Fi i="home" size={14} color={on ? '#fff' : 'var(--o-text3)'} />}
             <span style={{ fontSize: 12, fontWeight: on ? 800 : 700 }}>{r.name}</span>
-            {r.temp != null && <span style={{ fontSize: 12, fontWeight: 600, color: on ? '#fff' : 'var(--o-text3)' }}>{r.temp.toFixed(1).replace('.', ',')}°</span>}
+            {r.temp != null && <span style={{ fontSize: 12, fontWeight: 600, color: on ? '#fff' : 'var(--o-text3)' }}>{dec(r.temp, 1)}°</span>}
           </button>
         );
       })}
@@ -5554,7 +5588,15 @@ function useDomainCards(hass, { onNav = null } = {}) {
     return { pct, ration, feed, ficheId, repas, jours, dernier, portion, onRempli, sous, mort: muet(croq.reservoir) };
   };
   // Les plantes : leurs capteurs, reconnus a leur classe, et leur verdict.
-  const plante = (base) => { const p = plantsCfg().find(x => x.base === base); if (!p) return null; return { base, name: p.name || p.base, mort: muet(plantCapteur(S, p.base, 'moisture')), img: p.img || null, room: plantPiece(S, p.base, p.room), hum: numDe(plantCapteur(S, p.base, 'moisture')), cond: numDe(plantCapteur(S, p.base, 'conductivity', 'µS/cm')), lux: numDe(plantCapteur(S, p.base, 'illuminance', 'lx')), temp: numDe(plantCapteur(S, p.base, 'temperature')), bat: numDe(plantCapteur(S, p.base, 'battery', '%')) }; };
+  const plante = (base) => {
+    const p = plantsCfg().find(x => x.base === base); if (!p) return null;
+    const tempId = plantCapteur(S, p.base, 'temperature');
+    // `temp` est TOUJOURS en Celsius ici, comme pour confort.js/systeme.js : les seuils
+    // de verdictsPlante (objets.js) raisonnent en Celsius. `uniteTemp` ne sert qu'a
+    // reconvertir le chiffre affiche (gauge, fiche) vers l'unite reelle du capteur.
+    const uT = uniteTemp(tempId && S[tempId] ? S[tempId].attributes : null, hass);
+    return { base, name: p.name || p.base, mort: muet(plantCapteur(S, p.base, 'moisture')), img: p.img || null, room: plantPiece(S, p.base, p.room), hum: numDe(plantCapteur(S, p.base, 'moisture')), cond: numDe(plantCapteur(S, p.base, 'conductivity', 'µS/cm')), lux: numDe(plantCapteur(S, p.base, 'illuminance', 'lx')), temp: versCelsius(numDe(tempId), uT), uniteTemp: uT, bat: numDe(plantCapteur(S, p.base, 'battery', '%')) };
+  };
   const nom = (k) => nomDeCle(S, k);
   /* Toute cle rend sa carte : une entite, une zone (`zone:`), le distributeur
    * (`obj:feeder`), une plante (`plant:`) — dans n'importe quelle vue.
@@ -5573,7 +5615,7 @@ function useDomainCards(hass, { onNav = null } = {}) {
       const pl = plante(k.slice(6));
       if (!pl) return null;
       const v = verdictCartePlante(pl);
-      return <RoomPlantCard chip={chip} mort={pl.mort} nom={label || pl.name} sub={pl.room} hum={pl.hum} verdict={v.texte} verdictCol={v.couleur} rgb={v.rgb} lux={pl.lux} cond={pl.cond} temp={pl.temp} img={pl.img} onOpen={() => setPlantPop(pl)} />;
+      return <RoomPlantCard chip={chip} mort={pl.mort} nom={label || pl.name} sub={pl.room} hum={pl.hum} verdict={v.texte} verdictCol={v.couleur} rgb={v.rgb} lux={pl.lux} cond={pl.cond} temp={pl.temp} uniteTemp={pl.uniteTemp} img={pl.img} onOpen={() => setPlantPop(pl)} />;
     }
     if (chip) return <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense />;
     const d = k.split('.')[0];
@@ -5673,7 +5715,9 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   const lightIds = ents.filter(id => dom(id) === 'light');
   const lightsOn = lightIds.filter(id => S[id] && S[id].state === 'on');
   const bruitId = capteurBruitPiece(S, room);
-  const confortPiece = indiceConfort({ temp: live && live.temp, hum: live && live.hum, co2: live && live.co2, bruit: bruitId ? parseFloat(S[bruitId].state) : null });
+  // Même règle que la fiche de confort : la pastille de la barre suit l'unité réelle du capteur.
+  const uniteTPiece = uniteTemp(live && live.tempId && S[live.tempId] ? S[live.tempId].attributes : null, hass);
+  const confortPiece = indiceConfort({ temp: versCelsius(live && live.temp, uniteTPiece), hum: live && live.hum, co2: live && live.co2, bruit: bruitId ? parseFloat(S[bruitId].state) : null }, uniteTPiece);
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
@@ -5699,7 +5743,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                   ? tr('{n} lampes allumées', { n: lightsOn.length })
                   : tr('{n} lampe allumée', { n: lightsOn.length }))
                 : tr('Tout est éteint')}
-              {live && live.temp != null ? ' · ' + live.temp.toFixed(1).replace('.', ',') + ' °C' : ''}
+              {live && live.temp != null ? ' · ' + dec(live.temp, 1) + ' °' + uniteTPiece : ''}
               {live && live.hum != null ? ' · ' + Math.round(live.hum) + ' % HR' : ''}
               {live && live.co2 != null ? ' · ' + Math.round(live.co2) + ' ppm' : ''}
             </div>
@@ -6046,7 +6090,7 @@ function CamSheet({ haid, nom, hass, onClose, onNav = null, evenement = null }) 
 }
 function CameraTile({ c, agrandir = true }) {
   const live = !!(c.haid && c.hass);
-  const t = new Date(), hhmm = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
+  const t = new Date(), hhmm = t.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   // TOUTE la tuile agrandit (retour 20/09 : « un clic pourrait la zoomer,
   // l'afficher en plus gros ») — viser un bouton de 36 px sur une vignette de
   // caméra était une corvée. Le ⤢ du coin reste, en repère : il dit ce que le
@@ -6193,7 +6237,7 @@ function FichePlante({ pl, onClose }) {
   const mot = (cle) => (v[cle] && M[cle][v[cle]]) || [tr('Mesure absente'), 'var(--o-text3)'];
   const presse = v.presse.map(p => M.presse[p]).join(', ');
   const sous = [pl.room, pl.hum != null ? tr('Sol {n} %', { n: Math.round(pl.hum) }) : null, presse || null].filter(Boolean).join(' · ');
-  const fmt = (x, u, d = 0) => x == null ? '—' : (d ? Number(x).toFixed(d).replace('.', ',') : String(Math.round(x))) + u;
+  const fmt = (x, u, d = 0) => x == null ? '—' : (d ? dec(Number(x), d) : String(Math.round(x))) + u;
   const ligne = (premiere, titre, cle, valeur) => { const [desc, couleur] = mot(cle); return <FicheRangee premiere={premiere} titre={titre} desc={desc} droite={<FicheValeur couleur={couleur}>{valeur}</FicheValeur>} />; };
   const pile = couleurPile(pl.bat);
   return (
@@ -6202,7 +6246,7 @@ function FichePlante({ pl, onClose }) {
         <FicheEntete titre={pl.name} sous={sous} />
         <div style={{ marginTop: 4 }}>
           {ligne(true, tr('Humidité du sol'), 'hum', fmt(pl.hum, ' %'))}
-          {ligne(false, tr('Température'), 'temp', fmt(pl.temp, ' °C', 1))}
+          {ligne(false, tr('Température'), 'temp', fmt(deCelsius(pl.temp, pl.uniteTemp || 'C'), ' °' + (pl.uniteTemp || 'C'), 1))}
           {ligne(false, tr('Lumière reçue'), 'lux', fmt(pl.lux, ' lx'))}
           {ligne(false, tr('Conductivité'), 'cond', fmt(pl.cond, ' µS/cm'))}
           <FicheRangee titre={tr('Pile du capteur')} desc={tr('Ce qu’il reste dans le boîtier')} droite={<FicheValeur couleur={pile}>{fmt(pl.bat, ' %')}</FicheValeur>} />
@@ -9593,7 +9637,7 @@ const CHIP_CAR = (c) => (
   </g>
 );
 
-function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, evBranche = false, batW = 0, batSoc = null, batPresente = false }) {
+function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, evBranche = false, batW = 0, batSoc = null, batPresente = false, solarPresente = true }) {
   const netGridW = surplusW > 0 ? -surplusW : (homeW - solarW);
   const gridImporting = netGridW > 0, gridFlowW = Math.abs(netGridW);
   // Palette calquée sur la vidéo de réf : solaire=jaune, maison=rose, réseau=violet.
@@ -9603,7 +9647,7 @@ function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, 
   const batCharge = batW > 0, batFlowW = Math.abs(batW || 0);
   // Pas de signe moins — le user l'a rejete sur l'import reseau, une fleche dit
   // le sens sans laisser croire a une valeur negative.
-  const fmtChipW = (v) => (v >= 1000 ? (v / 1000).toFixed(1).replace('.', ',') + ' kW' : Math.round(v) + ' W');
+  const fmtChipW = (v) => (v >= 1000 ? dec(v / 1000, 1) + ' kW' : Math.round(v) + ' W');
   const batTxt = (() => {
     const bouts = [];
     if (batSoc != null) bouts.push(batSoc + ' %');
@@ -9614,7 +9658,7 @@ function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, 
   return (
     <div className="o-en-house" style={{ position: 'absolute', top: 0, height: '100%', left: '50%', transform: 'translateX(-50%)', aspectRatio: '960 / 720' }}>
       <img src={energyHomeImg} alt="" draggable={false} style={layer} />
-      <img src={energySolarImg} alt="" draggable={false} style={layer} />
+      {solarPresente && <img src={energySolarImg} alt="" draggable={false} style={layer} />}
       {evBranche && <img src={energyEvImg} alt="" draggable={false} style={layer} />}
       {batPresente && <img src={energyBatImg} alt="" draggable={false} style={layer} />}
       <svg viewBox="0 0 960 720" preserveAspectRatio="xMidYMid meet" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
@@ -9681,7 +9725,7 @@ function sunInfo(date = new Date()) {
   const sinEl = Math.sin(rad * geo.lat) * Math.sin(rad * decl) + Math.cos(rad * geo.lat) * Math.cos(rad * decl) * Math.cos(rad * ha);
   const elevation = Math.asin(Math.min(1, Math.max(-1, sinEl))) / rad;
   const t = Math.min(1, Math.max(0, (nowH - sunrise) / Math.max(0.01, sunset - sunrise))); // 0..1 sur l'arc du jour
-  const hm = (h) => { const hh = Math.floor(((h % 24) + 24) % 24); const mm = Math.round((h - Math.floor(h)) * 60); return String(hh).padStart(2, '0') + ':' + String(mm % 60).padStart(2, '0'); };
+  const hm = (h) => { const hh = Math.floor(((h % 24) + 24) % 24); const mm = Math.round((h - Math.floor(h)) * 60); const d = new Date(); d.setHours(hh, mm % 60, 0, 0); return d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
   return { sunrise, sunset, noon, elevation, t, day: nowH >= sunrise && nowH <= sunset, sunriseHM: hm(sunrise), sunsetHM: hm(sunset) };
 }
 // Scène type Helios au-dessus du schéma maison : grand arc du jour (segment parcouru brillant),
@@ -9696,7 +9740,7 @@ function wxHourEq() {
     return (18 + 12 * Math.min(1, Math.max(0, tn))) % 24;
   } catch { const d = new Date(); return d.getHours() + d.getMinutes() / 60; }
 }
-function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null }) {
+function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null, solarPresente = true }) {
   const [, tick] = useState(0);
   useEffect(() => { const iv = setInterval(() => tick(n => n + 1), 60000); return () => clearInterval(iv); }, []);
   const s = sunInfo();
@@ -9712,7 +9756,7 @@ function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null }) 
   const Ct = [P0[0] + (C[0] - P0[0]) * t, P0[1] + (C[1] - P0[1]) * t];
   const day = s.day;
   const irr = day ? Math.max(0, Math.round(1090 * Math.pow(Math.max(0, Math.sin(s.elevation * RAD)), 1.15))) : 0; // irradiance ciel clair estimée
-  const fmtKW = (w) => Math.abs(w) >= 995 ? (w / 1000).toFixed(1).replace('.', ',') + ' kW' : Math.round(w) + ' W';
+  const fmtKW = (w) => Math.abs(w) >= 995 ? dec(w / 1000, 1) + ' kW' : Math.round(w) + ' W';
   return (
     <svg viewBox="0 0 600 250" preserveAspectRatio="xMidYMid meet" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
       {/* arc complet estompé + segment parcouru brillant (style Helios) */}
@@ -9725,21 +9769,31 @@ function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null }) 
       </defs>
       <SunMark x={P0[0]} y={P0[1] - 2} hm={s.sunriseHM} />
       <SunMark x={P2[0]} y={P2[1] - 2} hm={s.sunsetHM} />
-      {/* soleil / lune */}
-      <circle cx={sx} cy={sy} r={day ? 10 : 7} fill={day ? 'var(--o-gold)' : '#aeb9e0'} style={{ filter: day ? 'drop-shadow(0 0 10px rgba(255,209,102,.95))' : 'drop-shadow(0 0 5px rgba(174,185,224,.7))' }} />
+      {/* Le soleil, SEULEMENT le jour : `t` n'a de sens qu'entre lever et
+          coucher, et se plafonne a 0 ou 1 hors de cet intervalle (sunInfo).
+          Affiche la nuit, ce rond retombait pile sur le repere de lever ou
+          de coucher qu'il cotoie deja — un doublon colle dessus, pas une
+          position de lune (02/10, signale : « a l'exterieur de l'arc,
+          superpose aux autres »). */}
+      {day && <circle cx={sx} cy={sy} r="10" fill="var(--o-gold)" style={{ filter: 'drop-shadow(0 0 10px rgba(255,209,102,.95))' }} />}
       {day && solarW > 5 && <circle cx={sx} cy={sy} r="16" fill="none" stroke="rgba(255,209,102,.35)" strokeWidth="1.6">{!REDUCE_MOTION && <><animate attributeName="r" values="13;20;13" dur="3s" repeatCount="indefinite" /><animate attributeName="opacity" values=".5;.12;.5" dur="3s" repeatCount="indefinite" /></>}</circle>}
       {/* chips façon Helios : soleil=irradiance, panneaux=production, maison=conso, pylône=NET réseau */}
       {day && (() => {
-        // La pastille de production est fixe en (352,78) : si celle du soleil tombe dessus,
-        // on la remonte, et si elle sort du cadre on la bascule de l'autre côté.
+        // Deux pastilles fixes partagent la scène : production (352,78) et
+        // réseau (478,168). Celle-ci SUIT le soleil et doit éviter les deux ;
+        // au lever et au coucher, `sy` approche 205-235 et la plafonner à 150
+        // la garde dans le dôme de l'arc plutôt que de la laisser descendre
+        // jusqu'au pylône, en bas à droite (02/10, chevauchement signalé).
         let cx = Math.min(510, Math.max(90, sx + (sx < 300 ? 70 : -70)));
-        let cy = Math.max(22, sy - 4);
-        if (Math.abs(cx - 352) < 132 && Math.abs(cy - 78) < 34) {
+        let cy = Math.min(150, Math.max(22, sy - 4));
+        const chevauche = (fx, fy, dx, dy) => Math.abs(cx - fx) < dx && Math.abs(cy - fy) < dy;
+        if (chevauche(352, 78, 132, 34)) {
           if (cy > 44) cy = 40; else cx = cx < 352 ? Math.max(90, cx - 120) : Math.min(510, cx + 120);
         }
+        if (chevauche(478, 168, 110, 40)) cx = Math.max(90, cx - 110);
         return <Chip icon="sun" x={cx} y={cy} color="var(--o-gold)" txt={irr + ' W/m²'} />;
       })()}
-      <Chip icon="panel" x={352} y={78} color="#ffa63c" txt={fmtKW(solarW)} live={solarW > 5} />
+      {solarPresente && <Chip icon="panel" x={352} y={78} color="#ffa63c" txt={fmtKW(solarW)} live={solarW > 5} />}
       <Chip icon="house" x={352} y={200} color="var(--o-cyan)" txt={fmtKW(homeW)} />
       <Chip icon="pylon" x={478} y={168} color="var(--o-purple)" txt={(exportW > 5 ? '↑ ' : '↓ ') + fmtKW(exportW > 5 ? exportW : gridW)} live={(exportW > 5 ? exportW : gridW) > 5} />
     </svg>
@@ -9867,7 +9921,7 @@ function EnPuissances({ series, h = 190 }) {
             <div key={v.nom} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600 }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: v.couleur, flexShrink: 0 }} />
               <span style={{ flex: 1, color: 'var(--o-text2)' }}>{v.nom}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{v.v == null ? '—' : (v.v / 1000).toFixed(2).replace('.', ',') + ' kW'}</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{v.v == null ? '—' : dec(v.v / 1000, 2) + ' kW'}</span>
             </div>
           ))}
         </div>
@@ -9912,7 +9966,7 @@ function EnBarresConso({ series, h = 190 }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: h, padding: '0 1px' }}>
         {heures.map((t, i) => (
-          <div key={t} title={new Date(t).getHours() + 'h · ' + totaux[i].toFixed(2).replace('.', ',') + ' kWh'}
+          <div key={t} title={new Date(t).getHours() + 'h · ' + dec(totaux[i], 2) + ' kWh'}
             style={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 2 }}>
             {parSerie.map(s => {
               const v = valeurDe(s, t);
@@ -9934,7 +9988,7 @@ function EnBarresConso({ series, h = 190 }) {
             <span style={{ width: 9, height: 9, borderRadius: 4, background: s.couleur }} />{s.nom}
           </span>
         ))}
-        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{total.toFixed(2).replace('.', ',')} kWh</span>
+        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{dec(total, 2)} kWh</span>
       </div>
     </div>
   );
@@ -10031,6 +10085,9 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const autosuff = avail(EN.autosuffJour) ? Math.round(num(EN.autosuffJour)) : null;
   const tauxAutoconso = avail(EN.tauxAutoconso) ? Math.round(num(EN.tauxAutoconso)) : null;
   const ecoJour = avail(EN.ecoJour) ? num(EN.ecoJour) : null;
+  // La devise suit l'entite, puis l'installation — jamais suppose en euros.
+  const deviseJour = (EN.ecoJour && S[EN.ecoJour] && S[EN.ecoJour].attributes && S[EN.ecoJour].attributes.unit_of_measurement)
+    || (hass && hass.config && hass.config.currency) || '€';
   const hcToday = avail(EN.consoJourHc) ? num(EN.consoJourHc) : num(EN.consoHcToday);
   const hpToday = avail(EN.consoJourHp) ? num(EN.consoJourHp) : num(EN.consoHpToday);
   const totalToday = avail(EN.consoJour) ? num(EN.consoJour) : ((hcToday + hpToday) || num(EN.consoReseauToday));
@@ -10119,14 +10176,14 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           <div className="o-en-well" style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 30%,var(--o-well0),var(--o-well2))', border: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10 }}>
             {/* Scène type Helios : arc du jour (géoloc domicile), soleil + irradiance, chips de flux */}
             <div className="o-en-scene" style={{ position: 'relative', width: '100%', aspectRatio: '600 / 250', margin: '0 auto' }}>
-              <EnergyHouseSchema solarW={solarW} homeW={consoW} surplusW={surplusW} evW={evW} evBranche={evBranche} batW={batW} batSoc={batSoc} batPresente={batPresente} />
-              <SunArc solarW={solarW} gridW={importW} exportW={surplusW} homeW={consoW} appW={avail(EN.appTotal) ? Math.round(num(EN.appTotal)) : null} />
+              <EnergyHouseSchema solarW={solarW} homeW={consoW} surplusW={surplusW} evW={evW} evBranche={evBranche} batW={batW} batSoc={batSoc} batPresente={batPresente} solarPresente={solarAvail} />
+              <SunArc solarW={solarW} gridW={importW} exportW={surplusW} homeW={consoW} appW={avail(EN.appTotal) ? Math.round(num(EN.appTotal)) : null} solarPresente={solarAvail} />
             </div>
           </div>
           <div className="o-en-kpis" style={{ display: 'flex', gap: 24, marginTop: 16, flexWrap: 'wrap' }}>
             <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{consoAvail ? <Num v={consoW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />{tr('Conso maison')}</div></div>
             <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-gold)' }}>{solarAvail ? <Num v={solarW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-gold)' }} />{tr('Production')}</div></div>
-            {ecoJour != null && <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-ok)' }}><Num v={ecoJour} d={2} suffix=" €" /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('Économie du jour')}</div></div>}
+            {ecoJour != null && <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-ok)' }}><Num v={ecoJour} d={2} suffix={' ' + deviseJour} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('Économie du jour')}</div></div>}
             <div style={{ marginLeft: 'auto', textAlign: 'right' }}><div style={{ fontSize: 25, fontWeight: 800, color: exporting ? 'var(--o-ok)' : 'var(--o-bad)' }}>{(surplusAvail || consoAvail) ? <Num v={exporting ? surplusW : importW} suffix=" W" /> : '—'}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><FlipText text={exporting ? '↑ ' + tr('Vente réseau') : '↓ ' + tr('Achat réseau')} /></div></div>
           </div>
         </div></Anim>
@@ -10192,7 +10249,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
               <div style={{ fontSize: 15, fontWeight: 800, marginTop: 3, color: on ? d.c : 'var(--o-text3)' }}>{avail(d.power) ? <Num v={w} fmt={fmtW} /> : '—'}</div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{kwh != null ? kwh.toFixed(2).replace('.', ',') + ' kWh jour' : '—'}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{kwh != null ? dec(kwh, 2) + ' kWh jour' : '—'}</div>
             </div>);
             if (!edit) return <Anim key={k} i={di} base={160} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
             return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit} hass={hass} taille={false}>{carte}</EditableCard>;
@@ -11081,8 +11138,8 @@ function CvClock() {
   const [, tic] = useState(0);
   useEffect(() => { const iv = setInterval(() => tic(n => n + 1), 15000); return () => clearInterval(iv); }, []);
   const d = new Date();
-  const h = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
-  const jour = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  const h = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+  const jour = d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' });
   return (
     <div style={{ ...CV_CADRE, alignItems: 'center', justifyContent: 'center', height: '100%' }}>
       <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{h}</div>
@@ -12550,6 +12607,10 @@ function CvCarte({ hass, gensDemo = null }) {
     return { ...p, home: !!st && st.state === 'home', lat: a.latitude, lon: a.longitude };
   });
   const km = (a, b) => { const R = 6371, dLa = (b.lat - a.lat) * Math.PI / 180, dLo = (b.lon - a.lon) * Math.PI / 180; const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+  // L'unite de distance de l'installation (mi aux Etats-Unis) : le calcul reste en km,
+  // seul l'affichage se convertit.
+  const uniteDist = (hass && hass.config && hass.config.unit_system && hass.config.unit_system.length === 'mi') ? 'mi' : 'km';
+  const versUniteDist = (valKm) => uniteDist === 'mi' ? valKm * 0.621371 : valKm;
   const cap = (a, b) => Math.atan2((b.lon - a.lon) * Math.cos(b.lat * Math.PI / 180), b.lat - a.lat);
   const maison = gens.filter(g => g.home).length;
   return (
@@ -12572,10 +12633,10 @@ function CvCarte({ hass, gensDemo = null }) {
           } else if (g.home) { x = 50 + (i % 2 ? 9 : -9); y = 58; }
           else return null; // absent sans position : rien à placer
           return (
-            <span key={g.haid} title={g.name + (dist != null ? ' · ' + Math.round(dist) + ' km' : '')}
+            <span key={g.haid} title={g.name + (dist != null ? ' · ' + Math.round(versUniteDist(dist)) + ' ' + uniteDist : '')}
               style={{ position: 'absolute', left: x + '%', top: y + '%', transform: 'translate(-50%,-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
               <span style={{ width: 20, height: 20, borderRadius: '50%', background: g.img ? `url("${g.img}") center/cover` : 'var(--o-surfA)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: 'var(--o-text1)', boxShadow: g.home ? '0 0 0 2px var(--o-ok)' : '0 0 0 2px var(--o-bd1)' }}>{!g.img && g.name.slice(0, 2).toUpperCase()}</span>
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{g.name}{dist != null ? ' · ' + Math.round(dist) + ' km' : ''}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{g.name}{dist != null ? ' · ' + Math.round(versUniteDist(dist)) + ' ' + uniteDist : ''}</span>
             </span>
           );
         })}
@@ -13466,7 +13527,7 @@ function deriveAccueil(hass, cfg, resolved) {
   const alarmArmed = !!(alarmS && typeof alarmS.state === 'string' && alarmS.state.indexOf('armed') === 0);
   const camOnline = cams.filter(c => c.online).length, camTotal = cams.length;
   const ssA = S['sun.sun'] && S['sun.sun'].attributes ? S['sun.sun'].attributes.next_setting : null;
-  let sunsetHM = null; if (ssA) { const d = new Date(ssA); if (!isNaN(d.getTime())) sunsetHM = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  let sunsetHM = null; if (ssA) { const d = new Date(ssA); if (!isNaN(d.getTime())) sunsetHM = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); }
   // Prochain repas = automations du distributeur configuré, repas désactivés exclus.
   const now = new Date(), nowM = now.getHours() * 60 + now.getMinutes();
   let nm = null, nd = Infinity;
@@ -14951,7 +15012,7 @@ export default function App() {
             + `url("${fondPhotoActif}") center center / cover no-repeat var(--o-bg)` }} />
       )}
       {ficheDemo && <FicheAppareil id={ficheDemo} hass={hass} onClose={() => setFicheDemo(null)} />}
-      {idle && ambient > 0 && plageOk && <AmbientOverlay scenes={scenariosAccueil(scenarios()).map(s => ({ ...s, nom: nomScenario(s) }))} onScene={(s) => lancerScenario(getHass(), s.id)} wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} lightsOn={lightsOn} notifs={notifs}
+      {idle && ambient > 0 && plageOk && <AmbientOverlay scenes={scenariosAccueil(scenarios()).map(s => ({ ...s, nom: nomScenario(s) }))} onScene={(s) => lancerScenario(getHass(), s.id)} wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} uniteTemp={uniteTemp(null, hass)} lightsOn={lightsOn} notifs={notifs}
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
       {haLost && <div role="alert" style={BANDEAU_ALERTE}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {!haLost && discovery.echec && <div role="alert" style={BANDEAU_ALERTE}>{tr('La découverte de la maison a été interrompue — recharge la page')}</div>}

@@ -52,6 +52,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .regles import demarrer, niveau
 from .textes import joindre
+from .unites import depuis_celsius, unite_temperature
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -1019,6 +1020,14 @@ class LoggiaVolets:
     async def async_config(self) -> dict[str, Any]:
         brut = await self.store.async_get_shared(CLE, None)
         cfg = {k: dict(v) for k, v in DEFAUT.items()}
+        # Le seuil par defaut (25) est pense en Celsius ; sur une installation
+        # jamais configuree et reglee en Fahrenheit, 25 est trop froid de loin
+        # (la regle croirait alors qu'il gele en permanence et remonterait
+        # tout). Un seuil deja enregistre vient de `brut` plus bas et n'est
+        # jamais touche ici : le frontend l'a deja ecrit dans l'unite reelle
+        # du capteur choisi.
+        if unite_temperature(self.hass) == "F":
+            cfg["soleil"]["temp_min"] = round(depuis_celsius(cfg["soleil"]["temp_min"], "F"))
         if isinstance(brut, dict):
             for section, valeurs in brut.items():
                 if section in cfg and isinstance(valeurs, dict):

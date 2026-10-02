@@ -117,6 +117,7 @@ export function pluieEtVent(previsionsJour, attributs, maintenant) {
   return {
     proba: proba == null ? null : Math.max(0, Math.min(100, Math.round(proba))),
     cumul: cumul == null ? null : Math.round(cumul * 10) / 10,
+    uniteCumul: a.precipitation_unit || 'mm',
     vent: vent == null ? null : Math.round(vent),
     uniteVent: a.wind_speed_unit || 'km/h',
   };

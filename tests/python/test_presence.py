@@ -42,11 +42,22 @@ class FauxServices:
         self.appels.append((domaine, service, dict(data)))
 
 
+class FauxUnites:
+    def __init__(self, temperature_unit="°C"):
+        self.temperature_unit = temperature_unit
+
+
+class FauxConfig:
+    def __init__(self, temperature_unit="°C"):
+        self.units = FauxUnites(temperature_unit)
+
+
 class FauxHass:
-    def __init__(self, etats):
+    def __init__(self, etats, temperature_unit="°C"):
         self.states = FauxEtats(etats)
         self.services = FauxServices()
         self.taches = []
+        self.config = FauxConfig(temperature_unit)
 
     def async_create_task(self, coro):
         self.taches.append(coro)
@@ -72,7 +83,7 @@ def regles_module():
 def creer(module, store_module, regles_module):
     faits = []
 
-    def fabrique(config=None, etats=None):
+    def fabrique(config=None, etats=None, temperature_unit="°C"):
         magasin = store_module.LoggiaStore.__new__(store_module.LoggiaStore)
         magasin._store = FauxStore({"users": {}, "shared": {"loggia_presence": config or {}}, "migrated": True})
         magasin._ancien = FauxStore(None)
@@ -80,7 +91,7 @@ def creer(module, store_module, regles_module):
         magasin._lock = asyncio.Lock()
 
         p = module.LoggiaPresence.__new__(module.LoggiaPresence)
-        p.hass = FauxHass(etats or {})
+        p.hass = FauxHass(etats or {}, temperature_unit)
         p.store = magasin
         p.cfg = lancer(p.async_config())
         p.eteintes = {}
@@ -268,6 +279,27 @@ def test_les_defauts(creer):
     assert p.cfg["delai_depart"] == 5
     assert p.cfg["depart"]["lumieres"] is True
     assert p.cfg["retour"]["seulement_la_nuit"] is True
+
+
+def test_les_defauts_de_chauffage_suivent_l_unite_de_l_installation(creer):
+    """17 et 20 sont penses en Celsius. Une installation jamais configuree et
+    reglee en Fahrenheit doit se voir proposer 63 et 68, pas un ordre de
+    chauffer trois fois plus fort que prevu (Task #20, 02/10)."""
+    p = creer(temperature_unit="°C")
+    assert p.cfg["depart"]["chauffage"]["consigne"] == 17
+    assert p.cfg["depart"]["chauffage"]["confort"] == 20
+
+    pf = creer(temperature_unit="°F")
+    assert pf.cfg["depart"]["chauffage"]["consigne"] == 63
+    assert pf.cfg["depart"]["chauffage"]["confort"] == 68
+
+
+def test_une_consigne_deja_enregistree_n_est_jamais_reconvertie(creer):
+    """Une valeur que l'utilisateur a enregistree vient du magasin dans
+    l'unite reelle (le frontend l'a deja ecrite ainsi) : elle ne doit plus
+    bouger, meme sur une installation Fahrenheit."""
+    p = creer({"depart": {"chauffage": {"consigne": 70}}}, temperature_unit="°F")
+    assert p.cfg["depart"]["chauffage"]["consigne"] == 70
 
 
 def test_un_patch_imbrique_garde_le_reste(creer):

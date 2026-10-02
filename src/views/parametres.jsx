@@ -34,6 +34,7 @@ import { VeillesReglages } from './veilles.jsx';
 import { JournalReglages } from './journal.jsx';
 import { weatherEntity } from '../wxutil.jsx';
 import { tr, locale, choixLangue, languesDisponibles, nomProfil } from '../i18n.js';
+import { uniteTemp } from '../unites.js';
 import { Panneau, Ligne, Pastille, CAPITALES, MONO, DESC_PANNEAU, FILET, btnPrimaire, btnSecondaire, btnDiscret, btnDanger } from './parcommun.jsx';
 
 /* ── Les briques d'affichage, au niveau du module ────────────────────────────
@@ -430,11 +431,12 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
   const S = (hass && hass.states) || {};
   const rooms = normRooms(cfgVal('loggia_rooms', null));
   const t0 = rooms[0] && rooms[0].haid && rooms[0].haid.temp ? S[rooms[0].haid.temp] : null;
-  const temp = t0 && !isNaN(parseFloat(t0.state)) ? parseFloat(t0.state).toFixed(1).replace('.', ',') + ' °C' : '—';
+  const uTPrev = uniteTemp(t0 ? t0.attributes : null, hass);
+  const temp = t0 && !isNaN(parseFloat(t0.state)) ? parseFloat(t0.state).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' °' + uTPrev : '—';
   const lightsOn = Object.keys(S).filter(id => id.indexOf('light.') === 0 && S[id].state === 'on').length;
   const en = { ...enHaids(), ...(cfgVal('loggia_energyHaids', null) || {}) };
   const cw = en.consoNow && S[en.consoNow] ? parseFloat(S[en.consoNow].state) : NaN;
-  const conso = !isNaN(cw) ? (Math.abs(cw) >= 995 ? (Math.abs(cw) / 1000).toFixed(1).replace('.', ',') + ' kW' : Math.round(Math.abs(cw)) + ' W') : '—';
+  const conso = !isNaN(cw) ? (Math.abs(cw) >= 995 ? (Math.abs(cw) / 1000).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kW' : Math.round(Math.abs(cw)) + ' W') : '—';
   const pvAlarm = (pvRes && pvRes.alarm && pvRes.alarm.available) ? pvRes.alarm.main : null;
   const al = (secAlarm() && S[secAlarm()]) ? S[secAlarm()] : (pvAlarm ? S[pvAlarm] : null);
   const alTxt = al ? (al.state === 'disarmed' ? tr('désarmée') : al.state.indexOf('armed') === 0 ? tr('armée') : al.state) : '—';
@@ -455,7 +457,7 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <span style={{ width: 20, height: 20, borderRadius: 10, background: 'linear-gradient(135deg,var(--o-ok),var(--o-accent))', flexShrink: 0 }} />
           <span style={{ fontSize: 12, fontWeight: 800 }}>Loggia</span>
-          <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{now.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
         <div style={{ background: 'var(--o-s3)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: RAD[1], padding: '10px 12px', marginBottom: 9 }}>
           <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 15, fontWeight: 500 }}>{greet}{userName ? ', ' + nomProfil(userName) : ''}</div>
@@ -923,7 +925,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
       {has('energy') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Énergie')}</div>
-          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Capteurs de puissance (W) du flux énergétique. Le véhicule et la batterie n'apparaissent sur le schéma que si tu les renseignes.")}</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Capteurs de puissance (W) du flux énergétique. Les panneaux solaires, le véhicule et la batterie n'apparaissent sur le schéma que si tu les renseignes.")}</div>
           {/* Deux colonnes : a trois, le champ tronquait les noms d'entites,
               qui depassent souvent trente caracteres. */}
           <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>

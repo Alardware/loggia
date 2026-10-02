@@ -14,6 +14,7 @@ import {
 import { cvName, RegleEntete, usePli , useEtatServeur, ListeChoix } from '../ui.jsx';
 import { ZONE_REGLAGES, CAPITALES, TITRE_PANNEAU } from './parcommun.jsx';
 import { tr, locale } from '../i18n.js';
+import { uniteTemp, deCelsius } from '../unites.js';
 
 /* Au niveau du module, et non dans le composant.
  *
@@ -42,6 +43,10 @@ const Rangee = ({ nom, desc, on, cb }) => (
 
 export function PresenceReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
+  // La consigne part telle quelle vers climate.set_temperature (presence.py) : aucune
+  // conversion interne, juste le bon label et les bonnes bornes pour l'unite reelle.
+  const uT = uniteTemp(null, hass);
+  const bMin = Math.round(deCelsius(5, uT)), bMax = Math.round(deCelsius(25, uT));
   const { etat, setEtat, err, setErr, vivant } =
     useEtatServeur(hass, 'loggia/presence/etat', 5000, tr('Réglages indisponibles.'));
   /* Le pli de la regle — avec les autres etats. */
@@ -196,10 +201,10 @@ export function PresenceReglages({ hass, cardSt }) {
             {chauf.actif && (
               <div style={{ ...ligne, marginTop: 4, paddingBottom: 8 }}>
                 <span style={{ ...label, minWidth: 88 }}>{tr('Absence')}</span>
-                <input aria-label={tr('Température en absence, en °C')} type="number" value={chauf.consigne != null ? chauf.consigne : 17} min={5} max={25} step={0.5}
+                <input aria-label={tr('Température en absence, en °{u}', { u: uT })} type="number" value={chauf.consigne != null ? chauf.consigne : 17} min={bMin} max={bMax} step={0.5}
                   onChange={e => enregistrer({ depart: { chauffage: { consigne: Number(e.target.value) || 17 } } })}
                   style={{ ...champ, width: 74 }} />
-                <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>°C</span>
+                <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>°{uT}</span>
               </div>
             )}
             <Rangee nom={tr('Armer l’alarme')} desc={alarmes.length === 0 ? tr('Aucune alarme trouvée.') : ''}

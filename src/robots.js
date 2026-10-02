@@ -13,7 +13,7 @@
  * langues), à défaut à leur identifiant. Et rien ne s'invente : une mesure que
  * l'appareil ne publie pas ne se dessine pas.
  */
-import { tr } from './i18n.js';
+import { tr, locale } from './i18n.js';
 
 export const DOMAINES_ROBOT = ['vacuum', 'lawn_mower'];
 
@@ -178,7 +178,7 @@ export function niveauUsure(pct) {
   return pct < 35 ? 'bas' : pct < 65 ? 'moyen' : 'bon';
 }
 
-const heures = (n) => { const r = n >= 10 ? Math.round(n) : Math.round(n * 10) / 10; return String(r).replace('.', ','); };
+const heures = (n) => { const r = n >= 10 ? Math.round(n) : Math.round(n * 10) / 10; return r.toLocaleString(locale(), { maximumFractionDigits: 1 }); };
 
 /**
  * Les pièces d'usure : ce qu'il reste, en pourcentage quand on le sait.

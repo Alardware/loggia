@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pilesMaison } from '../src/piles.js';
+import { enHaids, setLoggiaState } from '../src/state.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
@@ -95,6 +96,132 @@ test('le graphique de puissances ne dessine pas plus de points qu’il n’a de 
     'le calcul n’est plus memoise : il repart a chaque mouvement de souris');
   assert.ok(g.includes('const pts = sousEchantillonner(s.pts, W);'), 'le trace ne s’allege plus');
   assert.ok(g.includes('v: prochePoint(s.pts, t)'), 'la bulle ne lit plus les points d’origine : on a allege la mesure, pas le trace');
+});
+
+test('un capteur retiré de la fiche Énergie ne revient pas par la détection automatique (02/10)', () => {
+  /* « J'ai retiré les entités mais sur le schéma elles sont toujours
+   * présentes. » La fiche enregistre les SIX clés à chaque sauvegarde, y
+   * compris celles qu'on vide (`''`). */
+  setLoggiaState({
+    resolved: { energy: { available: true, haids: {
+      consoNow: 'sensor.demo_conso', solarOutput: 'sensor.demo_solaire', surplusNow: 'sensor.demo_surplus',
+    } } },
+    cfg: { loggia_energyHaids: {
+      consoNow: 'sensor.compteur_conso_reel', solarOutput: '', surplusNow: '',
+    } },
+  });
+  try {
+    const EN = enHaids();
+    assert.equal(EN.consoNow, 'sensor.compteur_conso_reel', 'la clé enregistrée fait foi');
+    assert.ok(!EN.solarOutput, 'la production solaire retirée ne doit pas revenir de la détection automatique');
+    assert.ok(!EN.surplusNow, 'le surplus retiré ne doit pas revenir non plus');
+  } finally {
+    setLoggiaState({ resolved: null, cfg: {} });
+  }
+});
+
+test('le tableau de bord Énergie NATIF de Home Assistant ne complète plus une fiche déjà enregistrée (02/10, suite)', () => {
+  /* Premier correctif incomplet : « toujours aucun changement ». La vraie
+   * fuite ne passait pas par une clé vidée mais par une clé que la fiche ne
+   * gère même pas. `resolve.js` nomme ses capteurs auto-détectés
+   * différemment (`solarNow`, `gridNow`…) de ceux de la fiche
+   * (`solarOutput`, `consoNow`…) : un `if (cfg[k])` clé par clé ne pouvait
+   * JAMAIS éteindre `solarNow`, puisque cette clé n'existe nulle part dans
+   * `cfg`. Elle survivait donc dans `out`, et `solarW` la préfère à
+   * `solarOutput` — d'où un toit solaire actif malgré une fiche vide.
+   * La fiche doit faire foi SEULE dès qu'elle existe, quelle que soit la
+   * forme du repli natif — même logique que le véhicule et la batterie, qui
+   * n'ont jamais eu ce repli. */
+  setLoggiaState({
+    resolved: { energy: { available: true, source: 'tableau de bord Energie', haids: {
+      consoJour: 'sensor.ha_conso_jour', prodJour: 'sensor.ha_prod_jour',
+      gridNow: 'sensor.ha_grid_power', solarNow: 'sensor.ha_solar_power',
+    } } },
+    cfg: { loggia_energyHaids: {
+      consoNow: 'sensor.compteur_conso_reel', solarOutput: '', surplusNow: '',
+      evNow: '', batNow: '', batSoc: '',
+    } },
+  });
+  try {
+    const EN = enHaids();
+    assert.equal(EN.consoNow, 'sensor.compteur_conso_reel');
+    assert.ok(!EN.solarNow, 'le capteur solaire du tableau de bord natif ne doit plus filtrer sous un autre nom');
+    assert.ok(!EN.gridNow, 'le capteur réseau du tableau de bord natif ne doit plus filtrer sous un autre nom');
+    assert.equal(Object.keys(EN).length, 1, 'seule la clé réellement renseignée doit sortir');
+  } finally {
+    setLoggiaState({ resolved: null, cfg: {} });
+  }
+});
+
+test('sans fiche enregistrée, la détection automatique du tableau de bord natif reste proposée', () => {
+  /* Le confort « zéro réglage » doit rester intact pour qui n'a jamais
+   * ouvert la fiche Énergie : c'est le SEUL cas où le repli joue. */
+  setLoggiaState({
+    resolved: { energy: { available: true, haids: { solarNow: 'sensor.demo_solar' } } },
+    cfg: {},
+  });
+  try {
+    const EN = enHaids();
+    assert.equal(EN.solarNow, 'sensor.demo_solar');
+  } finally {
+    setLoggiaState({ resolved: null, cfg: {} });
+  }
+});
+
+test('la pastille d’irradiance évite les DEUX badges fixes du schéma solaire, pas un seul (02/10)', () => {
+  /* « Le capteur d'énergie du soleil est à l'extérieur de l'arc, ça se
+   * superpose avec les autres. » Au lever et au coucher, la pastille suit
+   * le soleil au ras du bas du cadre (sy proche de 205-235) : sans
+   * plafond, elle descendait jusqu'au badge réseau (pylône, 478×168),
+   * jamais vérifié — seul le badge de production (352×78) l'était. */
+  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const f = src.slice(src.indexOf('function SunArc('), src.indexOf('\nconst EN_LAYOUT_KEY'));
+  assert.ok(f.includes('let cy = Math.min(150, Math.max(22, sy - 4));'),
+    'cy n’est plus plafonné : la pastille peut redescendre jusqu’au bas du cadre');
+  assert.ok(f.includes('chevauche(478, 168, 110, 40)'),
+    'la pastille ne vérifie plus sa collision avec le badge réseau (pylône)');
+  assert.ok(f.includes('chevauche(352, 78, 132, 34)'),
+    'la pastille ne vérifie plus sa collision avec le badge de production');
+});
+
+test('la nuit, le rond du soleil ne se pose plus sur le repère de lever ou de coucher (02/10)', () => {
+  /* `sunInfo().t` n'a de sens qu'ENTRE le lever et le coucher ; hors de cet
+   * intervalle il se plafonne à 0 ou 1 (voir `sunInfo`), et le rond du
+   * « soleil / lune », jusqu'ici dessiné jour ET nuit, retombait alors
+   * exactement sur le `SunMark` du lever ou du coucher — deux ronds collés
+   * au même endroit, toute la nuit, chaque nuit. Signalé le 02/10 (capture
+   * prise après le coucher) comme « à l'extérieur de l'arc, superposé aux
+   * autres ». Le rond ne représente rien de réel la nuit : il disparaît,
+   * les deux repères fixes suffisent à montrer lever et coucher. */
+  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const f = src.slice(src.indexOf('function SunArc('), src.indexOf('\nconst EN_LAYOUT_KEY'));
+  assert.ok(f.includes("{day && <circle cx={sx} cy={sy} r=\"10\" fill=\"var(--o-gold)\""),
+    'le rond du soleil n’est plus réservé au jour : il redessine sur le repère fixe la nuit');
+  assert.ok(!/<circle cx=\{sx\} cy=\{sy\} r=\{day \? 10 : 7\}/.test(f),
+    'l’ancien rond jour/nuit (couleur et rayon variables) traîne encore dans le code');
+});
+
+test('sans capteur de production, les panneaux solaires ne s’affichent plus sur le toit (02/10)', () => {
+  /* « J'ai les panneaux avec la production alors qu'il n'y a pas d'entité. »
+   * `energySolarImg` se dessinait SANS CONDITION, contrairement au véhicule
+   * (`evBranche &&`) et à la batterie (`batPresente &&`) qui suivent déjà
+   * cette règle. Le dessin du toit et le chip « 0 W » de `SunArc` suivent
+   * maintenant `solarPresente`, alimenté par `solarAvail` (capteur configuré,
+   * pas seulement production non nulle) — le même signal qui pilote déjà
+   * « Solaire actif / inactif » dans l'en-tête. */
+  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const maison = src.slice(src.indexOf('function EnergyHouseSchema('), src.indexOf('\n}', src.indexOf('function EnergyHouseSchema(')));
+  assert.ok(maison.includes('solarPresente = true'), 'solarPresente a disparu de la signature (ou son défaut, qui garde la démo intacte)');
+  assert.ok(maison.includes('{solarPresente && <img src={energySolarImg}'), 'les panneaux redessinent sans vérifier solarPresente');
+
+  const arc = src.slice(src.indexOf('function SunArc('), src.indexOf('\nconst EN_LAYOUT_KEY'));
+  assert.ok(arc.includes('solarPresente = true'), 'SunArc a perdu le paramètre solarPresente');
+  assert.ok(arc.includes('{solarPresente && <Chip icon="panel"'), 'le chip de production ne vérifie plus solarPresente : un « 0 W » resterait affiché sans toit');
+
+  assert.ok(src.includes('<EnergyHouseSchema solarW={solarW} homeW={consoW} surplusW={surplusW} evW={evW} evBranche={evBranche} batW={batW} batSoc={batSoc} batPresente={batPresente} solarPresente={solarAvail} />'),
+    'le schéma de la maison ne reçoit plus solarAvail');
+  assert.ok(src.includes('<SunArc solarW={solarW} gridW={importW} exportW={surplusW} homeW={consoW} appW={avail(EN.appTotal) ? Math.round(num(EN.appTotal)) : null} solarPresente={solarAvail} />'),
+    'l’arc solaire ne reçoit plus solarAvail');
 });
 
 test('une épingle s’écrit sur ce que la maison a, pas sur ce qu’un écran croyait', () => {

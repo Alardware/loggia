@@ -49,11 +49,22 @@ class FauxServices:
         self.appels.append((domaine, service, dict(data)))
 
 
+class FauxUnites:
+    def __init__(self, temperature_unit="°C"):
+        self.temperature_unit = temperature_unit
+
+
+class FauxConfig:
+    def __init__(self, temperature_unit="°C"):
+        self.units = FauxUnites(temperature_unit)
+
+
 class FauxHass:
-    def __init__(self, etats):
+    def __init__(self, etats, temperature_unit="°C"):
         self.states = FauxEtats(etats)
         self.services = FauxServices()
         self.taches = []
+        self.config = FauxConfig(temperature_unit)
 
     def async_create_task(self, coro):
         self.taches.append(coro)
@@ -79,7 +90,7 @@ def regles_module():
 def creer(module, store_module, regles_module):
     faits = []
 
-    def fabrique(config=None, etats=None):
+    def fabrique(config=None, etats=None, temperature_unit="°C"):
         magasin = store_module.LoggiaStore.__new__(store_module.LoggiaStore)
         magasin._store = FauxStore({"users": {}, "shared": {"loggia_volets": config or {}}, "migrated": True})
         magasin._ancien = FauxStore(None)
@@ -89,7 +100,7 @@ def creer(module, store_module, regles_module):
         # `__new__` : le vrai constructeur pose des rendez-vous de lever et de
         # coucher, ce qu'aucun test ne veut declencher.
         v = module.LoggiaVolets.__new__(module.LoggiaVolets)
-        v.hass = FauxHass(etats or {})
+        v.hass = FauxHass(etats or {}, temperature_unit)
         v.store = magasin
         v.cfg = lancer(v.async_config())
         # Un dictionnaire : la protection retient AUSSI d'ou elle a pris
@@ -275,6 +286,24 @@ def test_la_config_absente_prend_les_defauts(creer):
     assert v.cfg["planning"]["actif"] is False
     assert v.cfg["soleil"]["position"] == 30
     assert v.cfg["vent"]["seuil"] == 50
+
+
+def test_le_seuil_par_defaut_suit_l_unite_de_l_installation(creer):
+    """25 est pense en Celsius. Une installation jamais configuree et reglee
+    en Fahrenheit doit se voir proposer 77, sinon la regle croirait qu'il gele
+    en permanence et remonterait tout (Task #20, 02/10)."""
+    v = creer(temperature_unit="°C")
+    assert v.cfg["soleil"]["temp_min"] == 25
+
+    vf = creer(temperature_unit="°F")
+    assert vf.cfg["soleil"]["temp_min"] == 77
+
+
+def test_un_seuil_deja_enregistre_n_est_jamais_reconverti(creer):
+    """Une valeur enregistree vient du magasin dans l'unite reelle du capteur
+    choisi (le frontend l'a deja ecrite ainsi) : elle ne doit plus bouger."""
+    v = creer({"soleil": {"temp_min": 80}}, temperature_unit="°F")
+    assert v.cfg["soleil"]["temp_min"] == 80
 
 
 def test_une_section_partielle_garde_le_reste(creer):

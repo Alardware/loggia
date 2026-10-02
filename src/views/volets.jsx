@@ -15,6 +15,7 @@ import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur } 
 import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt, majuscule } from './parcommun.jsx';
 import { tr } from '../i18n.js';
 import { cfgVal, cfgSet } from '../state.js';
+import { uniteTemp, deCelsius } from '../unites.js';
 import { mot, pourquoi } from '../journalmots.js';
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -176,6 +177,10 @@ export function VoletsReglages({ hass, cardSt }) {
 
   const plan = cfg.planning || {};
   const sol = cfg.soleil || {};
+  // Comparee a une lecture reelle cote serveur (volets.py), jamais une conversion
+  // interne : le bon label et les bonnes bornes suffisent, suivant le capteur choisi.
+  const uTSol = uniteTemp(sol.temp_entite && hass && hass.states && hass.states[sol.temp_entite] ? hass.states[sol.temp_entite].attributes : null, hass);
+  const bMinSol = Math.round(deCelsius(0, uTSol)), bMaxSol = Math.round(deCelsius(45, uTSol));
   const vent = cfg.vent || {};
   const baies = cfg.baies || {};
   // Ordre non abouti (ADR 0007) : le seul réglage est le nombre de reprises.
@@ -377,7 +382,7 @@ export function VoletsReglages({ hass, cardSt }) {
             </div>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Et au-delà de')}</span>
-              <Nombre v={sol.temp_min != null && sol.temp_min !== '' ? sol.temp_min : 25} nom={tr('Température extérieure minimale, en °C')} min={0} max={45} unite={tr('°C dehors')}
+              <Nombre v={sol.temp_min != null && sol.temp_min !== '' ? sol.temp_min : 25} nom={tr('Température extérieure minimale, en °{u}', { u: uTSol })} min={bMinSol} max={bMaxSol} unite={tr('°{u} dehors', { u: uTSol })}
                 cb={n => enregistrer({ soleil: { temp_min: n } })} />
             </div>
             <div style={{ ...ligne, marginTop: 8 }}>

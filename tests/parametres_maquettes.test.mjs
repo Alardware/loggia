@@ -261,7 +261,7 @@ test('les puces de navigation choisies sont en bleu plein, texte blanc', () => {
 test('la consigne se lit entre les deux boutons des cartes climat', () => {
   // Carte du thermostat et carte du fil pilote : « − 19 °C + ».
   assert.equal((APP.match(/<span aria-label=\{tr\('Consigne'\)\}/g) || []).length, 2);
-  assert.equal((APP.match(/const consigne = \(Number\.isInteger\(Number\(target\)\)/g) || []).length, 2);
+  assert.equal((APP.match(/const consigne = decMax\(Number\(target\), 1\) \+ ' °' \+ uT;/g) || []).length, 2);
   // Le sous-titre dit l'état ; il ne répète plus la valeur.
   assert.ok(!APP.includes("tr('Chauffe') + ' · ' + consigne"), 'la consigne est dite deux fois');
 });

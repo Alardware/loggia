@@ -19,7 +19,7 @@ import { getHass } from './state.js';
  * retrouve l'ecran ou on l'avait laisse : c'est le MEME dashboard qui se met
  * en veille, pas un second a entretenir. Toujours sombre, quel que soit le
  * theme : c'est une veille. Idee reprise des dashboards ambiants de Madelena. */
-export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, lightsOn, notifs, ast = null, scenes = [], onScene = null }) {
+export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, uniteTemp = 'C', lightsOn, notifs, ast = null, scenes = [], onScene = null }) {
   // Tant que la veille recouvre l'écran, les fonds GPU (wx3d, ciel 3D) rendent
   // pour personne : la classe leur dit de souffler — batterie de la tablette.
   useEffect(() => {
@@ -158,7 +158,7 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, li
         </div>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16, maxWidth: '84vw' }}>
-        {inTemp != null && <span style={chip}>{pt('#54c8f0')}{inTemp.toFixed(1).replace('.', ',')} °C {tr('intérieur')}</span>}
+        {inTemp != null && <span style={chip}>{pt('#54c8f0')}{inTemp.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} °{uniteTemp} {tr('intérieur')}</span>}
         {lightsOn > 0 && <span style={{ ...chip, color: 'var(--o-lampe)' }}>{pt('var(--o-lampe)')}{lightsOn > 1 ? tr('{n} allumées', { n: lightsOn }) : tr('{n} allumée', { n: lightsOn })}</span>}
         {ast != null && <span style={{ ...chip, color: ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)' }}>{pt(ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)')}{ast === 'triggered' ? tr('Alarme') : ast === 'disarmed' ? tr('Alarme désarmée') : tr('Alarme armée')}</span>}
       </div>

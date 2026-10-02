@@ -134,7 +134,7 @@ function BoutonConfirme({ libelle, onConfirme }) {
 
 /* ════════════ L'accueil du robot ════════════ */
 
-function OngletAccueil({ domaine, robot, zones, nChoisies, basculerZone, peutChoisir, lancer, rentrer, resume, derniere, prochain, alerte, aUneCarte, allerA }) {
+function OngletAccueil({ domaine, robot, zones, nChoisies, basculerZone, peutChoisir, lancer, rentrer, resume, uniteSurface = 'm²', derniere, prochain, alerte, aUneCarte, allerA }) {
   // Deux tuiles, comme sur les maquettes : ce qui VIENT quand un passage est
   // planifié, sinon ce qui s'est passé (l'historique garde le reste).
   const passage = prochain ? { ...prochain, nom: tr('Prochain passage'), vers: 'planning' } : derniere ? { ...derniere, nom: tr('Dernier passage'), vers: 'historique' } : null;
@@ -189,7 +189,7 @@ function OngletAccueil({ domaine, robot, zones, nChoisies, basculerZone, peutCho
           {resume && (
             <div style={{ ...PANNEAU, padding: '14px 16px' }}>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Cette semaine')}</div>
-              <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.01em', marginTop: 5 }}>{resume.surface != null ? resume.surface + ' m²' : dureeLisible(resume.dureeMin)}</div>
+              <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.01em', marginTop: 5 }}>{resume.surface != null ? resume.surface + ' ' + uniteSurface : dureeLisible(resume.dureeMin)}</div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3 }}>{resume.n > 1 ? tr('{n} sessions', { n: resume.n }) : tr('{n} session', { n: resume.n })}</div>
             </div>
           )}
@@ -246,7 +246,7 @@ function OngletZones({ domaine, robot, zones, nChoisies, basculerZone, peutChois
 
 /* ════════════ L'historique ════════════ */
 
-function OngletHistorique({ domaine, sessions, resume, chargee, erreur = false }) {
+function OngletHistorique({ domaine, sessions, resume, uniteSurface = 'm²', chargee, erreur = false }) {
   // Un historique qui ne se lit pas n'est pas un historique vide (audit 18/09).
   if (erreur) return <div role="alert" style={{ ...PANNEAU, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Historique indisponible pour le moment')}</div>;
   if (!chargee) return <div style={{ ...PANNEAU, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Lecture de l’historique…')}</div>;
@@ -258,7 +258,7 @@ function OngletHistorique({ domaine, sessions, resume, chargee, erreur = false }
     <div className="rb-histo">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
         <div style={{ borderRadius: 'var(--o-radius,18px)', padding: '16px 20px', background: 'rgba(var(--rb-rgb),.14)', display: 'grid', gridTemplateColumns: 'repeat(' + (parSurface ? 3 : 2) + ', minmax(0, 1fr))', gap: 10 }}>
-          {parSurface && <div><div style={PETITES_CAPITALES}>{tr('Surface')}</div><div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>{resume.surface} m²</div></div>}
+          {parSurface && <div><div style={PETITES_CAPITALES}>{tr('Surface')}</div><div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>{resume.surface} {uniteSurface}</div></div>}
           <div><div style={PETITES_CAPITALES}>{tr('Durée')}</div><div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>{dureeLisible(resume.dureeMin)}</div></div>
           <div><div style={PETITES_CAPITALES}>{tr('Sessions')}</div><div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>{resume.n}</div></div>
         </div>
@@ -358,7 +358,7 @@ function LigneReglage({ hass, r }) {
       moins={() => appel('select', 'select_option', { option: r.options[i - 1] })} plus={() => appel('select', 'select_option', { option: r.options[i + 1] })} />;
   } else {
     const v = r.valeur;
-    commande = <PasAPas valeur={String(v).replace('.', ',') + (r.unite ? ' ' + r.unite : '')} peutMoins={r.min == null || v - r.pas >= r.min} peutPlus={r.max == null || v + r.pas <= r.max}
+    commande = <PasAPas valeur={Number(v).toLocaleString(locale()) + (r.unite ? ' ' + r.unite : '')} peutMoins={r.min == null || v - r.pas >= r.min} peutPlus={r.max == null || v + r.pas <= r.max}
       moins={() => appel('number', 'set_value', { value: Math.round((v - r.pas) * 1000) / 1000 })} plus={() => appel('number', 'set_value', { value: Math.round((v + r.pas) * 1000) / 1000 })} />;
   }
   return (
@@ -607,6 +607,8 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
   const vac = domaine === 'vacuum' && resolved && resolved.vacuum && resolved.vacuum.available && resolved.vacuum.main === idRobot ? resolved.vacuum : null;
   const idCarte = domaine === 'vacuum' ? ((vac && vac.map) || (entVac.map && S[entVac.map] ? entVac.map : null) || (robot.soeurs.find(s => s.domaine === 'image') || {}).id || null) : null;
   const idSurface = (vac && vac.area_cleaned) || (robot.soeurs.find(s => s.domaine === 'sensor' && (s.classe === 'area' || /^(m²|m2|ft²)$/.test(s.unite || '')) && !/total/.test(s.texte)) || {}).id || null;
+  // L'unite reelle du capteur (m² ou ft² selon l'installation), jamais supposee.
+  const uniteSurface = (idSurface && S[idSurface] && S[idSurface].attributes && S[idSurface].attributes.unit_of_measurement) || 'm²';
   const idCam = domaine === 'vacuum' && entVac.camera && S[entVac.camera] ? entVac.camera : null;
 
   /* Les zones. Aspirateur : les pièces que le robot annonce, rattachées aux
@@ -715,7 +717,7 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
   const finie = sessions.find(x => x.issue !== 'en_cours') || null;
   const derniere = finie ? {
     titre: etiquetteJour(finie.debut, Date.now(), locale()) + ' ' + new Date(finie.debut).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }),
-    sous: [dureeLisible(finie.dureeMin), finie.surface != null ? finie.surface + ' m²' : null, motIssue(finie.issue)].filter(Boolean).join(' · '),
+    sous: [dureeLisible(finie.dureeMin), finie.surface != null ? finie.surface + ' ' + uniteSurface : null, motIssue(finie.issue)].filter(Boolean).join(' · '),
   } : null;
 
   return (
@@ -746,10 +748,10 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
       )}
 
       {actuel === 'accueil' && <OngletAccueil domaine={domaine} robot={robot} zones={zones} nChoisies={nChoisies} basculerZone={basculerZone} peutChoisir={peutChoisir} lancer={lancer} rentrer={rentrer}
-        resume={brut ? resume : null} derniere={derniere} prochain={prochain} alerte={alerteEntretien(usure)} aUneCarte={!!idCarte} allerA={setOnglet} />}
+        resume={brut ? resume : null} uniteSurface={uniteSurface} derniere={derniere} prochain={prochain} alerte={alerteEntretien(usure)} aUneCarte={!!idCarte} allerA={setOnglet} />}
       {actuel === 'zones' && <OngletZones domaine={domaine} robot={robot} zones={zones} nChoisies={nChoisies} basculerZone={basculerZone} peutChoisir={peutChoisir} lancer={lancer} carte={idCarte ? planDe() : null} camera={camera} />}
       {actuel === 'planning' && <OngletPlanning hass={hass} domaine={domaine} robot={robot} zones={zonesPlanifiables} planning={planning} />}
-      {actuel === 'historique' && <OngletHistorique domaine={domaine} sessions={sessions} resume={resume} chargee={!!brut} erreur={histoErreur} />}
+      {actuel === 'historique' && <OngletHistorique domaine={domaine} sessions={sessions} resume={resume} uniteSurface={uniteSurface} chargee={!!brut} erreur={histoErreur} />}
       {actuel === 'entretien' && <OngletEntretien hass={hass} pieces={usure} compteurs={compteurs} />}
       {actuel === 'reglages' && <PageReglages hass={hass} domaine={domaine} robot={robot} reglages={reglages} fiche={fiche} retour={() => setOnglet('accueil')} onFiche={onFiche ? () => onFiche(idRobot) : null} />}
     </div>
