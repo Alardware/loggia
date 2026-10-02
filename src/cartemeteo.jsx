@@ -97,7 +97,7 @@ export function CarteMeteo({ hass, onOpen = null }) {
           {pluie.proba != null && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <Fi i="raindrops" size={12} />
-              {pluie.proba + ' %' + (pluie.cumul ? ' · ' + tr('{n} mm', { n: pluie.cumul }) : '')}
+              {pluie.proba + ' %' + (pluie.cumul ? ' · ' + tr('{n} {u}', { n: pluie.cumul, u: pluie.uniteCumul }) : '')}
             </span>
           )}
           {pluie.vent != null && (

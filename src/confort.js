@@ -15,6 +15,7 @@
  * (tests/pieces_confort.test.mjs).
  */
 import { tr, locale } from './i18n.js';
+import { deCelsius } from './unites.js';
 
 const OK = 'var(--o-ok)', DOUX = 'var(--o-accent-soft)', BLEU = 'var(--o-cold)';
 const AMBRE = 'var(--o-warn)', ORANGE = 'var(--o-warn2)', ROUGE = 'var(--o-bad)';
@@ -121,10 +122,12 @@ export function scoreMesure(cle, v) {
 
 const nombre = (n, decimales) => Number(n).toLocaleString(locale(), { maximumFractionDigits: decimales, minimumFractionDigits: 0 });
 
-/** « 21,4 °C », « 47 % », « 612 ppm », « 34 dB ». */
-export function valeurConfort(cle, v) {
+/** « 21,4 °C », « 47 % », « 612 ppm », « 34 dB ». `v` arrive TOUJOURS en Celsius pour
+ * `temp` (comme pour tout le reste de ce module) ; `uniteT` ne sert qu'à reconvertir le
+ * chiffre affiché vers l'unité réelle de l'installation. */
+export function valeurConfort(cle, v, uniteT = 'C') {
   if (!lisible(v)) return null;
-  if (cle === 'temp') return nombre(v, 1) + ' °C';
+  if (cle === 'temp') return nombre(deCelsius(v, uniteT), 1) + ' °' + uniteT;
   if (cle === 'hum') return nombre(v, 0) + ' %';
   if (cle === 'co2') return nombre(v, 0) + ' ppm';
   if (cle === 'bruit') return nombre(v, 0) + ' dB';
@@ -145,10 +148,10 @@ export function verdictIndice(indice) {
 /* L'INDICE : la moyenne des notes, tirée vers le bas par la pire. Une pièce à
  * 21 °C n'est pas confortable si l'air y est confiné : la moyenne seule le
  * cacherait, la pire note seule ignorerait tout le reste. */
-export function indiceConfort(valeurs) {
+export function indiceConfort(valeurs, uniteT = 'C') {
   const mesures = MESURES_CONFORT
     .filter(cle => valeurs && lisible(valeurs[cle]))
-    .map(cle => ({ cle, ...HABILLAGE[cle](), valeur: valeurConfort(cle, valeurs[cle]), verdict: verdictMesure(cle, valeurs[cle]), score: scoreMesure(cle, valeurs[cle]) }));
+    .map(cle => ({ cle, ...HABILLAGE[cle](), valeur: valeurConfort(cle, valeurs[cle], uniteT), verdict: verdictMesure(cle, valeurs[cle]), score: scoreMesure(cle, valeurs[cle]) }));
   if (!mesures.length) return null;
   const notes = mesures.map(m => m.score);
   const moyenne = notes.reduce((a, n) => a + n, 0) / notes.length;

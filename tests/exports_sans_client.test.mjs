@@ -18,8 +18,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const racine = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const racine = fileURLToPath(new URL('..', import.meta.url));
 
 const parcourir = (dir, sortie = []) => {
   for (const nom of readdirSync(dir)) {

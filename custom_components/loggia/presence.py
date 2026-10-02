@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import HomeAssistant, callback
 
 from .regles import demarrer, niveau
+from .unites import depuis_celsius, unite_temperature
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -578,6 +579,16 @@ class LoggiaPresence:
                 cfg[k] = list(v)
             else:
                 cfg[k] = v
+        # Les defauts de chauffage (17, 20) sont penses en Celsius ; une
+        # installation jamais configuree et reglee en Fahrenheit merite une
+        # proposition dans SA langue, pas un ordre de chauffer trois fois plus
+        # fort que prevu. Une valeur deja enregistree vient de `brut` plus bas
+        # et n'est jamais touchee ici : le frontend l'a deja ecrite en reel.
+        unite = unite_temperature(self.hass)
+        if unite == "F":
+            chauffage = cfg["depart"]["chauffage"]
+            chauffage["consigne"] = round(depuis_celsius(chauffage["consigne"], "F"))
+            chauffage["confort"] = round(depuis_celsius(chauffage["confort"], "F"))
         if isinstance(brut, dict):
             for k, v in brut.items():
                 if k not in cfg:

@@ -118,9 +118,9 @@ test('la pluie attendue et le vent : ce que le service donne, et rien de plus', 
   const demain = { datetime: minuit(18), precipitation: 12, precipitation_probability: 95 };
 
   assert.deepEqual(pluieEtVent([auj, demain], { wind_speed: 13.6, wind_speed_unit: 'km/h' }, maintenant),
-    { proba: 70, cumul: 4.2, vent: 14, uniteVent: 'km/h' }, 'le cumul s’arrondit au dixieme, le vent a l’unite');
+    { proba: 70, cumul: 4.2, uniteCumul: 'mm', vent: 14, uniteVent: 'km/h' }, 'le cumul s’arrondit au dixieme, le vent a l’unite');
   assert.deepEqual(pluieEtVent([demain], {}, maintenant),
-    { proba: null, cumul: null, vent: null, uniteVent: 'km/h' }, 'demain n’est pas aujourd’hui : la ligne ne se dessine pas');
+    { proba: null, cumul: null, uniteCumul: 'mm', vent: null, uniteVent: 'km/h' }, 'demain n’est pas aujourd’hui : la ligne ne se dessine pas');
 
   // Chaque valeur peut manquer SEULE : un service donne parfois l'une sans l'autre.
   assert.equal(pluieEtVent([{ datetime: minuit(17), precipitation: 2 }], {}, maintenant).proba, null);
@@ -138,6 +138,8 @@ test('la pluie attendue et le vent : ce que le service donne, et rien de plus', 
   assert.equal(pluieEtVent([{ datetime: 'pas une date', precipitation: 3 }], {}, maintenant).cumul, null);
   assert.equal(pluieEtVent(null, null, maintenant).uniteVent, 'km/h', 'sans unite annoncee, le km/h de Home Assistant');
   assert.equal(pluieEtVent([], { wind_speed: 20, wind_speed_unit: 'mph' }, maintenant).uniteVent, 'mph', 'une install en mph lit des mph');
+  assert.equal(pluieEtVent(null, null, maintenant).uniteCumul, 'mm', 'sans unite annoncee, le mm de Home Assistant');
+  assert.equal(pluieEtVent([demain], { precipitation_unit: 'in' }, maintenant).uniteCumul, 'in', 'une install imperiale lit des pouces');
 });
 
 test('le maximum et le minimum sont ceux d’AUJOURD’HUI, en date locale — sinon rien', () => {

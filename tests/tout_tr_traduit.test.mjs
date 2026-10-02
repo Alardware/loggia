@@ -22,9 +22,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const RACINE = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const RACINE = fileURLToPath(new URL('..', import.meta.url));
 
 const parcourir = (dir, filtre, sortie = []) => {
   for (const nom of readdirSync(dir)) {

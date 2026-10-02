@@ -549,17 +549,34 @@ export const medCompanion = (haid) => {
 // Logos des services, en SVG local — le projet n'embarque aucune ressource
 // externe. Chaque `logo` se dessine dans un carre de 32, centre sur (0,0).
 
-// Capteurs d'énergie : configuration de l'utilisateur, puis ce que le tableau de
-// bord Énergie natif permet de déduire, puis les constantes en repli. Les cases
-// sans équivalent standard restent nulles et la vue ne les affiche pas.
+// Capteurs d'énergie : la configuration de l'utilisateur SI elle existe, sinon
+// ce que le tableau de bord Énergie natif permet de déduire. Les deux ne se
+// mélangent jamais : voir le commentaire d'enHaids(). Les cases sans
+// équivalent standard restent nulles et la vue ne les affiche pas.
 export function enHaids() {
-  const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
-  const fromPrefs = (r && r.available) ? r.haids : null;
   // loggiaEnt('energy') lit déjà loggia_energyHaids en priorité (cf. ENT_ALIAS).
   const cfg = loggiaEnt('energy', null);
+  // Dès que la fiche (Paramètres → Entités) a été enregistrée UNE FOIS, elle
+  // fait foi SEULE — exactement comme le véhicule et la batterie, qui n'ont
+  // jamais eu de repli automatique. Avant ce garde, un mélange des deux
+  // sources survivait : le tableau de bord Énergie NATIF de Home Assistant
+  // nomme ses capteurs différemment (`solarNow`/`gridNow`, pas
+  // `solarOutput`/`consoNow`), donc aucune clé vidée dans la fiche ne
+  // l'arrêtait jamais — un capteur retiré restait actif sur le schéma,
+  // sourcé par le tableau de bord HA plutôt que par ce qu'on avait réglé
+  // (02/10, signalé après un premier correctif incomplet). La fiche n'a pas
+  // besoin d'être complète : une seule clé enregistrée suffit à l'activer.
+  if (cfg && typeof cfg === 'object') {
+    const out = {};
+    Object.keys(cfg).forEach(k => { if (cfg[k]) out[k] = cfg[k]; });
+    return out;
+  }
+  // Rien n'a jamais été enregistré : on propose ce que le tableau de bord
+  // Énergie natif de Home Assistant permet de déduire.
+  const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
+  const fromPrefs = (r && r.available) ? r.haids : null;
   const out = {};
   if (fromPrefs) Object.keys(fromPrefs).forEach(k => { if (fromPrefs[k]) out[k] = fromPrefs[k]; });
-  if (cfg && typeof cfg === 'object') Object.keys(cfg).forEach(k => { if (cfg[k]) out[k] = cfg[k]; });
   return out;
 }
 // Appareils suivis : ceux de la configuration, sinon ceux que le tableau de bord

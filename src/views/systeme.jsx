@@ -17,7 +17,7 @@
  * `SystemeContent` est l'export par defaut, comme `views/meteo.jsx`. */
 import { useState, useEffect, useRef } from 'react';
 import { Fi, Gauge, Bascule, BottomSheet, TitreFeuille } from '../ui.jsx';
-import { tr } from '../i18n.js';
+import { tr, locale } from '../i18n.js';
 import { useSysHist } from '../historique.jsx';
 import { sysSensors, sysNames } from '../sysconf.js';
 import { LOGGIA_INDEX } from '../state.js';
@@ -27,6 +27,7 @@ import {
   depuisDemarrage, dureeCapteur, enOctets, tailleLisible, paireTailles, nombre,
 } from '../systeme.js';
 import { CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE } from '../styles.js';
+import { uniteTemp, versCelsius } from '../unites.js';
 
 /* Le gabarit des cartes de la maison, repris de `RM_CARD` (App.jsx) : l'icone
  * en haut a gauche, la metrique ou la bascule en haut a droite, le titre SOUS
@@ -327,7 +328,7 @@ const NIVEAUX_JOURNAL = {
  * La liste ne pese rien dans le calcul de la rangee (base nulle) : c'est le
  * voisin — ou la hauteur minimale de la carte — qui fixe la taille. */
 function PanneauJournal({ journal, indisponible }) {
-  const heure = (t) => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  const heure = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const mots = { info: tr('INFO'), avert: tr('AVERT.'), erreur: tr('ERREUR') };
   return (
     <div className="sys-journal" style={{ ...SYS_PANNEAU, display: 'flex', flexDirection: 'column' }}>
@@ -338,7 +339,7 @@ function PanneauJournal({ journal, indisponible }) {
             const [rgb, col] = NIVEAUX_JOURNAL[l.niveau] || NIVEAUX_JOURNAL.info;
             return (
               <div key={l.t + ':' + i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 0' }}>
-                <span style={{ width: 38, flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{heure(l.t)}</span>
+                <span style={{ minWidth: 38, flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', marginTop: 2, whiteSpace: 'nowrap' }}>{heure(l.t)}</span>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: col, flexShrink: 0, marginTop: 5 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.titre}</div>
@@ -441,9 +442,13 @@ function SystemeContent({ hass }) {
   const disquePct = disqueTotal > 0 && disqueUtilise != null ? disqueUtilise / disqueTotal * 100 : num(premier(H.disk, H.diskAlt));
   const swapUtilise = octetsDe(H.swapUsed), swapLibre = octetsDe(H.swapFree);
   const swapTotal = swapUtilise != null && swapLibre != null ? swapUtilise + swapLibre : null;
-  const temp = num(H.temp);
+  const tempAffiche = num(H.temp);
+  // Le capteur de température CPU suit l'unité de l'installation (°F aux
+  // États-Unis) : les seuils de systeme.js, eux, restent en Celsius.
+  const uniteT = uniteTemp(H.temp && S[H.temp] ? S[H.temp].attributes : null, hass);
+  const temp = versCelsius(tempAffiche, uniteT);
   const serieCpu = resumeSerie(seaux(hist[cpuId], releve));
-  const tuiles = tuilesMesures({ cpu, cpuMoyenne: serieCpu ? serieCpu.moyenne : null, memPct, memUtilise, memTotal, temp,
+  const tuiles = tuilesMesures({ cpu, cpuMoyenne: serieCpu ? serieCpu.moyenne : null, memPct, memUtilise, memTotal, temp, tempAffiche, uniteT,
     disquePct, disqueUtilise, disqueTotal, swapPct: num(H.swapPct), swapUtilise, swapTotal });
 
   // ── La machine
@@ -474,7 +479,7 @@ function SystemeContent({ hass }) {
   ].filter(Boolean);
   // Le journal defile : toute la journee, pas seulement ses huit dernieres lignes.
   const journal = journalSysteme({ erreurs: Array.isArray(erreursHA) ? erreursHA : null, logbook, maintenant, max: 60 });
-  const alertes = alertesSysteme({ memPct, memTexte: paireTailles(memUtilise, memTotal), disquePct, temp, enLigne, modules: modules.liste });
+  const alertes = alertesSysteme({ memPct, memTexte: paireTailles(memUtilise, memTotal), disquePct, temp, tempAffiche, uniteT, enLigne, modules: modules.liste });
   const series = [
     cpuId && { cle: 'cpu', nom: tr('Processeur'), points: hist[cpuId], actuel: cpu, rgb: 'var(--o-accent-rgb)', couleur: 'var(--o-accent-soft)' },
     memId && { cle: 'memoire', nom: tr('Mémoire'), points: hist[memId], actuel: num(memId), rgb: 'var(--o-purple-rgb)', couleur: 'var(--o-purple)' },

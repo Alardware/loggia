@@ -201,6 +201,18 @@ test('une tuile par mesure CONNUE, dans l’ordre de la maquette, a ses couleurs
   assert.deepEqual(tuilesMesures({ cpu: 75, memPct: 75, temp: 75, disquePct: 75, swapPct: 75 }).map(t => t.niveau), ['warn', 'ok', 'warn', 'ok', 'warn'], 'a chaque mesure SES seuils : 75 % de memoire ou de disque n’alarment personne');
 });
 
+test('un capteur CPU en Fahrenheit n’alerte plus en permanence (02/10)', () => {
+  // 35,6 °F = 2 °C : loin du seuil (70 °C), mais 70 °F plein la vue en Celsius.
+  const froid = tuilesMesures({ temp: 2, tempAffiche: 35.6, uniteT: 'F' })[0];
+  assert.equal(froid.valeur, '36 °F');
+  assert.equal(froid.sous, 'alerte à 176 °F', 'le seuil de 80 °C se dit dans l’unite de l’utilisateur');
+  assert.equal(froid.niveau, 'ok');
+  assert.deepEqual(alertesSysteme({ temp: 2, tempAffiche: 35.6, uniteT: 'F' }), [], 'pas d’alerte a 2 °C reel, meme affiche en F');
+  const chaud = alertesSysteme({ temp: 75, tempAffiche: 167, uniteT: 'F' });
+  assert.equal(chaud.length, 1, '75 °C reel declenche, meme affiche en F');
+  assert.equal(chaud[0].texte, 'Processeur à 167 °F — vérifier la ventilation.');
+});
+
 test('la charge minute par minute : une minute sans point reprend la derniere valeur connue', () => {
   const fin = 1000 * 60000;
   const debut = fin - 60 * 60000;

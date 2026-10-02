@@ -15,11 +15,14 @@
  * (tests/systeme_hoas.test.mjs).
  */
 import { tr, locale, comparerTextes } from './i18n.js';
+import { deCelsius } from './unites.js';
 
 /* ── Les seuils ──────────────────────────────────────────────────────────────
  * [à surveiller, critique]. La mémoire et le disque reprennent les seuils des
  * alertes historiques de la vue (85 / 92) ; la température suit la plage où un
- * processeur commence à brider (70) puis s'y tient (80). */
+ * processeur commence à brider (70) puis s'y tient (80) — toujours en
+ * Celsius : `temp` doit arriver déjà converti, quelle que soit l'unité du
+ * capteur (voir `tuilesMesures`/`alertesSysteme`, paramètre `uniteT`). */
 export const SEUILS = { cpu: [70, 90], memoire: [85, 92], temperature: [70, 80], disque: [85, 92], swap: [60, 85] };
 
 export function niveau(v, seuils) {
@@ -139,6 +142,7 @@ export function dureeCapteur(brut, maintenant) {
  * Une tuile par mesure CONNUE. La couleur est celle de la maquette, tuile par
  * tuile ; le niveau (seuils) la remplace quand la mesure demande un regard. */
 export function tuilesMesures({ cpu = null, cpuMoyenne = null, memPct = null, memUtilise = null, memTotal = null, temp = null,
+  tempAffiche = null, uniteT = 'C',
   disquePct = null, disqueUtilise = null, disqueTotal = null, swapPct = null, swapUtilise = null, swapTotal = null } = {}) {
   const pct = (v) => Math.max(0, Math.min(100, v));
   const out = [];
@@ -147,7 +151,10 @@ export function tuilesMesures({ cpu = null, cpuMoyenne = null, memPct = null, me
   const mem = memPct != null ? memPct : (memUtilise != null && memTotal > 0 ? memUtilise / memTotal * 100 : null);
   // Le pourcentage en métrique, comme les autres tuiles ; les tailles dessous.
   if (mem != null) out.push({ cle: 'memoire', icone: 'memory', titre: tr('Mémoire'), court: 'RAM', valeur: nombre(mem) + ' %', sous: paireTailles(memUtilise, memTotal), pct: pct(mem), rgb: 'var(--o-purple-rgb)', couleur: 'var(--o-purple)', niveau: niveau(mem, SEUILS.memoire) });
-  if (temp != null) out.push({ cle: 'temperature', icone: 'thermometer-half', titre: tr('Température CPU'), court: tr('Temp.'), valeur: nombre(temp) + ' °C', sous: tr('alerte à {n} °C', { n: SEUILS.temperature[1] }), pct: pct(temp), rgb: 'var(--o-warn2-rgb)', couleur: 'var(--o-warn2)', niveau: niveau(temp, SEUILS.temperature) });
+  if (temp != null) {
+    const ta = tempAffiche != null ? tempAffiche : temp;
+    out.push({ cle: 'temperature', icone: 'thermometer-half', titre: tr('Température CPU'), court: tr('Temp.'), valeur: nombre(ta) + ' °' + uniteT, sous: tr('alerte à {n} °{u}', { n: Math.round(deCelsius(SEUILS.temperature[1], uniteT)), u: uniteT }), pct: pct(temp), rgb: 'var(--o-warn2-rgb)', couleur: 'var(--o-warn2)', niveau: niveau(temp, SEUILS.temperature) });
+  }
   const disque = disquePct != null ? disquePct : (disqueUtilise != null && disqueTotal > 0 ? disqueUtilise / disqueTotal * 100 : null);
   if (disque != null) out.push({ cle: 'disque', icone: 'hdd', titre: tr('Disque'), court: tr('Disque'), valeur: nombre(disque) + ' %', sous: paireTailles(disqueUtilise, disqueTotal), pct: pct(disque), rgb: 'var(--o-ok-rgb)', couleur: 'var(--o-ok)', niveau: niveau(disque, SEUILS.disque) });
   const swap = swapPct != null ? swapPct : (swapUtilise != null && swapTotal > 0 ? swapUtilise / swapTotal * 100 : null);
@@ -355,12 +362,12 @@ export function journalSysteme({ erreurs = null, logbook = null, maintenant, max
  * Rare et actionnable : la mémoire et le disque qui débordent, le processeur qui
  * chauffe, la machine injoignable, un module en erreur. Une mise à jour en
  * attente n'en fait pas partie — elle se lit dans le panneau Versions. */
-export function alertesSysteme({ memPct = null, memTexte = null, disquePct = null, temp = null, enLigne = true, modules = [] } = {}) {
+export function alertesSysteme({ memPct = null, memTexte = null, disquePct = null, temp = null, tempAffiche = null, uniteT = 'C', enLigne = true, modules = [] } = {}) {
   const out = [];
   if (!enLigne) out.push({ cle: 'horsligne', niveau: 'bad', texte: tr('Machine hors ligne — dernier état inconnu.') });
   if (memPct != null && memPct >= SEUILS.memoire[0]) out.push({ cle: 'memoire', niveau: niveau(memPct, SEUILS.memoire), texte: tr('Mémoire à {n} %', { n: Math.round(memPct) }) + (memTexte ? ' (' + memTexte + ')' : '') + ' ' + tr('— le cœur risque un redémarrage forcé.') });
   if (disquePct != null && disquePct >= SEUILS.disque[0]) out.push({ cle: 'disque', niveau: niveau(disquePct, SEUILS.disque), texte: tr('Partition /data à {n} % — prévoir une purge de la base ou des sauvegardes.', { n: Math.round(disquePct) }) });
-  if (temp != null && temp >= SEUILS.temperature[0]) out.push({ cle: 'temperature', niveau: niveau(temp, SEUILS.temperature), texte: tr('Processeur à {n} °C — vérifier la ventilation.', { n: Math.round(temp) }) });
+  if (temp != null && temp >= SEUILS.temperature[0]) out.push({ cle: 'temperature', niveau: niveau(temp, SEUILS.temperature), texte: tr('Processeur à {n} °{u} — vérifier la ventilation.', { n: Math.round(tempAffiche != null ? tempAffiche : temp), u: uniteT }) });
   (modules || []).filter(m => m && m.erreur).forEach(m => out.push({ cle: 'module:' + m.slug, niveau: 'bad', texte: tr('{nom} est en erreur.', { nom: m.nom }) }));
   return out;
 }

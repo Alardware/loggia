@@ -87,6 +87,21 @@ test('les valeurs se disent avec leur unite', () => {
   assert.equal(valeurConfort('lumiere', 3), null);
 });
 
+test('la temperature se reconvertit vers l’unite reelle, jamais les autres mesures (02/10)', () => {
+  // 21,4 °C = 70,52 °F ; seul le texte change, le 21,4 reste la verite interne.
+  assert.equal(valeurConfort('temp', 21.4, 'F'), '70,5 °F');
+  assert.equal(valeurConfort('temp', 21.4), '21,4 °C', 'par defaut, toujours le Celsius');
+  assert.equal(valeurConfort('hum', 47, 'F'), '47 %', 'uniteT ignore pour tout sauf la temperature');
+  // L'indice et le verdict restent identiques quelle que soit l'unite affichee : seule
+  // la chaine `valeur` des mesures change, jamais le score ni le mot.
+  const c = indiceConfort({ temp: 21.4, hum: 47, co2: 612, bruit: 34 }, 'C');
+  const f = indiceConfort({ temp: 21.4, hum: 47, co2: 612, bruit: 34 }, 'F');
+  assert.equal(c.indice, f.indice);
+  assert.equal(c.verdict.t, f.verdict.t);
+  assert.equal(f.mesures.find(m => m.cle === 'temp').valeur, '70,5 °F');
+  assert.equal(c.mesures.find(m => m.cle === 'temp').valeur, '21,4 °C');
+});
+
 test('l’indice : la moyenne des notes, tiree vers le bas par la pire', () => {
   assert.deepEqual(MESURES_CONFORT, ['temp', 'hum', 'co2', 'bruit']);
   const tout = indiceConfort({ temp: 21.4, hum: 47, co2: 612, bruit: 34 });
@@ -133,7 +148,7 @@ test('le sonometre se reconnait a sa device_class — jamais a son unite', () =>
 test('la vue d’une piece : la barre de confort a la place des reglages rapides', () => {
   const vue = bloc('function RoomView(', NL + '}');
   assert.ok(vue.includes('{confortPiece && <BarreConfort confort={confortPiece} onOpen={onOpenComfort} />}'), 'la barre, et la fiche de confort d’un tap');
-  assert.ok(vue.includes('const confortPiece = indiceConfort({ temp: live && live.temp, hum: live && live.hum, co2: live && live.co2, bruit: bruitId ? parseFloat(S[bruitId].state) : null });'), 'les mesures de la piece, et son sonometre');
+  assert.ok(vue.includes('const confortPiece = indiceConfort({ temp: versCelsius(live && live.temp, uniteTPiece), hum: live && live.hum, co2: live && live.co2, bruit: bruitId ? parseFloat(S[bruitId].state) : null }, uniteTPiece);'), 'les mesures de la piece, et son sonometre, convertis vers Celsius');
   assert.ok(vue.includes('const bruitId = capteurBruitPiece(S, room);') && vue.includes('<RoomComfortModal piece={piece} hass={hass} bruitId={bruitId}'), 'le bruit va aussi dans la fiche');
   for (const ancien of ['setGroupBri', 'setGroupColor', 'toggleCovers', 'coverPct', 'LIGHT_PALETTE', 'className="o-bar"', "tr('Luminosité')", 'o-barlabel']) assert.ok(!vue.includes(ancien), ancien + ' : les reglages rapides ont quitte la vue');
   assert.ok(vue.includes("? tr('{n} lampes allumées', { n: lightsOn.length })"), 'l’en-tete garde son compte de lampes');
@@ -142,7 +157,7 @@ test('la vue d’une piece : la barre de confort a la place des reglages rapides
   assert.ok(zone.includes('find(z => rmNorm(z.name) === cible)') && zone.includes('return zone ? capteurBruit(zone.entities, S) : null;'), 'le sonometre se cherche dans la ZONE Home Assistant de la piece');
   assert.ok(app.includes('capteurBruitPiece((getHass() || {}).states, activeRoom)].filter(Boolean) : [];'), 'et il est relu en direct quand la piece est ouverte');
   const fiche = bloc('function RoomComfortModal(', NL + '}');
-  assert.ok(fiche.includes('const confort = indiceConfort(vals);') && fiche.includes("const overall = confort ? confort.verdict : { t: '—', c: 'var(--o-text2)' };") && fiche.includes("{tr('Indice de confort')} · {confort.indice} / 100"), 'la fiche dit le meme mot que la barre');
+  assert.ok(fiche.includes('const confort = indiceConfort(vals, uniteT);') && fiche.includes("const overall = confort ? confort.verdict : { t: '—', c: 'var(--o-text2)' };") && fiche.includes("{tr('Indice de confort')} · {confort.indice} / 100"), 'la fiche dit le meme mot que la barre');
   assert.ok(fiche.includes('const metrics = [COMFORT.temp, COMFORT.hum, COMFORT.co2, COMFORT.bruit].filter(m => vals[m.key] != null);'));
 });
 
