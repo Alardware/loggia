@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  JOURS_AGENDA, cleJour, debutDe, finDe, plageSemaine, joursAgenda, toucheJour, comptesParJour, evenementsAVenir, evenementsDuJour,
+  JOURS_AGENDA, cleJour, jourDeCle, moisPlus, debutDe, finDe, plageSemaine, joursAgenda, toucheJour, comptesParJour, evenementsDuJour,
 } from '../src/agenda.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -77,35 +77,168 @@ test('les comptes par jour de la bande', () => {
   assert.deepEqual(comptesParJour(null, null), {});
 });
 
-test('ce qui vient : pas ce qui est fini, du plus proche au plus lointain', () => {
-  const v = evenementsAVenir([salon, cafe, passe, colis, poubelles, tard, { summary: 'sans date' }], AUJ);
-  assert.deepEqual(v.map(e => e.summary), ['Livraison colis', 'Tard', 'Poubelles', 'Café', 'Salon'], 'le colis en cours reste, le dentiste de ce matin non, l’evenement sans date non plus');
-  assert.deepEqual(evenementsAVenir([colis], new Date(2026, 8, 16, 17, 30)).map(e => e.summary), [], 'fini a l’instant : fini');
-  assert.deepEqual(evenementsAVenir([colis], new Date(2026, 8, 16, 17, 29).getTime()).map(e => e.summary), ['Livraison colis'], 'un instant en millisecondes vaut une date');
-  assert.deepEqual(evenementsAVenir(null, AUJ), []);
-});
-
 test('les evenements d’un jour, dans l’ordre', () => {
   assert.deepEqual(evenementsDuJour([tard, salon, passe, colis], new Date(2026, 8, 16)).map(e => e.summary), ['Dentiste', 'Livraison colis', 'Tard']);
   assert.deepEqual(evenementsDuJour([tard, salon, passe, colis], new Date(2026, 8, 20)).map(e => e.summary), ['Salon']);
   assert.deepEqual(evenementsDuJour([tard, salon], new Date(2026, 8, 22)), []);
 });
 
-test('le rail : une carte Agenda a la place de deux — la date, la bande, ce qui vient', () => {
-  assert.ok(src.includes("const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'calendrier', 'rappels', 'agenda'];"), 'le mini-mois d’avant n’est pas revenu : « calendrier » est un widget EN OPTION (ADR 0041), présent par défaut depuis le 19/09 et que la croix retire');
-  // La meteo a rejoint le rail (ADR 0038), puis deux widgets en option (ADR 0041) ferment la liste des noms.
-  assert.ok(src.includes("moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo'), heure: tr('Heure'), calendrier: tr('Calendrier'), co2: 'CO₂' });"), 'les noms en edition');
-  assert.ok(src.includes("import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, villesDe } from './horloge.js';"), 'les widgets du temps viennent de horloge.js');
+test('le rail : UNE carte Agenda a la place de deux (02/10)', () => {
+  /* Deux cartes disaient la MEME semaine, chacune a moitie : « Calendrier »
+   * dessinait les jours sans leurs evenements, « Agenda » listait les
+   * evenements sans leurs jours. La maquette du 02/10 les reunit, et une
+   * feuille montre la semaine en heures ou le mois en grille.
+   *
+   * Le widget calendrier n'est pas supprime pour autant : il quitte les
+   * presents par defaut, reste ajoutable, et garde son mois et ses villes. */
+  assert.ok(src.includes("import { CarteAgenda, FeuilleAgenda } from './agendarail.jsx';"),
+    'la carte et la feuille viennent de leur propre fichier');
+  assert.ok(src.includes("const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'rappels', 'agenda'];"),
+    'le calendrier reste une section connue du rail, donc ajoutable');
+
   const d = bloc('function Dashboard(', NL + '}');
-  assert.ok(d.includes('const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda);') && d.includes('const plageAgenda = useMemo(() => plageSemaine(new Date(jourAuj)), [jourAuj]);'), 'tous les evenements de la semaine, d’aujourd’hui minuit');
+  assert.ok(d.includes('const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda);')
+    && d.includes('const plageCourte = useMemo(() => plageSemaine(new Date(jourAuj)), [jourAuj]);'),
+    'sept jours pour la carte du rail, d’aujourd’hui minuit');
+  /* La feuille peut demander PLUS : sa vue Mois a besoin du mois entier, sinon
+   * ses cases sortent vides — le rail n'en charge que sept jours. */
+  assert.ok(d.includes('const plageAgenda = plageDemandee || plageCourte;'),
+    'la feuille doit pouvoir elargir la plage');
+  assert.ok(d.includes('onPlage={setPlageDemandee}'), 'et la feuille doit pouvoir la demander');
   assert.ok(d.includes('const [jourChoisi, setJourChoisi] = useState(null);'), 'un jour se choisit');
-  assert.ok(d.includes('const montresAg = jourAg ? evenementsDuJour(agenda || [], jourAg) : aVenir.slice(0, 5);'), 'cinq lignes de ce qui vient, ou le jour choisi en entier');
-  assert.ok(d.includes('onClick={() => setJourChoisi(choisi ? null : k)} aria-pressed={choisi}'), 'la bande : un jour se choisit et se rend');
-  assert.ok(d.includes("background: auj ? 'var(--o-accent-fond)' : 'transparent'") && d.includes('{Array.from({ length: Math.min(n, 2) }).map((_, i) => <span key={i} style={{ width: 4, height: 4, borderRadius: \'50%\', background: \'var(--o-accent-soft)\' }} />)}'), 'aujourd’hui en pastille, un point par evenement (deux au plus) — le dessin du mini-mois');
-  assert.ok(d.includes("const railAgenda = calRailId ? railPanel(tr('Agenda'), sousAg, nAuj ? (nAuj > 1 ? tr('{n} AUJOURD’HUI', { n: nAuj }) : tr('1 AUJOURD’HUI')) : tr('RIEN AUJOURD’HUI'), nAuj ? '79,140,255' : OKRGB, [bandeAg, ...lignesAg]) : null;"), 'la carte, avec le compte du jour ; sans calendrier, rien');
-  assert.ok(d.includes("{jourAg ? tr('Rien ce jour-là') : tr('Rien de prévu ces 7 jours')}"), 'sans evenement, elle le dit');
-  assert.ok(d.includes("onClick={() => dc.ouvrir(calRailId)} aria-label={tr('Ouvrir le calendrier')}"), 'la date ouvre le calendrier, comme le mini-mois le faisait');
-  assert.ok(d.includes('moment: railMoment, rappels: railRappels, agenda: railAgenda,') && !d.includes('calendrier: railCal') && !d.includes('<CvCalendrier id={calRailId}'), 'le mini-mois a quitte le rail (la carte du catalogue reste)');
+  assert.ok(d.includes('const [agendaOuvert, setAgendaOuvert] = useState(false);'), 'la feuille a son etat');
+  assert.ok(d.includes('<CarteAgenda hass={dashHass} evenements={agenda || []} jourChoisi={jourChoisi}'),
+    'la carte recoit les evenements et le jour choisi');
+  assert.ok(d.includes('onOuvrir={() => setAgendaOuvert(true)} lever={leverAg} />'),
+    'le bouton ouvre la feuille, et la pastille doree porte le prochain soleil');
+  assert.ok(d.includes('moment: railMoment, rappels: railRappels, agenda: railAgenda,'),
+    'la carte occupe la section « agenda » du rail');
+  assert.ok(src.includes('{agendaOuvert && ('), 'la feuille se monte quand on l’ouvre');
+
+  /* Le prochain lever ou coucher n'est pas invente : sans `sun.sun`, pas de
+   * pastille. C'est la regle de tout le rail — rien sans source. */
+  assert.ok(d.includes("const solAg = prochainSoleil(etatsAcc && etatsAcc['sun.sun'], maintenantAg);"),
+    'le soleil vient de l’entite, ou rien');
+
   const o = bloc('  const ordreDe = (zone) => {', NL + '  };');
-  assert.ok(o.includes('.filter(s => base.indexOf(s) >= 0)'), 'un ordre enregistre avec une section inconnue l’ignore simplement (un vieux « calendrier » ne fait que ranger le widget en option, toujours absent tant qu’on ne l’ajoute pas)');
+  assert.ok(o.includes('.filter(s => base.indexOf(s) >= 0)'),
+    'un ordre enregistre avec une section inconnue l’ignore simplement');
+});
+
+test('la carte Agenda : la bande porte ses points, la feuille a ses deux vues (02/10)', () => {
+  const c = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+
+  // La bande : le jour CHOISI se remplit d'accent, AUJOURD'HUI se liseré.
+  assert.ok(c.includes("background: sel ? 'var(--o-accent-fond)' : 'var(--o-s2)'"),
+    'le jour choisi doit se remplir d’accent, comme toute puce choisie de Loggia');
+  assert.ok(c.includes("border: (!sel && cejour) ? '1px solid var(--o-accent-soft)' : '1px solid transparent'"),
+    'aujourd’hui et le jour choisi ne doivent pas se ressembler');
+
+  /* QUATRE maquettes avaient ete fournies, pas deux : carte et feuille, pour
+   * l'ordinateur ET pour le mobile. Un premier essai n'a repris que le mobile
+   * et l'a servi partout. La feuille choisit donc sa maquette sur `large`. */
+  assert.ok(c.includes("return large ? <FeuilleLarge {...commun} /> : <FeuilleEtroite {...commun} />;"),
+    'la feuille doit choisir entre la maquette d’ordinateur et celle du telephone');
+  assert.ok(c.includes("const [vue, setVue] = useState('semaine');"), 'la feuille ouvre sur la semaine');
+
+  // Sur ordinateur : trois vues, deux colonnes, la liste des agendas.
+  assert.ok(c.includes("[['mois', tr('Mois')], ['semaine', tr('Semaine')], ['jour', tr('Jour')]]"),
+    'l’ordinateur a TROIS vues : mois, semaine, jour');
+  assert.ok(c.includes("gridTemplateColumns: '248px minmax(0,1fr)'"), 'les deux colonnes de la maquette 1b');
+  assert.ok(c.includes("tr('Mes agendas')"), 'la liste des agendas, avec ses cases a cocher');
+  /* `useAgenda` marque le calendrier sous `_cal`, pas `calendar` : lire le
+   * mauvais nom ne plantait rien — la teinte retombait sur la meme pour tous
+   * et le nom du calendrier sortait vide. */
+  assert.ok(c.includes("const calDe = (e) => (e && (e._cal || e.calendar)) || null;"),
+    'le calendrier d’un evenement se lit sur `_cal`');
+  assert.ok(c.includes('evts.filter(e => !eteints.has(calDe(e)'),
+    'eteindre un agenda ne doit filtrer QU’A L’ECRAN, jamais chez Home Assistant');
+
+  // Le trait de l'heure ne se dessine que dans la colonne d'aujourd'hui.
+  assert.ok(c.includes("k === auj && maintenant.getHours() >= H0 && maintenant.getHours() <= H1"),
+    'le trait de l’heure ne se dessine qu’aujourd’hui, et dans la plage montree — ailleurs il mentirait');
+
+  /* Le mois ne peint QUE ce qu'on sait : Loggia ne lit que sept jours, et une
+   * case vide hors de cette plage dirait « rien » alors qu'on ne sait rien. */
+  /* Le mois ne se limite PLUS aux sept jours du rail : il demande sa propre
+   * plage, sinon ses cases sortaient vides — « ici il n'y a pas le texte ». */
+  assert.ok(c.includes('const plageMois = useMemo(() => {'), 'la vue mois calcule sa plage');
+  assert.ok(c.includes("if (vue !== 'mois') { onPlage(null); return undefined; }"),
+    'et la rend en repartant : la carte du rail n’a pas besoin du mois');
+});
+
+/* Quatre defauts trouves en relisant la feuille a l'ecran le 02/10 — aucun
+ * n'etait visible dans les sources, tous l'etaient dans le navigateur. */
+test('ce que la relecture a l’ecran a corrige', () => {
+  const c = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+
+  /* 1. Un evenement sur la journee entiere empruntait tr('Journee'), la cle du
+   * reglage de veille jour/nuit : elle se traduit « Daytime », « Tagsuber »,
+   * « De dia » — « en journee », et non « toute la journee ». La colonne de
+   * 42 px dit donc « Jour » ; « Toute la journee » reste en entier dessous. */
+  assert.ok(c.includes("heure: journee ? tr('Jour') :"), 'la colonne courte ne doit pas reprendre la cle du reglage jour/nuit');
+  assert.ok(!c.includes("tr('Journée')"), 'tr(\'Journée\') se traduit « en journée » : pas le sens voulu ici');
+  assert.ok(c.includes("plage: journee ? tr('Toute la journée')"), 'le texte entier reste sous le titre');
+
+  /* 2. Trois comptes ecrivaient « 1 evenements » : un compte qui peut valoir
+   * un passe par `trN`, qui prend ses deux gabarits. */
+  assert.ok(c.includes("trN(duJour.length, '{n} événement', '{n} événements')"), 'le compte du jour a besoin de son singulier');
+  assert.ok(c.includes("trN(reste, '+{n} autre ce jour-là', '+{n} autres ce jour-là')"), '« + 1 autres ce jour-là »');
+  assert.ok(c.includes("trN(duJour.length - MONTRES, '+{n} autre', '+{n} autres')"), '« + 1 autres » dans une case du mois');
+
+  /* 3. L'en-tete des colonnes de la grille des heures ne pouvait JAMAIS
+   * marquer le jour choisi : `sel` finissait par `&& false`, et la prop
+   * `jourSel` que l'appelant passait n'etait meme pas declaree. */
+  assert.ok(c.includes('function GrilleHeures({ colonnes, evts, hass, ouvert, setOuvert, onChoisir, jourSel = null, compacte = false })'),
+    'GrilleHeures doit declarer le `jourSel` que ses deux appelants lui passent');
+  assert.ok(c.includes('const sel = !!jourSel && k === cleJour(jourSel);'), 'le jour choisi se marque pour de bon');
+  assert.ok(!/&&\s*false/.test(c), 'une condition qui finit par « && false » ne decide plus rien');
+
+  /* 4. Au telephone, la barre de tete se repliait au petit bonheur : la fleche
+   * « suivant » ouvrait la deuxieme ligne et la croix tombait seule sur une
+   * troisieme, a gauche. Deux rangees nommees, la croix en dernier sur celle
+   * du titre — « rien a faire glisser » (v3.56.2). */
+  assert.ok(c.includes('if (!large) {') && c.includes("flexDirection: 'column', gap: 10, padding: '0 0 12px'"),
+    'le telephone a sa propre barre, en deux rangees');
+  assert.ok(!c.includes("flexWrap: large ? 'nowrap' : 'wrap'"), 'un repli automatique remet le desordre');
+  /* Et « + Événement » demandait 116 px la ou il en restait 86 : au telephone
+   * il se reduit a son « + », son nom porte par `aria-label`. */
+  assert.ok(c.includes("{large ? tr('Événement') : null}"), 'le mot ne tient pas au telephone');
+  assert.ok(c.includes("aria-label={tr('Nouvel événement')}"), '… mais le bouton garde son nom pour qui ne voit pas');
+});
+
+/* Les flèches de la feuille, « je ne peux pas faire défiler les jours et mois
+ * avec les flèches » (02/10). Deux calculs à sec, et le branchement relu. */
+test('les flèches : un jour, une semaine, un MOIS — et la clé se relit', () => {
+  /* `cleJour` écrit « année-mois-jour », le mois comptant de 0. La feuille
+   * cherchait cette clé dans les sept jours du rail : au-delà, `find` échouait
+   * et le jour retombait sur aujourd'hui — les flèches n'affichaient rien. */
+  assert.equal(cleJour(new Date(2026, 9, 17)), '2026-9-17');
+  assert.deepEqual(jourDeCle('2026-9-17'), new Date(2026, 9, 17));
+  assert.deepEqual(jourDeCle(cleJour(new Date(2027, 0, 3))), new Date(2027, 0, 3), 'un aller-retour par la clé ne perd rien');
+  assert.equal(jourDeCle('2026-9-17').getHours(), 0, 'un jour entier, pas l’heure qu’il est');
+  assert.equal(jourDeCle('2026-1-31'), null, 'le 31 février n’existe pas');
+  assert.equal(jourDeCle('2026-9'), null);
+  assert.equal(jourDeCle('hier'), null);
+  assert.equal(jourDeCle(null), null);
+
+  /* Un mois se franchit en MOIS : trente jours depuis le 31 janvier tombent en
+   * mars, et février serait sauté. */
+  assert.deepEqual(moisPlus(new Date(2026, 0, 31), 1), new Date(2026, 1, 28), 'le 31 janvier mène au 28 février, pas au 2 mars');
+  assert.deepEqual(moisPlus(new Date(2026, 2, 31), -1), new Date(2026, 1, 28), '… et en arrière de même');
+  assert.deepEqual(moisPlus(new Date(2028, 0, 31), 1), new Date(2028, 1, 29), 'une année bissextile a son 29');
+  assert.deepEqual(moisPlus(new Date(2026, 11, 15), 1), new Date(2027, 0, 15), 'décembre mène à janvier de l’année suivante');
+  assert.deepEqual(moisPlus(new Date(2026, 0, 15), -1), new Date(2025, 11, 15));
+
+  const c = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+  assert.ok(c.includes('const jourSel = useMemo(() => jourDeCle(choisi) || base, [base, choisi]);'),
+    'la feuille relit la clé au lieu de la chercher dans sept jours');
+  assert.ok(c.includes("vue === 'mois' ? moisPlus(jourSel, sens) : ajoute(jourSel, sens * (vue === 'jour' ? 1 : 7))"),
+    'un jour, une semaine, un mois — chacun son pas');
+  /* La bande du téléphone était figée sur les sept jours à partir
+   * d'aujourd'hui : elle ne bougeait pas d'un pouce, le titre non plus. */
+  assert.ok(c.includes('const lundi = useMemo(() => lundiDe(jourSel), [jourSel]);'),
+    'la bande du telephone suit le jour choisi, comme les sept colonnes de l’ordinateur');
+  assert.ok(c.includes('const choisi = cleJour(jourSel);'),
+    'la carte marque le jour qu’elle montre — pas un jour que sa bande ne porte pas');
 });

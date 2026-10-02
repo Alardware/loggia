@@ -1,30 +1,26 @@
-/* ── Les widgets en option du rail de l'Accueil : l'heure, le calendrier (ADR 0041), le CO₂ (ADR 0044) ──
+/* ── Les widgets en option du rail de l'Accueil : l'heure (ADR 0041), le CO₂ (ADR 0044) ──
  *
- * Quatre captures fournies le 17/09 (« sur le côté à l'accueil voici d'autres
- * widgets que l'on pourrait mettre, pour l'heure 2 styles, calendrier
- * également ») : des aiguilles sur de grands chiffres, trois tuiles heures ·
- * minutes · secondes, une semaine sous deux tuiles (agenda, soleil), et un
- * mois à côté de l'heure d'ici et d'ailleurs.
+ * Deux captures fournies le 17/09 (« sur le côté à l'accueil voici d'autres
+ * widgets que l'on pourrait mettre, pour l'heure 2 styles ») : des aiguilles
+ * sur de grands chiffres, et trois tuiles heures · minutes · secondes.
  *
  * Les captures donnent la DISPOSITION ; les teintes sont celles des cartes du
  * rail (`railPanel`, la carte météo) — une capture venue d'ailleurs ne donne
- * pas une palette. Le panneau violet devient un lavis de l'accent du thème.
+ * pas une palette.
  *
  * Tout ce qui se calcule vit dans `horloge.js`, testé à sec. Rien sans source :
- * pas d'entité `calendar`, pas de tuile Agenda ; pas de `sun.sun`, pas de tuile
- * soleil ; pas de météo, pas de température sous les aiguilles.
+ * pas de météo, pas de température sous les aiguilles.
+ *
+ * Le calendrier « semaine » et « mois » a vécu ici jusqu'à la décision 0132 :
+ * la carte Agenda de `agendarail.jsx` dit la même chose, et sa feuille va plus
+ * loin — « retire la du coup elle ne serre plus a rien ».
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { tr, trN, locale } from './i18n.js';
-import { BottomSheet, Fi, ChampSuggere, TitreFeuille } from './ui.jsx';
+import { tr, locale } from './i18n.js';
 import { weatherEntity, WeatherIco } from './wxutil.jsx';
 import { degres, estNuit, modeMeteo } from './meteo.js';
-import {
-  chiffresHeure, anglesAiguilles, heureVille, premierJourSemaine, semaineDe, grilleMois,
-  prochainSoleil, resumeAgendaDuJour, fuseauValide, villesDe, VILLES_MAX,
-} from './horloge.js';
+import { chiffresHeure, anglesAiguilles } from './horloge.js';
 import { pointsHistorique, barresJournee, etendue, reperesAxe } from './air.js';
-import { cleJour, comptesParJour, evenementsDuJour } from './agenda.js';
 import { CARTE_RAIL, petitesCapitales } from './styles.js';
 
 /* La surface des cartes du rail (voir `railPanel` dans App.jsx et cartemeteo.jsx). */
@@ -45,7 +41,6 @@ function useMaintenant(pas) {
   return t;
 }
 
-const heureLocale = (d) => d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 const sansPoint = (s) => String(s || '').replace(/\./g, '');
 
 /* ════════════ L'HEURE ════════════ */
@@ -109,179 +104,6 @@ export function HorlogeRail({ style = 'aiguilles', hass = null }) {
   return style === 'tuiles' ? <HeureTuiles /> : <HeureAiguilles hass={hass} />;
 }
 
-/* ════════════ LE CALENDRIER ════════════ */
-
-/* La pastille d'un jour : aujourd'hui cerclé de l'accent, le reste sur le fond des tuiles. */
-const pastilleJour = (n, auj, taille, fond, classe = null) => (
-  <span className={classe || undefined} style={{ ...(classe ? {} : { width: taille, height: taille }), borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
-    background: auj ? 'transparent' : fond, border: auj ? '2px solid var(--o-accent)' : '2px solid transparent',
-    fontSize: taille >= 28 ? 12 : 11.5, fontWeight: auj ? 800 : 600, fontVariantNumeric: 'tabular-nums', color: auj ? 'var(--o-text)' : 'var(--o-text1)' }}>{n}</span>
-);
-
-function CalendrierSemaine({ hass, calId, evenementsJour, evenements = null, onOpen }) {
-  const t = useMaintenant(60000);
-  const d = new Date(t);
-  const S = (hass && hass.states) || {};
-  const soleil = prochainSoleil(S['sun.sun'] || null, t);
-  const jours = semaineDe(d, premierJourSemaine(locale()));
-  /* Un point sous les jours qui portent un rendez-vous, et un jour qu'on
-   * choisit — les deux « non faits » de l'ADR 0041 (25/09).
-   *
-   * Le compte vient de la bande entière (`evenements`), pas du seul jour
-   * courant : c'est ce qui manquait. La prop reste FACULTATIVE — sans elle,
-   * pas de point, et la tuile Agenda garde son jour. Le calendrier ne lit que
-   * sept jours : un point n'apparaît donc que sur la semaine lue, jamais
-   * au-delà, et c'est mieux que d'en inventer.
-   *
-   * Choisir un jour ne change QUE la tuile du dessus. Retoucher le même jour
-   * revient à aujourd'hui : on ne se retrouve pas coincé sur un mardi. */
-  const [jourChoisi, setJourChoisi] = useState(null);
-  const comptes = evenements ? comptesParJour(evenements, jours.map(j => j.date)) : {};
-  const duJour = (jourChoisi && evenements) ? evenementsDuJour(evenements, jourChoisi) : evenementsJour;
-  const resume = resumeAgendaDuJour(duJour);
-  const ligneAgenda = resume.prochain
-    ? (resume.prochain.start && resume.prochain.start.dateTime ? heureLocale(new Date(resume.prochain.start.dateTime)) : tr('journée')) + ' · ' + (resume.prochain.summary || tr('Événement'))
-    : tr('Aucun événement aujourd’hui');
-  const tuiles = [];
-  if (calId) tuiles.push(
-    <button key="agenda" type="button" onClick={() => { if (onOpen) onOpen(calId); }} aria-label={tr('Ouvrir le calendrier')}
-      style={{ ...TUILE, padding: '10px 12px', border: 'none', textAlign: 'left', color: 'inherit', font: 'inherit', cursor: 'pointer' }}>
-      <div style={{ fontSize: 13, fontWeight: 700 }}>{tr('Agenda')}</div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ligneAgenda}</div>
-      {resume.autres > 0 && <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-accent-soft)', marginTop: 3 }}>{resume.autres > 1 ? tr('+ {n} autres', { n: resume.autres }) : tr('+ 1 autre')}</div>}
-    </button>);
-  if (soleil) tuiles.push(
-    <div key="soleil" style={{ ...TUILE, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>{soleil.type === 'coucher' ? tr('Coucher') : tr('Lever')}</div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>{heureLocale(soleil.date)}</div>
-      </div>
-      <span aria-hidden="true" style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, background: soleil.type === 'coucher' ? 'var(--o-warn2)' : 'var(--o-warn)' }} />
-    </div>);
-  return (
-    <div className="o-w-temps" style={{ ...CARTE_RAIL, padding: 10 }}>
-      {tuiles.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + tuiles.length + ', minmax(0, 1fr))', gap: 8, marginBottom: 10 }}>{tuiles}</div>}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 2, padding: '0 2px 2px' }}>
-        {jours.map(j => { const n = comptes[cleJour(j.date)] || 0; const choisi = !!jourChoisi && cleJour(jourChoisi) === cleJour(j.date); return (
-          /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
-          <div key={j.date.getTime()} aria-current={j.aujourdhui ? 'date' : undefined}
-            role={evenements ? 'button' : undefined} tabIndex={evenements ? 0 : undefined}
-            aria-label={evenements ? j.date.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }) + (n ? ' · ' + trN(n, tr('{n} événement'), tr('{n} événements')) : '') : undefined}
-            onClick={evenements ? () => setJourChoisi(p => (p && cleJour(p) === cleJour(j.date)) ? null : j.date) : undefined}
-            onKeyDown={evenements ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setJourChoisi(p => (p && cleJour(p) === cleJour(j.date)) ? null : j.date); } } : undefined}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: evenements ? 'pointer' : 'default' }}>
-            {pastilleJour(j.date.getDate(), j.aujourdhui || choisi, 30, 'var(--o-s2)')}
-            {/* Le point ne PREND PAS de place : la rangée garderait deux
-              * hauteurs selon qu'un jour porte un rendez-vous ou non. Il se
-              * pose dans un creux de 4 px, toujours là, coloré ou vide. */}
-            <span aria-hidden="true" style={{ height: 4, display: 'flex', alignItems: 'center', marginTop: -3 }}>
-              <span style={{ width: 4, height: 4, borderRadius: '50%', background: n ? 'var(--o-accent)' : 'transparent' }} />
-            </span>
-            <span style={{ ...PETITES_CAPITALES, color: j.aujourdhui ? 'var(--o-text)' : 'var(--o-text3)' }}>{sansPoint(j.date.toLocaleDateString(locale(), { weekday: 'short' }))}</span>
-          </div>
-        ); })}
-      </div>
-    </div>
-  );
-}
-
-function CalendrierMois({ villes }) {
-  const t = useMaintenant(60000);
-  const d = new Date(t);
-  const premier = premierJourSemaine(locale());
-  const semaines = grilleMois(d, premier);
-  const entetes = semaines[0].map(c => c.date);
-  /* `villes` arrive BRUT de l'agencement (`null` = jamais réglées) : la liste
-   * se valide ici, une fois par changement — pas à chaque rendu de l'Accueil,
-   * qui suit tous les états de la maison. */
-  const liste = useMemo(() => villesDe(villes), [villes]);
-  const lignes = liste.map(v => ({ ...v, heure: heureVille(d, v.fuseau, locale()) })).filter(v => v.heure);
-  const dateLongue = d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' });
-  return (
-    <div className="o-w-temps" style={{ ...CARTE_RAIL, padding: 10 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(100px, 1fr) minmax(0, 1.45fr)', gap: 10, alignItems: 'stretch' }}>
-        {/* L'heure d'ici, puis celle d'ailleurs : le panneau teinté de la capture, au lavis de l'accent. */}
-        <div style={{ borderRadius: 12, padding: '10px 8px', background: 'rgba(var(--o-accent-rgb),.14)', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8 }}>
-          <div className="o-w-mois-heure" style={{ fontWeight: 800, lineHeight: 1, letterSpacing: '-.01em', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{heureLocale(d)}</div>
-          {lignes.length > 0
-            ? <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                {lignes.map(v => (
-                  <div key={v.fuseau + v.nom} className="o-w-ville" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 5, fontSize: 11.5 }}>
-                    <span style={{ fontWeight: 600, color: 'var(--o-text2)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.nom}</span>
-                    <span style={{ fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{v.heure}</span>
-                  </div>
-                ))}
-              </div>
-            : <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', textAlign: 'center', lineHeight: 1.3, textTransform: 'capitalize' }}>{dateLongue}</div>}
-        </div>
-        <div role="grid" aria-label={d.toLocaleDateString(locale(), { month: 'long', year: 'numeric' })} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', rowGap: 3, alignItems: 'center', justifyItems: 'center', minWidth: 0 }}>
-          {entetes.map(x => (
-            <span key={'e' + x.getTime()} aria-hidden="true" style={{ ...PETITES_CAPITALES, fontSize: 9, letterSpacing: '.04em', paddingBottom: 2 }}>
-              <span className="o-w-j3">{sansPoint(x.toLocaleDateString(locale(), { weekday: 'short' }))}</span>
-              <span className="o-w-j1">{x.toLocaleDateString(locale(), { weekday: 'narrow' })}</span>
-            </span>
-          ))}
-          {semaines.flat().map(c => (
-            <span key={c.date.getTime()} role="gridcell" aria-current={c.aujourdhui ? 'date' : undefined} style={{ opacity: c.horsMois ? .28 : 1 }}>
-              {pastilleJour(c.date.getDate(), c.aujourdhui, 23, 'transparent', 'o-w-pm')}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function CalendrierRail({ style = 'semaine', hass = null, calId = null, evenementsJour = null, evenements = null, villes = null, onOpen = null }) {
-  return style === 'mois'
-    ? <CalendrierMois villes={villes} />
-    : <CalendrierSemaine hass={hass} calId={calId} evenementsJour={evenementsJour} evenements={evenements} onOpen={onOpen} />;
-}
-
-/* ════════════ LES VILLES DU CALENDRIER « MOIS » ════════════ */
-
-const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' };
-
-/* Les fuseaux que le moteur connaît, pour la saisie assistée ; un moteur ancien
- * n'en donne pas : le champ reste libre, et la validité se lit à la coche. */
-const fuseauxConnus = () => { try { return typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []; } catch { return []; } };
-
-export function FeuilleVilles({ villes, onEnregistrer, onClose }) {
-  const [lignes, setLignes] = useState(() => (villes || []).map((v, i) => ({ ...v, _k: 'v' + i })));
-  const [fuseaux] = useState(fuseauxConnus);
-  const poser = (k, patch) => setLignes(l => l.map(x => x._k === k ? { ...x, ...patch } : x));
-  const valides = lignes.filter(x => fuseauValide(x.fuseau));
-  return (
-    <BottomSheet onClose={onClose}>
-      {close => (<>
-        <TitreFeuille style={{ fontSize: 19, fontWeight: 700 }}>{tr('Heures d’ailleurs')}</TitreFeuille>
-        <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, margin: '4px 0 14px' }}>{tr('Jusqu’à quatre villes, à côté du mois. Le fuseau s’écrit comme « Europe/Paris » ; sans ville, le panneau montre la date.')}</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {lignes.map(x => {
-            const ok = fuseauValide(x.fuseau);
-            return (
-              <div key={x._k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input aria-label={tr('Nom affiché')} value={x.nom || ''} onChange={e => poser(x._k, { nom: e.target.value })} placeholder={tr('Nom affiché')} style={{ ...champ, flex: '0 1 34%' }} />
-                <ChampSuggere label={tr('Fuseau horaire')} value={x.fuseau || ''} onChange={v => poser(x._k, { fuseau: v.trim() })} placeholder="Europe/Paris"
-                  suggestions={fuseaux.map(f => ({ id: f, label: f }))} style={{ ...champ, flex: 1, borderColor: x.fuseau && !ok ? 'var(--o-bad)' : undefined }} />
-                <button type="button" onClick={() => setLignes(l => l.filter(y => y._k !== x._k))} aria-label={tr('Retirer') + ' ' + (x.nom || x.fuseau || '')} title={tr('Retirer')}
-                  style={{ width: 38, height: 38, flexShrink: 0, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-bad)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="cross-small" size={14} /></button>
-              </div>
-            );
-          })}
-          {lignes.length < VILLES_MAX && (
-            <button type="button" onClick={() => setLignes(l => [...l, { nom: '', fuseau: '', _k: 'n' + Date.now() }])}
-              style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}><Fi i="plus" size={12} />{tr('Ajouter une ville')}</button>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
-          <button type="button" onClick={() => { onEnregistrer(valides.map(x => ({ nom: String(x.nom || '').trim(), fuseau: x.fuseau }))); close(); }}
-            style={{ padding: '10px 18px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#06121f', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
-        </div>
-      </>)}
-    </BottomSheet>
-  );
-}
 
 /* ════════════ L'AIR : LE CO₂ (ADR 0044) ════════════ */
 

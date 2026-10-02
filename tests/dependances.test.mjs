@@ -92,6 +92,11 @@ const VERIFIE = {
    * fait rendre : la dependance tournerait en boucle. Seuls les chiffres
    * relancent l'effet. */
   'src/views/interrupteurs.jsx': ['onCompte'],
+  /* `ws` (03/10/2026) : la relecture des listes de taches tient a `pret`, un
+   * 0/1 qui dit si le lien websocket repond. `hass.callWS` est RELIE a chaque
+   * rendu — le mettre dans le tableau relancerait la lecture a chaque etat qui
+   * bouge dans la maison, c'est-a-dire sans arret. */
+  'src/rappelsrail.jsx': ['ws'],
 };
 
 const APOSTROPHE = String.fromCharCode(39);

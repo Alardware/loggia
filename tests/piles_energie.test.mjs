@@ -176,12 +176,19 @@ test('la pastille d’irradiance évite les DEUX badges fixes du schéma solaire
    * jamais vérifié — seul le badge de production (352×78) l'était. */
   const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
   const f = src.slice(src.indexOf('function SunArc('), src.indexOf('\nconst EN_LAYOUT_KEY'));
-  assert.ok(f.includes('let cy = Math.min(150, Math.max(22, sy - 4));'),
+  /* Deux corrections se sont croisées sur ce calcul le 02/10, et les deux
+   * étaient justes : le PLAFOND de hauteur (ici) et l'essai de l'AUTRE CÔTÉ
+   * (décision 0131). Le test porte donc sur l'intention, pas sur la façon de
+   * l'écrire — sinon il casserait à la première réécriture tout en laissant
+   * passer une vraie régression. */
+  assert.ok(/cy0? = Math\.min\(150,/.test(f),
     'cy n’est plus plafonné : la pastille peut redescendre jusqu’au bas du cadre');
-  assert.ok(f.includes('chevauche(478, 168, 110, 40)'),
-    'la pastille ne vérifie plus sa collision avec le badge réseau (pylône)');
-  assert.ok(f.includes('chevauche(352, 78, 132, 34)'),
-    'la pastille ne vérifie plus sa collision avec le badge de production');
+  const fixes = f.match(/const FIXES = \[([^\]]*\][^;]*)\];/);
+  assert.ok(fixes, 'la liste des pastilles fixes a disparu : plus rien ne dit ce qu’il faut éviter');
+  for (const [x, y] of [[352, 78], [352, 200], [478, 168]]) {
+    assert.ok(fixes[1].includes(`[${x}, ${y}]`),
+      `la pastille ne vérifie plus sa collision avec le badge ${x}×${y}`);
+  }
 });
 
 test('la nuit, le rond du soleil ne se pose plus sur le repère de lever ou de coucher (02/10)', () => {
@@ -216,12 +223,19 @@ test('sans capteur de production, les panneaux solaires ne s’affichent plus su
 
   const arc = src.slice(src.indexOf('function SunArc('), src.indexOf('\nconst EN_LAYOUT_KEY'));
   assert.ok(arc.includes('solarPresente = true'), 'SunArc a perdu le paramètre solarPresente');
-  assert.ok(arc.includes('{solarPresente && <Chip icon="panel"'), 'le chip de production ne vérifie plus solarPresente : un « 0 W » resterait affiché sans toit');
+  assert.ok(/\{solarPresente &&[^}]*<Chip icon="panel"/.test(arc),
+    'le chip de production ne vérifie plus solarPresente : un « 0 W » resterait affiché sans toit');
 
-  assert.ok(src.includes('<EnergyHouseSchema solarW={solarW} homeW={consoW} surplusW={surplusW} evW={evW} evBranche={evBranche} batW={batW} batSoc={batSoc} batPresente={batPresente} solarPresente={solarAvail} />'),
-    'le schéma de la maison ne reçoit plus solarAvail');
-  assert.ok(src.includes('<SunArc solarW={solarW} gridW={importW} exportW={surplusW} homeW={consoW} appW={avail(EN.appTotal) ? Math.round(num(EN.appTotal)) : null} solarPresente={solarAvail} />'),
-    'l’arc solaire ne reçoit plus solarAvail');
+  /* Les deux composants reçoivent `solarAvail`. On ne fige PAS la ligne
+   * entière : d'autres propriétés s'y ajoutent (le format d'écran, décision
+   * 0131), et un test qui recopie un appel JSX au caractère près se casse à
+   * chaque ajout sans rien protéger de plus. */
+  for (const nom of ['EnergyHouseSchema', 'SunArc']) {
+    const i = src.indexOf('<' + nom + ' ');
+    assert.notEqual(i, -1, `l’appel de ${nom} est introuvable`);
+    const appel = src.slice(i, src.indexOf('/>', i));
+    assert.ok(appel.includes('solarPresente={solarAvail}'), `${nom} ne reçoit plus solarAvail`);
+  }
 });
 
 test('une épingle s’écrit sur ce que la maison a, pas sur ce qu’un écran croyait', () => {
