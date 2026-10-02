@@ -22,8 +22,15 @@ const ParametresContent = lazy(() => import('./views/parametres.jsx').then(m => 
 const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling, siblingsOf, cameraModes } from './discovery.js';
 import { DOMAINES_ROBOT } from './robots.js';
-import { planAction as actionsPlan, availableActions as actionsAvailable, runPlan, actionCtx,
-  datesEvenement, finApresDebut, champsDepuisEvenement, peut, commander, commanderService } from './actions.js';
+import {
+  planAction as actionsPlan,
+  availableActions as actionsAvailable,
+  runPlan,
+  actionCtx,
+  peut,
+  commander,
+  commanderService,
+} from './actions.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
 import { deviceCard, presentableDevices, presentationSummary, cleCamera } from './present.js';
 import { healthReport, healthText } from './health.js';
@@ -41,7 +48,12 @@ import {
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
 import { BarreConfort } from './barreconfort.jsx';
-import { HorlogeRail, CalendrierRail, FeuilleVilles, Co2Rail } from './widgetsrail.jsx';
+import { HorlogeRail, Co2Rail } from './widgetsrail.jsx';
+import { CarteAgenda, FeuilleAgenda } from './agendarail.jsx';
+import { CarteRappels, BandeauCollecte, useTodos, marquerFait, ajouterTache, useRelecture } from './rappelsrail.jsx';
+import { listesTodo } from './todos.js';
+import { joursCollecte } from './collecte.js';
+import { NouvelEvenement } from './formevenement.jsx';
 import { pireCapteur, seuilCo2, ventilationVeille, voletsDeLaZone, actionAerer } from './air.js';
 import { TYPES_PRISE, NOMS_PRISE, typeDePrise, modePrise, motDuMode, animationPrise, couleurPrise, libelleType } from './prises.js';
 import { DESSINS_CAT, FONTE_CAT, NOMS_DESSINS } from './dessins.js';
@@ -49,7 +61,7 @@ import { applisDe, appelPourLancer, appliCourante, telecommandeDe } from './appl
 import { entreeFavorite, memeFavori, basculerFavori, appelPourJouer, phraseAlexa, cibleAlexa, TYPE_PHRASE } from './favlecture.js';
 import { integrationDe, telecommandePour, appelPourTouche } from './telecommande.js';
 import { marqueDe } from './marques.js';
-import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, villesDe } from './horloge.js';
+import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, prochainSoleil } from './horloge.js';
 import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile } from './confort.js';
 import { pilesMaison } from './piles.js';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
@@ -69,7 +81,7 @@ import { AmbientOverlay } from './ecranveille.jsx';
 import { Ico } from './icones.jsx';
 import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
 import { evenementCamera, detecteursDe, reduireDerniers, depuis } from './evenement.js';
-import { cleJour, plageSemaine, joursAgenda, comptesParJour, evenementsAVenir, evenementsDuJour } from './agenda.js';
+import { plageSemaine } from './agenda.js';
 import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS, ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, bordsDefilement, actionVide, scenarioVide, versEnregistrement } from './scenarios.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
@@ -7122,10 +7134,23 @@ const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];
  * croix les retire ; Rappels et Agenda (que le calendrier reprend) suivent,
  * masques. Cela ne vaut que pour un accueil jamais range : un agencement
  * enregistre reste le sien. */
-const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'calendrier', 'rappels', 'agenda'];
-const ACC_AJOUTEES_DEFAUT = ['heure', 'co2', 'calendrier'];
-const ACC_CACHES_DEFAUT = ['rappels', 'agenda'];
-const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo'), heure: tr('Heure'), calendrier: tr('Calendrier'), co2: 'CO₂' });
+/* Le widget « calendrier » a quitte cette liste le 02/10 : la carte Agenda
+ * disait la meme semaine, en mieux — « retire-la, du coup elle ne sert plus
+ * a rien ». */
+const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'rappels', 'agenda'];
+const ACC_AJOUTEES_DEFAUT = ['heure', 'co2'];
+/* L'agenda n'est plus masque par defaut : il REMPLACE le calendrier, qui
+ * lui s'affichait. Le masquer reviendrait a retirer une carte que tout le
+ * monde avait.
+ *
+ * Les RAPPELS non plus, depuis le 03/10 : la carte portait deux lignes qui ne
+ * concernaient pas grand monde (le repas du chat, le ramassage), et c'est pour
+ * ca qu'elle se cachait. Elle montre maintenant les listes de taches de Home
+ * Assistant, et n'existe PAS chez qui n'en a aucune : elle ne peut plus faire
+ * de bruit, donc elle n'a plus a se cacher. Un agencement deja enregistre
+ * garde le sien — on ne reecrit l'accueil de personne. */
+const ACC_CACHES_DEFAUT = [];
+const ACC_NOMS = () => ({ attention: tr('À surveiller'), favoris: tr('Favoris'), scenes: tr('Scénarios'), pieces: tr('Pièces'), cameras: tr('Caméras'), moment: tr('En ce moment'), rappels: tr('Rappels'), agenda: tr('Agenda'), meteo: tr('Météo'), heure: tr('Heure'), co2: 'CO₂' });
 /* Les identifiants d'un accueil enregistre avant le 15/09 : la glissiere du
  * heros a disparu (son contenu vit dans « En ce moment »), « En cours » est
  * devenu « En ce moment ». Un identifiant inconnu est simplement ignore. */
@@ -7268,9 +7293,50 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   // evenements — la bande des jours compte chacun d'eux, la liste ne montre
   // que ce qui vient. `jourAuj` change a minuit, et la plage avec lui.
   const jourAuj = new Date().toDateString();
-  const plageAgenda = useMemo(() => plageSemaine(new Date(jourAuj)), [jourAuj]);
+  /* Sept jours pour la carte du rail — c'est tout ce qu'elle montre. La
+   * feuille, elle, peut en demander plus : sa vue Mois a besoin du mois, sinon
+   * ses cases sortent vides. Elle rend la plage courte en se refermant. */
+  const [plageDemandee, setPlageDemandee] = useState(null);
+  const plageCourte = useMemo(() => plageSemaine(new Date(jourAuj)), [jourAuj]);
+  const plageAgenda = plageDemandee || plageCourte;
   const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda);
   const [jourChoisi, setJourChoisi] = useState(null); // la cle du jour choisi dans la bande, ou null
+  const [agendaOuvert, setAgendaOuvert] = useState(false);
+
+  /* ── Les rappels et la collecte (maquettes du 03/10) ───────────────────────
+   *
+   * Les RAPPELS sont les listes de taches de Home Assistant (`todo.*`). Leur
+   * contenu ne se pousse pas : l'entite ne porte que le NOMBRE a faire, et le
+   * detail s'obtient par service. `relireTodos` force une relecture apres
+   * chaque coche — sinon le geste semblerait avoir echoue.
+   *
+   * La COLLECTE se lit d'un CAPTEUR designe quand il y en a un (le plus
+   * riche : il sait dire « demain soir »), sinon d'un CALENDRIER dont le nom
+   * parle de collecte. Chacun branche la sienne ; sans source, pas de carte. */
+  const [tickTodos, relireTodos] = useRelecture();
+  const taches = useTodos(accueil && accueil.hass, tickTodos);
+  const etatsRappels = (accueil && accueil.hass && accueil.hass.states) || null;
+  const calCollecteId = useMemo(() => {
+    const S = etatsRappels || {};
+    return Object.keys(S).find(id => id.indexOf('calendar.') === 0
+      && /collect|ramassage|dechet|waste|afval|müll|basura|rifiut|smieci/i.test(
+        ((S[id].attributes || {}).friendly_name || id))) || null;
+  }, [etatsRappels]);
+  /* Le premier jour qui porte un bac, dans les sept qui viennent. Le bandeau
+   * ne se montre que la veille ou le jour meme — il decide, pas nous. */
+  const prochaineCollecte = useMemo(() => {
+    if (!calCollecteId) return null;
+    const j = joursCollecte((agenda || []).filter(e => e._cal === calCollecteId));
+    return j.find(x => x.types.length) || null;
+  }, [calCollecteId, agenda]);
+  /* « C'est sorti » se retient par DATE : le lendemain, le bandeau revient de
+   * lui-meme pour la collecte suivante, sans qu'on ait rien a effacer. */
+  const [collecteSortie, setCollecteSortie] = useState(null);
+  const cleCollecte = prochaineCollecte ? prochaineCollecte.date.toDateString() : '';
+  const bandeauCollecte = prochaineCollecte ? (
+    <BandeauCollecte prochain={prochaineCollecte} sorti={collecteSortie === cleCollecte}
+      onSorti={(v) => setCollecteSortie(v ? cleCollecte : null)} />
+  ) : null;
   /* ── L'accueil se compose : ordre et visibilité des sections ───────────────
    * En mode édition, chaque section se SAISIT et se glisse sur une autre de sa
    * colonne pour prendre sa place, et la croix la masque — elle réapparaît
@@ -7288,9 +7354,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
        * ci-dessus reste : il sert de repli tant qu'une carte n'a pas été
        * posée à la main, et il donne sa taille par défaut. */
       places: (v.places && typeof v.places === 'object') ? v.places : {},
-      /* Les widgets en option du rail (ADR 0041) : ceux qu'on a ajoutes, leur
-       * style, et les villes du calendrier « mois » (`null` = jamais reglees). */
-      ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [...ACC_AJOUTEES_DEFAUT], styles: (v.styles && typeof v.styles === 'object') ? v.styles : {}, villes: Array.isArray(v.villes) ? v.villes : null,
+      /* Les widgets en option du rail (ADR 0041) : ceux qu'on a ajoutes et
+       * leur style. Les villes du calendrier « mois » sont parties avec lui
+       * (decision 0132) : une vieille cle `villes` reste en base, inerte. */
+      ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [...ACC_AJOUTEES_DEFAUT], styles: (v.styles && typeof v.styles === 'object') ? v.styles : {},
       /* Les grilles des autres formats. Les cles ci-dessus restent celles de
        * l'ORDINATEUR : une installation existante retrouve donc son accueil
        * tel qu'elle l'a laisse, et ne decouvre `formats` que le jour ou
@@ -7566,7 +7633,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     ? saveGrille({ ajoutees: [...(grille.ajoutees || []).filter(x => x !== id), id] })
     : saveGrille({ caches: grille.caches.filter(x => (ACC_RENOMME[x] || x) !== id) });
   const choisirStyle = (id, style) => saveGrille({ styles: { ...(grille.styles || {}), [id]: style } });
-  const [villesOuvertes, setVillesOuvertes] = useState(false);
   // Drag d'une CARTE pièce (dans la section) : même mécanique que les sections
   // — souris directe, appui long au doigt — mais l'ordre est le sien
   // (accL.piecesOrdre). stopPropagation : sinon la section se saisit avec.
@@ -7762,9 +7828,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
                   {STYLES_WIDGETS[id].map(st => { const on = styleDe(grille.styles, id) === st; return (
                     <button key={st} onClick={() => choisirStyle(id, st)} aria-pressed={on} style={{ padding: '6px 11px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, flexShrink: 0, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>{NOMS_STYLES()[st]}</button>); })}
-                  <span style={{ flex: 1 }} />
-                  {id === 'calendrier' && styleDe(grille.styles, id) === 'mois' && (
-                    <button onClick={() => setVillesOuvertes(true)} title={tr('Heures d’ailleurs')} aria-label={tr('Heures d’ailleurs')} style={EDIT_BTN}><Fi i="globe" size={12} /></button>)}
                 </div>
               )}
               {/* Contenu inerte en édition — SAUF les sections qui portent
@@ -7860,9 +7923,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   // HA absent → vitrine de demo ; HA present sans camera → aucune camera, pas d'exemple
   const cams = (a && (!a.cams || !a.cams.length)) ? [] : (a && a.cams && a.cams.length) ? a.cams.map((cam, i) => tuileCamera({ ...cam, evenement: evenementDe(cam.haid) }, i, a.hass)) : CAMERAS();
   const _dLv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase: tr('Éteint'), color: 'var(--o-text3)', active: false, valueIcon: 'timer', valueText: '--:--', bar: null };
-  const _dPb = { label: tr('Poubelles'), iconKey: 'trash', phase: tr('Dans {j}j', { j: 2 }), color: 'var(--o-warn)', active: false, valueText: 'Mer. 16 Juin', dotsFilled: 12, dotsTotal: 14 };
   const M = (a && a.machines) || {};
-  const mLv = M.lv || (a ? null : _dLv), mPb = M.poubelles || (a ? null : _dPb);
+  /* `machines.poubelles` existe toujours — « En ce moment » s'en sert —, mais
+   * l'Accueil ne le lit plus ici : la collecte a sa propre carte (03/10). */
+  const mLv = M.lv || (a ? null : _dLv);
   const metricDiv = { flexShrink: 0, width: 1, background: 'var(--o-bd2)', margin: '4px 4px' };
   // ── Layout PC (≥1180) : rail « En cours / Rappels » accolé à la zone Pièces+Caméras ──
   const wideXL = useWide(1440); // tablette paysage (1180-1439) : rail plus étroit, cartes pièces prioritaires
@@ -8498,17 +8562,13 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               {rows}
             </div>
           ) : null;
-          const OKRGB = 'var(--o-ok-rgb)', AMBRGB = 'var(--o-warn-rgb)';
+          const OKRGB = 'var(--o-ok-rgb)';
           const momentVisibles = nEnCours > 8
             ? [...momentRows.slice(0, 8), railRow('plus', tr('{n} autres', { n: nEnCours - 8 }), tr('Tout est dans Objets'), '', 'var(--o-text3)', 'objets')]
             : momentRows;
-          const rappelsRows = [];
-          if (!a || (a.repasIn && a.repasLabel)) rappelsRows.push(railRow('rep', tr('Repas chat'), a ? a.repasLabel : 'Collation après-midi · 18g', a ? a.repasIn.replace('DANS ', '').toLowerCase() : '1h38', 'var(--o-warn)'));
-          if (mPb) rappelsRows.push(railRow('pb', tr('Poubelles'), mPb.valueText, mPb.phase, mPb.color));
           const railMoment = railPanel(tr('En ce moment'), tr('Lecture, machines, chauffage, volets en mouvement'),
             nEnCours ? (nEnCours > 1 ? tr('{n} EN COURS', { n: nEnCours }) : tr('1 EN COURS')) : tr('RIEN EN COURS'), nEnCours ? 'var(--o-accent-soft-rgb)' : OKRGB,
             nEnCours ? momentVisibles : [<div key="rien" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', padding: '6px 0 2px' }}>{tr('Rien ne tourne pour le moment.')}</div>]);
-          const railRappels = railPanel(tr('Rappels'), tr('Repas du chat et ramassage'), null, AMBRGB, rappelsRows);
           /* AGENDA : une carte a la place de deux (ADR 0032). La date du jour,
             * la bande des sept prochains jours — un point par evenement, un jour
             * se choisit — puis ce qui vient (cinq lignes), ou le jour choisi en
@@ -8521,40 +8581,39 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             return Object.keys(S).find(x => x.indexOf('calendar.') === 0 && S[x] && S[x].state !== 'unavailable') || null;
           })();
           const maintenantAg = new Date();
-          const joursAg = joursAgenda(maintenantAg);
-          const cleAuj = cleJour(maintenantAg);
-          const comptesAg = comptesParJour(agenda || [], joursAg);
-          const aVenir = evenementsAVenir(agenda || [], maintenantAg);
-          const jourAg = jourChoisi ? joursAg.find(j => cleJour(j) === jourChoisi) : null;
-          const montresAg = jourAg ? evenementsDuJour(agenda || [], jourAg) : aVenir.slice(0, 5);
-          const nAuj = evenementsDuJour(aVenir, maintenantAg).length;
-          const bandeAg = (
-            <div key="bande" className="o-agenda-bande" style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, margin: '6px 0 4px' }}>
-              {joursAg.map(d => {
-                const k = cleJour(d), n = comptesAg[k] || 0, auj = k === cleAuj, choisi = jourChoisi === k;
-                return (
-                  <button key={k} type="button" onClick={() => setJourChoisi(choisi ? null : k)} aria-pressed={choisi}
-                    aria-label={d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric' }) + (n ? ' · ' + n : '')}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '4px 0', border: 'none', borderRadius: 9, cursor: 'pointer', background: choisi ? 'var(--o-s2)' : 'transparent', color: 'inherit', font: 'inherit' }}>
-                    <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--o-text3)' }}>{d.toLocaleDateString(locale(), { weekday: 'narrow' })}</span>
-                    <span style={{ width: 24, height: 24, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: auj ? 'var(--o-accent-fond)' : 'transparent', fontSize: 12, fontWeight: auj ? 700 : 500, color: auj ? '#fff' : 'var(--o-text1)' }}>{d.getDate()}</span>
-                    <span aria-hidden="true" style={{ height: 4, display: 'flex', gap: 3 }}>{Array.from({ length: Math.min(n, 2) }).map((_, i) => <span key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--o-accent-soft)' }} />)}</span>
-                  </button>
-                );
-              })}
-            </div>
-          );
-          const lignesAg = montresAg.length
-            ? montresAg.map((e, i) => { const { jour, heure } = jourAgenda(e); return railRow('ag' + i, e.summary, jour, heure, 'var(--o-accent-soft)'); })
-            : [<div key="rien" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', padding: '6px 0 2px' }}>{jourAg ? tr('Rien ce jour-là') : tr('Rien de prévu ces 7 jours')}</div>];
-          const dateAg = maintenantAg.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' });
-          const sousAg = (
-            <button type="button" onClick={() => dc.ouvrir(calRailId)} aria-label={tr('Ouvrir le calendrier')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0, border: 'none', background: 'none', color: 'inherit', font: 'inherit', cursor: 'pointer' }}>
-              {dateAg.charAt(0).toUpperCase() + dateAg.slice(1)}<Fi i="angle-right" size={9} color="var(--o-text3)" />
-            </button>
-          );
-          const railAgenda = calRailId ? railPanel(tr('Agenda'), sousAg, nAuj ? (nAuj > 1 ? tr('{n} AUJOURD’HUI', { n: nAuj }) : tr('1 AUJOURD’HUI')) : tr('RIEN AUJOURD’HUI'), nAuj ? '79,140,255' : OKRGB, [bandeAg, ...lignesAg]) : null;
+          /* Le prochain lever ou coucher, s'il y a un `sun.sun`. Rien sans
+           * source : pas de soleil declare, pas de pastille. */
+          const solAg = prochainSoleil(etatsAcc && etatsAcc['sun.sun'], maintenantAg);
+          const leverAg = solAg
+            ? (solAg.type === 'lever' ? tr('Lever') : tr('Coucher')) + ' '
+              + solAg.date.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
+            : null;
+          /* RAPPELS (maquette du 03/10) : les listes de taches de Home
+            * Assistant — `todo.*`. Les categories sont celles de CHACUN, avec
+            * le nom que HA leur donne ; pas de liste chez vous, pas de carte. */
+          const railRappels = taches.length || listesTodo(etatsAcc || {}).length ? (
+            <CarteRappels hass={dashHass} taches={taches}
+              onFait={(t) => marquerFait(dashHass, t).then(relireTodos)}
+              onAjouter={(l, titre, quand) => ajouterTache(dashHass, l, titre, quand).then(ok => { relireTodos(); return ok; })} />
+          ) : null;
+          /* La carte unique de l'agenda (maquette du 02/10). Deux cartes
+           * disaient la meme semaine sans jamais la montrer ensemble : le
+           * calendrier dessinait les jours sans leurs evenements, l'agenda
+           * listait les evenements sans leurs jours. Voir `agendarail.jsx`. */
+          /* Le bandeau de collecte se pose AU-DESSUS de l'agenda, le jour ou
+            * il faut sortir les bacs et la veille au soir. Une carte complete
+            * avait d'abord ete faite, avec sa propre bande de sept jours :
+            * « ca fait dupliquer le calendrier » — celle de l'agenda suffit, et
+            * les collectes y figurent deja puisqu'elles viennent d'un
+            * calendrier. */
+          const railAgenda = calRailId ? (
+            <>
+              {bandeauCollecte}
+              <CarteAgenda hass={dashHass} evenements={agenda || []} jourChoisi={jourChoisi}
+                onChoisirJour={(k) => setJourChoisi(k === jourChoisi ? null : k)}
+                onOuvrir={() => setAgendaOuvert(true)} lever={leverAg} />
+            </>
+          ) : null;
           const camsHeader = (
             /* Même air que sous l'en-tête des Pièces (30/09) : un menu rend la
                ligne plus haute qu'un simple titre, et la première tuile venait
@@ -8615,7 +8674,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             moment: railMoment, rappels: railRappels, agenda: railAgenda,
             // En option (ADR 0041) : `Sec` ne les monte que si on les a ajoutes.
             heure: <HorlogeRail style={styleDe(grille.styles, 'heure')} hass={dashHass} />,
-            calendrier: <CalendrierRail style={styleDe(grille.styles, 'calendrier')} hass={dashHass} calId={calRailId} evenementsJour={evenementsDuJour(aVenir, maintenantAg)} evenements={aVenir} villes={grille.villes} onOpen={dc.ouvrir} />,
             co2: co2Pire ? <Co2Rail hass={dashHass} capteur={co2Pire} seuil={co2Pire.seuil} action={co2Action} onAgir={aerer} /> : null,
           };
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
@@ -8646,7 +8704,14 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
       {/* Fiches des cartes du catalogue (héros « En ce moment »). */}
       {dc.sheets}
       {histoOuvert && <FeuilleHistorique entrees={histo} onRestaurer={restaurer} onOublier={oublierHisto} onClose={() => setHistoOuvert(false)} />}
-      {villesOuvertes && <FeuilleVilles villes={villesDe(grille.villes)} onEnregistrer={(v) => saveGrille({ villes: v })} onClose={() => setVillesOuvertes(false)} />}
+      {agendaOuvert && (
+        /* `large` decide de la MAQUETTE : deux colonnes sur ordinateur (1b),
+         * une feuille sur telephone (2b). Quatre maquettes avaient ete
+         * fournies ; un premier essai n'avait repris que le mobile. */
+        <FeuilleAgenda hass={accueil && accueil.hass} evenements={agenda || []} jourChoisi={jourChoisi}
+          onChoisirJour={setJourChoisi} onClose={() => { setAgendaOuvert(false); setPlageDemandee(null); }}
+          large={wide} onPlage={setPlageDemandee} />
+      )}
       {pieceSheet && <FichePiece key={pieceSheet.nom} nom={pieceSheet.nom} compacte={pieceSheet.compacte} hass={dashHass} onEnregistrer={enregistrerPieceIci} onSupprimer={retirerPiece} onClose={() => setPieceSheet(null)} />}
     </main>
   );
@@ -9637,7 +9702,7 @@ const CHIP_CAR = (c) => (
   </g>
 );
 
-function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, evBranche = false, batW = 0, batSoc = null, batPresente = false, solarPresente = true }) {
+function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, evBranche = false, batW = 0, batSoc = null, batPresente = false, solarPresente = true, format = 'pc' }) {
   const netGridW = surplusW > 0 ? -surplusW : (homeW - solarW);
   const gridImporting = netGridW > 0, gridFlowW = Math.abs(netGridW);
   // Palette calquée sur la vidéo de réf : solaire=jaune, maison=rose, réseau=violet.
@@ -9675,7 +9740,9 @@ function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, 
         {evBranche && evW > 5 && <FlowCable color={C.ev} power={evW} arrow="flux-ev" d="M 648 477 L 648 532 L 643 538 L 520 560 L 510 560 L 373 508 L 373 462" />}
         {batPresente && <FlowCable color={C.bat} power={batFlowW} reverse={batCharge} arrow="flux-bat" d="M 610 464 L 641 458" />}
         {batPresente && <HouseChip x={585} y={410} color={C.bat} txt={batTxt} glyph={CHIP_BAT(C.bat)} />}
-        {evBranche && <HouseChip x={300} y={410} color={C.ev} txt={evW != null ? fmtChipW(evW) : '—'} glyph={CHIP_CAR(C.ev)} />}
+        {/* La voiture se pose sur le garage : c'est elle qui part en premier
+          * quand la place manque (02/10). */}
+        {evBranche && format !== 'tablette' && <HouseChip x={300} y={410} color={C.ev} txt={evW != null ? fmtChipW(evW) : '—'} glyph={CHIP_CAR(C.ev)} />}
       </svg>
     </div>
   );
@@ -9740,7 +9807,11 @@ function wxHourEq() {
     return (18 + 12 * Math.min(1, Math.max(0, tn))) % 24;
   } catch { const d = new Date(); return d.getHours() + d.getMinutes() / 60; }
 }
-function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null, solarPresente = true }) {
+/* Deux conditions, deux questions differentes : `solarPresente` dit s'il Y A
+ * du solaire chez l'utilisateur, `format` dit quel ECRAN regarde. Les pastilles
+ * ne retrecissent pas — a six sur un telephone elles se marchent dessus :
+ * « pc mets-les toutes, tablette enleve garage, et mobile enleve panneau ». */
+function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null, solarPresente = true, format = 'pc' }) {
   const [, tick] = useState(0);
   useEffect(() => { const iv = setInterval(() => tick(n => n + 1), 60000); return () => clearInterval(iv); }, []);
   const s = sunInfo();
@@ -9779,21 +9850,34 @@ function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null, so
       {day && solarW > 5 && <circle cx={sx} cy={sy} r="16" fill="none" stroke="rgba(255,209,102,.35)" strokeWidth="1.6">{!REDUCE_MOTION && <><animate attributeName="r" values="13;20;13" dur="3s" repeatCount="indefinite" /><animate attributeName="opacity" values=".5;.12;.5" dur="3s" repeatCount="indefinite" /></>}</circle>}
       {/* chips façon Helios : soleil=irradiance, panneaux=production, maison=conso, pylône=NET réseau */}
       {day && (() => {
-        // Deux pastilles fixes partagent la scène : production (352,78) et
-        // réseau (478,168). Celle-ci SUIT le soleil et doit éviter les deux ;
-        // au lever et au coucher, `sy` approche 205-235 et la plafonner à 150
-        // la garde dans le dôme de l'arc plutôt que de la laisser descendre
-        // jusqu'au pylône, en bas à droite (02/10, chevauchement signalé).
-        let cx = Math.min(510, Math.max(90, sx + (sx < 300 ? 70 : -70)));
-        let cy = Math.min(150, Math.max(22, sy - 4));
-        const chevauche = (fx, fy, dx, dy) => Math.abs(cx - fx) < dx && Math.abs(cy - fy) < dy;
-        if (chevauche(352, 78, 132, 34)) {
-          if (cy > 44) cy = 40; else cx = cx < 352 ? Math.max(90, cx - 120) : Math.min(510, cx + 120);
+        /* « Le capteur du soleil se superpose, place-le de l'autre côté » (02/10).
+         *
+         * Deux corrections se sont croisées sur ce calcul, et les deux étaient
+         * justes : le PLAFOND de hauteur, qui garde la pastille dans le dôme de
+         * l'arc au lieu de la laisser descendre jusqu'au pylône au lever et au
+         * coucher ; et l'essai de L'AUTRE CÔTÉ quand le premier est pris.
+         *
+         * Les trois positions fixes sont NOMMÉES ici. Le défaut d'origine
+         * n'était pas quelques pixels : c'était une liste incomplète, qui
+         * n'évitait que la production. En ajouter une sans l'écrire ici
+         * ramènerait le défaut par le même chemin. */
+        const FIXES = [[352, 78], [352, 200], [478, 168]];
+        const libre = (x, y) => FIXES.every(([fx, fy]) => Math.abs(x - fx) > 128 || Math.abs(y - fy) > 32);
+        const cotes = sx < 300 ? [78, -78] : [-78, 78];
+        const cy0 = Math.min(150, Math.max(22, sy - 4));
+        let cx = null;
+        let cy = cy0;
+        for (const d of cotes) {
+          const x = Math.min(510, Math.max(90, sx + d));
+          if (libre(x, cy0)) { cx = x; break; }
         }
-        if (chevauche(478, 168, 110, 40)) cx = Math.max(90, cx - 110);
+        if (cx === null) {                 // les deux côtés sont pris : on monte
+          cy = 26;
+          cx = Math.min(510, Math.max(90, sx + cotes[0]));
+        }
         return <Chip icon="sun" x={cx} y={cy} color="var(--o-gold)" txt={irr + ' W/m²'} />;
       })()}
-      {solarPresente && <Chip icon="panel" x={352} y={78} color="#ffa63c" txt={fmtKW(solarW)} live={solarW > 5} />}
+      {solarPresente && format !== 'mobile' && <Chip icon="panel" x={352} y={78} color="#ffa63c" txt={fmtKW(solarW)} live={solarW > 5} />}
       <Chip icon="house" x={352} y={200} color="var(--o-cyan)" txt={fmtKW(homeW)} />
       <Chip icon="pylon" x={478} y={168} color="var(--o-purple)" txt={(exportW > 5 ? '↑ ' : '↓ ') + fmtKW(exportW > 5 ? exportW : gridW)} live={(exportW > 5 ? exportW : gridW) > 5} />
     </svg>
@@ -10020,6 +10104,11 @@ function EnDemiJauge({ pct, label, couleur, aide = null }) {
 }
 
 function EnergieContent({ hass, edit = false, onEnt }) {
+  /* Le format decide du nombre de pastilles sur la maison : toutes sur
+   * l'ordinateur, sans la voiture sur tablette, sans le panneau au telephone.
+   * Meme calcul que partout ailleurs — la souris fait l'ordinateur, le doigt
+   * la tablette au-dela de 1180 px. */
+  const formatEn = formatEcran(useCoarse(), useWide(1180));
   const S = (hass && hass.states) || null;
   const num = (id, def = 0) => { const e = S && S[id]; if (!e || e.state == null || e.state === 'unknown' || e.state === 'unavailable') return def; const n = parseFloat(e.state); return isNaN(n) ? def : n; };
   const avail = (id) => { const e = S && S[id]; return !!(e && e.state != null && e.state !== 'unknown' && e.state !== 'unavailable' && !isNaN(parseFloat(e.state))); };
@@ -10176,8 +10265,8 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           <div className="o-en-well" style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 30%,var(--o-well0),var(--o-well2))', border: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10 }}>
             {/* Scène type Helios : arc du jour (géoloc domicile), soleil + irradiance, chips de flux */}
             <div className="o-en-scene" style={{ position: 'relative', width: '100%', aspectRatio: '600 / 250', margin: '0 auto' }}>
-              <EnergyHouseSchema solarW={solarW} homeW={consoW} surplusW={surplusW} evW={evW} evBranche={evBranche} batW={batW} batSoc={batSoc} batPresente={batPresente} solarPresente={solarAvail} />
-              <SunArc solarW={solarW} gridW={importW} exportW={surplusW} homeW={consoW} appW={avail(EN.appTotal) ? Math.round(num(EN.appTotal)) : null} solarPresente={solarAvail} />
+              <EnergyHouseSchema solarW={solarW} homeW={consoW} surplusW={surplusW} evW={evW} evBranche={evBranche} batW={batW} batSoc={batSoc} batPresente={batPresente} solarPresente={solarAvail} format={formatEn} />
+              <SunArc solarW={solarW} gridW={importW} exportW={surplusW} homeW={consoW} appW={avail(EN.appTotal) ? Math.round(num(EN.appTotal)) : null} solarPresente={solarAvail} format={formatEn} />
             </div>
           </div>
           <div className="o-en-kpis" style={{ display: 'flex', gap: 24, marginTop: 16, flexWrap: 'wrap' }}>
@@ -12128,136 +12217,6 @@ function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
  * le lendemain. C'est la convention iCalendar, et l'oublier fabrique un
  * événement de durée nulle que rien n'affiche.
  */
-function NouvelEvenement({ hass, cals, jour, evenement = null, onFait, onClose }) {
-  /* Le meme formulaire cree et modifie. Les champs sont les memes, les regles
-   * de date aussi ; seuls le titre du panneau, le libelle du bouton et la
-   * commande envoyee changent. En faire deux composants aurait duplique la
-   * validation, c'est-a-dire l'endroit ou une divergence ne se verrait pas. */
-  const edition = !!(evenement && evenement.uid);
-  const depart = edition ? champsDepuisEvenement(evenement) : null;
-  const dd = (n) => String(n).padStart(2, '0');
-  const isoJour = (d) => d.getFullYear() + '-' + dd(d.getMonth() + 1) + '-' + dd(d.getDate());
-  /* L'heure proposée est la prochaine demie, pas l'heure courante : personne ne
-   * crée un rendez-vous qui commence à 14h37. */
-  const prochaineDemie = () => {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() >= 30 ? 60 : 30, 0, 0);
-    return dd(d.getHours()) + ':' + dd(d.getMinutes());
-  };
-  const [cal, setCal] = useState(edition ? evenement._cal : cals[0]);
-  const [titre, setTitre] = useState(edition ? (evenement.summary || '') : '');
-  const [journee, setJournee] = useState(edition ? depart.journee : false);
-  const [dDebut, setDDebut] = useState(() => (edition ? depart.dDebut : isoJour(jour)));
-  const [dFin, setDFin] = useState(() => (edition ? depart.dFin : isoJour(jour)));
-  const [hDebut, setHDebut] = useState(() => (edition ? (depart.hDebut || prochaineDemie()) : prochaineDemie()));
-  const [hFin, setHFin] = useState(() => {
-    if (edition && depart.hFin) return depart.hFin;
-    const [h, m] = prochaineDemie().split(':');
-    return dd((Number(h) + 1) % 24) + ':' + m;
-  });
-  const [erreur, setErreur] = useState(null);
-  const [envoi, setEnvoi] = useState(false);
-
-  const nomCal = (id) => ((((hass && hass.states) || {})[id] || {}).attributes || {}).friendly_name || id.replace('calendar.', '');
-
-  const envoyer = async () => {
-    const t = titre.trim();
-    if (!t) { setErreur(tr('Il faut un titre.')); return; }
-    /* Une fin avant le début est le seul cas que Home Assistant accepte sans
-     * broncher tout en ne créant rien de visible. On le refuse ici, où l'on
-     * peut encore le dire. */
-    if (!finApresDebut(journee, dDebut, hDebut, dFin, hFin)) {
-      setErreur(tr('La fin doit venir après le début.'));
-      return;
-    }
-    const dates = datesEvenement(journee, dDebut, hDebut, dFin, hFin);
-    setErreur(null); setEnvoi(true);
-    /* `planAction` + `runPlan` plutôt que `commander` : celui-ci ne rend pas de
-     * promesse — il signale ses échecs au toast global et rend la valeur
-     * envoyée. Un formulaire, lui, doit savoir QUAND c'est fait, pour se fermer
-     * et rafraîchir la liste, et POURQUOI ça ne l'est pas, pour le dire sur
-     * place plutôt que dans un bandeau qui passe. */
-    /* `calendar/event/update` prend les nouvelles valeurs dans un OBJET
-     * `event`, pas a plat — le serveur le dit lui-meme si on l'oublie. Et
-     * `recurrence_id`, quand il existe, dit QUELLE occurrence d'une serie on
-     * touche : sans lui, Home Assistant ne saurait pas laquelle. */
-    const p = edition
-      ? actionsPlan(evenement._cal, 'modifier_evenement', evenement.uid, actionCtx(hass),
-        Object.assign({ event: { summary: t, ...dates } },
-          evenement.recurrence_id ? { recurrence_id: evenement.recurrence_id } : null))
-      : actionsPlan(cal, 'creer_evenement', t, actionCtx(hass), dates);
-    if (!p.ok) { setEnvoi(false); setErreur(p.reason || tr('Home Assistant a refusé.')); return; }
-    const r = await runPlan(hass, p);
-    setEnvoi(false);
-    if (!r || !r.ok) { setErreur((r && r.reason) ? String(r.reason) : tr('Home Assistant a refusé.')); return; }
-    onFait();
-  };
-
-  const champ = {
-    padding: '10px 12px', borderRadius: 12, background: 'var(--o-s2)', color: 'var(--o-text)',
-    border: 'var(--o-bw,1px) solid var(--o-bd2)', fontSize: 13, fontWeight: 600,
-    boxSizing: 'border-box', minHeight: 44, width: '100%',
-  };
-  const legende = { fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78, marginBottom: 5 };
-
-  return (
-    <div style={{ marginBottom: 14, padding: 13, borderRadius: 16, background: 'var(--o-s1)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ flex: 1, fontSize: 13, fontWeight: 800 }}>{edition ? tr('Modifier l’événement') : tr('Nouvel événement')}</span>
-        <button onClick={onClose} aria-label={tr('Fermer')}
-          style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'var(--o-s2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Fi i="cross" size={12} />
-        </button>
-      </div>
-
-      <div>
-        <div style={legende}>{tr('TITRE')}</div>
-        {/* `autoFocus` délibéré : ce panneau s'ouvre sur un clic, pour saisir un
-          * titre. La règle vise les champs focalisés au CHARGEMENT d'une page. */}
-        <input value={titre} autoFocus onChange={e => setTitre(e.target.value)}
-          aria-label={tr('Titre de l’événement')} placeholder={tr('Dentiste, dîner, anniversaire…')} style={champ} />
-      </div>
-
-      {!edition && cals.length > 1 && (
-        <div>
-          <div style={legende}>{tr('AGENDA')}</div>
-          <ListeChoix value={cal} onChange={setCal} label={tr('Agenda')} options={cals.map(k => ({ id: k, label: nomCal(k) }))} style={champ} />
-        </div>
-      )}
-
-      <button onClick={() => setJournee(v => !v)} aria-pressed={journee}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', minHeight: 44, borderRadius: 12, cursor: 'pointer',
-          border: 'var(--o-bw,1px) solid var(--o-bd2)', background: journee ? 'rgba(var(--o-accent-rgb),.12)' : 'transparent', color: 'var(--o-text1)', textAlign: 'left' }}>
-        <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: journee ? 'var(--o-accent-fond)' : 'transparent', border: journee ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-          {journee && <Fi i="check" size={11} color="#fff" />}
-        </span>
-        <span style={{ fontSize: 13, fontWeight: 700 }}>{tr('Journée entière')}</span>
-      </button>
-
-      <div style={{ display: 'flex', gap: 10 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={legende}>{tr('DÉBUT')}</div>
-          <input type="date" value={dDebut} onChange={e => setDDebut(e.target.value)} aria-label={tr('Date de début')} style={champ} />
-          {!journee && <input type="time" value={hDebut} onChange={e => setHDebut(e.target.value)} aria-label={tr('Heure de début')} style={{ ...champ, marginTop: 7 }} />}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={legende}>{tr('FIN')}</div>
-          <input type="date" value={dFin} onChange={e => setDFin(e.target.value)} aria-label={tr('Date de fin')} style={champ} />
-          {!journee && <input type="time" value={hFin} onChange={e => setHFin(e.target.value)} aria-label={tr('Heure de fin')} style={{ ...champ, marginTop: 7 }} />}
-        </div>
-      </div>
-
-      {erreur && <div role="alert" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{erreur}</div>}
-
-      <button onClick={envoyer} disabled={envoi}
-        style={{ padding: '12px 16px', minHeight: 44, borderRadius: 14, border: 'none', cursor: envoi ? 'default' : 'pointer',
-          background: 'var(--o-accent-fond)', color: '#fff', fontSize: 13, fontWeight: 800, opacity: envoi ? .6 : 1 }}>
-        {envoi ? tr('Envoi…') : edition ? tr('Enregistrer') : tr('Créer l’événement')}
-      </button>
-    </div>
-  );
-}
 
 function FeuilleCalendrier({ hass, onClose }) {
   const S = (hass && hass.states) || {};
@@ -12850,7 +12809,6 @@ function BiblioView() {
       <Titre i="clock" c="var(--o-accent-soft)" t={tr('Widgets du rail')} />
       <Rangee>
         <Item l={tr('Heure')} w={280} h={200}><HorlogeRail hass={hb} /></Item>
-        <Item l={tr('Calendrier')} w={280} h={200}><CalendrierRail hass={hb} calId="calendar.biblio" evenementsJour={[]} /></Item>
         <Item l={tr('CO₂')} w={280} h={200}><Co2Rail hass={hb} capteur={{ id: 'sensor.biblio_co2', nom: 'CO₂ séjour', piece: 'Séjour', valeur: 640 }} seuil={1400} /></Item>
       </Rangee>
 

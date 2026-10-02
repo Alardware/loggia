@@ -107,9 +107,9 @@ test('le geste pour aérer : la ventilation de la veille, sinon les volets de la
 });
 
 test('le branchement : en option dans le rail, rien sans capteur, la couleur dit l’état', () => {
-  assert.deepEqual(WIDGETS_OPTION, ['heure', 'calendrier', 'co2']);
+  assert.deepEqual(WIDGETS_OPTION, ['heure', 'co2'], 'le calendrier les a quittes le 02/10 (decision 0132)');
   const app = lire('src', 'App.jsx');
-  assert.ok(app.includes("const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'calendrier', 'rappels', 'agenda'];"));
+  assert.ok(app.includes("const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'rappels', 'agenda'];"));
   /* Le seuil affiché est celui de la piece retenue, pas celui de la maison
    * (ADR 0044, son « non fait » — 25/09) : une piece peut avoir le sien, et
    * `pireCapteur` classe alors sur l'ecart au seuil. Sans reglage, chaque

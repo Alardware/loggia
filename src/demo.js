@@ -72,9 +72,14 @@ const lieu = (fr) => (LIEUX[fr] && LIEUX[fr][LANGUE_DEMO]) || fr;
 
 /* Les deux cameras. Une fonction, pas une table : leurs noms sont des lieux,
  * et la langue n'est connue qu'apres l'import. */
+/* Quatre cameras, dont une hors ligne : assez pour que la vue Securite
+ * ressemble a une vraie maison et que « cameras par ligne » ait un sens, et la
+ * hors-ligne garde son role — c'est elle que la carte « A surveiller » signale. */
 const CAMERAS = () => [
   { name: lieu('Jardin'), online: false },
   { name: lieu('Entrée'), haid: 'camera.entree', online: true },
+  { name: lieu('Garage'), haid: 'camera.garage', online: true },
+  { name: lieu('Terrasse'), haid: 'camera.terrasse', online: true },
 ];
 
 /* Les noms d'APPAREILS de la maison factice (23/09/2026).
@@ -95,6 +100,12 @@ const APPAREILS = {
   'humidité': { en: 'humidity', de: 'Luftfeuchte', nl: 'luchtvochtigheid', it: 'umidità', es: 'humedad', pl: 'wilgotność' },
   'température': { en: 'temperature', de: 'Temperatur', nl: 'temperatuur', it: 'temperatura', es: 'temperatura', pl: 'temperatura' },
   'Alarme': { en: 'Alarm', de: 'Alarm', nl: 'Alarm', it: 'Allarme', es: 'Alarma', pl: 'Alarm' },
+  'Collectes': { en: 'Waste collection', de: 'Abfuhr', nl: 'Inzameling', it: 'Raccolta', es: 'Recogida', pl: 'Odbiór odpadów' },
+  'Recyclables': { en: 'Recycling', de: 'Wertstoffe', nl: 'Recyclebaar', it: 'Riciclabili', es: 'Reciclables', pl: 'Surowce wtórne' },
+  'Verre': { en: 'Glass', de: 'Glas', nl: 'Glas', it: 'Vetro', es: 'Vidrio', pl: 'Szkło' },
+  'Ordures ménagères': { en: 'Household waste', de: 'Restmüll', nl: 'Restafval', it: 'Rifiuti indifferenziati', es: 'Basura doméstica', pl: 'Odpady zmieszane' },
+  'Repas du matin': { en: 'Morning meal', de: 'Morgenmahlzeit', nl: 'Ochtendmaaltijd', it: 'Pasto del mattino', es: 'Comida de la mañana', pl: 'Poranny posiłek' },
+  'Repas du soir': { en: 'Evening meal', de: 'Abendmahlzeit', nl: 'Avondmaaltijd', it: 'Pasto della sera', es: 'Comida de la noche', pl: 'Wieczorny posiłek' },
   'Alarme : armement en partant': { en: 'Alarm: arm on leaving', de: 'Alarm: beim Verlassen scharf', nl: 'Alarm: inschakelen bij vertrek', it: 'Allarme: attiva quando esci', es: 'Alarma: armar al salir', pl: 'Alarm: uzbrojenie przy wyjściu' },
   'Apéro': { en: 'Drinks', de: 'Aperitif', nl: 'Borrel', it: 'Aperitivo', es: 'Aperitivo', pl: 'Aperitif' },
   'Arrivée d’eau': { en: 'Water inlet', de: 'Wasserzulauf', nl: 'Wateraanvoer', it: 'Ingresso acqua', es: 'Entrada de agua', pl: 'Dopływ wody' },
@@ -165,8 +176,6 @@ const APPAREILS = {
   'Radiateur bureau hors gel': { en: 'Office radiator frost protection', de: 'Heizkörper Büro Frostschutz', nl: 'Radiator kantoor vorstbeveiliging', it: 'Radiatore studio antigelo', es: 'Radiador despacho antihielo', pl: 'Grzejnik biuro ochrona przed mrozem' },
   'Radiateur chambre': { en: 'Bedroom radiator', de: 'Heizkörper Schlafzimmer', nl: 'Radiator slaapkamer', it: 'Radiatore camera', es: 'Radiador dormitorio', pl: 'Grzejnik sypialnia' },
   'Radiateur salon': { en: 'Living room radiator', de: 'Heizkörper Wohnzimmer', nl: 'Radiator woonkamer', it: 'Radiatore soggiorno', es: 'Radiador salón', pl: 'Grzejnik salon' },
-  'Repas du matin': { en: 'Morning meal', de: 'Morgenmahlzeit', nl: 'Ochtendmaaltijd', it: 'Pasto del mattino', es: 'Comida de la mañana', pl: 'Poranny posiłek' },
-  'Repas du soir': { en: 'Evening meal', de: 'Abendmahlzeit', nl: 'Avondmaaltijd', it: 'Pasto della sera', es: 'Comida de la tarde', pl: 'Wieczorny posiłek' },
   'Réseau': { en: 'Grid', de: 'Netz', nl: 'Net', it: 'Rete', es: 'Red', pl: 'Sieć' },
   'Réservoir de croquettes': { en: 'Kibble tank', de: 'Futterbehälter', nl: 'Brokkenreservoir', it: 'Serbatoio crocchette', es: 'Depósito de pienso', pl: 'Zbiornik karmy' },
   'Réveil': { en: 'Wake up', de: 'Aufwachen', nl: 'Opstaan', it: 'Sveglia', es: 'Despertar', pl: 'Pobudka' },
@@ -318,6 +327,7 @@ function etatsInitiaux() {
     'sensor.vigilance_meteo': s('Jaune', { friendly_name: 'Vigilance météo', vent_violent: 'Jaune', orages: 'Jaune' }),
     'person.camille': s('home', { friendly_name: 'Camille' }),
     'person.alex': s('not_home', { friendly_name: 'Alex' }),
+    'person.lea': s('home', { friendly_name: 'Léa' }),
     /* Un appareil de streaming, pour que la grille d'applications ait de
      * quoi se montrer. Les valeurs sont celles d'une vraie Apple TV :
      * 450487 = les bits de lecture, plus SELECT_SOURCE et BROWSE_MEDIA. */
@@ -376,7 +386,18 @@ function etatsInitiaux() {
     'select.tondeuse_securite_faune': s('high', { friendly_name: 'Tondeuse Sécurité faune', options: ['off', 'low', 'high'] }),
     'switch.tondeuse_voix': s('on', { friendly_name: 'Tondeuse Voix' }),
     'update.tondeuse_micrologiciel': s('off', { friendly_name: 'Tondeuse Micrologiciel', installed_version: '1.14.0', latest_version: '1.14.0' }),
+    /* Borne de recharge et batterie : sans elles, la maison du schema n'avait
+     * ni pastille voiture ni pastille batterie, et il manquait la moitie de ce
+     * que la vue Energie sait montrer (02/10). */
+    'sensor.borne_recharge': s(0, { friendly_name: 'Borne de recharge', device_class: 'power', unit_of_measurement: 'W' }),
+    'sensor.batterie_maison': s(-310, { friendly_name: 'Batterie maison', device_class: 'power', unit_of_measurement: 'W' }),
+    'sensor.batterie_niveau': s(78, { friendly_name: 'Batterie niveau', device_class: 'battery', unit_of_measurement: '%' }),
     'binary_sensor.porte_entree': s('off', { friendly_name: "Porte d'entrée", device_class: 'door' }),
+    // Trois portes de plus (02/10) : a une seule, la vue Securite annoncait
+    // « 1/1 fermee » et sa rangee d'ouvrants tenait sur un quart de ligne.
+    'binary_sensor.porte_garage': s('off', { friendly_name: 'Porte de garage', device_class: 'door' }),
+    'binary_sensor.porte_service': s('off', { friendly_name: 'Porte de service', device_class: 'door' }),
+    'binary_sensor.baie_vitree': s('off', { friendly_name: 'Baie vitrée', device_class: 'door' }),
     'binary_sensor.mouvement_entree': s('off', { friendly_name: 'Mouvement entrée', device_class: 'motion' }),
     'sensor.pile_porte_entree': s(9, { friendly_name: 'Pile porte entrée', device_class: 'battery', unit_of_measurement: '%' }),
     'person.demo': s('home', { friendly_name: 'Démo' }),
@@ -442,13 +463,16 @@ function configDemo() {
     // sert ailleurs. Sans `haid`, la tuile prend son rendu de repli : degrade,
     // halo et badge « Direct », au lieu d'attendre un flux qui n'existe pas ici.
     loggia_cameras: CAMERAS(),
-    loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
+    loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp',
+      evNow: 'sensor.borne_recharge', batNow: 'sensor.batterie_maison', batSoc: 'sensor.batterie_niveau' },
     loggia_entities: {
       weather: ['weather.maison', 'sun.sun'],
       alarm: 'alarm_control_panel.maison',
       cameras: CAMERAS(),
-      people: [{ name: 'Camille', haid: 'person.camille' }, { name: 'Alex', haid: 'person.alex' }],
-      energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp' },
+      people: [{ name: 'Camille', haid: 'person.camille' }, { name: 'Alex', haid: 'person.alex' },
+        { name: 'Léa', haid: 'person.lea' }],
+      energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp',
+        evNow: 'sensor.borne_recharge', batNow: 'sensor.batterie_maison', batSoc: 'sensor.batterie_niveau' },
     },
     // Deux profils : la demo doit exercer les DEUX branches, admin comprise.
     loggia_users: [{ name: 'Démo', role: 'Admin', c: 'var(--o-accent)' }, { name: etiquette('Invité'), role: 'Famille', c: 'var(--o-purple)' }],
@@ -456,7 +480,42 @@ function configDemo() {
     // Le distributeur a sa cle (alias `feeder` → `loggia_feeder`) : `loggia_entities`
     // ne se lit qu'avec un serveur, que la demo n'a pas.
     loggia_feeder: { haids: { reservoir: 'input_number.croquettes_reservoir', portionWeight: 'number.distributeur_portion', distribuees: 'sensor.croquettes_du_jour' },
-      meals: [{ time: '07:30', g: 45, auto: 'input_boolean.repas_matin' }, { time: '19:00', g: 45, auto: 'input_boolean.repas_soir' }] },
+      /* Le libelle fait partie d'un repas (`lectures.js` : `{ id, time, label, g, auto }`) ;
+       * sans lui la carte Rappels ecrivait « undefined · 45g ». */
+      meals: [{ id: 'matin', time: '07:30', label: etiquette('Repas du matin'), g: 45, auto: 'input_boolean.repas_matin' },
+        { id: 'soir', time: '19:00', label: etiquette('Repas du soir'), g: 45, auto: 'input_boolean.repas_soir' }] },
+    /* La mosaique des pieces sur TABLETTE et TELEPHONE (02/10).
+     *
+     * « Dispose les cartes pieces comme ceci, je trouve plus joli » : des
+     * tuiles de deux hauteurs qui s'emboitent, et non une grille reguliere.
+     * `s` = standard (deux rangees), `c` = compacte (une seule).
+     *
+     * La cle est rangee par FORMAT : l'ordinateur garde sa grille a lui, et
+     * personne ne range pour les autres ecrans — c'est la regle de
+     * `disposition.js`. */
+    loggia_accueil: {
+      formats: {
+        tablette: { tailles: {
+          [lieu('Salon')]: 's', [lieu('Cuisine')]: 'c', [lieu('Chambre')]: 's',
+          [lieu('Bureau')]: 's', [lieu('Entrée')]: 'c', [lieu('Salle de bain')]: 'c',
+        } },
+        mobile: { tailles: {
+          [lieu('Salon')]: 's', [lieu('Cuisine')]: 'c', [lieu('Chambre')]: 's',
+          [lieu('Bureau')]: 'c', [lieu('Entrée')]: 'c', [lieu('Salle de bain')]: 'c',
+        } },
+      },
+    },
+    /* La carte Alarme sur DEUX colonnes (02/10) : « la carte alarme en double,
+     * s'il te plait ». Elle porte un etat, un message, et trois gestes a la
+     * suite — a une seule colonne les boutons se serrent au point de ne plus
+     * se lire. Loggia sait deja elargir une tuile : c'est son propre reglage
+     * (`larges`), pas une exception ecrite pour la demonstration. */
+    // L'agencement se range PAR VUE : `layoutOf` lit `cle[scope]`, pas la
+    // racine. Sans ce niveau, le reglage etait ecrit et simplement ignore.
+    loggia_seclayout: { securite: { larges: ['alarm_control_panel.maison'] } },
+    // Trois cameras par ligne sur grand ecran : a quatre cameras, « auto » en
+    // mettait deux et la rangee prenait la moitie de la page.
+    loggia_camdispo: { pc: '3' },
     loggia_onboarded: 1,
   };
 }
@@ -633,6 +692,17 @@ function historiqueDemo(chemin, states) {
   const t0 = d ? Date.parse(decodeURIComponent(d[1])) : Date.now() - 86400000;
   const t1 = Date.now();
   const solaire = /solaire|solar|production/i.test(id);
+  /* Le RESEAU n'est pas une courbe comme les autres : il change de SIGNE.
+   *
+   * Le generateur multipliait simplement la valeur du moment par une courbe de
+   * journee. Le reseau valant -460 W (on exporte), les vingt-quatre heures
+   * sortaient negatives — la maison aurait exporte toute la nuit, ce qui ne se
+   * peut pas, et le graphe affichait un bloc bleu d'un bout a l'autre.
+   *
+   * On lui donne donc une vraie journee : on IMPORTE la nuit et le soir, on
+   * EXPORTE quand le soleil donne. Et on recale la fin sur la valeur du moment,
+   * sinon la courbe et le chiffre affiche se contrediraient a l'instant meme. */
+  const reseau = !solaire && /reseau|grid/i.test(id);
   // Un compteur d'ÉNERGIE ne redescend pas : il monte jusqu'à sa valeur du
   // moment. Une puissance, elle, va et vient. Les deux courbes n'ont donc pas
   // la même forme, et le graphe de consommation lit bien des différences.
@@ -658,9 +728,16 @@ function historiqueDemo(chemin, states) {
       const heure = new Date(t).getHours() + new Date(t).getMinutes() / 60;
       const jour = Math.max(0, Math.sin((heure - 6) / 12 * Math.PI));
       v = co2 ? 430 + (cur - 430) * (0.45 + 0.55 * Math.max(0, Math.sin((heure - 18) / 14 * Math.PI))) * (0.9 + 0.1 * Math.sin(i))
-        : solaire ? cur * jour * (0.8 + 0.4 * Math.sin(i)) : cur * (0.7 + 0.6 * Math.sin(i / 3.7) + 0.15 * Math.sin(i));
+        : reseau ? (880 + 430 * Math.max(0, Math.sin((heure - 17.5) / 8 * Math.PI)) + 95 * Math.sin(i / 3.1)) - 2300 * jour
+          : solaire ? cur * jour * (0.8 + 0.4 * Math.sin(i)) : cur * (0.7 + 0.6 * Math.sin(i / 3.7) + 0.15 * Math.sin(i));
     }
     pts.push({ state: String(Math.round(v * 100) / 100), last_changed: new Date(t).toISOString() });
+  }
+  if (reseau && pts.length) {
+    // La fin rejoint la valeur affichee : une courbe qui finit ailleurs que le
+    // chiffre d'a cote se contredit sous les yeux du lecteur.
+    const ecart = cur - parseFloat(pts[pts.length - 1].state);
+    for (const p of pts) p.state = String(Math.round((parseFloat(p.state) + ecart) * 100) / 100);
   }
   return [pts];
 }
@@ -1214,12 +1291,58 @@ function parcoursDemo(cid) {
 const calSupprimes = new Set();
 const calModifies = new Map();
 
+/* Les taches cochees dans la demo : `todo.update_item` les y range, et
+ * `todo.get_items` ne les rend plus — sans quoi cocher ne ferait rien a
+ * l'ecran, ce qui est justement le geste a montrer. */
+const todoFaits = new Set();
+const todoAjoutes = [];
+
+function todosDemo(id) {
+  /* `due` est une heure LOCALE sans fuseau : `toISOString()` rendrait de
+   * l'UTC, et une tache de 9 h s'afficherait a 7 h en France. */
+  const p2 = (x) => String(x).padStart(2, '0');
+  const local = (d) => d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  const h = (n, hh, mm) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, mm || 0, 0, 0); return local(d) + 'T' + p2(hh) + ':' + p2(mm || 0) + ':00'; };
+  const j = (n) => local(new Date(Date.now() + n * 864e5));
+  const T = {
+    'todo.maison': [
+      /* Une tache dont l'heure est PASSEE : « En retard », en rouge. C'est
+       * l'etat que la maquette montre, et il ne se verrait jamais avec des
+       * heures toutes a venir. */
+      { uid: 'd1', summary: etiquette('Fermer les volets du bureau'), status: 'needs_action', due: h(-1, 21) },
+      { uid: 'd2', summary: etiquette('Arroser les plantes'), status: 'needs_action', due: h(0, 18) },
+      { uid: 'd3', summary: etiquette('Sortir le linge'), status: 'needs_action', due: j(2) },
+    ],
+    'todo.courses': [
+      { uid: 'd4', summary: etiquette('Croquettes du chat'), status: 'needs_action', due: h(1, 10) },
+      { uid: 'd5', summary: etiquette('Ampoules'), status: 'needs_action', due: null },
+    ],
+    'todo.partagee': [
+      { uid: 'd6', summary: etiquette('Prendre les médicaments'), status: 'needs_action', due: h(0, 20) },
+    ],
+  };
+  const base = (T[id] || []).concat(todoAjoutes.filter(t => t.liste === id).map(t => t.item));
+  return base.filter(t => !todoFaits.has(t.uid));
+}
+
 function calendrierDemo(id) {
-  const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.toISOString().slice(0, 10); };
+  /* Une journee entiere se dit en date LOCALE : `toISOString()` rend de l'UTC,
+   * et apres 22 h en France « demain » redevenait aujourd'hui — la collecte du
+   * lendemain s'affichait « a sortir ce matin ». Les rendez-vous a l'heure,
+   * eux, partent bien en ISO : c'est un INSTANT, pas un jour. */
+  const p2 = (x) => String(x).padStart(2, '0');
+  const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
   const vivants = (l) => l
     .filter(e => !calSupprimes.has(e.uid))
     .map(e => (calModifies.has(e.uid) ? { ...e, ...calModifies.get(e.uid) } : e));
+  /* Une collecte DEMAIN : c'est la veille au soir que le bandeau se montre,
+   * et c'est donc le seul etat ou on le voit. */
+  if (id === 'calendar.collectes') return vivants([
+    { uid: 'demo-recy', summary: etiquette('Recyclables'), start: { date: j(1) }, end: { date: j(2) } },
+    { uid: 'demo-verre', summary: etiquette('Verre'), start: { date: j(4) }, end: { date: j(5) } },
+    { uid: 'demo-ordures', summary: etiquette('Ordures ménagères'), start: { date: j(5) }, end: { date: j(6) } },
+  ]);
   if (id === 'calendar.travail') return vivants([
     { uid: 'demo-equipe', summary: 'Point d equipe', start: { dateTime: h(1, 9) }, end: { dateTime: h(1, 10) } },
     { uid: 'demo-livrable', summary: 'Livrable client', start: { dateTime: h(3, 17) }, end: { dateTime: h(3, 18) } },
@@ -1280,6 +1403,20 @@ export function installerDemo(langue) {
   const callService = (domaine, service, data, target) => {
     const id = (data && data.entity_id) || (target && target.entity_id);
     // La sirene aussi (ADR 0034) : sa bascule et son test sonore passent par turn_on / turn_off.
+    /* Cocher une tache, et en ajouter une : sans ca le geste de la carte
+     * Rappels partirait dans le vide, et c'est justement lui qu'on montre.
+     * Le compte de l'entite suit, car c'est lui qui declenche la relecture. */
+    if (domaine === 'todo') {
+      const liste = id;
+      if (service === 'update_item' && data && data.status === 'completed') todoFaits.add(String(data.item));
+      if (service === 'remove_item' && data) todoFaits.add(String(data.item));
+      if (service === 'add_item' && data && data.item) {
+        todoAjoutes.push({ liste, item: { uid: 'ajout-' + todoAjoutes.length, summary: String(data.item),
+          status: 'needs_action', due: data.due_datetime || data.due_date || null } });
+      }
+      toucher(liste, String(todosDemo(liste).length), {});
+      return Promise.resolve();
+    }
     if (domaine === 'automation' && service === 'trigger') {
       toucher(id, null, { last_triggered: maintenant() });
     } else if (domaine === 'update') {
@@ -1338,6 +1475,14 @@ export function installerDemo(langue) {
     states,
     connected: true,
     language: 'fr',
+    /* La course du soleil se calcule sur la POSITION declaree par Home
+     * Assistant, et `SunArc` refuse de dessiner un arc faux sans elle : la
+     * demonstration montrait donc une maison sans arc ni pastilles — « il
+     * manque les valeurs sur la maison » (02/10).
+     *
+     * Paris, parce qu'il faut bien un point et que celui-la n'appartient a
+     * personne. La maison de demonstration est inventee ; sa position aussi. */
+    config: { latitude: 48.8566, longitude: 2.3522, time_zone: 'Europe/Paris' },
     user: { id: 'demo', name: 'Démo', is_admin: true },
     /* Le websocket n'existe pas ici — sauf pour les PRÉVISIONS météo, que la
      * vue Météo demande par service. Sans elles, sa bannière n'aurait ni
@@ -1355,6 +1500,12 @@ export function installerDemo(langue) {
       /* Le navigateur de medias : sans reponse ici, il n'aurait qu'un message
        * d'erreur a montrer, alors que c'est l'arbre qu'il faut voir. Deux
        * niveaux suffisent a rendre la navigation credible. */
+      /* `todo.get_items` : le contenu d'une liste ne se pousse pas, il se
+       * demande. Sans reponse ici, la carte Rappels resterait vide. */
+      if (msg && msg.type === 'call_service' && msg.domain === 'todo' && msg.service === 'get_items') {
+        const cible = (msg.target && msg.target.entity_id) || '';
+        return Promise.resolve({ response: { [cible]: { items: todosDemo(cible) } } });
+      }
       if (msg && msg.type === 'media_player/browse_media') {
         return Promise.resolve(parcoursDemo(msg.media_content_id));
       }
@@ -1566,6 +1717,18 @@ export function installerDemo(langue) {
    * abonnement iCal. */
   states['calendar.maison'] = s('off', { friendly_name: 'Calendrier maison', supported_features: 7 });
   states['calendar.travail'] = s('off', { friendly_name: 'Travail', supported_features: 0 });
+  /* Un calendrier de COLLECTE : beaucoup de communes publient un .ics, et la
+   * carte Collecte sait le lire quand aucun capteur n'est designe. */
+  states['calendar.collectes'] = s('off', { friendly_name: etiquette('Collectes'), supported_features: 0 });
+
+  /* Deux LISTES DE TACHES (`todo.*`) : les rappels de l'Accueil. Les categories
+   * sont les listes elles-memes — chez chacun les siennes. « Partagee » est en
+   * LECTURE SEULE (`supported_features` a 0) : ni « + », ni case a cocher. A 15,
+   * tout est permis (creer 1 + supprimer 2 + modifier 4 + dater 8... voir
+   * TodoListEntityFeature). */
+  states['todo.maison'] = s('3', { friendly_name: etiquette('Maison'), supported_features: 1 | 2 | 4 | 16 | 32 });
+  states['todo.courses'] = s('2', { friendly_name: etiquette('Courses'), supported_features: 1 | 2 | 4 | 16 | 32 });
+  states['todo.partagee'] = s('1', { friendly_name: etiquette('Liste partagée'), supported_features: 0 });
 
   /* Deux entites de conversation, pour que le choix de l'assistant se montre :
    * celle de la demo, qui parle son propre protocole, et l'agent integre de

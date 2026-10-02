@@ -19,6 +19,26 @@ export function cleJour(d) {
   return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
 }
 
+/** L'inverse de `cleJour` : « 2026-9-17 » → le 17 octobre 2026 à minuit, le mois
+ * comptant de 0 comme le veut `Date`. `null` si la clé ne se lit pas. */
+export function jourDeCle(k) {
+  const p = typeof k === 'string' ? k.split('-') : [];
+  if (p.length !== 3) return null;
+  const [a, m, j] = p.map(Number);
+  if (!Number.isInteger(a) || !Number.isInteger(m) || !Number.isInteger(j)) return null;
+  const d = new Date(a, m, j);
+  return d.getFullYear() === a && d.getMonth() === m && d.getDate() === j ? d : null;
+}
+
+/** Le même jour `n` mois plus loin, ramené au dernier jour du mois quand il n'y
+ * existe pas : du 31 mars, un mois en arrière donne le 28 février, et non le
+ * 3 mars comme le ferait `setMonth` tout seul. */
+export const moisPlus = (d, n) => {
+  const x = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  x.setDate(Math.min(d.getDate(), new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate()));
+  return x;
+};
+
 /** Le début d'un événement (une journée entière commence à minuit local) ;
  * null quand on ne sait pas le lire. */
 export function debutDe(e) {
@@ -72,13 +92,6 @@ export function comptesParJour(events, jours) {
 }
 
 const parDebut = (x, y) => debutDe(x).getTime() - debutDe(y).getTime();
-
-/** Ce qui vient : les événements pas encore finis, du plus proche au plus
- * lointain — un rendez-vous commencé y est encore, un rendez-vous fini non. */
-export function evenementsAVenir(events, maintenant) {
-  const now = maintenant instanceof Date ? maintenant.getTime() : Number(maintenant);
-  return (events || []).filter(e => { const f = finDe(e); return !!f && f.getTime() > now; }).sort(parDebut);
-}
 
 /** Les événements d'un jour, dans l'ordre. */
 export function evenementsDuJour(events, jour) {

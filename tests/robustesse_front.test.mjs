@@ -105,7 +105,10 @@ test('les libellés de l’alarme passent tous par la traduction', () => {
 test('les heures du journal et des règles suivent la langue choisie, pas celle du navigateur', () => {
   // Ceux qui formatent eux-memes. Les regles passent par `quandCourt`
   // (parcommun.jsx, 18/09) : une seule heure a tenir, pour toutes.
-  const fichiers = ['src/App.jsx', 'src/ficherobot.jsx', 'src/widgetsrail.jsx', 'src/views/parcommun.jsx'];
+  // `widgetsrail.jsx` a quitte la liste le 02/10 : les heures qu'il formatait
+  // etaient celles du widget « calendrier » (decision 0132). L'heure qui reste
+  // s'ecrit chiffre par chiffre (`chiffresHeure`), sans passer par Intl.
+  const fichiers = ['src/App.jsx', 'src/ficherobot.jsx', 'src/agendarail.jsx', 'src/views/parcommun.jsx'];
   for (const f of fichiers) {
     const s = lire(...f.split('/'));
     const appels = s.match(/toLocaleTimeString\([^)]*\)/g) || [];

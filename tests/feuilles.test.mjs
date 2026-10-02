@@ -80,9 +80,21 @@ test('aucune autre croix : la commune, la commande d’un volet, le formulaire d
     const n = (s.match(/aria-label=\{tr\('Fermer'\)\}/g) || []).length;
     if (n) croix.push(f + ' × ' + n);
   }
-  assert.deepEqual(croix.sort(), ['src/App.jsx × 2', 'src/ui.jsx × 1']);
+  /* La troisieme est arrivee le 02/10 avec l'agenda : elle ferme la FICHE
+   * d'un evenement, une carte posee DANS la feuille, et non la feuille
+   * elle-meme. `CroixFeuille` fermerait la feuille entiere — ce n'est pas
+   * ce qu'on demande ici. */
+  /* La quatrieme est arrivee le 03/10 avec les rappels : meme cas que celle
+   * du formulaire d'evenement — elle ferme le PANNEAU d'ajout pose dans la
+   * carte, et non une feuille. */
+  assert.deepEqual(croix.sort(), ['src/App.jsx × 1', 'src/agendarail.jsx × 1', 'src/formevenement.jsx × 1', 'src/rappelsrail.jsx × 1', 'src/ui.jsx × 1']);
+  const rap = readFileSync(join(RACINE, 'src', 'rappelsrail.jsx'), 'utf8');
+  assert.ok(rap.includes("<button onClick={onClose} aria-label={tr('Fermer')}"), 'la croix du formulaire de rappel');
   assert.ok(APP.includes("<button aria-label={tr('Fermer')} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }}"), 'la commande du volet');
-  assert.ok(fonction(APP, 'NouvelEvenement').includes("<button onClick={onClose} aria-label={tr('Fermer')}"), 'la croix du formulaire d’événement, DANS la fiche de l’agenda');
+  /* Le formulaire a quitte `App.jsx` le 02/10 : l'agenda du rail en avait
+   * besoin, et un second formulaire aurait duplique sa validation. */
+  const form = readFileSync(join(RACINE, 'src', 'formevenement.jsx'), 'utf8');
+  assert.ok(form.includes("<button onClick={onClose} aria-label={tr('Fermer')}"), 'la croix du formulaire d’événement');
   assert.ok(!APP.includes('FICHE_X') && !/<FicheEntete [^\n]*close=/.test(APP), 'l’en-tête des fiches a retrouvé sa croix à part');
 });
 

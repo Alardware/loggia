@@ -130,7 +130,10 @@ test('les suggestions sous un champ : le panneau des menus, à leur taille', () 
   for (const s of ["suggestions={c.domain && sugg ? sugg(c.domain) : []}", "suggestions={sugg('sensor')}", "suggestions={sugg('alarm_control_panel')}", "suggestions={sugg('weather')}"]) {
     assert.ok(PAR.includes(s), 'les entités d’une vue : ' + s);
   }
-  assert.ok(lire('src', 'widgetsrail.jsx').includes('suggestions={fuseaux.map(f => ({ id: f, label: f }))}'), 'le fuseau des villes');
+  /* Le champ a suggestions du fuseau vivait dans la feuille des villes du
+   * widget « calendrier », parti le 02/10 (decision 0132). Les deux clients
+   * qui restent — la fiche d'une piece et les entites d'une vue — suffisent a
+   * tenir la regle : les suggestions passent par `ChampSuggere`. */
 });
 
 test('le sélecteur des fiches passe par la liste commune', () => {

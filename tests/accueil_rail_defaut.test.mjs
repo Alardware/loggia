@@ -27,21 +27,34 @@ const liste = (nom) => {
 test('l’ordre de la capture, À surveiller tout en haut', () => {
   const rail = liste('ACC_RAIL');
   assert.equal(rail[0], 'attention', 'À surveiller n’est plus en tête');
-  assert.deepEqual(rail, ['attention', 'heure', 'meteo', 'co2', 'moment', 'calendrier', 'rappels', 'agenda']);
+  assert.deepEqual(rail, ['attention', 'heure', 'meteo', 'co2', 'moment', 'rappels', 'agenda']);
 });
 
-test('l’heure, le CO₂ et le calendrier sont là d’emblée — et restent en option', () => {
+test('l’heure et le CO₂ sont là d’emblée, et sont les seules options (02/10)', () => {
+  /* Le calendrier a quitte les widgets presents par defaut, puis les options
+   * tout court (decision 0132) : la carte Agenda tient sa place, dessine la
+   * semaine AVEC ses evenements, et sa feuille va plus loin que le mois du
+   * widget — « retire la du coup elle ne serre plus a rien ». */
   const ajoutees = liste('ACC_AJOUTEES_DEFAUT');
-  assert.deepEqual([...ajoutees].sort(), [...WIDGETS_OPTION].sort(), 'un widget en option manque, ou n’en est pas un');
+  assert.deepEqual([...ajoutees].sort(), ['co2', 'heure']);
+  for (const id of ajoutees) {
+    assert.ok(WIDGETS_OPTION.indexOf(id) >= 0, id + ' est propose par defaut sans etre une option');
+  }
+  assert.equal(WIDGETS_OPTION.indexOf('calendrier'), -1, 'le calendrier n’est plus ajoutable : il n’existe plus');
   // La croix les retire toujours : ils restent dans WIDGETS_OPTION.
   assert.ok(APP.includes('const estOption = (id) => WIDGETS_OPTION.indexOf(id) >= 0;'));
   assert.ok(APP.includes('ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [...ACC_AJOUTEES_DEFAUT],'), 'un accueil jamais rangé les reçoit ; un agencement enregistré garde les siens');
 });
 
-test('Rappels et Agenda masqués par défaut ; l’heure en tuiles', () => {
-  assert.deepEqual(liste('ACC_CACHES_DEFAUT'), ['rappels', 'agenda']);
+test('Rappels masqués par défaut, l’Agenda non ; l’heure en tuiles', () => {
+  /* L'Agenda s'est demasque le 02/10 : il REMPLACE le calendrier, qui lui
+   * s'affichait. Le laisser masque aurait retire une carte a tout le monde. */
+  /* Les Rappels se sont demasques le 03/10 : la carte ne porte plus deux
+   * lignes qui ne concernaient personne, mais les listes de taches de chacun —
+   * et elle n'existe pas sans liste. Plus rien a cacher. */
+  assert.deepEqual(liste('ACC_CACHES_DEFAUT'), []);
   assert.ok(APP.includes('caches: Array.isArray(v.caches) ? v.caches : [...ACC_CACHES_DEFAUT],'), 'un masquage enregistré, même vide, reste le sien');
   assert.equal(STYLES_WIDGETS.heure[0], 'tuiles');
   assert.equal(styleDe({}, 'heure'), 'tuiles', 'une heure jamais réglée se montre en tuiles');
-  assert.equal(styleDe({}, 'calendrier'), 'semaine');
+  assert.equal(styleDe({}, 'calendrier'), null, 'un widget retire n’a plus de style');
 });
