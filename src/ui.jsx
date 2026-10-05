@@ -549,12 +549,29 @@ export class Barriere extends Component {
  * 480 px — l'agenda d'ordinateur et ses deux colonnes (02/10). Sur un
  * ecran etroit elle redevient une feuille ordinaire : la largeur est
  * bornee par la fenetre, et le reste du gabarit ne bouge pas. */
+/** L'événement qui ferme toutes les feuilles ouvertes, d'où qu'elles viennent.
+ *
+ * Un nom plutôt qu'un rappel passé de parent en enfant : une feuille montée par
+ * `useDomainCards` et une feuille montée par une vue n'ont aucun ancêtre commun
+ * qui pourrait les fermer ensemble. */
+export const FERMER_TOUT = 'loggia:fermer-feuilles';
+
 export function BottomSheet({ onClose, children, opaque = false, onglets = false, title = null, large = false }) {
   const [closing, setClosing] = useState(false);
   // Le filet (si l'animation ne se declenche pas) est ANNULE quand elle se
   // termine : sinon `onClose` partait deux fois a chaque fermeture (audit 18/09).
   const filet = useRef(null);
   const close = () => { if (closing) return; setClosing(true); filet.current = setTimeout(onClose, 420); };
+  /* Le retour à l'accueil ferme les feuilles OUVERTES, et il ne peut pas en
+   * tenir la liste : elles naissent dans une dizaine d'endroits, dans des
+   * composants qui ne se connaissent pas. Chacune s'auto-ferme donc sur un
+   * événement commun — une ligne ici vaut pour toutes, y compris celles qu'on
+   * écrira demain. Voir `FERMER_TOUT` et le minuteur d'inactivité d'App.jsx. */
+  useEffect(() => {
+    const surFermer = () => close();
+    window.addEventListener(FERMER_TOUT, surFermer);
+    return () => window.removeEventListener(FERMER_TOUT, surFermer);
+  });
   const sheetRef = useRef(null);
   // Un `click` est emis sur l'ANCETRE COMMUN du mousedown et du mouseup. Une
   // selection de texte commencee dans un champ et relachee dehors le fait donc

@@ -49,11 +49,14 @@ import { ecrireRegle, estRefus, raisonEchec, texteRefus } from './refus.js';
 import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
 import { isViewAvailable, viewReason } from './views.js';
+import { etagesDesPieces, piecesDeLEtage } from './etages.js';
+import CarteLovelace from './cartelovelace.jsx';
+import { lireConfig } from './miniyaml.js';
 import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
   BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere, CroixFeuille, TitreFeuille,
-  useIdTitreFeuille, NomFeuille, Barriere, Surface, nomCarte
+  useIdTitreFeuille, NomFeuille, Barriere, Surface, nomCarte, FERMER_TOUT
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
@@ -2351,9 +2354,9 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onO
       <div className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')}
         style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         {onOpen && <Surface onClick={() => onOpen()} label={nomCarte(nom, ligne)} />}
-        <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-lampe-rgb),.14)', color: 'var(--o-lampe)' }}><Fi i="paw" size={15} /></span>
-          <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
+        <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>
+          <span className="o-cvico" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-lampe-rgb),.14)', color: 'var(--o-lampe)' }}><Fi i="paw" size={15} /></span>
+          <div className="o-cvtxt">
             <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ligne || '—'}</div>
           </div>
@@ -2406,8 +2409,10 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onO
 function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, cond, temp, uniteTemp: uniteT = 'C', img = null, onOpen, chip = false, rgb = 'var(--o-ok-rgb)' }) {
   // L'icône pousse du gabarit maison ; l'illustration de la plante vit en
   // FILIGRANE au fond de la carte, comme sur la vue Objets.
-  const portrait = (taille) => (
-    <span style={{ width: taille, height: taille, borderRadius: taille > 40 ? 13 : 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-ok-rgb),.14)', color: 'var(--o-ok)' }}><Fi i="seedling" size={taille > 40 ? 17 : 15} /></span>
+  /* La COMPACTE passe sa classe : sa taille vient alors de la feuille, qui la
+   * rapetisse quand la carte est étroite. En ligne, elle ne le pourrait pas. */
+  const portrait = (taille, cls = null) => (
+    <span className={cls || undefined} style={{ ...(cls ? null : { width: taille, height: taille, borderRadius: taille > 40 ? 13 : 10 }), flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-ok-rgb),.14)', color: 'var(--o-ok)' }}><Fi i="seedling" size={taille > 40 ? 17 : 15} /></span>
   );
   const filigrane = img && PLANT_ART[img] && (
     <span aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -10, width: 120, height: 120, backgroundImage: `url("${PLANT_ART[img]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.14, pointerEvents: 'none' }} />
@@ -2428,9 +2433,9 @@ function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, 
       <div className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={nomCarte(nom, ligne, humLue)} aria-haspopup="dialog"
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
         onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
-        <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {portrait(34)}
-          <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
+        <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>
+          {portrait(34, 'o-cvico')}
+          <div className="o-cvtxt">
             <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
             <div style={{ fontSize: 12, fontWeight: 600, color: verdictCol || 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ligne || '—'}</div>
           </div>
@@ -7806,6 +7811,7 @@ function FavorisAccueil({ hass, edit = false }) {
   const [retype, setRetype] = useState(null);
   // Carte chips dont on compose la rangée.
   const [chipsEdit, setChipsEdit] = useState(null);
+  const [lovelaceEdit, setLovelaceEdit] = useState(null);
   // Une entité disparue ne doit pas laisser un trou : on la saute au rendu,
   // sans la retirer de la configuration (elle peut revenir).
   const liste = eps.filter(x => cvEstTpl(x) || !cvId(x).includes('.') || S[cvId(x)]);
@@ -7839,7 +7845,7 @@ function FavorisAccueil({ hass, edit = false }) {
                 </div>
                 {edit && (
                   <EditBarre>
-                    <button onClick={() => (cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCv(x, hass)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
+                    <button onClick={() => (cvTypeDe(x) === 'chips' ? setChipsEdit(x) : cvTypeDe(x) === 'lovelace' ? setLovelaceEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCv(x, hass)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
                     <button onClick={() => poser(eps.map(y => cvKey(y) === cvKey(x) ? cvAvecW(x) : y))} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-label={tr('Largeur double') + ' · ' + nomCv(x, hass)} aria-pressed={cvW(x) === 2}
                       style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
                     <button onClick={() => poser(eps.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} aria-label={tr('Retirer') + ' · ' + nomCv(x, hass)} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
@@ -7858,6 +7864,8 @@ function FavorisAccueil({ hass, edit = false }) {
       {retype && <CarteAjoutSheet hass={hass} remplace={retype} onClose={() => setRetype(null)} onPose={(e) => poser(eps.map(y => cvKey(y) === cvKey(retype) ? e : y))} />}
       {chipsEdit && <ChipsEditSheet x={chipsEdit} hass={hass} onClose={() => setChipsEdit(null)}
         onSave={(n) => { setChipsEdit(n); poser(eps.map(y => cvKey(y) === cvKey(chipsEdit) ? n : y)); }} />}
+      {lovelaceEdit && <LovelaceEditSheet x={lovelaceEdit} hass={hass} onClose={() => setLovelaceEdit(null)}
+        onSave={(n) => poser(eps.map(y => cvKey(y) === cvKey(lovelaceEdit) ? n : y))} />}
       {dc.sheets}
     </div>
   );
@@ -8073,6 +8081,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
    * le plan par defaut ». Pas de reglage en double dans Parametres — la bascule
    * de l'Accueil EST le reglage, elle se souvient. */
   const [vuePiecesCfg, setVuePiecesCfg] = useState(() => cfgVal('loggia_vuepieces', null));
+  /* L'etage regarde, ou null pour « Tous ». En memoire seulement : c'est un
+   * filtre de consultation, pas un reglage — on le rouvre a plat. */
+  const [etageChoisi, setEtageChoisi] = useState(null);
   const vuePieces = vuePiecesDe(vuePiecesCfg, formatGrille);
   const setVuePieces = (id) => {
     const n = poserVuePieces(vuePiecesCfg, formatGrille, id);
@@ -9185,25 +9196,64 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             PC ≥1180 : rail accolé à droite. Mobile/tablette : empilement. */}
         {(() => {
           const inner = pieces;
+          /* LES ETAGES (05/10). Home Assistant tient un registre d'etages et
+            * Loggia le lisait deja sans jamais s'en servir. Il FILTRE les pieces
+            * plutot que de les regrouper : leur grille porte un placement libre,
+            * des tailles par carte et un glisser-deposer, ranges par format
+            * d'ecran — la decouper en sections aurait defait tout cela.
+            *
+            * Rien ne s'affiche sans DEUX etages habites : dans une maison de
+            * plain-pied, ou quand toutes les pieces sont au meme niveau, le
+            * filtre ne retirerait rien. */
+          const infosEtages = etagesDesPieces(LOGGIA_INDEX, inner.map(p => p.name));
+          const piecesVues = infosEtages.utile
+            ? inner.filter(p => piecesDeLEtage(LOGGIA_INDEX, [p.name], etageChoisi).length)
+            : inner;
+          /* Les puces d'etage tiennent dans l'en-tete sur grand ecran. Au
+            * TELEPHONE elles le faisaient deborder : titre tronque, compte
+            * disparu, « Cartes / Plan » coupe. Deux rangees alors, comme la
+            * barre des ambiances — rien a faire glisser. */
+          const etagesPuces = infosEtages.utile ? (
+            <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-s2)', flexShrink: 0, minWidth: 0, overflow: 'hidden' }}>
+              {[{ id: null, nom: tr('Tous') }, ...infosEtages.etages].map(e => {
+                const on = etageChoisi === e.id;
+                return (
+                  <button key={e.id || 'tous'} type="button" onClick={() => setEtageChoisi(e.id)} aria-pressed={on}
+                    style={{ height: 30, padding: etroitPieces ? '0 10px' : '0 12px', borderRadius: 10, border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 700,
+                      whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', flex: etroitPieces ? '0 1 auto' : '0 0 auto',
+                      background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)' }}>{e.nom}</button>
+                );
+              })}
+            </div>
+          ) : null;
           const piecesHeader = (
-            /* Plus d'air sous CET en-tête que sous les autres (30/09) : le
-               segment le rend plus haut, et la première carte venait presque
-               le toucher — « là c'est presque collé ». */
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
-              <h2 style={sectionTitle}>{tr('Pièces')}</h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{tr('{n} pièces', { n: inner.length })}</span>
-                <Segment value={vuePieces} onChange={setVuePieces} label={tr('Affichage des pièces')}
-                  options={[{ id: 'cartes', label: tr('Cartes'), ico: 'apps' }, { id: 'plan', label: tr('Plan'), ico: 'home' }]} />
+            /* Plus d'air sous CET en-tete que sous les autres (30/09) : le
+               segment le rend plus haut, et la premiere carte venait presque
+               le toucher — « la c'est presque colle ». */
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <h2 style={sectionTitle}>{tr('Pièces')}</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{tr('{n} pièces', { n: piecesVues.length })}</span>
+                  {!etroitPieces && etagesPuces}
+                  <Segment value={vuePieces} onChange={setVuePieces} label={tr('Affichage des pièces')}
+                    options={[{ id: 'cartes', label: tr('Cartes'), ico: 'apps' }, { id: 'plan', label: tr('Plan'), ico: 'home' }]} />
+                </div>
               </div>
+              {etroitPieces && etagesPuces && <div style={{ marginTop: 10 }}>{etagesPuces}</div>}
             </div>
           );
           /* OÙ chaque carte se pose (23/09) : une cellule, colonne et rangée,
            * calculée par `placement.js` d'après ce que l'utilisateur a posé.
            * Un trou voulu reste vide — c'est tout l'objet du changement. */
-          const piecesNoms = ordrePieces(inner.map(p => p.name));
-          const piecesTailles = taillesDe(inner.map(p => p.name));
-          const piecesOu = disposer(piecesNoms, piecesTailles, grille.places, piecesCols);
+          const piecesNoms = ordrePieces(piecesVues.map(p => p.name));
+          const piecesTailles = taillesDe(piecesVues.map(p => p.name));
+          /* Un filtre d'etage REALIGNE les cartes. Les positions enregistrees
+           * valent pour la maison ENTIERE : appliquees a un sous-ensemble,
+           * elles laissaient les trous des pieces masquees — « les cartes
+           * doivent se realigner automatiquement ». Sans filtre, l'agencement
+           * reprend tous ses droits, trous voulus compris. */
+          const piecesOu = disposer(piecesNoms, piecesTailles, etageChoisi ? {} : grille.places, piecesCols);
           /* La première case libre APRÈS tout le monde : la tuile « Ajouter
            * une pièce » s'y met, et jamais dans un trou qu'on a voulu vide. */
           const piecesPrises = new Set();
@@ -9223,7 +9273,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               * a trois, `auto-fill` en donnerait quatre ou cinq et les grandes
               * tuiles tomberaient n'importe ou. */
             <div ref={poserGrillePieces} className="grid-chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + piecesCols + ',minmax(0,1fr))', gap: 8 }}>
-              {ordrePieces(inner.map(p => p.name)).map(n => inner.find(p => p.name === n)).filter(Boolean).map((p, i) => {
+              {ordrePieces(piecesVues.map(p => p.name)).map(n => piecesVues.find(p => p.name === n)).filter(Boolean).map((p, i) => {
                 /* Un choix explicite (bouton de taille en edition) prime sur
                   * tout : il vaut pour l'appareil qui l'a fait comme pour les
                   * autres. Sans choix, l'appareil decide. */
@@ -11025,8 +11075,18 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const autosuff = avail(EN.autosuffJour) ? Math.round(num(EN.autosuffJour)) : null;
   const tauxAutoconso = avail(EN.tauxAutoconso) ? Math.round(num(EN.tauxAutoconso)) : null;
   const ecoJour = avail(EN.ecoJour) ? num(EN.ecoJour) : null;
+  /* Le COUT du jour (05/10). `resolveEnergy` le resolvait depuis le tableau
+   * de bord Energie de Home Assistant (`stat_cost`) et personne ne le lisait :
+   * on allait le chercher, on le rangeait dans l'index, et il mourait la.
+   *
+   * Home Assistant le CALCULE lui-meme, avec les heures creuses et les tarifs
+   * multiples : on reprend son chiffre, on n'en refait pas un a partir d'un
+   * prix du kWh. Sans tarif declare, `stat_cost` n'existe pas et rien ne
+   * s'affiche — ni zero, ni tiret. */
+  const coutJour = avail(EN.coutJour) ? num(EN.coutJour) : null;
   // La devise suit l'entite, puis l'installation — jamais suppose en euros.
-  const deviseJour = (EN.ecoJour && S[EN.ecoJour] && S[EN.ecoJour].attributes && S[EN.ecoJour].attributes.unit_of_measurement)
+  const uniteDe = (id) => (id && S[id] && S[id].attributes && S[id].attributes.unit_of_measurement) || null;
+  const deviseJour = uniteDe(EN.coutJour) || uniteDe(EN.ecoJour)
     || (hass && hass.config && hass.config.currency) || '€';
   /* Le total du jour n'existe que si un compteur se lit (audit du 03/10).
    * `num()` rend 0 pour une entité muette : heures creuses + heures pleines
@@ -11163,6 +11223,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           <div className="o-en-kpis" style={{ display: 'flex', gap: 24, marginTop: 16, flexWrap: 'wrap' }}>
             <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{consoLue ? <Num v={consoW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />{tr('Conso maison')}</div></div>
             <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-gold)' }}>{solarAvail ? <Num v={solarW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-gold)' }} />{tr('Production')}</div></div>
+            {coutJour != null && <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-text)' }}><Num v={coutJour} d={2} suffix={' ' + deviseJour} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-text2)' }} />{tr('Coût du jour')}</div></div>}
             {ecoJour != null && <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-ok)' }}><Num v={ecoJour} d={2} suffix={' ' + deviseJour} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('Économie du jour')}</div></div>}
             <div style={{ marginLeft: 'auto', textAlign: 'right' }}><div style={{ fontSize: 25, fontWeight: 800, color: exporting ? 'var(--o-ok)' : 'var(--o-bad)' }}>{sensLu ? <Num v={exporting ? surplusW : importW} suffix=" W" /> : '—'}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><FlipText text={exporting ? '↑ ' + tr('Vente réseau') : '↓ ' + tr('Achat réseau')} /></div></div>
           </div>
@@ -11851,14 +11912,14 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
      * est positionnée : peinte après la surface, elle reçoit son clic. La
      * rangée, elle, ne l'est plus : un clic sur l'icône, le nom, l'état ou la
      * consigne ouvre la fiche, comme avant. */
-    <div className={'o-piece' + (dense ? ' o-cvdense' : '') + (dense && dom === 'climate' ? ' o-cvclim' : '') + (dead ? ' o-panne' : '') + ' o-cvcarte'}
+    <div className={'o-piece' + (dense ? ' o-cvdense' : '') + (dead ? ' o-panne' : '') + ' o-cvcarte'}
       style={{ position: 'relative', background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
       {ouvrable && <Surface onClick={() => onOpen(id)} label={nomCarte(name, sousTitre)} />}
       <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>
-        <span className="o-cvpastille" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinteLu || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{/* `Ico` et non `Fi` : une icone CHOISIE peut etre un dessin, que `Fi`
+        <span className="o-cvpastille" style={{ background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinteLu || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{/* `Ico` et non `Fi` : une icone CHOISIE peut etre un dessin, que `Fi`
                   * aurait cherche dans la police et rendu vide. */}
           {ico ? <Ico name={ico} size={dense ? 15 : 17} /> : <PlugIcon size={dense ? 15 : 17} />}</span>
-        <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
+        <div className="o-cvtxt">
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
           <div style={{ fontSize: 12, fontWeight: 600, color: on ? (teinte ? teinteTxt : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {sousTitre}
@@ -11911,12 +11972,21 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           if (dom === 'climate') {
             const base = ovT != null ? ovT : a.temperature;
             const bouge = (d) => { if (base == null) return; const v = commander(hass, id, 'set_temperature', base + d, 'temperature'); poseT(v != null ? v : base + d); };
-            // Groupe serré, ancré à droite — l'espace libre reste à gauche.
+            /* Groupe serré, ancré à droite — l'espace libre reste à gauche.
+             * PLUS SERRÉ QUE LES AUTRES depuis le gabarit à deux rangées
+             * (05/10) : il partage sa ligne avec l'ICÔNE, qui ne s'efface plus.
+             * 148 px de contenu au téléphone, moins 26 d'icône et 9 d'écart, il
+             * lui reste 113. À 38 px de bouton et 8 d'écart il en demandait 126
+             * et le « + » tombait à la ligne, la carte débordant de 26 px sur sa
+             * voisine. À 30 et 4 il en prend 102, et 113 avec une consigne à
+             * trois chiffres (« 101,5° », en Fahrenheit) : la largeur tient
+             * PILE. 32 px la ferait déborder — mesuré. */
+            const miniClim = { ...mini, width: 30 };
             return (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexShrink: 0 }}>
-                <button style={mini} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); bouge(-0.5); }}>−</button>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
+                <button style={miniClim} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); bouge(-0.5); }}>−</button>
                 <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 34, textAlign: 'center' }}>{base != null ? decMax(base, 1) + '°' : '—'}</span>
-                <button style={mini} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); bouge(0.5); }}>+</button>
+                <button style={miniClim} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); bouge(0.5); }}>+</button>
               </span>
             );
           }
@@ -12067,7 +12137,7 @@ function cvTypesPour(id) {
   if (d === 'camera') return ['camera', 'compacte'];
   return ['compacte', 'riche', 'chip'];
 }
-const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)'), activite: tr('Activité récente'), camera: tr('Caméra'), calendrier: tr('Calendrier'), localisation: tr('Localisation'), chips: tr('Chips (groupe)'), chip: tr('Chip') });
+const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)'), activite: tr('Activité récente'), camera: tr('Caméra'), calendrier: tr('Calendrier'), localisation: tr('Localisation'), chips: tr('Chips (groupe)'), chip: tr('Chip'), lovelace: tr('Carte Home Assistant') });
 
 /* Horloge : l'heure de la maison, sans entité — la carte se suffit. */
 function CvClock() {
@@ -13132,9 +13202,9 @@ function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
   if (chip) {
     return (
       <div className="o-piece o-cvdense" style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
-        <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-purple-rgb),.16)', color: 'var(--o-purple)' }}><Fi i="soap" size={15} /></span>
-          <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
+        <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>
+          <span className="o-cvico" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-purple-rgb),.16)', color: 'var(--o-purple)' }}><Fi i="soap" size={15} /></span>
+          <div className="o-cvtxt">
             <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-purple)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{etat}</div>
           </div>
@@ -13629,6 +13699,10 @@ function CvTyped({ x, hass, dc }) {
   if (t === 'alarmeseule') return <CvAlarm id={id} hass={hass} sans />;
   if (t === 'camera') return <CvCamera id={id} hass={hass} />;
   if (t === 'calendrier') return <CvCalendrier id={id} hass={hass} onOpen={dc ? dc.ouvrir : null} />;
+  /* Une carte de l'ecosysteme Home Assistant, posee telle quelle (05/10).
+   * Le catalogue de Loggia etait ferme : ni `mini-graph-card`, ni
+   * `apexcharts-card`, ni meme une `tile`. */
+  if (t === 'lovelace') { const lu = lireConfig(x && x.yaml); return <CarteLovelace config={lu.ok ? lu.config : null} hass={hass} />; }
   if (t === 'localisation') return <CvCarte hass={hass} />;
   if (t === 'chip') return <CvChip id={id} hass={hass} dc={dc} />;
   if (t === 'chips') return <CvChips x={x} hass={hass} dc={dc} />;
@@ -13907,7 +13981,7 @@ const cvW = (x) => (x && typeof x === 'object' && x.w === 2) ? 2 : 1;
 /* DEUX tailles, pas trois : compacte (1 rangée de 88 px) ou standard (2).
  * Toute carte non compacte DOIT tenir dans la standard — le graphique, le
  * journal et les machines se compriment plutôt que de déborder. */
-const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2, camera: 2, calendrier: 2, localisation: 2, chips: 1, chip: 1 };
+const CV_ROWS = { lovelace: 2, compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2, camera: 2, calendrier: 2, localisation: 2, chips: 1, chip: 1 };
 const cvRowsDe = (x) => {
   if (typeof x === 'string') return 1;
   const d = String(x.id || '').split('.')[0];
@@ -14021,6 +14095,56 @@ function CarteApercu({ x, hass, dc, lbl, actif = false, onClick }) {
 /* L'éditeur d'une carte CHIPS : on compose la rangée, pastille par pastille.
  * Sans aucune entité, la carte résume la maison toute seule — c'est son état
  * de départ, et le vider y revient. */
+/* Coller la configuration d'une carte Home Assistant (05/10).
+ *
+ * On colle du YAML, parce que c'est ce que donnent la documentation des cartes
+ * et l'editeur de Home Assistant ; le JSON passe aussi. L'apercu se redessine
+ * a chaque frappe : on voit ce qu'on obtiendra avant de fermer.
+ *
+ * Ce qui ne se lit pas est REFUSE et DIT — une configuration mal comprise
+ * donnerait une carte fausse, ce qui est pire qu'un refus. */
+function LovelaceEditSheet({ x, hass, onClose, onSave }) {
+  const [texte, setTexte] = useState(x && x.yaml ? x.yaml : '');
+  const lu = lireConfig(texte);
+  const souci = lu.ok ? null
+    : lu.raison === 'vide' ? null
+      : lu.raison === 'objet' ? tr('Une carte se décrit par des clés, pas par une liste.')
+        : tr('Cette configuration ne se lit pas. Les ancres et les blocs « | » ne sont pas pris en charge.');
+  const champ = {
+    width: '100%', boxSizing: 'border-box', minHeight: 170, resize: 'vertical',
+    background: 'var(--o-s2)', color: 'var(--o-text)', border: 'var(--o-bw,1px) solid var(--o-bd2)',
+    borderRadius: 12, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.5,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  };
+  return (
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <NomFeuille><span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 700 }}>{tr('Carte Home Assistant')}</span></NomFeuille>
+          <CroixFeuille />
+        </div>
+        <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 10 }}>
+          {tr('Collez la configuration de la carte, comme dans Home Assistant.')}
+        </div>
+        <textarea value={texte} onChange={(e) => setTexte(e.target.value)} spellCheck={false}
+          aria-label={tr('Configuration de la carte')} style={champ} />
+        {souci && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{souci}</div>}
+        {/* L'apercu : la vraie carte, avec les vrais etats. */}
+        {lu.ok && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78, marginBottom: 6 }}>{tr('APERÇU')}</div>
+            <CarteLovelace config={lu.config} hass={hass} />
+          </div>
+        )}
+        <button onClick={() => { onSave({ ...x, yaml: texte }); onClose(); }} disabled={!lu.ok}
+          style={{ marginTop: 14, width: '100%', minHeight: 44, borderRadius: 12, border: 'none', background: 'var(--o-accent)', color: '#fff', font: 'inherit', fontSize: 13, fontWeight: 800, cursor: lu.ok ? 'pointer' : 'default', opacity: lu.ok ? 1 : .5 }}>
+          {tr('Enregistrer')}
+        </button>
+      </>)}
+    </BottomSheet>
+  );
+}
+
 function ChipsEditSheet({ x, hass, onClose, onSave }) {
   const S = (hass && hass.states) || {};
   const [ids, setIds] = useState(Array.isArray(x.ids) ? x.ids : []);
@@ -14163,6 +14287,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   // compose la rangée.
   const [retype, setRetype] = useState(null);
   const [chipsEdit, setChipsEdit] = useState(null);
+  const [lovelaceEdit, setLovelaceEdit] = useState(null);
   useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); setTplEdit(null); setRetype(null); }, [cv.id, edit]);
   const setEnts = (ents) => onSave && onSave({ ...cv, ents });
   const dc = useDomainCards(hass);
@@ -14308,7 +14433,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
                     * la retirer et la reposer (retour 01/09). Un template garde
                     * son propre éditeur. Chaque outil nomme la carte qu'il
                     * touche (lot 13 de l'audit du 03/10). */}
-                  <button onClick={() => (cvEstTpl(x) ? setTplEdit(x) : cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCarte(x)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
+                  <button onClick={() => (cvEstTpl(x) ? setTplEdit(x) : cvTypeDe(x) === 'chips' ? setChipsEdit(x) : cvTypeDe(x) === 'lovelace' ? setLovelaceEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCarte(x)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
                   <button onClick={() => basculerW(x)} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-label={tr('Largeur double') + ' · ' + nomCarte(x)} aria-pressed={cvW(x) === 2}
                     style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
                   <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} aria-label={tr('Retirer') + ' · ' + nomCarte(x)} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
@@ -14338,17 +14463,19 @@ function CustomView({ cv, hass, edit = false, onSave }) {
         {retype && <CarteAjoutSheet hass={hass} remplace={retype} onClose={() => setRetype(null)} onPose={(e) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(retype) ? e : y))} />}
         {chipsEdit && <ChipsEditSheet x={chipsEdit} hass={hass} onClose={() => setChipsEdit(null)}
           onSave={(n) => { setChipsEdit(n); setEnts(cv.ents.map(y => cvKey(y) === cvKey(chipsEdit) ? n : y)); }} />}
+        {lovelaceEdit && <LovelaceEditSheet x={lovelaceEdit} hass={hass} onClose={() => setLovelaceEdit(null)}
+          onSave={(n) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(lovelaceEdit) ? n : y))} />}
       </div>
     </main>
   );
 }
 
-function ParametresView({ themeMode, loggiaTheme, haTheme, onMode, onPickTheme, onFollowHa, navbar, onToggleNavbar, wxFx, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, cielEtoile, onToggleCiel, navMargin, navAuto, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin, topAuto, onTopOffset, onTopOffsetReset, hass, users, userIdx, isAdmin, droits = [], onAddUser, onUpdateUser, onDeleteUser, customViews, onSaveCustomViews, onNav = null }) {
+function ParametresView({ themeMode, loggiaTheme, haTheme, onMode, onPickTheme, onFollowHa, navbar, onToggleNavbar, wxFx, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, retourAcc = 0, onRetourAcc, cielEtoile, onToggleCiel, navMargin, navAuto, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin, topAuto, onTopOffset, onTopOffsetReset, hass, users, userIdx, isAdmin, droits = [], onAddUser, onUpdateUser, onDeleteUser, customViews, onSaveCustomViews, onNav = null }) {
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <Suspense fallback={<div className="loggia-content" style={{ padding: '26px 28px 56px' }} />}>
-      <ParametresContent droits={droits} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} customViews={customViews} onSaveCustomViews={onSaveCustomViews} onNav={onNav} />
+      <ParametresContent droits={droits} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} retourAcc={retourAcc} onRetourAcc={onRetourAcc} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} customViews={customViews} onSaveCustomViews={onSaveCustomViews} onNav={onNav} />
       </Suspense>
     </main>
   );
@@ -16091,6 +16218,47 @@ export default function App() {
     arme();
     return () => { clearTimeout(t); evs.forEach(e => window.removeEventListener(e, reveil)); };
   }, [ambient]);
+  /* ── Le retour à l'accueil après inactivité (05/10) ────────────────────────
+   *
+   * Sur une tablette murale, une fiche laissée ouverte y reste jusqu'au
+   * prochain passage. Passé le délai, les feuilles se ferment et la vue revient
+   * à l'Accueil. COUPÉ par défaut : personne ne doit voir son écran bouger tout
+   * seul sans l'avoir demandé.
+   *
+   * Par APPAREIL, comme la veille : la tablette du couloir et le téléphone
+   * qu'on garde en main n'ont pas le même besoin.
+   *
+   * Ce minuteur vit dans l'onglet, et c'est sa place : il ne s'agit pas d'une
+   * action différée sur la maison — celles-là vivent dans le composant —, mais
+   * du comportement d'un écran. */
+  const [retourAcc, setRetourAcc] = useState(() => { try { return parseInt(localStorage.getItem('loggia-retour') || '0', 10) || 0; } catch { return 0; } });
+  const onRetourAcc = (min) => { setRetourAcc(min); try { localStorage.setItem('loggia-retour', String(min)); } catch {} };
+  /* Une référence vivante : le geste change à chaque rendu (il ferme la vue
+   * courante), et le mettre dans les dépendances relancerait le minuteur sans
+   * arrêt — il ne sonnerait jamais. */
+  const retourRef = useRef(null);
+  retourRef.current = () => {
+    /* Une saisie en cours ne se fait pas couper sous les doigts : on laisse le
+     * délai repartir plutôt que de fermer un formulaire à moitié rempli. */
+    const a = document.activeElement;
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return;
+    window.dispatchEvent(new Event(FERMER_TOUT));
+    setView('accueil');
+  };
+  useEffect(() => {
+    if (!retourAcc) return undefined;
+    let t = 0;
+    const sonne = () => { retourRef.current(); arme(); };
+    const arme = () => { clearTimeout(t); t = setTimeout(sonne, retourAcc * 60000); };
+    /* Ce qui compte comme activité : un geste de l'utilisateur. Un changement
+     * d'état de la maison n'en est PAS un — sinon le délai ne s'écoulerait
+     * jamais dans une maison vivante. */
+    const evs = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+    evs.forEach(e => window.addEventListener(e, arme, { passive: true }));
+    arme();
+    return () => { clearTimeout(t); evs.forEach(e => window.removeEventListener(e, arme)); };
+  }, [retourAcc]);
+
   // Fonds animés de l'Accueil : effets météo (défaut activés) et ciel étoilé en remplacement de « nuit claire » (défaut activé)
   const [wxFx, setWxFx] = useState(() => { try { return localStorage.getItem('loggia-wxfx') !== '0'; } catch { return true; } });
   const onToggleWxFx = () => setWxFx(v => { const nv = !v; try { localStorage.setItem('loggia-wxfx', nv ? '1' : '0'); } catch {} return nv; });
@@ -16335,7 +16503,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <ObjetsView hass={hass} onNav={setView} filtre="volets" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'voletsplan' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer && !compteOrdinaire(hass)} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); /* Une mesure absente reste null (audit du 03/10) : `base` porte les valeurs de vitrine du modèle (PIECES, l'écran d'avant la connexion), et la fiche de confort les affichait pour une vraie pièce — « Humidité 60 % » dans une chambre sans hygromètre. */ return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? dec(lv.temp, 1) + '°' : null, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : null, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <ObjetsView hass={hass} onNav={setView} filtre="volets" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'voletsplan' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} retourAcc={retourAcc} onRetourAcc={onRetourAcc} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer && !compteOrdinaire(hass)} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); /* Une mesure absente reste null (audit du 03/10) : `base` porte les valeurs de vitrine du modèle (PIECES, l'écran d'avant la connexion), et la fiche de confort les affichait pour une vraie pièce — « Humidité 60 % » dans une chambre sans hygromètre. */ return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? dec(lv.temp, 1) + '°' : null, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : null, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
       </Barriere>
       </div>
       {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} menuOuvert={navOpen} assistantAttendu={assistantAttendu} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}

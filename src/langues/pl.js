@@ -2666,4 +2666,19 @@ export default {
   'À sortir ce matin': 'Wystaw dziś rano',
   'À sortir ce soir avant {h}': 'Wystaw dziś wieczorem przed {h}',
   'C’est sorti': 'Wystawione',
+
+  // Le retour a l'accueil apres inactivite (05/10)
+  'Retour à l’accueil': 'Powrót do strony głównej',
+  'Après ce délai sans toucher, les fenêtres se ferment et Loggia revient à l’accueil.': 'Po tym czasie bez dotknięcia okna zamykają się, a Loggia wraca do strony głównej.',
+  'Coût du jour': 'Koszt dzisiaj',
+
+  // Les cartes Lovelace posees dans Loggia (05/10)
+  'Carte Home Assistant': 'Karta Home Assistant',
+  'Une carte se décrit par des clés, pas par une liste.': 'Kartę opisują klucze, a nie lista.',
+  'Cette configuration ne se lit pas. Les ancres et les blocs « | » ne sont pas pris en charge.': 'Tej konfiguracji nie da się odczytać. Kotwice i bloki „|” nie są obsługiwane.',
+  'Collez la configuration de la carte, comme dans Home Assistant.': 'Wklej konfigurację karty, tak jak w Home Assistant.',
+  'Configuration de la carte': 'Konfiguracja karty',
+  'Home Assistant n’a pas fourni ses cartes.': 'Home Assistant nie udostępnił swoich kart.',
+  'Aucune carte configurée.': 'Nie skonfigurowano karty.',
+  'Carte « {t} » introuvable. La ressource est-elle installée ?': 'Nie znaleziono karty „{t}”. Czy zasób jest zainstalowany?',
 };

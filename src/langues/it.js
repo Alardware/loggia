@@ -2665,4 +2665,19 @@ export default {
   'À sortir ce matin': 'Da portare fuori stamattina',
   'À sortir ce soir avant {h}': 'Da portare fuori stasera entro le {h}',
   'C’est sorti': 'È fuori',
+
+  // Le retour a l'accueil apres inactivite (05/10)
+  'Retour à l’accueil': 'Ritorno alla home',
+  'Après ce délai sans toucher, les fenêtres se ferment et Loggia revient à l’accueil.': 'Dopo questo tempo senza tocchi, le finestre si chiudono e Loggia torna alla home.',
+  'Coût du jour': 'Costo di oggi',
+
+  // Les cartes Lovelace posees dans Loggia (05/10)
+  'Carte Home Assistant': 'Scheda Home Assistant',
+  'Une carte se décrit par des clés, pas par une liste.': 'Una scheda si descrive con chiavi, non con un elenco.',
+  'Cette configuration ne se lit pas. Les ancres et les blocs « | » ne sont pas pris en charge.': 'Questa configurazione non si legge. Le ancore e i blocchi «|» non sono supportati.',
+  'Collez la configuration de la carte, comme dans Home Assistant.': 'Incolla la configurazione della scheda, come in Home Assistant.',
+  'Configuration de la carte': 'Configurazione della scheda',
+  'Home Assistant n’a pas fourni ses cartes.': 'Home Assistant non ha fornito le sue schede.',
+  'Aucune carte configurée.': 'Nessuna scheda configurata.',
+  'Carte « {t} » introuvable. La ressource est-elle installée ?': 'Scheda «{t}» non trovata. La risorsa è installata?',
 };
