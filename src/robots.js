@@ -13,11 +13,11 @@
  * langues), à défaut à leur identifiant. Et rien ne s'invente : une mesure que
  * l'appareil ne publie pas ne se dessine pas.
  */
-import { tr, locale } from './i18n.js';
+import { tr, locale, comparerTextes } from './i18n.js';
+import { sansAccents } from './outils.js';
 
 export const DOMAINES_ROBOT = ['vacuum', 'lawn_mower'];
 
-const sansAccents = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const nombre = (v) => { const n = typeof v === 'number' ? v : parseFloat(v); return isNaN(n) ? null : n; };
 const borne = (n, a, b) => Math.min(b, Math.max(a, n));
 
@@ -51,7 +51,7 @@ export function decrireSoeurs(index, states, idRobot) {
       texte: sansAccents((m.translationKey || '') + ' ' + objet),
     });
   });
-  return out.sort((x, y) => x.id.localeCompare(y.id));
+  return out.sort((x, y) => comparerTextes(x.id, y.id));
 }
 
 const vivant = (s) => s && s.etat != null && s.etat !== 'unavailable' && s.etat !== 'unknown' && s.etat !== '';

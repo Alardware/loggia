@@ -31,7 +31,13 @@ class FauxEtats:
         self.table = dict(table)
 
     def get(self, haid):
-        return self.table.get(haid)
+        st = self.table.get(haid)
+        # Les volets de ces tests sont des volets roulants : un volet se
+        # reconnait a sa classe depuis le 03/10 (ouvrants.py). Un test qui veut
+        # un ouvrant SANS classe l'ecrit : `{"device_class": None}`.
+        if st is not None and haid.startswith("cover.") and "device_class" not in st.attributes:
+            st.attributes["device_class"] = "shutter"
+        return st
 
     def async_entity_ids(self, domaine):
         return [e for e in self.table if e.startswith(domaine + '.')]

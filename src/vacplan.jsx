@@ -11,8 +11,9 @@
  * rafraichissement a l'autre, contrairement a sa position dans la liste.
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { cfgVal, cfgSet } from './state.js';
-import { tr } from './i18n.js';
+import { cfgVal, cfgSet, compteOrdinaire } from './state.js';
+import { tr, trN } from './i18n.js';
+import { detecterPieces } from './vacplan_pixels.js';
 
 /** Cle de configuration : { "<couleur hex>": "<id de zone>" }. */
 const CLE_ASSOC = 'loggia_vacplan';
@@ -39,98 +40,9 @@ function poser(ctx, img, rot, w, h) {
   ctx.restore();
 }
 
-// Quantification : le rendu de la carte est legerement bruite (anti-aliasing,
-// compression), deux pixels d'une meme piece ne sont jamais identiques au bit
-// pres. On regroupe par paliers de 24 niveaux.
-const PALIER = 24;
-const quant = (v) => Math.min(255, Math.round(v / PALIER) * PALIER);
-const hex = (r, g, b) => [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
-
-/**
- * Regions colorees d'une image.
- *
- * Ne retient que les teintes franches et suffisamment etendues : le fond, les
- * murs, le trajet du robot (blanc) et les hachures sont soit trop sombres, soit
- * trop desatures, soit trop rares pour passer les seuils.
- */
-/**
- * Distance de TEINTE, clarte mise de cote.
- *
- * Les hachures et le trace du robot eclaircissent une piece sans en changer la
- * couleur : en RGB brut leur ecart (~45) depasse celui de deux pastels voisins
- * (~40), impossible a departager. Rapporter chaque canal a la somme des trois
- * annule la clarte et ne garde que la teinte.
- */
-function ecart(a, b) {
-  const sa = (a[0] + a[1] + a[2]) || 1, sb = (b[0] + b[1] + b[2]) || 1;
-  const dr = a[0] / sa - b[0] / sb, dg = a[1] / sa - b[1] / sb;
-  return Math.sqrt(dr * dr + dg * dg);
-}
-
-/**
- * @param {number} attendu  Nombre de pieces que le robot declare. On ne garde
- *   que les regions les plus etendues jusqu'a ce compte : au-dela, ce sont des
- *   variantes de teinte, pas des pieces.
- */
-function detecterPieces(data, w, h, attendu = 0) {
-  const seaux = new Map();
-  // Un pixel sur deux dans chaque direction : quatre fois moins de travail,
-  // pour un resultat identique a cette echelle.
-  for (let y = 0; y < h; y += 2) {
-    for (let x = 0; x < w; x += 2) {
-      const i = (y * w + x) * 4;
-      if (data[i + 3] < 200) continue;
-      const r = data[i], g = data[i + 1], b = data[i + 2];
-      const max = Math.max(r, g, b), min = Math.min(r, g, b);
-      // Trop sombre (murs, fond) ou trop gris (trajet, hachures) : ce n'est pas
-      // une piece.
-      if (max < 90 || max - min < 18) continue;
-      const k = hex(quant(r), quant(g), quant(b));
-      let s = seaux.get(k);
-      if (!s) { s = { n: 0, sx: 0, sy: 0, pts: [] }; seaux.set(k, s); }
-      s.n++;
-      s.sx += x; s.sy += y;
-      s.pts.push(x, y);
-    }
-  }
-  const total = (w * h) / 4;
-  // Regroupement des teintes voisines : une piece hachuree ou parcourue par le
-  // robot produit plusieurs paliers qui sont la MEME piece.
-  const groupes = [];
-  [...seaux.entries()]
-    .sort((a, b) => b[1].n - a[1].n)
-    .forEach(([couleur, s]) => {
-      const rgb = [parseInt(couleur.slice(0, 2), 16), parseInt(couleur.slice(2, 4), 16), parseInt(couleur.slice(4, 6), 16)];
-      // 0,020 : mesure sur une carte hachuree — au-dela, deux pastels
-      // distincts fusionnent ; en deca, une meme piece se scinde.
-      const proche = groupes.find(g => ecart(g.rgb, rgb) < 0.020);
-      if (proche) {
-        proche.n += s.n; proche.sx += s.sx; proche.sy += s.sy;
-        for (let i = 0; i < s.pts.length; i++) proche.pts.push(s.pts[i]);
-      } else {
-        groupes.push({ couleur, rgb, n: s.n, sx: s.sx, sy: s.sy, pts: s.pts.slice() });
-      }
-    });
-  const retenus = groupes.filter(g => g.n / total > 0.012);
-  // Le robot fait foi sur le NOMBRE de pieces.
-  const gardes = attendu > 0 ? retenus.slice(0, attendu) : retenus;
-  return gardes
-    .map(g => [g.couleur, g])
-    .map(([couleur, s]) => {
-      // Centre de masse, puis le point REEL de la piece qui s'en approche le
-      // plus : sur une forme en L, le centre de masse tombe dans le vide.
-      const cx = s.sx / s.n, cy = s.sy / s.n;
-      let bx = s.pts[0], by = s.pts[1], best = Infinity;
-      for (let i = 0; i < s.pts.length; i += 2) {
-        const dx = s.pts[i] - cx, dy = s.pts[i + 1] - cy;
-        const d = dx * dx + dy * dy;
-        if (d < best) { best = d; bx = s.pts[i]; by = s.pts[i + 1]; }
-      }
-      // En fractions de l'image : le rendu peut etre a n'importe quelle taille.
-      return { couleur, part: s.n / total, x: bx / w, y: by / h };
-    })
-    .sort((a, b) => b.part - a.part);
-}
+// Les pieces se lisent dans les pixels de la carte : `detecterPieces`, sortie
+// telle quelle dans vacplan_pixels.js (lot 16, 05/10) pour se verifier sous
+// node sans React ni canvas.
 
 /**
  * `zones` arrive deja resolu par `vacRooms` : pieces declarees par le robot,
@@ -242,19 +154,22 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
   };
 
   const zoneDe = (couleur) => pieces.find(z => z.id === assoc[couleur]) || null;
+  /* Nommer une piece de la carte ecrit `loggia_vacplan`, la configuration de
+   * la maison (03/10) : un compte Home Assistant ordinaire ne pourrait jamais
+   * l'enregistrer. Il voit les pieces deja nommees et les cible ; les « ? »,
+   * l'invite et « Reassocier les pieces » ne lui sont pas montres. Pivoter
+   * reste : le quart de tour (`loggia_vacrot`) est de l'apparence. */
+  const ordinaire = compteOrdinaire(hass);
   const libres = useMemo(
     () => pieces.filter(z => !Object.values(assoc).includes(z.id)),
     [pieces, assoc]
   );
 
-  if (!haid) {
-    return (
-      <div style={{ padding: '28px 10px', textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>
-        {tr('Aucune carte : désigne l’entité {quoi} du robot dans Paramètres → Entités.', { quoi: 'image' })}
-      </div>
-    );
-  }
-
+  /* Pas d'etat « sans carte » ici (audit du 03/10) : la fiche du robot ne
+   * monte ce plan que si elle a trouve une image (`idCarte ? planDe() : null`,
+   * ficherobot.jsx). L'ancienne branche, jamais atteinte, envoyait vers la
+   * section Entites des Parametres, qui n'existe plus. Une image qui ne se
+   * charge pas donne « Carte indisponible », plus bas. */
   return (
     <div>
       {/* Encombrement borne en largeur ET en hauteur : sans cela la carte
@@ -272,15 +187,17 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
           ? <canvas ref={cvRef} role="img" aria-label={tr('Plan du logement')} style={{ display: 'block', width: '100%', height: 'auto' }} />
           : <div style={{ aspectRatio: '4/3', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Carte indisponible')}</div>}
 
-        {regions.map(r => {
+        {regions.filter(r => !ordinaire || zoneDe(r.couleur)).map(r => {
           const z = zoneDe(r.couleur);
           const on = z ? !!selection[z.id] : false;
+          // Le nom lu et l'info-bulle se disent dans la langue de l'écran (audit
+          // du 03/10) : « Cibler Kitchen » sortait en français.
           return (
             <button key={r.couleur}
               onClick={() => (z ? onToggle && onToggle(z) : setAAssocier(r.couleur))}
               aria-pressed={on}
-              aria-label={z ? ((on ? 'Retirer ' : 'Cibler ') + z.name) : 'Associer cette pièce'}
-              title={z ? z.name : 'Cliquer pour nommer cette pièce'}
+              aria-label={z ? (on ? tr('Retirer {nom}', { nom: z.name }) : tr('Cibler {nom}', { nom: z.name })) : tr('Associer cette pièce')}
+              title={z ? z.name : tr('Cliquer pour nommer cette pièce')}
               style={{
                 position: 'absolute',
                 left: (r.x * 100) + '%', top: (r.y * 100) + '%',
@@ -289,9 +206,14 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer', whiteSpace: 'nowrap',
                 fontSize: 11, fontWeight: 800,
-                background: on ? 'rgba(255,255,255,.94)' : 'rgba(8,13,22,.82)',
-                color: on ? '#0b101b' : 'rgba(255,255,255,.88)',
-                border: '1.5px solid ' + (on ? '#fff' : z ? 'rgba(255,255,255,.42)' : 'rgba(255,214,102,.75)'),
+                /* Choisie : bleu plein, texte blanc, comme toute puce choisie.
+                 * Sinon, une surface OPAQUE du thème : le plan est une image aux
+                 * couleurs du robot, une surface translucide y laisserait le
+                 * texte à la merci d'un aplat clair. Une pièce encore à nommer
+                 * garde son liseré doré (lot 15 de l’audit du 03/10). */
+                background: on ? 'var(--o-accent-fond)' : 'var(--o-bg)',
+                color: on ? '#fff' : 'var(--o-text)',
+                border: '1.5px solid ' + (on ? 'transparent' : z ? 'rgba(var(--o-text3-rgb),.6)' : 'rgba(var(--o-gold-rgb),.75)'),
                 boxShadow: '0 2px 8px rgba(0,0,0,.45)',
                 transition: 'background .15s, color .15s',
               }}>
@@ -302,14 +224,14 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 10, fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', flexWrap: 'wrap' }}>
-        <span>{regions.length ? (regions.length > 1 ? tr('{n} pièces détectées', { n: regions.length }) : tr('{n} pièce détectée', { n: regions.length })) : tr('Analyse de la carte…')}</span>
-        {regions.some(r => !zoneDe(r.couleur)) && <span style={{ color: 'var(--o-warn2)' }}>{tr('Clique une zone « ? » pour la nommer')}</span>}
+        <span>{regions.length ? trN(regions.length, '{n} pièce détectée', '{n} pièces détectées') : tr('Analyse de la carte…')}</span>
+        {!ordinaire && regions.some(r => !zoneDe(r.couleur)) && <span style={{ color: 'var(--o-warn2)' }}>{tr('Clique une zone « ? » pour la nommer')}</span>}
         <span style={{ flex: 1 }} />
         <button onClick={pivoter} title={tr('Pivoter la carte d’un quart de tour')}
           style={{ padding: '5px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)' }}>
           {tr('Pivoter')}
         </button>
-        {Object.keys(assoc).length > 0 && (
+        {!ordinaire && Object.keys(assoc).length > 0 && (
           <button onClick={() => { setAssoc({}); cfgSet({ [CLE_ASSOC]: null }); }}
             style={{ padding: '5px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)' }}>{tr('Réassocier les pièces')}</button>
         )}

@@ -58,13 +58,25 @@ test('les paliers sont CEUX des captures du 19/09, borne par borne', () => {
 });
 
 test('la fiche de confort lit la meme table : ses verdicts sont delegues', () => {
-  const table = bloc('const COMFORT = {', NL + '};');
+  const table = bloc('const FICHE_CONFORT = () => ({', NL + '});');
   for (const cle of ['temp', 'hum', 'co2', 'bruit']) assert.ok(table.includes("verdict: v => verdictMesure('" + cle + "', v) }"), cle + ' : verdict delegue');
   assert.ok(!/verdict: v => v </.test(table), 'plus aucun seuil ecrit dans la fiche : une seule table, confort.js');
   assert.ok(table.includes("bruit: { key: 'bruit', label: tr('Bruit'), ico: 'volume', ...echelleFiche('bruit'),"), 'le bruit a sa barre dans la fiche');
   // La barre de la fiche : l'echelle des jauges des cartes (19/09).
   assert.ok(app.includes('const e = echelleMesure(cle);') && app.includes("return { min: e.de, max: e.a, grad: 'linear-gradient(90deg,' + e.bandes.map(b => b.c + ' ' + b.de + '% ' + b.a + '%').join(',') + ')',"), 'bornes, couleurs et reperes des cartes');
-  assert.ok(app.includes("import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile } from './confort.js';"));
+  assert.ok(app.includes("import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile, mesuresFiche } from './confort.js';"));
+});
+
+test('la fiche de confort se dit dans la langue du moment (relecture du 03/10)', () => {
+  /* Objet du module, la table se bâtissait une fois, à l'import : passer à
+   * l'allemand sans recharger laissait « Qualité de l'air », « Température »…
+   * en français. Une fonction, appelée à chaque rendu de la fiche. */
+  assert.ok(!/^const COMFORT = \{/m.test(app), 'la table de la fiche est redevenue un objet du module : ses titres se figent à l’import');
+  assert.ok(app.includes('const FICHE_CONFORT = () => ({'), 'la table de la fiche est une fonction');
+  const fiche = bloc('function RoomComfortModal(', NL + '}');
+  assert.ok(fiche.includes('const table = FICHE_CONFORT();'), 'appelée au rendu de la fiche, pas une fois pour toutes');
+  const table = bloc('const FICHE_CONFORT = () => ({', NL + '});');
+  for (const titre of ["tr('Température')", "tr('Humidité')", `tr("Qualité de l'air")`, "tr('Bruit')"]) assert.ok(table.includes('label: ' + titre), titre + ' : le titre se traduit dans la fonction');
 });
 
 test('la note d’une mesure : 100 sur le plateau de l’idéal, puis une pente entre les ancrages', () => {
@@ -158,7 +170,7 @@ test('la vue d’une piece : la barre de confort a la place des reglages rapides
   assert.ok(app.includes('capteurBruitPiece((getHass() || {}).states, activeRoom)].filter(Boolean) : [];'), 'et il est relu en direct quand la piece est ouverte');
   const fiche = bloc('function RoomComfortModal(', NL + '}');
   assert.ok(fiche.includes('const confort = indiceConfort(vals, uniteT);') && fiche.includes("const overall = confort ? confort.verdict : { t: '—', c: 'var(--o-text2)' };") && fiche.includes("{tr('Indice de confort')} · {confort.indice} / 100"), 'la fiche dit le meme mot que la barre');
-  assert.ok(fiche.includes('const metrics = [COMFORT.temp, COMFORT.hum, COMFORT.co2, COMFORT.bruit].filter(m => vals[m.key] != null);'));
+  assert.ok(fiche.includes('const metrics = [table.temp, table.hum, table.co2, table.bruit].filter(m => vals[m.key] != null);'));
 });
 
 test('la barre : l’indice et son anneau, un filet, une pastille par mesure', () => {
@@ -168,7 +180,9 @@ test('la barre : l’indice et son anneau, un filet, une pastille par mesure', (
   assert.ok(barre.includes('if (!confort) return null;'), 'sans mesure, pas de barre');
   assert.ok(barre.includes('strokeDashoffset={TOUR * (1 - Math.max(0, Math.min(100, indice)) / 100)}') && barre.includes('stroke={verdict.c}'), 'l’anneau se remplit a hauteur de l’indice, a la couleur du verdict');
   assert.ok(barre.includes("background: 'rgba(' + cl_hexRgb(m.verdict.c) + ',.16)', color: m.verdict.c"), 'chaque pastille prend la couleur de SON verdict');
-  assert.ok(barre.includes('role="button" tabIndex={0} aria-label={tr(\'Historique du confort\')}') && barre.includes("if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }"), 'au clavier comme au doigt');
+  // Son nom est ce qu'elle affiche, l'indice et son mot ; ce qu'elle ouvre
+  // passe en infobulle (lot 13 de l'audit du 03/10).
+  assert.ok(barre.includes("role=\"button\" tabIndex={0} aria-label={nomCarte(tr('Indice de confort'), indice + ' / 100', verdict.t)}") && barre.includes("aria-haspopup=\"dialog\" title={tr('Historique du confort')}") && barre.includes("if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }"), 'au clavier comme au doigt');
   assert.ok(barre.includes("style={{ '--conf-n': mesures.length }}"));
   assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(barre), 'aucune couleur en dur');
 });
@@ -199,7 +213,7 @@ test('la barre a la hauteur de celle des scenarios (retour du 18/09)', () => {
   assert.ok(css.includes('.o-confort-nom { font-size: 10.5px; line-height: 1.15;') && css.includes('.o-confort-val { display: flex; align-items: center; gap: 6px; margin-top: 1px; font-size: 12.5px; line-height: 1.2;'), 'le nom au-dessus de la valeur, en petit');
 });
 
-test('deux mesures ou moins : les tuiles restent EN LIGNE', () => {
+test('deux mesures ou moins : les tuiles restent EN LIGNE', async () => {
   /* Maquette 2a (01/10). L'empilement au téléphone — icône au-dessus, valeur
    * dessous — sert à tenir QUATRE pastilles sur 375 px. À deux, il ne fabrique
    * que des tuiles hautes et vides, alors que la place ne manque pas.
@@ -207,9 +221,26 @@ test('deux mesures ou moins : les tuiles restent EN LIGNE', () => {
    * C'est le NOMBRE de mesures qui décide, pas la largeur seule : une pièce
    * avec un thermomètre et un hygromètre n'a aucune raison de s'empiler là où
    * une pièce à quatre capteurs le doit. */
-  const bc = readFileSync(join(RACINE, 'src', 'barreconfort.jsx'), 'utf8');
-  assert.ok(bc.includes("mesures.length <= 2 ? ' o-confort-peu' : ''"),
-    'la barre ne distingue plus le cas « peu de mesures »');
+  /* RENDUE, plus relue (lot 15 de l'audit du 03/10, couverture réelle) : on
+   * épinglait la ligne du JSX, qu'un déplacement de la classe sur un enfant ou
+   * un compte réécrit laissaient intacte. Les mesures viennent du vrai
+   * `indiceConfort`, comme dans la vue d'une pièce. */
+  const { composant, rendre } = await import('./rendu.mjs');
+  const BarreConfort = await composant('barreconfort.jsx', 'BarreConfort');
+  const racine = (html) => html.slice(0, html.indexOf('>') + 1);
+  const deux = rendre(BarreConfort, { confort: indiceConfort({ temp: 21.4, hum: 47 }), onOpen: () => {} });
+  assert.match(racine(deux), /^<div class="o-confort o-confort-peu"/, 'à deux mesures, la barre ne se dit plus « peu de mesures »');
+  assert.match(racine(deux), /--conf-n:\s*2/);
+  assert.equal((deux.match(/class="o-confort-mesure"/g) || []).length, 2, 'une pastille par mesure');
+  const ordre = ['>Température<', '>21,4 °C<', '>Idéal<', '>Humidité<', '>47 %<', '>Idéal<'];
+  let curseur = -1;
+  for (const morceau of ordre) { const i = deux.indexOf(morceau, curseur + 1); assert.ok(i > curseur, morceau + ' manque ou n’est pas à sa place'); curseur = i; }
+  const une = rendre(BarreConfort, { confort: indiceConfort({ co2: 1280 }), onOpen: () => {} });
+  assert.match(racine(une), /^<div class="o-confort o-confort-peu"/, 'une seule mesure : en ligne aussi');
+  for (const vals of [{ temp: 19.6, hum: 49, co2: 1280 }, { temp: 21.4, hum: 47, co2: 612, bruit: 34 }]) {
+    const html = rendre(BarreConfort, { confort: indiceConfort(vals), onOpen: () => {} });
+    assert.match(racine(html), /^<div class="o-confort"/, Object.keys(vals).length + ' mesures : la colonne du téléphone reste due');
+  }
 
   const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
   const petit = css.slice(css.indexOf('@media (max-width: 560px)'));

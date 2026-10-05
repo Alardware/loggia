@@ -21,5 +21,16 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "scenario_inconnu": {
+      "message": "Er is geen Loggia-scenario met de ID ‘{id}’."
+    },
+    "scenarios_indisponibles": {
+      "message": "De Loggia-scenario’s zijn niet beschikbaar: de integratie is niet gestart."
+    },
+    "compte_illisible": {
+      "message": "Scenario geweigerd: het account dat erom vroeg kon niet worden gelezen."
+    }
   }
 }

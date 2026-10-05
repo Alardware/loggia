@@ -7,13 +7,13 @@
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, ListeChoix, ChampSuggere, CroixFeuille
+  Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, ListeChoix, ChampSuggere, CroixFeuille, NomFeuille
 } from '../ui.jsx';
 import {
   cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, medCompanion,
   medPlayers, normRooms, secAlarm, switchLightsCfg,
-  exportConfigComplete, importConfigComplete, resetLoggiaComplet, cheminPanneau, lirePageAccueil,
-  definirPageAccueil, DROITS
+  exportConfigComplete, lireConfigImport, importConfigComplete, resetLoggiaComplet, cheminPanneau, lirePageAccueil,
+  definirPageAccueil, DROITS, DROITS_ADMIN_HA, compteOrdinaire
 } from '../state.js';
 import { conversationsDe, entiteChoisie, choixAssistant } from '../assistant.js';
 import {
@@ -24,7 +24,11 @@ import { useLoggia } from '../runtime.js';
 import { commanderService } from '../actions.js';
 import { viewReason } from '../views.js';
 import { detecterCapteursPieces } from '../resolve.js';
-import { autoFamille } from '../autos.js';
+import { autoFamille, FAMILLES_AUTO } from '../autos.js';
+import { sansAccents } from '../outils.js';
+import { croqRepasEdition } from '../lectures.js';
+import { reposerFocus } from '../focus.js';
+import { useDemandes, enVol } from '../optimiste.js';
 import { InterrupteursSection, gestesRegles, appareilsVisibles } from './interrupteurs.jsx';
 import { VoletsReglages, VoletsAffichage } from './volets.jsx';
 import { FenetresReglages } from './fenetres.jsx';
@@ -33,8 +37,9 @@ import { NuitReglages } from './nuit.jsx';
 import { VeillesReglages } from './veilles.jsx';
 import { JournalReglages } from './journal.jsx';
 import { weatherEntity } from '../wxutil.jsx';
-import { tr, locale, choixLangue, languesDisponibles, nomProfil } from '../i18n.js';
-import { uniteTemp } from '../unites.js';
+import { tr, trN, locale, choixLangue, languesDisponibles, nomProfil, comparerTextes } from '../i18n.js';
+import { raisonEchec, bilanEcritures, texteRefus } from '../refus.js';
+import { uniteTemp, wattsDe } from '../unites.js';
 import { Panneau, Ligne, Pastille, CAPITALES, MONO, DESC_PANNEAU, FILET, btnPrimaire, btnSecondaire, btnDiscret, btnDanger } from './parcommun.jsx';
 
 /* ── Les briques d'affichage, au niveau du module ────────────────────────────
@@ -74,10 +79,16 @@ const OptRow = ({ title, desc, children, retrait = false, eteint = false }) => (
 // Segment : 2 a 3 choix mutuellement exclusifs, sur une piste unique.
 /* `wrap` : une liste dont on ne connait pas la longueur — les entites d'une
  * maison — se replie au lieu de deborder de l'ecran d'un telephone. */
-const Seg = ({ value, opts, onPick, disabled = false, wrap = false }) => (
-  <div style={{ display: 'flex', flexWrap: wrap ? 'wrap' : 'nowrap', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: disabled ? .5 : 1 }}>
+/* `label` nomme le groupe, et chaque option dit si elle est choisie (audit
+ * du 03/10). Le choix ne se voyait qu'en bleu plein : un lecteur d'ecran
+ * lisait « Auto, bouton », « Clair, bouton »… sans dire lequel etait pris, ni
+ * de quoi il s'agissait. Meme contrat que `Segment` (App.jsx) : un groupe
+ * nomme, `aria-pressed` sur chaque option. Chaque appel donne son nom — le
+ * plus souvent le titre de la ligne qui l'entoure. Le bleu plein ne change pas. */
+const Seg = ({ value, opts, onPick, label, disabled = false, wrap = false }) => (
+  <div role="group" aria-label={label} style={{ display: 'flex', flexWrap: wrap ? 'wrap' : 'nowrap', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: disabled ? .5 : 1 }}>
     {opts.map(([v, lb]) => (
-      <button key={String(v)} disabled={disabled} onClick={() => onPick(v)} style={{ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: value === v ? 'var(--o-accent-fond)' : 'transparent', color: value === v ? '#fff' : 'var(--o-text2)', boxShadow: 'none', fontFamily: 'inherit' }}>{lb}</button>
+      <button key={String(v)} aria-pressed={value === v} disabled={disabled} onClick={() => onPick(v)} style={{ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: value === v ? 'var(--o-accent-fond)' : 'transparent', color: value === v ? '#fff' : 'var(--o-text2)', boxShadow: 'none', fontFamily: 'inherit' }}>{lb}</button>
     ))}
   </div>
 );
@@ -89,7 +100,7 @@ const MarginRow = ({ label, px, auto, onStep }) => (
     <div style={{ fontSize: 13, fontWeight: 700, width: 120, flexShrink: 0 }}>{label}</div>
     <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
       <button onClick={() => onStep(-2)} style={stepBtn} aria-label={tr('Réduire') + ' ' + label}>−</button>
-      <span style={{ minWidth: 48, textAlign: 'center', fontWeight: 800, fontSize: 12, fontFamily: 'ui-monospace,monospace', color: auto ? 'var(--o-text3)' : 'var(--o-text)' }}>{auto ? 'auto' : Math.round(px) + 'px'}</span>
+      <span style={{ minWidth: 48, textAlign: 'center', fontWeight: 800, fontSize: 12, fontFamily: 'ui-monospace,monospace', color: auto ? 'var(--o-text3)' : 'var(--o-text)' }}>{auto ? tr('auto') : Math.round(px) + 'px'}</span>
       <button onClick={() => onStep(2)} style={stepBtn} aria-label={tr('Augmenter') + ' ' + label}>+</button>
     </div>
   </div>
@@ -280,8 +291,15 @@ function AlertesTele({ hass }) {
     const n = { ...cfg, ...patch };
     setCfg(n); setMsg('');
     if (local) { cfgSet({ loggia_alertes: n }); return; }
+    /* Un refus n'est pas une panne (audit du 03/10). `loggia_alertes` est un
+     * réglage de la maison : sous un compte Home Assistant ordinaire, le
+     * composant le refuse (`not_admin`, la clé nommée — store.py), même quand
+     * le profil a reçu « Alertes ». L'écran disait « le composant ne répond
+     * pas » et envoyait chercher une panne. Sur un échec, la bascule revient
+     * aussi à la valeur d'avant — sauf si un réglage plus récent l'a déjà
+     * remplacée. */
     if (h) h.callWS({ type: 'loggia/config/set', config: { loggia_alertes: n } })
-      .catch(() => setMsg(tr('Enregistrement impossible — le composant ne répond pas.')));
+      .catch((e) => { setMsg(raisonEchec(e, 'loggia_alertes')); setCfg(c => (c === n ? cfg : c)); });
   };
   const test = () => {
     if (!cfg.service) { setMsg(tr('Choisis d’abord un téléphone.')); return; }
@@ -304,8 +322,8 @@ function AlertesTele({ hass }) {
     if (!ids.length) return tr('Aucun détecteur pour l’instant');
     const n = ids.length;
     const base = humidite
-      ? (n > 1 ? tr('{n} détecteurs d’humidité', { n }) : tr('{n} détecteur d’humidité', { n }))
-      : (n > 1 ? tr('{n} détecteurs', { n }) : tr('{n} détecteur', { n }));
+      ? trN(n, '{n} détecteur d’humidité', '{n} détecteurs d’humidité')
+      : trN(n, '{n} détecteur', '{n} détecteurs');
     const piece = n === 1 && LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' ? LOGGIA_INDEX.areaNameOf(ids[0]) : null;
     return piece ? base + ' · ' + piece : base;
   };
@@ -324,7 +342,7 @@ function AlertesTele({ hass }) {
   const vanneAuto = vannes.find(id => (S[id].attributes || {}).device_class === 'water') || null;
   const nomDe = (id) => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id;
   // Par nom affiché, pas par identifiant : la liste se lit comme elle s'écrit.
-  const parNom = (ids) => ids.slice().sort((a, b) => nomDe(a).localeCompare(nomDe(b), locale()));
+  const parNom = (ids) => ids.slice().sort((a, b) => comparerTextes(nomDe(a), nomDe(b)));
   const vanne = cfg.actions.vanne.entite || '';
   const svcs = cfg.service && services.indexOf(cfg.service) < 0 ? [cfg.service, ...services] : services;
   const actOff = !cfg.actions.actif;
@@ -435,8 +453,12 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
   const temp = t0 && !isNaN(parseFloat(t0.state)) ? parseFloat(t0.state).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' °' + uTPrev : '—';
   const lightsOn = Object.keys(S).filter(id => id.indexOf('light.') === 0 && S[id].state === 'on').length;
   const en = { ...enHaids(), ...(cfgVal('loggia_energyHaids', null) || {}) };
-  const cw = en.consoNow && S[en.consoNow] ? parseFloat(S[en.consoNow].state) : NaN;
-  const conso = !isNaN(cw) ? (Math.abs(cw) >= 995 ? (Math.abs(cw) / 1000).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kW' : Math.round(Math.abs(cw)) + ' W') : '—';
+  // En watts, quelle que soit l'unité du compteur (audit du 03/10) : 2,75 kW
+  // donnait « 3 W » dans l'aperçu. `null` sans valeur : « — », pas « 0 W ».
+  const cw = en.consoNow && S[en.consoNow] ? wattsDe(S[en.consoNow]) : null;
+  // Arrondi AVANT l'unité (05/10), comme l'arc solaire : 994,6 W s'écrivait
+  // « 995 W » quand 995 donne « 1,0 kW » — `cw` arrive brut de `wattsDe`.
+  const conso = cw != null ? (Math.round(Math.abs(cw)) >= 995 ? (Math.abs(cw) / 1000).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kW' : Math.round(Math.abs(cw)) + ' W') : '—';
   const pvAlarm = (pvRes && pvRes.alarm && pvRes.alarm.available) ? pvRes.alarm.main : null;
   const al = (secAlarm() && S[secAlarm()]) ? S[secAlarm()] : (pvAlarm ? S[pvAlarm] : null);
   const alTxt = al ? (al.state === 'disarmed' ? tr('désarmée') : al.state.indexOf('armed') === 0 ? tr('armée') : al.state) : '—';
@@ -444,6 +466,14 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
   // Les memes mots que l'Accueil, traduits — l'apercu montrait « Bonjour,
   // Administrateur » en francais au milieu de l'italien (retour du 23/09).
   const greet = h < 6 ? tr('Bonne nuit') : h < 12 ? tr('Bonjour') : h < 18 ? tr('Bon après-midi') : tr('Bonsoir');
+  /* La ligne sous l'aperçu, dans la langue de l'écran (audit du 03/10) :
+   * « Thème « … » · mode foncé. » était écrit en clair autour de deux
+   * expressions, là où le filet des nœuds de texte ne regarde pas. Une phrase
+   * par mode, pour que chaque langue accorde son adjectif. */
+  const nomTheme = (PRESET_META().find(x => x.id === (loggiaTheme || '')) || PRESET_META()[0]).name;
+  const ligneTheme = themeMode === 'light'
+    ? tr('Thème « {nom} » · mode clair.', { nom: nomTheme })
+    : tr('Thème « {nom} » · mode foncé.', { nom: nomTheme });
   const tile = (v, l, c) => (
     <div key={l} style={{ background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: RAD[2], padding: '9px 11px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: c, flexShrink: 0 }} /><span style={{ fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span></div>
@@ -465,7 +495,7 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 9 }}>
           {tile(temp, rooms[0] ? rooms[0].room : tr('Pièce'), 'var(--o-orange)')}
-          {tile(lightsOn > 1 ? tr('{n} allumées', { n: lightsOn }) : tr('{n} allumée', { n: lightsOn }), tr('Lumières'), 'var(--o-gold)')}
+          {tile(trN(lightsOn, '{n} allumée', '{n} allumées'), tr('Lumières'), 'var(--o-gold)')}
           {tile(conso, tr('Consommation'), 'var(--o-ok)')}
           {tile(alTxt, tr('Alarme'), 'var(--o-accent)')}
         </div>
@@ -476,7 +506,7 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
           <span style={{ flex: 1, height: 14, borderRadius: RAD[3], background: 'var(--o-s3)' }} />
         </div>
       </div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', padding: '8px 2px 0' }}>Thème « {(PRESET_META().find(x => x.id === (loggiaTheme || '')) || PRESET_META()[0]).name} » · mode {themeMode === 'light' ? 'clair' : 'foncé'}.</div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', padding: '8px 2px 0' }}>{ligneTheme}</div>
     </div>
   );
 }
@@ -503,10 +533,16 @@ function telechargerConfig(texte, base) {
   } catch { return false; }
 }
 
+/* Un fichier qui n'a pas pu etre propose au telechargement n'est pas une
+ * sauvegarde : l'operation qui l'attendait s'arrete. */
+const PAS_DE_FICHIER = 'telechargement';
+
 function ResetLoggiaBtn() {
   const [arm, setArm] = useState(false);
   useEffect(() => { if (!arm) return undefined; const t = setTimeout(() => setArm(false), 4000); return () => clearTimeout(t); }, [arm]);
-  const [enCours, setEnCours] = useState(false);
+  // 'sauvegarde', puis 'raz' : le bouton dit ce qui se passe VRAIMENT.
+  const [etape, setEtape] = useState(null);
+  const enCours = etape != null;
   /**
    * Remise a zero REELLE : la configuration du serveur comprise.
    *
@@ -519,25 +555,129 @@ function ResetLoggiaBtn() {
    * autrement, et personne ne pense a exporter avant d'effacer.
    */
   const doReset = async () => {
-    setEnCours(true);
+    setEtape('sauvegarde');
     try {
       const j = await exportConfigComplete();
-      telechargerConfig(j, 'loggia-avant-remise-a-zero');
+      if (!telechargerConfig(j, 'loggia-avant-remise-a-zero')) throw new Error(PAS_DE_FICHIER);
     } catch {
       // Sans sauvegarde, pas de remise a zero : l'operation ne se rattrape
       // pas, et un fichier vide aurait l'air d'une sauvegarde (audit 18/09).
-      setEnCours(false); setArm(false);
+      setEtape(null); setArm(false);
       window.alert(tr('Sauvegarde impossible : la remise à zéro est annulée. Réessaie quand Home Assistant répond.'));
       return;
     }
+    setEtape('raz');
     try { await resetLoggiaComplet(); } catch {
-      setEnCours(false); setArm(false);
+      setEtape(null); setArm(false);
       window.alert(tr('Remise à zéro incomplète : Home Assistant a refusé ou n’a pas répondu. La configuration de la maison est inchangée.'));
       return;
     }
     window.location.reload();
   };
-  return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ ...btnDanger, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'transparent', color: arm ? '#fff' : 'var(--o-bad)', transition: 'background .2s, color .2s' }}>{enCours ? tr('Sauvegarde…') : arm ? tr('Confirmer ?') : tr('Réinitialiser…')}</button>;
+  return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ ...btnDanger, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'transparent', color: arm ? '#fff' : 'var(--o-bad)', transition: 'background .2s, color .2s' }}>{etape === 'raz' ? tr('Remise à zéro…') : enCours ? tr('Sauvegarde…') : arm ? tr('Confirmer ?') : tr('Réinitialiser…')}</button>;
+}
+
+/* Ce qu'un echec veut dire, dans la langue de l'ecran.
+ *
+ * Un refus de Home Assistant porte un code et son message ; une connexion
+ * perdue, le message de la bibliotheque (`{ error: { code, message } }`).
+ * Tout le reste — un fichier non propose, une page sans composant, la
+ * demonstration — se dit par une phrase traduite : jamais le texte interne
+ * d'une `Error`, souvent ecrit en francais, qui s'affichait tel quel au
+ * visiteur anglais de la demonstration (relecture du lot 1, audit du 03/10). */
+const motifEchec = (err) => {
+  if (err && err.message === PAS_DE_FICHIER) return tr('le fichier n’a pas pu être proposé au téléchargement.');
+  /* Un refus PRÉVISIBLE du composant — trop volumineux, une clé de la maison,
+   * le code administrateur — se dit par son code (refus.js, audit du 03/10) :
+   * « valeur trop volumineuse pour la cle … » sortait en français sans
+   * accents. Le motif reste le dernier recours. */
+  if (err && typeof err.code === 'string' && err.message) return texteRefus(err) || err.message;
+  if (err && err.error && err.error.message) return err.error.message;
+  return tr('Home Assistant n’a pas répondu.');
+};
+
+const LECTURE_IMPOSSIBLE = {
+  illisible: () => tr('ce fichier n’est pas un JSON lisible. Rien n’a été modifié.'),
+  pas_loggia: () => tr('ce fichier n’est pas une configuration Loggia. Rien n’a été modifié.'),
+  vide: () => tr('ce fichier ne contient aucun réglage à restaurer. Rien n’a été modifié.'),
+};
+
+/**
+ * Importer une configuration : lire, montrer, sauvegarder, puis remplacer.
+ *
+ * L'import partait des que le fichier etait choisi — pas de confirmation, pas
+ * de sauvegarde, alors qu'il remplace la configuration de TOUTE la maison. La
+ * remise a zero, elle, faisait deja les deux (audit 18/09). Le geste est
+ * maintenant le meme (audit du 03/10) :
+ *
+ * 1. le fichier est LU sans rien ecrire, et refuse s'il n'est pas une
+ *    configuration Loggia ;
+ * 2. son resume s'affiche — date, pieces, profils — et le bouton passe au
+ *    rouge : un second appui confirme, sinon tout retombe au bout de 15 s ;
+ * 3. la configuration actuelle est telechargee d'abord, et sans elle l'import
+ *    n'a pas lieu ;
+ * 4. puis UN SEUL envoi au composant, qui accepte tout ou rien.
+ */
+function ImportConfigBtn() {
+  const [lu, setLu] = useState(null);
+  // 'sauvegarde', puis 'import' : le bouton dit ce qui se passe VRAIMENT.
+  const [etape, setEtape] = useState(null);
+  const enCours = etape != null;
+  const fichier = useRef(null);
+  useEffect(() => { if (!lu || enCours) return undefined; const t = setTimeout(() => setLu(null), 15000); return () => clearTimeout(t); }, [lu, enCours]);
+
+  const choisir = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try { setLu(lireConfigImport(await f.text())); } catch (err) {
+      setLu(null);
+      const motif = err && LECTURE_IMPOSSIBLE[err.code];
+      window.alert(tr('Import impossible : ') + (motif ? motif() : motifEchec(err)));
+    }
+  };
+
+  const importer = async () => {
+    setEtape('sauvegarde');
+    try {
+      const j = await exportConfigComplete();
+      if (!telechargerConfig(j, 'loggia-avant-import')) throw new Error(PAS_DE_FICHIER);
+    } catch {
+      setEtape(null); setLu(null);
+      window.alert(tr('Sauvegarde impossible : l’import est annulé. Réessaie quand Home Assistant répond.'));
+      return;
+    }
+    setEtape('import');
+    try { await importConfigComplete(lu); } catch (err) {
+      setEtape(null); setLu(null);
+      // Un refus de Home Assistant porte un code : rien n'a ete ecrit. Une
+      // connexion perdue n'en porte pas — l'envoi a pu passer ou non.
+      window.alert(err && typeof err.code === 'string'
+        ? tr('Import refusé par Home Assistant : {x}. La configuration de la maison n’a pas été touchée.', { x: motifEchec(err) })
+        : tr('Import interrompu : {x}. Recharge la page pour voir la configuration en place.', { x: motifEchec(err) }));
+      return;
+    }
+    window.location.reload();
+  };
+
+  const r = lu && lu.resume;
+  const date = r && r.exporteLe
+    ? tr('Fichier du {d}', { d: new Date(r.exporteLe).toLocaleDateString(locale(), { day: 'numeric', month: 'long', year: 'numeric' }) })
+    : tr('Fichier sans date');
+  return (
+    <>
+      {r && (
+        <span role="status" style={{ flex: '1 1 100%', fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>
+          {date} · {tr('Pièces : {n}', { n: r.pieces })} · {tr('Profils : {n}', { n: r.profils })} — {tr('la configuration actuelle sera d’abord sauvegardée.')}
+        </span>
+      )}
+      <input ref={fichier} aria-label={tr('Importer un fichier de configuration')} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={choisir} />
+      <button disabled={enCours} onClick={() => { if (lu) importer(); else if (fichier.current) fichier.current.click(); }}
+        style={lu ? { ...btnDanger, background: 'var(--o-bad)', color: '#fff' } : btnSecondaire}>
+        {etape === 'import' ? tr('Import…') : enCours ? tr('Sauvegarde…') : lu ? tr('Remplacer la configuration ?') : tr('Importer')}
+      </button>
+    </>
+  );
 }
 
 function AdminPinEditor({ hass }) {
@@ -579,7 +719,13 @@ function AdminPinEditor({ hass }) {
         <div><div style={champ}>{tr('Confirmer')}</div><input aria-label={tr('Confirmer le nouveau code')} value={cf} onChange={e => { setCf(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" type="password" autoComplete="new-password" style={inp} /></div>
         <button onClick={save} disabled={enCours} style={{ ...btnPrimaire, padding: '12px 20px', opacity: enCours ? .6 : 1 }}>{tr('Enregistrer le code')}</button>
       </div>
-      {msg && <div role="status" style={{ padding: '0 22px 18px', fontSize: 12, fontWeight: 700, color: msg.ok ? 'var(--o-ok)' : 'var(--o-bad)' }}>{msg.t}</div>}
+      {/* Le refus se DIT (audit du 03/10, règle de l'ADR 0107) : monté avec son
+        * texte, ce `status` ne s'annonçait pas — et c'est lui qui répondait au
+        * bouton quand le composant refusait le code (administrateurs
+        * seulement, enregistrement impossible). La région reste montée ;
+        * vide, elle ne prend aucune place, et c'est son texte qui change. Un
+        * seul nœud : rien ne se lit deux fois. */}
+      <div role="status" style={msg ? { padding: '0 22px 18px', fontSize: 12, fontWeight: 700, color: msg.ok ? 'var(--o-ok)' : 'var(--o-bad)' } : undefined}>{msg ? msg.t : ''}</div>
     </Panneau>
   );
 }
@@ -605,55 +751,93 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
   ];
   const basculeVue = (vid) => setVues(v => v.indexOf(vid) >= 0 ? v.filter(x => x !== vid) : [...v, vid]);
   const basculeDroit = (did) => setDroits(d => d.indexOf(did) >= 0 ? d.filter(x => x !== did) : [...d, did]);
+  /* Les cases cochées dont le COMPOSANT garde l'écriture (DROITS_ADMIN_HA,
+   * state.js) : l'avertissement, plus bas, les nomme. */
+  const sousAdminHA = DROITS.filter(([did]) => DROITS_ADMIN_HA.indexOf(did) >= 0 && droits.indexOf(did) >= 0).map(([, lb]) => tr(lb));
   const inp = { width: '100%', padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' };
   const save = () => { const n = name.trim(); if (!n) return; onSave({ name: n, role, c, sub: role + ' · ' + n.toLowerCase().replace(/\s+/g, '.'), vues: role === 'Admin' ? [] : vues, droits: role === 'Admin' ? [] : droits }); };
   const roleBtn = (on) => ({ flex: 1, padding: 11, borderRadius: 10, border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd1)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' });
+  /* Le nom de chaque pastille, dans l'ordre de USER_COLORS (ui.jsx) — lot 13
+   * de l'audit du 03/10. Les huit s'annonçaient toutes « Couleur du profil »,
+   * et seule une bague montrait laquelle était prise : un lecteur d'écran
+   * entendait huit fois la même chose. Le groupe porte « Couleur du profil »,
+   * chaque pastille sa couleur, `aria-pressed` celle qui est prise. Les noms
+   * des teintes d'accent quand la famille est la même (Turquoise, Violet,
+   * Ambre, Rouge) ; seul « Orange » est nouveau. */
+  const nomsCouleurs = [tr('Bleu'), tr('Vert'), tr('Violet'), tr('Orange'), tr('Rose'), tr('Turquoise'), tr('Ambre'), tr('Rouge')];
   return (
-    <div role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div role="presentation" onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}><span style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 19, color: '#fff', background: `linear-gradient(135deg,${c},rgba(${cl_hexRgb(c)},.6))` }}>{(name.trim()[0] || '?').toUpperCase()}</span><div style={{ fontSize: 15, fontWeight: 800 }}>{user ? tr("Modifier l'utilisateur") : tr('Nouvel utilisateur')}</div></div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>{tr('NOM')}</div>
-        {/* `autoFocus` delibere : cette feuille s'ouvre pour saisir un nom, en
-          * reponse a un clic. La regle vise les champs focalises au CHARGEMENT
-          * d'une page. */}
-        <input aria-label={tr('Nom')} value={name} autoFocus onChange={e => setName(e.target.value)} placeholder={tr('Nom')} style={{ ...inp, marginBottom: 16 }} />
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>{tr('RÔLE')}</div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <button onClick={() => setRole('Admin')} style={roleBtn(role === 'Admin')}>{tr('Admin')}</button>
-          <button onClick={() => setRole('Famille')} style={roleBtn(role === 'Famille')}>{tr('Famille')}</button>
-        </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 8 }}>{tr('COULEUR')}</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-          {USER_COLORS.map(col => <button key={col} aria-label={tr('Couleur du profil')} onClick={() => setC(col)} style={{ width: 32, height: 32, borderRadius: '50%', border: col === c ? '2px solid var(--o-text)' : '2px solid transparent', background: col, cursor: 'pointer', flexShrink: 0 }} />)}
-        </div>
-        {role !== 'Admin' && (<>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 4 }}>{tr('VUES AUTORISÉES')}</div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 8 }}>{tr("Rien de coché = tout est visible. L'Accueil et les fiches restent toujours accessibles.")}</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-            {VUES_CHOIX.map(([vid, lb]) => { const on = vues.indexOf(vid) >= 0; return (
-              <button key={vid} onClick={() => basculeVue(vid)} aria-pressed={on}
-                style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd1)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>{lb}</button>
-            ); })}
-          </div>
-        </>)}
-        {role !== 'Admin' && (<>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 4 }}>{tr('AUTORISATIONS')}</div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 8 }}>{tr('Rien de coché = aucune. Ajouter, modifier ou supprimer un profil, et le code admin, restent réservés à un administrateur.')}</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-            {DROITS.map(([did, lb]) => { const on = droits.indexOf(did) >= 0; return (
-              <button key={did} onClick={() => basculeDroit(did)} aria-pressed={on}
-                style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd1)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>{tr(lb)}</button>
-            ); })}
-          </div>
-        </>)}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: 'var(--o-bad)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Supprimer')}</button>}
-          <div style={{ flex: 1 }} />
-          <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Annuler')}</button>
-          <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
-        </div>
+    /* Une feuille, plus une modale faite main (lot 13 de l'audit du 03/10).
+     * Le voile d'avant (`position: fixed`, fermé à la souris) n'était ni un
+     * dialogue ni nommé ; Échap ne le fermait pas, et Tab filait derrière lui
+     * vers la page restée vivante. `BottomSheet` apporte le rôle, le nom (sa
+     * ligne de titre), Échap, le fond inerte, et rend le focus au bouton qui
+     * l'a ouverte — après « Supprimer », parti avec sa ligne, au titre de la
+     * section (`rendreFocus`, relecture du lot 13). Sa croix remplace
+     * « Annuler », qui ne faisait que fermer.
+     * L'initiale reste à côté du titre, tue : la feuille s'appelle « Modifier
+     * l'utilisateur », pas « G Modifier l'utilisateur ». */
+    <BottomSheet onClose={onClose} title={(
+      <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span aria-hidden="true" style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 19, color: '#fff', background: `linear-gradient(135deg,${c},rgba(${cl_hexRgb(c)},.6))` }}>{(name.trim()[0] || '?').toUpperCase()}</span>
+        {user ? tr("Modifier l'utilisateur") : tr('Nouvel utilisateur')}
+      </span>
+    )}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>{tr('NOM')}</div>
+      {/* Plus d'`autoFocus` (lot 13 de l'audit du 03/10) : la feuille pose
+        * d'elle-même le focus sur son premier champ, ce nom. Un `autoFocus` le
+        * prenait AVANT elle ; elle retenait alors ce champ comme l'élément à
+        * qui rendre le focus, et le rendait à la fermeture à un champ démonté :
+        * le clavier repartait du haut de la page, pas du bouton qui l'avait
+        * ouverte. */}
+      <input aria-label={tr('Nom')} value={name} onChange={e => setName(e.target.value)} placeholder={tr('Nom')} style={{ ...inp, marginBottom: 16 }} />
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 6 }}>{tr('RÔLE')}</div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button onClick={() => setRole('Admin')} aria-pressed={role === 'Admin'} style={roleBtn(role === 'Admin')}>{tr('Admin')}</button>
+        <button onClick={() => setRole('Famille')} aria-pressed={role === 'Famille'} style={roleBtn(role === 'Famille')}>{tr('Famille')}</button>
       </div>
-    </div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 8 }}>{tr('COULEUR')}</div>
+      <div role="group" aria-label={tr('Couleur du profil')} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+        {USER_COLORS.map((col, k) => <button key={col} aria-label={nomsCouleurs[k]} title={nomsCouleurs[k]} aria-pressed={col === c} onClick={() => setC(col)} style={{ width: 32, height: 32, borderRadius: '50%', border: col === c ? '2px solid var(--o-text)' : '2px solid transparent', background: col, cursor: 'pointer', flexShrink: 0 }} />)}
+      </div>
+      {role !== 'Admin' && (<>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 4 }}>{tr('VUES AUTORISÉES')}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 8 }}>{tr("Rien de coché = tout est visible. L'Accueil et les fiches restent toujours accessibles.")}</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+          {VUES_CHOIX.map(([vid, lb]) => { const on = vues.indexOf(vid) >= 0; return (
+            <button key={vid} onClick={() => basculeVue(vid)} aria-pressed={on}
+              style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd1)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>{lb}</button>
+          ); })}
+        </div>
+      </>)}
+      {role !== 'Admin' && (<>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', marginBottom: 4 }}>{tr('AUTORISATIONS')}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 8 }}>{tr('Rien de coché = aucune. Ajouter, modifier ou supprimer un profil, et le code admin, restent réservés à un administrateur.')}</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+          {DROITS.map(([did, lb]) => { const on = droits.indexOf(did) >= 0; return (
+            <button key={did} onClick={() => basculeDroit(did)} aria-pressed={on}
+              style={{ padding: '7px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd1)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>{tr(lb)}</button>
+          ); })}
+        </div>
+        {/* Trois de ces cases ouvrent une section dont le COMPOSANT garde
+          * l'écriture (audit du 03/10) : les règles et les interrupteurs
+          * passent par des commandes réservées aux administrateurs de Home
+          * Assistant, les alertes par `loggia_alertes`, une clé de la maison.
+          * Le profil n'y change rien — il n'est pas une frontière de
+          * sécurité —, et sous un compte Home Assistant ordinaire la section
+          * s'ouvrait pour ne rien enregistrer. On le dit au moment d'accorder. */}
+        {sousAdminHA.length > 0 && (
+          <div role="note" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '-8px 0 20px', padding: '10px 12px', borderRadius: 12, background: 'rgba(var(--o-warn-rgb),.10)', border: '1px solid rgba(var(--o-warn-rgb),.45)', color: 'var(--o-warn)', fontSize: 12, fontWeight: 700, lineHeight: 1.45 }}>
+            <Fi i="triangle-warning" size={14} color="var(--o-warn)" />
+            <span>{tr('{liste} : ces réglages appartiennent à la maison, et le composant ne les enregistre que depuis un compte administrateur de Home Assistant. Sous un compte ordinaire, la section s’ouvre, mais rien ne s’y enregistre.', { liste: sousAdminHA.join(', ') })}</span>
+          </div>
+        )}
+      </>)}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: 'var(--o-bad)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Supprimer')}</button>}
+        <div style={{ flex: 1 }} />
+        <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
+      </div>
+    </BottomSheet>
   );
 }
 
@@ -706,30 +890,33 @@ function CvEditor({ cv, hass, onSave, onClose }) {
   const inp = cvInp;
   const save = () => { const n = name.trim(); if (!n) return; onSave({ id: cv ? cv.id : 'cv_' + Math.random().toString(36).slice(2, 8), name: n, icon, ents }); };
   return (
-    <div role="presentation" onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,8,15,.6)', backdropFilter: 'blur(4px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div role="presentation" onMouseDown={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 470, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 18, padding: 22, boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
-        <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 16 }}>{cv ? 'Modifier la vue' : 'Nouvelle vue'}</div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', marginBottom: 6 }}>{tr('NOM')}</div>
-        <input aria-label={tr('Ma vue')} value={name} onChange={e => setName(e.target.value)} placeholder={tr('Ma vue')} style={inp} />
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('ICÔNE')}</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {/* Une grille d'icônes nues : chacune dit son nom et si elle est
-            * choisie, sinon c'est « bouton » vingt fois (plan M7). */}
-          {CV_ICONS.map(ic => <button key={ic} aria-label={ic} aria-pressed={icon === ic} title={ic} onClick={() => setIcon(ic)} style={{ width: 40, height: 40, borderRadius: 10, border: icon === ic ? '2px solid var(--o-accent)' : 'var(--o-bw,1px) solid var(--o-bd2)', background: icon === ic ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: icon === ic ? 'var(--o-accent-soft)' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={ic} size={16} /></button>)}
-        </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>ENTITÉS ({ents.length})</div>
-        {ents.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-          {ents.map((x, i) => <span key={cvKey(x)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px solid rgba(var(--o-accent-rgb),.25)', fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)', maxWidth: '100%' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cvEstTpl(x) ? '{ } ' + (x.name || 'Template') : cvName(hass && hass.states && hass.states[x], x)}</span><span role="button" tabIndex={0} aria-label={tr('Retirer cette entité')} onClick={() => setEnts(prev => prev.filter((_, k) => k !== i))} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEnts(prev => prev.filter((_, k) => k !== i)); } }} style={{ cursor: 'pointer', fontWeight: 800, opacity: .8 }}>×</span></span>)}
-        </div>}
-        <EntPicker hass={hass} exclude={ents.filter(x => typeof x === 'string')} onPick={(id) => setEnts(prev => prev.indexOf(id) < 0 ? [...prev, id] : prev)} />
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
-        <TplForm hass={getHass()} onAdd={(t) => setEnts(prev => [...prev, t])} />
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '11px 16px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Annuler')}</button>
-          <button onClick={save} style={{ padding: '11px 20px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: name.trim() ? 1 : .5 }}>{tr('Enregistrer')}</button>
-        </div>
+    /* Une feuille, plus une modale faite main (lot 13 de l'audit du 03/10),
+     * pour les raisons de l'éditeur de profil, plus haut : un dialogue nommé
+     * par son titre, Échap, le fond inerte, le focus rendu au bouton qui l'a
+     * ouverte, et la croix à la place d'« Annuler ». */
+    <BottomSheet onClose={onClose} title={cv ? tr('Modifier la vue') : tr('Nouvelle vue')}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', marginBottom: 6 }}>{tr('NOM')}</div>
+      <input aria-label={tr('Ma vue')} value={name} onChange={e => setName(e.target.value)} placeholder={tr('Ma vue')} style={inp} />
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('ICÔNE')}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {/* Une grille d'icônes nues : chacune dit son nom et si elle est
+          * choisie, sinon c'est « bouton » vingt fois (plan M7). La choisie
+          * passe en bleu plein, comme toute puce choisie et comme la grille
+          * d'icônes d'une carte (lot 13 de l'audit du 03/10) : son contour bleu
+          * sur fond lavé était la dernière exception. */}
+        {CV_ICONS.map(ic => { const on = icon === ic; return <button key={ic} aria-label={ic} aria-pressed={on} title={ic} onClick={() => setIcon(ic)} style={{ width: 40, height: 40, borderRadius: 10, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={ic} size={16} /></button>; })}
       </div>
-    </div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('ENTITÉS ({n})', { n: ents.length })}</div>
+      {ents.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+        {ents.map((x, i) => <span key={cvKey(x)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 10px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.12)', border: '1px solid rgba(var(--o-accent-rgb),.25)', fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)', maxWidth: '100%' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cvEstTpl(x) ? '{ } ' + (x.name || tr('Template')) : cvName(hass && hass.states && hass.states[x], x)}</span><span role="button" tabIndex={0} aria-label={tr('Retirer cette entité')} onClick={() => setEnts(prev => prev.filter((_, k) => k !== i))} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEnts(prev => prev.filter((_, k) => k !== i)); } }} style={{ cursor: 'pointer', fontWeight: 800, opacity: .8 }}>×</span></span>)}
+      </div>}
+      <EntPicker hass={hass} exclude={ents.filter(x => typeof x === 'string')} onPick={(id) => setEnts(prev => prev.indexOf(id) < 0 ? [...prev, id] : prev)} />
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', letterSpacing: '.04em', margin: '14px 0 6px' }}>{tr('OU UNE CARTE TEMPLATE')}</div>
+      <TplForm hass={getHass()} onAdd={(t) => setEnts(prev => [...prev, t])} />
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+        <button onClick={save} style={{ padding: '11px 20px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: name.trim() ? 1 : .5 }}>{tr('Enregistrer')}</button>
+      </div>
+    </BottomSheet>
   );
 }
 
@@ -768,7 +955,7 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
               <span key={c.k} style={{ position: 'relative', flex: c.flex || 1, minWidth: 0, display: 'flex' }}>
                 <span className="o-entlabel">{c.label}</span>
                 <ChampSuggere label={c.label} value={v} onChange={val => set(i, c.k, val)} placeholder={c.ph || ''} suggestions={c.domain && sugg ? sugg(c.domain) : []} style={{ ...entInp, width: '100%', minWidth: 0, paddingRight: st ? 24 : undefined, border: st === 'bad' ? 'var(--o-bw,1px) solid rgba(var(--o-bad-rgb),.55)' : entInp.border }} />
-                {st && <span title={st === 'ok' ? 'Entité trouvée' : 'Introuvable dans Home Assistant'} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 7, height: 7, borderRadius: '50%', background: st === 'ok' ? 'var(--o-ok)' : 'var(--o-bad)', pointerEvents: 'none' }} />}
+                {st && <span title={st === 'ok' ? tr('Entité trouvée') : tr('Introuvable dans Home Assistant')} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 7, height: 7, borderRadius: '50%', background: st === 'ok' ? 'var(--o-ok)' : 'var(--o-bad)', pointerEvents: 'none' }} />}
               </span>
             ); })}
             {addable && <button onClick={() => del(i)} title={tr('Retirer')} style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 14, fontWeight: 800 }}>×</button>}
@@ -786,29 +973,88 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
  * MAISON passe donc par le composant, code administrateur et profil actif
  * compris depuis le 03/09. Ne restent locales que les marges d'ecran. */
 
+/* Les repas que « Enregistrer » écrit (05/10, suite du point 10b). Une ligne
+ * vide part — un « + Ajouter » resté sans suite. Une ligne sans heure mais
+ * avec un libellé, des grammes ou un interrupteur RESTE, l'heure à `null` :
+ * la fiche et l'Accueil l'ignorent (`croqMeals`), l'éditeur la remontre vide
+ * pour qu'on la complète. Elle s'effaçait au premier enregistrement, sans un
+ * mot. Une configuration valide s'écrit exactement comme avant. */
+export function repasAEcrire(lignes) {
+  return lignes.filter(r => r.time || r.label || r.auto || Number(r.g))
+    .map((r, i) => ({ id: 'repas' + i, time: r.time || null, label: r.label || '', g: Number(r.g) || 0, auto: r.auto || null }));
+}
+
+/* Le distributeur tel que l'éditeur le tient : ses quatre champs, plus `haid`
+ * (05/10, relecture du lot 16). `haid` est l'entité qu'ouvre la fiche du
+ * distributeur (App.jsx) ; il n'a pas de champ ici, il ne se lisait donc pas,
+ * et « Enregistrer » réécrivait la clé sans lui — même une configuration
+ * valide. Il voyage maintenant, invisible, comme il est venu. */
+export function feederEdition(f) {
+  const h = (f && f.haids) || {};
+  return { reservoir: h.reservoir || '', portionWeight: h.portionWeight || '', distribuees: h.distribuees || '', script: (f && f.script) || '', haid: (f && f.haid) || '' };
+}
+
+/* Ce que « Enregistrer » écrit du distributeur. `null` quand rien n'est
+ * désigné : la carte se tait au lieu de montrer un réservoir vide, et `cfgSet`
+ * efface la clé. Mais la clé vit tant qu'UN champ désigne quelque chose
+ * (05/10, relecture du lot 16) : elle ne tenait qu'au réservoir, à la portion
+ * ou à un repas, et un distributeur désigné par son script ou son compteur,
+ * sans repas lisible, perdait TOUT au premier « Enregistrer » d'une autre vue —
+ * la Sécurité, qui ne le montre même pas. */
+export function feederAEcrire(ent) {
+  return (ent.feeder.distribuees || ent.feeder.script || ent.feeder.haid || ent.feeder.reservoir || ent.feeder.portionWeight || repasAEcrire(ent.repas).length)
+    ? {
+      haids: {
+        reservoir: ent.feeder.reservoir || null,
+        portionWeight: ent.feeder.portionWeight || null,
+        distribuees: ent.feeder.distribuees || null,
+      },
+      ...(ent.feeder.script ? { script: ent.feeder.script } : {}),
+      ...(ent.feeder.haid ? { haid: ent.feeder.haid } : {}),
+      meals: repasAEcrire(ent.repas),
+    }
+    : null;
+}
+
 // Hook partagé : état + persistance de la config d'entités, pour la fiche « Entités de la vue » de chaque page.
 function useEntConfig(hass) {
   // Cle de rendu stable, posee DES la lecture : sans elle, les lignes se
   // reperaient par leur rang et une suppression deplacait le curseur de saisie.
   const avecCle = (a) => a.map((r, i) => ({ ...r, _k: r._k || 'k' + i + '_' + Math.random().toString(36).slice(2, 6) }));
+  // …et retirée à l'écriture (05/10) : `loggia_people` et `loggia_medias`
+  // gardaient `_k`, tirée au hasard — du bruit dans la configuration.
+  const sansCle = ({ _k, ...r }) => r;
   // Lecture de la configuration courante, telle que le formulaire l'affiche.
+  /* Les lignes d'une liste éditée : ses objets, rien d'autre (05/10, suite du
+   * point 10b). Un élément `null`, ou une liste qui n'en est pas une, faisait
+   * tomber TOUTE la vue Paramètres — la seule d'où l'on répare. Une ligne dont
+   * un champ est abîmé reste, pour être corrigée. */
+  const lignes = (v) => (Array.isArray(v) ? v.filter(x => x && typeof x === 'object' && !Array.isArray(x)) : []);
+  // Un champ en texte, comme le formulaire : un nombre se montre (« 5 », à
+  // corriger), un objet se vide — il ne désigne rien et s'affichait
+  // « [object Object] ».
+  const texte = (v) => (typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v)) ? String(v) : '');
   const readEnt = () => ({
     rooms: avecCle(normRooms(cfgVal('loggia_rooms', null)).map(r => ({ room: r.room || '', icon: r.icon || null, teinte: r.teinte || null, temp: (r.haid && r.haid.temp) || '', humidity: (r.haid && r.haid.humidity) || '', co2: (r.haid && r.haid.co2) || '', co2seuil: (r.haid && r.haid.co2seuil) != null ? String(r.haid.co2seuil) : '',
       lights: Array.isArray(r.haid && r.haid.lights) ? r.haid.lights.join(', ') : ((r.haid && r.haid.lights) || '') }))),
     energy: { ...enHaids(), ...(cfgVal('loggia_energyHaids', null) || {}) },
     alarm: secAlarm() || '',
     weather: weatherEntity(getHass()) || '',
-    people: avecCle((cfgVal('loggia_people', null) || []).map(p => ({ name: p.name || '', haid: p.haid || '' }))),
+    people: avecCle(lignes(cfgVal('loggia_people', null)).map(p => ({ name: p.name || '', haid: p.haid || '' }))),
     switches: avecCle(switchLightsCfg().map(id => ({ haid: id }))),
-    cams: avecCle((cfgVal('loggia_cameras', null) || []).map(c => ({ name: c.name || '', haid: c.haid || '' }))),
+    cams: avecCle(lignes(cfgVal('loggia_cameras', null)).map(c => ({ name: c.name || '', haid: c.haid || '' }))),
     medias: avecCle(medPlayers().map(m => ({ name: m.name || '', haid: m.haid || '', ma: m.ma || medCompanion(m.haid) || '' }))),
     /* Chauffage : les thermostats `climate.*` se decouvrent seuls, mais un
      * radiateur fil pilote est un `switch` entoure d'aides — seule une
      * configuration peut dire lesquelles. Elle n'avait aucun ecran jusqu'ici. */
-    climate: avecCle((cfgVal('loggia_climate', null) || loggiaEnt('climate', null) || []).map(z => ({
-      name: z.name || '', room: z.room || '', haid: z.haid || '',
-      tempCible: z.tempCible || '', modeEnt: z.modeEnt || '',
-      autoEnt: z.autoEnt || '', tempSensor: z.tempSensor || '',
+    climate: avecCle(lignes(cfgVal('loggia_climate', null) || loggiaEnt('climate', null)).map(z => ({
+      /* En texte (05/10, suite du point 10b) : « Enregistrer » fait
+       * `z.name.toLowerCase()` et `z.haid.indexOf(...)`. Une zone au nom en
+       * nombre ou à l'entité en objet le faisait lever — « Enregistrement
+       * impossible » pour TOUTE la configuration, rien ne se réparait. */
+      name: texte(z.name), room: texte(z.room), haid: texte(z.haid),
+      tempCible: texte(z.tempCible), modeEnt: texte(z.modeEnt),
+      autoEnt: texte(z.autoEnt), tempSensor: texte(z.tempSensor),
     }))),
     /* Distributeur de croquettes : pilote par automatisations, sans equivalent
      * standard dans Home Assistant — il n'y a rien a decouvrir, seulement a
@@ -816,14 +1062,12 @@ function useEntConfig(hass) {
      * de la demonstration, si bien que la carte et la fiche du distributeur
      * n'apparaissaient jamais sur une vraie installation, pendant que le README
      * promettait cette designation (plan du 22/09, points S1 et M4). */
-    feeder: (() => {
-      const f = cfgVal('loggia_feeder', null) || loggiaEnt('feeder', null) || {};
-      const h = f.haids || {};
-      return { reservoir: h.reservoir || '', portionWeight: h.portionWeight || '', distribuees: h.distribuees || '', script: f.script || '' };
-    })(),
-    repas: avecCle((((cfgVal('loggia_feeder', null) || loggiaEnt('feeder', null) || {}).meals) || []).map(m => ({
-      time: m.time || '', label: m.label || '', g: m.g != null ? String(m.g) : '', auto: m.auto || '',
-    }))),
+    feeder: feederEdition(cfgVal('loggia_feeder', null) || loggiaEnt('feeder', null)),
+    /* Par le lecteur de l'éditeur (05/10, point 10b et sa suite) : un repas
+     * `null` faisait tomber toute la vue Paramètres, et `croqMeals` — celui de
+     * la fiche — écarte un repas dont seul l'interrupteur est abîmé, que le
+     * prochain « Enregistrer » effaçait. Ici il reste, réparable. */
+    repas: avecCle(croqRepasEdition()),
   });
   const [ent, setEnt] = useState(readEnt);
   // La configuration serveur arrive APRES le premier rendu. Sans cette
@@ -845,10 +1089,12 @@ function useEntConfig(hass) {
         loggia_energyHaids: ent.energy,
         loggia_alarm: ent.alarm || '',
         loggia_weather: ent.weather || '',
-        loggia_people: ent.people.filter(p => p.haid),
+        loggia_people: ent.people.filter(p => p.haid).map(sansCle),
         loggia_switchlights: ent.switches.map(s => s.haid).filter(Boolean),
-        loggia_cameras: ent.cams.filter(c => c.haid).map((c, i) => ({ id: 'cam_' + i, name: c.name || ('Caméra ' + (i + 1)), online: true, haid: c.haid })),
-        loggia_medias: ent.medias.filter(m => m.haid),
+        // Un nom par défaut s'écrit dans la langue de qui enregistre : c'est
+        // ensuite un nom comme un autre (audit du 03/10).
+        loggia_cameras: ent.cams.filter(c => c.haid).map((c, i) => ({ id: 'cam_' + i, name: c.name || tr('Caméra {n}', { n: i + 1 }), online: true, haid: c.haid })),
+        loggia_medias: ent.medias.filter(m => m.haid).map(sansCle),
         /* Une zone n'a de sens qu'avec l'entite qu'elle pilote. `id` sert de
          * cle interne : il est derive du nom, faute de mieux, mais reste stable
          * tant que le nom ne bouge pas. */
@@ -860,24 +1106,10 @@ function useEntConfig(hass) {
           autoEnt: z.autoEnt || null, hasAuto: !!z.autoEnt,
           tempSensor: z.tempSensor || null,
         })),
-        /* `null` quand rien n'est renseigne : la carte du distributeur se tait
-         * alors, au lieu de montrer un reservoir vide. `cfgSet` efface la cle. */
-        loggia_feeder: (ent.feeder.reservoir || ent.feeder.portionWeight || ent.repas.some(r => r.time))
-          ? {
-            haids: {
-              reservoir: ent.feeder.reservoir || null,
-              portionWeight: ent.feeder.portionWeight || null,
-              distribuees: ent.feeder.distribuees || null,
-            },
-            ...(ent.feeder.script ? { script: ent.feeder.script } : {}),
-            meals: ent.repas.filter(r => r.time).map((r, i) => ({
-              id: 'repas' + i, time: r.time, label: r.label || '',
-              g: Number(r.g) || 0, auto: r.auto || null,
-            })),
-          }
-          : null,
+        // Toutes les vues réécrivent le distributeur, même sans le montrer.
+        loggia_feeder: feederAEcrire(ent),
       });
-    } catch { alert('Enregistrement impossible — la configuration n’a pas été appliquée.'); return; }
+    } catch { alert(tr('Enregistrement impossible — la configuration n’a pas été appliquée.')); return; }
     // L'écriture serveur part en arrière-plan : on lui laisse le temps d'aboutir
     // avant de recharger, sinon la page relirait l'ancienne valeur.
     setTimeout(() => window.location.reload(), 700);
@@ -899,6 +1131,9 @@ function useEntConfig(hass) {
 function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) {
   const has = (k) => !only || only.indexOf(k) >= 0;
   const check = hass && hass.states ? (id) => !!hass.states[id] : null;
+  // « (optionnel) » se dit dans la langue de l'écran, l'identifiant non (audit
+  // du 03/10) : « sensor.… (optionnel) » restait en français partout.
+  const facultatif = (x) => tr('{x} (optionnel)', { x });
   // Les suggestions d'un domaine, sous chaque champ : le nom lu, l'identifiant dessous.
   const sugg = (d) => (dlists[d] || []).map(id => ({ id, label: (hass && hass.states && hass.states[id] && hass.states[id].attributes && hass.states[id].attributes.friendly_name) || id, sub: id }));
   const detecter = () => {
@@ -908,11 +1143,14 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
       vivant: (id) => !!(id && hass && hass.states && hass.states[id]),
     });
     entSet('rooms')(r.rooms);
-    alert(r.trouves
-      ? (r.trouves > 1 ? tr('{n} capteurs détectés', { n: r.trouves }) : tr('{n} capteur détecté', { n: r.trouves }))
-        + (r.parZone ? ' (' + r.parZone + ' par la zone Home Assistant)' : ' par le nom')
-        + ' — vérifie puis « Enregistrer et recharger ».'
-      : 'Aucun capteur supplémentaire trouvé. Range tes capteurs dans une zone Home Assistant : la détection s’appuie dessus en premier.');
+    /* Des phrases entières (audit du 03/10) : la fin du message était collée
+     * en français derrière le compte traduit — « 3 sensors found par le nom ».
+     * `trN` : le polonais accorde « czujnik » sur trois formes. */
+    alert(!r.trouves
+      ? tr('Aucun capteur supplémentaire trouvé. Range tes capteurs dans une zone Home Assistant : la détection s’appuie dessus en premier.')
+      : r.parZone
+        ? trN(r.trouves, '{n} capteur détecté ({z} par la zone Home Assistant) — vérifie puis « Enregistrer et recharger ».', '{n} capteurs détectés ({z} par la zone Home Assistant) — vérifie puis « Enregistrer et recharger ».', { z: r.parZone })
+        : trN(r.trouves, '{n} capteur détecté par le nom — vérifie puis « Enregistrer et recharger ».', '{n} capteurs détectés par le nom — vérifie puis « Enregistrer et recharger ».'));
   };
   return (
     <>
@@ -921,7 +1159,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
           <button onClick={detecter} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(var(--o-ok-rgb),.13)', border: '1px solid rgba(var(--o-ok-rgb),.3)', color: 'var(--o-ok)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}><Fi i="magic-wand" size={13} />{tr('Détecter automatiquement')}</button>
         </div>
       )}
-      {has('rooms') && <EntSection sugg={sugg} title={tr('Pièces (Accueil)')} desc={tr("Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce.")} cols={[{ k: 'room', label: tr('Pièce'), ph: tr('Séjour'), flex: .8 }, { k: 'temp', label: tr('Température'), ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: tr('Humidité'), ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: 'sensor.… (optionnel)', domain: 'sensor' }, { k: 'co2seuil', label: tr('Seuil CO₂'), ph: tr('1400 par défaut'), flex: .55 }, { k: 'lights', label: tr('Lampes du bouton'), ph: tr('toutes (light.a, light.b)'), domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
+      {has('rooms') && <EntSection sugg={sugg} title={tr('Pièces (Accueil)')} desc={tr("Cartes pièces : capteurs température / humidité / CO2 (CO2 optionnel). « Lampes du bouton » choisit ce que l'interrupteur de la carte allume — vide, il agit sur toutes les lumières de la pièce.")} cols={[{ k: 'room', label: tr('Pièce'), ph: tr('Séjour'), flex: .8 }, { k: 'temp', label: tr('Température'), ph: 'sensor.…', domain: 'sensor' }, { k: 'humidity', label: tr('Humidité'), ph: 'sensor.…', domain: 'sensor' }, { k: 'co2', label: 'CO2', ph: facultatif('sensor.…'), domain: 'sensor' }, { k: 'co2seuil', label: tr('Seuil CO₂'), ph: tr('1400 par défaut'), flex: .55 }, { k: 'lights', label: tr('Lampes du bouton'), ph: tr('toutes (light.a, light.b)'), domain: 'light' }]} rows={ent.rooms} onRows={entSet('rooms')} check={check} />}
       {has('energy') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Énergie')}</div>
@@ -930,7 +1168,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
               qui depassent souvent trente caracteres. */}
           <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
             {[['consoNow', tr('Consommation')], ['surplusNow', tr('Surplus')], ['solarOutput', tr('Production solaire')],
-              ['evNow', 'Véhicule · charge'], ['batNow', 'Batterie · puissance'], ['batSoc', 'Batterie · niveau']].map(([k, l]) => (
+              ['evNow', tr('Véhicule · charge')], ['batNow', tr('Batterie · puissance')], ['batSoc', tr('Batterie · niveau')]].map(([k, l]) => (
               <div key={k}><div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)', marginBottom: 4 }}>{l.toUpperCase()}</div><ChampSuggere label={l} value={ent.energy[k] || ''} onChange={val => setEnt(o => ({ ...o, energy: { ...o.energy, [k]: val } }))} placeholder="sensor.…" suggestions={sugg('sensor')} style={entInp} /></div>
             ))}
           </div>
@@ -952,8 +1190,8 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
       )}
       {has('people') && <EntSection sugg={sugg} title={tr('Présence')} desc={tr('Personnes affichées sur l’Accueil (avatars).')} cols={[{ k: 'name', label: tr('Prénom'), ph: tr('Prénom'), flex: .7 }, { k: 'haid', label: tr('Entité person'), ph: 'person.…', domain: 'person' }]} rows={ent.people} onRows={entSet('people')} check={check} />}
       {has('switches') && <EntSection sugg={sugg} title={tr('Interrupteurs traités comme lumières')} desc={tr('Entités switch affichées dans la vue Lumières.')} cols={[{ k: 'haid', label: tr('Entité switch'), ph: 'switch.…', domain: 'switch' }]} rows={ent.switches} onRows={entSet('switches')} />}
-      {has('cams') && <EntSection sugg={sugg} title={tr('Caméras (Accueil)')} desc={tr("Tuiles caméras de l'Accueil (flux live).")} cols={[{ k: 'name', label: 'Nom', ph: tr('Entrée'), flex: .7 }, { k: 'haid', label: tr('Entité camera'), ph: 'camera.…', domain: 'camera' }]} rows={ent.cams} onRows={entSet('cams')} />}
-      {has('medias') && <EntSection sugg={sugg} title={tr('Lecteurs médias')} desc={tr("Vue Médias. « Compagnon MA » optionnel : entité Music Assistant qui porte titre/pochette (métadonnées + transport).")} cols={[{ k: 'name', label: 'Nom', ph: 'Echo Salon', flex: .8 }, { k: 'haid', label: tr('Entité native'), ph: 'media_player.…', domain: 'media_player' }, { k: 'ma', label: tr('Compagnon MA'), ph: 'media_player.… (optionnel)', domain: 'media_player' }]} rows={ent.medias} onRows={entSet('medias')} />}
+      {has('cams') && <EntSection sugg={sugg} title={tr('Caméras (Accueil)')} desc={tr("Tuiles caméras de l'Accueil (flux live).")} cols={[{ k: 'name', label: tr('Nom'), ph: tr('Entrée'), flex: .7 }, { k: 'haid', label: tr('Entité camera'), ph: 'camera.…', domain: 'camera' }]} rows={ent.cams} onRows={entSet('cams')} />}
+      {has('medias') && <EntSection sugg={sugg} title={tr('Lecteurs médias')} desc={tr("Vue Médias. « Compagnon MA » optionnel : entité Music Assistant qui porte titre/pochette (métadonnées + transport).")} cols={[{ k: 'name', label: tr('Nom'), ph: tr('Echo Salon'), flex: .8 }, { k: 'haid', label: tr('Entité native'), ph: 'media_player.…', domain: 'media_player' }, { k: 'ma', label: tr('Compagnon MA'), ph: facultatif('media_player.…'), domain: 'media_player' }]} rows={ent.medias} onRows={entSet('medias')} />}
       {has('climate') && <EntSection sugg={sugg} title={tr('Chauffage')}
         desc={tr('Un thermostat (climate.…) est trouvé tout seul : rien à saisir. Cette liste sert aux radiateurs fil pilote — un interrupteur entouré de ses aides, que rien ne permet de deviner.')}
         cols={[
@@ -973,8 +1211,8 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
           <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
             {[['reservoir', tr('Réservoir'), 'input_number.…', 'input_number'],
               ['portionWeight', tr('Poids d’une portion'), 'number.…', 'number'],
-              ['distribuees', tr('Distribué aujourd’hui'), 'sensor.… (optionnel)', 'sensor'],
-              ['script', tr('Script de distribution'), 'script.… (optionnel)', 'script']].map(([k, l, ph, d]) => (
+              ['distribuees', tr('Distribué aujourd’hui'), facultatif('sensor.…'), 'sensor'],
+              ['script', tr('Script de distribution'), facultatif('script.…'), 'script']].map(([k, l, ph, d]) => (
               <div key={k}>
                 <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)', marginBottom: 4 }}>{l.toUpperCase()}</div>
                 <ChampSuggere label={l} value={ent.feeder[k] || ''} onChange={val => setEnt(o => ({ ...o, feeder: { ...o.feeder, [k]: val } }))} placeholder={ph} suggestions={sugg(d)} style={entInp} />
@@ -1025,8 +1263,8 @@ const VUES_PRINCIPALES = ['pieces', 'scenes', 'objets', 'energie', 'securite', '
 export const VIEW_ENT_SECTIONS = {
   accueil: ['rooms', 'weather', 'energy', 'people', 'cams'],
   // Le distributeur se designe dans Objets : c'est la que vivent sa carte et sa
-  // fiche. La vue Croquettes, elle, a quitte le menu le 30/08 — la fiche
-  // d'appareil universelle la remplace (voir les vues secondaires, ui.jsx).
+  // fiche. La vue Croquettes, elle, a quitte le menu le 30/08 et le code le
+  // 04/10 : ses repas s'activent dans la fiche du distributeur.
   objets: ['switches', 'medias', 'climate', 'feeder'],
   lumieres: ['switches'],
   energie: ['energy'],
@@ -1043,7 +1281,7 @@ export function ViewEntSheet({ view, hass, onClose }) {
     <BottomSheet onClose={onClose}>
       {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 700 }}>{tr('Entités de cette vue')}</span>
+          <NomFeuille><span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 700 }}>{tr('Entités de cette vue')}</span></NomFeuille>
           <CroixFeuille />
         </div>
         <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 14 }}>{tr('Autocomplétion en tapant. « Enregistrer » recharge le dashboard pour appliquer.')}</div>
@@ -1056,7 +1294,7 @@ export function ViewEntSheet({ view, hass, onClose }) {
   );
 }
 
-export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews, onNav = null, droits = [] }) {
+export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin: profilAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews, onNav = null, droits = [] }) {
   /* La section ouverte survit au rechargement, comme la vue elle-meme.
    *
    * Changer de langue recharge la page : on revenait au sommaire des sections,
@@ -1070,6 +1308,33 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   });
   useEffect(() => {
     try { window.sessionStorage.setItem('loggia-par-section', tab); } catch { /* stockage indisponible */ }
+  }, [tab]);
+  /* Le focus suit la section (audit du 03/10). La tuile du sommaire et le
+   * retour « ‹ Paramètres » disparaissent avec l'écran qu'ils quittent : le
+   * focus tombait sur <body>, et la tabulation repartait du haut de la page.
+   * À l'entrée dans une section, son titre le reçoit ; au retour au sommaire,
+   * la tuile d'où l'on venait — on reprend la lecture là où on l'avait
+   * laissée, au lieu de recompter les tuiles depuis la première. Même règle
+   * que pour les vues (App.jsx) : seulement si le focus est tombé, et jamais
+   * au montage — la section retrouvée après un rechargement ne vole rien.
+   * La tuile se retrouve en COMPARANT son attribut, sans fabriquer de
+   * sélecteur : la section d'où l'on vient peut sortir de la session, et un
+   * nom inattendu (une apostrophe, un guillemet) ferait lever querySelector
+   * au milieu d'un effet. */
+  const racineRef = useRef(null);
+  const tabFocus = useRef(tab);
+  useEffect(() => {
+    const avant = tabFocus.current;
+    if (avant === tab) return undefined;
+    tabFocus.current = tab;
+    return reposerFocus(() => {
+      const r = racineRef.current;
+      if (!r) return null;
+      const tuile = tab === 'hub' ? Array.from(r.querySelectorAll('[data-section]')).find(b => b.getAttribute('data-section') === avant) : null;
+      return tuile || r.querySelector('h1');
+      // `voir` dans les deux sens : le titre d'une section ouverte depuis le
+      // bas du sommaire restait, lui aussi, au-dessus de l'écran.
+    }, { voir: true });
   }, [tab]);
   // Une vue que l'installation ne peut pas remplir se montre ici verrouillée,
   // avec son motif : mieux vaut expliquer que faire disparaître sans un mot.
@@ -1100,7 +1365,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   };
   useEffect(() => { if (tab === 'connexion' && lat == null) ping(); }, [tab]);
   const accessOrigin = (() => { try { return (window.top && window.top.location.origin) || window.location.origin; } catch { return window.location.origin; } })();
-  const accessKind = /nabu\.casa/.test(accessOrigin) ? 'Nabu Casa' : /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|localhost|127\.)/.test(accessOrigin) ? tr('réseau local') : 'accès distant';
+  const accessKind = /nabu\.casa/.test(accessOrigin) ? 'Nabu Casa' : /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|localhost|127\.)/.test(accessOrigin) ? tr('réseau local') : tr('accès distant');
+  // « accès distant » passe par `tr` comme « réseau local » (audit du 03/10) :
+  // il s'affichait en français sous « Connexion HA ».
   // Adresses du serveur : locales a cet appareil. Loggia n'ouvre PAS de session par ces URL
   // (il emprunte celle du navigateur) — elles servent au test de joignabilite, au repli
   // Nabu Casa et a l'intervalle de rafraichissement du pont hass.
@@ -1189,18 +1456,17 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     return tr('vu il y a {n} j', { n: Math.round(m / 1440) });
   };
   const [editing, setEditing] = useState(null); // { i, u } pour éditer, { i:null } pour ajouter
-  // Automatisations : état optimiste local (id → on/off) au-dessus de hass.
-  const [autoOv, setAutoOv] = useState({});
-  // Signature des états automation.* → purge l'override optimiste dès que HA confirme (ou change depuis un autre appareil).
+  // Signature des états automation.* : relance la purge des mises à jour (plus bas).
   const autoSig = (hass && hass.states) ? Object.keys(hass.states).filter(e => e.indexOf('automation.') === 0).map(id => id + ':' + hass.states[id].state).join('|') : '';
-  useEffect(() => {
-    setAutoOv(o => {
-      const ids = Object.keys(o); if (!ids.length || !hass || !hass.states) return o;
-      const n = { ...o }; let ch = false;
-      for (const id of ids) { const s = hass.states[id]; if (s && (s.state === 'on') === n[id]) { delete n[id]; ch = true; } }
-      return ch ? n : o;
-    });
-  }, [autoSig]);
+  /* Automatisations : id → demande (`demandeCle`), par le filet commun (lot 15
+   * de l'audit du 03/10). La purge faite main ne retirait une entrée que si HA
+   * CONFIRMAIT : une automatisation qu'il refusait de couper restait
+   * « coupée » tant qu'on ne quittait pas Paramètres. La réponse se lit par
+   * automatisation (`enVol`), sinon la réponse de l'une jetterait la
+   * demande encore en vol de l'autre ; et chaque demande a sa propre
+   * échéance (`useDemandes`, relecture du lot 15) : basculer d'autres
+   * lignes ne prolonge plus un refus. */
+  const [autoOv, demanderAuto] = useDemandes();
   const autoCall = (svc, id) => commanderService(hass, id, 'automation', svc, { entity_id: id });
   // ── Entités (config du dashboard) : leur compte, pour « À propos ». Elles se règlent dans la fiche de chaque vue. ──
   const { ent } = useEntConfig(hass);
@@ -1234,6 +1500,18 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   }) : [];
   // purge l'optimiste dès que HA prend le relais (in_progress réel) ou que la MàJ est terminée (state off)
   const connecte = !!hass;
+  /* LE COMPTE, PAS SEULEMENT LE PROFIL (03/10). Un profil Admin de Loggia se
+   * choisit au code depuis n'importe quel compte, et c'est celui d'une
+   * installation neuve. Or ce qu'il garde ici — profils, code administrateur,
+   * vues perso, import, remise a zero — ecrit la configuration de la maison,
+   * que le composant reserve aux administrateurs Home Assistant. Un compte
+   * ordinaire ne voit donc pas ces gestes, meme sous le profil Admin : il ne
+   * pourrait jamais les enregistrer. Pour un administrateur, rien ne change.
+   * Les sections qu'ouvre un DROIT (Regles, Interrupteurs, Alertes) restent :
+   * l'editeur de profil previent en l'accordant, et leur refus se dit
+   * (`DROITS_ADMIN_HA`). */
+  const ordinaire = compteOrdinaire(hass);
+  const isAdmin = profilAdmin && !ordinaire;
   /* Ce que ce profil a le droit d'ouvrir. `droits` arrive deja complet pour
    * un administrateur ; le `isAdmin ||` est la ceinture, pas la bretelle. */
   const aD = (id) => isAdmin || droits.indexOf(id) >= 0;
@@ -1248,14 +1526,14 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     if (done.length) setUpdBusy(b => { const n = { ...b }; done.forEach(id => delete n[id]); return n; });
   }, [autoSig, upsSig]);
   // on n'affiche QUE les mises à jour disponibles ou en cours — celles déjà faites n'encombrent pas la liste
-  const ups = upsAll.filter(u => u.avail || u.prog !== false).sort((a, b) => a.name.localeCompare(b.name));
+  const ups = upsAll.filter(u => u.avail || u.prog !== false).sort((a, b) => comparerTextes(a.name, b.name));
   const upsAvail = ups.filter(u => u.avail).length;
   const upsTotal = upsAll.length;
-  const toggleAuto = (a) => { setAutoOv(o => ({ ...o, [a.id]: !a.on })); autoCall(a.on ? 'turn_off' : 'turn_on', a.id); };
+  const toggleAuto = (a) => { const s = hass.states[a.id]; demanderAuto(a.id, !a.on, s, s && s.state === 'on'); autoCall(a.on ? 'turn_off' : 'turn_on', a.id); };
   const runAuto = (a) => autoCall('trigger', a.id);
   const depuisMin = (m) => m < 1 ? tr('à l’instant') : m < 60 ? tr('il y a {n} min', { n: Math.round(m) }) : m < 1440 ? tr('il y a {n} h', { n: Math.round(m / 60) }) : tr('il y a {n} j', { n: Math.round(m / 1440) });
   const autoRel = (t) => { try { if (!t) return ''; const ms = new Date(t).getTime(); return Number.isFinite(ms) ? depuisMin((Date.now() - ms) / 60000) : ''; } catch { return ''; } };
-  const autos = (hass && hass.states) ? Object.keys(hass.states).filter(e => e.indexOf('automation.') === 0).map(id => { const s = hass.states[id], at = s.attributes || {}; return { id, name: at.friendly_name || id.replace('automation.', '').replace(/_/g, ' '), on: autoOv[id] != null ? autoOv[id] : s.state === 'on', last: at.last_triggered }; }).sort((a, b) => a.name.localeCompare(b.name)) : [];
+  const autos = (hass && hass.states) ? Object.keys(hass.states).filter(e => e.indexOf('automation.') === 0).map(id => { const s = hass.states[id], at = s.attributes || {}; return { id, name: at.friendly_name || id.replace('automation.', '').replace(/_/g, ' '), on: enVol(autoOv, id, s, s.state === 'on'), last: at.last_triggered }; }).sort((a, b) => comparerTextes(a.name, b.name)) : [];
   const tabStyle = on => on
     ? { padding: '9px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff', flexShrink: 0, whiteSpace: 'nowrap' }
     : { padding: '9px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)', flexShrink: 0, whiteSpace: 'nowrap' };
@@ -1288,6 +1566,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
    * 18/09). Chaque module garde son propre drapeau cote serveur ; ici on les
    * lit ensemble et on les pose ensemble. `null` : pas encore lus. */
   const [observe, setObserve] = useState(null);
+  /* Ce que la dernière bascule n'a pas pu poser, nommé — '' si tout a pris
+   * (audit du 03/10). Effacé à la bascule suivante. */
+  const [obsRefus, setObsRefus] = useState('');
   const lireObserve = () => {
     const h = hass;
     if (!h || typeof h.callWS !== 'function') return;
@@ -1311,12 +1592,20 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     if (!h || typeof h.callWS !== 'function' || !observe) return;
     const cible = !Object.values(observe).some(v => v === true);
     setObserve({ volets: cible, fenetres: cible, presence: cible, nuit: cible });
-    await Promise.all([
-      h.callWS({ type: 'loggia/volets/config', patch: { simulation: { actif: cible } } }),
-      h.callWS({ type: 'loggia/fenetres/config', patch: { simulation: cible } }),
-      h.callWS({ type: 'loggia/presence/config', patch: { simulation: { actif: cible } } }),
-      h.callWS({ type: 'loggia/nuit/config', patch: { simulation: { actif: cible } } }),
-    ].map(p => p.catch(() => null)));
+    setObsRefus('');
+    /* Les quatre refus ne s'avalent plus (audit du 03/10). L'ancien filet
+     * jetait chaque rejet : sous un compte Home Assistant ordinaire, les
+     * quatre commandes sont réservées aux administrateurs (`require_admin`) —
+     * même pour un profil qui a reçu « Règles » —, la bascule revenait en
+     * arrière à la relecture et rien ne disait pourquoi. `require_admin` ne
+     * nomme rien : chaque écriture porte ici la clé qu'elle touche, et le
+     * bilan nomme celles qui n'ont pas pris. */
+    setObsRefus(await bilanEcritures([
+      ['loggia_volets', h.callWS({ type: 'loggia/volets/config', patch: { simulation: { actif: cible } } })],
+      ['loggia_fenetres', h.callWS({ type: 'loggia/fenetres/config', patch: { simulation: cible } })],
+      ['loggia_presence', h.callWS({ type: 'loggia/presence/config', patch: { simulation: { actif: cible } } })],
+      ['loggia_nuit', h.callWS({ type: 'loggia/nuit/config', patch: { simulation: { actif: cible } } })],
+    ]));
     lireObserve();
   };
   useEffect(() => {
@@ -1393,14 +1682,14 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const enTete = (() => {
     const moi = users[userIdx] || {};
     if (tab === 'users') return {
-      sous: (users.length > 1 ? tr('{n} profils du foyer', { n: users.length }) : tr('{n} profil du foyer', { n: users.length })) + (moi.name ? ' · ' + tr('vous êtes {nom}', { nom: moi.name }) : ''),
+      sous: trN(users.length, '{n} profil du foyer', '{n} profils du foyer') + (moi.name ? ' · ' + tr('vous êtes {nom}', { nom: moi.name }) : ''),
       droite: isAdmin ? <button onClick={() => setEditing({ i: null })} style={btnPrimaire}>{tr('Ajouter un profil')}</button> : null,
     };
     if (tab === 'apparence') return { sous: tr('Thème, couleurs, effets'), droite: null };
     if (tab === 'inter') {
       const c = compteInter;
-      const t = c ? (c.telecommandes > 1 ? tr('{n} télécommandes', { n: c.telecommandes }) : tr('{n} télécommande', { n: c.telecommandes })) : null;
-      const g = c ? (c.gestes > 1 ? tr('{n} gestes réglés', { n: c.gestes }) : tr('{n} geste réglé', { n: c.gestes })) : null;
+      const t = c ? trN(c.telecommandes, '{n} télécommande', '{n} télécommandes') : null;
+      const g = c ? trN(c.gestes, '{n} geste réglé', '{n} gestes réglés') : null;
       return { sous: tr('Boutons sans fil Zigbee') + (c ? ' · ' + t + ', ' + g : ''), droite: null };
     }
     if (tab === 'alertes') return { sous: tr('Ce que le téléphone doit apprendre, même dashboard fermé'), droite: null };
@@ -1461,7 +1750,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         sous: tr('Menu latéral et vues perso') + ' · ' + tr('{v} visibles, {m} masquées', { v: vues, m: total - vues }),
         droite: <>
           {onNav && <button onClick={() => onNav('biblio')} style={btnSecondaire}>{tr('Bibliothèque de cartes')}</button>}
-          <button onClick={() => setCvEditing('new')} style={btnPrimaire}>{tr('Créer une vue')}</button>
+          {!ordinaire && <button onClick={() => setCvEditing('new')} style={btnPrimaire}>{tr('Créer une vue')}</button>}
         </>,
       };
     }
@@ -1470,16 +1759,16 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // Bandeau d'une section : volontairement LEGER (1 a 2 groupes) — entasser dix reglages
 
   return (
-    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div ref={racineRef} className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       {tab === 'hub' ? (
         <>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Paramètres')}</h1>
-              <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Réglages de Loggia')} · {users.length > 1 ? tr('{n} profils du foyer', { n: users.length }) : tr('{n} profil du foyer', { n: users.length })}</div>
+              <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Réglages de Loggia')} · {trN(users.length, '{n} profil du foyer', '{n} profils du foyer')}</div>
             </div>
             <span style={{ flex: 1 }} />
-            {upsAvail > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(var(--o-warn2-rgb),.14)', color: 'var(--o-warn2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-warn2)' }} />{upsAvail > 1 ? tr('{n} MISES À JOUR', { n: upsAvail }) : tr('{n} MISE À JOUR', { n: upsAvail })}</span>}
+            {upsAvail > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(var(--o-warn2-rgb),.14)', color: 'var(--o-warn2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-warn2)' }} />{trN(upsAvail, '{n} MISE À JOUR', '{n} MISES À JOUR')}</span>}
           </div>
 
           {/* Pas de barre « Mode Sombre / Clair » ici (retiree le 17/09) : le
@@ -1487,17 +1776,23 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Toutes les sections')}</div>
           <div className="grid-parsections" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 16 }}>
             {SECTIONS.map(sec => (
-              <button key={sec.id} onClick={() => setTab(sec.id)} style={{ textAlign: 'left', cursor: 'pointer', padding: '16px 17px', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button key={sec.id} data-section={sec.id} onClick={() => setTab(sec.id)} style={{ textAlign: 'left', cursor: 'pointer', padding: '16px 17px', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: sec.bg }}><Fi i={sec.ico} size={15} color={sec.col} /></span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 800 }}>{tr(sec.name)}</div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sec.sub}</div>
+                    {/* Deux lignes, hauteur RÉSERVÉE (audit du 03/10) : sur
+                      * une seule, six sous-titres sur dix finissaient en « … »
+                      * à 1440 px ; réservée, la grande valeur tombe au même
+                      * endroit dans toutes les cartes d'une rangée. */}
+                    <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.35, minHeight: '2.7em', color: 'var(--o-text3)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{sec.sub}</div>
                   </div>
                   {sec.dot && <span style={{ width: 7, height: 7, borderRadius: '50%', background: sec.col, flexShrink: 0 }} />}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
-                  <span style={{ fontSize: sec.small ? 17 : 24, fontWeight: 800, letterSpacing: '-.02em', color: sec.col, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sec.big}</span>
+                  {/* La valeur ne se coupe jamais (« notify » finissait en
+                    * « no… ») : c'est l'unité, à côté, qui cède. */}
+                  <span style={{ flexShrink: 0, maxWidth: '100%', fontSize: sec.small ? 17 : 24, fontWeight: 800, letterSpacing: '-.02em', color: sec.col, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sec.big}</span>
                   <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sec.unit}</span>
                 </div>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{tr('Ouvrir')}<Fi i="angle-small-right" size={12} color="var(--o-accent-soft)" /></span>
@@ -1533,7 +1828,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         return (<>
           <AppCard title={tr('Thème')}
             sub={themeTab === 'natifs' ? tr('{n} thèmes natifs installés', { n: themeList.length }) : tr('{n} thèmes de la communauté', { n: themeList.length })}
-            action={<Seg value={themeTab} opts={[['natifs', tr('Natifs')], ['commu', tr('Communauté')]]} onPick={setThemeTab} />}>
+            action={<Seg label={tr('Collection de thèmes')} value={themeTab} opts={[['natifs', tr('Natifs')], ['commu', tr('Communauté')]]} onPick={setThemeTab} />}>
             <div className="grid-par-pal" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: 10, opacity: notFollow ? 1 : .55, transition: 'opacity .25s', padding: '0 22px 20px' }}>
               {themeList.map(p => {
                 const on = notFollow && (loggiaTheme || '') === p.id, rgb = cl_hexRgb(p.cols[0]);
@@ -1557,13 +1852,17 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
 
           <AppCard title={tr('Couleurs')}>
             <OptRow title={tr('Mode')} desc={tr('Appliqué au thème choisi.')}>
-              <Seg value={themeMode} opts={[['auto', tr('Auto')], ['dark', tr('Foncé')], ['light', tr('Clair')]]} onPick={onMode} disabled={!notFollow} />
+              <Seg label={tr('Mode')} value={themeMode} opts={[['auto', tr('Auto')], ['dark', tr('Foncé')], ['light', tr('Clair')]]} onPick={onMode} disabled={!notFollow} />
             </OptRow>
             <OptRow title={tr("Couleur d'accent")} desc={tr('Éléments actifs, jauges et liens.')}>
+              {/* Le nom de la teinte se traduit ICI et non dans `ACCENTS`, que les
+                * tests relisent comme une donnée (audit du 03/10) : l'info-bulle et
+                * le lecteur d'écran le disaient en français. */}
               {ACCENTS.map(([c, lb]) => {
                 const on = (look.accent || '') === c;
+                const nomTeinte = tr(lb);
                 return (
-                  <button key={c || 'auto'} onClick={() => onLook({ accent: c })} title={lb} aria-label={lb} aria-pressed={on}
+                  <button key={c || 'auto'} onClick={() => onLook({ accent: c })} title={nomTeinte} aria-label={nomTeinte} aria-pressed={on}
                     style={{ width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: c || 'var(--o-accent-theme, var(--o-accent))', border: on ? '2px solid var(--o-text)' : '2px solid transparent', boxShadow: on ? '0 0 0 2px var(--o-surfA) inset' : 'none' }}>
                     {on ? <Fi i="check" size={12} color="#fff" /> : null}
                   </button>
@@ -1571,7 +1870,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               })}
             </OptRow>
             <OptRow title={tr("Teinte d'état")} desc={tr('Une carte active se lave de sa couleur.')}>
-              <Seg value={look.tint || 'douce'}
+              <Seg label={tr("Teinte d'état")} value={look.tint || 'douce'}
                 opts={[['sans', tr('Sans')], ['discrete', tr('Discrète')], ['douce', tr('Douce')], ['pleine', tr('Pleine')]]}
                 onPick={v => onLook({ tint: v })} />
             </OptRow>
@@ -1645,14 +1944,14 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <Tgl on={!!wxFx} cb={onToggleWxFx} label={tr('Effets météo animés')} />
             </OptRow>
             <OptRow title={tr('Écran de veille')} desc={tr('Pour une tablette murale : après ce délai sans toucher, heure et météo.')}>
-              <Seg value={String(ambient || 0)}
+              <Seg label={tr('Écran de veille')} value={String(ambient || 0)}
                 opts={[['0', tr('Off')], ['1', '1 min'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']]}
                 onPick={v => onAmbient && onAmbient(parseInt(v, 10) || 0)} />
             </OptRow>
             {/* Trois réglages de la veille : grisés tant qu'elle est coupée,
               * sans être verrouillés — on peut les préparer avant. */}
             <OptRow retrait eteint={!veille} title={tr('Plage horaire')} desc={tr("La nuit, la veille baisse d'un ton et l'horloge dérive pour ménager l'écran.")}>
-              <Seg value={ambPlage}
+              <Seg label={tr('Plage horaire')} value={ambPlage}
                 opts={[['toujours', tr('Toujours')], ['nuit', tr('Nuit')], ['jour', tr('Journée')]]}
                 onPick={v => onAmbPlage && onAmbPlage(v)} />
             </OptRow>
@@ -1668,7 +1967,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               l'accueil — partout (décision user 29/08). */}
           <AppCard title={tr('Matière & formes')} note={tr('aucun coût GPU')}>
             <OptRow title={tr('Arrondi')} desc={tr('Rayon des cartes, des champs et des boutons.')}>
-              <Seg value={look.radius || 'doux'} opts={[['net', tr('Net')], ['doux', tr('Doux')], ['rond', tr('Rond')]]} onPick={v => onLook({ radius: v })} />
+              <Seg label={tr('Arrondi')} value={look.radius || 'doux'} opts={[['net', tr('Net')], ['doux', tr('Doux')], ['rond', tr('Rond')]]} onPick={v => onLook({ radius: v })} />
             </OptRow>
             <OptRow title={tr('Ombres portées')} desc={tr('Détache les cartes du fond. À couper pour un rendu plat.')}>
               <Tgl on={!!look.shadow} cb={() => onLook({ shadow: !look.shadow })} label={tr('Ombres portées')} />
@@ -1711,14 +2010,18 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <Tgl on={!!haDraft.fallback} cb={toggleFallback} label={tr('Bascule automatique')} />
           </Ligne>
           <Ligne titre={tr('Intervalle de rafraîchissement')} desc={tr('Plus court = plus de requêtes vers Home Assistant.')}>
-            <Seg value={haDraft.pollMs || 2000} opts={POLL_CHOICES} onPick={(ms) => setHaDraft(d => ({ ...d, pollMs: ms }))} />
+            <Seg label={tr('Intervalle de rafraîchissement')} value={haDraft.pollMs || 2000} opts={POLL_CHOICES} onPick={(ms) => setHaDraft(d => ({ ...d, pollMs: ms }))} />
           </Ligne>
           {/* L'assistant : une entite de conversation. Son nom vit ici et non
             * dans le code — un assistant porte souvent un prenom, et le code de
-            * Loggia est public. */}
-          <Ligne titre={tr('Assistant vocal')} desc={tr('L’entité de conversation qui répond à l’orbe, en haut de l’écran et dans la barre du bas.')}>
-            <Seg value={assistantChoix} opts={assistantOpts} onPick={choisirAssistant} wrap />
-          </Ligne>
+            * Loggia est public. Le choix ecrit `loggia_assistant`, reservee aux
+            * administrateurs Home Assistant : un compte ordinaire ne le voit
+            * pas (03/10). */}
+          {!ordinaire && (
+            <Ligne titre={tr('Assistant vocal')} desc={tr('L’entité de conversation qui répond à l’orbe, en haut de l’écran et dans la barre du bas.')}>
+              <Seg label={tr('Assistant vocal')} value={assistantChoix} opts={assistantOpts} onPick={choisirAssistant} wrap />
+            </Ligne>
+          )}
         </Panneau>
       )}
 
@@ -1738,7 +2041,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 14, fontWeight: 800 }}>{u.name}</span>
-                    <Pastille capitales niveau={admin ? 'alerte' : 'ok'}>{u.role || tr('Famille')}</Pastille>
+                    {/* Le rôle est une VALEUR gardée telle quelle (« Admin », « Famille ») :
+                      * il se traduit à l'affichage, comme dans le menu des profils (audit du 03/10). */}
+                    <Pastille capitales niveau={admin ? 'alerte' : 'ok'}>{tr(u.role || 'Famille')}</Pastille>
                   </div>
                   <div style={{ ...MONO, fontSize: 11.5, color: 'var(--o-text3)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ident}</div>
                 </div>
@@ -1787,11 +2092,11 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             droite={<span style={CAPITALES}>{tr('Visibilité du menu latéral')}</span>}>
             <Row icon="home" c="var(--o-accent)" name={tr('Accueil')} sub={tr('vue principale')} on fixe />
             {principales.map(([vid, name, icon, sub, c], idx) => { const why = viewReason(availViews, vid); return (
-              <Row key={vid} icon={icon} c={c} name={name} sub={why || sub} locked={!!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)}
+              <Row key={vid} icon={icon} c={c} name={name} sub={why ? tr(why) : sub} locked={!!why} on={!why && !cfg.hidden.has(vid)} onT={() => toggleMain(vid)}
                 onUp={idx > 0 ? () => deplacerP(vid, -1) : null} onDown={idx < principales.length - 1 ? () => deplacerP(vid, 1) : null} />
             ); })}
             {secondaires.map((h, idx) => { const why = viewReason(availViews, h.vid); return (
-              <Row key={h.vid} icon={h.icon} c={h.c} name={h.label} sub={why || DESC_SECONDAIRE[h.vid] || ''} locked={!!why} on={!why && cfg.shown.has(h.vid)} onT={() => toggleExtra(h.vid)}
+              <Row key={h.vid} icon={h.icon} c={h.c} name={h.label} sub={why ? tr(why) : (DESC_SECONDAIRE[h.vid] || '')} locked={!!why} on={!why && cfg.shown.has(h.vid)} onT={() => toggleExtra(h.vid)}
                 onUp={idx > 0 ? () => deplacerS(h.vid, -1) : null} onDown={idx < secondaires.length - 1 ? () => deplacerS(h.vid, 1) : null} />
             ); })}
           </Panneau>
@@ -1800,9 +2105,13 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               {customViews.map(cv => (
                 <div key={cv.id} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 22px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
                   <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><Fi i={cv.icon || 'sparkles'} size={15} /></span>
-                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 700 }}>{cv.name}</div><div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div></div>
-                  <button onClick={() => setCvEditing(cv)} title={tr('Modifier')} aria-label={tr('Modifier') + ' ' + cv.name} style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="pencil" size={13} /></button>
-                  <button onClick={() => onSaveCustomViews(customViews.filter(x => x.id !== cv.id))} title={tr('Supprimer')} aria-label={tr('Supprimer') + ' ' + cv.name} style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>×</button>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 700 }}>{cv.name}</div><div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{trN(cv.ents.length, '{n} entité', '{n} entités')}</div></div>
+                  {/* `loggia_customviews` est reservee (03/10) : un compte
+                    * ordinaire voit ses vues, sans les gestes qui les reecrivent. */}
+                  {!ordinaire && (<>
+                    <button onClick={() => setCvEditing(cv)} title={tr('Modifier')} aria-label={tr('Modifier') + ' ' + cv.name} style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="pencil" size={13} /></button>
+                    <button onClick={() => onSaveCustomViews(customViews.filter(x => x.id !== cv.id))} title={tr('Supprimer')} aria-label={tr('Supprimer') + ' ' + cv.name} style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(var(--o-bad-rgb),.12)', border: 'none', color: 'var(--o-bad)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>×</button>
+                  </>)}
                 </div>
               ))}
             </Panneau>
@@ -1813,14 +2122,17 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       {cvEditing && isAdmin && <CvEditor cv={cvEditing === 'new' ? null : cvEditing} hass={hass} onClose={() => setCvEditing(null)} onSave={(cv) => { onSaveCustomViews(cvEditing === 'new' ? [...customViews, cv] : customViews.map(x => x.id === cv.id ? cv : x)); setCvEditing(null); }} />}
 
       {tab === 'auto' && aD('auto') && (() => {
-        const norm = (t) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const q = norm(autoQ.trim());
-        const filtered = autos.filter(a => (!q || norm(a.name).indexOf(q) >= 0) && (autoFilter === 'all' || (autoFilter === 'on') === a.on));
+        const q = sansAccents(autoQ.trim());
+        const filtered = autos.filter(a => (!q || sansAccents(a.name).indexOf(q) >= 0) && (autoFilter === 'all' || (autoFilter === 'on') === a.on));
         // Le classement vit dans `autos.js`, avec ses tests : le premier mot du
         // nom faisait deux familles pour « Lumière » et « Lumières » (retour 02/09).
         const groups = [];
         filtered.forEach(a => { const g = autoFamille(a.name); let e = groups.find(x => x.g === g); if (!e) { e = { g, items: [] }; groups.push(e); } e.items.push(a); });
-        groups.sort((x, y) => x.g.localeCompare(y.g));
+        /* La famille se dit dans la langue de l'écran (audit du 03/10) ; un mot
+         * repris du NOM de l'automatisation vient de Home Assistant et reste
+         * tel quel. Le tri suit ce qu'on lit. */
+        const nomFam = (g) => (FAMILLES_AUTO.indexOf(g) >= 0 ? tr(g) : g);
+        groups.sort((x, y) => comparerTextes(nomFam(x.g), nomFam(y.g)));
         const line = (a) => (
           <div key={a.id} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 22px 10px 51px', borderTop: FILET }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -1839,7 +2151,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <input aria-label={tr('Filtrer par nom…')} value={autoQ} onChange={e => setAutoQ(e.target.value)} placeholder={tr('Filtrer par nom…')} spellCheck={false}
               style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px 10px 38px', borderRadius: 12, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }} />
           </div>
-          <Seg value={autoFilter} opts={[['all', tr('Toutes')], ['on', tr('Actives')], ['off', tr('Inactives')]]} onPick={setAutoFilter} />
+          <Seg label={tr('Filtrer par état')} value={autoFilter} opts={[['all', tr('Toutes')], ['on', tr('Actives')], ['off', tr('Inactives')]]} onPick={setAutoFilter} />
         </div>
         <Panneau>
           {!groups.length && <div style={{ padding: '24px 22px', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{autos.length ? tr('Aucune automatisation ne correspond au filtre.') : tr('Aucune automatisation détectée.')}</div>}
@@ -1852,10 +2164,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '13px 22px', background: 'none', border: 'none', borderTop: gi ? FILET : 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
                   <span style={{ display: 'inline-flex', transition: 'transform .22s', transform: isOpen ? 'rotate(90deg)' : 'rotate(0)' }}><Fi i="angle-small-right" size={15} color="var(--o-text3)" /></span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 14, fontWeight: 800 }}>{gr.g}</span>
-                    <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{gr.items.length > 1 ? tr('{n} automatisations', { n: gr.items.length }) : tr('{n} automatisation', { n: gr.items.length })}</span>
+                    <span style={{ display: 'block', fontSize: 14, fontWeight: 800 }}>{nomFam(gr.g)}</span>
+                    <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{trN(gr.items.length, '{n} automatisation', '{n} automatisations')}</span>
                   </span>
-                  <Pastille niveau={nOn ? 'ok' : 'neutre'}>{nOn === gr.items.length ? (nOn > 1 ? tr('{n} actives', { n: nOn }) : tr('{n} active', { n: nOn })) : tr('{a} sur {n}', { a: nOn, n: gr.items.length })}</Pastille>
+                  <Pastille niveau={nOn ? 'ok' : 'neutre'}>{nOn === gr.items.length ? trN(nOn, '{n} active', '{n} actives') : tr('{a} sur {n}', { a: nOn, n: gr.items.length })}</Pastille>
                 </button>
                 {isOpen && gr.items.map(line)}
               </div>
@@ -1896,6 +2208,17 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             );
           })()}
         </div>
+        {/* Ce que la dernière bascule d'« Observer sans agir » n'a pas pu poser
+          * (audit du 03/10). Sous la barre, pour ne pas la déformer. `alert`
+          * se dit à sa CRÉATION (WAI-ARIA 1.2, comme le toast d'App.jsx) : le
+          * bandeau n'est monté qu'avec son texte, et `setObsRefus('')` le
+          * démonte avant chaque bascule — un même refus se redit. */}
+        {obsRefus && (
+          <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.10)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.45 }}>
+            <Fi i="triangle-warning" size={15} color="var(--o-bad)" />
+            <span>{obsRefus}</span>
+          </div>
+        )}
         {ongletRegle === 'volets' ? <><VoletsAffichage cardSt={cardSt} /><div style={{ height: 16 }} /><VoletsReglages hass={hass} cardSt={cardSt} /></>
           : ongletRegle === 'fenetres' ? <FenetresReglages hass={hass} cardSt={cardSt} />
             : ongletRegle === 'presence' ? <PresenceReglages hass={hass} cardSt={cardSt} />
@@ -1928,7 +2251,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             ? <div style={{ padding: '28px 22px 24px', textAlign: 'center' }}>
                 <div style={{ width: 52, height: 52, borderRadius: '50%', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-ok-rgb),.14)' }}><Fi i="check" size={22} color="var(--o-ok)" /></div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--o-ok)' }}>{tr('Tout est à jour')}</div>
-                <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 3 }}>{upsTotal > 1 ? tr('{n} modules suivis', { n: upsTotal }) : tr('{n} module suivi', { n: upsTotal })}</div>
+                <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 3 }}>{trN(upsTotal, '{n} module suivi', '{n} modules suivis')}</div>
               </div>
             : groupes.map((gr, gi) => (
               <div key={gr.g}>
@@ -1989,32 +2312,25 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             pied={<>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: '1 1 220px' }}>{tr('La configuration Loggia s’exporte en un fichier JSON.')}</span>
               <button onClick={() => window.location.reload()} style={btnSecondaire}>{tr('Recharger')}</button>
-              {isAdmin && (
-                <>
-                  <input aria-label={tr('Importer un fichier de configuration')} type="file" accept="application/json,.json" style={{ display: 'none' }} id="o-import-cfg"
-                    onChange={async (e) => {
-                      const f = e.target.files && e.target.files[0];
-                      if (!f) return;
-                      try {
-                        await importConfigComplete(await f.text());
-                        window.location.reload();
-                      } catch (err) {
-                        alert(tr('Import impossible : ') + ((err && err.message) || err));
-                      } finally { e.target.value = ''; }
-                    }} />
-                  <button onClick={() => { const el = document.getElementById('o-import-cfg'); if (el) el.click(); }} style={btnSecondaire}>{tr('Importer')}</button>
-                </>
-              )}
+              {/* L'import reste un geste d'administrateur : il remplace la
+                  configuration de toute la maison. */}
+              {isAdmin && <ImportConfigBtn />}
               {/* Sauvegarder la configuration COMPLETE : celle du serveur,
-                  partagee entre tous les appareils, et non le seul navigateur. */}
-              <button onClick={async () => { const j = await exportConfigComplete(); telechargerConfig(j, 'loggia-config'); }} style={btnSecondaire}>{tr('Exporter')}</button>
+                  partagee entre tous les appareils, et non le seul navigateur.
+                  Un serveur muet le dit, au lieu d'un bouton qui ne fait rien. */}
+              <button onClick={async () => {
+                try {
+                  const j = await exportConfigComplete();
+                  if (!telechargerConfig(j, 'loggia-config')) throw new Error(PAS_DE_FICHIER);
+                } catch (err) { window.alert(tr('Export impossible : ') + motifEchec(err)); }
+              }} style={btnSecondaire}>{tr('Exporter')}</button>
             </>}>
             <Ligne titre={tr('Version')} desc={inst.suiviPar ? tr('Suivie par {x}', { x: inst.suiviPar }) : tr('Lue dans le composant installé')}><span style={valeur}>{inst.version || '—'}</span></Ligne>
             <Ligne titre={tr('Socle technique')} desc={tr('Construit et servi depuis Home Assistant')}><span style={texte}>React + Vite</span></Ligne>
             <Ligne titre={tr('Typographie')} desc={tr('Auto-hébergée, sans CDN')}><span style={texte}>Manrope / Newsreader</span></Ligne>
             <Ligne titre={tr('Entités suivies')} desc={tr('{a} configurées sur {n} disponibles', { a: nombre(entIds.length), n: nombre(entCount) })}><span style={valeur}>{nombre(entIds.length)}</span></Ligne>
             <Ligne titre={tr('Cache local')} desc={tr('États des entités et réglages de cet appareil')}>
-              <span style={valeur}>{cacheKb != null ? (cacheKb >= 1024 ? nombre(cacheKb / 1024) + ' Mo' : nombre(cacheKb) + ' Ko') : '—'}</span>
+              <span style={valeur}>{cacheKb != null ? (cacheKb >= 1024 ? nombre(cacheKb / 1024) + ' ' + tr('Mo') : nombre(cacheKb) + ' ' + tr('Ko')) : '—'}</span>
             </Ligne>
           </Panneau>
 

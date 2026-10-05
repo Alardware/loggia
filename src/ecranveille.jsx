@@ -6,11 +6,18 @@
  * piece et la vue Objets.
  */
 import { useState, useEffect, useRef } from 'react';
-import { REDUCE_MOTION } from './ui.jsx';
+import { REDUCE_MOTION, Surface } from './ui.jsx';
 import { Ico } from './icones.jsx';
 import { WxMini, WeatherIco } from './wxutil.jsx';
-import { tr, locale } from './i18n.js';
+import { tr, trN, locale } from './i18n.js';
 import { getHass } from './state.js';
+import { annoncerVeille } from './regard.js';
+
+/* Réveiller l'écran (lot 13 de l'audit du 03/10). Le minuteur de la veille vit
+ * dans l'App : il se réarme à tout `pointerdown` de la fenêtre. La caméra de la
+ * tablette passait déjà par là ; le bouton de surface aussi, car le clic d'un
+ * lecteur d'écran ou de la touche Entrée n'émet aucun `pointerdown`. */
+const reveiller = () => { try { window.dispatchEvent(new PointerEvent('pointerdown')); } catch { window.dispatchEvent(new Event('pointerdown')); } };
 
 /* Mode ambiant : l'ecran de veille de la tablette murale. Apres un delai sans
  * toucher, le dashboard s'efface derriere l'essentiel — l'heure en grand, la
@@ -24,7 +31,9 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, un
   // pour personne : la classe leur dit de souffler — batterie de la tablette.
   useEffect(() => {
     document.documentElement.classList.add('loggia-ambient-on');
-    return () => document.documentElement.classList.remove('loggia-ambient-on');
+    // Et le dire : les caméras suspendent leur direct (lot 14 de l'audit du 03/10, regard.js).
+    annoncerVeille();
+    return () => { document.documentElement.classList.remove('loggia-ambient-on'); annoncerVeille(); };
   }, []);
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => { const iv = setInterval(() => setClock(new Date()), 10000); return () => clearInterval(iv); }, []);
@@ -110,7 +119,7 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, un
               let diff = 0;
               for (let i = 0; i < d.length; i += 16) { if (Math.abs(d[i] - avant[i]) > 26) diff++; }
               // ~192 points échantillonnés : une vingtaine qui bougent = une présence, pas du bruit de capteur.
-              if (diff > 18) { try { window.dispatchEvent(new PointerEvent('pointerdown')); } catch { window.dispatchEvent(new Event('pointerdown')); } }
+              if (diff > 18) reveiller();
             }
             avant = new Uint8ClampedArray(d);
           } catch { /* frame illisible */ }
@@ -135,18 +144,33 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, un
   const chip = { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)', fontSize: 14, fontWeight: 700, color: '#aeb9cc' };
   const pt = (c) => <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: c, boxShadow: '0 0 8px ' + c }} />;
   return (
-    <div className="o-sombre" role="button" aria-label={tr('Toucher pour réveiller')} style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070b', color: '#e8edf5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', animation: REDUCE_MOTION ? 'none' : 'o-ambient-in 1s ease', userSelect: 'none' }}>
+    /* La veille n'est plus un `role="button"` (lot 13 de l'audit du 03/10) :
+     * elle porte les boutons des scènes, et un rôle bouton rend sa descendance
+     * présentationnelle — un lecteur d'écran n'en voyait aucun
+     * (`nested-interactive`). Le geste « réveiller » passe par un bouton de
+     * SURFACE, frère des scènes et premier enfant : le toucher réveille
+     * toujours par la fenêtre, comme avant ; le bouton donne au clavier et au
+     * lecteur d'écran un nom et une action. Il change d'écran, il n'ouvre pas
+     * de fiche : `popup={false}`. */
+    <div className="o-sombre" style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070b', color: '#e8edf5', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', animation: REDUCE_MOTION ? 'none' : 'o-ambient-in 1s ease', userSelect: 'none' }}>
+    <Surface onClick={reveiller} label={tr('Toucher pour réveiller')} popup={false} />
     {/* Diaporama : la photo courante en fondu, la suivante préchargée invisible,
         un voile pour que l'horloge reste lisible — plus opaque la nuit. */}
     {photos.length > 0 && (
-      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
         {photos.map((u, i) => (i === photoIdx || i === (photoIdx + 1) % photos.length)
           ? <img key={u} src={u} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: i === photoIdx ? 1 : 0, transition: REDUCE_MOTION ? 'none' : 'opacity 2.5s ease' }} />
           : null)}
         <div style={{ position: 'absolute', inset: 0, background: nuit ? 'rgba(5,7,11,.74)' : 'rgba(5,7,11,.48)' }} />
       </div>
     )}
-    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transform: `translate(${decal.x}px, ${decal.y}px)`, opacity: nuit ? .55 : 1, transition: REDUCE_MOTION ? 'opacity 2s ease' : 'transform 6s ease, opacity 2s ease' }}>
+    {/* Le toucher traverse l'horloge, la météo, les puces et le diaporama
+      * jusqu'à la surface (relecture du lot 13, 04/10). Positionnés après
+      * elle, ils la recouvraient : le réveil passait, la vibration non —
+      * l'écoute haptique de l'App cherche un bouton sous le doigt, et la
+      * veille n'a plus de rôle. Seules les scènes reprennent le pointeur,
+      * bouton par bouton : sur leur rangée, ses interstices le garderaient. */}
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, pointerEvents: 'none', transform: `translate(${decal.x}px, ${decal.y}px)`, opacity: nuit ? .55 : 1, transition: REDUCE_MOTION ? 'opacity 2s ease' : 'transform 6s ease, opacity 2s ease' }}>
       <div style={{ fontSize: 'clamp(72px, 17vw, 170px)', fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{hm}</div>
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 'clamp(17px, 2.6vw, 24px)', color: '#8b95a7' }}>{dateStr}</div>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 22px', borderRadius: 18, background: 'rgba(255,255,255,.035)', marginTop: 18, overflow: 'hidden' }}>
@@ -159,7 +183,7 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, un
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16, maxWidth: '84vw' }}>
         {inTemp != null && <span style={chip}>{pt('#54c8f0')}{inTemp.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} °{uniteTemp} {tr('intérieur')}</span>}
-        {lightsOn > 0 && <span style={{ ...chip, color: 'var(--o-lampe)' }}>{pt('var(--o-lampe)')}{lightsOn > 1 ? tr('{n} allumées', { n: lightsOn }) : tr('{n} allumée', { n: lightsOn })}</span>}
+        {lightsOn > 0 && <span style={{ ...chip, color: 'var(--o-lampe)' }}>{pt('var(--o-lampe)')}{trN(lightsOn, '{n} allumée', '{n} allumées')}</span>}
         {ast != null && <span style={{ ...chip, color: ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)' }}>{pt(ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)')}{ast === 'triggered' ? tr('Alarme') : ast === 'disarmed' ? tr('Alarme désarmée') : tr('Alarme armée')}</span>}
       </div>
       {rouges.length > 0 && (
@@ -177,7 +201,7 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, un
               onPointerDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); lancerScene(s); }}
-              style={{ ...chip, cursor: 'pointer', fontSize: 12, padding: '8px 14px', transition: 'background .3s, border-color .3s',
+              style={{ ...chip, cursor: 'pointer', pointerEvents: 'auto', fontSize: 12, padding: '8px 14px', transition: 'background .3s, border-color .3s',
                 background: scFlash === s.id ? 'rgba(var(--o-accent-rgb),.28)' : 'rgba(255,255,255,.05)',
                 border: '1px solid ' + (scFlash === s.id ? 'rgba(var(--o-accent-rgb),.55)' : 'rgba(255,255,255,.09)') }}>
               <Ico name={s.icone || 'sparkles'} size={13} />{s.nom || s.id}

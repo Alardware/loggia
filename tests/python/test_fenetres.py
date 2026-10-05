@@ -393,3 +393,43 @@ def test_un_chauffage_partage_attend_la_derniere_fenetre(creer, module):
     lancer(f._async_rendre("Cuisine"))
     assert [(d, s, data["entity_id"]) for d, s, data in f.hass.services.appels] == [("switch", "turn_on", ["switch.rad"])]
     assert f.coupes == {}
+
+
+# ── Audit du 03/10 : capteur muet, fenetre ouverte toute la journee ─────────
+
+def test_un_capteur_muet_garde_la_coupure(creer):
+    """La pile du capteur lache, la fenetre est toujours ouverte : le
+    chauffage repartait. Un capteur muet ne dit pas « ferme »."""
+    f = creer(cfg(), {**OUVERTE, **RADIATEUR})
+    lancer(f._async_couper("Chambre"))
+    f.hass.states.table["switch.rad_chambre"] = FauxEtat("off")
+    f.hass.states.table["binary_sensor.fen_chambre"] = FauxEtat("unavailable")
+    avant = list(f.hass.services.appels)
+    lancer(f._async_piece("Chambre"))
+    assert f.hass.services.appels == avant, "le chauffage est reparti sur un capteur muet"
+    assert "Chambre" in f.coupes
+    # Revenu, et franchement ferme : on rend.
+    f.hass.states.table["binary_sensor.fen_chambre"] = FauxEtat("off")
+    lancer(f._async_piece("Chambre"))
+    assert f.hass.services.appels[-1] == ("switch", "turn_on", {"entity_id": ["switch.rad_chambre"]})
+
+
+def test_une_fenetre_ouverte_toute_la_journee_rend_le_chauffage(creer, monkeypatch, regles_module):
+    f = creer(cfg(), {**OUVERTE, **RADIATEUR})
+    lancer(f._async_couper("Chambre"))
+    vrai = regles_module.time.time
+    monkeypatch.setattr(regles_module.time, "time", lambda: vrai() + 13 * 3600)
+    f.hass.states.table["switch.rad_chambre"] = FauxEtat("off")
+    f.hass.states.table["binary_sensor.fen_chambre"] = FauxEtat("off")
+    lancer(f._async_piece("Chambre"))
+    assert f.hass.services.appels[-1] == ("switch", "turn_on", {"entity_id": ["switch.rad_chambre"]}), \
+        "au-dela de 12 h, la coupure n'etait plus rendue"
+
+
+def test_couper_la_regle_lache_le_radiateur_coupe(creer):
+    f = creer(cfg(), {**OUVERTE, **RADIATEUR})
+    lancer(f._async_couper("Chambre"))
+    assert f.regles.tient("fenetres", "fenetre", "switch.rad_chambre")
+    lancer(f.async_enregistrer({"actif": False}))
+    assert f.coupes == {}
+    assert not f.regles.tient("fenetres", "fenetre", "switch.rad_chambre")

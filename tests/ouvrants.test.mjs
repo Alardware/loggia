@@ -37,7 +37,7 @@ test('plus de petit carre : le coin haut droit d’un capteur montre sa pile, ou
   const c = bloc('function RoomGenericCard(', NL + 'function ');
   assert.ok(!c.includes("'square'"), 'le bouche-trou a disparu');
   assert.ok(c.includes("const pile = (dom === 'binary_sensor' || dom === 'sensor') && !mort ? pileDe(S, id) : null;"), 'la pile vient du capteur soeur, pour les capteurs seulement');
-  assert.ok(c.includes(': pile != null ? <PileRepere n={pile} /> : null}'), 'la pile, sinon rien');
+  assert.ok(c.includes(': pile != null ? <PileRepere n={pile} onOuvrir={ouvrable ? () => onOpen(id) : null} /> : null}'), 'la pile, sinon rien — et son clic ouvre la fiche, comme la surface qu’il recouvre');
   const p = bloc('function PileRepere(', NL + '}');
   assert.ok(p.includes("n < 12 ? 'battery-empty' : n < 37 ? 'battery-quarter' : n < 62 ? 'battery-half' : n < 87 ? 'battery-three-quarters' : 'battery-full'"), 'l’icone suit le niveau');
   assert.ok(p.includes("n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-text3)'"), 'rouge sous 20 %, ambre sous 50 %, comme la rangee Pile de la fiche');

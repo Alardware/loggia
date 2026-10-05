@@ -124,10 +124,12 @@ test('la vue et l’Accueil rangent les scénarios par type d’écran', () => {
   const h = app.slice(app.indexOf('function useScenarios('), app.indexOf('\n}\n', app.indexOf('function useScenarios(')));
   assert.ok(h.includes('const format = formatEcran(useCoarse(), useWide(1180));'));
   assert.ok(h.includes("const tous = ordonnerSelon((etat && etat.scenarios) || [], ordreDuFormat(ordres, format));"));
-  assert.ok(h.includes("if (format === 'pc') return enregistrer({ ordre: ids });") && h.includes('cfgSet({ loggia_scnordre: n });'), 'ranger sur le téléphone réécrirait l’ordre de l’ordinateur');
+  // L'ordinateur range par la commande OUVERTE depuis l'audit du 03/10 (ADR 0125), plus par `enregistrer`, réservée.
+  assert.ok(h.includes("if (format === 'pc') {") && h.includes('const r = await rangerScenarios(h, ids);') && !h.includes('enregistrer({ ordre: ids })') && h.includes('cfgSet({ loggia_scnordre: n });'), 'ranger sur le téléphone réécrirait l’ordre de l’ordinateur');
   assert.ok(h.includes('SCN_ETAT = { ...etat, scenarios: tous }'), 'la veille et la recherche garderaient l’ordre du composant');
   assert.ok(app.includes('const liste = scenariosAccueil(sc.tous);'), 'la rangée de l’Accueil');
-  assert.ok(app.includes('sc.ordonner(ids).catch(() => {});') && !app.includes('sc.enregistrer({ ordre: ids })'), 'les flèches de la vue');
+  // Sans `catch` (audit du 03/10) : il avalait le refus d'un compte ordinaire.
+  assert.ok(app.includes('sc.ordonner(ids);') && !app.includes('sc.ordonner(ids).catch') && !app.includes('sc.enregistrer({ ordre: ids })'), 'les flèches de la vue');
 });
 
 test('l’Accueil se souvient : cartes ou plan, par type d’écran', () => {

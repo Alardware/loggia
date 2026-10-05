@@ -10,7 +10,7 @@
  * Rien d'invente : chaque mot vient d'un etat de Home Assistant, range dans
  * la piece par sa zone. Pur : pas de React, pas de Home Assistant.
  */
-import { tr } from './i18n.js';
+import { tr, trN } from './i18n.js';
 import { CLASSES_PORTE, CLASSES_FENETRE, SEUIL_CO2 } from './attention.js';
 
 export const NIVEAUX_PIECE = ['probleme', 'actif', 'calme'];
@@ -34,7 +34,7 @@ export function ambiancePiece({ lumieres = 0, medias = [], chauffe = false, froi
 
   const actifs = [];
   const n = Number(lumieres) || 0;
-  if (n > 0) actifs.push(n > 1 ? tr('{n} lumières', { n }) : tr('{n} lumière', { n }));
+  if (n > 0) actifs.push(trN(n, '{n} lumière', '{n} lumières'));
   const lecteurs = Array.isArray(medias) ? medias.filter(Boolean) : [];
   if (lecteurs.some(m => m.tv)) actifs.push(tr('TV'));
   if (lecteurs.some(m => !m.tv)) actifs.push(tr('Musique'));

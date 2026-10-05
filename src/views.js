@@ -21,10 +21,14 @@ const VIEW_ALWAYS = ['accueil', 'parametres'];
 /** Tous les identifiants de vue que le dashboard sait afficher. */
 export const VIEW_IDS = [
   'accueil', 'pieces', 'scenes', 'objets', 'energie', 'securite', 'systeme',
-  'lumieres', 'climat', 'volets', 'croquettes', 'medias', 'parametres',
+  'lumieres', 'climat', 'volets', 'medias', 'parametres',
 ];
 
 const OK = { ok: true, reason: null };
+/* Le motif est une CLÉ du catalogue, en français comme toutes les clés : il
+ * se traduit à l'affichage — `tr(reason)` dans la vue vide, Paramètres → Vues
+ * et le premier lancement. Les trois l'affichaient tel quel, en français dans
+ * les sept langues (audit du 03/10). Ce fichier, lui, n'importe toujours rien. */
 const no = (reason) => ({ ok: false, reason });
 
 /** Toutes disponibles — etat d'attente, et repli si le calcul echoue. */
@@ -130,9 +134,8 @@ export function viewAvailability(ctx) {
   const sysReady = (res.system && res.system.available) || cfg('system');
   out.systeme = sysReady ? OK : no('aucune machine supervisée — pas de capteur de charge processeur');
 
-  // Croquettes : distributeur maison, sans équivalent standard. Configuration
-  // obligatoire, rien à découvrir.
-  out.croquettes = cfg('feeder') ? OK : no('aucun distributeur de croquettes configuré');
+  // Croquettes n'est plus une vue (04/10) : le distributeur est une carte et
+  // sa fiche, dans Objets — `cfg('feeder')` y compte plus haut.
 
   return out;
 }

@@ -48,7 +48,7 @@ test('petite maison : lumieres, chauffage, volets — rien d’autre', () => {
     resolved: { rooms: { suggested: [{ id: 'salon' }] } },
   }));
   ['lumieres', 'climat', 'volets', 'scenes', 'pieces'].forEach(v => ok(r, v));
-  ['medias', 'securite', 'energie', 'systeme', 'croquettes'].forEach(v => ko(r, v));
+  ['medias', 'securite', 'energie', 'systeme'].forEach(v => ko(r, v));
 });
 
 test('scenarios : Loggia les compose des qu’il y a quelque chose a piloter, meme sans scene', () => {
@@ -107,15 +107,16 @@ test('configuration heritee d’une autre installation : entites mortes, vue mas
     entities: { feeder: { haids: { reservoir: 'input_number.croquettes' } } },
     states: { 'light.salon': {} },
   }));
-  ko(r, 'croquettes');
+  // Objets compte le distributeur configure (04/10 : il n'a plus de vue a lui).
+  ko(r, 'objets');
 });
 
-test('distributeur configure et vivant : la vue apparait', () => {
+test('distributeur configure et vivant : Objets apparait, plus de vue Croquettes', () => {
   const r = viewAvailability(ctx({
     entities: { feeder: { haids: { reservoir: 'input_number.croquettes' } } },
     states: { 'input_number.croquettes': { state: '1200' } },
   }));
-  ok(r, 'croquettes');
+  assert.equal(r.croquettes, undefined, 'la vue Croquettes est partie le 04/10 : la carte et sa fiche suffisent');
   ok(r, 'objets'); // le distributeur suffit a justifier le regroupement
 });
 

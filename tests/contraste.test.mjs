@@ -169,7 +169,7 @@ test('la garde est branchée, purgée, et les thèmes sans ombre gardent un file
    * pas laquelle porte quoi. */
   const appSeul = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
   const themeSeul = readFileSync(join(RACINE, 'src', 'theme.js'), 'utf8');
-  assert.ok(appSeul.includes("import { lisibleSurLavis } from './contraste.js';"),
+  assert.ok(appSeul.includes("import { lisibleSurLavis, versHex } from './contraste.js';"),
     'App.jsx n’importe plus la lisibilité sur lavis, dont ses cartes se servent');
   assert.ok(themeSeul.includes("import { garde, JETONS_GARDE } from './contraste.js';"),
     'le thème n’importe plus la garde de contraste ni les jetons qu’elle pose');
@@ -181,7 +181,10 @@ test('la garde est branchée, purgée, et les thèmes sans ombre gardent un file
   // La surface lue est celle DU thème (le bogue : elle était retirée avant d'être lue).
   assert.ok(src.includes('const brut = getComputedStyle(root).getPropertyValue(token).trim();'), 'la surface du thème est lue avant d’être retouchée');
   // Atrium : le filet, porté par l'ombre, faute de bordure.
-  assert.ok(src.includes("shadow: '0 0 0 1px rgba(255,255,255,.085)'") && src.includes("shadow: '0 0 0 1px rgba(16,24,40,.14)'"), 'Atrium garde son filet d’un pixel');
+  // Depuis le 04/10, l'anneau ne vaut que là où le liseré manque : un seul trait.
+  assert.ok(src.includes("shadow: '0 0 0 calc(1px - var(--o-bw, 1px)) rgba(255,255,255,.085)'") && src.includes("shadow: '0 0 0 calc(1px - var(--o-bw, 1px)) rgba(16,24,40,.14)'"), 'Atrium garde son filet d’un pixel, et un seul');
+  const themes = readFileSync(join(RACINE, 'src', 'theme.js'), 'utf8');
+  assert.equal(themes.split("0 0 0 1px rgba(").length - 1, 0, 'un anneau fixe d’Atrium s’ajouterait au liseré : 2 px');
   assert.ok(src.includes("'--o-shadow-hover', '--o-shadow-rangee',"), 'le jeton de la rangée se purge aussi');
   // La rangée des scénarios : une ombre courte, contenue par le rembourrage.
   assert.ok(css.includes('.grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(0,0,0,.16), 0 3px 8px rgba(0,0,0,.12)) !important; }'), 'l’ombre courte de la rangée');

@@ -129,9 +129,12 @@ test('la reconnaissance automatique ne bascule pas vers un Admin sans droit HA',
   assert.ok(j > i && j - i < 400, 'le refus precede bien l’ecriture');
 });
 
-test('le toast distingue les deux refus « not_admin »', () => {
-  assert.ok(src.includes("/code administrateur/i.test(String(r.message || ''))"),
-    'le motif du composant departage le reglage de maison et le code admin');
+test('le toast distingue les deux refus de droits', () => {
+  /* Le passage refusé vers un profil Admin porte son code à lui (audit du
+   * 03/10) : l'écran ne relit plus le motif français du composant. */
+  assert.ok(src.includes("const codeAdmin = r && r.code === 'code_admin_requis';"),
+    'le code du composant departage le reglage de maison et le code admin');
+  assert.ok(!src.includes('/code administrateur/i'), 'le toast relit de nouveau le motif français du composant');
   assert.ok(src.includes("tr('Profil non changé — le code administrateur est requis')"),
     'le message du code admin ne parle plus d’administrateur Home Assistant');
 });

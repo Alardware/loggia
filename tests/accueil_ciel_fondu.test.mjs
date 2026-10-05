@@ -23,7 +23,10 @@ test('le ciel s’efface par un masque : il laisse voir le fond du theme, quel q
   for (const sel of ['.o-wx3d-veil', 'html.loggia-light .o-wx3d-veil']) {
     assert.ok(!regle(sel).includes('var(--o-bg) 100%'), sel + ' ne recouvre plus le bas du ciel d’une couleur opaque');
   }
-  assert.ok(regle('.o-wx3d.o-sky-full').includes('-webkit-mask-image: none; mask-image: none;'), 'le ciel plein ecran, lui, ne s’efface pas');
+  // Le ciel plein ecran (`o-sky-full`, `html.loggia-sky`) n'avait plus rien qui
+  // l'allume : ses regles sont parties au lot 15 de l'audit du 03/10.
+  assert.ok(!css.includes('o-sky-full') && !css.includes('loggia-sky'), 'plus de regle pour un ciel que rien n’allume');
+  assert.ok(css.includes('main:has(.o-wx3d) .loggia-hdr { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }'), 'au-dessus du ciel meteo, l’en-tete ne floute toujours pas');
 });
 
 test('le voile et la barre du haut prennent la teinte du theme, pas le bleu nuit de Loggia', () => {

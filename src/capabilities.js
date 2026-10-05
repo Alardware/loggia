@@ -27,7 +27,7 @@
  * documentation, et elles valent pour toute installation.
  */
 
-const domaineDe = (id) => (typeof id === 'string' ? id.slice(0, id.indexOf('.')) : '');
+import { domaineDe } from './outils.js';
 
 /** Une entité absente ou muette ne prouve rien sur ce qu'elle sait faire. */
 const repond = (st) => !!(st && st.state != null && st.state !== 'unavailable' && st.state !== 'unknown');

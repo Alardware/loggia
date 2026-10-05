@@ -97,3 +97,27 @@ test('aucune clé de catalogue que plus rien n’appelle', () => {
   assert.deepEqual(orphelines, [],
     'ces clés sont traduites six fois et ne s’afficheront jamais : retire-les des catalogues');
 });
+
+test('un gabarit que le serveur écrit au journal s’écrit en entier, et a sa clé', () => {
+  /* Relecture du 03/10. `journalmots.js` traduit un texte composé par son
+   * GABARIT : le gabarit doit donc être une clé. La présence le recomposait à
+   * partir du genre d'indice, le planning des volets à partir du moment : le
+   * texte entier n'était écrit nulle part, ni au catalogue, et le journal
+   * d'une maison polonaise lisait « lever du soleil +15 min » ou
+   * « ouverture : Drzwi wejściowe ». Chaque genre — ceux d'INDICES, et
+   * « main », le geste posé sur une entité pilotée — a maintenant le sien. */
+  const lire = (f) => readFileSync(join(RACINE, 'custom_components', 'loggia', f), 'utf8');
+  const presence = lire('presence.py');
+  const volets = lire('volets.py');
+  assert.ok(!presence.includes('genre + " : {nom}"'), 'la présence recompose son motif');
+  assert.ok(!volets.includes('moment + " {d} min"'), 'le planning des volets recompose son motif');
+  const indices = presence.match(/^INDICES = \{[^}]*\}/m);
+  assert.ok(indices, 'INDICES introuvable dans presence.py');
+  const genres = new Set([...indices[0].matchAll(/: "(\w+)"/g)].map(m => m[1]).concat('main'));
+  assert.ok(genres.size >= 3, 'la lecture des genres a échoué');
+  const gabarits = [...genres].map(g => g + ' : {nom}').concat(['lever du soleil {d} min', 'coucher du soleil {d} min']);
+  for (const gab of gabarits) {
+    assert.ok((presence + volets).includes('"' + gab + '"'), 'écrit nulle part en entier : ' + gab);
+    assert.ok(CLES.has(gab), 'sans clé, il s’affiche en français dans les sept langues : ' + gab);
+  }
+});

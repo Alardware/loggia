@@ -435,6 +435,18 @@ def test_enregistrer_refuse_l_illisible_sans_rien_ecrire(creer, patch):
     assert [p["id"] for p in lancer(r.async_config())["plannings"]] == ["p1"]
 
 
+def test_un_planning_de_trop_se_refuse_par_son_code_et_nomme_la_limite(creer, module):
+    """Le refus que l'ecran peut provoquer — un planning de trop — porte un
+    code a lui, et la limite apres les deux-points : l'ecran le dit dans sa
+    langue (audit du 03/10). Il s'affichait en francais sans accents."""
+    r = creer({"plannings": [planning()]})
+    with pytest.raises(ValueError) as refus:
+        lancer(r.async_enregistrer({"plannings": [planning(id="p%d" % i) for i in range(module.MAX_PLANNINGS + 1)]}))
+    assert getattr(refus.value, "code", None) == "trop_de_plannings"
+    assert str(refus.value).endswith(" : %d" % module.MAX_PLANNINGS), str(refus.value)
+    assert [p["id"] for p in lancer(r.async_config())["plannings"]] == ["p1"]
+
+
 def test_l_etat_dit_la_config_la_meteo_et_le_journal(creer):
     r = creer({"plannings": [planning()]}, {"vacuum.robot": FauxEtat("cleaning"), "weather.maison": FauxEtat("sunny")})
     lancer(r.async_minute(LUNDI_0930))

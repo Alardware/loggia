@@ -656,3 +656,30 @@ def test_la_regle_de_presence_eteinte_le_coucher_ne_se_retient_plus(creer):
     lancer(n._async_coucher())
     assert len(n.hass.services.appels) == 1, "le coucher doit eteindre : rien ne rendrait la main"
     assert not [j for j in lancer(n.regles.journal(module="nuit")) if j["quoi"] == "retenir"]
+
+
+# ── Audit du 03/10 : capteur qui decroche, maison vide ──────────────────────
+
+def test_un_capteur_qui_decroche_arme_quand_meme_l_extinction(creer, monkeypatch):
+    """on, puis unavailable, puis off : la transition unavailable → off
+    n'armait rien, et la lampe restait allumee jusqu'au matin."""
+    armes = minuteurs(monkeypatch)
+    n = creer(cfg_eclairage(), {**NUIT, **ENTREE})
+    n._sur_mouvement(Mvt("on"))
+    lancer(n.hass.taches.pop())
+    n.hass.states.table["light.entree"] = FauxEtat("on")
+    n.hass.states.table["light.miroir"] = FauxEtat("on")
+    n._sur_mouvement(Mvt("unavailable", avant="on"))
+    assert armes == [180], armes
+    assert "Entrée" in n._minuteurs_pieces
+
+
+def test_maison_vide_un_mouvement_n_allume_rien(creer):
+    """Le chat passe devant le capteur, maison declaree vide (ADR 0014)."""
+    import types
+
+    n = creer(cfg_eclairage(), {**NUIT, **ENTREE})
+    n.hass.data = {"loggia": {"presence": types.SimpleNamespace(dehors=True)}}
+    n._sur_mouvement(Mvt("on"))
+    lancer(n.hass.taches.pop())
+    assert [a for a in n.hass.services.appels if a[1] == "turn_on"] == []

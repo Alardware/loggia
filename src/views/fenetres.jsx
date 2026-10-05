@@ -14,6 +14,8 @@ import {
 import { LOGGIA_INDEX } from '../state.js';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { tr } from '../i18n.js';
+import { raisonEchec } from '../refus.js';
+import { puce as pucePartagee } from '../styles.js';
 
 /* Au niveau du module, et non dans le composant.
  *
@@ -77,7 +79,9 @@ export function FenetresReglages({ hass, cardSt }) {
       const r = await h.callWS({ type: 'loggia/fenetres/config', patch });
       if (vivant.current && r && r.config) setEtat(e => (e ? { ...e, config: r.config } : e));
     } catch (e) {
-      setErr((e && (e.message || e.code)) || tr('Enregistrement impossible.'));
+      // Un refus se dit comme tel et nomme sa clé ; une panne reste une panne
+      // (audit du 03/10, refus.js). Il s'affichait en « Unauthorized ».
+      setErr(raisonEchec(e, 'loggia_fenetres'));
     }
   };
 
@@ -108,7 +112,9 @@ export function FenetresReglages({ hass, cardSt }) {
   const simu = !!cfg.simulation;
   const sous = { fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 };
   const label = { fontSize: 12, fontWeight: 700 };
-  const puce = (on) => ({ padding: '6px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
+  // La puce partagée (styles.js), avec son rembourrage d'ici : le choix ne
+  // se recopie plus (lot 15 de l’audit du 03/10).
+  const puce = (on) => ({ ...pucePartagee(on), padding: '6px 11px' });
 
 
   /* Deux nombres dans une meme phrase, chacun avec son accord : une seule cle

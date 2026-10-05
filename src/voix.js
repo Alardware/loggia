@@ -231,7 +231,7 @@ export async function ecouter(hass, { onNiveau, onEtape } = {}) {
       end_stage: 'stt',
       input: { sample_rate: TAUX },
       ...(pipeline ? { pipeline } : {}),
-    });
+    }, { resubscribe: false });   // une écoute ponctuelle : jamais rejouée à la reconnexion (03/10)
   } catch (e) {
     ranger();
     throw e;
@@ -360,7 +360,7 @@ export function synthese(hass, texte) {
       } else if (quoi === 'error' || quoi === 'run-end') {
         finir(null);
       }
-    }, { type: 'assist_pipeline/run', start_stage: 'tts', end_stage: 'tts', input: { text: texte } })
+    }, { type: 'assist_pipeline/run', start_stage: 'tts', end_stage: 'tts', input: { text: texte } }, { resubscribe: false })
       .then((d) => { desabonner = d; if (fini) lacher(d); })
       .catch(() => finir(null));
   });

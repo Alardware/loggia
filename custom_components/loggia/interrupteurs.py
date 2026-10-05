@@ -75,7 +75,9 @@ ANTI_REBOND_S = 0.6
 # L'ecoute d'apprentissage : ouverte pour un temps compte, comme l'appairage
 # de zigbee2mqtt, puis refermee d'elle-meme. Sans elle, chaque telecommande de
 # la maison venait s'inscrire dans la page, reglee ou non (retour du 18/09).
-ECOUTE_S = 300
+# La duree vient de l'ecran (`ECOUTE_S` de src/views/interrupteurs.jsx, cinq
+# minutes) ; le serveur ne fait que la borner. Sa copie d'ici, que seul un
+# test lisait, est partie (lot 15 de l'audit du 03/10).
 ECOUTE_MAX_S = 900
 
 # LES TROIS GESTES QU'UN BOUTON SANS FIL NE FERA PAS (audit du 29/09/2026).
@@ -374,8 +376,18 @@ class LoggiaInterrupteurs:
     async def async_affecter(
         self, cle: str, action: str, gestes: list[Any], nom: str = ""
     ) -> dict[str, Any]:
-        """Pose (ou retire, si `gestes` est vide) ce que fait un bouton."""
-        table = dict(await self.async_affectations())
+        """Pose (ou retire, si `gestes` est vide) ce que fait un bouton.
+
+        Lue, changee et ecrite d'un seul tenant, sous le verrou du magasin
+        (lot 15 de l'audit du 03/10) : deux boutons affectes coup sur coup
+        partaient de la meme table, et le second effacait le premier."""
+        return await self.store.async_modifier_shared(
+            CLE, lambda brut: self._affecter_dans(brut, cle, action, gestes, nom))
+
+    def _affecter_dans(self, brut: Any, cle: str, action: str, gestes: list[Any],
+                       nom: str) -> dict[str, Any]:
+        """La table, ce bouton pose ou retire. Synchrone : sous le verrou."""
+        table = brut if isinstance(brut, dict) else {}
         enr = dict(table.get(cle) or {})
         enr.setdefault("source", cle.split("/", 1)[0])
         enr["nom"] = nom or enr.get("nom") or cle.split("/", 1)[-1]
@@ -391,7 +403,6 @@ class LoggiaInterrupteurs:
             # Plus un seul bouton affecte : l'appareil quitte la table plutot
             # que d'y rester en coquille vide.
             table.pop(cle, None)
-        await self.store.async_set_shared(CLE, table)
         return table
 
     @callback

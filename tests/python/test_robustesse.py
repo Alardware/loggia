@@ -207,7 +207,9 @@ def test_un_compte_illisible_fait_refuser_au_lieu_d_elargir():
     # Et c'est bien cette regle qui garde le service.
     src = (RACINE / "custom_components" / "loggia" / "__init__.py").read_text(encoding="utf-8")
     assert "if not compte_resolu(uid, utilisateur):" in src
-    assert "return" in src.split("if not compte_resolu(uid, utilisateur):")[1][:200]
+    # Le refus se DIT depuis le 03/10 : une erreur traduite que l'automatisation
+    # voit, plus un retour muet (execute dans tests/python/test_demarrage.py).
+    assert 'raise _refus("compte_illisible")' in src.split("if not compte_resolu(uid, utilisateur):")[1][:200]
 
 
 def test_un_module_qui_rate_son_demarrage_le_dit_et_le_retient(caplog):
@@ -265,7 +267,9 @@ def test_chaque_module_vivant_sait_s_arreter():
     init = (dossier / "__init__.py").read_text(encoding="utf-8")
     bloc = init.split("MODULES_VIVANTS = (")[1].split(")")[0]
     noms = re.findall(r'"([a-z_]+)"', bloc)
-    assert len(noms) == 12, noms
+    # Treize depuis le 03/10 : `rechargement` ecoute la configuration, il doit
+    # se taire aussi.
+    assert len(noms) == 13, noms
     for nom in noms:
         src = (dossier / (nom + ".py")).read_text(encoding="utf-8")
         assert "def async_arreter" in src or "def arreter" in src, nom

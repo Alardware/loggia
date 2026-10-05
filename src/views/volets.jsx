@@ -13,10 +13,17 @@ import {
 } from 'react';
 import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt, majuscule } from './parcommun.jsx';
-import { tr } from '../i18n.js';
+import { tr, trN, comparerTextes } from '../i18n.js';
+import { raisonEchec } from '../refus.js';
+import { puceHaute as puce } from '../styles.js';
 import { cfgVal, cfgSet } from '../state.js';
 import { uniteTemp, deCelsius } from '../unites.js';
 import { mot, pourquoi } from '../journalmots.js';
+
+/* Ce qu'est un volet, par sa `device_class` : MIROIR de
+ * custom_components/loggia/ouvrants.py — tests/ouvrants_miroir.test.mjs
+ * refuse que les deux listes divergent. */
+const CLASSES_VOLETS = ['shutter', 'blind', 'shade', 'curtain', 'awning'];
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Le seuil de fermeture — le seul reglage de cette page qui ne parte PAS au
@@ -41,7 +48,6 @@ export function VoletsAffichage({ cardSt }) {
    * s'allumait qu'au prochain rendu venu d'ailleurs. */
   const [seuil, setSeuil] = useState(lireSeuil);
   const choisir = (n) => { setSeuil(n); cfgSet({ loggia_coverseuil: n === SEUIL_DEF ? null : n }); };
-  const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
   return (
     <div style={cardSt}>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{tr('Considérer fermé en dessous de')}</div>
@@ -83,15 +89,18 @@ const Nombre = ({ v, min, max, pas = 1, unite, nom, cb }) => (
 );
 
 
+/* Les abréviations se traduisent (audit du 03/10) : « O » et « SO » ne disent
+ * rien en anglais (W, SW), et l'allemand ou le néerlandais écrivent « O » pour
+ * l'EST. Les huit passent donc par le catalogue. */
 const CARDINAUX = () => [
-  { deg: 0, court: 'N' },
-  { deg: 45, court: 'NE' },
-  { deg: 90, court: 'E' },
-  { deg: 135, court: 'SE' },
-  { deg: 180, court: 'S' },
-  { deg: 225, court: 'SO' },
-  { deg: 270, court: 'O' },
-  { deg: 315, court: 'NO' },
+  { deg: 0, court: tr('N') },
+  { deg: 45, court: tr('NE') },
+  { deg: 90, court: tr('E') },
+  { deg: 135, court: tr('SE') },
+  { deg: 180, court: tr('S') },
+  { deg: 225, court: tr('SO') },
+  { deg: 270, court: tr('O') },
+  { deg: 315, court: tr('NO') },
 ];
 
 // Nomme ainsi, et non `JOURS`, pour ne pas se confondre avec le tableau du
@@ -138,6 +147,7 @@ export function VoletsReglages({ hass, cardSt }) {
   const [pliSol, plierSol] = usePli('volets:soleil');
   const [pliVent, plierVent] = usePli('volets:vent');
   const [pliBaies, plierBaies] = usePli('volets:baies');
+  const [pliVelux, plierVelux] = usePli('volets:velux');
 
 
   const cfg = (etat && etat.config) || null;
@@ -152,17 +162,31 @@ export function VoletsReglages({ hass, cardSt }) {
       const r = await h.callWS({ type: 'loggia/volets/config', patch });
       if (vivant.current && r && r.config) setEtat(e => (e ? { ...e, config: r.config } : e));
     } catch (e) {
-      setErr((e && (e.message || e.code)) || tr('Enregistrement impossible.'));
+      // Un refus se dit comme tel et nomme sa clé ; une panne reste une panne
+      // (audit du 03/10, refus.js). Il s'affichait en « Unauthorized ».
+      setErr(raisonEchec(e, 'loggia_volets'));
     }
   };
 
-  const covers = useMemo(() => {
-    if (!hass || !hass.states) return [];
-    return Object.keys(hass.states)
-      .filter(id => id.indexOf('cover.') === 0)
-      .map(id => ({ id, nom: cvName(hass.states[id], id) }))
-      .sort((a, b) => a.nom.localeCompare(b.nom));
-  }, [hass]);
+  /* Les volets, par leur CLASSE (ouvrants.py, audit du 03/10) : un garage, un
+   * portail, une porte ne sont pas des volets — une classe absente non plus.
+   * Les fenêtres de toit s'y ajoutent quand l'option velux est prise. Le
+   * composant ne pilote que ceux-là : les montrer tous laissait croire qu'un
+   * portail suivait le planning. */
+  const velux = !!(cfg && cfg.velux && cfg.velux.actif);
+  const { covers, sansClasse, fenetres } = useMemo(() => {
+    if (!hass || !hass.states) return { covers: [], sansClasse: 0, fenetres: 0 };
+    const ids = Object.keys(hass.states).filter(id => id.indexOf('cover.') === 0);
+    const classe = (id) => (hass.states[id].attributes || {}).device_class;
+    return {
+      covers: ids
+        .filter(id => CLASSES_VOLETS.indexOf(classe(id)) >= 0 || (velux && classe(id) === 'window'))
+        .map(id => ({ id, nom: cvName(hass.states[id], id) }))
+        .sort((a, b) => comparerTextes(a.nom, b.nom)),
+      sansClasse: ids.filter(id => !classe(id)).length,
+      fenetres: ids.filter(id => classe(id) === 'window').length,
+    };
+  }, [hass, velux]);
 
   if (!cfg) {
     return (
@@ -189,7 +213,6 @@ export function VoletsReglages({ hass, cardSt }) {
   const simu = cfg.simulation || {};
   const label = { fontSize: 12, fontWeight: 700, marginBottom: 6 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
-  const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
 
 
 
@@ -251,6 +274,13 @@ export function VoletsReglages({ hass, cardSt }) {
               <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>
                 {tr('Sans rien ici, tous suivent les heures ci-dessus.')}
               </div>
+              {/* Un vrai volet sans classe n'est plus piloté (03/10) : le
+                * dire, sinon on cherche pourquoi il ne bouge plus. */}
+              {sansClasse > 0 && (
+                <div style={{ fontSize: 12, color: 'var(--o-warn2)', fontWeight: 700, marginBottom: 10 }}>
+                  {tr('Ouvrants sans classe dans Home Assistant, laissés de côté : {n}. Donne-leur une classe (volet, store…) pour que Loggia les pilote.', { n: sansClasse })}
+                </div>
+              )}
               {covers.length === 0 && (
                 <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun volet trouvé dans Home Assistant.')}</div>
               )}
@@ -364,7 +394,7 @@ export function VoletsReglages({ hass, cardSt }) {
             <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: 'var(--o-lampe)' }} />
             <span>
               {tr('En ce moment : soleil à {a}°, hauteur {e}°', { a: Math.round(etat.soleil.azimut), e: Math.round(etat.soleil.elevation) })}
-              {' — '}{etat.abaisses && etat.abaisses.length ? (etat.abaisses.length > 1 ? tr('{n} volets abaissés', { n: etat.abaisses.length }) : tr('{n} volet abaissé', { n: 1 })) : tr('aucun volet abaissé')}
+              {' — '}{etat.abaisses && etat.abaisses.length ? trN(etat.abaisses.length, '{n} volet abaissé', '{n} volets abaissés') : tr('aucun volet abaissé')}
             </span>
           </div>
         )}
@@ -427,7 +457,7 @@ export function VoletsReglages({ hass, cardSt }) {
       {/* ── La mise à l'abri ── */}
       <div style={cardSt}>
         <RegleEntete nom={tr('Vent fort')}
-          desc={tr('Au-delà d’un seuil, tout remonter — un volet baissé dans une rafale est un volet plié.')}
+          desc={tr('Au-delà d’un seuil, remonter les volets et replier les stores bannes — un volet baissé dans une rafale est un volet plié.')}
           note={tr('Passe avant les deux règles ci-dessus')}
           on={vent.actif} cb={() => enregistrer({ vent: { actif: !vent.actif } })} plie={pliVent} onPlier={plierVent} zone="volets-vent" />
         {etat.a_l_abri && (
@@ -446,6 +476,25 @@ export function VoletsReglages({ hass, cardSt }) {
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('À partir de')}</span>
               <Nombre v={vent.seuil != null ? vent.seuil : 50} nom={tr('Seuil de vent, dans l’unité du capteur')} min={0} max={150} pas={5} unite={tr('dans l’unité du capteur')}
                 cb={n => enregistrer({ vent: { seuil: n } })} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Les fenêtres de toit ── */}
+      {/* Une option, pas une règle de plus : une fenêtre n'est pas un volet.
+        * « Tout remonter » au vent, c'est l'OUVRIR dans la tempête — Loggia ne
+        * fait donc que les fermer, et chacun choisit (03/10, ouvrants.py). */}
+      <div style={cardSt}>
+        <RegleEntete nom={tr('Fenêtres de toit (velux)')}
+          desc={tr('Les fermer avec les volets : au coucher du soleil, par vent fort et dans les scénarios qui ferment. Loggia ne les ouvre jamais.')}
+          on={velux} cb={() => enregistrer({ velux: { actif: !velux } })} plie={pliVelux} onPlier={plierVelux} zone="volets-velux" />
+        {velux && !pliVelux && (
+          <div id="volets-velux" style={ZONE_REGLAGES}>
+            <div style={{ marginTop: 9, fontSize: 12, fontWeight: 700, color: fenetres ? 'var(--o-text3)' : 'var(--o-warn2)' }}>
+              {fenetres
+                ? tr('Fenêtres de toit trouvées : {n}', { n: fenetres })
+                : tr('Aucune fenêtre de toit trouvée : il faut qu’elle porte la classe « fenêtre » dans Home Assistant.')}
             </div>
           </div>
         )}
@@ -513,7 +562,9 @@ export function VoletsReglages({ hass, cardSt }) {
             * plutôt que laisser deviner pourquoi l'une a cédé. */}
           {Array.isArray(etat.priorites) && etat.priorites.length > 1 && (
             <div style={{ marginTop: 4, fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>
-              {tr('Qui l’emporte')} : {etat.priorites.map(nomPriorite).join(' › ')}
+              {/* Libellé et valeur par un gabarit (audit du 03/10) : l'espace
+                * avant les deux-points est française, « {a}: {b} » ailleurs. */}
+              {tr('{a} : {b}', { a: tr('Qui l’emporte'), b: etat.priorites.map(nomPriorite).join(' › ') })}
             </div>
           )}
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column' }}>

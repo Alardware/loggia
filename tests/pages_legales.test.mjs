@@ -103,6 +103,10 @@ test('la politique des cookies dit vrai : aucun cookie, et chaque clé de sessio
   assert.ok(app.includes("const cle = 'loggia-defilement';"));
   cles.add('loggia-accueil-onglet');
   cles.add('loggia-defilement');
+  // La date du rechargement unique (audit du 03/10) passe par un stockage
+  // injecté, que le motif ci-dessus ne voit pas : on tient sa constante.
+  assert.ok(lire('src', 'recharge.js').includes("export const CLE_RECHARGE = 'loggia_recharge_module';"));
+  cles.add('loggia_recharge_module');
 
   assert.ok(cles.size >= 8, 'la recherche des clés ne trouve plus rien : le test ne garde plus rien');
   for (const c of cles) assert.ok(h.includes('<code>' + c + '</code>'), 'clé de session absente de la page : ' + c);

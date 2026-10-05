@@ -100,7 +100,8 @@ def creer(module, store_module):
         ecouteur._defait = []
         # Les tests d'apprentissage appuient ecoute ouverte ; ceux de l'ecoute
         # coupee la ferment eux-memes.
-        ecouteur.ecouter(module.ECOUTE_S)
+        # Cinq minutes, comme le bouton de l'ecran (la duree vit cote page).
+        ecouteur.ecouter(300)
         ecouteur.sources = {'mqtt_present': True, 'z2m': True, 'zha': True, 'deconz': True}
         faits.append(ecouteur)
         return ecouteur

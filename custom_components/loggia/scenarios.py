@@ -36,6 +36,7 @@ un.
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 import logging
 import re
@@ -47,8 +48,10 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import Context, HomeAssistant, callback
 
 from .discovery import async_index
+from .refus import RefusNomme
 from .regles import demarrer
 from .nuit import CLE as CLE_NUIT, fait_nuit
+from .ouvrants import est_fenetre_de_toit, est_volet
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -89,13 +92,15 @@ GESTES: dict[str, tuple[str, ...]] = {
     "alarme": ("absent", "nuit", "maison"),
     "serrures": ("verrouiller",),
 }
-FAMILLES = tuple(GESTES)
 DOMAINES = {"lumieres": "light", "volets": "cover", "medias": "media_player",
             "chauffage": "climate", "alarme": "alarm_control_panel", "serrures": "lock"}
 
-# Ce qu'un volet est : par `device_class`, jamais par nom. Un portail, une
-# porte de garage ou un clapet n'en est pas un ; une classe absente en est un.
-CLASSES_VOLET = (None, "", "shutter", "blind", "shade", "curtain", "awning", "window")
+# Ce qu'un volet est : par `device_class`, jamais par nom — une seule liste,
+# celle des regles de volets (ouvrants.py). Un portail, une porte de garage ou
+# un clapet n'en est pas un, et une classe ABSENTE non plus depuis le 03/10 :
+# le Reveil ouvrait un portail motorise sans classe avec les volets. Une
+# fenetre de toit se ferme avec eux si l'option velux est prise, et ne s'ouvre
+# jamais par un scenario.
 
 # Les pieces ou l'on ne recoit pas : la portee « pieces de vie » les exclut.
 MOTS_INTIMES = ("chambre", "bedroom", "bain", "bath", "wc", "toilet", "douche",
@@ -109,6 +114,18 @@ PRESETS_CHAUFFAGE = {"confort": ("comfort", 20.0), "eco": ("eco", 17.0)}
 BORNES_VALEUR = {"lumieres": (1, 100), "chauffage": (5, 30)}
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
+
+
+class ScenariosInconnusError(ValueError):
+    """Un ordre qui nomme un scenario que la maison n'a pas (audit du 03/10).
+
+    Un `ValueError` a part : la commande WebSocket en fait un `not_found`, pas
+    un « format invalide », et le message NOMME les identifiants — le plus
+    souvent un scenario supprime depuis un autre ecran entre deux sondages."""
+
+    def __init__(self, idents) -> None:
+        self.idents = list(idents)
+        super().__init__("scenarios inconnus : " + ", ".join(self.idents))
 
 
 def _a(famille: str, geste: str, portee: str = "maison", **reste: Any) -> dict[str, Any]:
@@ -293,7 +310,9 @@ def valider_scenario(brut: Any) -> dict[str, Any]:
             if not isinstance(actions, list):
                 raise ValueError("actions illisibles")
             if len(actions) > MAX_ACTIONS:
-                raise ValueError(f"trop d'actions ({len(actions)} > {MAX_ACTIONS})")
+                # Une limite : son code, et elle-meme apres les deux-points,
+                # que l'ecran dit dans sa langue (audit du 03/10).
+                raise RefusNomme("trop_d_actions", f"trop d'actions ({len(actions)}), au plus", MAX_ACTIONS)
             s["actions"] = [valider_action(a) for a in actions]
     return s
 
@@ -428,7 +447,9 @@ def cibles(action: dict[str, Any], maison: dict[str, Any], piece: str | None,
             if geste == "eteindre" and etat != "on":
                 continue
         elif famille == "volets":
-            if e.get("classe") not in CLASSES_VOLET:
+            classe = e.get("classe")
+            velux = geste == "fermer" and bool(maison.get("velux")) and est_fenetre_de_toit(classe)
+            if not (est_volet(classe) or velux):
                 continue
             if (geste == "fermer" and etat == "closed") or (geste == "ouvrir" and etat == "open"):
                 continue
@@ -668,6 +689,13 @@ class LoggiaScenarios:
                                  "nom": str(attrs.get("friendly_name") or haid)}
         return {"zones": noms_zones, "entites": entites}
 
+    async def _velux(self) -> bool:
+        """L'option velux des reglages de volets : les fenetres de toit se
+        ferment avec eux (ouvrants.py)."""
+        volets = await self.store.async_get_shared("loggia_volets", None)
+        v = volets.get("velux") if isinstance(volets, dict) else None
+        return bool(isinstance(v, dict) and v.get("actif"))
+
     async def _veilleuses(self) -> list[str]:
         nuit = await self.store.async_get_shared(CLE_NUIT, None)
         v = (nuit or {}).get("veilleuse") if isinstance(nuit, dict) else None
@@ -697,6 +725,7 @@ class LoggiaScenarios:
 
     async def _contexte(self) -> dict[str, Any]:
         maison = self.inventaire()
+        maison["velux"] = await self._velux()
         return {"maison": maison, "veilleuses": await self._veilleuses(),
                 "alarme": await self._alarme(maison), "nuit": self._nuit()}
 
@@ -799,13 +828,26 @@ class LoggiaScenarios:
         return lire_config(await self.store.async_get_shared(CLE, None))
 
     async def async_migrer(self) -> dict[str, Any]:
-        cfg = await self.async_config()
-        if cfg.get("migre"):
-            return cfg
-        anciennes = await self.store.async_get_shared(CLE_ANCIENNE, None)
-        cfg = migrer_quickscenes(cfg, anciennes)
-        await self.store.async_set_shared(CLE, cfg)
-        return cfg
+        # Sous le meme verrou que ranger et enregistrer (audit du 03/10) : la
+        # reprise tourne au demarrage, quand un ecran deja ouvert peut ranger.
+        # Lu avant elle et ecrit apres, un rangement remettait `migre` a faux
+        # et perdait les scenarios repris jusqu'au demarrage suivant.
+        async with self._verrou_config():
+            cfg = await self.async_config()
+            if cfg.get("migre"):
+                return cfg
+            anciennes = await self.store.async_get_shared(CLE_ANCIENNE, None)
+
+            # Relecture du lot 15 : la reprise repart de ce que le magasin
+            # tient SOUS son verrou. Le verrou du module ne voit que ses
+            # propres gestes : un import parti au demarrage par
+            # `loggia/config/set` etait recouvert par la copie lue avant lui.
+            # Deja reprise (un import en apporte une) : la valeur reste telle.
+            def changer(brut: Any) -> Any:
+                lu = lire_config(brut)
+                return brut if lu["migre"] else migrer_quickscenes(lu, anciennes)
+
+            return lire_config(await self.store.async_modifier_shared(CLE, changer))
 
     def _dernier(self, s: dict[str, Any]) -> float | None:
         fois = [self._derniers.get(s["id"])]
@@ -853,11 +895,75 @@ class LoggiaScenarios:
         return {"scenarios": scenarios, "liens": liens, "pieces": maison["zones"],
                 "alarme": c["alarme"], "journal": journal}
 
+    def _verrou_config(self) -> asyncio.Lock:
+        """Un seul « lire, changer, ecrire » a la fois sur `loggia_scenarios`
+        (audit du 03/10).
+
+        Ranger est ouvert a tout compte depuis `async_ordonner`. Un compte
+        ordinaire qui rangeait pendant qu'un administrateur ajoutait un
+        scenario lisait la configuration d'avant l'ajout, attendait le verrou
+        du magasin, puis l'ecrivait : le scenario ajoute disparaissait sans un
+        mot. Le verrou du magasin ne couvrait que l'ecriture ; celui-ci couvrait
+        la lecture avec, mais pour les seuls gestes du module : un import par
+        `loggia/config/set` passait a cote. Depuis la relecture du lot 15,
+        `async_modifier_shared` lit, change et ecrit sous le verrou du
+        magasin ; celui-ci ne fait plus que garder les gestes du module en
+        file. Toujours pris AVANT celui du magasin, jamais dans un `changer` :
+        `asyncio.Lock` n'est pas reentrant. Pose a la demande : les tests
+        batissent l'objet sans `__init__`."""
+        return self.__dict__.setdefault("_verrou", asyncio.Lock())
+
     async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
         """Quatre gestes, dans cet ordre : enregistrer un scenario (le sien ou
         ce qu'on change a l'un de Loggia), en supprimer un personnel,
-        remettre d'origine un scenario de Loggia, choisir l'ordre."""
-        cfg = await self.async_config()
+        remettre d'origine un scenario de Loggia, choisir l'ordre. Par
+        `loggia/scenarios/config`, reservee aux administrateurs."""
+        async with self._verrou_config():
+            return await self._enregistrer(patch)
+
+    async def async_ordonner(self, ordre: Any) -> dict[str, Any]:
+        """Choisir l'ordre, et RIEN d'autre (audit du 03/10).
+
+        Ranger les scenarios est de l'agencement (ADR 0125) : ouvert a tout
+        compte par `loggia/scenarios/ordre`, quand creer, modifier ou
+        supprimer restent aux administrateurs. D'ou une porte a part plutot
+        qu'un droit de plus sur `async_enregistrer` : n'y passent que des
+        identifiants que la maison connait deja, chacun une fois — ni un
+        scenario, ni une chaine choisie par le client. Un inconnu fait tout
+        refuser en se nommant (`ScenariosInconnusError`) : l'ecran dit ce qui
+        n'a pas pris, au lieu d'un ordre ecrit a moitie. `async_enregistrer`,
+        lui, l'ecarte en silence."""
+        if not isinstance(ordre, list) or not all(isinstance(x, str) for x in ordre):
+            raise ValueError("ordre illisible")
+        if len(set(ordre)) != len(ordre):
+            raise ValueError("ordre illisible : un scenario y figure deux fois")
+
+        # Juge et ecrit sous le verrou du MAGASIN (relecture du lot 15) :
+        # celui des scenarios ne voit pas `loggia/config/set`, et un import ou
+        # une remise a zero partis pendant le rangement etaient recouverts par
+        # la copie lue avant eux. Un inconnu leve ici : rien n'est ecrit.
+        def changer(brut: Any) -> dict[str, Any]:
+            cfg = lire_config(brut)
+            connus = {s["id"] for s in effectifs(cfg)}
+            inconnus = [x for x in ordre if x not in connus]
+            if inconnus:
+                raise ScenariosInconnusError(inconnus)
+            cfg["ordre"] = list(ordre)
+            return cfg
+
+        async with self._verrou_config():
+            return await self.store.async_modifier_shared(CLE, changer)
+
+    async def _enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
+        # Lire, changer, ecrire d'un seul tenant, sous le verrou du magasin
+        # (relecture du lot 15, voir `async_ordonner`). Ce que `_appliquer`
+        # leve n'ecrit rien.
+        return await self.store.async_modifier_shared(
+            CLE, lambda brut: self._appliquer(lire_config(brut), patch))
+
+    def _appliquer(self, cfg: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+        """Les quatre gestes de `async_enregistrer` sur `cfg`. SYNCHRONE :
+        `async_modifier_shared` refuse une coroutine."""
         if not isinstance(patch, dict):
             raise ValueError("patch illisible")
         if "enregistrer" in patch:
@@ -875,7 +981,9 @@ class LoggiaScenarios:
                 existant = next((p for p in persos if p["id"] == ident), None) if ident else None
                 if existant is None:
                     if len(persos) >= MAX_SCENARIOS:
-                        raise ValueError(f"trop de scenarios ({MAX_SCENARIOS} au plus)")
+                        # Meme forme que les actions (audit du 03/10).
+                        raise RefusNomme("trop_de_scenarios", "trop de scenarios personnels, au plus",
+                                         MAX_SCENARIOS)
                     base = "perso_" + slug(s.get("nom") or "scenario")
                     ident, n = base, 2
                     pris = {p["id"] for p in persos}
@@ -904,7 +1012,6 @@ class LoggiaScenarios:
                 raise ValueError("ordre illisible")
             connus = {s["id"] for s in effectifs(cfg)}
             cfg["ordre"] = [x for x in ordre if isinstance(x, str) and x in connus]
-        await self.store.async_set_shared(CLE, cfg)
         return cfg
 
     @callback

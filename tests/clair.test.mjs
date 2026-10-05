@@ -77,7 +77,10 @@ test('un îlot sombre garde les jetons sombres sous n’importe quel thème', ()
   const ilot = bloc('.o-sombre {');
   for (const k of ['--o-text', '--o-text2', '--o-ok', '--o-warn', '--o-bad', '--o-lampe', '--o-accent-soft']) assert.ok(ilot.includes(k + ':'), k);
   assert.equal(jetons(ilot)['--o-bad'], SOMBRE['--o-bad']);
-  assert.ok(app.includes(`<div className="o-sombre" role="button" aria-label={tr('Toucher pour réveiller')}`), 'la veille');
+  // La veille n'est plus un `role="button"` qui englobe ses scènes (lot 13 de
+  // l'audit du 03/10) : l'îlot sombre reste sa racine, son geste passe par un
+  // bouton de surface.
+  assert.ok(app.includes(`<div className="o-sombre" style={{ position: 'fixed', inset: 0, zIndex: 500,`) && app.includes(`<Surface onClick={reveiller} label={tr('Toucher pour réveiller')} popup={false} />`), 'la veille');
   assert.ok(app.includes("className={'o-sombre o-cam-tuile' + (c.online === false ? ' o-panne' : '')}"), 'la tuile caméra');
 });
 

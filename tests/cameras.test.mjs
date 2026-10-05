@@ -179,7 +179,8 @@ test('le direct ne repart pas parce que le jeton a change', () => {
    * bascule qu'a la connexion ou a la deconnexion. */
   const cam = readFileSync(join(RACINE, 'src', 'camera.jsx'), 'utf8');
   assert.ok(cam.includes('const authentifie = !!token;'), 'le jeton n’est plus reduit a « authentifie ou pas »');
-  assert.ok(cam.includes('}, [haid, online, authentifie, conn]);'), 'le direct depend a nouveau de la valeur du jeton');
+  // `regardee` s'y ajoute (lot 14 de l'audit du 03/10) : un booleen, lui aussi.
+  assert.ok(cam.includes('}, [haid, online, authentifie, conn, regardee]);'), 'le direct depend a nouveau de la valeur du jeton');
   assert.ok(!/\}, \[[^\]]*\btoken\b[^\]]*\]/.test(cam), 'un effet depend encore de la valeur du jeton');
 
   /* La vignette, elle, a besoin du jeton COURANT pour signer son appel : il se
@@ -187,7 +188,7 @@ test('le direct ne repart pas parce que le jeton a change', () => {
    * dependances sans jamais envoyer un jeton perime. */
   assert.ok(cam.includes('jeton.current = token;') && cam.includes('Bearer ${jeton.current}'),
     'la vignette n’envoie plus le jeton courant');
-  assert.ok(cam.includes('}, [haid, authentifie, refreshMs, kind]);'), 'la boucle de vignette repart sur chaque renouvellement');
+  assert.ok(cam.includes('}, [haid, authentifie, refreshMs, kind, regardee]);'), 'la boucle de vignette repart sur chaque renouvellement');
 });
 
 test('« Absent » se traduit, comme « Présent » juste à côté', () => {

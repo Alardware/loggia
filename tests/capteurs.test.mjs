@@ -25,8 +25,8 @@ test('la carte capteur : la carte de base — la mesure en grand, le verdict de 
   // le CO2 ajouter une jauge en dessous comme sur ces images ».
   const c = bloc('function RoomGenericCard(', NL + 'function ');
   assert.ok(c.includes("mesure = isNaN(n) ? { v: String(s), u: '' } : { v: fmtN(n), u: unite };"), 'la mesure, valeur et unite');
-  assert.ok(c.includes('const cle = isNaN(n) ? null : cleMesure(a.device_class);') && c.includes("jauge = jaugeMesure(cle, cle === 'temp' ? versCelsius(n, uniteTemp(a, hass)) : n);"), 'la jauge des mesures que la table connait, temperature convertie en Celsius');
-  assert.ok(c.includes("sub = (cle === 'co2' ? tr('Qualité d’air') : MESURES_NOMS()[a.device_class]) + ' · ' + jauge.verdict.t.toLocaleUpperCase(locale());"), 'le mot de la table, en capitales');
+  assert.ok(c.includes('const cle = isNaN(n) ? null : cleMesure(a.device_class);') && c.includes('const uniteJauge = uniteTemp(a, hass);') && c.includes("jauge = jaugeMesure(cle, cle === 'temp' ? versCelsius(n, uniteJauge) : n, uniteJauge);"), 'la jauge des mesures que la table connait, temperature convertie en Celsius, reperes dans l’unite du capteur (audit du 03/10)');
+  assert.ok(c.includes("const libMesure = cle === 'co2' ? tr('Qualité d’air') : MESURES_NOMS()[a.device_class];") && c.includes("sub = libMesure + ' · ' + jauge.verdict.t.toLocaleUpperCase(locale());"), 'le mot de la table, en capitales');
   assert.ok(c.includes("if (cle === 'co2') { avis = jauge.verdict; teinte = TEINTE_PALIER[couleur] || 'or'; }"), 'le CO2 allume sa carte dans la couleur de son palier');
   assert.ok(c.includes("sub = MESURES_NOMS()[a.device_class] || unite || tr('Mesure');"), 'sans regle : le nom de la mesure, rien d’invente');
   assert.ok(c.includes("(dom === 'sensor' && mesure && !mort)") && c.includes('fontSize: 22, fontWeight: 800') && c.includes("color: avis != null ? couleur : 'var(--o-text)'"), 'la valeur en grand, coloree par le verdict du CO2 seulement');

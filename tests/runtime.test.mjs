@@ -46,7 +46,7 @@ test('assemblage complet : resolution faite, vues calculees', () => {
   assert.equal(rt.resolved.climate.available, true);
   assert.equal(rt.views.lumieres.ok, true);
   assert.equal(rt.views.aspirateur, undefined, 'un robot n’a plus de vue : sa carte ouvre sa fiche (v3.45.0)');
-  assert.equal(rt.views.croquettes.ok, false);
+  assert.equal(rt.views.croquettes, undefined, 'un distributeur n’a plus de vue : sa carte ouvre sa fiche (04/10)');
 });
 
 test('les preferences Energie traversent jusqu’aux resolveurs', () => {

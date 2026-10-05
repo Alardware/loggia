@@ -17,14 +17,16 @@ Voir websocket_api.py.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from .code_admin import CLE_CLAIR, CLE_HACHE, code_valide, enregistrement_valide, hacher
+from .refus import RefusNomme
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -130,6 +132,15 @@ AGENCEMENT: frozenset[str] = frozenset(
 )
 
 # Ce a quoi le dashboard ressemble. Rien ici ne decide de ce qu il COMMANDE.
+#
+# Le glyphe choisi pour une entite (`loggia_icones`) et le quart de tour du
+# plan du robot (`loggia_vacrot`) l ont rejointe le 03/10. Ils etaient restes
+# reserves faute d avoir ete ranges, pas par decision : ils ne font que
+# remplacer un dessin ou tourner une image, et une erreur ne coute rien — on
+# rend l icone d origine, on tourne encore d un quart. Refuses, le geste
+# s affichait, un message le disait non enregistre, et il disparaissait au
+# rechargement. Leur voisine `loggia_vacplan` ne suit pas : associer une
+# couleur du plan a une piece decide de ce que le robot nettoie.
 APPARENCE: frozenset[str] = frozenset(
     {
         "loggia_look",
@@ -138,6 +149,8 @@ APPARENCE: frozenset[str] = frozenset(
         "loggia-navbar",
         "loggia-wxfx",
         "loggia-langue",
+        "loggia_icones",
+        "loggia_vacrot",
     }
 )
 
@@ -238,7 +251,7 @@ class LoggiaStore:
             # copie existante, et le dashboard repartirait vide.
             remontee = self._migrer(raw)
             menage = self._purger_ombres(raw)
-            code = self._migrer_code(raw)
+            code = self._migrer_code(raw, await self._hache_a_migrer(raw))
             if remontee or menage or renomme or code:
                 await self._store.async_save(raw)
             self._data = raw
@@ -337,8 +350,28 @@ class LoggiaStore:
         )
         return True
 
+    async def _hache_a_migrer(self, raw: dict[str, Any]) -> dict[str, Any] | None:
+        """Le hache du code en clair d'avant le 18/09, calcule HORS de la boucle.
+
+        Cent mille tours de PBKDF2 tenaient la boucle d'evenements arretee une
+        centaine de millisecondes (97 a 118 ms en mediane, mesurees) au premier
+        chargement d'un fichier ancien, quand l'ADR 0045 veut le hachage hors d'elle :
+        `loggia/pin/definir` et `verifier` l'y envoyaient deja, la migration
+        non (lot 15 de l'audit du 03/10). Appele APRES `_migrer`, dont la
+        remontee peut apporter le clair d'une section de compte. None s'il n'y
+        a rien a hacher : pas de clair, un clair illisible, un hache valide.
+        """
+        clair = raw["shared"].get(CLE_CLAIR)
+        if clair is None or not code_valide(str(clair)) or enregistrement_valide(raw["shared"].get(CLE_HACHE)):
+            return None
+        hass = getattr(self, "hass", None)
+        if hass is not None:
+            return await hass.async_add_executor_job(hacher, str(clair))
+        # Sans Home Assistant (un test) : l'executeur de la boucle, meme effet.
+        return await asyncio.get_running_loop().run_in_executor(None, hacher, str(clair))
+
     @staticmethod
-    def _migrer_code(raw: dict[str, Any]) -> bool:
+    def _migrer_code(raw: dict[str, Any], hache: dict[str, Any] | None) -> bool:
         """Le code administrateur en clair devient un hache, et disparait de partout.
 
         Un fichier ecrit avant le 18/09 porte `loggia_admin_pin` en clair dans
@@ -351,8 +384,10 @@ class LoggiaStore:
         clair = raw["shared"].pop(CLE_CLAIR, None)
         if clair is not None:
             change = True
-            if code_valide(str(clair)) and not enregistrement_valide(raw["shared"].get(CLE_HACHE)):
-                raw["shared"][CLE_HACHE] = hacher(str(clair))
+            # Le hache vient de `_hache_a_migrer`, hors de la boucle ; None
+            # quand le clair est illisible ou qu'un hache valide est deja la.
+            if hache is not None:
+                raw["shared"][CLE_HACHE] = hache
                 _LOGGER.info("Loggia : code administrateur hache, l'ancien code en clair est efface")
         for reglages in raw["users"].values():
             if isinstance(reglages, dict):
@@ -429,28 +464,61 @@ class LoggiaStore:
         suite de petits appels acceptes un a un laisse sinon passer n'importe
         quelle taille.
         """
+        await self.async_modifier_shared(key, lambda _avant: value)
+
+    async def async_modifier_shared(self, key: str, modifier: Callable[[Any], Any]) -> Any:
+        """Lire, changer et ecrire une cle commune d'un seul tenant.
+
+        Les modules lisaient leur configuration, la changeaient, puis
+        l'ecrivaient par `async_set_shared` : la lecture se faisait HORS du
+        verrou, et le cache n'est remplace qu'une fois le disque d'accord.
+        Deux enregistrements partis ensemble relisaient donc la meme
+        configuration, et le second effacait le premier — deux boutons d'une
+        telecommande affectes coup sur coup, le premier perdu sans un mot
+        (lot 15 de l'audit du 03/10).
+
+        `modifier` recoit une COPIE de la valeur en place (None si elle
+        manque) et rend la nouvelle ; ce qu'il leve n'ecrit rien. Il est
+        SYNCHRONE, et ne rappelle pas le magasin : `asyncio.Lock` n'est pas
+        reentrant, un appel d'ici a `async_set_shared` attendrait sa propre
+        fin. La fusion reste celle de chaque module — un patch de
+        `planning.volets` remplace toujours la table entiere, que l'ecran
+        envoie entiere. Memes plafonds que `async_set_shared`, qui passe
+        d'ailleurs par ici. Rend la valeur ecrite.
+        """
         async with self._lock:
             data = await self._load()
+            value = modifier(copy.deepcopy(data["shared"].get(key)))
+            if asyncio.iscoroutine(value):
+                value.close()
+                raise TypeError("async_modifier_shared : une modification synchrone, pas une coroutine")
             taille_valeur = _taille({key: value})
+            # Un plafond est un refus PREVISIBLE (audit du 03/10) : son code,
+            # que l'ecran traduit, et la cle apres les deux-points quand il en
+            # nomme une (refus.py). Le reste du message est pour le journal.
             if taille_valeur > MAX_VALUE_BYTES:
-                raise ValueError(
-                    f"valeur trop volumineuse pour {key} "
-                    f"({taille_valeur} > {MAX_VALUE_BYTES} octets)"
+                raise RefusNomme(
+                    "payload_too_large",
+                    f"valeur trop volumineuse ({taille_valeur} > {MAX_VALUE_BYTES} octets)",
+                    key,
                 )
             commun = dict(data["shared"])
             commun[key] = value
             if len(commun) > MAX_KEYS_PER_USER:
-                raise ValueError(
-                    f"trop de cles communes ({len(commun)} > {MAX_KEYS_PER_USER})"
+                raise RefusNomme(
+                    "payload_too_large",
+                    f"trop de cles communes ({len(commun)} > {MAX_KEYS_PER_USER})",
                 )
             taille = _taille(commun)
             if taille > MAX_TOTAL_BYTES:
-                raise ValueError(
-                    f"stockage commun trop volumineux ({taille} > {MAX_TOTAL_BYTES} octets)"
+                raise RefusNomme(
+                    "payload_too_large",
+                    f"stockage commun trop volumineux ({taille} > {MAX_TOTAL_BYTES} octets)",
                 )
             nouveau = {**data, "shared": commun}
             await self._store.async_save(nouveau)
             self._data = nouveau
+            return value
 
     async def async_get_user(self, user_id: str) -> dict[str, Any]:
         """Configuration vue par un utilisateur : le commun, puis ses cles d'appareil.
@@ -597,8 +665,10 @@ class LoggiaStore:
                     commun.pop(key, None)
 
         if len(perso) > MAX_KEYS_PER_USER or len(commun) > MAX_KEYS_PER_USER:
-            raise ValueError(
-                f"trop de cles ({max(len(perso), len(commun))} > {MAX_KEYS_PER_USER})"
+            # Un plafond : son code, que l'ecran traduit (audit du 03/10).
+            raise RefusNomme(
+                "payload_too_large",
+                f"trop de cles ({max(len(perso), len(commun))} > {MAX_KEYS_PER_USER})",
             )
 
         # Le plafond de taille ne portait que sur la requete recue. Apres fusion,
@@ -609,8 +679,9 @@ class LoggiaStore:
         for nom, contenu in (("compte", perso), ("commun", commun)):
             taille = _taille(contenu)
             if taille > MAX_TOTAL_BYTES:
-                raise ValueError(
-                    f"stockage {nom} trop volumineux ({taille} > {MAX_TOTAL_BYTES} octets)"
+                raise RefusNomme(
+                    "payload_too_large",
+                    f"stockage {nom} trop volumineux ({taille} > {MAX_TOTAL_BYTES} octets)",
                 )
 
         # Copie avant ecriture : le cache n'est remplace qu'une fois le disque

@@ -100,7 +100,7 @@ test('la grille suit la catégorie de la carte', () => {
    * par un compte au-delà de huit pages ; le 29/09, la pagination de cette
    * fiche disparaît tout court — voir « la fiche cherche, range par famille ».
    * Reste un compte, mais d'icônes, pas de pages. */
-  assert.ok(app.includes("trN(liste.length, tr('{n} icône'), tr('{n} icônes'))"), 'la grille ne dit plus combien elle montre');
+  assert.ok(app.includes("trN(liste.length, '{n} icône', '{n} icônes')"), 'la grille ne dit plus combien elle montre');
 
   // L'électroménager reste dessiné, et chaque nom cité a bien son tracé.
   for (const n of ['washer', 'dryer', 'dishwasher', 'fridge', 'oven', 'microwave']) {
@@ -206,7 +206,7 @@ test('la fiche cherche, range par famille, et se souvient des dernières', () =>
    * lave-vaisselle a été rangé. */
   assert.ok(f.includes('if (cherche) return chercherIcones(q);'), 'la recherche ne passe pas devant la famille');
   const c = app.slice(app.indexOf('function chercherIcones('), app.indexOf('\n}', app.indexOf('function chercherIcones(')));
-  assert.ok(c.includes('aplatiIcone(nomIcone(c))') && c.includes('aplatiIcone(legendeIcone(c))'),
+  assert.ok(c.includes('sansAccents(nomIcone(c))') && c.includes('sansAccents(legendeIcone(c))'),
     'la recherche ignore le nom du dessin : « lave » ne trouverait pas `dishwasher`');
 
   /* Les dernières choisies vivent dans le NAVIGATEUR : c'est la commodité de

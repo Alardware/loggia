@@ -30,6 +30,9 @@ OUVERTES = [
     "WS_SIR_TESTER",
     # Suivre la configuration (22/09) : des noms de cles, rien de la maison.
     "WS_CFG_SUIVRE",
+    # Ranger les scenarios (audit du 03/10) : de l'agencement (ADR 0125),
+    # comme ranger ses cartes — l'ordre seul, de scenarios que la maison a.
+    "WS_SCN_ORDRE",
 ]
 
 
@@ -83,3 +86,15 @@ def test_l_identite_vient_de_la_connexion():
 
 def test_lancer_un_scenario_respecte_les_permissions_du_compte():
     assert "controle=controle_de(connection.user)" in SOURCE, "un compte restreint ne pilote pas par scenario ce que Home Assistant lui refuse"
+
+
+def test_ranger_les_scenarios_ne_mene_qu_a_l_ordre():
+    """Audit du 03/10 : la commande ouverte ne touche qu'a l'ordre. Si elle
+    appelait `async_enregistrer`, un compte ordinaire creerait, modifierait ou
+    supprimerait des scenarios par ce detour (execute dans
+    test_websocket_api_execution.py)."""
+    corps = SOURCE[SOURCE.index("async def handle_scn_ordre"):SOURCE.index("async def handle_scn_lancer")]
+    assert 'await scenarios.async_ordonner(msg["ordre"])' in corps
+    assert "async_enregistrer" not in corps, "la porte ouverte mene a la configuration des scenarios"
+    # Relecture du 03/10 : un plafond du magasin y repartait en `invalid_format`.
+    assert "_relayer(connection, msg, err)" in corps, "un refus nomme du magasin perd son code en rangeant"

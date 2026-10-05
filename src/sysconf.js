@@ -8,6 +8,7 @@
 import { LOGGIA_INDEX, LOGGIA_RESOLVED, loggiaEnt, getHass } from './state.js';
 import { siblingsOf } from './discovery.js';
 import { capteursHote } from './resolve.js';
+import { tr } from './i18n.js';
 
 export const sysKeys = () => Object.values(sysSensors()).flatMap(o => Object.values(o || {})).filter(Boolean);
 export const SYS_SLOTS = ['host', 'nebula', 'ucg'];
@@ -69,11 +70,12 @@ export function sysSensors() {
 // Nom affiché de chaque emplacement : celui de l'appareil Home Assistant quand
 // c'est la découverte qui a rempli l'emplacement, sinon le libellé historique.
 // Libellés d'attente : ils ne s'affichent que le temps de la découverte, ou
-// pour un emplacement resté vide.
-const SYS_NAMES_DEF = { host: 'Machine 1', nebula: 'Machine 2', ucg: 'Machine 3' };
+// pour un emplacement resté vide. Une fonction, dite au rendu dans la langue
+// de l'écran (audit du 03/10) : « Machine 1 » restait en français partout.
+const SYS_NAMES_DEF = () => ({ host: tr('Machine {n}', { n: 1 }), nebula: tr('Machine {n}', { n: 2 }), ucg: tr('Machine {n}', { n: 3 }) });
 export function sysNames() {
   const cfg = loggiaEnt('sysNames', null);
-  const out = { ...SYS_NAMES_DEF, ...(cfg && typeof cfg === 'object' ? cfg : {}) };
+  const out = { ...SYS_NAMES_DEF(), ...(cfg && typeof cfg === 'object' ? cfg : {}) };
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.system;
   if (r && r.available && r.hosts.length && !loggiaEnt('system', null)) {
     SYS_SLOTS.forEach((k, i) => { if (r.hosts[i]) out[k] = r.hosts[i].name; });

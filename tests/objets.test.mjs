@@ -172,7 +172,7 @@ test('la vue Objets dessine les cartes de la piece, une par appareil, derriere d
    * AUSSI le compte de la famille — le nombre s'efface avec le mot, mais pas
    * pour qui ecoute la page. */
   assert.ok(vue.includes('<span className="o-objfiltre-mot">{f.label}</span>'), 'le mot a sa classe');
-  assert.ok(vue.includes("aria-label={f.label + ' · ' + trN(n, tr('{n} appareil'), tr('{n} appareils'))} title={f.label}"),
+  assert.ok(vue.includes("aria-label={f.label + ' · ' + trN(n, '{n} appareil', '{n} appareils')} title={f.label}"),
     'l’etiquette dit la famille ET ce qu’elle porte');
   assert.ok(vue.includes("const n = f.id === 'tous' ? objets.length : objets.filter(o => o.filtres.indexOf(f.id) >= 0).length;"),
     '« Tous » compte tout, une famille compte les siens');

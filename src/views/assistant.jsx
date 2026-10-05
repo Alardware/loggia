@@ -41,17 +41,20 @@
  * ses couleurs ont fait le voyage — la teinte de ce dont l'assistant parle,
  * voir `parole.js`.
  */
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { lazyRecharge } from '../recharge.js';
 import { tr, locale } from '../i18n.js';
-import { cfgSet } from '../state.js';
-import { Fi, BottomSheet, REDUCE_MOTION, CroixFeuille } from '../ui.jsx';
+import { cfgSet, compteOrdinaire } from '../state.js';
+import { Fi, BottomSheet, REDUCE_MOTION, CroixFeuille, NomFeuille, ListeChoix } from '../ui.jsx';
 import { conversationsDe, entiteChoisie } from '../assistant.js';
 import { ecouter, voixDisponible, raisonLisible, preparerLecture, jouer, couperLecture, positionLecture, synthese } from '../voix.js';
 import { teinteDe, mots, poidsDesMots, motAuTemps, phraseAutour } from '../parole.js';
 
 /* L'orbe tire Three.js — 448 ko. Elle ne se charge donc qu'à l'ouverture de la
  * popup, jamais au démarrage du dashboard. Même raison que le fond météo. */
-const Orbe = lazy(() => import('../orbe.jsx'));
+/* Et un décor (audit du 03/10) : introuvable même après le rechargement
+ * unique de `lazyRecharge`, elle ne rend rien — la conversation reste. */
+const Orbe = lazyRecharge(() => import('../orbe.jsx'), { decor: true });
 
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
@@ -251,7 +254,6 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
   const saisieRef = useRef(null);
   const basculeRef = useRef(null);
   const focaliserRef = useRef(false);
-  const [menu, setMenu] = useState(false);
 
   /* La ligne sous l'orbe. `null` au départ : la popup s'ouvre sur une
    * invitation, pas sur le dernier message d'hier, que l'historique ramène. */
@@ -293,10 +295,10 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
     return () => clearTimeout(id);
   }, [fil]);
 
-  // Le choix de l'assistant se referme dès qu'elle écoute ou répond.
-  useEffect(() => { if (etat !== 'idle' || ecoute) setMenu(false); }, [etat, ecoute]);
-
-  const ouvrirFil = () => { setMenu(false); setFil('ouvert'); };
+  /* Le choix de l'assistant se referme dès qu'elle écoute ou répond : c'est
+   * le `disabled` de sa liste (lot 13 de l'audit du 03/10). Un appui hors de
+   * la liste la referme aussi : ouvrir le fil n'a plus à s'en charger. */
+  const ouvrirFil = () => setFil('ouvert');
   const fermerFil = () => setFil((f) => (f === 'ferme' ? f : (REDUCE_MOTION ? 'ferme' : 'sortant')));
   const ecrire = () => { focaliserRef.current = true; ouvrirFil(); };
 
@@ -533,11 +535,16 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
           setTeinte(teinteDe(reponseRef.current));
           // On a parle : elle repond. On a tape : elle ecrit.
           if (vocalRef.current) dire(reponseRef.current); else setEtat('idle');
+          // Le tour est fini : son flux se ferme (audit du 03/10). Resté
+          // ouvert, une reconnexion à Home Assistant renvoyait la question —
+          // et rejouait l'action domotique sans que personne ne parle.
+          fermerFlux();
           break;
         case 'error':
           setEtat('idle');
           messageRef.current = null;
           setErreur(evt.message || tr('L’assistant n’a pas répondu.'));
+          fermerFlux();
           break;
         default:
           break;
@@ -548,7 +555,8 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
     // `fermerFlux`. Sans cela, sa référence était simplement écrasée.
     fermerFlux();
     try {
-      const defaire = await ws.connection.subscribeMessage(surEvenement, message);
+      // Une question se pose UNE fois : jamais rejouée à la reconnexion.
+      const defaire = await ws.connection.subscribeMessage(surEvenement, message, { resubscribe: false });
       /* Un tour plus récent est parti pendant l'attente — on a retapé, ou
        * arrêté. Celui-ci n'a plus lieu d'être, et sa référence ne doit SURTOUT
        * pas écraser la sienne : on le ferme ici, tout de suite. */
@@ -583,10 +591,15 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
    * conversation dans la maison : le nom de l'en-tête devient un choix, et le
    * choix est le réglage lui-même — la popup suivante s'ouvre sur lui. */
   const choix = conversationsDe(hass);
+  /* Ce choix ecrit `loggia_assistant`, reservee aux administrateurs Home
+   * Assistant (03/10) : un compte ordinaire voit le nom de l'assistant, pas
+   * le menu qu'il ne pourrait jamais enregistrer. */
+  const peutChoisir = choix.length > 1 && !compteOrdinaire(hass);
   const choisir = (id) => {
-    setMenu(false);
     if (id !== actuelle) cfgSet({ loggia_assistant: id });
   };
+  // Le nom, l'identifiant en petit dessous : ce que montrait le menu fait main.
+  const optionsChoix = choix.map((c) => ({ id: c.id, label: c.nom, sub: c.id }));
 
   const etiquette = ecoute ? tr('Écoute…')
     : etat === 'thinking' ? tr('Réfléchit…')
@@ -623,17 +636,25 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
               boxShadow: `0 0 10px 1px color-mix(in srgb, ${POINT[etatVu]} 70%, transparent)`,
               transition: 'background .3s, box-shadow .3s',
             }} />
-            {choix.length > 1 ? (
-              <button onClick={() => setMenu((m) => !m)} disabled={occupe} aria-expanded={menu}
-                aria-label={titre + ' — ' + tr('Choisir l’assistant')} title={tr('Choisir l’assistant')}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 4, minHeight: 36, padding: '0 2px', minWidth: 0,
-                  background: 'none', border: 0, color: 'var(--o-text)', cursor: occupe ? 'default' : 'pointer',
-                }}>
-                <span style={{ ...TITRE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{titre}</span>
-                <Fi i="angle-small-down" size={15} color="var(--o-text2)" />
-              </button>
-            ) : <span style={TITRE}>{titre}</span>}
+            {/* Le choix de l'assistant : la liste de Loggia, plus un menu fait
+              * main (lot 13 de l'audit du 03/10) — une liste et ses options
+              * au clavier, le choix en bleu plein, la taille commune des
+              * menus. Le bouton garde son dessin (le titre, son chevron), son
+              * nom, qui commence par ce qui se lit, et sa bulle. Figé pendant
+              * qu'elle écoute ou répond : la réponse en cours continuerait
+              * d'arriver dans le fil d'un autre. */}
+            {peutChoisir ? (
+              <ListeChoix value={actuelle} options={optionsChoix} onChange={choisir} label={tr('Choisir l’assistant')}
+                disabled={occupe || ecoute} nom={titre + ' — ' + tr('Choisir l’assistant')} title={tr('Choisir l’assistant')}
+                style={{ gap: 4, minHeight: 36, padding: '0 2px', minWidth: 0, background: 'none', border: 0, color: 'var(--o-text)' }}>
+                {() => (
+                  <>
+                    <NomFeuille><span style={{ ...TITRE, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{titre}</span></NomFeuille>
+                    <Fi i="angle-small-down" size={15} color="var(--o-text2)" />
+                  </>
+                )}
+              </ListeChoix>
+            ) : <NomFeuille><span style={TITRE}>{titre}</span></NomFeuille>}
             <span aria-live="polite" style={{
               fontFamily: MONO, fontSize: 10.5, color: 'var(--o-text2)', letterSpacing: '.04em',
               textTransform: 'lowercase', whiteSpace: 'nowrap',
@@ -650,31 +671,6 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
               aria-expanded={ouvert} style={carre(ouvert)}><Fi i="comment" size={15} /></button>
             <CroixFeuille />
           </div>
-
-          {/* Les entités de conversation de la maison. */}
-          {menu && (
-            <div role="group" aria-label={tr('Choisir l’assistant')} style={{
-              position: 'absolute', top: 46, left: 0, right: 0, zIndex: 5, padding: 6,
-              display: 'flex', flexDirection: 'column', gap: 2, borderRadius: 14,
-              background: 'linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg)',
-              border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: 'var(--o-shadow)',
-            }}>
-              {choix.map((c) => {
-                const sur = c.id === actuelle;
-                return (
-                  <button key={c.id} onClick={() => choisir(c.id)} aria-pressed={sur} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 44, padding: '0 12px',
-                    borderRadius: 10, border: 0, cursor: 'pointer', textAlign: 'left',
-                    background: sur ? 'rgba(var(--o-accent-rgb), .13)' : 'transparent',
-                    color: sur ? 'var(--o-accent)' : 'var(--o-text)', fontSize: 13.5, fontWeight: 700,
-                  }}>
-                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nom}</span>
-                    <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 500, color: 'var(--o-text3)' }}>{c.id}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
 
           {/* L'écran « Parler », et la conversation qui monte par-dessus. */}
           <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>

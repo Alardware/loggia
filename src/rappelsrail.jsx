@@ -163,8 +163,16 @@ function LigneRappel({ t, onFait, cochable }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 12, background: 'var(--o-s2)' }}>
       {cochable && onFait
         ? (
+          /* La case se vise à 24 × 24, la pastille reste dessinée à 18 (audit
+            * du 03/10). Le bouton MESURAIT sa pastille, 18 × 18 — sous les 24
+            * de WCAG 2.5.8, et c'est le seul geste de la ligne. Même procédé
+            * que l'ADR 0101 : la zone grandit, pas le dessin, et la marge
+            * négative de 3 px rend ce qui est emprunté — à gauche au retrait
+            * de la ligne (12), à droite à l'écart (11), en haut et en bas au
+            * retrait (10). La ligne ne bouge pas d'un pixel, et une pastille
+            * en lecture seule reste alignée sur celles qu'on coche. */
           <button type="button" onClick={() => onFait(t)} aria-label={tr('Marquer fait : {t}', { t: t.titre })}
-            style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer', display: 'flex', flexShrink: 0 }}>
+            style={{ width: 24, height: 24, margin: -3, padding: 0, border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             {pastille}
           </button>
         )

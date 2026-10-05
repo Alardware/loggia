@@ -60,8 +60,15 @@ const THEME_KEYS = ['--o-bg', '--o-bggrad', '--o-bg2', '--o-side1', '--o-side2',
 // pilotée par le Mode d'affichage. Forme = entrée de applyVars (bg/surface/text/accent/radius/shadow/border/font/bggrad).
 const LOGGIA_PRESETS = {
   neumorphix: {
-    light: { bg: '#e8eaf0', surface: '#eef0f6', surfaceElevated: '#f3f5fb', text: '#2c2f3a', muted: '#606470', border: 'rgba(120,130,160,.14)', accent: '#6c7ae0', accentText: '#5563cc', radius: '20px', borderWidth: '0px', shadow: '6px 6px 14px #d3d6e1, -6px -6px 14px #ffffff', bggrad: 'linear-gradient(160deg,#edeff5,#e3e6ef)', font: "'Manrope', -apple-system, sans-serif" },
-    dark: { bg: '#1e2128', surface: '#262b35', surfaceElevated: '#2c323e', text: '#e2e8f0', muted: '#94a3b8', border: 'rgba(255,255,255,.05)', accent: '#5de0d8', radius: '20px', borderWidth: '0px', shadow: '5px 5px 12px #13161c, -5px -5px 12px #2d3340', bggrad: 'linear-gradient(160deg,#21252e,#171a20)', font: "'Manrope', -apple-system, sans-serif" },
+    light: { bg: '#e8eaf0', surface: '#eef0f6', surfaceElevated: '#f3f5fb', text: '#2c2f3a', muted: '#606470', border: 'rgba(120,130,160,.14)', accent: '#6c7ae0', accentText: '#5563cc', radius: '20px', borderWidth: '0px', shadow: '6px 6px 14px #d3d6e1, -6px -6px 14px #ffffff', bggrad: 'linear-gradient(160deg,#edeff5,#e3e6ef)', font: "'Manrope', -apple-system, sans-serif",
+      // Le relief EN PETIT pour ce qui défile (relecture du 04/10) : la colonne
+      // du rail et la rangée des scénarios lisent `--o-shadow-rangee`, et sans
+      // lui retombaient sur l'ombre portée générique — Neumorphix, sans liseré,
+      // y perdait le relief qui le distingue. 2 px / 5 px : 7 px de débord,
+      // logés dans le rembourrage de la colonne (6 / 8 / 14 px).
+      fine: { '--o-shadow-rangee': '2px 2px 5px #d3d6e1, -2px -2px 5px #ffffff' } },
+    dark: { bg: '#1e2128', surface: '#262b35', surfaceElevated: '#2c323e', text: '#e2e8f0', muted: '#94a3b8', border: 'rgba(255,255,255,.05)', accent: '#5de0d8', radius: '20px', borderWidth: '0px', shadow: '5px 5px 12px #13161c, -5px -5px 12px #2d3340', bggrad: 'linear-gradient(160deg,#21252e,#171a20)', font: "'Manrope', -apple-system, sans-serif",
+      fine: { '--o-shadow-rangee': '2px 2px 5px #13161c, -2px -2px 5px #2d3340' } },
   },
   google: {
     light: { bg: '#f6f8fc', surface: '#ffffff', surfaceElevated: '#ffffff', text: '#202124', muted: '#5f6368', border: '#e7e9ee', accent: '#1a73e8', radius: '12px', borderWidth: '1px', shadow: '0 1px 3px rgba(60,64,67,.15), 0 1px 2px rgba(60,64,67,.1)', bggrad: '', font: "'Google Sans','Roboto',-apple-system,sans-serif" },
@@ -119,12 +126,15 @@ const LOGGIA_PRESETS = {
     dark: {
       bg: '#07090d', surface: '#0b0f15', surfaceElevated: '#111620', text: '#e9eef5', muted: '#a8b2c1',
       border: 'rgba(255,255,255,.065)', accent: '#5b8cff', accentText: '#8fb0ff',
-      radius: '16px', borderWidth: '1px', shadow: '0 0 0 1px rgba(255,255,255,.085)', bggrad: '', font: "'Manrope', -apple-system, sans-serif",
+      radius: '16px', borderWidth: '1px', shadow: '0 0 0 calc(1px - var(--o-bw, 1px)) rgba(255,255,255,.085)', bggrad: '', font: "'Manrope', -apple-system, sans-serif",
       fine: {
         // carte = dégradé c1 → c2 + filet 1px ; aucune ombre portée au repos —
         // le filet EST l'ombre (un anneau), sinon les cartes se confondaient
         // avec la page, la règle du gabarit leur interdisant une bordure.
-        '--o-shadow-rangee': '0 0 0 1px rgba(255,255,255,.085)',
+        // Depuis le 04/10, toutes les cartes portent le liseré du réglage
+        // « Liserés » : l'anneau s'efface quand le trait est là (épaisseur
+        // 1px − --o-bw), et revient quand on le coupe — un seul trait, jamais 2 px.
+        '--o-shadow-rangee': '0 0 0 calc(1px - var(--o-bw, 1px)) rgba(255,255,255,.085)',
         '--o-surfA': '#111620', '--o-surfB': '#0b0f15',
         '--o-bg2': '#0a0d12', '--o-side1': '#0a0d12', '--o-side2': '#07090d',
         '--o-header': 'rgba(8,10,14,.88)',
@@ -145,9 +155,9 @@ const LOGGIA_PRESETS = {
     light: {
       bg: '#f2f4f7', surface: '#ffffff', surfaceElevated: '#ffffff', text: '#101828', muted: '#475467',
       border: 'rgba(16,24,40,.1)', accent: '#5b8cff', accentText: '#1d55c9',
-      radius: '16px', borderWidth: '1px', shadow: '0 0 0 1px rgba(16,24,40,.14)', bggrad: '', font: "'Manrope', -apple-system, sans-serif",
+      radius: '16px', borderWidth: '1px', shadow: '0 0 0 calc(1px - var(--o-bw, 1px)) rgba(16,24,40,.14)', bggrad: '', font: "'Manrope', -apple-system, sans-serif",
       fine: {
-        '--o-shadow-rangee': '0 0 0 1px rgba(16,24,40,.14)',
+        '--o-shadow-rangee': '0 0 0 calc(1px - var(--o-bw, 1px)) rgba(16,24,40,.14)',
         // en clair, c1 = c2 = blanc : la carte est plate, c'est le filet qui la détache
         '--o-surfA': '#ffffff', '--o-surfB': '#ffffff',
         '--o-bg2': '#ffffff', '--o-side1': '#ffffff', '--o-side2': '#ffffff',
@@ -440,7 +450,11 @@ function applyLook(root, L, frostedPreset, light) {
   }
   if (L.radius === 'net') root.style.setProperty('--o-radius', '7px');
   else if (L.radius === 'rond') root.style.setProperty('--o-radius', '26px');
-  if (!L.shadow) { root.style.setProperty('--o-shadow', 'none'); root.style.setProperty('--o-shadow-hover', 'none'); }
+  /* `--o-shadow-rangee` aussi (04/10) : la colonne du rail de l'Accueil
+   * redéfinit `--o-shadow` par elle, et la rangée des scénarios la lit en
+   * `!important` — « Ombres portées » coupé y laissait une ombre. Purgée avec
+   * les jetons du thème (THEME_KEYS) : rallumer les ombres la rend. */
+  if (!L.shadow) { root.style.setProperty('--o-shadow', 'none'); root.style.setProperty('--o-shadow-hover', 'none'); root.style.setProperty('--o-shadow-rangee', 'none'); }
   if (!L.hairline) root.style.setProperty('--o-bw', '0px');
   /* L'accent DU THEME, avant qu'un choix de l'Apparence le remplace : la
    * pastille « Couleur du theme » le montre. Elle lisait `--o-accent` — apres

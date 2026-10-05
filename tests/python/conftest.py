@@ -57,6 +57,8 @@ def _poser_doublures() -> None:
         # `store.py` signale ce qui change aux ecrans abonnes (ADR 0067) ; la
         # doublure n'envoie rien, un test qui veut le voir la remplace.
         ("homeassistant.helpers.dispatcher", ("async_dispatcher_send", "async_dispatcher_connect")),
+        # `minuteurs.py` et `sirene.py` rattrapent apres le demarrage complet.
+        ("homeassistant.helpers.start", ("async_at_started",)),
     ):
         module = types.ModuleType(nom)
         for attr in attrs:
@@ -98,6 +100,17 @@ def _poser_doublures() -> None:
     _disp.async_dispatcher_send = lambda *a, **k: None
     _disp.async_dispatcher_connect = lambda *a, **k: (lambda: None)
     sys.modules["homeassistant.helpers"].dispatcher = _disp
+
+    # Comme le vrai quand Home Assistant TOURNE deja : le rappel part aussitot,
+    # en tache. Un test qui veut le demarrage en cours remplace la doublure.
+    def _au_demarrage(hass, rappel):
+        retour = rappel(hass)
+        if asyncio.iscoroutine(retour):
+            hass.async_create_task(retour)
+        return lambda: None
+
+    sys.modules["homeassistant.helpers.start"].async_at_started = _au_demarrage
+    sys.modules["homeassistant.helpers"].start = sys.modules["homeassistant.helpers.start"]
     sys.modules["homeassistant.util"].dt = sys.modules["homeassistant.util.dt"]
 
 

@@ -26,3 +26,21 @@ test('cote serveur : la maison n’est jamais vide, le coucher attend, et la cou
   const n = lire('custom_components/loggia/nuit.py');
   assert.ok(n.includes('from .presence import CLE as CLE_PRESENCE, invite_present') && n.includes('await self.regles.noter("nuit", "coucher", "retenir", n=0, motif="mode invite")'), 'le coucher attend, et le dit');
 });
+
+test('le dernier indice se dit dans la langue de l’écran (audit du 03/10)', async () => {
+  /* Le serveur nomme le genre en français — « mouvement », « ouverture »,
+   * « main » — et l'onglet l'affichait tel quel : « Last clue : mouvement ». */
+  const v = lire('src/views/presence.jsx');
+  assert.ok(v.includes("b: tr(etat.indices.dernier.genre || '')"), 'le genre du dernier indice passe par tr (dans le gabarit « {a} : {b} »)');
+  const p = lire('custom_components/loggia/presence.py');
+  const debut = p.indexOf('INDICES = {');
+  const genres = new Set([...p.slice(debut, p.indexOf('}', debut)).matchAll(/: "([a-z_]+)"/g)].map(m => m[1]));
+  assert.ok(p.includes('self._indice(haid, "main")'), 'le geste manuel a changé de nom : le catalogue doit suivre');
+  genres.add('main');
+  assert.deepEqual([...genres].sort(), ['main', 'mouvement', 'ouverture']);
+  const { CHARGEURS } = await import('../src/langues/index.js');
+  for (const langue of Object.keys(CHARGEURS)) {
+    const cat = (await CHARGEURS[langue]()).default;
+    for (const g of genres) assert.equal(typeof cat[g], 'string', langue + ' : « ' + g + ' » manque au catalogue');
+  }
+});

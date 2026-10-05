@@ -109,7 +109,10 @@ export function quandCourt(ts) {
   const h = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const auj = new Date();
   if (d.toDateString() === auj.toDateString()) return h;
-  if (d.toDateString() === new Date(auj.getTime() - 86400000).toDateString()) return tr('hier') + ' ' + h;
+  // La veille sur le CALENDRIER : « maintenant moins 24 h » retombait
+  // l'avant-veille entre 0 h et 1 h, le lendemain du passage à l'heure d'été.
+  const hier = new Date(auj); hier.setDate(hier.getDate() - 1);
+  if (d.toDateString() === hier.toDateString()) return tr('hier') + ' ' + h;
   return d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' }) + ' ' + h;
 }
 

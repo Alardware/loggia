@@ -7,6 +7,17 @@
  * Ce dernier ne pouvait pas quitter `App.jsx` tant que la camera y restait. */
 import { useState, useEffect, useRef } from 'react';
 import { tr } from './i18n.js';
+import { pageRegardee, suivreRegard, GRACE_DIRECT } from './regard.js';
+
+/* Regardée ou non, à `grace` ms près (lot 14 de l'audit du 03/10) : faux
+ * quand l'onglet est caché ou que la veille recouvre la page depuis `grace`
+ * ms, vrai dès le retour. La logique vit dans `regard.js`, pure et testée ;
+ * ici, seulement l'état React qui la suit. */
+function useRegard(grace) {
+  const [regardee, setRegardee] = useState(() => pageRegardee());
+  useEffect(() => suivreRegard(setRegardee, { grace }), [grace]);
+  return regardee;
+}
 
 export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = 'cover', alt = '' }) {
   const [src, setSrc] = useState(null);
@@ -20,9 +31,16 @@ export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = '
   const jeton = useRef(token);
   jeton.current = token;
   const authentifie = !!token;
+  /* Personne ne regarde, plus de vignette (lot 14 de l'audit du 03/10) : sous
+   * la veille ou dans un onglet caché, l'image se retéléchargeait toutes les
+   * deux secondes, toute la nuit. Sans grâce : une vignette n'a rien à
+   * renégocier, le retour en relit une aussitôt — la dernière reste affichée
+   * en attendant. */
+  const regardee = useRegard(0);
   useEffect(() => {
     if (!haid || !authentifie) { setSrc(null); return; }
-    let alive = true, last = null, tour = 0;
+    if (!regardee) return;
+    let alive = true, tour = 0;
     const endpoint = kind === 'image' ? 'image_proxy' : 'camera_proxy';
     const fetchSnap = async () => {
       /* Chaque appel porte son numero. Sur une camera lente, la reponse d'un
@@ -34,15 +52,17 @@ export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = '
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const blob = await res.blob();
         if (!alive || mien !== tour) return;
-        const url = URL.createObjectURL(blob);
-        if (last) URL.revokeObjectURL(last);
-        last = url; setSrc(url);
+        setSrc(URL.createObjectURL(blob));
       } catch { /* garde le fond en repli */ }
     };
     fetchSnap();
     const id = setInterval(fetchSnap, refreshMs);
-    return () => { alive = false; clearInterval(id); if (last) URL.revokeObjectURL(last); };
-  }, [haid, authentifie, refreshMs, kind]);
+    return () => { alive = false; clearInterval(id); };
+  }, [haid, authentifie, refreshMs, kind, regardee]);
+  /* Une image se libère quand la suivante l'a remplacée, ou au démontage —
+   * plus au nettoyage de la boucle : la pause l'aurait révoquée sous l'image
+   * encore affichée (lot 14 de l'audit du 03/10). */
+  useEffect(() => () => { if (src) URL.revokeObjectURL(src); }, [src]);
   if (!src) return null;
   return <img src={src} alt={alt} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit }} />;
 }
@@ -85,6 +105,9 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
   const vidRef = useRef(null);
   const imgRef = useRef(null);
   const [mode, setMode] = useState('loading'); // loading | video | mjpeg | snap | off
+  // Coupé par le regard : une vignette tient la place pendant la renégociation
+  // du réveil (relecture du lot 14), sinon la tuile restait vide des secondes.
+  const [reprise, setReprise] = useState(false);
   const token = hass && hass.auth && hass.auth.data ? hass.auth.data.access_token : null;
   /* LE DIRECT NE REPART PAS PARCE QUE LE JETON A CHANGE (audit du 29/09).
    *
@@ -101,10 +124,20 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
    * connexion ou a la deconnexion. */
   const authentifie = !!token;
   const conn = hass && hass.connection ? hass.connection : null;
+  /* Personne ne regarde, plus de direct (lot 14 de l'audit du 03/10). Sous la
+   * veille — posée par-dessus l'Accueil sans le démonter — ou dans un onglet
+   * caché, chaque caméra gardait sa session toute la nuit. Elle se ferme
+   * maintenant après `GRACE_DIRECT` (30 s, le pourquoi dans regard.js) : un
+   * retour rapide ne coupe rien, un retour tardif renégocie (quelques
+   * secondes, 12 au plus). */
+  const regardee = useRegard(GRACE_DIRECT);
   useEffect(() => {
     let cancelled = false, cleanupRtc = null;
     setMode('loading');
     if (!online || !authentifie || !conn) { setMode('off'); return; }
+    // Coupé, mais `<video>` et `<img>` restent montés (« loading » ne montre
+    // rien) : au retour, l'effet retrouve ses références pour les refermer.
+    if (!regardee) { setReprise(true); return; }
     /* Un flux qui a réussi à se connecter peut mourir en route — la 5G
      * capricieuse gèle la vidéo sans la fermer, et l'image figée a l'air d'un
      * direct. Sans nouvelle frame décodée pendant trois relevés (9 s), on
@@ -117,6 +150,11 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
       gelIv = setInterval(() => {
         const v = vidRef.current;
         if (cancelled || !v) return;
+        // Pendant la grâce, un onglet caché peut cesser de décoder : un compteur
+        // immobile quand personne ne regarde ne prouve aucun gel, et un retour
+        // rapide aurait trouvé le direct remplacé par le MJPEG (lot 14 de
+        // l'audit du 03/10).
+        if (!pageRegardee()) { immobiles = 0; return; }
         const n = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality().totalVideoFrames
           : (v.webkitDecodedFrameCount != null ? v.webkitDecodedFrameCount : null);
         if (n == null) { clearInterval(gelIv); return; } // pas de compteur : impossible de juger
@@ -177,7 +215,10 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
           if (msg.type === 'session') sessionId = msg.session_id;
           else if (msg.type === 'answer') pc.setRemoteDescription({ type: 'answer', sdp: msg.answer }).catch(() => {});
           else if (msg.type === 'candidate' && msg.candidate) { try { pc.addIceCandidate(new RTCIceCandidate(typeof msg.candidate === 'string' ? { candidate: msg.candidate, sdpMLineIndex: 0 } : msg.candidate)); } catch {} }
-        }, { type: 'camera/webrtc/offer', entity_id: haid, offer: pc.localDescription.sdp });
+        }, { type: 'camera/webrtc/offer', entity_id: haid, offer: pc.localDescription.sdp },
+        // Une offre vaut pour UNE connexion : rejouée après une coupure, elle
+        // négocierait un flux que plus personne n'écoute (audit du 03/10).
+        { resubscribe: false });
         /* Le meme piege que pour la configuration ICE, quinze lignes plus haut
          * — et il restait ouvert (audit du 27/09). `createOffer`,
          * `setLocalDescription` et cet abonnement s'attendent : on peut avoir
@@ -220,7 +261,7 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
     const vidCapture = vidRef.current;
     const imgCapture = imgRef.current;
     return () => { cancelled = true; clearInterval(gelIv); if (cleanupRtc) { try { cleanupRtc(); } catch {} } const v = vidCapture; if (v) { try { v.pause(); } catch {} try { v.srcObject = null; } catch {} v.removeAttribute('src'); try { v.load(); } catch {} } const im = imgCapture; if (im) { im.onerror = null; im.removeAttribute('src'); } };
-  }, [haid, online, authentifie, conn]);
+  }, [haid, online, authentifie, conn, regardee]);
   const cover = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' };
   if (mode === 'off') return null; // repli sur le fond gradient de la tuile
   /* Le flux porte le NOM de la caméra (20/09) : une image sans texte ne dit
@@ -231,6 +272,10 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
       <video ref={vidRef} aria-label={dit} autoPlay muted playsInline style={{ ...cover, display: mode === 'video' ? 'block' : 'none' }} />
       <img ref={imgRef} alt={dit} style={{ ...cover, display: mode === 'mjpeg' ? 'block' : 'none' }} />
       {mode === 'snap' && <HaImage hass={hass} haid={haid} refreshMs={2000} kind="camera" alt={dit} />}
+      {/* Au réveil, la dernière vue en attendant la piste : HaImage ne
+        * télécharge rien tant que personne ne regarde (son propre regard), et
+        * se démonte quand le direct revient. Le premier chargement ne change pas. */}
+      {mode === 'loading' && reprise && <HaImage hass={hass} haid={haid} refreshMs={2000} kind="camera" alt={dit} />}
     </>
   );
 }

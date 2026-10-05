@@ -89,6 +89,40 @@ test('llms.txt et le plan du site nomment chaque page', () => {
   assert.equal(plan.split('<loc>').length - 1, LEGALES.length + 1, 'le plan du site nomme une page qui n’existe plus');
 });
 
+test('le site annonce les langues que Loggia parle VRAIMENT — les sept, pas deux', async () => {
+  /* Audit du 03/10 : les données structurées, le repli sans JavaScript et
+   * `llms.txt` disaient encore « français et anglais » bien après l'arrivée des
+   * cinq autres langues (v3.70.0, ADR 0070) — et un moteur de recherche ou un
+   * agent IA ne lit QUE ces textes-là. La liste qui fait foi est celle du
+   * sélecteur : une huitième langue fera échouer ce test tant que le site ne
+   * la nomme pas. */
+  const { LANGUES, LOCALES } = await import('../src/langues/index.js');
+  const codes = LANGUES.map((l) => l.code).filter((c) => c !== 'auto');
+  const ANGLAIS = { fr: 'French', en: 'English', de: 'German', nl: 'Dutch', it: 'Italian', es: 'Spanish', pl: 'Polish' };
+  const t = lire('site', '_tete.html');
+  const n = lire('site', '_sans-script.html');
+  const l = lire('site', 'llms.txt');
+  for (const [nom, s] of [['_tete.html', t], ['_sans-script.html', n], ['llms.txt', l]]) {
+    assert.ok(!/fran[çc]ais et (en )?anglais|French and English/i.test(s), nom + ' ne parle encore que de deux langues');
+  }
+  const ld = JSON.parse(t.match(/<script type="application\/ld\+json">([\s\S]+?)<\/script>/)[1].replace('{{version}}', '1.2.3'));
+  assert.deepEqual(ld.inLanguage, codes, 'inLanguage ne suit plus la liste des langues');
+  assert.ok(t.includes('<meta property="og:locale" content="' + LOCALES.fr.replace('-', '_') + '" />'));
+  for (const x of codes.filter((y) => y !== 'fr')) {
+    assert.ok(t.includes('<meta property="og:locale:alternate" content="' + LOCALES[x].replace('-', '_') + '" />'), 'og:locale:alternate oublie ' + x);
+  }
+  // Le repli reste bilingue : chaque bloc nomme les langues dans la sienne.
+  const [blocFr, blocEn] = n.split('<div lang="en"');
+  for (const c of codes) {
+    const nomFr = LANGUES.find((x) => x.code === c).enFrancais;
+    assert.ok(ANGLAIS[c], 'nom anglais inconnu pour ' + c + ' : l’ajouter ici, puis au site');
+    assert.ok(ld.description.toLowerCase().includes(nomFr), 'la description des données structurées oublie : ' + nomFr);
+    assert.ok(blocFr.includes(nomFr), 'le repli français oublie : ' + nomFr);
+    assert.ok(blocEn.includes(ANGLAIS[c]), 'le repli anglais oublie : ' + ANGLAIS[c]);
+    assert.ok(l.includes(ANGLAIS[c]) && l.includes('`' + c + '`'), 'llms.txt oublie : ' + c);
+  }
+});
+
 test('chaque vue a un titre, et l’Accueil des titres de section', () => {
   const app = lire('src', 'App.jsx');
   assert.ok(app.includes("<h1 className=\"o-vh\">{tr('Accueil')}</h1>"), 'l’Accueil n’a plus de titre de page');

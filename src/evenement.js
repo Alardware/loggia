@@ -108,3 +108,48 @@ export function depuis(quand, maintenant = Date.now(), lang = null) {
     return new Intl.DateTimeFormat(l, { weekday: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(t));
   } catch { return new Date(t).toLocaleTimeString(); }
 }
+
+/* ── Le journal « 24 h, en direct » (audit du 03/10) ─────────────────────────
+ *
+ * L'abonnement au journal remonte 24 h en arrière de son OUVERTURE, puis
+ * ajoute ce qui arrive sans jamais rien retirer. Sur une tablette allumée
+ * plusieurs jours, la carte « Les dernières 24 heures, en direct » gardait le
+ * jeudi un événement de lundi — et le datait « 16:00 », comme s'il était du
+ * jour. Les deux fonctions vivent ici, à côté de `instantDe` et de la fenêtre
+ * de 24 h qu'elles partagent avec les caméras : sans React, elles se testent
+ * à sec. */
+
+/** Les événements encore dans la fenêtre au moment `maintenant` (ms). Un
+ * instant illisible ne prouve pas qu'il est récent : il tombe. Un instant dans
+ * le futur reste — c'est l'horloge de la tablette qui retarde, pas l'événement
+ * qui est faux. Rend le MÊME tableau quand rien ne tombe : la mémoïsation de
+ * l'appelant tient. */
+export function dansLaFenetre(evenements, maintenant = Date.now(), fenetre = FENETRE_EVENEMENT) {
+  const l = Array.isArray(evenements) ? evenements : [];
+  const garde = l.filter(e => {
+    const t = e ? instantDe(e.when) : null;
+    return t != null && maintenant - t <= fenetre;
+  });
+  return garde.length === l.length ? l : garde;
+}
+
+/** L'heure d'une ligne du journal : seule aujourd'hui, « hier » la veille, la
+ * date avant. La forme de `quandCourt` (views/parcommun.jsx), qui ne lit que
+ * des secondes et l'horloge du moment ; ici l'instant se lit comme le journal
+ * le donne (`instantDe`) et `maintenant` se passe, pour qu'un test fixe le
+ * jour sans truquer l'horloge. La veille se cherche sur le CALENDRIER :
+ * « maintenant moins 24 h » retombe l'avant-veille entre 0 h et 1 h, le
+ * lendemain du passage à l'heure d'été. Sans instant lisible : « — »
+ * (ADR 0030), jamais « Invalid Date ». */
+export function heureJournal(quand, maintenant = Date.now(), lang = null) {
+  const t = instantDe(quand);
+  if (t == null) return '—';
+  const l = lang || locale();
+  const d = new Date(t);
+  const h = d.toLocaleTimeString(l, { hour: '2-digit', minute: '2-digit' });
+  const auj = new Date(maintenant);
+  if (d.toDateString() === auj.toDateString()) return h;
+  const hier = new Date(auj); hier.setDate(hier.getDate() - 1);
+  if (d.toDateString() === hier.toDateString()) return tr('hier') + ' ' + h;
+  return d.toLocaleDateString(l, { day: 'numeric', month: 'short' }) + ' ' + h;
+}

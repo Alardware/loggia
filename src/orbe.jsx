@@ -877,6 +877,8 @@ function creerOrbe(hote) {
         if (rtScene) rtScene.dispose();
         mips.forEach(m => { m.a.dispose(); m.b.dispose(); });
         renderer.dispose();
+        // Et le contexte, que dispose() garde (lot 14 de l'audit du 03/10) : 4 encore vivants après 10 ouvertures, 0 depuis.
+        renderer.forceContextLoss();
         if (cv.parentNode) cv.parentNode.removeChild(cv);
       } catch { /* un contexte déjà perdu n'a plus rien à rendre */ }
     },

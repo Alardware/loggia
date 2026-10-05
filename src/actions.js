@@ -24,8 +24,7 @@
 
 import { entityCaps } from './capabilities.js';
 import { getHass } from './state.js';
-
-const domaineDe = (id) => (typeof id === 'string' ? id.slice(0, id.indexOf('.')) : '');
+import { domaineDe } from './outils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // La traduction.

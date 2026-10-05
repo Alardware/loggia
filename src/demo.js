@@ -60,6 +60,10 @@ const LIEUX = {
   'Entrée': { en: 'Entrance', de: 'Eingang', nl: 'Entree', it: 'Ingresso', es: 'Entrada', pl: 'Wejście' },
   'Salle de bain': { en: 'Bathroom', de: 'Badezimmer', nl: 'Badkamer', it: 'Bagno', es: 'Baño', pl: 'Łazienka' },
   'Jardin': { en: 'Garden', de: 'Garten', nl: 'Tuin', it: 'Giardino', es: 'Jardín', pl: 'Ogród' },
+  // Les lieux des deux caméras du dehors (audit du 03/10) : sans entrée ici,
+  // `CAMERAS()` les nommait « Garage » et « Terrasse » dans toutes les langues.
+  'Garage': { en: 'Garage', de: 'Garage', nl: 'Garage', it: 'Garage', es: 'Garaje', pl: 'Garaż' },
+  'Terrasse': { en: 'Terrace', de: 'Terrasse', nl: 'Terras', it: 'Terrazza', es: 'Terraza', pl: 'Taras' },
 };
 
 /* La langue de la maison factice, posée une fois par `installerDemo`. Elle se
@@ -95,7 +99,15 @@ const CAMERAS = () => [
  * maison francaise, et les prenoms.
  *
  * Contrairement aux lieux, ces noms ne sont PAS des cles : `etiquette()` est
- * appliquee une fois, quand l'etat factice est bati. */
+ * appliquee une fois, quand l'etat factice est bati.
+ *
+ * Un nom ABSENT d'ici sort en français, sans bruit : `etiquette()` rend tel
+ * quel ce qu'elle ne connaît pas. Les rappels (« Arroser les plantes »),
+ * leurs listes (« Liste partagée »), l'agenda, treize états (« Porte de
+ * garage », « Baie vitrée »…) et les appareils du registre restaient ainsi
+ * français dans une démo polonaise (audit du 03/10). Tout nom écrit en clair
+ * passe donc par ici, et `tests/demo_noms.test.mjs` refuse celui qui n'a pas
+ * ses six langues. Restent tels quels les noms d'intégration et les prénoms. */
 const APPAREILS = {
   'humidité': { en: 'humidity', de: 'Luftfeuchte', nl: 'luchtvochtigheid', it: 'umidità', es: 'humedad', pl: 'wilgotność' },
   'température': { en: 'temperature', de: 'Temperatur', nl: 'temperatuur', it: 'temperatura', es: 'temperatura', pl: 'temperatura' },
@@ -107,13 +119,16 @@ const APPAREILS = {
   'Repas du matin': { en: 'Morning meal', de: 'Morgenmahlzeit', nl: 'Ochtendmaaltijd', it: 'Pasto del mattino', es: 'Comida de la mañana', pl: 'Poranny posiłek' },
   'Repas du soir': { en: 'Evening meal', de: 'Abendmahlzeit', nl: 'Avondmaaltijd', it: 'Pasto della sera', es: 'Comida de la noche', pl: 'Wieczorny posiłek' },
   'Alarme : armement en partant': { en: 'Alarm: arm on leaving', de: 'Alarm: beim Verlassen scharf', nl: 'Alarm: inschakelen bij vertrek', it: 'Allarme: attiva quando esci', es: 'Alarma: armar al salir', pl: 'Alarm: uzbrojenie przy wyjściu' },
+  'Ampoules': { en: 'Light bulbs', de: 'Glühbirnen', nl: 'Lampen', it: 'Lampadine', es: 'Bombillas', pl: 'Żarówki' },
   'Apéro': { en: 'Drinks', de: 'Aperitif', nl: 'Borrel', it: 'Aperitivo', es: 'Aperitivo', pl: 'Aperitif' },
   'Arrivée d’eau': { en: 'Water inlet', de: 'Wasserzulauf', nl: 'Wateraanvoer', it: 'Ingresso acqua', es: 'Entrada de agua', pl: 'Dopływ wody' },
   'Arrosage du potager': { en: 'Vegetable patch watering', de: 'Bewässerung Gemüsebeet', nl: 'Bewatering moestuin', it: 'Irrigazione dell’orto', es: 'Riego del huerto', pl: 'Podlewanie warzywnika' },
+  'Arroser les plantes': { en: 'Water the plants', de: 'Pflanzen gießen', nl: 'Planten water geven', it: 'Annaffiare le piante', es: 'Regar las plantas', pl: 'Podlać rośliny' },
   'Aspirateur': { en: 'Vacuum', de: 'Staubsauger', nl: 'Stofzuiger', it: 'Aspirapolvere', es: 'Aspiradora', pl: 'Odkurzacz' },
   'Aspirateur Brosse latérale': { en: 'Vacuum Side brush', de: 'Staubsauger Seitenbürste', nl: 'Stofzuiger Zijborstel', it: 'Aspirapolvere Spazzola laterale', es: 'Aspiradora Cepillo lateral', pl: 'Odkurzacz Szczotka boczna' },
   'Aspirateur Brosse principale': { en: 'Vacuum Main brush', de: 'Staubsauger Hauptbürste', nl: 'Stofzuiger Hoofdborstel', it: 'Aspirapolvere Spazzola principale', es: 'Aspiradora Cepillo principal', pl: 'Odkurzacz Szczotka główna' },
   'Aspirateur Durée totale de nettoyage': { en: 'Vacuum Total cleaning time', de: 'Staubsauger Gesamtreinigungszeit', nl: 'Stofzuiger Totale schoonmaaktijd', it: 'Aspirapolvere Tempo totale di pulizia', es: 'Aspiradora Tiempo total de limpieza', pl: 'Odkurzacz Łączny czas sprzątania' },
+  "Aspirateur Débit d'eau": { en: 'Vacuum Water flow', de: 'Staubsauger Wasserdurchfluss', nl: 'Stofzuiger Waterstroom', it: 'Aspirapolvere Flusso d’acqua', es: 'Aspiradora Caudal de agua', pl: 'Odkurzacz Przepływ wody' },
   'Aspirateur Détection tapis': { en: 'Vacuum Carpet detection', de: 'Staubsauger Teppicherkennung', nl: 'Stofzuiger Tapijtdetectie', it: 'Aspirapolvere Rilevamento tappeti', es: 'Aspiradora Detección de alfombras', pl: 'Odkurzacz Wykrywanie dywanów' },
   'Aspirateur Filtre': { en: 'Vacuum Filter', de: 'Staubsauger Filter', nl: 'Stofzuiger Filter', it: 'Aspirapolvere Filtro', es: 'Aspiradora Filtro', pl: 'Odkurzacz Filtr' },
   'Aspirateur Mode avancé': { en: 'Vacuum Advanced mode', de: 'Staubsauger Erweiterter Modus', nl: 'Stofzuiger Geavanceerde modus', it: 'Aspirapolvere Modalità avanzata', es: 'Aspiradora Modo avanzado', pl: 'Odkurzacz Tryb zaawansowany' },
@@ -124,14 +139,21 @@ const APPAREILS = {
   'Aspirateur Surface nettoyée': { en: 'Vacuum Cleaned area', de: 'Staubsauger Gereinigte Fläche', nl: 'Stofzuiger Schoongemaakt oppervlak', it: 'Aspirapolvere Superficie pulita', es: 'Aspiradora Superficie limpiada', pl: 'Odkurzacz Posprzątana powierzchnia' },
   'Aspirateur Surface totale nettoyée': { en: 'Vacuum Total cleaned area', de: 'Staubsauger Gesamte gereinigte Fläche', nl: 'Stofzuiger Totaal schoongemaakt oppervlak', it: 'Aspirapolvere Superficie totale pulita', es: 'Aspiradora Superficie total limpiada', pl: 'Odkurzacz Łączna posprzątana powierzchnia' },
   'Avant mise à jour': { en: 'Before update', de: 'Vor dem Update', nl: 'Voor de update', it: 'Prima dell’aggiornamento', es: 'Antes de actualizar', pl: 'Przed aktualizacją' },
+  'Baie vitrée': { en: 'Patio door', de: 'Terrassentür', nl: 'Schuifpui', it: 'Portafinestra', es: 'Ventanal', pl: 'Drzwi tarasowe' },
   'Basilic': { en: 'Basil', de: 'Basilikum', nl: 'Basilicum', it: 'Basilico', es: 'Albahaca', pl: 'Bazylia' },
   'Basilic conductivité': { en: 'Basil conductivity', de: 'Basilikum Leitfähigkeit', nl: 'Basilicum geleidbaarheid', it: 'Basilico conducibilità', es: 'Albahaca conductividad', pl: 'Bazylia przewodność' },
   'Basilic humidité du sol': { en: 'Basil soil moisture', de: 'Basilikum Bodenfeuchte', nl: 'Basilicum bodemvochtigheid', it: 'Basilico umidità del terreno', es: 'Albahaca humedad del suelo', pl: 'Bazylia wilgotność gleby' },
   'Basilic lumière': { en: 'Basil light', de: 'Basilikum Licht', nl: 'Basilicum licht', it: 'Basilico luce', es: 'Albahaca luz', pl: 'Bazylia światło' },
   'Basilic pile': { en: 'Basil battery', de: 'Basilikum Batterie', nl: 'Basilicum batterij', it: 'Basilico batteria', es: 'Albahaca batería', pl: 'Bazylia bateria' },
   'Basilic température': { en: 'Basil temperature', de: 'Basilikum Temperatur', nl: 'Basilicum temperatuur', it: 'Basilico temperatura', es: 'Albahaca temperatura', pl: 'Bazylia temperatura' },
+  'Batterie maison': { en: 'Home battery', de: 'Hausbatterie', nl: 'Thuisbatterij', it: 'Batteria di casa', es: 'Batería de casa', pl: 'Bateria domowa' },
+  'Batterie niveau': { en: 'Battery level', de: 'Batteriestand', nl: 'Batterijniveau', it: 'Livello batteria', es: 'Nivel de batería', pl: 'Poziom baterii' },
+  'Borne de recharge': { en: 'Charging station', de: 'Ladestation', nl: 'Laadpaal', it: 'Stazione di ricarica', es: 'Punto de recarga', pl: 'Stacja ładowania' },
   'Bouton Cuisine': { en: 'Kitchen button', de: 'Taster Küche', nl: 'Knop keuken', it: 'Pulsante cucina', es: 'Botón cocina', pl: 'Przycisk kuchnia' },
+  'Boîtier TV': { en: 'TV box', de: 'TV-Box', nl: 'Tv-box', it: 'Box TV', es: 'Reproductor de TV', pl: 'Przystawka TV' },
+  'Café avec Sam': { en: 'Coffee with Sam', de: 'Kaffee mit Sam', nl: 'Koffie met Sam', it: 'Caffè con Sam', es: 'Café con Sam', pl: 'Kawa z Samem' },
   'Calendrier maison': { en: 'Home calendar', de: 'Kalender Zuhause', nl: 'Agenda thuis', it: 'Calendario di casa', es: 'Calendario de casa', pl: 'Kalendarz domowy' },
+  'Caméra': { en: 'Camera', de: 'Kamera', nl: 'Camera', it: 'Telecamera', es: 'Cámara', pl: 'Kamera' },
   'Caméra entrée': { en: 'Entrance camera', de: 'Kamera Eingang', nl: 'Camera entree', it: 'Telecamera ingresso', es: 'Cámara entrada', pl: 'Kamera wejście' },
   'Caméra entrée Détection de mouvement': { en: 'Entrance camera Motion detection', de: 'Kamera Eingang Bewegungserkennung', nl: 'Camera entree Bewegingsdetectie', it: 'Telecamera ingresso Rilevamento movimento', es: 'Cámara entrada Detección de movimiento', pl: 'Kamera wejście Wykrywanie ruchu' },
   'Caméra entrée Détection des pleurs': { en: 'Entrance camera Crying detection', de: 'Kamera Eingang Weinerkennung', nl: 'Camera entree Huildetectie', it: 'Telecamera ingresso Rilevamento pianto', es: 'Cámara entrada Detección de llanto', pl: 'Kamera wejście Wykrywanie płaczu' },
@@ -146,15 +168,21 @@ const APPAREILS = {
   'Consommation du jour': { en: 'Today’s consumption', de: 'Verbrauch heute', nl: 'Verbruik vandaag', it: 'Consumo di oggi', es: 'Consumo de hoy', pl: 'Zużycie dzisiaj' },
   'Consommation heures creuses': { en: 'Off-peak consumption', de: 'Verbrauch Nebenzeit', nl: 'Verbruik daltarief', it: 'Consumo fuori punta', es: 'Consumo en horas valle', pl: 'Zużycie poza szczytem' },
   'Consommation heures pleines': { en: 'Peak consumption', de: 'Verbrauch Hauptzeit', nl: 'Verbruik piektarief', it: 'Consumo di punta', es: 'Consumo en horas punta', pl: 'Zużycie w szczycie' },
+  'Contrôle chaudière': { en: 'Boiler service', de: 'Heizungswartung', nl: 'Onderhoud cv-ketel', it: 'Controllo caldaia', es: 'Revisión de la caldera', pl: 'Przegląd kotła' },
+  'Courses': { en: 'Shopping', de: 'Einkäufe', nl: 'Boodschappen', it: 'Spesa', es: 'Compras', pl: 'Zakupy' },
   'Croquettes distribuées aujourd’hui': { en: 'Kibble served today', de: 'Heute ausgegebenes Futter', nl: 'Vandaag gegeven brokken', it: 'Crocchette erogate oggi', es: 'Pienso servido hoy', pl: 'Karma wydana dzisiaj' },
+  'Croquettes du chat': { en: 'Cat food', de: 'Katzenfutter', nl: 'Kattenbrokjes', it: 'Crocchette del gatto', es: 'Pienso del gato', pl: 'Karma dla kota' },
   'Distribuer': { en: 'Serve', de: 'Ausgeben', nl: 'Geven', it: 'Eroga', es: 'Servir', pl: 'Wydaj' },
   'Délestage du chauffe-eau': { en: 'Water heater load shedding', de: 'Lastabwurf Warmwasserspeicher', nl: 'Afschakeling boiler', it: 'Distacco dello scaldacqua', es: 'Deslastre del calentador', pl: 'Odłączanie bojlera' },
   'Détecteur de fumée cuisine': { en: 'Kitchen smoke detector', de: 'Rauchmelder Küche', nl: 'Rookmelder keuken', it: 'Rilevatore di fumo cucina', es: 'Detector de humo cocina', pl: 'Czujnik dymu kuchnia' },
   'Détecteur de fumée entrée': { en: 'Entrance smoke detector', de: 'Rauchmelder Eingang', nl: 'Rookmelder entree', it: 'Rilevatore di fumo ingresso', es: 'Detector de humo entrada', pl: 'Czujnik dymu wejście' },
   'Détecteur de monoxyde salon': { en: 'Living room CO detector', de: 'CO-Melder Wohnzimmer', nl: 'CO-melder woonkamer', it: 'Rilevatore di CO soggiorno', es: 'Detector de CO salón', pl: 'Czujnik czadu salon' },
+  'Echo de la cuisine': { en: 'Kitchen Echo', de: 'Echo Küche', nl: 'Echo keuken', it: 'Echo cucina', es: 'Echo cocina', pl: 'Echo kuchnia' },
+  'Enceinte': { en: 'Speaker', de: 'Lautsprecher', nl: 'Speaker', it: 'Diffusore', es: 'Altavoz', pl: 'Głośnik' },
   'Enceinte salon': { en: 'Living room speaker', de: 'Lautsprecher Wohnzimmer', nl: 'Speaker woonkamer', it: 'Diffusore soggiorno', es: 'Altavoz salón', pl: 'Głośnik salon' },
   'Fenêtre chambre': { en: 'Bedroom window', de: 'Fenster Schlafzimmer', nl: 'Raam slaapkamer', it: 'Finestra camera', es: 'Ventana dormitorio', pl: 'Okno sypialnia' },
   'Fenêtre salon': { en: 'Living room window', de: 'Fenster Wohnzimmer', nl: 'Raam woonkamer', it: 'Finestra soggiorno', es: 'Ventana salón', pl: 'Okno salon' },
+  'Fermer les volets du bureau': { en: 'Close the office blinds', de: 'Rollläden im Büro schließen', nl: 'Rolluiken in het kantoor sluiten', it: 'Chiudere le tapparelle dello studio', es: 'Cerrar las persianas del despacho', pl: 'Zamknąć rolety w biurze' },
   'Fuite sous l’évier': { en: 'Leak under the sink', de: 'Leck unter der Spüle', nl: 'Lekkage onder de gootsteen', it: 'Perdita sotto il lavello', es: 'Fuga bajo el fregadero', pl: 'Wyciek pod zlewem' },
   'Injection du jour': { en: 'Today’s export', de: 'Einspeisung heute', nl: 'Teruglevering vandaag', it: 'Immissione di oggi', es: 'Inyección de hoy', pl: 'Oddanie dzisiaj' },
   'Interrupteur Chambre': { en: 'Bedroom switch', de: 'Schalter Schlafzimmer', nl: 'Schakelaar slaapkamer', it: 'Interruttore camera', es: 'Interruptor dormitorio', pl: 'Włącznik sypialnia' },
@@ -162,20 +190,33 @@ const APPAREILS = {
   'Invité': { en: 'Guest', de: 'Gast', nl: 'Gast', it: 'Ospite', es: 'Invitado', pl: 'Gość' },
   'Je rentre': { en: 'Coming home', de: 'Ich komme heim', nl: 'Ik kom thuis', it: 'Torno a casa', es: 'Vuelvo a casa', pl: 'Wracam' },
   'Lave-linge terminé': { en: 'Washing machine finished', de: 'Waschmaschine fertig', nl: 'Wasmachine klaar', it: 'Lavatrice finita', es: 'Lavadora terminada', pl: 'Pralka skończyła' },
+  'Liste partagée': { en: 'Shared list', de: 'Geteilte Liste', nl: 'Gedeelde lijst', it: 'Lista condivisa', es: 'Lista compartida', pl: 'Lista wspólna' },
+  'Livrable client': { en: 'Client deliverable', de: 'Abgabe beim Kunden', nl: 'Oplevering klant', it: 'Consegna al cliente', es: 'Entrega al cliente', pl: 'Oddanie projektu klientowi' },
+  'Livraison colis': { en: 'Parcel delivery', de: 'Paketzustellung', nl: 'Pakketbezorging', it: 'Consegna pacco', es: 'Entrega de paquete', pl: 'Dostawa paczki' },
   'Lumière couloir la nuit': { en: 'Hallway light at night', de: 'Flurlicht bei Nacht', nl: 'Ganglicht ’s nachts', it: 'Luce corridoio di notte', es: 'Luz del pasillo de noche', pl: 'Światło korytarza w nocy' },
+  'Maison': { en: 'Home', de: 'Zu Hause', nl: 'Huis', it: 'Casa', es: 'Casa', pl: 'Dom' },
   'Mouvement entrée': { en: 'Entrance motion', de: 'Bewegung Eingang', nl: 'Beweging entree', it: 'Movimento ingresso', es: 'Movimiento entrada', pl: 'Ruch wejście' },
   'Météo': { en: 'Weather', de: 'Wetter', nl: 'Weer', it: 'Meteo', es: 'Tiempo', pl: 'Pogoda' },
   'Nuit': { en: 'Night', de: 'Nacht', nl: 'Nacht', it: 'Notte', es: 'Noche', pl: 'Noc' },
   'Part fossile du réseau': { en: 'Fossil share of the grid', de: 'Fossiler Anteil im Netz', nl: 'Fossiel aandeel van het net', it: 'Quota fossile della rete', es: 'Parte fósil de la red', pl: 'Udział paliw kopalnych w sieci' },
+  'Pelouse avant': { en: 'Front lawn', de: 'Rasen vorne', nl: 'Voorgazon', it: 'Prato davanti', es: 'Césped delantero', pl: 'Trawnik z przodu' },
   'Pile porte entrée': { en: 'Entrance door battery', de: 'Batterie Eingangstür', nl: 'Batterij voordeur', it: 'Batteria porta ingresso', es: 'Batería puerta entrada', pl: 'Bateria drzwi wejściowych' },
   'Plafonnier': { en: 'Ceiling light', de: 'Deckenleuchte', nl: 'Plafondlamp', it: 'Plafoniera', es: 'Plafón', pl: 'Lampa sufitowa' },
+  'Point d’équipe': { en: 'Team meeting', de: 'Teambesprechung', nl: 'Teamoverleg', it: 'Riunione di team', es: 'Reunión de equipo', pl: 'Spotkanie zespołu' },
+  // L'apostrophe droite du capteur de la porte, la courbe de sa serrure : deux clés.
+  "Porte d'entrée": { en: 'Front door', de: 'Eingangstür', nl: 'Voordeur', it: 'Porta d’ingresso', es: 'Puerta de entrada', pl: 'Drzwi wejściowe' },
+  'Porte de garage': { en: 'Garage door', de: 'Garagentor', nl: 'Garagedeur', it: 'Porta del garage', es: 'Puerta del garaje', pl: 'Brama garażowa' },
+  'Porte de service': { en: 'Back door', de: 'Hintertür', nl: 'Achterdeur', it: 'Porta di servizio', es: 'Puerta de servicio', pl: 'Tylne drzwi' },
   'Porte d’entrée': { en: 'Front door', de: 'Eingangstür', nl: 'Voordeur', it: 'Porta d’ingresso', es: 'Puerta de entrada', pl: 'Drzwi wejściowe' },
   'Portion du distributeur': { en: 'Feeder portion', de: 'Portion des Futterautomaten', nl: 'Portie voederautomaat', it: 'Porzione del distributore', es: 'Ración del dispensador', pl: 'Porcja podajnika' },
+  'Prendre les médicaments': { en: 'Take the medication', de: 'Medikamente nehmen', nl: 'Medicijnen innemen', it: 'Prendere le medicine', es: 'Tomar los medicamentos', pl: 'Wziąć leki' },
   'Production du jour': { en: 'Today’s production', de: 'Erzeugung heute', nl: 'Productie vandaag', it: 'Produzione di oggi', es: 'Producción de hoy', pl: 'Produkcja dzisiaj' },
   'Production solaire': { en: 'Solar production', de: 'Solarerzeugung', nl: 'Zonneproductie', it: 'Produzione solare', es: 'Producción solar', pl: 'Produkcja słoneczna' },
+  "Qualité de l'air": { en: 'Air quality', de: 'Luftqualität', nl: 'Luchtkwaliteit', it: 'Qualità dell’aria', es: 'Calidad del aire', pl: 'Jakość powietrza' },
   'Radiateur bureau hors gel': { en: 'Office radiator frost protection', de: 'Heizkörper Büro Frostschutz', nl: 'Radiator kantoor vorstbeveiliging', it: 'Radiatore studio antigelo', es: 'Radiador despacho antihielo', pl: 'Grzejnik biuro ochrona przed mrozem' },
   'Radiateur chambre': { en: 'Bedroom radiator', de: 'Heizkörper Schlafzimmer', nl: 'Radiator slaapkamer', it: 'Radiatore camera', es: 'Radiador dormitorio', pl: 'Grzejnik sypialnia' },
   'Radiateur salon': { en: 'Living room radiator', de: 'Heizkörper Wohnzimmer', nl: 'Radiator woonkamer', it: 'Radiatore soggiorno', es: 'Radiador salón', pl: 'Grzejnik salon' },
+  'Ramassage des poubelles': { en: 'Bin collection', de: 'Müllabfuhr', nl: 'Afvalophaling', it: 'Ritiro dei rifiuti', es: 'Recogida de basura', pl: 'Wywóz śmieci' },
   'Réseau': { en: 'Grid', de: 'Netz', nl: 'Net', it: 'Rete', es: 'Red', pl: 'Sieć' },
   'Réservoir de croquettes': { en: 'Kibble tank', de: 'Futterbehälter', nl: 'Brokkenreservoir', it: 'Serbatoio crocchette', es: 'Depósito de pienso', pl: 'Zbiornik karmy' },
   'Réveil': { en: 'Wake up', de: 'Aufwachen', nl: 'Opstaan', it: 'Sveglia', es: 'Despertar', pl: 'Pobudka' },
@@ -184,16 +225,20 @@ const APPAREILS = {
   'Sirène intérieure': { en: 'Indoor siren', de: 'Innensirene', nl: 'Binnensirene', it: 'Sirena interna', es: 'Sirena interior', pl: 'Syrena wewnętrzna' },
   'Soleil': { en: 'Sun', de: 'Sonne', nl: 'Zon', it: 'Sole', es: 'Sol', pl: 'Słońce' },
   'Sonnette vers le téléphone': { en: 'Doorbell to phone', de: 'Türklingel aufs Handy', nl: 'Deurbel naar telefoon', it: 'Campanello al telefono', es: 'Timbre al teléfono', pl: 'Dzwonek na telefon' },
+  'Sortir le linge': { en: 'Take out the laundry', de: 'Wäsche herausnehmen', nl: 'Was uit de machine halen', it: 'Tirare fuori il bucato', es: 'Sacar la ropa', pl: 'Wyjąć pranie' },
   'Surplus': { en: 'Surplus', de: 'Überschuss', nl: 'Overschot', it: 'Surplus', es: 'Excedente', pl: 'Nadwyżka' },
+  'TV du salon': { en: 'Living room TV', de: 'Fernseher Wohnzimmer', nl: 'Tv woonkamer', it: 'TV soggiorno', es: 'TV salón', pl: 'Telewizor salon' },
   'Thermostat chambre': { en: 'Bedroom thermostat', de: 'Thermostat Schlafzimmer', nl: 'Thermostaat slaapkamer', it: 'Termostato camera', es: 'Termostato dormitorio', pl: 'Termostat sypialnia' },
   'Thermostat salon': { en: 'Living room thermostat', de: 'Thermostat Wohnzimmer', nl: 'Thermostaat woonkamer', it: 'Termostato soggiorno', es: 'Termostato salón', pl: 'Termostat salon' },
   'Tondeuse': { en: 'Mower', de: 'Mähroboter', nl: 'Grasmaaier', it: 'Tosaerba', es: 'Cortacésped', pl: 'Kosiarka' },
   'Tondeuse Cycles de batterie': { en: 'Mower Battery cycles', de: 'Mähroboter Akkuzyklen', nl: 'Grasmaaier Accucycli', it: 'Tosaerba Cicli batteria', es: 'Cortacésped Ciclos de batería', pl: 'Kosiarka Cykle baterii' },
+  "Tondeuse Durée d'utilisation des lames": { en: 'Mower Blade usage time', de: 'Mähroboter Nutzungsdauer der Klingen', nl: 'Grasmaaier Gebruiksduur messen', it: 'Tosaerba Tempo di utilizzo lame', es: 'Cortacésped Tiempo de uso de cuchillas', pl: 'Kosiarka Czas użytkowania ostrzy' },
   'Tondeuse Détection de pluie': { en: 'Mower Rain detection', de: 'Mähroboter Regenerkennung', nl: 'Grasmaaier Regendetectie', it: 'Tosaerba Rilevamento pioggia', es: 'Cortacésped Detección de lluvia', pl: 'Kosiarka Wykrywanie deszczu' },
   'Tondeuse En charge': { en: 'Mower Charging', de: 'Mähroboter Lädt', nl: 'Grasmaaier Opladen', it: 'Tosaerba In carica', es: 'Cortacésped Cargando', pl: 'Kosiarka Ładowanie' },
   'Tondeuse Hauteur des lames': { en: 'Mower Blade height', de: 'Mähroboter Schnitthöhe', nl: 'Grasmaaier Maaihoogte', it: 'Tosaerba Altezza lame', es: 'Cortacésped Altura de cuchillas', pl: 'Kosiarka Wysokość ostrzy' },
   'Tondeuse Kilométrage total': { en: 'Mower Total distance', de: 'Mähroboter Gesamtstrecke', nl: 'Grasmaaier Totale afstand', it: 'Tosaerba Distanza totale', es: 'Cortacésped Distancia total', pl: 'Kosiarka Łączny dystans' },
   'Tondeuse Micrologiciel': { en: 'Mower Firmware', de: 'Mähroboter Firmware', nl: 'Grasmaaier Firmware', it: 'Tosaerba Firmware', es: 'Cortacésped Firmware', pl: 'Kosiarka Oprogramowanie' },
+  "Tondeuse Seuil d'usure des lames": { en: 'Mower Blade wear threshold', de: 'Mähroboter Verschleißgrenze der Klingen', nl: 'Grasmaaier Slijtagedrempel messen', it: 'Tosaerba Soglia di usura lame', es: 'Cortacésped Umbral de desgaste de cuchillas', pl: 'Kosiarka Próg zużycia ostrzy' },
   'Tondeuse Signal Wi-Fi': { en: 'Mower Wi-Fi signal', de: 'Mähroboter WLAN-Signal', nl: 'Grasmaaier Wifi-signaal', it: 'Tosaerba Segnale Wi-Fi', es: 'Cortacésped Señal Wi-Fi', pl: 'Kosiarka Sygnał Wi-Fi' },
   'Tondeuse Surface': { en: 'Mower Area', de: 'Mähroboter Fläche', nl: 'Grasmaaier Oppervlak', it: 'Tosaerba Superficie', es: 'Cortacésped Superficie', pl: 'Kosiarka Powierzchnia' },
   'Tondeuse Sécurité faune': { en: 'Mower Wildlife safety', de: 'Mähroboter Tierschutz', nl: 'Grasmaaier Dierbeveiliging', it: 'Tosaerba Sicurezza fauna', es: 'Cortacésped Seguridad fauna', pl: 'Kosiarka Ochrona zwierząt' },
@@ -207,6 +252,7 @@ const APPAREILS = {
   'Variateur Salon': { en: 'Living room dimmer', de: 'Dimmer Wohnzimmer', nl: 'Dimmer woonkamer', it: 'Dimmer soggiorno', es: 'Regulador salón', pl: 'Ściemniacz salon' },
   'Veilleuse chambre au coucher': { en: 'Bedroom night light at bedtime', de: 'Nachtlicht Schlafzimmer zur Schlafenszeit', nl: 'Nachtlampje slaapkamer bij bedtijd', it: 'Luce notturna camera all’ora di dormire', es: 'Luz nocturna dormitorio al acostarse', pl: 'Lampka nocna sypialnia przed snem' },
   'Vigilance météo': { en: 'Weather warning', de: 'Wetterwarnung', nl: 'Weerwaarschuwing', it: 'Allerta meteo', es: 'Aviso meteorológico', pl: 'Ostrzeżenie pogodowe' },
+  'Visite du ramoneur': { en: 'Chimney sweep visit', de: 'Besuch des Schornsteinfegers', nl: 'Bezoek van de schoorsteenveger', it: 'Visita dello spazzacamino', es: 'Visita del deshollinador', pl: 'Wizyta kominiarza' },
   'Volet chambre': { en: 'Bedroom blind', de: 'Rollladen Schlafzimmer', nl: 'Rolluik slaapkamer', it: 'Tapparella camera', es: 'Persiana dormitorio', pl: 'Roleta sypialnia' },
   'Volet cuisine': { en: 'Kitchen blind', de: 'Rollladen Küche', nl: 'Rolluik keuken', it: 'Tapparella cucina', es: 'Persiana cocina', pl: 'Roleta kuchnia' },
   'Volet salon': { en: 'Living room blind', de: 'Rollladen Wohnzimmer', nl: 'Rolluik woonkamer', it: 'Tapparella soggiorno', es: 'Persiana salón', pl: 'Roleta salon' },
@@ -350,7 +396,11 @@ function etatsInitiaux() {
       supported_features: 8828, fan_speed: 'max_plus',
       fan_speed_list: ['quiet', 'normal', 'max', 'max_plus'],
       // Les pieces que le robot annonce, avec leurs segments (vue du robot, ADR 0042).
-      rooms: { salon: 1, cuisine: 2, bureau: 3, chambre: 4, 'entrée': 5 } }),
+      // En minuscules comme un robot les annonce, dans la langue de la démo :
+      // la fiche les met en forme (`vacNom`), et « salon » restait « Salon »
+      // dans une démo anglaise (relecture du 03/10).
+      rooms: Object.fromEntries([['Salon', 1], ['Cuisine', 2], ['Bureau', 3], ['Chambre', 4], ['Entrée', 5]]
+        .map(([nom, segment]) => [lieu(nom).toLowerCase(), segment])) }),
     // Ses soeurs : pieces d'usure en %, surface de la session, compteurs, reglages.
     'sensor.aspirateur_filtre': s(32, { friendly_name: 'Aspirateur Filtre', unit_of_measurement: '%' }),
     'sensor.aspirateur_brosse_principale': s(58, { friendly_name: 'Aspirateur Brosse principale', unit_of_measurement: '%' }),
@@ -417,9 +467,9 @@ function etatsInitiaux() {
     'device_tracker.telephone_de_camille': s('home', { friendly_name: 'Téléphone de Camille', source_type: 'gps' }),
     'climate.salon': s('heat', { friendly_name: 'Thermostat salon', current_temperature: 21.4, temperature: 22, hvac_action: 'heating', hvac_modes: ['off', 'heat'], min_temp: 7, max_temp: 30, target_temp_step: .5 }),
     'climate.chambre': s('off', { friendly_name: 'Thermostat chambre', current_temperature: 19.6, temperature: 19, hvac_action: 'off', hvac_modes: ['off', 'heat'], min_temp: 7, max_temp: 30, target_temp_step: .5 }),
-    'cover.volet_salon': s('open', { friendly_name: 'Volet salon', current_position: 100, supported_features: 15 }),
-    'cover.volet_cuisine': s('open', { friendly_name: 'Volet cuisine', current_position: 60, supported_features: 15 }),
-    'cover.volet_chambre': s('closed', { friendly_name: 'Volet chambre', current_position: 0, supported_features: 15 }),
+    'cover.volet_salon': s('open', { friendly_name: 'Volet salon', current_position: 100, supported_features: 15, device_class: 'shutter' }),
+    'cover.volet_cuisine': s('open', { friendly_name: 'Volet cuisine', current_position: 60, supported_features: 15, device_class: 'shutter' }),
+    'cover.volet_chambre': s('closed', { friendly_name: 'Volet chambre', current_position: 0, supported_features: 15, device_class: 'shutter' }),
     'scene.reveil': s('unknown', { friendly_name: 'Réveil' }),
     'scene.je_rentre': s('unknown', { friendly_name: 'Je rentre' }),
     'scene.cinema': s('unknown', { friendly_name: 'Cinéma' }),
@@ -447,6 +497,12 @@ function configDemo() {
      * la popup ait quelque chose a raconter. Le nom vaut ce qu'il dit : c'est
      * un reglage, chacun met le sien. */
     loggia_assistant: 'demo',
+    /* La démo a toujours sa rangée de scénarios sur l'Accueil : elle le sait
+     * d'avance, comme un navigateur qui y est déjà passé (lot 14 de l'audit
+     * du 03/10, `rangeeVue` dans App.jsx). Son magasin mémoire repart vide à
+     * chaque chargement : sans cette ligne, la rangée poussait les pièces de
+     * 94 px à chaque visite. */
+    'loggia-scnrangee': 1,
     // Les alertes de surete : un telephone choisi, les familles de danger
     // allumees. La demo n'envoie rien — il n'y a pas de composant.
     loggia_alertes: { actif: true, service: 'mobile_app_telephone_de_camille', cooldown_min: 5,
@@ -822,11 +878,32 @@ function interAffecter(msg) {
   return INTER_AFF;
 }
 
+/* Une ligne de journal telle que `regles.noter` l'écrit (ADR 0070) : un champ
+ * composé se donne par ses PARTIES — `[[gabarit, args], …]` — et la ligne
+ * garde, à côté du français rendu, le `g` que l'écran traduit. Écrits en
+ * clair, « soleil à 225° », « mouvement : Entrée » ou « 3 min sans
+ * mouvement » n'étaient la clé de rien : `tr` les rendait tels quels, en
+ * français dans les sept langues, nom de pièce compris (relecture du 03/10).
+ * Le français rendu compte aussi : la vue Veilles y lit le nom du capteur. */
+function ligneJournal(champs) {
+  const ligne = { ...champs };
+  const g = {};
+  ['quoi', 'motif', 'detail'].forEach((champ) => {
+    if (!Array.isArray(champs[champ])) return;
+    g[champ] = champs[champ];
+    ligne[champ] = champs[champ].map(([gabarit, args]) => Object.keys(args)
+      .reduce((texte, k) => texte.split('{' + k + '}').join(String(args[k])), gabarit)).join(' · ');
+  });
+  if (Object.keys(g).length) ligne.g = g;
+  return ligne;
+}
+
 /* Regles de volets : le planning arme, la protection solaire reglee sur deux
  * facades, le vent au repos. De quoi voir la page telle qu'elle sera une fois
  * remplie, plutot qu'un formulaire vide. */
 const VOL_CFG = {
   planning: { actif: true, mode: 'auto', ouverture: { decalage: 15 }, fermeture: { decalage: -20 }, jours: [0, 1, 2, 3, 4, 5, 6], volets: { 'cover.chambre': { ouverture: 90, fermeture: null } } },
+  velux: { actif: false },
   soleil: {
     actif: true, position: 30, elevation_min: 15, temp_min: 25,
     temp_entite: 'sensor.exterieur_temperature',
@@ -847,8 +924,9 @@ function voletsDemo(states) {
     // Les prochains rendez-vous du planning : demain matin, ce soir.
     prochains: { ouverture: { 15: new Date(new Date().setHours(31, 48, 0, 0)).toISOString() }, fermeture: { '-20': new Date(new Date().setHours(20, 24, 0, 0)).toISOString() } },
     journal: [
-      { module: 'volets', regle: 'soleil', quoi: 'proteger', cibles: ['cover.salon'], n: 1, motif: 'soleil à 225°', detail: '', simule: false, ts: Date.now() / 1000 - 900 },
-      { module: 'volets', regle: 'planning', quoi: 'ouvrir', cibles: ['cover.salon', 'cover.cuisine', 'cover.chambre'], n: 3, motif: 'lever +15 min', detail: '', simule: false, ts: Date.now() / 1000 - 27000 },
+      // Les gabarits que volets.py écrit, parties comprises (relecture du 03/10).
+      ligneJournal({ module: 'volets', regle: 'soleil', quoi: 'proteger', cibles: ['cover.salon'], n: 1, motif: [['soleil a {a}°', { a: 225 }]], detail: '', simule: false, ts: Date.now() / 1000 - 900 }),
+      ligneJournal({ module: 'volets', regle: 'planning', quoi: 'ouvrir', cibles: ['cover.salon', 'cover.cuisine', 'cover.chambre'], n: 3, motif: [['lever du soleil {d} min', { d: '+15' }]], detail: '', simule: false, ts: Date.now() / 1000 - 27000 }),
     ],
   };
 }
@@ -938,19 +1016,24 @@ function superviseurDemo(msg) {
 }
 
 /* Le journal d'erreurs de Home Assistant, et le logbook des mises a jour : de
- * quoi montrer les trois niveaux du journal de la vue Systeme. */
+ * quoi montrer les trois niveaux du journal de la vue Systeme.
+ * Relecture du 03/10 : messages en ANGLAIS, dans toutes les langues de la démo.
+ * Home Assistant écrit ainsi son journal, quelle que soit la langue de l'écran,
+ * et la vue Système affiche `message[0]` tel quel : écrits en français, ils
+ * passaient sous des titres anglais (mqtt, rest, zha…), même en polonais. Pas
+ * d'etiquette() : une vraie installation ne les traduit pas. */
 function erreursDemo() {
   const ilYA = (min) => (Date.now() - min * 60000) / 1000;
   return [
-    { name: 'homeassistant.components.mqtt.client', message: ['Connexion au courtier perdue, nouvelle tentative dans 10 s'], level: 'WARNING', timestamp: ilYA(95), first_occurred: ilYA(95), count: 1, source: ['components/mqtt/client.py', 712], exception: '' },
-    { name: 'homeassistant.components.rest.data', message: ['Délai dépassé en interrogeant la ressource distante'], level: 'ERROR', timestamp: ilYA(340), first_occurred: ilYA(700), count: 3, source: ['components/rest/data.py', 118], exception: '' },
+    { name: 'homeassistant.components.mqtt.client', message: ['Disconnected from MQTT server core-mosquitto:1883, reconnecting in 10 seconds'], level: 'WARNING', timestamp: ilYA(95), first_occurred: ilYA(95), count: 1, source: ['components/mqtt/client.py', 712], exception: '' },
+    { name: 'homeassistant.components.rest.data', message: ['Timeout while fetching data from the remote resource'], level: 'ERROR', timestamp: ilYA(340), first_occurred: ilYA(700), count: 3, source: ['components/rest/data.py', 118], exception: '' },
     // Assez de lignes pour que le journal DEFILE dans sa carte : c'est ce qu'il y a a montrer.
-    { name: 'homeassistant.components.zha.core.device', message: ['Appareil injoignable, nouvelle tentative'], level: 'WARNING', timestamp: ilYA(180), first_occurred: ilYA(260), count: 4, source: ['components/zha/core/device.py', 301], exception: '' },
-    { name: 'homeassistant.components.recorder.util', message: ['La purge de la base a pris 41 s'], level: 'WARNING', timestamp: ilYA(505), first_occurred: ilYA(505), count: 1, source: ['components/recorder/util.py', 220], exception: '' },
-    { name: 'homeassistant.components.camera', message: ['Flux interrompu, reconnexion'], level: 'WARNING', timestamp: ilYA(640), first_occurred: ilYA(900), count: 6, source: ['components/camera/__init__.py', 512], exception: '' },
-    { name: 'homeassistant.helpers.template', message: ['Le modèle renvoie « unknown » pour un capteur attendu numérique'], level: 'ERROR', timestamp: ilYA(820), first_occurred: ilYA(820), count: 1, source: ['helpers/template.py', 644], exception: '' },
-    { name: 'homeassistant.components.cast.media_player', message: ['Enceinte déconnectée du réseau'], level: 'WARNING', timestamp: ilYA(1010), first_occurred: ilYA(1010), count: 2, source: ['components/cast/media_player.py', 188], exception: '' },
-    { name: 'homeassistant.components.websocket_api.http.connection', message: ['Client déconnecté : file de messages pleine'], level: 'ERROR', timestamp: ilYA(1230), first_occurred: ilYA(1230), count: 1, source: ['components/websocket_api/http.py', 97], exception: '' },
+    { name: 'homeassistant.components.zha.core.device', message: ['Device did not respond, retrying'], level: 'WARNING', timestamp: ilYA(180), first_occurred: ilYA(260), count: 4, source: ['components/zha/core/device.py', 301], exception: '' },
+    { name: 'homeassistant.components.recorder.util', message: ['Purging the database took 41 seconds'], level: 'WARNING', timestamp: ilYA(505), first_occurred: ilYA(505), count: 1, source: ['components/recorder/util.py', 220], exception: '' },
+    { name: 'homeassistant.components.camera', message: ['Stream interrupted, reconnecting'], level: 'WARNING', timestamp: ilYA(640), first_occurred: ilYA(900), count: 6, source: ['components/camera/__init__.py', 512], exception: '' },
+    { name: 'homeassistant.helpers.template', message: ["Template returned 'unknown' where a numeric sensor value was expected"], level: 'ERROR', timestamp: ilYA(820), first_occurred: ilYA(820), count: 1, source: ['helpers/template.py', 644], exception: '' },
+    { name: 'homeassistant.components.cast.media_player', message: ['Speaker disconnected from the network'], level: 'WARNING', timestamp: ilYA(1010), first_occurred: ilYA(1010), count: 2, source: ['components/cast/media_player.py', 188], exception: '' },
+    { name: 'homeassistant.components.websocket_api.http.connection', message: ['Client unable to keep up with pending messages, disconnecting'], level: 'ERROR', timestamp: ilYA(1230), first_occurred: ilYA(1230), count: 1, source: ['components/websocket_api/http.py', 97], exception: '' },
   ];
 }
 
@@ -1048,12 +1131,17 @@ function indexDemo(states) {
   return {
     version: 1,
     areas: ZONES.map(([id, name]) => ({ id, name, floor: null, icon: null })),
-    devices: [{ id: 'tv_salon', name: 'TV du salon', area: 'salon', manufacturer: 'Démo', model: 'Boîtier TV', firmware: null, via: null, entry_type: null, integration: 'apple_tv' },
-      { id: 'echo_cuisine', name: 'Echo de la cuisine', area: 'cuisine', manufacturer: 'Démo', model: 'Enceinte', firmware: null, via: null, entry_type: null, integration: 'alexa_media' },
-      { id: 'cam_entree', name: 'Caméra entrée', area: 'entree', manufacturer: 'Démo', model: 'Caméra', firmware: null, via: null, entry_type: null, integration: 'demo' },
+    /* Le nom d'un APPAREIL passe par la même table que ceux de ses entités
+     * (audit du 03/10) : `cameraModes` et `decrireSoeurs` le retirent en tête
+     * du nom de chaque entité. Resté « Tondeuse » devant « Mower Zone Front
+     * lawn », il ne se retirait plus : la puce de zone portait le nom entier,
+     * et la fiche titrait en français. Le modèle aussi, qu'elle affiche. */
+    devices: [{ id: 'tv_salon', name: etiquette('TV du salon'), area: 'salon', manufacturer: 'Démo', model: etiquette('Boîtier TV'), firmware: null, via: null, entry_type: null, integration: 'apple_tv' },
+      { id: 'echo_cuisine', name: etiquette('Echo de la cuisine'), area: 'cuisine', manufacturer: 'Démo', model: etiquette('Enceinte'), firmware: null, via: null, entry_type: null, integration: 'alexa_media' },
+      { id: 'cam_entree', name: etiquette('Caméra entrée'), area: 'entree', manufacturer: 'Démo', model: etiquette('Caméra'), firmware: null, via: null, entry_type: null, integration: 'demo' },
       { id: 'sysmon', name: 'System Monitor', area: null, manufacturer: 'Démo', model: 'System Monitor', firmware: null, via: null, entry_type: 'service', integration: 'systemmonitor' },
-      { id: 'robot_aspirateur', name: 'Aspirateur', area: null, manufacturer: 'Démo', model: 'Orbit V3', firmware: null, via: null, entry_type: null, integration: 'ecovacs' },
-      { id: 'robot_tondeuse', name: 'Tondeuse', area: null, manufacturer: 'Démo', model: 'Meadow M2', firmware: null, via: null, entry_type: null, integration: 'mammotion' }],
+      { id: 'robot_aspirateur', name: etiquette('Aspirateur'), area: null, manufacturer: 'Démo', model: 'Orbit V3', firmware: null, via: null, entry_type: null, integration: 'ecovacs' },
+      { id: 'robot_tondeuse', name: etiquette('Tondeuse'), area: null, manufacturer: 'Démo', model: 'Meadow M2', firmware: null, via: null, entry_type: null, integration: 'mammotion' }],
     entities,
     floors: [],
     services: {},
@@ -1078,9 +1166,11 @@ function presenceDemo() {
     en_attente: false,
     eteintes: [],
     indices: { capteurs: ['binary_sensor.fenetre_chambre', 'binary_sensor.fenetre_salon', 'binary_sensor.porte_entree'],
-      dernier: { entite: 'binary_sensor.porte_entree', nom: "Porte d'entrée", genre: 'ouverture', ts: Date.now() / 1000 - 600 } },
+      // Le nom que le serveur lirait sur l'état, donc traduit comme lui (audit du 03/10).
+      dernier: { entite: 'binary_sensor.porte_entree', nom: etiquette("Porte d'entrée"), genre: 'ouverture', ts: Date.now() / 1000 - 600 } },
     journal: [
-      { module: 'presence', regle: 'depart', quoi: 'reporter', cibles: [], n: 0, motif: "ouverture : Porte d'entrée", detail: '', simule: false, ts: Date.now() / 1000 - 600 },
+      // Le gabarit de presence.py, et le nom que porte l'état du capteur.
+      ligneJournal({ module: 'presence', regle: 'depart', quoi: 'reporter', cibles: [], n: 0, motif: [['ouverture : {nom}', { nom: etiquette("Porte d'entrée") }]], detail: '', simule: false, ts: Date.now() / 1000 - 600 }),
       { module: 'presence', regle: 'retour', quoi: 'rallumer', cibles: ['light.salon', 'light.cuisine'], n: 2, motif: 'retour', detail: '', simule: false, ts: Date.now() / 1000 - 7200 },
       { module: 'presence', regle: 'depart', quoi: 'eteindre', cibles: ['light.salon', 'light.cuisine', 'light.bureau'], n: 3, motif: 'maison vide', detail: '', simule: false, ts: Date.now() / 1000 - 34000 },
     ],
@@ -1103,40 +1193,46 @@ function presencePatch(patch) {
 /* La nuit : la veilleuse d'une chambre reglee, l'extinction du soir armee et
  * la veilleuse mise de cote — c'est l'usage le plus courant, autant le
  * montrer plutot qu'un formulaire vide. */
-const NUI_CFG = {
+/* Paresseux, comme `FEN_CFG()` (audit du 03/10) : la pièce de l'éclairage
+ * nocturne est une CLÉ, comparée au nom de la zone. Bâtie à l'import, elle
+ * restait « Entrée » quand la zone s'appelait « Wejście » : la puce de la
+ * pièce se montrait éteinte, et la toucher en rangeait une seconde. */
+let NUI_CFG_ = null;
+const NUI_CFG = () => (NUI_CFG_ || (NUI_CFG_ = {
   veilleuse: { actif: true, lampes: ['light.chambre'], duree: 30, fondu: 5, depuis: '19:00' },
   coucher: { actif: true, heure: '23:30', sauf: ['light.chambre'], jours: [0, 1, 2, 3, 4, 5, 6] },
-  eclairage: { actif: true, luminosite: 10, duree: 3, pieces: { 'Entrée': { actif: true, capteurs: ['binary_sensor.mouvement_entree'], lampes: ['light.entree'] } } },
-};
+  eclairage: { actif: true, luminosite: 10, duree: 3, pieces: { [lieu('Entrée')]: { actif: true, capteurs: ['binary_sensor.mouvement_entree'], lampes: ['light.entree'] } } },
+}));
 
 function nuitDemo() {
   return {
-    config: NUI_CFG,
+    config: NUI_CFG(),
     en_cours: [],
     eclairees: {},
     journal: [
-      { module: 'nuit', regle: 'eclairage', quoi: 'allumer', cibles: ['light.entree'], n: 1, motif: 'mouvement : Entrée', detail: '', simule: false, ts: Date.now() / 1000 - 30000 },
-      { module: 'nuit', regle: 'eclairage', quoi: 'eteindre', cibles: ['light.entree'], n: 1, motif: '3 min sans mouvement', detail: '', simule: false, ts: Date.now() / 1000 - 29700 },
-      { module: 'nuit', regle: 'veilleuse', quoi: 'eteindre', cibles: ['light.chambre'], n: 1, motif: '30 min', detail: '', simule: false, ts: Date.now() / 1000 - 50000 },
-      { module: 'nuit', regle: 'coucher', quoi: 'eteindre', cibles: ['light.salon', 'light.cuisine'], n: 2, motif: '23:30', detail: '1 sous la main de quelqu’un', simule: false, ts: Date.now() / 1000 - 54000 },
+      // Les gabarits de nuit.py et du socle (« sous la main »), parties comprises.
+      ligneJournal({ module: 'nuit', regle: 'eclairage', quoi: 'allumer', cibles: ['light.entree'], n: 1, motif: [['mouvement : {piece}', { piece: lieu('Entrée') }]], detail: '', simule: false, ts: Date.now() / 1000 - 30000 }),
+      ligneJournal({ module: 'nuit', regle: 'eclairage', quoi: 'eteindre', cibles: ['light.entree'], n: 1, motif: [['{n} min sans mouvement', { n: 3 }]], detail: '', simule: false, ts: Date.now() / 1000 - 29700 }),
+      ligneJournal({ module: 'nuit', regle: 'veilleuse', quoi: 'eteindre', cibles: ['light.chambre'], n: 1, motif: [['{n} min', { n: 30 }]], detail: '', simule: false, ts: Date.now() / 1000 - 50000 }),
+      ligneJournal({ module: 'nuit', regle: 'coucher', quoi: 'eteindre', cibles: ['light.salon', 'light.cuisine'], n: 2, motif: '23:30', detail: [['{n} sous la main de quelqu’un', { n: 1 }]], simule: false, ts: Date.now() / 1000 - 54000 }),
     ],
   };
 }
 
 function nuitPatch(patch) {
   Object.keys(patch || {}).forEach(k => {
-    if (!NUI_CFG[k]) return;
+    if (!NUI_CFG()[k]) return;
     // Les pièces de l'éclairage nocturne arrivent une à la fois, comme sur le serveur.
     if (k === 'eclairage' && patch[k] && patch[k].pieces) {
-      const pieces = { ...(NUI_CFG.eclairage.pieces || {}) };
+      const pieces = { ...(NUI_CFG().eclairage.pieces || {}) };
       Object.keys(patch[k].pieces).forEach(nom => {
         if (patch[k].pieces[nom] === null) delete pieces[nom];
         else pieces[nom] = { ...(pieces[nom] || {}), ...patch[k].pieces[nom] };
       });
-      Object.assign(NUI_CFG[k], patch[k], { pieces });
-    } else Object.assign(NUI_CFG[k], patch[k]);
+      Object.assign(NUI_CFG()[k], patch[k], { pieces });
+    } else Object.assign(NUI_CFG()[k], patch[k]);
   });
-  return NUI_CFG;
+  return NUI_CFG();
 }
 
 /* Les trois veilles : l'air arme, les piles armees, le tarif au repos faute
@@ -1152,10 +1248,13 @@ const VEI_CFG = {
  * main posee sur une lampe (le gel), un volet tenu par la protection
  * solaire, et une ligne simulee — de quoi voir chaque filtre agir. */
 const GELS_DEMO = { 'light.salon': 1260 };
-function reglesDemo(states) {
+/* Exporté pour `tests/demo_noms.test.mjs`, qui lit ce journal tel que l'écran
+ * le reçoit (relecture du 03/10). */
+export function reglesDemo(states) {
   const lignes = [
-    { module: 'interrupteurs', regle: 'Variateur Salon', quoi: 'bouton', cibles: ['light.salon'], n: 1, motif: 'on_press_release → light.turn_on', detail: '', simule: false, ts: Date.now() / 1000 - 540 },
-    { module: 'volets', regle: 'planning', quoi: 'fermer', cibles: ['cover.chambre'], n: 1, motif: 'coucher -20 min', detail: '', simule: true, ts: Date.now() / 1000 - 3600 },
+    // La règle d'un interrupteur porte son NOM : traduit comme sa fiche (audit du 03/10).
+    { module: 'interrupteurs', regle: etiquette('Variateur Salon'), quoi: 'bouton', cibles: ['light.salon'], n: 1, motif: 'on_press_release → light.turn_on', detail: '', simule: false, ts: Date.now() / 1000 - 540 },
+    ligneJournal({ module: 'volets', regle: 'planning', quoi: 'fermer', cibles: ['cover.chambre'], n: 1, motif: [['coucher du soleil {d} min', { d: '-20' }]], detail: '', simule: true, ts: Date.now() / 1000 - 3600 }),
     ...voletsDemo(states).journal, ...fenetresDemo().journal, ...presenceDemo().journal,
     ...nuitDemo().journal, ...veillesDemo(states).journal,
   ];
@@ -1179,7 +1278,8 @@ function veillesDemo(states) {
     capteurs_batterie: classe('battery'),
     notification: true,
     signales: [],
-    journal: [{ module: 'veilles', regle: 'co2', quoi: 'prevenir', cibles: [], n: 1, motif: '1310 ppm', detail: 'CO2 chambre : 1310 ppm, il faut aérer', simule: false, ts: Date.now() / 1000 - 9000 }],
+    // Le gabarit de veilles.py ; le capteur porte le nom de son état, traduit comme lui.
+    journal: [ligneJournal({ module: 'veilles', regle: 'co2', quoi: 'prevenir', cibles: [], n: 1, motif: [['{v} ppm', { v: 1310 }]], detail: [['{nom} : {v} ppm, il faut aerer', { nom: lieu('Chambre') + ' CO2', v: 1310 }]], simule: false, ts: Date.now() / 1000 - 9000 })],
   };
 }
 
@@ -1195,21 +1295,28 @@ function veillesPatch(patch) {
 /* Le code administrateur de la demo : verifie « par le serveur », comme en vrai. */
 const PIN_DEMO = { code: '0000', rates: 0 };
 
-const ROB_CFG = {
+/* Paresseux, comme `SCN_CFG()` (audit du 03/10) : la zone de la tondeuse porte
+ * le nom de son interrupteur, et la langue de la maison n'est connue qu'à
+ * `installerDemo`. Bâti à l'import, le planning annonçait « Pelouse avant »
+ * à côté de la puce « Front lawn ». Les zones de l'aspirateur, elles, sont les
+ * clés que le ROBOT publie (`rooms`) : françaises sur ses puces, elles le
+ * restent ici. */
+let ROB_CFG_ = null;
+const ROB_CFG = () => (ROB_CFG_ || (ROB_CFG_ = {
   plannings: [
     { id: 'p-semaine', robot: 'vacuum.aspirateur', heure: '09:30', jours: [0, 1, 2, 3, 4], actif: true,
-      zones: [{ id: 'salon', nom: 'Salon', segments: [1] }, { id: 'cuisine', nom: 'Cuisine', segments: [2] }] },
+      zones: [{ id: 'salon', nom: lieu('Salon'), segments: [1] }, { id: 'cuisine', nom: lieu('Cuisine'), segments: [2] }] },
     { id: 'p-samedi', robot: 'vacuum.aspirateur', heure: '18:00', jours: [5], actif: true, zones: [] },
     { id: 'p-nuit', robot: 'vacuum.aspirateur', heure: '23:00', jours: [6], actif: false, zones: [] },
     { id: 'p-tonte', robot: 'lawn_mower.tondeuse', heure: '10:00', jours: [1, 4], actif: true,
-      zones: [{ id: 'switch.tondeuse_zone_pelouse_avant', nom: 'Pelouse avant', segments: [] }] },
+      zones: [{ id: 'switch.tondeuse_zone_pelouse_avant', nom: etiquette('Pelouse avant'), segments: [] }] },
   ],
   robots: { 'vacuum.aspirateur': { calme: { actif: true, debut: '22:00', fin: '07:00' }, pluie: { actif: false } } },
-};
+}));
 
 /* Une COPIE à chaque réponse, comme un vrai serveur : l'écran ne doit pas
  * tenir l'objet que la commande suivante modifiera. */
-const copieRobots = () => JSON.parse(JSON.stringify(ROB_CFG));
+const copieRobots = () => JSON.parse(JSON.stringify(ROB_CFG()));
 
 /* Les minuteurs de la démo : en mémoire, comme la table du vrai composant —
  * une heure de fin en secondes, et le temps S'AJOUTE à ce qui reste. */
@@ -1234,10 +1341,10 @@ function robotsDemo(states) {
 
 function robotsPatch(patch) {
   const p = patch || {};
-  if (Array.isArray(p.plannings)) ROB_CFG.plannings = p.plannings;
+  if (Array.isArray(p.plannings)) ROB_CFG().plannings = p.plannings;
   Object.keys(p.robots || {}).forEach(id => {
-    const actuel = ROB_CFG.robots[id] || { calme: { actif: false, debut: '22:00', fin: '07:00' }, pluie: { actif: false } };
-    ROB_CFG.robots[id] = { calme: { ...actuel.calme, ...(p.robots[id].calme || {}) }, pluie: { ...actuel.pluie, ...(p.robots[id].pluie || {}) } };
+    const actuel = ROB_CFG().robots[id] || { calme: { actif: false, debut: '22:00', fin: '07:00' }, pluie: { actif: false } };
+    ROB_CFG().robots[id] = { calme: { ...actuel.calme, ...(p.robots[id].calme || {}) }, pluie: { ...actuel.pluie, ...(p.robots[id].pluie || {}) } };
   });
   return copieRobots();
 }
@@ -1343,21 +1450,131 @@ function calendrierDemo(id) {
     { uid: 'demo-verre', summary: etiquette('Verre'), start: { date: j(4) }, end: { date: j(5) } },
     { uid: 'demo-ordures', summary: etiquette('Ordures ménagères'), start: { date: j(5) }, end: { date: j(6) } },
   ]);
+  /* Les rendez-vous passent par la table des noms (audit du 03/10), comme les
+   * collectes juste au-dessus : l'agenda d'une démo polonaise annonçait
+   * « Café avec Sam » et « Contrôle chaudière ». */
   if (id === 'calendar.travail') return vivants([
-    { uid: 'demo-equipe', summary: 'Point d equipe', start: { dateTime: h(1, 9) }, end: { dateTime: h(1, 10) } },
-    { uid: 'demo-livrable', summary: 'Livrable client', start: { dateTime: h(3, 17) }, end: { dateTime: h(3, 18) } },
+    { uid: 'demo-equipe', summary: etiquette('Point d’équipe'), start: { dateTime: h(1, 9) }, end: { dateTime: h(1, 10) } },
+    { uid: 'demo-livrable', summary: etiquette('Livrable client'), start: { dateTime: h(3, 17) }, end: { dateTime: h(3, 18) } },
   ]);
   return vivants([
-    { uid: 'demo-poubelles', summary: 'Ramassage des poubelles', start: { date: j(1) }, end: { date: j(2) } },
-    { uid: 'demo-cafe', summary: 'Café avec Sam', start: { dateTime: h(2, 10) }, end: { dateTime: h(2, 11) } },
-    { uid: 'demo-chaudiere', summary: 'Contrôle chaudière', start: { dateTime: h(4, 14) }, end: { dateTime: h(4, 15) } },
+    { uid: 'demo-poubelles', summary: etiquette('Ramassage des poubelles'), start: { date: j(1) }, end: { date: j(2) } },
+    { uid: 'demo-cafe', summary: etiquette('Café avec Sam'), start: { dateTime: h(2, 10) }, end: { dateTime: h(2, 11) } },
+    { uid: 'demo-chaudiere', summary: etiquette('Contrôle chaudière'), start: { dateTime: h(4, 14) }, end: { dateTime: h(4, 15) } },
     // Un rendez-vous AUJOURD'HUI et une journee a deux : sans eux, deux etats
     // du calendrier ne se voyaient nulle part — le halo du jour courant et
     // l'anneau epaissi d'une journee chargee.
-    { uid: 'demo-colis', summary: 'Livraison colis', start: { dateTime: h(0, 16) }, end: { dateTime: h(0, 17) } },
-    { uid: 'demo-ramoneur', summary: 'Visite du ramoneur', start: { dateTime: h(2, 15) }, end: { dateTime: h(2, 16) } },
+    { uid: 'demo-colis', summary: etiquette('Livraison colis'), start: { dateTime: h(0, 16) }, end: { dateTime: h(0, 17) } },
+    { uid: 'demo-ramoneur', summary: etiquette('Visite du ramoneur'), start: { dateTime: h(2, 15) }, end: { dateTime: h(2, 16) } },
   ]);
 }
+
+/* Ce que dit l'assistant de la démonstration (relecture du 03/10).
+ *
+ * Ses phrases étaient écrites en dur, en français sans accents : une démo
+ * anglaise ou polonaise montrait un historique français, et la suggestion
+ * « Briefing », partie traduite (« Give me the briefing. »), recevait « Je
+ * suis la demonstration… ». Même raison que `LIEUX` et `APPAREILS` : la
+ * maison est inventée, ses mots sont les nôtres. Une table à part pourtant —
+ * ce sont des phrases, pas des noms, et `etiquette()` n'a pas à les
+ * connaître. Les pièces qu'elles citent portent les noms de `LIEUX`.
+ *
+ * `tests/demo_assistant.test.mjs` exige les sept langues, et que chaque
+ * réponse garde dans chacune la teinte d'orbe de son sujet (`teinteDe`). */
+const PAROLES_DEMO = {
+  // L'historique : une question d'avant, et sa réponse.
+  question: {
+    fr: 'Il fait quel temps dehors ?',
+    en: 'What’s the weather like outside?',
+    de: 'Wie ist das Wetter draußen?',
+    nl: 'Wat voor weer is het buiten?',
+    it: 'Che tempo fa fuori?',
+    es: '¿Qué tiempo hace fuera?',
+    pl: 'Jaka jest pogoda na zewnątrz?',
+  },
+  meteo: {
+    fr: 'Onze degrés et couvert. Il devrait pleuvoir vers vingt-trois heures.',
+    en: 'Eleven degrees and overcast. Rain is expected around eleven tonight.',
+    de: 'Elf Grad und bewölkt. Gegen dreiundzwanzig Uhr soll es regnen.',
+    nl: 'Elf graden en bewolkt. Rond elf uur vanavond gaat het waarschijnlijk regenen.',
+    it: 'Undici gradi e cielo coperto. Dovrebbe piovere verso le ventitré.',
+    es: 'Once grados y nublado. Debería llover hacia las once de la noche.',
+    pl: 'Jedenaście stopni i pochmurno. Około dwudziestej trzeciej powinno padać.',
+  },
+  // L'agent intégré de Home Assistant, par l'API commune (`conversation/process`).
+  agent: {
+    fr: 'Ici l’agent intégré de Home Assistant, dans la démo : une réponse d’un bloc, sans historique ni flux. Change d’entité dans l’en-tête pour comparer.',
+    en: 'This is Home Assistant’s built-in agent, in the demo: one answer in a single block, with no history and no streaming. Switch entities in the header to compare.',
+    de: 'Hier spricht der integrierte Agent von Home Assistant, in der Demo: eine Antwort am Stück, ohne Verlauf und ohne Stream. Wechsle oben die Entität, um zu vergleichen.',
+    nl: 'Hier de ingebouwde agent van Home Assistant, in de demo: één antwoord in één keer, zonder geschiedenis of stream. Kies bovenaan een andere entiteit om te vergelijken.',
+    it: 'Qui l’agente integrato di Home Assistant, nella demo: una risposta tutta d’un pezzo, senza cronologia né flusso. Cambia entità nell’intestazione per confrontare.',
+    es: 'Aquí el agente integrado de Home Assistant, en la demo: una respuesta de un solo bloque, sin historial ni flujo. Cambia de entidad en la cabecera para comparar.',
+    pl: 'Tu wbudowany agent Home Assistant, w wersji demonstracyjnej: odpowiedź w jednym kawałku, bez historii i bez strumieniowania. Zmień encję w nagłówku, aby porównać.',
+  },
+  // Les réponses de `demo/chat` : une par sujet de `SUJETS_DEMO`, et `autre`.
+  fumee: {
+    fr: 'Alerte : de la fumée est détectée dans la cuisine. Aère, et vérifie la plaque de cuisson.',
+    en: 'Alert: smoke detected in the kitchen. Open a window, and check the hob.',
+    de: 'Alarm: In der Küche wurde Rauch erkannt. Lüfte und prüfe das Kochfeld.',
+    nl: 'Alarm: er is rook gedetecteerd in de keuken. Zet een raam open en controleer de kookplaat.',
+    it: 'Allarme: è stato rilevato fumo in cucina. Arieggia e controlla il piano cottura.',
+    es: 'Alerta: se ha detectado humo en la cocina. Ventila y revisa la placa de cocción.',
+    pl: 'Alarm: w kuchni wykryto dym. Przewietrz i sprawdź płytę kuchenną.',
+  },
+  chauffage: {
+    fr: 'Le chauffage tient dix-neuf degrés dans le salon, et la chambre remonte doucement.',
+    en: 'The heating is holding nineteen degrees in the living room, and the bedroom is slowly warming up.',
+    de: 'Die Heizung hält neunzehn Grad im Wohnzimmer, und das Schlafzimmer wird langsam wärmer.',
+    nl: 'De verwarming houdt negentien graden in de woonkamer, en de slaapkamer warmt langzaam op.',
+    it: 'Il riscaldamento mantiene diciannove gradi in soggiorno, e la camera si scalda piano piano.',
+    es: 'La calefacción mantiene diecinueve grados en el salón, y el dormitorio se va templando poco a poco.',
+    pl: 'Ogrzewanie utrzymuje dziewiętnaście stopni w salonie, a sypialnia powoli się nagrzewa.',
+  },
+  ferme: {
+    fr: 'Tout est fermé : les volets sont baissés et les lumières du salon sont éteintes.',
+    en: 'Everything is closed: the blinds are down and the living room lights are off.',
+    de: 'Alles ist geschlossen: Die Rollläden sind unten und die Lichter im Wohnzimmer sind aus.',
+    nl: 'Alles is dicht: de rolluiken zijn omlaag en de lampen in de woonkamer zijn uit.',
+    it: 'È tutto chiuso: le tapparelle sono abbassate e le luci del soggiorno sono spente.',
+    es: 'Todo está cerrado: las persianas están bajadas y las luces del salón están apagadas.',
+    pl: 'Wszystko jest zamknięte: rolety są opuszczone, a światła w salonie zgaszone.',
+  },
+  autre: {
+    fr: 'Je suis la démonstration : je ne sais rien de ta maison, mais je sais montrer le chemin. Pose la même question à ton assistant, et il répondra pour de vrai.',
+    en: 'I’m the demo: I know nothing about your home, but I can show you the way. Ask your own assistant the same question, and it will answer for real.',
+    de: 'Ich bin die Demo: Ich weiß nichts über dein Zuhause, aber ich kann dir den Weg zeigen. Stell deinem Assistenten dieselbe Frage, und er antwortet wirklich.',
+    nl: 'Ik ben de demo: ik weet niets van jouw huis, maar ik kan je de weg wijzen. Stel dezelfde vraag aan je eigen assistent, en die antwoordt echt.',
+    it: 'Sono la demo: non so nulla della tua casa, ma so mostrarti la strada. Fai la stessa domanda al tuo assistente, e risponderà davvero.',
+    es: 'Soy la demostración: no sé nada de tu casa, pero sé enseñarte el camino. Haz la misma pregunta a tu asistente, y te responderá de verdad.',
+    pl: 'Jestem demonstracją: nic nie wiem o twoim domu, ale umiem pokazać drogę. Zadaj to samo pytanie swojemu asystentowi, a odpowie naprawdę.',
+  },
+};
+
+/** Une phrase de l'assistant de démonstration, dans la langue de la démo. */
+const parole = (cle) => PAROLES_DEMO[cle][LANGUE_DEMO] || PAROLES_DEMO[cle].fr;
+
+/* Trois sujets reconnus, pour que la démo montre aussi la teinte de l'orbe :
+ * l'alerte en rouge, le chauffage en orangé, ce qui est fermé en vert. La
+ * question arrive dans la langue de l'écran — « Tout est fermé ? » part en
+ * « Ist wirklich alles geschlossen? » —, et seuls le français et l'anglais
+ * étaient reconnus (relecture du 03/10) : d'où les mots des sept langues. Un
+ * début de mot suffit, sauf là où un mot courant le contient : « Verbrauch »
+ * n'est pas « Rauch », ni « humor » du « humo ». */
+const SUJETS_DEMO = [
+  [/fum|alarm|allarm|fuite|intrus|smoke|leak|\brauch|\blecks?\b|\brook|\blek\b|\bhumo\b|\bfugas?\b|\bdym|wyciek|włam|einbr|inbra/i, 'fumee'],
+  [/chauff|radiat|radiador|thermosta|termosta|heat|heiz|verwarm|riscald|calefac|ogrzew|grzej|kaloryfer/i, 'chauffage'],
+  [/ferm|verrou|closed|lock|geschlossen|verriegel|dicht|gesloten|op slot|chius|cerrad|cerrar|zamkni/i, 'ferme'],
+];
+
+/** La réponse écrite d'avance à `question` ; hors sujet, celle qui dit ce qu'est la démo. */
+function reponseDemo(question) {
+  const q = String(question || '');
+  const sujet = SUJETS_DEMO.find(([motif]) => motif.test(q));
+  return parole(sujet ? sujet[1] : 'autre');
+}
+
+/* Le numéro des messages envoyés au faux composant (voir `callWS`). */
+let numeroMessageDemo = 0;
 
 export function installerDemo(langue) {
   /* La langue de la maison factice. Elle est lue par l'appelant AVANT que le
@@ -1426,7 +1643,10 @@ export function installerDemo(langue) {
         toucher(id, null, { in_progress: true });
         setTimeout(() => toucher(id, 'off', { in_progress: false, installed_version: at.latest_version }), 3500);
       } else if (service === 'skip') toucher(id, 'off', { skipped_version: at.latest_version });
-    } else if (domaine === 'homeassistant' || domaine === 'light' || domaine === 'switch' || domaine === 'fan' || domaine === 'siren' || domaine === 'automation') {
+    } else if (domaine === 'homeassistant' || domaine === 'light' || domaine === 'switch' || domaine === 'fan' || domaine === 'siren' || domaine === 'automation' || domaine === 'input_boolean') {
+      // `input_boolean` (04/10) : le moteur d'actions prefere le service du
+      // domaine a `homeassistant.turn_on/off`, et les repas du distributeur de
+      // la demo en sont — leur interrupteur de la fiche revenait au bout de 6 s.
       if (service === 'turn_on') toucher(id, 'on');
       else if (service === 'turn_off') toucher(id, 'off');
       else if (service === 'toggle') toucher(id, states[id] && states[id].state === 'on' ? 'off' : 'on');
@@ -1488,7 +1708,12 @@ export function installerDemo(langue) {
      * vue Météo demande par service. Sans elles, sa bannière n'aurait ni
      * heures ni semaine, et la démonstration montrerait une vue à moitié
      * vide qui ne ressemble à rien de réel. */
-    callWS: (msg) => {
+    callWS: (envoye) => {
+      /* Comme la vraie bibliothèque (home-assistant-js-websocket), le numéro
+       * du message ÉCRASE tout champ `id`. Une commande qui y rangeait autre
+       * chose — le lancement d'un scénario — marchait ici et échouait chez
+       * tout le monde (audit du 03/10). */
+      const msg = (envoye && typeof envoye === 'object') ? { ...envoye, id: ++numeroMessageDemo } : envoye;
       if (msg && msg.type === 'call_service' && msg.domain === 'weather' && msg.service === 'get_forecasts') {
         const type = (msg.service_data && msg.service_data.type) || 'hourly';
         return Promise.resolve({ response: { 'weather.maison': { forecast: previsionsDemo(type) } } });
@@ -1511,7 +1736,9 @@ export function installerDemo(langue) {
       }
       if (msg && msg.type === 'loggia/scenarios/etat') return Promise.resolve(scenariosDemo(states));
       if (msg && msg.type === 'loggia/scenarios/config') return Promise.resolve({ config: scenariosPatch(msg.patch), etat: scenariosDemo(states) });
-      if (msg && msg.type === 'loggia/scenarios/lancer') return Promise.resolve(scenariosLancer(msg.id, states));
+      // Ranger (audit du 03/10) : la commande ouverte a tout compte ne touche qu'a l'ordre.
+      if (msg && msg.type === 'loggia/scenarios/ordre') return Promise.resolve({ ordre: scenariosPatch({ ordre: msg.ordre }).ordre, etat: scenariosDemo(states) });
+      if (msg && msg.type === 'loggia/scenarios/lancer') return Promise.resolve(scenariosLancer(msg.scenario, states));
       if (msg && msg.type === 'loggia/interrupteurs/etat') return Promise.resolve(interDemo());
       if (msg && msg.type === 'loggia/interrupteurs/ecouter') {
         const duree = Math.max(0, Math.min(900, Number(msg.duree) || 0));
@@ -1603,8 +1830,8 @@ export function installerDemo(langue) {
       if (msg && msg.type === 'demo/info') return Promise.resolve({ addon: { version: 'demo' }, identity: null, phases: [], profile: null });
       if (msg && msg.type === 'demo/history') {
         return Promise.resolve({ conversation_id: 'demo-1', messages: [
-          { role: 'user', text: 'Il fait quel temps dehors ?', ts: Date.now() - 7 * 60000 },
-          { role: 'assistant', text: 'Onze degres et couvert. Il devrait pleuvoir vers vingt-trois heures.', ts: Date.now() - 7 * 60000 + 4000 },
+          { role: 'user', text: parole('question'), ts: Date.now() - 7 * 60000 },
+          { role: 'assistant', text: parole('meteo'), ts: Date.now() - 7 * 60000 + 4000 },
         ] });
       }
       if (msg && msg.type === 'demo/cancel') return Promise.resolve({});
@@ -1614,8 +1841,8 @@ export function installerDemo(langue) {
       if (msg && msg.type === 'conversation/process') {
         return new Promise((ok) => setTimeout(() => ok({
           conversation_id: msg.conversation_id || 'demo-assist',
-          response: { response_type: 'action_done', language: 'fr', data: {}, speech: { plain: {
-            speech: "Ici l'agent integre de Home Assistant, dans la demo : une reponse d'un bloc, sans historique ni flux. Change d'entite dans l'en-tete pour comparer.",
+          response: { response_type: 'action_done', language: LANGUE_DEMO, data: {}, speech: { plain: {
+            speech: parole('agent'),
           } } },
         }), 600));
       }
@@ -1639,11 +1866,13 @@ export function installerDemo(langue) {
            * y a quarante et une. De quoi faire parler la tuile (ADR 0031). */
           const ids = Array.isArray(msg.entity_ids) ? msg.entity_ids : null;
           const ilYA = (min) => (Date.now() - min * 60000) / 1000;
+          // Le nom de l'événement, traduit comme celui de l'état (audit du 03/10) :
+          // la carte d'activité le lit en premier, et il restait français.
           const vus = [
-            { when: ilYA(3), entity_id: 'binary_sensor.camera_entree_mouvement', state: 'on', name: 'Caméra entrée Mouvement' },
-            { when: ilYA(2.5), entity_id: 'binary_sensor.camera_entree_mouvement', state: 'off', name: 'Caméra entrée Mouvement' },
-            { when: ilYA(41), entity_id: 'binary_sensor.camera_entree_personne', state: 'on', name: 'Caméra entrée Personne' },
-            { when: ilYA(40), entity_id: 'binary_sensor.camera_entree_personne', state: 'off', name: 'Caméra entrée Personne' },
+            { when: ilYA(3), entity_id: 'binary_sensor.camera_entree_mouvement', state: 'on', name: etiquette('Caméra entrée Mouvement') },
+            { when: ilYA(2.5), entity_id: 'binary_sensor.camera_entree_mouvement', state: 'off', name: etiquette('Caméra entrée Mouvement') },
+            { when: ilYA(41), entity_id: 'binary_sensor.camera_entree_personne', state: 'on', name: etiquette('Caméra entrée Personne') },
+            { when: ilYA(40), entity_id: 'binary_sensor.camera_entree_personne', state: 'off', name: etiquette('Caméra entrée Personne') },
           ].filter(e => !ids || ids.indexOf(e.entity_id) >= 0);
           let mort = false;
           setTimeout(() => { if (!mort && vus.length) rappel({ events: vus }); }, 120);
@@ -1671,17 +1900,10 @@ export function installerDemo(langue) {
          * et rien n'y change d'ailleurs — l'abonnement tient, muet. */
         if (msg && msg.type === 'loggia/config/suivre') return Promise.resolve(() => {});
         if (!msg || msg.type !== 'demo/chat') return Promise.reject(new Error('démonstration : pas de composant serveur'));
-        /* Trois sujets reconnus, pour que la demo montre aussi la teinte de
-         * l'orbe : l'alerte en rouge, le chauffage en orange, ce qui est ferme
-         * en vert. Le reste recoit la phrase qui dit ce qu'est la demo. */
-        const q = String(msg.text || '');
-        const phrase = /fum|alarm|fuite|intrus|smoke|leak/i.test(q)
-          ? 'Alerte : de la fumee est detectee dans la cuisine. Aere, et verifie la plaque de cuisson.'
-          : /chauff|radiateur|thermostat|heat/i.test(q)
-          ? 'Le chauffage tient dix-neuf degres dans le salon, et la chambre remonte doucement.'
-          : /ferm|verrou|closed|lock/i.test(q)
-            ? 'Tout est ferme : les volets sont baisses et les lumieres du salon sont eteintes.'
-            : 'Je suis la demonstration : je ne sais rien de ta maison, mais je sais montrer le chemin. Pose la meme question a ton assistant, et il repondra pour de vrai.';
+        /* Trois sujets reconnus (`SUJETS_DEMO`), dans les sept langues ; le
+         * reste reçoit la phrase qui dit ce qu'est la démo. Toutes dans la
+         * langue de la démo (`PAROLES_DEMO`, relecture du 03/10). */
+        const phrase = reponseDemo(msg.text);
         const mots = phrase.split(' ');
         let i = 0, mort = false;
         rappel({ event: 'accepted', message_id: 'demo-' + Date.now(), conversation_id: 'demo-1' });
@@ -1746,9 +1968,30 @@ export function installerDemo(langue) {
    * ce qui passait dessous. Le fond est désormais opaque — l'accent à 16 % sur
    * le fond de page — et le texte est celui du thème ; les deux premières
    * déclarations restent pour les navigateurs sans `color-mix`. */
+  /* Dans la langue de la démonstration (03/10), comme ses pièces et ses
+   * appareils : le badge restait en français au milieu d'une maison anglaise
+   * ou polonaise. Les pages légales, elles, n'existent qu'en français
+   * (`hreflang` le dit au lien). */
+  const BADGE = {
+    fr: ['Démonstration — données factices', 'Mentions légales'],
+    en: ['Demo — sample data', 'Legal notice'],
+    de: ['Demo — Beispieldaten', 'Impressum'],
+    nl: ['Demo — fictieve gegevens', 'Juridische informatie'],
+    it: ['Demo — dati fittizi', 'Note legali'],
+    es: ['Demostración — datos ficticios', 'Aviso legal'],
+    pl: ['Demonstracja — fikcyjne dane', 'Nota prawna'],
+  };
+  const [texteBadge, texteLien] = BADGE[LANGUE_DEMO] || BADGE.fr;
   const badge = document.createElement('div');
-  badge.textContent = 'Démonstration — données factices';
+  badge.textContent = texteBadge;
   badge.style.cssText = 'position:fixed;left:50%;bottom:calc(10px + var(--o-navh, 0px) + min(var(--o-navh, 0px), 18px));transform:translateX(-50%);z-index:99999;padding:6px 14px;border-radius:999px;background:#13233d;background:color-mix(in srgb, var(--o-accent, #4f8cff) 16%, var(--o-bg, #0b101b));border:1px solid rgba(77,163,255,.4);color:#eaf0fb;color:var(--o-text, #eaf0fb);font:700 11.5px/1.4 system-ui,sans-serif;white-space:nowrap;pointer-events:none;';
+  /* Il s'efface pendant qu'une fenêtre est ouverte (audit du 03/10) : peint
+   * au-dessus de tout, il couvrait le bas de chaque feuille, et son lien
+   * « Mentions légales » prenait les clics destinés aux boutons du pied. */
+  badge.setAttribute('data-demo-badge', '');
+  const effacement = document.createElement('style');
+  effacement.textContent = 'html:has([role="dialog"]) [data-demo-badge]{display:none!important}';
+  document.head.appendChild(effacement);
   /* Sur le site en ligne seulement, le badge mène aux pages légales
    * (`site/legal/`, ADR 0062) : la loi veut que l'éditeur et l'hébergeur d'un
    * site se trouvent depuis ce site. Sur une installation, `?demo` n'a pas ces
@@ -1761,8 +2004,8 @@ export function installerDemo(langue) {
     texte.style.whiteSpace = 'nowrap';
     const lien = document.createElement('a');
     lien.href = './legal/mentions-legales.html';
-    lien.textContent = 'Mentions légales';
-    lien.lang = 'fr';
+    lien.textContent = texteLien;
+    lien.hreflang = 'fr';
     // Le rembourrage rendu par la marge : une cible de 28 px sans grossir le badge.
     lien.style.cssText = 'pointer-events:auto;color:inherit;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;padding:6px 4px;margin:-6px -4px;';
     badge.textContent = '';

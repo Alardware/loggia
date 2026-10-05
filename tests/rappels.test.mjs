@@ -261,3 +261,33 @@ test('les deux ecritures de l’heure que Home Assistant emploie', () => {
   assert.deepEqual(avecEspace.date, new Date(2026, 9, 3, 19, 30));
   assert.equal(lireTodo({ summary: 'Ce soir', due: '2026-10-03 19:30:00' }, MAISON, AUJ).quand, 'aujourdhui');
 });
+
+/* ════════════ CE QUI SE VISE (audit du 03/10) ════════════ */
+
+test('la case « Marquer fait » se vise à 24 px, la pastille reste dessinée à 18', () => {
+  /* WCAG 2.5.8 : rien ne se vise sous 24 × 24. Le bouton MESURAIT sa
+   * pastille, 18 × 18 — et c'est le seul geste d'une ligne de rappel, fait
+   * du bout du doigt sur une tablette murale. Même procédé que l'ADR 0101 :
+   * la zone grandit, le dessin non, et une marge négative rend les pixels
+   * empruntés. */
+  const src = lire('src', 'rappelsrail.jsx');
+  const i = src.indexOf("aria-label={tr('Marquer fait : {t}'");
+  assert.notEqual(i, -1, 'la case qui coche un rappel a disparu');
+  const balise = src.slice(src.lastIndexOf('<button', i), src.indexOf('}}>', i) + 3);
+  assert.match(balise, /width: 24, height: 24, margin: -3,/,
+    'la case est retombée à la taille de sa pastille : 18 px, sous les 24 de la règle');
+  assert.match(balise, /alignItems: 'center', justifyContent: 'center'/,
+    'la pastille n’est plus centrée dans sa zone : le rond se décale de 3 px');
+  assert.match(src, /const pastille = \([\s\S]{0,120}width: 18, height: 18,/,
+    'le rond a changé de taille : c’est la ZONE qui grandit, pas le dessin');
+
+  // Et aucun autre bouton du fichier ne passe sous 24 — le « + », les
+  // onglets, la croix du formulaire, « Ajouter le rappel », « C’est sorti ».
+  const boutons = src.match(/<button[\s\S]*?\}\}>/g) || [];
+  assert.ok(boutons.length >= 6, `seulement ${boutons.length} bouton(s) relevé(s)`);
+  for (const b of boutons) {
+    for (const [, prop, n] of b.matchAll(/\b(width|height|minHeight): (\d+)\b/g)) {
+      assert.ok(Number(n) >= 24, `un bouton des rappels mesure ${prop} ${n} : sous les 24 de WCAG 2.5.8`);
+    }
+  }
+});

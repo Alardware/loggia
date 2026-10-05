@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import HomeAssistant, callback
 
 from .presence import CLE as CLE_PRESENCE, invite_present
+from .const import DOMAIN
 from .regles import demarrer, niveau
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
@@ -345,8 +346,11 @@ class LoggiaNuit:
         ancien = str(getattr(d.get("old_state"), "state", "")).lower()
         if neuf == "on" and ancien != "on":
             self.hass.async_create_task(self._async_allumer(piece))
-        elif neuf == "off" and ancien == "on":
+        elif ancien == "on" and neuf != "on":
             # Plus de mouvement : le decompte commence — pour ce qu'on a allume.
+            # Quel que soit le nouvel etat (audit du 03/10) : un capteur Zigbee
+            # qui decroche passe de « on » a « unavailable », puis revient a
+            # « off » — et la lampe restait allumee toute la nuit.
             self._armer_extinction(piece)
 
     async def _async_allumer(self, piece: str) -> None:
@@ -356,6 +360,12 @@ class LoggiaNuit:
         # Quelqu'un bouge : ce qu'on a allume reste allume.
         self._desarmer_piece(piece)
         if not fait_nuit(self.hass.states.get(SOLEIL)):
+            return
+        # Maison declaree vide : un chat devant le capteur n'allume rien
+        # (ADR 0014). La tenue du depart ne protegeait que les lampes qu'il
+        # avait eteintes, et tombait au bout de douze heures (audit du 03/10).
+        presence = (getattr(self.hass, "data", None) or {}).get(DOMAIN, {}).get("presence")
+        if presence is not None and getattr(presence, "dehors", False):
             return
         reglage = (e.get("pieces") or {}).get(piece) or {}
         lampes = list(reglage.get("lampes") or [])
@@ -498,7 +508,11 @@ class LoggiaNuit:
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     async def async_config(self) -> dict[str, Any]:
-        brut = await self.store.async_get_shared(CLE, None)
+        return self._config_de(await self.store.async_get_shared(CLE, None))
+
+    def _config_de(self, brut: Any) -> dict[str, Any]:
+        """La configuration, defauts compris. Synchrone : `async_enregistrer`
+        la rebatit sous le verrou du magasin (lot 15 de l'audit du 03/10)."""
         cfg = {k: dict(v) for k, v in DEFAUT.items()}
         cfg["veilleuse"]["lampes"] = []
         cfg["coucher"]["sauf"] = []
@@ -519,9 +533,8 @@ class LoggiaNuit:
             "journal": await self.regles.journal(limite=40, module="nuit"),
         }
 
-    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
-        cfg = await self.async_config()
-        simulait = bool((cfg.get("simulation") or {}).get("actif"))
+    def _poser_patch(self, cfg: dict[str, Any], patch: dict[str, Any]) -> None:
+        """Le patch de l'ecran, pose sur `cfg`. Synchrone : sous le verrou."""
         for section, valeurs in (patch or {}).items():
             if section not in cfg or not isinstance(valeurs, dict):
                 continue
@@ -536,7 +549,20 @@ class LoggiaNuit:
                         pieces[nom] = {**pieces.get(nom, {}), **piece}
                 valeurs = {**valeurs, "pieces": pieces}
             cfg[section].update(valeurs)
-        await self.store.async_set_shared(CLE, cfg)
+
+    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
+        # D'un seul tenant, sous le verrou du magasin (lot 15 de l'audit du
+        # 03/10 ; voir store.async_modifier_shared).
+        simulait = False
+
+        def changer(brut: Any) -> dict[str, Any]:
+            nonlocal simulait
+            cfg = self._config_de(brut)
+            simulait = bool((cfg.get("simulation") or {}).get("actif"))
+            self._poser_patch(cfg, patch)
+            return cfg
+
+        cfg = await self.store.async_modifier_shared(CLE, changer)
         self.cfg = cfg
         if bool((cfg.get("simulation") or {}).get("actif")) != simulait:
             self._repartir_de_zero()

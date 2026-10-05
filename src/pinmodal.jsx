@@ -6,7 +6,7 @@
  * bouton de l'assistant.
  */
 import { useState, useEffect, useRef } from 'react';
-import { tr } from './i18n.js';
+import { tr, trN } from './i18n.js';
 import { inerterAutour } from './ui.jsx';
 
 // Modale du code administrateur — gate le basculement vers un profil Admin.
@@ -19,6 +19,12 @@ export function PinModal({ hass, onClose, onSuccess }) {
   const [attente, setAttente] = useState(false);
   const [bloque, setBloque] = useState(0);   // secondes annoncées par le serveur
   const [horsLigne, setHorsLigne] = useState(false);
+  /* Le code a été REFUSÉ — et seulement lui (audit du 03/10) : un blocage a
+   * sa propre alerte, et un serveur injoignable n'a rien vérifié. Le message
+   * tient jusqu'à la touche suivante, pas 650 ms comme le rouge des points :
+   * effacé si tôt, une annonce encore en file d'attente peut se perdre, et
+   * un œil qui regardait le pavé ne l'aurait pas vu. */
+  const [faux, setFaux] = useState(false);
   const timers = useRef([]);
   // Le compte à rebours du blocage : on l'affiche, on ne le contourne pas.
   useEffect(() => {
@@ -34,6 +40,7 @@ export function PinModal({ hass, onClose, onSuccess }) {
       const r = await h.callWS({ type: 'loggia/pin/verifier', pin: np });
       if (r && r.ok) { onSuccess(); return; }
       setBloque(r && r.bloque ? Number(r.bloque) : 0);
+      setFaux(!(r && r.bloque));
       setError(true);
       timers.current.push(setTimeout(() => { setPin(''); setError(false); }, 650));
     } catch {
@@ -64,7 +71,7 @@ export function PinModal({ hass, onClose, onSuccess }) {
   const padBtn = { height: 52, borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 600, cursor: 'pointer' };
   const add = (d) => {
     if (attente || bloque) return;
-    setError(false); setHorsLigne(false);
+    setError(false); setHorsLigne(false); setFaux(false);
     setPin(p => {
       if (p.length >= 4) return p;
       const np = p + d;
@@ -77,16 +84,44 @@ export function PinModal({ hass, onClose, onSuccess }) {
       onPointerDown={(e) => { partiDuVoile.current = e.target === e.currentTarget; }}
       onClick={(e) => { if (e.target === e.currentTarget && partiDuVoile.current) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.62)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      {/* Une boite de dialogue qui ecoute Echap n'est pas une anomalie. */}
+      {/* Une boite de dialogue qui ecoute Echap n'est pas une anomalie.
+        * Pas d'`aria-modal` : `inerterAutour` confine deja, et la region
+        * d'annonce du tableau de bord doit rester lisible (voir BottomSheet). */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-      <div ref={boiteRef} role="dialog" aria-modal="true" aria-label={tr('Code administrateur')} tabIndex={-1}
+      <div ref={boiteRef} role="dialog" aria-label={tr('Code administrateur')} tabIndex={-1}
         onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}
         onClick={e => e.stopPropagation()} style={{ width: 296, maxHeight: '92vh', overflowY: 'auto', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd1)', borderRadius: 'var(--o-radius,18px)', padding: 24, boxShadow: '0 30px 70px rgba(0,0,0,.6)', animation: error ? 'm-shake .45s' : 'none' }}>
         <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700 }}>{tr('Code administrateur')}</div>
-        <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--o-text2)', marginTop: 4 }}>{tr('Requis pour ce profil')}</div>
+        {/* « Code incorrect » à l'ŒIL aussi (audit du 03/10) : le rouge des
+          * points ne tient que 650 ms, un œil qui distingue mal le rouge n'y
+          * voit que des points qui se vident, et le tremblement, « réduire les
+          * animations » l'efface. Le sous-titre le dit donc jusqu'à la touche
+          * suivante. Même ligne, même corps : rien ne bouge sous le doigt — un
+          * message glissé au-dessus des points ferait descendre le pavé, puis
+          * remonter à la première touche, au milieu de la saisie. Tu le temps
+          * de l'erreur : la région d'alerte le dit déjà, une fois suffit. */}
+        <div aria-hidden={faux || undefined} style={{ textAlign: 'center', fontSize: 12, color: faux ? 'var(--o-bad)' : 'var(--o-text2)', fontWeight: faux ? 700 : undefined, marginTop: 4 }}>{faux ? tr('Code incorrect') : tr('Requis pour ce profil')}</div>
         {bloque > 0 && <div role="alert" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Trop d’essais. Réessaie dans {n} s.', { n: bloque })}</div>}
         {horsLigne && <div role="alert" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Home Assistant n’est pas joignable : le code ne peut pas être vérifié.')}</div>}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, margin: '22px 0' }}>{[0, 1, 2, 3].map(i => <span key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: i < pin.length ? (error ? 'var(--o-bad)' : 'var(--o-accent-soft)') : 'transparent', border: `1px solid ${error ? 'var(--o-bad)' : 'var(--o-bd2)'}`, transition: 'background .15s' }} />)}</div>
+        {/* « Code incorrect », pour le lecteur d'écran (audit du 03/10) : un
+          * code faux et un code en cours de saisie s'y ressemblaient exactement.
+          *
+          * La région est TOUJOURS montée, vide tant que rien n'est faux : un
+          * lecteur d'écran n'annonce que ce qui CHANGE dans une région déjà
+          * là, et une alerte qui naît remplie peut se taire. Elle vit DANS la
+          * boîte : le reste de la page est inerte pendant la saisie, et une
+          * région inerte ne dit rien. Lue, pas vue — ce qui se voit, c'est le
+          * sous-titre. */}
+        <div className="o-vh" role="alert">{faux ? tr('Code incorrect') : ''}</div>
+        {/* Les quatre points, en mots : « 2 chiffres sur 4 », annoncé à chaque
+          * touche comme les points se remplissent à l'œil — le nombre, jamais
+          * les chiffres. Les points eux-mêmes se taisent. Hors flux (o-vh),
+          * l'équivalent ne prend pas de place dans la rangée.
+          *
+          * Les deux gabarits vont NUS à trN. Passés d'abord par tr, l'objet de
+          * formes du polonais serait tranché SANS le nombre, donc toujours en
+          * « other » : « 2 cyfr » au lieu de « 2 cyfry » (ADR 0071). */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, margin: '22px 0' }}><span className="o-vh" role="status">{trN(pin.length, '{n} chiffre sur 4', '{n} chiffres sur 4')}</span>{[0, 1, 2, 3].map(i => <span key={i} aria-hidden="true" style={{ width: 14, height: 14, borderRadius: '50%', background: i < pin.length ? (error ? 'var(--o-bad)' : 'var(--o-accent-soft)') : 'transparent', border: `1px solid ${error ? 'var(--o-bad)' : 'var(--o-bd2)'}`, transition: 'background .15s' }} />)}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => <button key={n} onClick={() => add(String(n))} style={padBtn}>{n}</button>)}
           <span />

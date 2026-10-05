@@ -310,14 +310,34 @@ export default function WeatherGL({ condition = 'partlycloudy', hourEq = 12, int
     const clock = new THREE.Clock();
     let flash = 0, bolt = 0, nextStrike = 2;
 
-    // Plafond de rendu : le temps avance toujours, le GPU souffle.
+    /* La boucle se PLANIFIE et dort quand personne ne regarde (lot 14 de
+     * l'audit du 03/10). Elle demandait une image à chaque rafraîchissement
+     * (130 rAF/s sur un écran à 130 Hz) pour en dessiner 27, et chaque
+     * demande réveillait le navigateur ; elle dort maintenant jusqu'à peu
+     * avant l'échéance (setTimeout), puis l'écran donne l'instant (rAF) :
+     * même porte de 33 ms, mêmes images, 36 rAF/s. Elle dessinait aussi
+     * 22 images/s pour un canevas à top −1169, sous les cartes qu'on était
+     * descendu lire, et tournait à vide sous la veille (138 rAF/s) : hors du
+     * cadre (IntersectionObserver), onglet caché ou veille par-dessus, plus
+     * rien ne se planifie, et la fin de l'arrêt la relance. */
     const MS_PAR_IMAGE = 1000 / 30;
-    let dernierRendu = 0;
+    const AVANCE_MS = 8; // réveil avant l'échéance : l'image tombe sur le rafraîchissement qui la suit
+    const maintenant = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const auRepos = () => document.hidden || document.documentElement.classList.contains('loggia-ambient-on');
+    let dernierRendu = 0, minuteur = 0, pret = false, dansLeCadre = true;
+    function planifie() {
+      if (disposed || !pret || !dansLeCadre || auRepos() || rafId || minuteur) return;
+      const reste = MS_PAR_IMAGE - AVANCE_MS - (maintenant() - dernierRendu);
+      if (reste > 0) minuteur = setTimeout(() => { minuteur = 0; planifie(); }, reste);
+      else rafId = requestAnimationFrame(frame);
+    }
     function frame() {
-      if (disposed) return;
-      rafId = requestAnimationFrame(frame);
+      rafId = 0;
       // Onglet caché ou veille ambiante par-dessus : le rendu ne servirait à personne.
-      if (document.hidden || document.documentElement.classList.contains('loggia-ambient-on')) return;
+      if (disposed || !dansLeCadre || auRepos()) return;
+      if (maintenant() - dernierRendu < MS_PAR_IMAGE) { planifie(); return; } // en avance : le rafraîchissement suivant
+      dernierRendu = maintenant();
+      planifie();
       const dt = Math.min(clock.getDelta(), 0.05);
       const t = clock.elapsedTime;
       U.uTime.value = t;
@@ -361,20 +381,44 @@ export default function WeatherGL({ condition = 'partlycloudy', hourEq = 12, int
         U.uBolt.value = 0;
       }
 
-      const maintenant = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-      if (maintenant - dernierRendu >= MS_PAR_IMAGE) {
-        dernierRendu = maintenant;
-        renderer.render(scene, camera);
-      }
+      renderer.render(scene, camera);
     }
-    frame();
+
+    /* Le shader se compile AVANT la première image (lot 14 de l'audit du
+     * 03/10) : à froid — première ouverture, navigateur ou pilote mis à
+     * jour —, sa compilation figeait l'interface au premier rendu (1,3 à
+     * 1,5 s à l'audit, 2,2 à 4,7 s au retour sur l'Accueil dans la démo).
+     * compileAsync la confie au pilote (KHR_parallel_shader_compile) et rend
+     * la main : l'Accueil répond, le ciel paraît à la fin. Sans l'extension,
+     * le gel se reporte au premier rendu — et on ne l'appelle pas : three
+     * journaliserait l'extension absente à chaque affichage de l'Accueil
+     * (rendu logiciel, GPU écarté), pour ne rien gagner (relecture du lot
+     * 14). `has` ne journalise rien. */
+    let compilation;
+    try { compilation = renderer.extensions.has('KHR_parallel_shader_compile') ? renderer.compileAsync(scene, camera) : Promise.resolve(); } catch { compilation = Promise.resolve(); }
+    const demarre = () => { pret = true; planifie(); };
+    compilation.then(demarre, demarre);
+    const io = new IntersectionObserver((es) => { dansLeCadre = es[es.length - 1].isIntersecting; planifie(); });
+    io.observe(host);
+    const mo = new MutationObserver(() => planifie()); // la veille pose puis retire sa classe sur <html>
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    document.addEventListener('visibilitychange', planifie);
 
     return () => {
       disposed = true;
+      clearTimeout(minuteur);
       cancelAnimationFrame(rafId);
-      ro.disconnect();
-      geo.dispose(); mat.dispose(); renderer.dispose();
+      ro.disconnect(); io.disconnect(); mo.disconnect();
+      document.removeEventListener('visibilitychange', planifie);
       try { host.removeChild(canvas); } catch {}
+      /* Le contexte se REND (lot 14 de l'audit du 03/10) : dispose() libère
+       * ce que three a créé, pas le contexte, que le ramasse-miettes ne
+       * reprend que plus tard (jusqu'à 5 encore vivants sur la vue suivante
+       * après 10 allers-retours). Une compilation en cours relit ses
+       * programmes toutes les 10 ms : tout part à sa fin, jamais sous elle
+       * (une erreur dans son minuteur, ou un statut jamais rendu). */
+      const libere = () => { geo.dispose(); mat.dispose(); renderer.dispose(); renderer.forceContextLoss(); };
+      if (pret) libere(); else compilation.then(libere, libere);
     };
   }, []);
   return <div ref={hostRef} aria-hidden="true" style={{ position: 'absolute', inset: 0 }} />;

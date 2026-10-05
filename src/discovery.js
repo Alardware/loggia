@@ -18,6 +18,8 @@ import { buildDevices } from './devices.js';
 import { capsSummary, deviceCaps } from './capabilities.js';
 import { profilesSummary } from './profiles.js';
 import { healthReport } from './health.js';
+import { comparerTextes } from './i18n.js';
+import { domaineDe, enPanne, sansAccents } from './outils.js';
 
 export const DISCOVERY_VERSION = 1;
 
@@ -52,8 +54,6 @@ const REG = {
   entities: 'config/entity_registry/list',
   floors: 'config/floor_registry/list',
 };
-
-const domainOf = (id) => (typeof id === 'string' ? id.slice(0, id.indexOf('.')) : '');
 
 /** Appel WebSocket qui ne jette jamais : renvoie [] et note l'erreur. */
 async function safeWS(hass, type, errors) {
@@ -244,7 +244,7 @@ export function buildIndex({ areas = [], devices = [], entities = [], floors = [
       floor: a.floor_id || null,
       entities: byArea.get(a.area_id) || [],
     }))
-    .sort((x, y) => x.name.localeCompare(y.name, 'fr'));
+    .sort((x, y) => comparerTextes(x.name, y.name));
 
   return {
     areaList,
@@ -308,7 +308,7 @@ export function siblingsOf(index, entityId) {
 export function pickSibling(index, states, entityId, { domain, deviceClass, unit, match } = {}) {
   const ids = siblingsOf(index, entityId);
   const ok = (id) => {
-    if (domain && domainOf(id) !== domain) return false;
+    if (domain && domaineDe(id) !== domain) return false;
     const a = (states[id] && states[id].attributes) || {};
     if (deviceClass && a.device_class !== deviceClass) return false;
     // `unit` accepte une liste : la meme grandeur se publie sous plusieurs
@@ -351,14 +351,13 @@ const CAMERA_MODES = [
   ['pleurs', /baby|[_ .]cry|pleur|bebe/],
   ['prive', /privacy|prive|private|lens_?mask|occult/],
 ];
-const sansAccents = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 export function cameraModes(index, states, cameraId) {
   const etats = states || {};
   const pris = new Set();
   const out = [];
   siblingsOf(index, cameraId).forEach(id => {
-    if (domainOf(id) !== 'switch') return;
+    if (domaineDe(id) !== 'switch') return;
     const m = index.entityMeta.get(id) || {};
     if (m.hidden || m.disabled) return;
     const a = (etats[id] && etats[id].attributes) || {};
@@ -370,7 +369,7 @@ export function cameraModes(index, states, cameraId) {
     out.push({ id, cle: trouve ? trouve[0] : null, nom });
   });
   const rang = (cle) => cle ? CAMERA_MODES.findIndex(([k]) => k === cle) : CAMERA_MODES.length;
-  return out.sort((x, y) => rang(x.cle) - rang(y.cle) || x.nom.localeCompare(y.nom));
+  return out.sort((x, y) => rang(x.cle) - rang(y.cle) || comparerTextes(x.nom, y.nom));
 }
 
 /** Un capteur compte comme « énergie » d'après sa device_class, jamais son nom. */
@@ -390,10 +389,10 @@ export function capabilities({ states = {}, index = null }) {
 
   const ids = index ? index.live : Object.keys(states);
   ids.forEach(id => {
-    const d = domainOf(id);
+    const d = domaineDe(id);
     if (!d) return;
     const st = states[id];
-    if (st && (st.state === 'unavailable' || st.state === 'unknown')) unavailable++;
+    if (st && enPanne(id, st)) unavailable++; // scène, bouton jamais déclenchés : pas indisponibles (05/10)
     counts[d] = (counts[d] || 0) + 1;
     if (!byDomain[d]) byDomain[d] = [];
     byDomain[d].push(id);

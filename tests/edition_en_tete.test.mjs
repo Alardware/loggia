@@ -61,9 +61,11 @@ test('une seule barre existe : ViewEditBar et la barre maison des vues perso son
 test('le bandeau porte « Entites de la vue » et sait changer son mot d’ordre', () => {
   const b = bloc(app, 'function BandeauEdition(', NL + '}');
   assert.ok(b.includes('onEnt = null, entLabel = null, texte = null })'), 'les trois proprietes');
-  assert.ok(b.includes("{onEnt && <button onClick={onEnt} style={btn(false)}><Fi i=\"list\" size={12} />{entLabel || tr('Entités de la vue')}</button>}"), 'le bouton des entites, au style des autres');
+  assert.ok(b.includes("{ouvrirEnt && <button onClick={ouvrirEnt} style={btn(false)}><Fi i=\"list\" size={12} />{entLabel || tr('Entités de la vue')}</button>}"), 'le bouton des entites, au style des autres');
+  // Il ecrit la configuration de la maison : masque a un compte ordinaire (03/10).
+  assert.ok(b.includes('const ouvrirEnt = onEnt && !compteOrdinaire(ctx.hass) ? onEnt : null;'), 'les entites de la vue se proposent a qui ne pourra pas les enregistrer');
   assert.ok(b.includes("{texte || tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une carte.')}"), 'le mot d’ordre par defaut reste celui de la maquette');
-  assert.ok(b.indexOf('{extra}') < b.indexOf('{onEnt &&') && b.indexOf('{onEnt &&') < b.indexOf("tr('Terminer')"), 'Terminer ferme la marche');
+  assert.ok(b.indexOf('{extra}') < b.indexOf('{ouvrirEnt &&') && b.indexOf('{ouvrirEnt &&') < b.indexOf("tr('Terminer')"), 'Terminer ferme la marche');
   // Qui le recoit : les vues qui ont une fiche d'entites.
   assert.ok(bloc(app, 'function Dashboard(', NL + 'function ').includes('</>} onEnt={onEnt} />'), 'l’Accueil passe par la propriete, plus par un bouton a lui');
   assert.ok(bloc(app, 'function EnergieContent(', NL + 'function ').includes("onEnt={onEnt} entLabel={tr('Entités du schéma')} />"), 'l’Energie garde son libelle');

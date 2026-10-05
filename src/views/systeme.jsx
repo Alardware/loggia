@@ -17,7 +17,7 @@
  * `SystemeContent` est l'export par defaut, comme `views/meteo.jsx`. */
 import { useState, useEffect, useRef } from 'react';
 import { Fi, Gauge, Bascule, BottomSheet, TitreFeuille } from '../ui.jsx';
-import { tr, locale } from '../i18n.js';
+import { tr, trN, locale } from '../i18n.js';
 import { useSysHist } from '../historique.jsx';
 import { sysSensors, sysNames } from '../sysconf.js';
 import { LOGGIA_INDEX } from '../state.js';
@@ -26,7 +26,7 @@ import {
   interfaceReseau, debitLisible, baseDeDonnees, etatCloud, journalSysteme, alertesSysteme, nomCarte, dureeLisible,
   depuisDemarrage, dureeCapteur, enOctets, tailleLisible, paireTailles, nombre,
 } from '../systeme.js';
-import { CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE } from '../styles.js';
+import { CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE, LISERE } from '../styles.js';
 import { uniteTemp, versCelsius } from '../unites.js';
 
 /* Le gabarit des cartes de la maison, repris de `RM_CARD` (App.jsx) : l'icone
@@ -41,7 +41,8 @@ const SYS_CARTE = { ...CARTE_MAISON, boxSizing: 'border-box', minWidth: 0 };
 const SYS_ICO = (rgb, col) => ({ ...ICONE_CARTE, background: 'rgba(' + rgb + ',.16)', color: col });
 const SYS_NOM = NOM_CARTE;
 const SYS_SOUS = SOUS_CARTE;
-const SYS_PANNEAU = { background: SYS_FOND, border: 'none', borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', minWidth: 0 };
+// Le liseré du réglage (04/10), comme les panneaux de Paramètres.
+const SYS_PANNEAU = { background: SYS_FOND, border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', minWidth: 0 };
 const SYS_BADGE = (rgb, col) => ({ flexShrink: 0, padding: '4px 9px', borderRadius: 9, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(' + rgb + ',.14)', color: col });
 const COULEUR_NIVEAU = { warn: 'var(--o-warn2)', bad: 'var(--o-bad)' };
 const ESPACE = String.fromCharCode(160);
@@ -332,8 +333,16 @@ function PanneauJournal({ journal, indisponible }) {
   const mots = { info: tr('INFO'), avert: tr('AVERT.'), erreur: tr('ERREUR') };
   return (
     <div className="sys-journal" style={{ ...SYS_PANNEAU, display: 'flex', flexDirection: 'column' }}>
-      <EntetePanneau titre={tr('Journal')} droite={journal.total > 0 ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{(journal.total > 1 ? tr('{n} événements', { n: journal.total }) : tr('{n} événement', { n: journal.total })) + ' · ' + tr('{n} h', { n: 24 })}</span> : null} />
-      <div className="sys-journal-liste" style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>
+      <EntetePanneau titre={tr('Journal')} droite={journal.total > 0 ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{trN(journal.total, '{n} événement', '{n} événements') + ' · ' + tr('{n} h', { n: 24 })}</span> : null} />
+      {/* Une zone qui DEFILE se prend au clavier (audit du 03/10). Aucune ligne
+        * du journal n'est un bouton : Firefox et les Chrome recents rendent
+        * quand meme focalisable un cadre a defilement, Safari et l'appli iOS
+        * non — au clavier, la journee s'arretait a ce que la carte montre. La
+        * zone porte donc le focus elle-meme et dit ce qu'elle est : une region,
+        * nommee comme son titre a l'ecran (le nom entendu = le nom lu, et pas
+        * de cle de plus a traduire). */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- une region qui defile doit prendre le focus : sans lui, ni fleches ni Page suivante ne la parcourent sous Safari. */}
+      <div className="sys-journal-liste" role="region" tabIndex={0} aria-label={tr('Journal')} style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>
       {journal.lignes.length
         ? journal.lignes.map((l, i) => {
             const [rgb, col] = NIVEAUX_JOURNAL[l.niveau] || NIVEAUX_JOURNAL.info;

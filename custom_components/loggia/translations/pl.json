@@ -21,5 +21,16 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "scenario_inconnu": {
+      "message": "Żaden scenariusz Loggii nie ma identyfikatora „{id}”."
+    },
+    "scenarios_indisponibles": {
+      "message": "Scenariusze Loggii są niedostępne: integracja nie została uruchomiona."
+    },
+    "compte_illisible": {
+      "message": "Scenariusz odrzucony: nie udało się odczytać konta, które go uruchomiło."
+    }
   }
 }

@@ -6,7 +6,7 @@ Assistant. Le client ne peut pas designer un autre utilisateur — aucune comman
 n'accepte de champ `user_id`. Un utilisateur ne lit et n'ecrit donc que sa propre
 configuration, et les permissions Home Assistant restent celles de sa session.
 
-Les 31 commandes, toutes prefixees `loggia/`. Le compte et la repartition
+Les 32 commandes, toutes prefixees `loggia/`. Le compte et la repartition
 entre ouvertes et reservees sont verrouilles par `test_websocket_api.py` :
 une commande nouvelle doit y etre rangee d'un cote ou de l'autre.
 
@@ -29,6 +29,9 @@ une commande nouvelle doit y etre rangee d'un cote ou de l'autre.
     scenarios/lancer        -> lancer un scenario
     minuteurs/etat|poser|annuler -> le minuteur d'extinction d'un appareil
     sirene/tester           -> sonner trois secondes, tenu ici
+  L'agencement, ouvert a tout compte (ADR 0125)
+    scenarios/ordre         -> ranger les scenarios, et rien d'autre : des
+                               identifiants que la maison connait (03/10)
   Les boutons sans fil
     interrupteurs/etat      -> ce que l'ecoute a vu passer
     interrupteurs/affecter  -> lier un geste a une action (admin)
@@ -59,7 +62,8 @@ from homeassistant.core import HomeAssistant, callback
 
 from .code_admin import CODE_DEFAUT, LaissezPasser, Limiteur, code_valide, hacher, passage_admin, verifier
 from .discovery import async_index
-from .scenarios import controle_de
+from .refus import RefusNomme
+from .scenarios import ScenariosInconnusError, controle_de
 from .store import MAX_TOTAL_BYTES, MAX_VALUE_BYTES, SIGNAL_CONFIG, LoggiaStore, MaisonReserveeError
 
 _LOGGER = logging.getLogger(__name__)
@@ -87,6 +91,7 @@ WS_REG_DEGELER = "loggia/regles/degeler"
 WS_SCN_ETAT = "loggia/scenarios/etat"
 WS_SCN_CONFIG = "loggia/scenarios/config"
 WS_SCN_LANCER = "loggia/scenarios/lancer"
+WS_SCN_ORDRE = "loggia/scenarios/ordre"
 WS_ROB_ETAT = "loggia/robots/etat"
 WS_ROB_CONFIG = "loggia/robots/config"
 WS_MIN_ETAT = "loggia/minuteurs/etat"
@@ -117,11 +122,27 @@ def _payload_too_big(patch: dict[str, Any]) -> str | None:
         except (TypeError, ValueError):
             return f"valeur non serialisable pour la cle {key}"
         if size > MAX_VALUE_BYTES:
-            return f"valeur trop volumineuse pour la cle {key} ({size} octets)"
+            # La cle APRES les deux-points, comme `not_admin` : l'ecran la
+            # nomme dans sa langue sans lire le reste (audit du 03/10).
+            return f"valeur trop volumineuse ({size} octets) : {key}"
         total += size
     if total > MAX_TOTAL_BYTES:
         return f"charge totale trop volumineuse ({total} octets)"
     return None
+
+
+def _relayer(connection: websocket_api.ActiveConnection, msg: dict[str, Any], err: ValueError) -> None:
+    """Un `ValueError` du composant, relaye a l'ecran (audit du 03/10).
+
+    Son message partait tel quel, en francais sans accents, et l'ecran
+    l'affichait dans les sept langues. Un refus PREVISIBLE — un plafond, une
+    limite — porte desormais son code et ce qu'il nomme (`RefusNomme`,
+    refus.py) : l'ecran le traduit (`src/refus.js`). Tout autre `ValueError`
+    est un format que l'ecran n'envoie pas de lui-meme. Le message reste, pour
+    le journal.
+    """
+    code = err.code if isinstance(err, RefusNomme) else "invalid_format"
+    connection.send_error(msg["id"], code, str(err))
 
 
 @callback
@@ -197,7 +218,11 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             return
         refus = await _refus_profil_admin(patch, connection)
         if refus:
-            connection.send_error(msg["id"], "not_admin", refus)
+            # Son code a lui (audit du 03/10) : `not_admin` est celui des
+            # reglages de la maison, et l'ecran departageait les deux refus par
+            # une expression sur ce motif en francais. Le motif reste, pour le
+            # journal.
+            connection.send_error(msg["id"], "code_admin_requis", refus)
             return
         try:
             # Le role vient de la connexion authentifiee, jamais du message :
@@ -215,7 +240,9 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             connection.send_error(msg["id"], "not_admin", str(err))
             return
         except ValueError as err:
-            connection.send_error(msg["id"], "invalid_format", str(err))
+            # Les plafonds du magasin disent `payload_too_large` ; le reste est
+            # un format invalide (audit du 03/10).
+            _relayer(connection, msg, err)
             return
         connection.send_result(msg["id"], {"config": config})
 
@@ -272,7 +299,8 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                 msg["cle"], msg["action"], msg["gestes"], msg.get("nom") or ""
             )
         except ValueError as err:
-            connection.send_error(msg["id"], "payload_too_large", str(err))
+            # Un plafond du magasin : son code, et sa cle (audit du 03/10).
+            _relayer(connection, msg, err)
             return
         connection.send_result(msg["id"], {"affectations": table})
 
@@ -322,8 +350,10 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         except ValueError as err:
             # Les plafonds de `store.py`. Sans ce relais, le refus
             # remonterait en erreur inconnue et l'ecran continuerait
-            # d'afficher un reglage que le serveur n'a pas garde.
-            connection.send_error(msg["id"], "payload_too_large", str(err))
+            # d'afficher un reglage que le serveur n'a pas garde. Un plafond
+            # dit `payload_too_large` et nomme sa cle ; une valeur illisible
+            # n'en est pas un (audit du 03/10).
+            _relayer(connection, msg, err)
             return
         connection.send_result(msg["id"], {"config": config})
 
@@ -352,8 +382,10 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         except ValueError as err:
             # Les plafonds de `store.py`. Sans ce relais, le refus
             # remonterait en erreur inconnue et l'ecran continuerait
-            # d'afficher un reglage que le serveur n'a pas garde.
-            connection.send_error(msg["id"], "payload_too_large", str(err))
+            # d'afficher un reglage que le serveur n'a pas garde. Un plafond
+            # dit `payload_too_large` et nomme sa cle ; une valeur illisible
+            # n'en est pas un (audit du 03/10).
+            _relayer(connection, msg, err)
             return
         connection.send_result(msg["id"], {"config": config})
 
@@ -382,8 +414,10 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         except ValueError as err:
             # Les plafonds de `store.py`. Sans ce relais, le refus
             # remonterait en erreur inconnue et l'ecran continuerait
-            # d'afficher un reglage que le serveur n'a pas garde.
-            connection.send_error(msg["id"], "payload_too_large", str(err))
+            # d'afficher un reglage que le serveur n'a pas garde. Un plafond
+            # dit `payload_too_large` et nomme sa cle ; une valeur illisible
+            # n'en est pas un (audit du 03/10).
+            _relayer(connection, msg, err)
             return
         connection.send_result(msg["id"], {"config": config})
 
@@ -412,8 +446,10 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         except ValueError as err:
             # Les plafonds de `store.py`. Sans ce relais, le refus
             # remonterait en erreur inconnue et l'ecran continuerait
-            # d'afficher un reglage que le serveur n'a pas garde.
-            connection.send_error(msg["id"], "payload_too_large", str(err))
+            # d'afficher un reglage que le serveur n'a pas garde. Un plafond
+            # dit `payload_too_large` et nomme sa cle ; une valeur illisible
+            # n'en est pas un (audit du 03/10).
+            _relayer(connection, msg, err)
             return
         connection.send_result(msg["id"], {"config": config})
 
@@ -442,8 +478,10 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         except ValueError as err:
             # Les plafonds de `store.py`. Sans ce relais, le refus
             # remonterait en erreur inconnue et l'ecran continuerait
-            # d'afficher un reglage que le serveur n'a pas garde.
-            connection.send_error(msg["id"], "payload_too_large", str(err))
+            # d'afficher un reglage que le serveur n'a pas garde. Un plafond
+            # dit `payload_too_large` et nomme sa cle ; une valeur illisible
+            # n'en est pas un (audit du 03/10).
+            _relayer(connection, msg, err)
             return
         connection.send_result(msg["id"], {"config": config})
 
@@ -452,7 +490,9 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     # ── Les scenarios (ADR 0027) ───────────────────────────────────────────
     # Lire et lancer sont ouverts a tout compte connecte : lancer, c'est
     # appeler des services que Home Assistant lui permet deja. Ecrire — les
-    # scenarios sont ceux de la maison — reste aux administrateurs.
+    # scenarios sont ceux de la maison — reste aux administrateurs, sauf
+    # l'ORDRE (audit du 03/10) : ranger est de l'agencement, et passe par sa
+    # propre commande, plus bas.
     @websocket_api.websocket_command({vol.Required("type"): WS_SCN_ETAT})
     @websocket_api.async_response
     async def handle_scn_etat(hass, connection, msg):
@@ -475,13 +515,55 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         try:
             config = await scenarios.async_enregistrer(msg["patch"])
         except ValueError as err:
-            connection.send_error(msg["id"], "invalid_format", str(err))
+            # 24 scenarios, 12 actions : la limite se dit par son code, et se
+            # nomme apres les deux-points (audit du 03/10).
+            _relayer(connection, msg, err)
             return
         # L'etat avec : l'ecran redessine sans attendre son sondage.
         connection.send_result(msg["id"], {"config": config, "etat": await scenarios.async_etat()})
 
+    # Ranger les scenarios (audit du 03/10). L'ordre passait par `config`,
+    # reservee : sur un compte ordinaire la fleche de la vue etait refusee, et
+    # l'ecran avalait le refus. Or l'ordre est de l'AGENCEMENT (ADR 0125),
+    # ouvert a tout compte comme ranger ses cartes. Cette commande ne fait que
+    # ca : aucun scenario dans le message, rien que des identifiants que la
+    # maison connait — un inconnu fait tout refuser en se nommant
+    # (`not_found`). Le schema borne le reste : du texte, 64 au plus, le
+    # double de ce que la maison peut compter (8 de Loggia + 24 personnels).
     @websocket_api.websocket_command(
-        {vol.Required("type"): WS_SCN_LANCER, vol.Required("id"): str}
+        {vol.Required("type"): WS_SCN_ORDRE,
+         vol.Required("ordre"): vol.All([vol.All(str, vol.Length(min=1, max=64))], vol.Length(max=64))}
+    )
+    @websocket_api.async_response
+    async def handle_scn_ordre(hass, connection, msg):
+        scenarios = acces_scenarios() if acces_scenarios else None
+        if scenarios is None:
+            connection.send_error(msg["id"], "not_available", "scenarios indisponibles")
+            return
+        try:
+            config = await scenarios.async_ordonner(msg["ordre"])
+        except ScenariosInconnusError as err:
+            connection.send_error(msg["id"], "not_found", str(err))
+            return
+        except ValueError as err:
+            # Par `_relayer`, comme ses voisines (relecture du 03/10) : un
+            # plafond du magasin leve `payload_too_large` en nommant
+            # `loggia_scenarios`, et repartait d'ici en `invalid_format` — le
+            # code et la cle perdus, l'ecran disait une panne. Un ordre
+            # illisible (un doublon) reste `invalid_format`.
+            _relayer(connection, msg, err)
+            return
+        # L'etat avec, deja range : l'ecran redessine sans attendre son sondage.
+        connection.send_result(msg["id"], {"ordre": config["ordre"], "etat": await scenarios.async_etat()})
+
+    # Le scenario se nomme `scenario`, JAMAIS `id` (audit du 03/10) : `id` est
+    # le numero du message, que la bibliotheque du navigateur ecrase avec le
+    # sien, et que Home Assistant exige entier. Le schema etendu remplacait la
+    # cle de base par `str` : tout lancement depuis l'ecran etait refuse en
+    # « invalid_format ». tests/python/test_websocket_api_execution.py refuse
+    # desormais tout schema qui declare `id`.
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_SCN_LANCER, vol.Required("scenario"): vol.All(str, vol.Length(min=1, max=64))}
     )
     @websocket_api.async_response
     async def handle_scn_lancer(hass, connection, msg):
@@ -491,10 +573,10 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             return
         # La main de celui qui appuie : les regles la verront comme telle.
         # Ses permissions d'entite, pas celles du composant (audit 18/09).
-        resultat = await scenarios.async_lancer(msg["id"], user_id=connection.user.id,
+        resultat = await scenarios.async_lancer(msg["scenario"], user_id=connection.user.id,
                                                 controle=controle_de(connection.user))
         if resultat is None:
-            connection.send_error(msg["id"], "not_found", "scenario inconnu : %s" % msg["id"])
+            connection.send_error(msg["id"], "not_found", "scenario inconnu : %s" % msg["scenario"])
             return
         connection.send_result(msg["id"], resultat)
 
@@ -573,7 +655,8 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         try:
             config = await robots.async_enregistrer(msg["patch"])
         except ValueError as err:
-            connection.send_error(msg["id"], "invalid_format", str(err))
+            # 24 plannings au plus : meme regle que les scenarios (03/10).
+            _relayer(connection, msg, err)
             return
         connection.send_result(msg["id"], {"config": config})
 
@@ -724,6 +807,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_scn_etat)
     websocket_api.async_register_command(hass, handle_scn_config)
     websocket_api.async_register_command(hass, handle_scn_lancer)
+    websocket_api.async_register_command(hass, handle_scn_ordre)
     websocket_api.async_register_command(hass, handle_rob_etat)
     websocket_api.async_register_command(hass, handle_rob_config)
     websocket_api.async_register_command(hass, handle_min_etat)

@@ -11,7 +11,8 @@ import {
 import { cvName, RegleEntete, usePli , useEtatServeur, ListeChoix, BottomSheet, EntPicker } from '../ui.jsx';
 import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt } from './parcommun.jsx';
 import { niveauPile, couleurNiveau, SEUIL_CO2 } from '../attention.js';
-import { tr } from '../i18n.js';
+import { tr, comparerTextes } from '../i18n.js';
+import { raisonEchec } from '../refus.js';
 import { puce } from '../styles.js';
 
 /* Au niveau du module, et non dans le composant.
@@ -65,7 +66,9 @@ export function VeillesReglages({ hass, cardSt }) {
       const r = await h.callWS({ type: 'loggia/veilles/config', patch });
       if (vivant.current && r && r.config) setEtat(e => (e ? { ...e, config: r.config } : e));
     } catch (e) {
-      setErr((e && (e.message || e.code)) || tr('Enregistrement impossible.'));
+      // Un refus se dit comme tel et nomme sa clé ; une panne reste une panne
+      // (audit du 03/10, refus.js). Il s'affichait en « Unauthorized ».
+      setErr(raisonEchec(e, 'loggia_veilles'));
     }
   };
 
@@ -79,7 +82,7 @@ export function VeillesReglages({ hass, cardSt }) {
     return Object.keys(hass.states)
       .filter(id => id.indexOf('switch.') === 0 || id.indexOf('fan.') === 0)
       .map(id => ({ id, nom: cvName(hass.states[id], id) }))
-      .sort((a, b) => a.nom.localeCompare(b.nom));
+      .sort((a, b) => comparerTextes(a.nom, b.nom));
   }, [hass]);
 
   const tarifs = useMemo(() => {
@@ -88,7 +91,7 @@ export function VeillesReglages({ hass, cardSt }) {
       .filter(id => id.indexOf('sensor.') === 0 || id.indexOf('binary_sensor.') === 0
         || id.indexOf('select.') === 0)
       .map(id => ({ id, nom: cvName(hass.states[id], id) }))
-      .sort((a, b) => a.nom.localeCompare(b.nom));
+      .sort((a, b) => comparerTextes(a.nom, b.nom));
   }, [hass]);
 
   if (!cfg) {

@@ -17,8 +17,7 @@
 // que « Lumière » et « Lumières » ne se séparent plus jamais.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Minuscules sans accents : « Éclairage » et « eclairage » doivent se valoir. */
-const sansAccent = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+import { sansAccents } from './outils.js';
 
 /* Familles de métier, dans l'ordre où on les cherche. La première qui matche
  * gagne : « alarme lumière » est une affaire de sécurité avant d'être une
@@ -39,6 +38,13 @@ const AUTO_FAMILLES = [
   ['Réveil', /(reveil|coucher|nuit|matin|soir|sommeil)/],
 ];
 
+/** Les familles que Loggia nomme lui-même, `Divers` compris (audit du 03/10).
+ * Elles restent des clés françaises — elles servent aussi à regrouper, et les
+ * tests les lisent ainsi — et se traduisent à l'affichage. Le repli, un mot
+ * tiré du NOM de l'automatisation, vient de Home Assistant : il reste tel
+ * quel, d'où cette liste plutôt qu'un `tr` sur tout. */
+export const FAMILLES_AUTO = AUTO_FAMILLES.map(([nom]) => nom).concat('Divers');
+
 /* Verbes et mots de service qui commencent un nom sans rien dire du sujet.
  * « Force veilleuse » : c'est le mot d'APRÈS qui compte. */
 const AUTO_VERBES = /^(force|forcer|allume|allumer|eteint|eteindre|coupe|couper|active|activer|desactive|desactiver|lance|lancer|met|mettre|envoie|envoyer|demarre|demarrer|arrete|arreter|ferme|fermer|ouvre|ouvrir|regle|regler|baisse|baisser|monte|monter|passe|passer|change|changer|notifie|notifier|synchronise|verifie|verifier|gere|gerer|auto|automatisation|routine|scenario|test|copie|nouvelle|nouveau)$/;
@@ -53,12 +59,12 @@ const AUTO_VERBES = /^(force|forcer|allume|allumer|eteint|eteindre|coupe|couper|
 export function autoFamille(nom) {
   const brut = String(nom || '').trim();
   if (!brut) return 'Divers';
-  const n = sansAccent(brut);
+  const n = sansAccents(brut);
   const trouve = AUTO_FAMILLES.find(([, re]) => re.test(n));
   if (trouve) return trouve[0];
   // Rien de reconnu : le premier mot qui ne soit pas un verbe d'action.
   const mots = brut.split(/[\s:–—_/-]+/).map(m => m.replace(/[^0-9A-Za-zÀ-ÿ]/g, '')).filter(m => m.length > 2);
-  const mot = mots.find(m => !AUTO_VERBES.test(sansAccent(m))) || mots[0];
+  const mot = mots.find(m => !AUTO_VERBES.test(sansAccents(m))) || mots[0];
   if (!mot) return 'Divers';
   // Le pluriel rejoint le singulier — c'est là que « Lumière » et « Lumières »
   // se retrouvaient séparés.

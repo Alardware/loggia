@@ -11,13 +11,15 @@
  * mise en page vit dans index.css : au téléphone la rangée de mesures reste
  * sur UNE ligne, l'icône au-dessus.
  */
-import { Fi, cl_hexRgb } from './ui.jsx';
+import { useId } from 'react';
+import { Fi, cl_hexRgb, nomCarte } from './ui.jsx';
 import { tr } from './i18n.js';
 
 const RAYON = 18;
 const TOUR = 2 * Math.PI * RAYON;
 
 export function BarreConfort({ confort, onOpen }) {
+  const did = useId(); // avant le `return null` : l'ordre des crochets ne change pas d'un rendu à l'autre
   if (!confort) return null;
   const { indice, verdict, mesures } = confort;
   return (
@@ -25,9 +27,23 @@ export function BarreConfort({ confort, onOpen }) {
      * texte, au lieu de se mettre en colonne au telephone. Avec quatre
      * pastilles sur 375 px la colonne s'impose ; avec deux, la place ne manque
      * pas et l'empilement fabriquait des tuiles hautes et vides (maquette 2a,
-     * 01/10). Le compte decide, pas la largeur seule. */
+     * 01/10). Le compte decide, pas la largeur seule.
+     *
+     * Son NOM est ce qu'elle affiche (lot 13 de l'audit du 03/10) : « Indice
+     * de confort, 72 / 100, Bon ». « Historique du confort » n'est écrit nulle
+     * part sur la barre et taisait l'indice même (WCAG 2.5.3) : il devient
+     * l'infobulle, ce que le geste ouvre. Pas
+     * `aria-description` : jsx-a11y ne le connaît pas sur un bouton. Aucune
+     * commande dedans : elle reste un bouton, qui dit qu'il ouvre une fiche.
+     *
+     * Relecture du lot 13 : ce rôle rend aussi sa descendance
+     * présentationnelle — chaque mesure, sa valeur et son verdict (« Humidité
+     * 58 % Bon ») ne se lisaient nulle part. `aria-describedby` les lit en
+     * description, au focus ; il passe avant `title`, qui reste l'infobulle de
+     * la souris. */
     <div className={'o-confort' + (mesures.length <= 2 ? ' o-confort-peu' : '')} style={{ '--conf-n': mesures.length }}
-      role="button" tabIndex={0} aria-label={tr('Historique du confort')}
+      role="button" tabIndex={0} aria-label={nomCarte(tr('Indice de confort'), indice + ' / 100', verdict.t)} aria-describedby={did}
+      aria-haspopup="dialog" title={tr('Historique du confort')}
       onClick={onOpen} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}>
       <div className="o-confort-indice">
         <span className="o-confort-anneau" aria-hidden="true">
@@ -46,7 +62,7 @@ export function BarreConfort({ confort, onOpen }) {
         </div>
       </div>
       <span className="o-confort-sep" aria-hidden="true" />
-      <div className="o-confort-mesures">
+      <div className="o-confort-mesures" id={did}>
         {mesures.map(m => (
           <div key={m.cle} className="o-confort-mesure">
             <span className="o-confort-ico" style={{ background: 'rgba(' + cl_hexRgb(m.verdict.c) + ',.16)', color: m.verdict.c }}><Fi i={m.icone} size={15} /></span>

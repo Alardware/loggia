@@ -6,6 +6,7 @@
  * dessiné par le système — blanc sous Windows, quel que soit le thème.
  * Loggia dessine donc les siens, partout, et tous à la même taille.
  */
+import { sansAccents } from './outils.js';
 
 /** Au-delà de douze options, un champ filtre la liste. */
 export const SEUIL_RECHERCHE = 12;
@@ -15,11 +16,6 @@ export const SEUIL_RECHERCHE = 12;
  *  liste courte laisse du vide, la longue défile. */
 export const LARGEUR_MENU = 320;
 export const HAUTEUR_MENU = 320;
-
-/** Minuscules sans accents : « Éclairage » se trouve en tapant « eclai ». */
-export function sansAccents(s) {
-  return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-}
 
 /** Les options qui répondent au texte tapé : le nom, l'identifiant affiché
  *  dessous ou la clé elle-même. Sans texte, toutes. */
@@ -61,4 +57,21 @@ export function placerMenu(r, vw, vh) {
     top: r.bottom + 6,
     bottom: vh - r.top + 6,
   };
+}
+
+/** Le clavier d'une barre d'onglets (motif ARIA « tabs », audit du 03/10).
+ *  La barre ne tient qu'UN arrêt de Tab — l'onglet actif — et l'on y circule
+ *  aux flèches : ← et → passent au voisin en bouclant, Début et Fin vont au
+ *  premier et au dernier. Rend le rang visé, ou -1 pour une touche qui ne
+ *  regarde pas la barre : Tab en sort, Entrée et Espace cliquent, haut et bas
+ *  font défiler. Rangé avec la logique des listes : comme elle, il se vérifie
+ *  sans navigateur, et la prochaine barre d'onglets le trouvera ici. */
+export function ongletVoisin(n, i, touche) {
+  if (!(n > 0)) return -1;
+  const k = i >= 0 && i < n ? i : 0;
+  if (touche === 'ArrowRight') return (k + 1) % n;
+  if (touche === 'ArrowLeft') return (k + n - 1) % n;
+  if (touche === 'Home') return 0;
+  if (touche === 'End') return n - 1;
+  return -1;
 }

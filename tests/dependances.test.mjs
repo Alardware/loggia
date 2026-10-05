@@ -58,14 +58,17 @@ const VERIFIE = {
    * Objets ont quitté `App.jsx`, leurs cinq omissions avec elles — celles-là
    * ont disparu, pas déménagé : la vue Objets n'en a aucune.
    * Puis à 32 : la fiche « Modifier l'entité » (mode édition, 14/09) n'a plus
-   * de champ ENTITÉ, ni le `useMemo` qui listait ses options. */
+   * de champ ENTITÉ, ni le `useMemo` qui listait ses options.
+   * Lot 15 de l'audit du 03/10 : `autoOn` (les repas) et `derivedCovers`
+   * (les volets) sont partis avec les miroirs qui les recopiaient — les deux
+   * états passent par `useOptimiste`. Disparus, pas déménagés. */
   'src/App.jsx': [
     'S', 'S', 'S',
     'S and dc', 'S and ids', 'S, domaineOk, and nomEnt',
     'a and dashHass', 'ancre', 'api and plage', 'applyUser',
-    'autoOn', 'choisis and tousCals', 'cle and hass', 'cv.name',
+    'choisis and tousCals', 'cle and hass', 'cv.name',
     'dc', 'debutGrille and finGrille', 'derived',
-    'derivedCovers', 'discovery', 'discovery',
+    'discovery', 'discovery',
     'hass', 'hass', 'hass',
     'hass and live', 'hass, ids, and metrics', 'hidden', 'keys and noisyKeys',
     'loggiaRuntime.index', 'noms', 'seulement',
@@ -82,10 +85,12 @@ const VERIFIE = {
   /* `lireObserve` (18/09/2026) : l'interrupteur « Observer sans agir » des
    * Regles relit les quatre modules toutes les cinq secondes. La fonction est
    * recreee a chaque rendu — et le rendu suit chaque changement d'etat de la
-   * maison : la mettre dans le tableau relancerait l'intervalle a ce rythme. */
+   * maison : la mettre dans le tableau relancerait l'intervalle a ce rythme.
+   * Un `hass` de moins (lot 15 de l'audit du 03/10) : la purge faite main des
+   * automatisations est partie, `useOptimiste` la remplace. */
   'src/views/parametres.jsx': [
     'entTouched and readEnt', 'h', 'hass', 'hass',
-    'hass', 'hass and updBusy', 'lat and ping', 'lireObserve',
+    'hass and updBusy', 'lat and ping', 'lireObserve',
   ],
   /* `onCompte` (18/09/2026) : la section remonte ses chiffres a l'en-tete de
    * la page. Le parent recree ce rappel a chaque rendu, et chaque appel le
@@ -245,6 +250,49 @@ test('aucun nom déclaré ne reste sans lecteur', async () => {
   }
   assert.deepEqual(morts.sort(), [],
     'un nom déclaré n’est lu nulle part : un découpage a laissé son gravier');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lot 16 (05/10) : hors des dépendances d'effet, ESLint ne doit RIEN dire.
+//
+// `lint:tout` sortait 53 avertissements : les 48 exhaustive-deps relues plus
+// haut, et cinq qui n'en étaient pas. D'abord deux faux positifs
+// control-has-associated-label : le champ Alexa et la recherche d'icônes ont
+// leur `<label htmlFor>`, que la règle ne suit pas. Ensuite un
+// no-noninteractive-tabindex sur la carte Présence, où rôle et tabIndex sont
+// posés ENSEMBLE (ADR 0147). Enfin deux directives qui ne couvraient rien :
+// l'une visait la div au lieu du champ, l'autre nommait une règle déjà
+// satisfaite. Une directive inutile ne dit rien aujourd'hui, et elle tait
+// demain le vrai défaut qui viendra se poser sur sa ligne.
+//
+// `npm test` ne lance pas le lint : sans ces deux tests, seule la CI le
+// verrait. Ils lisent la passe déjà faite ici, et n'en lancent pas une
+// troisième (plan S8, 24/09).
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('hors des dépendances d’effet, eslint ne sort rien : ni jsx-a11y, ni directive inutile', async () => {
+  const autres = [];
+  for (const f of await passe()) {
+    const nom = relative(RACINE, f.filePath).split(ANTISLASH).join('/');
+    for (const m of f.messages) {
+      if (m.ruleId === 'react-hooks/exhaustive-deps') continue;
+      autres.push(`${nom}:${m.line} ${m.ruleId || (m.fatal ? 'analyse' : 'directive')} → ${m.message}`);
+    }
+  }
+  assert.deepEqual(autres, [],
+    'un avertissement autre qu’exhaustive-deps est revenu : un vrai défaut se corrige ; un faux positif prend sa directive SUR la ligne qu’il vise, et une directive qui ne couvre plus rien se retire');
+});
+
+test('le compte d’eslint tient sous le cliquet de la CI, et le cliquet ne remonte pas', async () => {
+  const wf = readFileSync(join(RACINE, '.github', 'workflows', 'validate.yml'), 'utf8');
+  const m = wf.match(/\n {6}- run: npm run lint:tout -- --max-warnings (\d+)\n/);
+  assert.ok(m, 'le cliquet a disparu de validate.yml');
+  let n = 0;
+  for (const f of await passe()) n += f.warningCount;
+  assert.ok(n <= Number(m[1]), `eslint sort ${n} avertissements, le cliquet de la CI en tolère ${m[1]} : la PR serait rouge`);
+  // Le lot 16 a ramené le compte à 48 et serré le cliquet d'autant. Au-dessus,
+  // un avertissement est entré sans que personne le décide.
+  assert.ok(Number(m[1]) <= 48, `le cliquet de la CI est à ${m[1]}, au-dessus des 48 du lot 16 : il ne doit que descendre`);
 });
 
 test('le chemin chaud ne recalcule plus pour rien', () => {

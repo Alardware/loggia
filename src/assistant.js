@@ -11,6 +11,7 @@
  */
 import { useState, useEffect } from 'react';
 import { cfgVal } from './state.js';
+import { comparerTextes } from './i18n.js';
 
 /** Le réglage tel qu'il est : l'identifiant d'une entité de conversation, un
  * nom de composant — l'ancienne forme, toujours valable —, ou ''. */
@@ -36,7 +37,7 @@ export function conversationsDe(hass) {
   return Object.keys(etats)
     .filter((id) => id.indexOf('conversation.') === 0)
     .map((id) => ({ id, nom: String(((etats[id] || {}).attributes || {}).friendly_name || id) }))
-    .sort((a, b) => a.nom.localeCompare(b.nom));
+    .sort((a, b) => comparerTextes(a.nom, b.nom));
 }
 
 /** L'entité que désigne le réglage. Un nom de composant — l'ancienne forme —
@@ -60,7 +61,10 @@ function composantDe(hass, id) {
 /**
  * L'assistant réglé est-il là, et comment lui parler ?
  *
- * Rend la clé que reçoit la popup, ou '' :
+ * Rend `{ cle, attente }`. `attente` : la PREMIÈRE réponse manque encore —
+ * l'en-tête et la barre du bas gardent la place du micro, qui paraissait une
+ * image après le premier dessin et poussait la date de 50 px (lot 14 de
+ * l'audit du 03/10). `cle`, la clé que reçoit la popup, ou '' :
  *
  *   • le NOM DU COMPOSANT quand celui-ci parle son propre protocole —
  *     `<nom>/info` répond : la réponse arrive mot à mot, avec l'historique ;
@@ -77,6 +81,7 @@ function composantDe(hass, id) {
  */
 export function useAssistant(hass) {
   const [cle, setCle] = useState('');
+  const [repondu, setRepondu] = useState(false);
   const choix = choixAssistant();
   const dispo = !!(hass && typeof hass.callWS === 'function' && choix);
   useEffect(() => {
@@ -95,9 +100,10 @@ export function useAssistant(hass) {
         else if (hass.states && hass.states[choix]) r = choix;
       }
       if (vivant) setCle(r);
+      if (vivant) setRepondu(true);
     })();
     return () => { vivant = false; };
     // `hass` change à chaque état de la maison ; sa disponibilité, non.
   }, [dispo, choix]);   // eslint-disable-line react-hooks/exhaustive-deps
-  return dispo ? cle : '';
+  return { cle: dispo ? cle : '', attente: dispo && !repondu };
 }

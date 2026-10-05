@@ -13,7 +13,9 @@ const bloc = (debut) => { const i = app.indexOf(debut); assert.ok(i >= 0, debut 
 test('le kit commun : la carte au focus se deplace aux fleches, Entree ouvre sa fiche', () => {
   const c = bloc('function EditableCard(');
   assert.ok(c.includes("if (e.key === 'ArrowLeft') { e.preventDefault(); ed.move(id, -1); }") && c.includes("else if (e.key === 'ArrowRight') { e.preventDefault(); ed.move(id, 1); }"), 'les fleches');
-  assert.ok(c.includes("role=\"button\" tabIndex={0} {...prise}"), 'focalisable');
+  // Focalisable : la SURFACE de la carte porte le clavier (lot 13 de l'audit du 03/10).
+  assert.equal((c.match(/<Surface [^\n]*\{\.\.\.clavier\}/g) || []).length, 2, 'focalisable : l’intertitre et la carte');
+  assert.ok(c.includes("else if ((e.key === 'Enter' || e.key === ' ') && onEdit) { e.preventDefault(); onEdit(id); }"), 'Entree ouvre la fiche');
 });
 
 test('les sections de l’Accueil et les tuiles des pieces : focus en edition, fleches, un cran, l’ordre de la souris', () => {
@@ -25,8 +27,12 @@ test('les sections de l’Accueil et les tuiles des pieces : focus en edition, f
    * doigt, et le même résultat. */
   assert.ok(d.includes('const d = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];'), 'les quatre sens');
   assert.ok(d.includes("saveGrille({ places: nettoyer(poser(grille.places, noms, t, id, c, r, piecesCols), noms) });"), 'la meme pose que la souris');
-  assert.ok(d.includes("onKeyDown={editMode ? (e) => clavierSec(e, zone, id) : undefined}") && d.includes("onKeyDown={editMode ? (e) => clavierPiece(e, p.name, inner.map(x => x.name)) : undefined}"), 'branche sur les deux enveloppes');
-  assert.ok(d.includes("tabIndex={editMode ? 0 : undefined}") && d.includes("tr('Déplacer avec les flèches')"), 'focalisable et nomme, en edition seulement');
+  /* Branchés sur la SURFACE de la section et de la tuile (lot 13 de l'audit
+   * du 03/10), posée en édition seulement : l'enveloppe n'est plus un bouton
+   * qui contient des boutons. */
+  assert.ok(d.includes("onKeyDown={(e) => clavierSec(e, zone, id)}") && d.includes("onKeyDown={(e) => clavierPiece(e, p.name, inner.map(x => x.name))}"), 'branche sur les deux surfaces');
+  assert.equal((d.match(/\{editMode && <Surface popup=\{false\}/g) || []).length, 2, 'focalisable, en edition seulement');
+  assert.ok(d.includes("tr('Déplacer avec les flèches')"), 'et nomme');
   // Un bouton du bandeau garde ses touches : seul l'element lui-meme compte.
   assert.equal((d.match(/if \(e\.target !== e\.currentTarget\) return;/g) || []).length, 2, 'deux gardes, une par rangement');
 });
@@ -34,7 +40,10 @@ test('les sections de l’Accueil et les tuiles des pieces : focus en edition, f
 test('les cartes d’une vue personnalisee suivent la meme regle', () => {
   const v = bloc('function CustomView(');
   assert.ok(v.includes('const deplacerCv = ') && v.includes('const clavierCv = ') && v.includes('setEnts(a);'), 'le rangement');
-  assert.ok(v.includes("onKeyDown={edit ? (e) => clavierCv(e, x) : undefined}") && v.includes("tabIndex={edit ? 0 : undefined}"), 'branche, en edition seulement');
+  /* Depuis le lot 13 de l'audit du 03/10, le clavier passe par la SURFACE de
+   * la carte, un vrai bouton, nommé, posé en édition seulement : la carte
+   * entière, `role="button"`, englobait sa barre d'outils. */
+  assert.ok(v.includes("{edit && <Surface popup={false} label={nomCarte(x) + ' · ' + tr('Déplacer avec les flèches')} onKeyDown={(e) => clavierCv(e, x)}"), 'branche, en edition seulement');
   assert.ok(v.includes('if (e.target !== e.currentTarget) return;'), 'les boutons de la barre gardent leurs touches');
 });
 

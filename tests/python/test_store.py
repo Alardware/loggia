@@ -349,6 +349,53 @@ def test_trop_de_cles_est_refuse(creer_store, store_module):
         lancer(magasin.async_set_user("u1", trop, is_admin=True))
 
 
+MAISON = {"loggia_rooms": ["Salon", "Cuisine"], "loggia_users": [{"name": "Luna"}], "loggia-theme": "nuit"}
+
+
+def _import_en_un_envoi(contenu):
+    """Ce que le dashboard envoie pour importer (audit du 03/10) : les cles
+    actuelles a None ET le contenu du fichier, dans le MEME lot."""
+    lot = {k: None for k in MAISON}
+    lot.update(contenu)
+    return lot
+
+
+def test_un_import_refuse_laisse_la_maison_intacte(creer_store, store_module):
+    """Le contrat dont l'import depend : un lot refuse ne touche a RIEN.
+
+    L'import envoyait la purge, puis le contenu, en deux fois. La purge passait
+    toujours ; le contenu pouvait etre refuse — et il ne restait plus rien de
+    la maison. Le dashboard les envoie maintenant ensemble : ce test garde la
+    moitie serveur de la promesse, ni en memoire ni sur le disque.
+    """
+    magasin = creer_store({"users": {}, "shared": dict(MAISON), "migrated": True})
+    trop = {f"loggia_k{i}": i for i in range(store_module.MAX_KEYS_PER_USER + 1)}
+    with pytest.raises(ValueError):
+        lancer(magasin.async_set_user("u1", _import_en_un_envoi(trop), is_admin=True))
+    assert lancer(magasin._load())["shared"] == MAISON, "la purge est passee sans le contenu"
+    assert magasin._store.ecritures == 0, "un lot refuse a ete ecrit sur le disque"
+
+
+def test_un_import_par_un_compte_ordinaire_ne_touche_a_rien(creer_store, store_module):
+    """Meme promesse quand c'est le DROIT qui manque : la purge de cles de la
+    maison est refusee avec le reste, au lieu de passer seule."""
+    magasin = creer_store({"users": {}, "shared": dict(MAISON), "migrated": True})
+    with pytest.raises(store_module.MaisonReserveeError):
+        lancer(magasin.async_set_user("u2", _import_en_un_envoi({"loggia_rooms": ["Grenier"]}), is_admin=False))
+    assert lancer(magasin._load())["shared"] == MAISON
+    assert magasin._store.ecritures == 0
+
+
+def test_un_import_accepte_est_un_miroir(creer_store):
+    """Le pendant : accepte, le lot remplace la maison d'un bloc."""
+    magasin = creer_store({"users": {}, "shared": {**MAISON, "loggia_plants": ["ficus"]}, "migrated": True})
+    lot = _import_en_un_envoi({"loggia_rooms": ["Grenier"], "loggia-theme": "jour"})
+    lot["loggia_plants"] = None
+    lancer(magasin.async_set_user("u1", lot, is_admin=True))
+    assert lancer(magasin._load())["shared"] == {"loggia_rooms": ["Grenier"], "loggia-theme": "jour"}
+    assert magasin._store.ecritures == 1, "un import doit s'ecrire en une fois"
+
+
 def test_volume_cumule_est_refuse(creer_store, store_module):
     """Des ecritures acceptees une a une ne doivent pas gonfler le fichier.
 
@@ -463,6 +510,22 @@ def test_le_nombre_de_cles_communes_est_plafonne(creer_store, store_module):
     with pytest.raises(ValueError):
         for i in range(store_module.MAX_KEYS_PER_USER + 1):
             lancer(magasin.async_set_shared(f"loggia_p{i}", i))
+
+def test_un_plafond_porte_son_code_et_nomme_sa_cle(creer_store, store_module):
+    """Un plafond est un refus PREVISIBLE (audit du 03/10) : il porte le code
+    que l'ecran traduit, et la cle apres les deux-points. Il partait en
+    `ValueError` nu, que les commandes des modules relayaient tel quel, en
+    francais sans accents."""
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    with pytest.raises(ValueError) as refus:
+        lancer(magasin.async_set_shared("loggia_volets", {"x": "x" * store_module.MAX_VALUE_BYTES}))
+    assert getattr(refus.value, "code", None) == "payload_too_large"
+    assert str(refus.value).endswith(" : loggia_volets"), str(refus.value)
+    with pytest.raises(ValueError) as refus:
+        for i in range(store_module.MAX_KEYS_PER_USER + 1):
+            lancer(magasin.async_set_shared(f"loggia_p{i}", i))
+    assert getattr(refus.value, "code", None) == "payload_too_large"
+
 
 def test_les_commandes_de_module_relaient_le_refus():
     """Un plafond qui refuse en silence ne vaut guere mieux qu'aucun plafond.
@@ -579,6 +642,42 @@ def test_un_compte_ordinaire_range_ses_cartes(creer_store, store_module):
     assert data["users"].get("famille", {}) == {}, "une ombre a ete laissee dans sa section"
 
 
+def test_un_compte_ordinaire_choisit_une_icone_et_tourne_le_plan(creer_store, store_module):
+    """Le choix d'une icone et le quart de tour du plan du robot sont de
+    l'apparence (03/10).
+
+    Ils ne font que remplacer un dessin ou tourner une image : une erreur ne
+    coute rien. Restes du cote reserve faute d'avoir ete ranges, ils
+    s'affichaient depuis un compte ordinaire, un message les disait « non
+    enregistres », et ils disparaissaient au rechargement.
+    """
+    assert {"loggia_icones", "loggia_vacrot"} <= store_module.APPARENCE
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    lancer(magasin.async_set_user(
+        "famille",
+        {"loggia_icones": {"switch.prise": "bulb"}, "loggia_vacrot": 90},
+        is_admin=False,
+    ))
+    data = lancer(magasin._load())
+    # Dans le COMMUN, comme l'agencement : une icone vaut pour toutes les
+    # cartes de la maison qui montrent cette entite.
+    assert data["shared"]["loggia_icones"] == {"switch.prise": "bulb"}
+    assert data["shared"]["loggia_vacrot"] == 90
+    assert data["users"].get("famille", {}) == {}, "une ombre a ete laissee dans sa section"
+    # Rendre l'icone d'origine est ouvert de la meme facon.
+    lancer(magasin.async_set_user("famille", {"loggia_icones": None}, is_admin=False))
+    assert "loggia_icones" not in lancer(magasin._load())["shared"]
+
+    # Les voisines ne suivent pas. L'association des couleurs du plan aux
+    # pieces decide quelle piece le robot nettoie quand on touche une zone :
+    # c'est de la configuration. Les agendas de l'Accueil restent reserves
+    # par decision du 03/10.
+    for cle in ("loggia_vacplan", "loggia_agendas"):
+        assert cle not in store_module.OUVERTES_A_TOUS, cle + " est devenue ouverte a tous"
+        with pytest.raises(store_module.MaisonReserveeError):
+            lancer(magasin.async_set_user("famille", {cle: {"x": "y"}}, is_admin=False))
+
+
 def test_la_configuration_de_la_maison_reste_reservee(creer_store, store_module):
     """La frontiere a bouge, elle n'a pas disparu.
 
@@ -593,6 +692,67 @@ def test_la_configuration_de_la_maison_reste_reservee(creer_store, store_module)
     assert lancer(magasin._load())["shared"] == {}
 
 
+def test_une_piece_refusee_ne_deplace_pas_sa_carte(creer_store, store_module):
+    """Renommer une piece depuis un compte ordinaire (audit du 03/10).
+
+    La piece (`loggia_rooms`) est reservee ; sa place sur l'Accueil
+    (`loggia_accueil`) et la grille de sa vue (`loggia_roomlayout`) ne sont que
+    de l'agencement, ouvert a tous. Envoyees en deux fois, la piece etait
+    refusee et la grille acceptee : la carte perdait sa taille et sa place pour
+    tout le foyer. Le dashboard les envoie desormais dans UN lot
+    (`src/ecrirepiece.js`) ; ce test garde la moitie serveur de la promesse :
+    un lot qui porte une cle reservee est refuse EN ENTIER, avant la moindre
+    ecriture, et le refus ne nomme que la cle reservee.
+    """
+    maison = {
+        "loggia_rooms": [{"room": "Salon"}],
+        "loggia_roomlayout": {"Salon": {"larges": ["light.plafonnier"]}},
+        "loggia_accueil": {
+            "tailles": {"Salon": "c"},
+            "places": {"Salon": {"c": 1, "r": 1}},
+            "piecesOrdre": ["Salon"],
+        },
+    }
+    magasin = creer_store({"users": {}, "shared": dict(maison), "migrated": True})
+    with pytest.raises(store_module.MaisonReserveeError) as refus:
+        lancer(magasin.async_set_user(
+            "famille",
+            {
+                "loggia_rooms": [{"room": "Sejour"}],
+                "loggia_roomlayout": {"Sejour": {"larges": ["light.plafonnier"]}},
+                "loggia_accueil": {
+                    "tailles": {"Sejour": "c"},
+                    "places": {"Sejour": {"c": 1, "r": 1}},
+                    "piecesOrdre": ["Sejour"],
+                },
+            },
+            is_admin=False,
+        ))
+    # L'ecran nomme ce qui n'a pas pris : la piece, jamais l'agencement.
+    assert str(refus.value).endswith(" : loggia_rooms"), str(refus.value)
+    assert lancer(magasin._load())["shared"] == maison, "la grille a bouge sans la piece"
+    assert magasin._store.ecritures == 0, "un lot refuse a ete ecrit sur le disque"
+
+
+def test_le_choix_des_agendas_reste_reserve(creer_store, store_module):
+    """Quels calendriers la maison montre : de la configuration (03/10).
+
+    `loggia_agendas` n'est ni de l'agencement ni de l'apparence : elle reste
+    aux administrateurs. L'ecran masque le choix a un compte Home Assistant
+    ordinaire (FeuilleCalendrier) PARCE QUE le serveur le refuse. Les deux
+    bougent ensemble : ouverte ici un jour, la cle resterait cachee la-bas
+    sans raison.
+    """
+    assert "loggia_agendas" not in store_module.OUVERTES_A_TOUS
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    with pytest.raises(store_module.MaisonReserveeError):
+        lancer(magasin.async_set_user("famille", {"loggia_agendas": ["calendar.famille"]}, is_admin=False))
+    assert lancer(magasin._load())["shared"] == {}
+    # Un administrateur l'ecrit dans le COMMUN : tout le foyer lit le meme choix.
+    lancer(magasin.async_set_user("admin", {"loggia_agendas": ["calendar.famille"]}, is_admin=True))
+    assert lancer(magasin._load())["shared"]["loggia_agendas"] == ["calendar.famille"]
+
+
 def test_aucune_cle_ouverte_ne_porte_un_role(store_module):
     """Le garde-fou de la liste elle-meme : on peut y ajouter une cle par
     inadvertance, et personne ne le verrait avant qu'un compte ordinaire s'en
@@ -602,6 +762,8 @@ def test_aucune_cle_ouverte_ne_porte_un_role(store_module):
         "loggia_users", "loggia_rooms", "loggia_cameras", "loggia_medias",
         "loggia_alarm", "loggia_people", "loggia_customviews",
         "loggia_energyHaids", "loggia_switchlights", "loggia_assistant",
+        # Quels agendas la maison affiche : de la configuration (03/10).
+        "loggia_agendas",
     }
     assert not (store_module.OUVERTES_A_TOUS & interdites), (
         "une cle de configuration est devenue ouverte a tous : "

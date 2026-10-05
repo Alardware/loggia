@@ -53,6 +53,7 @@ from homeassistant.core import HomeAssistant, callback
 from .regles import demarrer, niveau
 from .textes import joindre
 from .unites import depuis_celsius, unite_temperature
+from .ouvrants import est_fenetre_de_toit, est_volet, geste_au_vent
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -101,6 +102,10 @@ DEFAUT: dict[str, Any] = {
     "soleil": {"actif": False, "position": 30, "elevation_min": 15, "temp_min": 25,
                "temp_entite": "", "volets": {}},
     "vent": {"actif": False, "entite": "", "seuil": 50},
+    # Les fenetres de toit (velux) : Loggia ne fait que les FERMER — au
+    # coucher, par vent fort, dans un scenario qui ferme. Sur option : chacun
+    # choisit (03/10, voir ouvrants.py).
+    "velux": {"actif": False},
     # Volet bloque : la porte ou la fenetre devant chaque volet (ADR 0010).
     "baies": {"actif": False, "volets": {}},
     # Ordre non abouti : combien de fois redemander avant la ligne rouge (ADR 0007).
@@ -404,11 +409,28 @@ class LoggiaVolets:
     async def _async_demarrer(self) -> None:
         self.cfg = await self.async_config()
         await self._async_reprogrammer()
-        # Le soleil bouge : Home Assistant reecrit `sun.sun` regulierement, et
-        # chaque ecriture est une occasion de reevaluer. Le vent a sa propre
-        # entite, suivie par la meme fonction.
+        self._reabonner_etat()
+
+    def _reabonner_etat(self) -> None:
+        """Suit le soleil et l'anemometre CHOISI MAINTENANT.
+
+        Le soleil bouge : Home Assistant reecrit `sun.sun` regulierement, et
+        chaque ecriture est une occasion de reevaluer. Le vent a sa propre
+        entite, suivie par la meme fonction.
+
+        Rappele a chaque enregistrement (audit du 03/10) : l'abonnement n'etait
+        pose qu'au demarrage. Un anemometre choisi ou change dans les reglages
+        n'etait suivi qu'au redemarrage suivant — l'ancien, pour rien, en
+        attendant.
+        """
         from homeassistant.helpers.event import async_track_state_change_event
 
+        for defaire in self._defait:
+            try:
+                defaire()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia volets : desabonnement sans effet")
+        self._defait.clear()
         surveillees = [SOLEIL]
         vent = (self.cfg.get("vent") or {}).get("entite")
         if vent:
@@ -424,8 +446,6 @@ class LoggiaVolets:
         Les decalages font partie du rendez-vous lui-meme : les changer oblige
         a tout reposer, d'ou cette fonction rappelee a chaque enregistrement.
         """
-        from homeassistant.util import dt as dt_util
-
         for defaire in self._defait_soleil:
             try:
                 defaire()
@@ -496,10 +516,10 @@ class LoggiaVolets:
             # maison a une heure que plus personne n'avait demandee — un
             # decalage arme dont on avait retire le dernier volet.
             cibles = list(
-                groupes_horaires(plan, self._tous_les_covers(), sens_long).get(decalage, [])
+                groupes_horaires(plan, self._ouvrants(sens_long), sens_long).get(decalage, [])
             )
         else:
-            cibles = self._tous_les_covers()
+            cibles = self._ouvrants(sens_long)
         # Les jours propres a chaque volet, evalues MAINTENANT.
         cibles = volets_du_jour(plan, cibles, 'ouverture' if sens == 'ouvrir' else 'fermeture', dt_util.now())
         if not cibles:
@@ -523,8 +543,13 @@ class LoggiaVolets:
             joignables = [h for h in joignables if h not in retenus]
         # « lever du soleil +30 min » : le mot du soleil, distinct du coucher
         # de la maison — chaque mot du journal a sa cle traduite (ADR 0070).
+        # Le gabarit s'ecrit EN ENTIER, c'est sa cle au catalogue : recompose a
+        # partir du moment, il n'etait ecrit nulle part, ni donc traduit, et
+        # l'ecran montrait « lever du soleil +15 min » en francais dans les
+        # sept langues (relecture du 03/10).
         moment = "lever du soleil" if sens == "ouvrir" else "coucher du soleil"
-        motif = (moment + " {d} min", {"d": "%+d" % int(decalage)}) if decalage else moment
+        gabarit = "lever du soleil {d} min" if sens == "ouvrir" else "coucher du soleil {d} min"
+        motif = (gabarit, {"d": "%+d" % int(decalage)}) if decalage else moment
         partis = []
         if joignables:
             partis = await self._async_service(
@@ -564,7 +589,7 @@ class LoggiaVolets:
         # laisse le planning muet pendant des jours. Le soleil, lui, bouge
         # toutes les quelques minutes, et cette fonction avec lui. `suivre`
         # ne fait rien quand la liste n'a pas change.
-        self.regles.suivre("volets", self._tous_les_covers())
+        self.regles.suivre("volets", self._tous_les_covers() + self._fenetres_de_toit())
         if await self._async_vent():
             return
         await self._async_soleil()
@@ -585,12 +610,21 @@ class LoggiaVolets:
             return False
         if valeur >= seuil:
             if not self.a_l_abri:
-                cibles = self._tous_les_covers()
-                if cibles:
-                    await self._async_service("open_cover", cibles, regle="vent",
-                                              quoi="ouvrir",
-                                              motif=("vent {v}", {"v": valeur}),
-                                              priorite=PRIORITES["vent"], tenir=True)
+                # Chacun selon ce qu'il est (ouvrants.py) : le volet se
+                # remonte, le store banne se replie, la fenetre de toit se
+                # ferme — et le garage, le portail, la porte ne bougent pas.
+                velux = bool((self.cfg.get("velux") or {}).get("actif"))
+                gestes: dict[str, list] = {}
+                for haid in self._tous_les_covers() + self._fenetres_de_toit():
+                    service = geste_au_vent(self._classe(haid), velux)
+                    if service:
+                        gestes.setdefault(service, []).append(haid)
+                for service, quoi in (("open_cover", "ouvrir"), ("close_cover", "fermer")):
+                    if gestes.get(service):
+                        await self._async_service(service, gestes[service], regle="vent",
+                                                  quoi=quoi,
+                                                  motif=("vent {v}", {"v": valeur}),
+                                                  priorite=PRIORITES["vent"], tenir=True)
                 self.a_l_abri = True
                 self.abaisses.clear()
             return True
@@ -707,15 +741,7 @@ class LoggiaVolets:
             await self._async_rendre(haid)
 
     # ── Les commandes ──────────────────────────────────────────────────────
-    def _tous_les_covers(self) -> list:
-        """Tous les volets de l'installation.
-
-        Le planning les prend tous — un volet ajoute apres coup suit sans
-        qu'on ait a le declarer — et la table par volet dit lesquels s'en
-        ecartent. La protection solaire, elle, ne touche que ceux a qui on a
-        donne une orientation : ce sont deux notions distinctes, et les
-        confondre faisait suivre au planning les seuls volets orientes.
-        """
+    def _covers(self) -> list:
         try:
             return sorted(self.hass.states.async_entity_ids("cover"))
         except Exception:  # noqa: BLE001
@@ -723,6 +749,40 @@ class LoggiaVolets:
             # decalage arme » se lisait comme un jour sans rien a faire.
             _LOGGER.warning("Loggia volets : volets illisibles pour le moment", exc_info=True)
             return []
+
+    def _classe(self, haid: str):
+        st = self.hass.states.get(haid)
+        return (getattr(st, "attributes", None) or {}).get("device_class") if st is not None else None
+
+    def _tous_les_covers(self) -> list:
+        """Tous les VOLETS de l'installation — et rien d'autre.
+
+        Le planning les prend tous — un volet ajoute apres coup suit sans
+        qu'on ait a le declarer — et la table par volet dit lesquels s'en
+        ecartent. La protection solaire, elle, ne touche que ceux a qui on a
+        donne une orientation : ce sont deux notions distinctes, et les
+        confondre faisait suivre au planning les seuls volets orientes.
+
+        UN VOLET SE RECONNAIT A SA CLASSE (audit du 03/10, ouvrants.py). Cette
+        liste prenait tous les `cover.*` : le vent et le lever du soleil
+        ouvraient la porte de garage et le portail. Une classe absente n'est
+        pas un volet : c'est le choix fait le 03/10.
+        """
+        return [h for h in self._covers() if est_volet(self._classe(h))]
+
+    def _fenetres_de_toit(self) -> list:
+        """Les fenetres de toit, si l'option est prise — sinon aucune."""
+        if not (self.cfg.get("velux") or {}).get("actif"):
+            return []
+        return [h for h in self._covers() if est_fenetre_de_toit(self._classe(h))]
+
+    def _ouvrants(self, sens_long: str) -> list:
+        """Ce que le planning bouge dans ce sens : les volets, et — a la
+        fermeture seulement — les fenetres de toit. Loggia n'ouvre jamais une
+        fenetre."""
+        if sens_long == "fermeture":
+            return self._tous_les_covers() + self._fenetres_de_toit()
+        return self._tous_les_covers()
 
     # ── Les ordres qui attendent leur volet ────────────────────────────────
     def _baie_de(self, haid: str):
@@ -819,6 +879,18 @@ class LoggiaVolets:
                                   detail=haid, motif="ordre perime")
                 continue
             if not self._joignable(haid):
+                continue
+            # L'ordre n'a de sens que si le planning le donnerait ENCORE
+            # (audit du 03/10) : passe en « Manuel » — « Ne touche a rien » —,
+            # coupe, ou en « Fermeture nuit » pour une ouverture, il est jete.
+            # Une mise a l'abri en cours le retient : le vent prime.
+            plan = self.cfg.get("planning") or {}
+            if not plan.get("actif") or not planning_agit(plan.get("mode"), ordre.get("sens", "")):
+                if self.attente.pop(haid, None) is not None:
+                    await self._noter(ordre.get("sens", "?"), "attente abandonnee", 0,
+                                      detail=haid, motif="planning en manuel ou coupe")
+                continue
+            if self.a_l_abri:
                 continue
             # Une baie encore ouverte retient toujours la fermeture ; muette,
             # elle ne retient plus rien (ADR 0010).
@@ -1018,7 +1090,11 @@ class LoggiaVolets:
         self.regles.relacher("volets")
 
     async def async_config(self) -> dict[str, Any]:
-        brut = await self.store.async_get_shared(CLE, None)
+        return self._config_de(await self.store.async_get_shared(CLE, None))
+
+    def _config_de(self, brut: Any) -> dict[str, Any]:
+        """La configuration, defauts compris. Synchrone : `async_enregistrer`
+        la rebatit sous le verrou du magasin (lot 15 de l'audit du 03/10)."""
         cfg = {k: dict(v) for k, v in DEFAUT.items()}
         # Le seuil par defaut (25) est pense en Celsius ; sur une installation
         # jamais configuree et reglee en Fahrenheit, 25 est trop froid de loin
@@ -1064,7 +1140,7 @@ class LoggiaVolets:
         correction, et l'etat doit dire ce qui se passerait vraiment.
         """
         plan = self.cfg.get("planning") or {}
-        groupes = groupes_horaires(plan, self._tous_les_covers(), sens)
+        groupes = groupes_horaires(plan, self._ouvrants(sens), sens)
         return {d: list(groupes.get(int(d), [])) for d in self.armes.get(sens, {})}
 
     def _prochains(self) -> dict[str, Any]:
@@ -1090,22 +1166,45 @@ class LoggiaVolets:
                     sortie.setdefault(sens, {})[decalage] = "erreur : %s" % err
         return sortie
 
-    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
-        cfg = await self.async_config()
-        simulait = bool((cfg.get("simulation") or {}).get("actif"))
+    def _poser_patch(self, cfg: dict[str, Any], patch: dict[str, Any]) -> None:
+        """Le patch de l'ecran, pose sur `cfg`. Synchrone : sous le verrou.
+        Une section se fusionne au premier niveau : `planning.volets` arrive
+        entier de l'ecran, et le remplace entier — un patch qui ne porterait
+        qu'un volet effacerait les autres."""
         for section, valeurs in (patch or {}).items():
             if section in cfg and isinstance(valeurs, dict):
                 cfg[section].update(valeurs)
         # Le seul reglage de la verification, borne (ADR 0007).
         cfg["verification"]["tentatives"] = tentatives_valides(cfg["verification"].get("tentatives"))
-        await self.store.async_set_shared(CLE, cfg)
+
+    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
+        # D'un seul tenant, sous le verrou du magasin (lot 15 de l'audit du
+        # 03/10 ; voir store.async_modifier_shared).
+        simulait = False
+
+        def changer(brut: Any) -> dict[str, Any]:
+            nonlocal simulait
+            cfg = self._config_de(brut)
+            simulait = bool((cfg.get("simulation") or {}).get("actif"))
+            self._poser_patch(cfg, patch)
+            return cfg
+
+        cfg = await self.store.async_modifier_shared(CLE, changer)
         self.cfg = cfg
         if bool((cfg.get("simulation") or {}).get("actif")) != simulait:
             self._repartir_de_zero()
             self.hass.async_create_task(self._async_evaluer())
+        # Planning coupe ou passe en « Manuel » : les ordres en attente d'une
+        # baie ou d'un volet revenu n'ont plus de raison d'etre (audit du 03/10).
+        plan = cfg.get("planning") or {}
+        if self.attente and (not plan.get("actif") or str(plan.get("mode") or "auto").lower() == "manuel"):
+            self.attente.clear()
+            self._suivre_attente()
         # Les rendez-vous portent les decalages : les changer oblige a les
         # reposer, sinon l'ancienne heure resterait armee jusqu'au redemarrage.
         await self._async_reprogrammer()
+        # L'anemometre aussi : choisi ou change ici, il est suivi tout de suite.
+        self._reabonner_etat()
         return cfg
 
     @callback

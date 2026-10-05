@@ -56,11 +56,33 @@ export function finDe(e) {
   return isNaN(d.getTime()) ? debutDe(e) : d;
 }
 
+/* Un jour n'a pas toujours vingt-quatre heures (audit du 03/10).
+ *
+ * Le dimanche du passage à l'heure d'hiver en a vingt-cinq, celui de l'heure
+ * d'été vingt-trois. Ajouter `864e5` à un minuit tombait donc, à l'automne, la
+ * VEILLE à 23 h : la grille d'octobre 2026 montrait deux fois le 25 et
+ * décalait toute la fin du mois d'un jour de semaine ; un rendez-vous le
+ * 25 à 23 h 30 n'appartenait à aucun jour. Ces deux fonctions comptent sur le
+ * CALENDRIER — `setDate` sait combien d'heures a chaque jour. */
+
+/** Minuit du jour `n` jours après `d` (avant si `n` est négatif). */
+export function jourPlus(d, n) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+/** Combien de jours de calendrier vont de `a` à `b`, heures ignorées :
+ * 0 le même jour, 1 le lendemain, -1 la veille. */
+export function ecartJours(a, b) {
+  return Math.round((jourPlus(b, 0).getTime() - jourPlus(a, 0).getTime()) / 864e5);
+}
+
 /** Du jour donné à minuit, sept jours : la plage lue dans les calendriers. */
 export function plageSemaine(d, n = JOURS_AGENDA) {
-  const debut = new Date(d);
-  debut.setHours(0, 0, 0, 0);
-  return { debut, fin: new Date(debut.getTime() + n * 864e5) };
+  const debut = jourPlus(d, 0);
+  return { debut, fin: jourPlus(debut, n) };
 }
 
 /** Les jours de la bande : aujourd'hui puis les suivants, à minuit local. */
@@ -76,9 +98,8 @@ export function joursAgenda(d, n = JOURS_AGENDA) {
 export function toucheJour(e, jour) {
   const d = debutDe(e);
   if (!d) return false;
-  const j0 = new Date(jour);
-  j0.setHours(0, 0, 0, 0);
-  const j1 = new Date(j0.getTime() + 864e5);
+  const j0 = jourPlus(jour, 0);
+  const j1 = jourPlus(jour, 1);
   if (e.start && e.start.dateTime) return d >= j0 && d < j1;
   const f = finDe(e);
   return d < j1 && f > j0;
@@ -91,9 +112,66 @@ export function comptesParJour(events, jours) {
   return out;
 }
 
-const parDebut = (x, y) => debutDe(x).getTime() - debutDe(y).getTime();
+/* Un début illisible se range en DERNIER, il ne lève plus (audit du 03/10).
+ *
+ * `debutDe` rend `null` sur un `start` qu'il ne sait pas lire, et l'ancien
+ * comparateur appelait `.getTime()` dessus : un TypeError au milieu d'un tri,
+ * levé au rendu de l'agenda — et, faute d'autre barrière, l'écran entier
+ * remplacé par la page de secours. `evenementsDuJour` filtrait avant de trier :
+ * par chance, pas par construction. `lireCalendriers` évitait carrément le
+ * comparateur et rangeait ces entrées au hasard (`NaN` en guise d'ordre).
+ * Un seul comparateur pour les deux : ce qui se date d'abord, dans l'ordre ; le
+ * reste ensuite, dans son ordre d'arrivée (le tri est stable). */
+export function parDebut(x, y) {
+  const a = debutDe(x), b = debutDe(y);
+  if (a && b) return a.getTime() - b.getTime();
+  return (a ? 0 : 1) - (b ? 0 : 1);
+}
 
 /** Les événements d'un jour, dans l'ordre. */
 export function evenementsDuJour(events, jour) {
   return (events || []).filter(e => toucheJour(e, jour)).sort(parDebut);
+}
+
+/* ── Une panne n'est pas un agenda vide (audit du 03/10) ─────────────────────
+ *
+ * Un redémarrage de Home Assistant, une coupure du Wi-Fi au mauvais moment :
+ * chaque GET des calendriers échouait, `useAgenda` posait une liste vide et la
+ * tenait jusqu'au sondage suivant — un quart d'heure de « Rien de prévu ce
+ * jour-là. », sept zéros dans la bande, et le bandeau de la collecte parti
+ * avec. Un calendrier qui RÉPOND vide est vide ; un calendrier qui ne répond
+ * pas n'a rien dit. Les deux ne se confondent plus. */
+
+/** Lit chaque calendrier de `ids` sur [debut, fin) par `api` (le `callApi` de
+ * Home Assistant). Rend les événements de tous, marqués de leur calendrier
+ * sous `_cal` et rangés par début — ou `null` quand AUCUN n'a répondu. Un
+ * calendrier qui refuse ne prive pas les autres. */
+export async function lireCalendriers(api, ids, debut, fin) {
+  const q = '?start=' + encodeURIComponent(debut.toISOString()) + '&end=' + encodeURIComponent(fin.toISOString());
+  const tous = [];
+  let repondu = 0;
+  for (const id of ids || []) {
+    try {
+      const evs = await api('GET', 'calendars/' + id + q);
+      repondu++;
+      if (Array.isArray(evs)) evs.forEach(e => { if (e && e.summary && e.start) tous.push({ ...e, _cal: id }); });
+    } catch {} // un calendrier qui refuse ne prive pas les autres
+  }
+  if (!repondu) return null;
+  // Un `start` illisible se range en dernier (`parDebut`), et non plus au hasard.
+  return tous.sort(parDebut);
+}
+
+/** Ce que l'agenda garde quand aucun calendrier n'a répondu : les événements
+ * déjà montrés, des calendriers encore lus, qui touchent encore [debut, fin).
+ * Un rendez-vous passé pendant la panne s'en va, un agenda décoché aussi, et
+ * le mois qu'on quitte ne déborde pas sur celui qu'on ouvre. */
+export function garderDansFenetre(events, ids, debut, fin) {
+  const cals = new Set(ids || []);
+  return (events || []).filter(e => {
+    const d = debutDe(e);
+    if (!d || !cals.has(e._cal)) return false;
+    // Comme Home Assistant : ce qui chevauche la fenêtre, un instant compris.
+    return d < fin && (finDe(e) > debut || d >= debut);
+  });
 }

@@ -27,12 +27,12 @@ test('tout ce qui s’édite passe par le point qui empile', () => {
   const ecritures = src.match(/cfgSet\(\{ loggia_accueil:/g) || [];
   assert.equal(ecritures.length, 3,
     'un geste écrit loggia_accueil hors des trois points prévus (sauvegarde, défaire, refaire) : il sera inannulable');
-  assert.match(src, /const saveAccL = \(n\) => \{\s*\n\s*setPasse/,
+  assert.match(src, /const saveAccL = \(n, avec\) => \{\s*\n\s*setPasse/,
     'la sauvegarde n’empile plus l’état précédent');
 });
 
 test('une nouvelle action coupe la branche refaite', () => {
-  const i = src.indexOf('const saveAccL = (n) => {');
+  const i = src.indexOf('const saveAccL = (n, avec) => {');
   const corps = src.slice(i, src.indexOf('};', i));
   // Sans cela, on pourrait « refaire » un état abandonné depuis longtemps et
   // le voir ressurgir par-dessus le travail en cours.
@@ -40,7 +40,7 @@ test('une nouvelle action coupe la branche refaite', () => {
 });
 
 test('la pile a un fond', () => {
-  const i = src.indexOf('const saveAccL = (n) => {');
+  const i = src.indexOf('const saveAccL = (n, avec) => {');
   const corps = src.slice(i, src.indexOf('};', i));
   // Chaque pas garde une copie de l'agencement : sans plafond, une longue
   // séance d'édition les accumulerait toutes.
@@ -98,7 +98,7 @@ test('le bouton dit « défaire », pas « annuler »', () => {
 });
 
 test('l’ordinateur écrit dans la base, les autres dans leur grille', () => {
-  const i = src.indexOf('const saveGrille = (g) => {');
+  const i = src.indexOf('const saveGrille = (g, avec) => {');
   assert.notEqual(i, -1, 'saveGrille a disparu');
   const corps = src.slice(i, src.indexOf('\n  };', i));
   // L'ordinateur garde les clés historiques : une installation existante

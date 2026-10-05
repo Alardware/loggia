@@ -28,7 +28,11 @@ test('la carte d’edition : icone, bouton de taille en coin, « Domaine · iden
   assert.ok(!c.includes('ed.basculerLarge('), 'le coin ne touche pas a la largeur');
   assert.ok(!c.includes('<Fi i="pencil" size={14} />'), 'plus de crayon en coin : Modifier suffit');
   assert.ok(c.includes('const bouton = boutonEdition, petit = BOUTON_PETIT;') && c.includes('style={BOUTON_COIN}'), 'les boutons sont ceux de toutes les cartes d’edition');
-  assert.ok(c.includes('<div data-id={id} role="button" tabIndex={0} {...prise}'), 'la carte entiere est la prise');
+  /* Lot 13 de l'audit du 03/10 : la carte entière reste la PRISE au pointeur,
+   * dans ses trois gabarits, mais n'est plus un bouton — le focus, le nom et
+   * le clavier sont à sa surface, sœur de ses boutons. */
+  assert.equal((c.match(/<div data-id=\{id\} \{\.\.\.prise\}/g) || []).length, 3, 'la carte entiere est la prise');
+  assert.ok(!c.includes('role="button"'), 'la carte est redevenue un bouton qui contient des boutons');
   assert.ok(!c.includes("position: 'absolute', inset: 0, zIndex: 2"), 'plus de voile de saisie');
   assert.ok(c.includes('onPointerDown={stop}'), 'les boutons ne saisissent pas');
   assert.ok(c.includes('...RM_CARD'), 'au gabarit des cartes');

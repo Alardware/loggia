@@ -36,6 +36,65 @@ export const LOCAL_ONLY_KEYS = new Set(['loggia_enattente']);
 const KEY_PREFIXES = ['loggia_', 'loggia-'];
 const isLoggiaKey = (k) => typeof k === 'string' && KEY_PREFIXES.some(p => k.indexOf(p) === 0);
 
+/* Ce que l'appareil sait de LUI-MEME, et qui n'est pas la configuration de la
+ * maison (audit du 03/10).
+ *
+ * L'export balaie le stockage local par motif — `loggia_` ou `loggia-` — pour
+ * qu'un reglage nouveau soit sauvegarde sans qu'on y pense (24/09). Le revers :
+ * tout ce que le navigateur range sous ce prefixe partait dans le fichier, puis
+ * dans la configuration COMMUNE au premier import. La photo de fond surtout —
+ * « jamais envoyee au serveur », dit `ui.jsx` — qui peut depasser les 256 Kio
+ * qu'il accepte par valeur : l'import etait refuse, et une sauvegarde faite
+ * avant une remise a zero ne se restaurait plus.
+ *
+ * C'est donc une liste d'EXCLUSION : une cle de configuration ajoutee demain
+ * part toujours dans l'export. Une cle d'appareil ajoutee demain sans passer
+ * par ici y partirait aussi — moins grave, mais a ajouter ici en la creant. */
+export const CLES_APPAREIL = new Set([
+  // Les marges de securite de l'ecran et la trace du dernier passage : les
+  // cles PERSONNELLES du composant (store.py). Importees, celles d'un
+  // telephone s'imposaient a la tablette murale.
+  'loggia-navoffset', 'loggia-topoffset', 'loggia-lastseen',
+  'loggia-fond-photo',        // la photo de fond (ui.jsx, FOND_PHOTO_CLE)
+  'loggia_journal',           // les notifications lues PAR CELUI QUI REGARDE (v3.80.0)
+  'loggia-assistant-device',  // l'identifiant de ce navigateur aupres de l'assistant
+  'loggia-langue-active',     // la derniere langue servie ici (i18n.js)
+  'loggia-maj-verifie',       // la derniere verification de mise a jour
+  'loggia-scnrangee',         // la rangee des scenarios vue pleine ici (App.jsx, lot 14)
+  // Les commodites de celui qui regarde : leur absence ne casse rien.
+  'loggia_favlecture', 'loggia_appsrecentes', 'loggia_icorecents',
+  // L'ecran de veille de CET appareil : une tablette murale, pas un telephone.
+  'loggia-ambient', 'loggia-ambientplage', 'loggia-ambphotos', 'loggia-ambmotion',
+]);
+// Les traductions de Home Assistant mises en cache, une cle par langue.
+// Le tiret final compte : `loggia-ha`, lui, est le theme HA choisi.
+const PREFIXES_APPAREIL = ['loggia-ha-'];
+
+/** Une cle que l'appareil garde pour lui : ni exportee, ni importee, ni effacee par un import. */
+export const estCleAppareil = (k) => typeof k === 'string'
+  && (CLES_APPAREIL.has(k) || PREFIXES_APPAREIL.some(p => k.indexOf(p) === 0));
+
+/* Ce que le SERVEUR calcule ou garde pour lui. `loggia_admin_pin_defini` dit
+ * seulement si un code existe : le composant le recalcule a chaque lecture, et
+ * le reimporter l'ecrivait en dur dans la partie commune. Le code lui-meme,
+ * en clair ou hache, ne passe que par sa propre commande (code_admin.py). */
+/* Et ce qu'il TIENT en cours d'execution : les minuteurs qui tournent et le
+ * test de sirene en cours. Ce n'est pas un reglage. Reimporte une semaine
+ * plus tard, un minuteur depuis longtemps echu eteignait une lampe au
+ * redemarrage suivant ; efface par l'import, un minuteur en cours se perdait.
+ * Ces cles ne quittent donc pas le serveur, et l'import ne les purge pas. */
+const CLES_SERVEUR = new Set([
+  'loggia_admin_pin_defini', 'loggia_admin_pin', 'loggia_admin_pin_hache',
+  'loggia_minuteurs', 'loggia_sirene_test',
+]);
+
+/** Une cle que le serveur calcule ou tient pour lui : jamais dans un fichier, jamais purgee par un import. */
+export const estCleServeur = (k) => CLES_SERVEUR.has(k);
+
+/** Ce qui n'a rien a faire dans un fichier de configuration, a l'aller comme au retour. */
+export const horsSauvegarde = (k) => !isLoggiaKey(k) || LOCAL_ONLY_KEYS.has(k)
+  || estCleAppareil(k) || CLES_SERVEUR.has(k);
+
 // Cles reellement lues ou ecrites par la V2, relevees dans App.jsx
 // (localStorage.getItem/setItem/removeItem + readLS). Le navigateur en contient
 // beaucoup d'autres, heritees de la V1 : loggia_feeder, loggia_fridge, loggia_locks,

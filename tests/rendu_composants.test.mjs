@@ -22,7 +22,10 @@ test('la barre de confort : un bouton nomme, l’indice sur 100, une pastille pa
   const BarreConfort = await composant('barreconfort.jsx', 'BarreConfort');
   const html = rendre(BarreConfort, { confort: CONFORT, onOpen: () => {} });
   assert.ok(html.includes('role="button"') && html.includes('tabindex="0"'), 'un bouton, au clavier aussi');
-  assert.ok(html.includes('aria-label="Historique du confort"'), 'son nom');
+  // Son nom est ce qu'elle affiche ; ce qu'elle ouvre passe en infobulle (lot
+  // 13 de l'audit du 03/10).
+  assert.ok(html.includes('aria-label="Indice de confort, 72 / 100, Confortable"'), 'son nom');
+  assert.ok(html.includes('title="Historique du confort"') && html.includes('aria-haspopup="dialog"'), 'ce qu’elle ouvre');
   assert.ok(html.includes('<span class="n">72</span>') && html.includes('/ 100') && html.includes('Confortable'), 'l’indice et son mot');
   assert.equal((html.match(/class="o-confort-mesure"/g) || []).length, 2, 'une pastille par mesure');
   assert.ok(html.includes('--conf-n:2') || html.includes('--conf-n: 2'), 'la rangee sait combien elle porte');
@@ -65,7 +68,7 @@ test('le premier lancement : ses textes passent tous par la traduction', async (
   const Onboarding = await composant('Onboarding.jsx');
   const runtime = {
     caps: { totals: { entities: 412, areasUsed: 7, domains: 19 } },
-    views: { pieces: { ok: true }, scenes: { ok: true }, croquettes: { ok: false, reason: 'Aucun distributeur.' } },
+    views: { pieces: { ok: true }, scenes: { ok: true }, energie: { ok: false, reason: 'aucun capteur de puissance ou d’énergie' } },
     resolved: {
       rooms: {
         rooms: [],

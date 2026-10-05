@@ -21,5 +21,16 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "scenario_inconnu": {
+      "message": "Kein Loggia-Szenario trägt die Kennung „{id}“."
+    },
+    "scenarios_indisponibles": {
+      "message": "Die Loggia-Szenarien sind nicht verfügbar: Die Integration ist nicht gestartet."
+    },
+    "compte_illisible": {
+      "message": "Szenario abgelehnt: Das anfragende Konto konnte nicht gelesen werden."
+    }
   }
 }

@@ -782,3 +782,32 @@ def test_le_retour_exige_un_signe_franc_dans_l_evaluation():
     src = (racine / "custom_components" / "loggia" / "presence.py").read_text(encoding="utf-8")
     assert 'rentre = quelquun_est_la(etats, self.cfg.get("personnes")) or invite' in src
     assert "if self.dehors and rentre:" in src, "le retour ne demande plus de signe franc"
+
+
+# ── Audit du 03/10 : un depart de plus de 12 h ──────────────────────────────
+
+def test_un_depart_de_plus_de_12_h_rend_le_chauffage_au_retour(creer, monkeypatch, regles_module):
+    """Depart a 7 h 30, retour a 20 h : la tenue du depart tombait a 19 h 30,
+    et le retour ne remettait aucune consigne — la maison restait a 16 °C."""
+    c = cfg(depart={"lumieres": False, "chauffage": {"actif": True, "consigne": 16}},
+            retour={"lumieres": False, "chauffage": True})
+    p = creer(c, {**DEHORS, "climate.salon": FauxEtat("heat", {"temperature": 21})})
+    lancer(p._async_depart())
+    vrai = regles_module.time.time
+    monkeypatch.setattr(regles_module.time, "time", lambda: vrai() + 13 * 3600)
+    assert p.regles.tient("presence", "depart", "climate.salon"), "la tenue du depart est tombee au bout de 12 h"
+    lancer(p._async_retour())
+    assert p.hass.services.appels[-1] == ("climate", "set_temperature",
+                                          {"entity_id": ["climate.salon"], "temperature": 21.0})
+
+
+def test_couper_la_regle_rend_ce_que_le_depart_tenait(creer):
+    """Sans echeance, une tenue que plus aucun retour ne rendra doit tomber
+    quand on coupe la regle — sinon elle tiendrait jusqu'au redemarrage."""
+    c = cfg(depart={"lumieres": False, "chauffage": {"actif": True, "consigne": 16}})
+    p = creer(c, {**DEHORS, "climate.salon": FauxEtat("heat", {"temperature": 21})})
+    lancer(p._async_depart())
+    assert p.regles.tient("presence", "depart", "climate.salon")
+    lancer(p.async_enregistrer({"actif": False}))
+    assert not p.regles.tient("presence", "depart", "climate.salon")
+    p.hass.abandonner()

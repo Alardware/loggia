@@ -6,10 +6,28 @@ import { migrerAnciennesCles } from './state.js';
  * lit quand plus rien ne marche, et il etait le seul a rester en francais.
  * `i18n.js` ne depend ni d'App ni du rendu — il repond meme ici. */
 import { tr } from './i18n.js';
+import { ecouterPrechargement } from './recharge.js';
+import { ecouterHorsEcran } from './horsecran.js';
 
 // Avant toute lecture, donc avant le rendu : sans cela, une installation qui
 // vient d'Orion demarre sur des reglages vides et les reecrit aussitot.
 migrerAnciennesCles();
+
+/* Un import à la demande que Vite n'a pas pu charger — un fichier qu'une
+ * mise à jour HACS a retiré pendant que la page restait ouverte — recharge la
+ * page une fois au lieu de lever (audit du 03/10, voir `recharge.js`). Les
+ * modules de l'écran passent par `lazyRecharge` ; cet écouteur couvre le
+ * reste : un catalogue de langue demandé en cours de route, la voix, le
+ * préchargement de l'orbe. Le catalogue de l'amorce part avant lui, depuis
+ * `main.jsx`, et retombe déjà sur le français. Posé avant le premier rendu,
+ * d'où part le premier module à la demande. */
+ecouterPrechargement(window);
+
+/* Le liseré « ne répond plus » et le point LIVE se mettent en pause hors de
+ * l'écran (lot 14 de l'audit du 03/10, voir `horsecran.js`) : un seul
+ * observateur pour toute la page, posé avant le premier rendu pour entendre
+ * le premier `animationstart`. */
+ecouterHorsEcran(document);
 
 /**
  * Filet de securite au rendu.
@@ -20,6 +38,11 @@ migrerAnciennesCles();
  *
  * Ici, l'erreur s'affiche. C'est moins beau qu'un dashboard, mais infiniment
  * plus utile qu'un ecran noir.
+ *
+ * C'est le DERNIER filet depuis l'audit du 03/10 : chaque vue et chaque feuille
+ * ont leur barriere (`Barriere`, ui.jsx), et une carte qui casse ne prend plus
+ * que sa vue. N'arrive plus ici que ce qui casse au-dessus d'elles — l'App, la
+ * barre laterale, l'en-tete que la carte de panne d'une vue remontre.
  */
 class LoggiaErrorBoundary extends React.Component {
   constructor(props) {

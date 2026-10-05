@@ -42,6 +42,7 @@ d'abandon de ce genre de systeme, et il ne se corrige pas regle par regle.
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 import logging
 import time
@@ -77,6 +78,12 @@ GEL_DEFAUT = 30 * 60
 
 # Combien de temps une tenue survit si la regle qui l'a prise oublie de la
 # rendre. Un filet, pas un reglage : les regles rendent leurs tenues.
+#
+# SAUF les tenues qui attendent un EVENEMENT (audit du 03/10) : le depart tient
+# jusqu'au retour, la fenetre ouverte jusqu'a sa fermeture — `agir(...,
+# jusqu_a_relacher=True)`. Avec le filet, un depart a 7 h 30 tombait a
+# 19 h 30 : au retour de 20 h, ni chauffage ni lampes n'etaient rendus, et la
+# nuit suivante l'eclairage nocturne rallumait la maison vide.
 TENUE_MAX = 12 * 3600
 
 # L'echelle de la maison : quatre paliers, du plus fort au plus faible. Avant
@@ -159,6 +166,11 @@ class Regles:
         self.store = store
         self._entrees: list[dict[str, Any]] = []
         self._charge = False
+        # Un seul chargement, les autres l'attendent (audit du 03/10) : le
+        # drapeau pose AVANT de lire laissait un second `noter` inserer sa
+        # ligne, que la relecture du disque ecrasait aussitot — au demarrage,
+        # precisement quand plusieurs modules notent en meme temps.
+        self._verrou_charge = asyncio.Lock()
         # {entity_id: horodatage de fin de gel}
         self._gel: dict[str, float] = {}
         self.duree_gel = GEL_DEFAUT
@@ -222,14 +234,17 @@ class Regles:
     async def _charger(self) -> None:
         if self._charge:
             return
-        self._charge = True
-        try:
-            brut = await self._store_journal().async_load()
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia regles : journal illisible, on repart a vide")
-            brut = None
-        if isinstance(brut, dict) and isinstance(brut.get("entrees"), list):
-            self._entrees = [e for e in brut["entrees"] if isinstance(e, dict)][:MAX_JOURNAL]
+        async with self._verrou_charge:
+            if self._charge:
+                return
+            try:
+                brut = await self._store_journal().async_load()
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Loggia regles : journal illisible, on repart a vide")
+                brut = None
+            if isinstance(brut, dict) and isinstance(brut.get("entrees"), list):
+                self._entrees = [e for e in brut["entrees"] if isinstance(e, dict)][:MAX_JOURNAL]
+            self._charge = True
 
     @callback
     def _programmer_ecriture(self) -> None:
@@ -422,7 +437,7 @@ class Regles:
     def _tenue(self, haid: str):
         """La tenue en cours sur cette entite, ou None — echue, elle tombe."""
         t = self._tenues.get(haid)
-        if t is not None and time.time() >= t["fin"]:
+        if t is not None and t["fin"] is not None and time.time() >= t["fin"]:
             del self._tenues[haid]
             return None
         return t
@@ -564,7 +579,8 @@ class Regles:
     async def agir(self, module: str, regle: str, domaine: str, service: str,
                    cibles, data: dict | None = None, *,
                    quoi: str = "", motif: str = "", priorite: int = 0,
-                   tenir: bool = False, simuler: bool = False) -> list:
+                   tenir: bool = False, jusqu_a_relacher: bool = False,
+                   simuler: bool = False) -> list:
         """Commande, en respectant ce que les regles doivent toutes respecter.
 
         Rend la liste des entites REELLEMENT commandees — jamais la liste
@@ -581,6 +597,10 @@ class Regles:
         des plus faibles, jusqu'a le rendre — `relacher`, ou une commande sans
         `tenir`. Commander par-dessus une tenue la reprend : la regle qui
         tenait ne rendra pas l'entite derriere nous.
+
+        `jusqu_a_relacher` : la tenue n'a pas d'echeance — le filet de
+        `TENUE_MAX` ne la fait pas tomber. Pour ce qui attend un evenement : le
+        retour, la fermeture d'une fenetre. La regle DOIT la rendre.
 
         `simuler` : rien ne part. Le journal note ce qui SERAIT parti, et les
         tenues bougent comme en vrai — la simulation raconte la meme histoire
@@ -624,8 +644,8 @@ class Regles:
 
         for h in retenues:
             if tenir:
-                self._tenues[h] = {"module": module, "regle": regle,
-                                   "priorite": priorite, "fin": time.time() + TENUE_MAX}
+                self._tenues[h] = {"module": module, "regle": regle, "priorite": priorite,
+                                   "fin": None if jusqu_a_relacher else time.time() + TENUE_MAX}
             else:
                 self._tenues.pop(h, None)
 

@@ -22,6 +22,39 @@ test('elle répond dans la langue qu’on lui parle', () => {
   assert.equal(teinteDe('I closed the shutters.'), 'bien');
 });
 
+test('et dans les sept langues de Loggia', () => {
+  /* Relecture du 03/10 : seuls le français et l'anglais teintaient l'orbe. Une
+   * maison allemande ou polonaise la gardait neutre — et la démo aussi, depuis
+   * que ses réponses parlent la langue de l'écran. */
+  assert.equal(teinteDe('Die Heizung läuft im Wohnzimmer.'), 'chaud');
+  assert.equal(teinteDe('In der Küche wurde Rauch erkannt.'), 'alerte');
+  assert.equal(teinteDe('De rolluiken zijn dicht.'), 'bien');
+  assert.equal(teinteDe('Il climatizzatore è acceso.'), 'froid');
+  assert.equal(teinteDe('Se ha detectado una fuga de agua.'), 'alerte');
+  assert.equal(teinteDe('Światła w salonie są zgaszone.'), 'bien');
+  // Leur négation rassure, comme « Aucune alerte ».
+  assert.equal(teinteDe('Kein Rauch, kein Leck.'), 'base');
+  assert.equal(teinteDe('Geen rook gedetecteerd.'), 'base');
+  assert.equal(teinteDe('Nessuna perdita in cucina.'), 'base');
+  assert.equal(teinteDe('Sin humo ni fugas.'), 'base');
+  assert.equal(teinteDe('Nie wykryto dymu.'), 'base');
+  assert.equal(teinteDe('Non c’è fumo in cucina.'), 'base');
+  // … mais le « non » italien ne rassure pas une alerte française.
+  assert.equal(teinteDe('Alerte non acquittée : fumée dans la cuisine.'), 'alerte');
+  // La lumière, sans le « licht » néerlandais de la météo.
+  assert.equal(teinteDe('Das Licht im Wohnzimmer ist aus.'), 'bien');
+  assert.equal(teinteDe('Het licht in de keuken is uit.'), 'bien');
+  assert.equal(teinteDe('Światło jest włączone.'), 'bien');
+  assert.equal(teinteDe('Elf graden en licht bewolkt, vanavond lichte regen.'), 'base');
+  // Un mot courant qui CONTIENT le motif n'alerte pas : l'expression vaut pour
+  // toutes les langues à la fois.
+  assert.equal(teinteDe('Der Verbrauch liegt bei drei Kilowattstunden.'), 'base');
+  assert.equal(teinteDe('Das Essen war lecker.'), 'base');
+  assert.equal(teinteDe('Der Staubsauger ist zur Ladestation gefahren.'), 'base');
+  assert.equal(teinteDe('Rookie mistake, sorry.'), 'base');
+  assert.equal(teinteDe('Odkurzacz jest połączony z siecią.'), 'base');
+});
+
 test('une phrase qui rassure ne teinte pas en rouge', () => {
   /* « Aucune alerte » parle d'une alerte pour dire qu'il n'y en a pas. En
    * rouge, l'orbe dirait l'inverse de la phrase. */

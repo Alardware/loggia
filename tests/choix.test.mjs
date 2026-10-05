@@ -18,7 +18,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { sansAccents, filtrerChoix, blocsChoix, placerMenu, SEUIL_RECHERCHE, LARGEUR_MENU, HAUTEUR_MENU } from '../src/choix.js';
+import { filtrerChoix, blocsChoix, placerMenu, SEUIL_RECHERCHE, LARGEUR_MENU, HAUTEUR_MENU } from '../src/choix.js';
+import { sansAccents } from '../src/outils.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
@@ -116,7 +117,7 @@ test('les menus des Alertes : la liste de Loggia, groupée, triée par nom', () 
   assert.ok(PAR.includes("groupe: tr('Vannes')") && PAR.includes("groupe: tr('Prises et interrupteurs')"));
   // Le groupe prend tout `switch.*` : pas seulement des prises.
   assert.ok(!PAR.includes("tr('Prises commandées')"), 'le groupe promet des prises et liste tous les interrupteurs');
-  assert.ok(PAR.includes('const parNom = (ids) => ids.slice().sort((a, b) => nomDe(a).localeCompare(nomDe(b), locale()));'), 'la liste suit les identifiants, pas les noms lus');
+  assert.ok(PAR.includes('const parNom = (ids) => ids.slice().sort((a, b) => comparerTextes(nomDe(a), nomDe(b)));'), 'la liste suit les identifiants, pas les noms lus');
 });
 
 test('les suggestions sous un champ : le panneau des menus, à leur taille', () => {

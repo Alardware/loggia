@@ -21,6 +21,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// L'analyseur d'ESLint (hissé par le lockfile) : le second filet lit l'ARBRE du source.
+import { parse } from 'espree';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(RACINE, 'src');
@@ -157,4 +159,133 @@ test('aucun texte écrit en clair dans le JSX', () => {
     }
   }
   assert.deepEqual(fuites, [], 'ces textes ne passent pas par tr() : ils resteront en français');
+});
+
+/* Le second filet : ce que la regex ne voit pas (audit du 03/10).
+ *
+ * Le test précédent lit le source comme du TEXTE — un nœud borné par `>` et
+ * `<`, sans accolade. Quatre formes lui échappaient, et l'audit du 03/10 en a
+ * relevé quarante-cinq dans App.jsx, Paramètres et le plan du robot :
+ *
+ *   1. le texte MÊLÉ d'expressions — « actuel {z.current}° », « Thème
+ *      « {nom} » · mode {…} » : le nœud s'arrête à l'accolade ;
+ *   2. les littéraux qu'un ternaire, un `||` ou un `+` RENDENT —
+ *      `{on ? 'Pause' : tr('Lecture')}` : la moitié traduite cachait l'autre ;
+ *   3. les attributs que l'on lit ou que l'on entend — `title`, `aria-label`,
+ *      `placeholder`, `alt` ;
+ *   4. les boîtes du navigateur — `alert()`, `confirm()`, `prompt()`.
+ *
+ * Ici le source est PARSÉ : ni faux nœud ouvert par un `>` de comparaison, ni
+ * commentaire à blanchir. Un appel n'est jamais ouvert — ce qui passe par `tr`
+ * ou `trN` est traduit, ce qui sort d'une autre fonction ne se juge pas ici —,
+ * et une CONDITION ne se lit pas (`s === 'on'`, la gauche d'un `&&`) : seules
+ * les branches d'un ternaire, les deux côtés d'un `||`, d'un `??` et d'un `+`,
+ * les morceaux d'un gabarit `…${x}…` sont des textes rendus.
+ *
+ * Reste neutre ce que `NEUTRES` admet déjà, un texte dont chaque mot est une
+ * unité (« 07h », « 12 ms », « 2 700 K », « 3,2 kW »), un identifiant
+ * d'entité ou de service donné en exemple (`sensor.…`, `script.turn_on`), un
+ * gabarit Jinja. Tout le reste passe par `tr()` — ou entre dans `EXCEPTIONS`
+ * avec sa raison, et le test vérifie qu'elle sert encore.
+ */
+const UNITES = new Set(['g', 'h', 's', 'ms', 'K', 'W', 'kW', 'kWh', 'ppm', 'px', 'm', 'CO']);
+const TECHNIQUE = /^(?:[a-z_]+\.(?:[a-z0-9_]+|…)(?:,\s*|$))+$|^\{\{[\s\S]*\}\}$/;
+const EXCEPTIONS = new Set([
+  /* L'exemple d'une VALEUR d'état, pas un libellé : ce qu'un compteur Linky
+   * renvoie en heures creuses. On y tape ce que dit SON capteur, et un état
+   * de Home Assistant ne se traduit pas. */
+  'views/veilles.jsx "HC"',
+]);
+const ATTRIBUTS = new Set(['title', 'aria-label', 'placeholder', 'alt']);
+const BOITES = new Set(['alert', 'confirm', 'prompt']);
+
+function neutre(texte) {
+  /* Un « s » COLLÉ, rendu par une expression, est le pluriel à la française
+   * (`n > 1 ? 's' : ''`), pas l'unité des secondes — celle-ci s'écrit avec
+   * son espace (`cpt.reste + ' s'`). */
+  if (texte === 's') return false;
+  const t = texte.replace(/\s+/g, ' ').trim();
+  if (!/\p{L}/u.test(t) || NEUTRES.has(t) || TECHNIQUE.test(t)) return true;
+  return t.match(/\p{L}+/gu).every(w => UNITES.has(w));
+}
+
+/* Les littéraux qu'une expression RENDRAIT, sans jamais entrer dans un appel. */
+function rendus(n, acc = []) {
+  if (!n) return acc;
+  if (n.type === 'Literal' && typeof n.value === 'string') acc.push([n, n.value]);
+  else if (n.type === 'TemplateLiteral') {
+    acc.push([n, n.quasis.map(q => q.value.cooked).join(' ')]);
+    n.expressions.forEach(e => rendus(e, acc));
+  } else if (n.type === 'ConditionalExpression') { rendus(n.consequent, acc); rendus(n.alternate, acc); }
+  else if (n.type === 'LogicalExpression') { if (n.operator !== '&&') rendus(n.left, acc); rendus(n.right, acc); }
+  else if (n.type === 'BinaryExpression' && n.operator === '+') { rendus(n.left, acc); rendus(n.right, acc); }
+  else if (n.type === 'SequenceExpression') rendus(n.expressions[n.expressions.length - 1], acc);
+  return acc;
+}
+
+function relever(source) {
+  const arbre = parse(source, { ecmaVersion: 'latest', sourceType: 'module', ecmaFeatures: { jsx: true }, loc: true });
+  const trouves = [];
+  const voir = (forme, noeud, texte) => {
+    if (!neutre(texte)) trouves.push({ ligne: noeud.loc.start.line, forme, texte: texte.replace(/\s+/g, ' ').trim() });
+  };
+  const enfants = (liste) => {
+    for (const c of liste) {
+      if (c.type === 'JSXText') voir('texte', c, c.value);
+      else if (c.type === 'JSXExpressionContainer') for (const [m, t] of rendus(c.expression)) voir('rendu', m, t);
+    }
+  };
+  (function marcher(n) {
+    if (n.type === 'JSXElement') {
+      const el = n.openingElement;
+      for (const a of el.attributes) {
+        if (a.type !== 'JSXAttribute' || !a.value || !ATTRIBUTS.has(a.name.name)) continue;
+        const v = a.value.type === 'JSXExpressionContainer' ? a.value.expression : a.value;
+        for (const [m, t] of rendus(v)) voir(a.name.name, m, t);
+      }
+      // Le contenu d'un `<style>` est du CSS, pas une phrase.
+      if (el.name.name !== 'style') enfants(n.children);
+    } else if (n.type === 'JSXFragment') enfants(n.children);
+    else if (n.type === 'CallExpression') {
+      const c = n.callee;
+      const qui = c.type === 'Identifier' ? c.name : c.type === 'MemberExpression' && !c.computed ? c.property.name : null;
+      if (BOITES.has(qui)) for (const [m, t] of rendus(n.arguments[0])) voir(qui + '()', m, t);
+    }
+    for (const k in n) {
+      const v = n[k];
+      if (Array.isArray(v)) { for (const x of v) if (x && typeof x.type === 'string') marcher(x); }
+      else if (v && typeof v.type === 'string') marcher(v);
+    }
+  })(arbre);
+  return trouves;
+}
+
+test('le second filet voit les quatre formes, et laisse passer ce qui est traduit', () => {
+  /* Sans cette épingle, un filet affaibli resterait vert sans rien voir. */
+  const vus = relever([
+    "const A = () => <div title=\"Fermer la fiche\">actuel {x}°",
+    "  <span>{on ? 'Pause' : tr('Lecture')}</span>",
+    "  <input placeholder=\"sensor.…\" aria-label={tr('Nom')} />",
+    "  <i>{n + ' ms'}</i><b>{trN(n, '{n} repas', '{n} repas')}{n > 1 ? 's' : ''}</b></div>;",
+    "alert(ok ? tr('Fait') : 'Échec de l’envoi');",
+    "window.confirm(err || 'Tout effacer ?');",
+  ].join('\n')).map(x => x.forme + ' ' + x.texte);
+  assert.deepEqual(vus, [
+    'title Fermer la fiche', 'texte actuel', 'rendu Pause', 'rendu s',
+    'alert() Échec de l’envoi', 'confirm() Tout effacer ?',
+  ]);
+});
+
+test('aucun texte rendu en clair : mêlé, ternaire, attribut, alert()', () => {
+  const fuites = [];
+  const servies = new Set();
+  for (const f of fichiers) {
+    for (const x of relever(readFileSync(f, 'utf8'))) {
+      const cle = nom(f) + ' ' + JSON.stringify(x.texte);
+      if (EXCEPTIONS.has(cle)) { servies.add(cle); continue; }
+      fuites.push(`${nom(f)}:${x.ligne}  [${x.forme}] ${JSON.stringify(x.texte.slice(0, 80))}`);
+    }
+  }
+  assert.deepEqual(fuites, [], 'ces textes ne passent pas par tr() : ils resteront en français');
+  assert.deepEqual([...EXCEPTIONS].filter(e => !servies.has(e)), [], 'une exception ne sert plus : la retirer');
 });

@@ -95,7 +95,9 @@ def etats_de_base(nuit=True):
         # Sans zone ni registre : une lampe de jardin ajoutee en YAML.
         "light.jardin": FauxEtat("on"),
         "cover.volet_salon": FauxEtat("open"), "cover.garage": FauxEtat("open"),
-        "cover.volet_cuisine": FauxEtat("open"),
+        # Sans registre, sa classe vient de l'etat. Elle COMPTE depuis le 03/10 :
+        # une classe absente n'est plus un volet (ouvrants.py).
+        "cover.volet_cuisine": FauxEtat("open", {"device_class": "shutter"}),
         "media_player.tv": FauxEtat("off", {"device_class": "tv"}),
         "media_player.enceinte": FauxEtat("playing"),
         "climate.salon": FauxEtat("heat", {"preset_modes": ["eco", "comfort"], "temperature": 21}),
@@ -251,6 +253,43 @@ def test_l_ordre_choisi_s_applique_et_ignore_l_inconnu(creer, module):
     ids = [x["id"] for x in module.effectifs(lancer(s.async_config()))]
     assert ids[:2] == ["cinema", "nuit"] and len(ids) == 8
     assert lancer(s.async_config())["ordre"] == ["cinema", "nuit"]
+
+
+def test_ranger_n_accepte_que_des_scenarios_connus_et_rien_d_autre(creer, module):
+    """La porte ouverte a tout compte (`loggia/scenarios/ordre`, audit du
+    03/10). Un inconnu fait TOUT refuser en se nommant, un doublon aussi ; ce
+    qui est accepte ne change que l'ordre."""
+    s = creer({"persos": [{"id": "perso_apero", "nom": "Apéro", "actions": []}],
+               "integres": {"nuit": {"nom": "Dodo"}}, "migre": True})
+    avant = lancer(s.async_config())
+    with pytest.raises(module.ScenariosInconnusError) as refus:
+        lancer(s.async_ordonner(["cinema", "fantome", "nuit"]))
+    assert refus.value.idents == ["fantome"] and "fantome" in str(refus.value)
+    for mauvais in (["nuit", "cinema", "nuit"], "cinema", ["cinema", 3], None):
+        with pytest.raises(ValueError):
+            lancer(s.async_ordonner(mauvais))
+    assert lancer(s.async_config()) == avant, "un ordre refuse a quand meme ete ecrit"
+    assert lancer(s.async_ordonner(["perso_apero", "cinema"]))["ordre"] == ["perso_apero", "cinema"]
+    apres = lancer(s.async_config())
+    assert [x["id"] for x in module.effectifs(apres)][:2] == ["perso_apero", "cinema"]
+    # Rien d'autre ne bouge : ni les scenarios de Loggia, ni les siens.
+    assert {k: v for k, v in apres.items() if k != "ordre"} == {k: v for k, v in avant.items() if k != "ordre"}
+
+
+def test_ranger_pendant_qu_un_administrateur_ajoute_ne_perd_rien(creer):
+    """Ranger est ouvert a tout compte (audit du 03/10). Lu avant l'ajout et
+    ecrit apres lui, l'ordre emportait le scenario qu'un administrateur venait
+    de creer : le verrou du magasin ne couvrait que l'ecriture."""
+    s = creer()
+
+    async def ensemble():
+        await asyncio.gather(s.async_enregistrer({"enregistrer": {"nom": "Apéro"}}),
+                             s.async_ordonner(["cinema", "nuit"]))
+
+    lancer(ensemble())
+    cfg = lancer(s.async_config())
+    assert [p["id"] for p in cfg["persos"]] == ["perso_apero"], "ranger a efface le scenario ajoute au meme moment"
+    assert cfg["ordre"] == ["cinema", "nuit"]
 
 
 # ── Resoudre au lancement ───────────────────────────────────────────────────

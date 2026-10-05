@@ -6,14 +6,32 @@
  * elles : on ne charge pas une vue a la demande si le tronc la retient.
  *
  * Rien ici ne connait le reste du dashboard : ce module n'importe que la
- * traduction et deux crochets React. */
-import { useState, useEffect } from 'react';
-import { tr, locale } from './i18n.js';
+ * traduction, trois crochets React et les instants du journal
+ * (`evenement.js`, sans React — la fenêtre de 24 h et l'heure d'une ligne s'y
+ * testent à sec, audit du 03/10). */
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { tr } from './i18n.js';
+import { dansLaFenetre, heureJournal } from './evenement.js';
+import { seriesRelues, GARDE_SERIE } from './releve.js';
+
+/* L'heure qui avance, à la minute ronde (audit du 03/10). Un rafraîchissement
+ * d'AFFICHAGE, rien d'autre : aucune commande ne part d'ici. Sans lui, un
+ * journal que rien de neuf ne vient secouer ne vieillirait jamais. */
+function useMinute() {
+  const [t, setT] = useState(() => Date.now());
+  useEffect(() => {
+    let iv = null;
+    const to = setTimeout(() => { setT(Date.now()); iv = setInterval(() => setT(Date.now()), 60000); }, 60000 - (Date.now() % 60000));
+    return () => { clearTimeout(to); if (iv) clearInterval(iv); };
+  }, []);
+  return t;
+}
 
 export function useRoomLogbook(hass, ids) {
   // `ids = null` : le journal de TOUTE la maison — le logbook écarte déjà de
   // lui-même les capteurs continus, ce qui arrive mérite d'être raconté.
   const [events, setEvents] = useState([]);
+  const maintenant = useMinute();
   const conn = hass && hass.connection;
   const sig = ids ? ids.join('|') : '*';
   useEffect(() => {
@@ -24,7 +42,13 @@ export function useRoomLogbook(hass, ids) {
     conn.subscribeMessage((msg) => {
       if (mort || !msg || !Array.isArray(msg.events) || !msg.events.length) return;
       setEvents(prev => {
-        const tous = [...prev, ...msg.events.filter(e => e && e.entity_id && e.state !== 'unknown' && e.state !== 'unavailable')];
+        /* Dédoublonné (audit du 03/10) : à la reconnexion, l'abonnement est
+         * rejoué avec le même `start_time`, et Home Assistant renvoie tout
+         * l'historique depuis ce point — chaque ligne s'affichait deux fois. */
+        const cle = (e) => e.entity_id + '|' + e.when + '|' + (e.state != null ? e.state : e.message);
+        const vus = new Set(prev.map(cle));
+        const neufs = msg.events.filter(e => e && e.entity_id && e.state !== 'unknown' && e.state !== 'unavailable' && !vus.has(cle(e)));
+        const tous = [...prev, ...neufs];
         tous.sort((a, b) => (b.when || 0) - (a.when || 0));
         return tous.slice(0, 30);
       });
@@ -33,7 +57,12 @@ export function useRoomLogbook(hass, ids) {
       .catch(() => {}); // logbook absent ou refuse : la carte ne s'affiche pas, c'est tout
     return () => { mort = true; if (unsub) { try { unsub(); } catch {} } };
   }, [conn, sig]);
-  return events;
+  /* Filtré AU RENDU (audit du 03/10) : l'abonnement remonte 24 h en arrière
+   * de son OUVERTURE, puis ajoute sans jamais rien retirer. Sur une tablette
+   * allumée plusieurs jours, la carte « 24 h, en direct » montrait encore
+   * lundi le jeudi. Ce qui sort de la fenêtre sort de l'écran à la minute
+   * près — ce qu'un rechargement aurait montré. */
+  return useMemo(() => dansLaFenetre(events, maintenant), [events, maintenant]);
 }
 
 /* Le DERNIER declenchement de chaque entite, d'apres le meme flux du journal :
@@ -71,11 +100,13 @@ export function etatJournal(id, st, S) {
   if (dom === 'media_player') return st === 'playing' ? tr('Lecture') : st === 'paused' ? tr('En pause') : st === 'off' ? tr('Éteint') : st === 'on' ? tr('Allumé') : tr('Inactif');
   if (dom === 'binary_sensor') {
     const porte = ['door', 'window', 'garage_door', 'opening'].indexOf(a.device_class) >= 0;
-    return st === 'on' ? (porte ? tr('Ouvert') : tr('Détecté')) : (porte ? tr('Fermé') : 'RAS');
+    // « RAS » et « Absent » passent par `tr` comme leurs voisins (audit du
+    // 03/10) : le journal d'une pièce les disait en français.
+    return st === 'on' ? (porte ? tr('Ouvert') : tr('Détecté')) : (porte ? tr('Fermé') : tr('RAS'));
   }
   if (dom === 'climate') return st === 'off' ? tr('Éteint') : st === 'heat' ? tr('CONFORT') : st;
   if (dom === 'vacuum') return st === 'cleaning' ? tr('Nettoyage') : st === 'docked' ? tr('À la base') : st === 'returning' ? tr('Retour base') : st === 'paused' ? tr('En pause') : st;
-  if (dom === 'person') return st === 'home' ? tr('Présent') : 'Absent';
+  if (dom === 'person') return st === 'home' ? tr('Présent') : tr('Absent');
   return st + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
 }
 
@@ -96,7 +127,9 @@ export function RoomActivityCard({ hass, ids, titre = null, sous = null, max = 8
   const events = grouperJournal(useRoomLogbook(hass, ids));
   if (!events.length) return null;
   const S = (hass && hass.states) || {};
-  const heure = (when) => { const ms = when < 1e12 ? when * 1000 : when; const d = new Date(ms); return d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
+  /* L'heure dit le jour quand ce n'est plus aujourd'hui (audit du 03/10) :
+   * « 16:00 » seul datait du jour un événement de lundi. Le rendu suit la
+   * minute du crochet — la ligne passe à « hier » au premier coup de minuit. */
   const actif = (e) => ['on', 'open', 'unlocked', 'playing', 'heat', 'cleaning', 'home'].indexOf(e.state) >= 0;
   return (
     <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
@@ -108,7 +141,7 @@ export function RoomActivityCard({ hass, ids, titre = null, sous = null, max = 8
             <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: actif(e) ? 'var(--o-warn)' : 'var(--o-text3)', boxShadow: actif(e) ? '0 0 7px var(--o-warn)' : 'none' }} />
             <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.name || (S[e.entity_id] && S[e.entity_id].attributes && S[e.entity_id].attributes.friendly_name) || e.entity_id}</span>
             <span style={{ fontSize: 12, fontWeight: 600, color: actif(e) ? 'var(--o-warn)' : 'var(--o-text2)', whiteSpace: 'nowrap' }}>{e.state != null ? etatJournal(e.entity_id, e.state, S) : (e.message || '')}{e.n > 1 ? ' ·×' + e.n : ''}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0, minWidth: 38, textAlign: 'right' }}>{heure(e.when)}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0, minWidth: 38, textAlign: 'right', whiteSpace: 'nowrap' }}>{heureJournal(e.when)}</span>
           </div>
         ))}
       </div>
@@ -118,20 +151,29 @@ export function RoomActivityCard({ hass, ids, titre = null, sous = null, max = 8
 
 export function useSysHist(hass, ids, hours, refreshKey) {
   const [data, setData] = useState({});
+  // L'instant de la dernière lecture RÉUSSIE de chaque série (relecture du 03/10).
+  const lus = useRef({});
   const key = ids.filter(Boolean).join('|');
   const connecte = hass ? 1 : 0;
   useEffect(() => {
     let alive = true;
     if (!hass || !hass.callApi || !key) { setData({}); return undefined; }
     const start = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+    /* Un raté rend `null`, pas `[]` (audit du 03/10) : les courbes se relisent
+     * maintenant au tour, et un historique vide effaçait la courbe d'avant
+     * pour un simple raté du réseau. `seriesRelues` la garde (releve.js). */
     Promise.all(key.split('|').map(id =>
       hass.callApi('GET', 'history/period/' + start + '?filter_entity_id=' + encodeURIComponent(id) + '&minimal_response&no_attributes')
-        .then(res => ({ id, arr: (res && res[0]) || [] })).catch(() => ({ id, arr: [] }))
+        .then(res => ({ id, arr: (res && res[0]) || [] })).catch(() => ({ id, arr: null }))
     )).then(rs => {
       if (!alive) return;
-      const m = {};
-      rs.forEach(r => { const pts = r.arr.map(x => ({ t: new Date(x.last_changed || x.last_updated || 0).getTime(), v: parseFloat(x.state) })).filter(pt => !isNaN(pt.v)); if (pts.length >= 2) m[r.id] = pts; });
-      setData(m);
+      const maintenant = Date.now();
+      rs.forEach(r => { if (r && Array.isArray(r.arr)) lus.current[r.id] = maintenant; });
+      /* Une courbe gardée après un raté expire : trente minutes au plus — la
+       * borne de l'historique 24 h —, et le quart de sa fenêtre pour une
+       * courbe courte (celle d'une heure du Système). */
+      const garde = Math.min(GARDE_SERIE, hours * 3600 * 1000 / 4);
+      setData(avant => seriesRelues(avant, rs, (id) => maintenant - (lus.current[id] || 0) < garde));
     });
     return () => { alive = false; };
   }, [connecte, key, hours, refreshKey]);

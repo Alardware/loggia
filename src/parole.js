@@ -19,21 +19,79 @@
  * « no smoke » RASSURENT — les teindre en rouge dirait l'inverse de la phrase.
  *
  * La négation se cherche dans la MÊME phrase que le mot, et en mots entiers :
- * « Nouvelle alerte » commence par « No », et ce n'est pas un refus. */
-const ALERTE = /alarme|alerte|fuite|fum[ée]e|intrusion|danger|alarm|alert|leak|smoke|intruder/i;
-const NEGATION = /\b(aucune?|pas|sans|rien|jamais|ni|no|not|none|nothing|never|without)\b/i;
+ * « Nouvelle alerte » commence par « No », et ce n'est pas un refus.
+ *
+ * Les SEPT langues de Loggia, une ligne chacune (relecture du 03/10). Il n'y
+ * avait que le français et l'anglais : l'orbe d'une maison allemande ou
+ * polonaise restait toujours neutre — celle de la démo aussi, depuis que ses
+ * réponses parlent la langue de l'écran. Les lignes ne sont qu'une lecture :
+ * l'expression est UNE, et chaque mot vaut dans toutes les langues. D'où une
+ * frontière là où un mot courant contient le motif — « Verbrauch » n'est pas
+ * de la fumée (« Rauch »), ni « lecker » une fuite (« Leck »), ni « humor »
+ * du « humo », ni « gefahren » (le robot est rentré) un danger, ni « rookie »
+ * de la fumée (« rook »). Le « non » italien ne nie que devant un verbe
+ * (« non c'è », « non è stato rilevato ») : seul, il nierait aussi le français
+ * « Alerte non acquittée : fumée… », qui doit rester rouge. Sans drapeau `u`,
+ * `\b` reste celui de l'ASCII, comme avant. */
+const ou = (...motifs) => new RegExp(motifs.map((m) => m.source).join('|'), 'i');
 
-/* Les autres sujets, dans l'ordre où ils l'emportent.
+const ALERTE = ou(
+  /alarme|alerte|fuite|fum[ée]e|intrusion|danger/,          // français
+  /alarm|alert|leak|smoke|intruder/,                         // anglais
+  /\brauch|\blecks?\b|wasserleck|einbr[ue]ch|gefahr(?!en)/,   // allemand
+  /\brook(?!ie)|\blek\b|lekkage|inbra|inbrek|gevaar/,         // néerlandais
+  /allarm|allert|\bfum[oi]\b|perdit[ae]\b|intrus|pericol/,   // italien
+  /\bhumo\b|\bfugas?\b|intrus|peligr/,                       // espagnol
+  /\bdym|wyciek|włam|zagroż|niebezpiecz/,                    // polonais
+);
+const NEGATION = ou(
+  /\b(aucune?|pas|sans|rien|jamais|ni)\b/,
+  /\b(no|not|none|nothing|never|without)\b/,
+  /\b(kein(e|en|em|er|es)?|nicht|nichts|nie|niemals|ohne)\b/,
+  /\b(geen|niet|niets|nooit|zonder)\b/,
+  /\b(nessun[oa]?|niente|nulla|senza)\b|\bnon (c['’]|ci |è |sono |ho |ha |hanno |si |risult|rilev|vedo|trovo|segnal)/,
+  /\b(ning[uú]n[oa]?|nada|nunca|sin)\b/,
+  /\b(nie|brak|bez|nigdy|nic)\b/,
+);
+
+/* Les autres sujets, dans l'ordre où ils l'emportent ; les langues, dans le
+ * même ordre que l'alerte.
  *
- * Français et anglais : l'assistant répond dans la langue qu'on lui parle.
- *
- * Ni « degré » ni « température » dans le chaud. Ce sont les mots de la météo
- * autant que du chauffage, et « il fait trois degrés dehors » aurait teinté
- * l'orbe en orangé. */
+ * Ni « degré » ni « température » dans le chaud — ni « Grad », « gradi » ou
+ * « stopni ». Ce sont les mots de la météo autant que du chauffage, et « il
+ * fait trois degrés dehors » aurait teinté l'orbe en orangé. Pour la même
+ * raison, pas de « licht » seul dans la lumière : en néerlandais, c'est aussi
+ * « léger » — « licht bewolkt », « lichte regen » auraient teinté la météo en
+ * vert. Et « włączon », pas « łączon », qui est aussi « połączony » (connecté) ;
+ * « refrigeración », pas « refriger », qui est aussi le réfrigérateur. */
 const SUJETS = [
-  ['chaud', /chauffage|chauffe|radiateur|thermostat|chaudi[èe]re|chaud|heating|radiator|boiler|warm/i],
-  ['froid', /climatis|\bclim\b|refroidi|ventilat|froid|fra[îi]ch|air.?condition|cooling|\bcold\b/i],
-  ['bien', /allum|[ée]teint|lumi[èe]re|lampe|\bvolets?\b|\bstores?\b|sc[èe]ne|\blights?\b|\blamps?\b|shutter|\bblinds?\b|\bscenes?\b|turned (on|off)/i],
+  ['chaud', ou(
+    /chauffage|chauffe|radiateur|thermostat|chaudi[èe]re|chaud/,
+    /heating|radiator|boiler|warm/,
+    /heiz|wärm/,
+    /verwarm|thermostaat/,
+    /scald|termosifon|termostat|caldaia|\bcald[oa]\b/,
+    /calefac|calent|radiador|caldera|\bcalor\b/,
+    /grzew|grzej|kaloryfer|termostat|ciepł/,
+  )],
+  ['froid', ou(
+    /climatis|\bclim\b|refroidi|ventilat|froid|fra[îi]ch/,
+    /air.?condition|cooling|\bcold\b/,
+    /klima|k[üu]hl|\bkalt/,
+    /airco|\bkoel|\bkoud/,
+    /climatiz|condizionat|raffresc|fredd/,
+    /climatiz|acondicionad|refrigeraci[oó]n|\bfr[íi]o\b/,
+    /klimatyz|chłod|zimn/,
+  )],
+  ['bien', ou(
+    /allum|[ée]teint|lumi[èe]re|lampe|\bvolets?\b|\bstores?\b|sc[èe]ne/,
+    /\blights?\b|\blamps?\b|shutter|\bblinds?\b|\bscenes?\b|turned (on|off)/,
+    /\blichter\b|\b(das|dem) licht\b|beleuchtung|\blampen\b|rolll[äa]den|rolladen|jalousie|szene|geschaltet/,
+    /\bhet licht\b|\blichten\b|verlicht|rolluik|geschakeld|(aan|uit)gezet/,
+    /\bluc[ei]\b|lampad|tapparell|persian|\bscena\b|\bacces[ai]\b|\bspent[aeio]\b/,
+    /\bluz\b|\bluces\b|l[áa]mpara|persiana|escena|encendid|apagad/,
+    /światł|świetl|\blamp[aey]\b|rolet|\bsceny?\b|\bwy?łączon|zgasz/,
+  )],
 ];
 
 /** La teinte de ce dont parle `texte` : « chaud », « froid », « bien », « alerte » — ou « base ». */

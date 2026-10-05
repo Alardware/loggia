@@ -104,10 +104,20 @@ class LoggiaSirene:
         self.regles = regles
         self.table: dict[str, dict[str, Any]] = {}
         self._rdv: dict[str, Any] = {}
+        self._au_demarrage = None
         demarrer(hass, self, self._async_demarrer(), "sirene")
 
     async def _async_demarrer(self) -> None:
         self.table = normaliser(await self.store.async_get_shared(CLE, None))
+        # Apres le demarrage COMPLET, comme les minuteurs (audit du 03/10) :
+        # une sirene pas encore creee par son integration aurait ete rayee de
+        # la table sans etre eteinte.
+        from homeassistant.helpers.start import async_at_started
+
+        self._au_demarrage = async_at_started(self.hass, self._async_rattraper)
+
+    async def _async_rattraper(self, _hass=None) -> None:
+        self._au_demarrage = None
         # Un test qui traverse un redemarrage a deja trop dure : on eteint.
         for haid in sorted(self.table):
             await self._async_eteindre(haid, rattrape=True)
@@ -209,5 +219,8 @@ class LoggiaSirene:
 
     @callback
     def async_arreter(self) -> None:
+        if self._au_demarrage:
+            self._au_demarrage()
+            self._au_demarrage = None
         for haid in list(self._rdv):
             self._desarmer(haid)

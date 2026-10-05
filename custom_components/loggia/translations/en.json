@@ -21,5 +21,16 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "scenario_inconnu": {
+      "message": "No Loggia scenario has the identifier “{id}”."
+    },
+    "scenarios_indisponibles": {
+      "message": "Loggia scenarios are not available: the integration has not started."
+    },
+    "compte_illisible": {
+      "message": "Scenario refused: the account that requested it could not be read."
+    }
   }
 }

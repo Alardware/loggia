@@ -402,7 +402,7 @@ test('la vue : le gabarit des cartes de la maison, partage et non recopie', () =
    * depuis le 23/09 (plan M1) : il n'y a plus qu'a verifier que les deux le
    * prennent la, et que chacune garde SA difference, a decouvert. */
   const styles = readFileSync(join(RACINE, 'src', 'styles.js'), 'utf8');
-  for (const morceau of ["display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 172, padding: 16, borderRadius: 'var(--o-radius,18px)'", "border: 'none'", "boxShadow: 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))'", "background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))'"]) {
+  for (const morceau of ["display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 172, padding: 16, borderRadius: 'var(--o-radius,18px)'", "border: LISERE", "boxShadow: 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))'", "background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))'"]) {
     assert.ok(styles.includes(morceau), 'le gabarit commun a perdu : ' + morceau);
   }
   assert.ok(app.includes('const RM_CARD = { ...CARTE_MAISON, transition:'), 'l’Accueil ne part plus du gabarit commun');
@@ -454,7 +454,7 @@ test('les retouches du 17/09 : le graphe a la hauteur des versions, les modules 
   // Le journal et le reseau cote a cote, le journal defile.
   const pied = vue.slice(vue.lastIndexOf('<div className="grid-sys-duo">'));
   assert.ok(pied.indexOf('<PanneauJournal') > 0 && pied.indexOf('<PanneauJournal') < pied.indexOf('<PanneauReseau'), 'le journal a gauche, le reseau a droite');
-  assert.ok(vue.includes(`<div className="sys-journal-liste" style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>`), 'la liste defile, et ne pese rien dans la hauteur de la rangee');
+  assert.ok(vue.includes(`<div className="sys-journal-liste" role="region" tabIndex={0} aria-label={tr('Journal')} style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>`), 'la liste defile, ne pese rien dans la hauteur de la rangee, et se prend au clavier (audit du 03/10)');
   assert.ok(css.includes('.sys-journal { min-height: 320px; }') && css.includes('.sys-journal-liste { scrollbar-width: thin;'), 'une hauteur minimale, une barre fine');
   assert.ok(vue.includes('logbook, maintenant, max: 60 });'), 'toute la journee se parcourt, pas huit lignes');
 });

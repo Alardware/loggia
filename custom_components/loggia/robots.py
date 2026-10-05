@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
+from .refus import RefusNomme
 from .regles import Regles, demarrer, niveau
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
@@ -401,15 +402,19 @@ class LoggiaRobots:
             "journal": await self.regles.journal(limite=20, module=MODULE),
         }
 
-    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
+    def _poser_patch(self, cfg: dict[str, Any], patch: dict[str, Any]) -> None:
         """`plannings` REMPLACE la liste ; `robots` se fusionne robot par robot.
-        Tout est relu : une valeur illisible est refusee, pas ecartee."""
-        cfg = await self.async_config()
+        Tout est relu : une valeur illisible est refusee, pas ecartee — et
+        rien n'est ecrit. Synchrone : sous le verrou du magasin."""
         patch = patch or {}
         if "plannings" in patch:
             liste = patch["plannings"]
-            if not isinstance(liste, list) or len(liste) > MAX_PLANNINGS:
-                raise ValueError("%d plannings au plus" % MAX_PLANNINGS)
+            if not isinstance(liste, list):
+                raise ValueError("plannings : une liste")
+            if len(liste) > MAX_PLANNINGS:
+                # Le seul refus que l'ecran puisse provoquer ici : son code, et
+                # la limite que l'ecran dit dans sa langue (audit du 03/10).
+                raise RefusNomme("trop_de_plannings", "trop de plannings, au plus", MAX_PLANNINGS)
             propres = [normaliser_planning(p) for p in liste]
             if len({p["id"] for p in propres}) != len(propres):
                 raise ValueError("deux plannings portent le meme identifiant")
@@ -430,7 +435,16 @@ class LoggiaRobots:
                         raise ValueError("pluie : un objet {actif}")
                     actuel["pluie"] = {"actif": bool(reglages["pluie"].get("actif"))}
                 cfg["robots"][haid] = actuel
-        await self.store.async_set_shared(CLE, cfg)
+
+    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
+        """D'un seul tenant, sous le verrou du magasin (lot 15 de l'audit du
+        03/10 ; voir store.async_modifier_shared). Un refus n'ecrit rien."""
+        def changer(brut: Any) -> dict[str, Any]:
+            cfg = normaliser(brut)
+            self._poser_patch(cfg, patch)
+            return cfg
+
+        cfg = await self.store.async_modifier_shared(CLE, changer)
         self.cfg = cfg
         self._reabonner()
         return cfg

@@ -118,7 +118,8 @@ test('l’orbe n’est demandée qu’à l’appui', () => {
   // Un import statique la ferait entrer dans le premier chargement avec
   // Three.js derrière elle.
   assert.doesNotMatch(APP, /^import .*from '\.\/orbe\.jsx'/m);
-  assert.match(APP, /const OrbeMini = lazy\(\(\) => import\('\.\/orbe\.jsx'\)\)/);
+  assert.ok(APP.includes(`const OrbeMini = lazyRecharge(() => import('./orbe.jsx'), { decor: true });`),
+    'à la demande, derrière le rechargement unique, et sans écran d’erreur pour un décor (audit du 03/10)');
   // Et le téléchargement part dès l'appui : sinon elle arriverait après le seuil.
   assert.match(BOUTON, /import\('\.\/orbe\.jsx'\)\.catch\(/);
 });
@@ -171,7 +172,7 @@ test('la barre du bas reçoit aussi de quoi dicter', () => {
   // Elle recevait `onDictee` et `hass` sans les lire : sur téléphone, le
   // maintien faisait paraître l'orbe mais n'écoutait rien. Le bouton porte un
   // micro depuis la 3.54 : il doit dicter là aussi.
-  assert.match(APP, /function MobileNav\(\{ view, onNav, onMenu, onAssistant = null, onDictee = null, hass = null \}\)/,
+  assert.match(APP, /function MobileNav\(\{ view, onNav, onMenu, menuOuvert = false, onAssistant = null, onDictee = null, hass = null, assistantAttendu = false \}\)/,
     'la barre du bas laisse tomber ce qu’il faut pour dicter');
   assert.match(APP, /<BoutonAssistant onAssistant=\{onAssistant\} onDictee=\{onDictee\} hass=\{hass\} \/>/,
     'le bouton du bas ne reçoit pas de quoi dicter');

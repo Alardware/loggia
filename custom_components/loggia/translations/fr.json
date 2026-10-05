@@ -21,5 +21,16 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "scenario_inconnu": {
+      "message": "Aucun scénario Loggia ne porte l’identifiant « {id} »."
+    },
+    "scenarios_indisponibles": {
+      "message": "Les scénarios de Loggia ne sont pas disponibles : le composant n’a pas démarré."
+    },
+    "compte_illisible": {
+      "message": "Scénario refusé : le compte qui l’a demandé n’a pas pu être lu."
+    }
   }
 }

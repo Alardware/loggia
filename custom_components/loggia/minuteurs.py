@@ -156,10 +156,22 @@ class LoggiaMinuteurs:
         self.table: dict[str, dict[str, Any]] = {}
         self._rdv: dict[str, Any] = {}
         self._ecoute = None
+        self._au_demarrage = None
         demarrer(hass, self, self._async_demarrer(), "minuteurs")
 
     async def _async_demarrer(self) -> None:
         self.table = normaliser(await self.store.async_get_shared(CLE, None))
+        # Le rattrapage attend que Home Assistant ait FINI de demarrer (audit
+        # du 03/10). Lance pendant la mise en place, il trouvait parfois la
+        # lampe pas encore creee par son integration : le minuteur echu etait
+        # efface sans rien eteindre, et la lampe restait allumee la nuit.
+        # Deja demarre (un rechargement), il part aussitot.
+        from homeassistant.helpers.start import async_at_started
+
+        self._au_demarrage = async_at_started(self.hass, self._async_rattraper)
+
+    async def _async_rattraper(self, _hass=None) -> None:
+        self._au_demarrage = None
         maintenant = time.time()
         for haid in echus(self.table, maintenant):
             await self._async_echoir(haid, rattrape=True)
@@ -271,6 +283,9 @@ class LoggiaMinuteurs:
 
     @callback
     def async_arreter(self) -> None:
+        if self._au_demarrage:
+            self._au_demarrage()
+            self._au_demarrage = None
         for haid in list(self._rdv):
             self._desarmer(haid)
         if self._ecoute:

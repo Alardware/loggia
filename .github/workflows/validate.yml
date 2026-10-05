@@ -60,7 +60,14 @@ jobs:
           python-version: "3.12"
       # Les tests posent leurs propres doublures de Home Assistant : inutile de
       # l'installer, et la suite ne se fige pas sur une version.
-      - run: pip install pytest
+      #
+      # `voluptuous` (la version de Home Assistant) fait tourner les commandes
+      # WebSocket et le demarrage POUR DE VRAI (03/10) : sans lui, ces tests
+      # sont sautes, et c'est en les executant que l'on a vu la collision `id`
+      # du lancement de scenario. `ruff --select F` : les noms non definis et
+      # les imports morts, que seule l'execution revelait jusqu'ici.
+      - run: pip install pytest voluptuous==0.15.2 ruff==0.16.10
+      - run: ruff check --select F custom_components
       - run: python -m pytest tests/python -q
 
   paquet:
@@ -99,8 +106,29 @@ jobs:
           # automatique, mais autant tourner sur une version soutenue.
           node-version: "22"
       - run: npm ci
-      - run: npm run lint
+      # Le cliquet des avertissements (lot 15 de l'audit du 03/10). `npm run
+      # lint` passe `--quiet` : les avertissements n'y etaient ni montres ni
+      # comptes, et un de plus entrait sans un mot. Les erreurs echouent comme
+      # avant, et au-dela de 48 avertissements aussi (56 avant le lot 15, qui
+      # en a retire trois ; 53 avant le lot 16, qui a pose les directives des
+      # faux positifs jsx-a11y sur leur ligne : il ne reste que des
+      # exhaustive-deps relues). Le chiffre ne fait que DESCENDRE
+      # (tests/lot15_tests_ci.test.mjs, tests/dependances.test.mjs).
+      - run: npm run lint:tout -- --max-warnings 48
       - run: npm test
+      # La couverture, A TITRE D'INFORMATION : aucun seuil, et une etape qui
+      # ne fait jamais echouer la PR. Le chiffre ne compte que les fichiers
+      # qu'un test CHARGE — App.jsx et la plupart des vues n'y sont pas : il
+      # dit au-dessus de la verite (81 % affiches pour src/ au 04/10, quand
+      # 24 000 de ses 61 000 lignes ne sont jamais chargees).
+      - run: npm test -- --experimental-test-coverage --test-coverage-include='src/**'
+        continue-on-error: true
       # Refuse la publication si une entite, un prenom ou une adresse du
       # domicile a ete laisse en dur dans les sources.
       - run: npm run audit
+      # La demo en ligne (demo.yml) ne se construisait qu'APRES la fusion. Son
+      # greffon (vite.config.js) la fait echouer — un gabarit de `site/`
+      # renomme ou retire suffit — sans que `npm run build` ne bronche : la
+      # PR n'en voyait rien, la publication cassait apres (lot 15 de l'audit
+      # du 03/10).
+      - run: npm run build:demo

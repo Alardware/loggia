@@ -34,8 +34,7 @@
  */
 
 import { locale } from './i18n.js';
-
-const domaineDe = (id) => (typeof id === 'string' ? id.slice(0, id.indexOf('.')) : '');
+import { domaineDe } from './outils.js';
 
 /** Les domaines qui vivent dans la configuration, sans matériel derrière. */
 const DOMAINES_LOCAUX = new Set(['automation', 'script', 'scene', 'input_boolean',

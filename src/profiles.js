@@ -23,6 +23,8 @@
  * ajoutant une entrée, et cette entrée est lisible sans connaître le reste.
  */
 
+import { domaineDe } from './outils.js';
+
 /**
  * Les règles qu'un profil peut porter.
  *
@@ -92,8 +94,6 @@ const PROFILS = [
     notes: 'Entrée de service, sans matériel derrière.',
   },
 ];
-
-const domaineDe = (id) => (typeof id === 'string' ? id.slice(0, id.indexOf('.')) : '');
 
 /** Compare une valeur à un motif : chaîne exacte, expression, ou liste. */
 function correspond(valeur, motif) {
