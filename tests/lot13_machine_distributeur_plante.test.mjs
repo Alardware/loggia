@@ -110,7 +110,10 @@ test('la carte du distributeur, compacte et standard : la même structure', () =
   // La compacte : le bouton SEUL au-dessus, le nom reste sous la surface.
   assert.ok(c.includes("aria-label={tr('Distribuer une ration') + ' ' + nom}"), 'le bouton de la compacte ne nomme pas l’appareil');
   assert.ok(c.includes("style={{ position: 'relative', width: 38, height: 26"), 'le bouton de la compacte passe sous la surface');
-  assert.ok(c.includes(`<div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>`), 'la rangée de la compacte ne doit pas passer au-dessus : un appui sur le nom n’ouvrirait plus rien');
+  /* L'écart a quitté la ligne pour la feuille (05/10) : la requête de
+   * conteneur le resserre quand la carte est étroite, et un style en ligne
+   * aurait gagné contre elle. La rangée reste SANS position. */
+  assert.ok(c.includes(`<div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>`), 'la rangée de la compacte ne doit pas passer au-dessus : un appui sur le nom n’ouvrirait plus rien');
   // La standard : les boutons au-dessus, pas leur rangée ; des noms qui commencent par le texte visible.
   assert.ok(c.includes(RANGEE) && !c.includes(RANGEE_POSEE), 'la rangée Distribuer / Rempli couvre la surface : l’écart entre eux ne fait plus rien');
   assert.equal(compter(c, 'style={RM_BTN}'), 2, 'Distribuer et Rempli ne tiennent plus leur position de RM_BTN : ils passeraient sous la surface');

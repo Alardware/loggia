@@ -113,8 +113,11 @@ test('chaque tuile pièce a sa cellule : colonne ET rangée', () => {
    * un trou voulu reste vide. */
   assert.match(src, /gridColumn: cell\.c, gridRow: cell\.r \+ ' \/ span ' \+ hauteurCarte\(t\)/,
     'la tuile n’est plus posée sur une cellule : les trous se reboucheront tout seuls');
-  assert.ok(src.includes('const piecesOu = disposer(piecesNoms, piecesTailles, grille.places, piecesCols);'),
-    'le placement vient de placement.js, d’après ce que l’utilisateur a posé');
+  /* Depuis le 05/10, un filtre d'étage REALIGNE : les positions enregistrées
+   * valent pour la maison entière, et les appliquer à un sous-ensemble
+   * laissait les trous des pièces masquées. Sans filtre, rien ne change. */
+  assert.ok(src.includes('const piecesOu = disposer(piecesNoms, piecesTailles, etageChoisi ? {} : grille.places, piecesCols);'),
+    'le placement vient de placement.js, d’après ce que l’utilisateur a posé — sauf sous un filtre d’étage');
   assert.ok(!src.includes('gridColumn: (i % 3) + 1'), 'l’ancienne colonne imposée de la tablette a disparu');
   const i = src.indexOf('gridColumn: (i % 3) + 1');
   assert.ok(!src.slice(i, i + 160).includes('gridRow'),

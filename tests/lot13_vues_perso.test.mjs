@@ -155,11 +155,16 @@ test('la carte d’entité : une surface nommée de ce qu’elle affiche, sœur 
 test('la carte d’entité : chaque commande passe sur la surface et nomme l’appareil', () => {
   const c = fonction('CvCard');
   assert.ok(c.includes("const mini = { position: 'relative',"), 'les minis de la compacte');
+  /* Les variantes partent de `mini` : elles en héritent la position, et sans
+   * elle le bouton passerait SOUS la surface qui ouvre la fiche. */
+  for (const v of ['miniAccent', 'miniClim']) {
+    assert.ok(c.includes('const ' + v + ' = { ...mini,'), v + ' ne dérive plus de mini : il perdrait sa position');
+  }
   const tags = [...c.matchAll(/<button[\s>]/g)].map(m => balise(c, baliseOuvrante(c, m.index)));
   assert.ok(tags.length >= 14, 'les boutons de la carte ne sont plus lus : ' + tags.length);
   for (const t of tags) {
     const court = t.replace(/\s+/g, ' ').slice(0, 80);
-    assert.ok(t.includes("position: 'relative'") || /style=\{mini(Accent)?\}/.test(t), 'non positionné, il passe sous la surface : ' + court);
+    assert.ok(t.includes("position: 'relative'") || /style=\{mini(Accent|Clim)?\}/.test(t), 'non positionné, il passe sous la surface : ' + court);
     const nom = attribut(t, 'aria-label');
     assert.ok(nom && /\bname\b/.test(nom), 'sans le nom de l’appareil : ' + court);
   }

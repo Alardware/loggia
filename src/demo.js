@@ -112,6 +112,9 @@ const APPAREILS = {
   'humidité': { en: 'humidity', de: 'Luftfeuchte', nl: 'luchtvochtigheid', it: 'umidità', es: 'humedad', pl: 'wilgotność' },
   'température': { en: 'temperature', de: 'Temperatur', nl: 'temperatuur', it: 'temperatura', es: 'temperatura', pl: 'temperatura' },
   'Alarme': { en: 'Alarm', de: 'Alarm', nl: 'Alarm', it: 'Allarme', es: 'Alarma', pl: 'Alarm' },
+  'Rez-de-chaussée': { en: 'Ground floor', de: 'Erdgeschoss', nl: 'Begane grond', it: 'Piano terra', es: 'Planta baja', pl: 'Parter' },
+  'Étage': { en: 'Upstairs', de: 'Obergeschoss', nl: 'Verdieping', it: 'Piano superiore', es: 'Piso superior', pl: 'Piętro' },
+  'Coût du jour': { en: 'Cost today', de: 'Kosten heute', nl: 'Kosten vandaag', it: 'Costo di oggi', es: 'Coste de hoy', pl: 'Koszt dzisiaj' },
   'Collectes': { en: 'Waste collection', de: 'Abfuhr', nl: 'Inzameling', it: 'Raccolta', es: 'Recogida', pl: 'Odbiór odpadów' },
   'Recyclables': { en: 'Recycling', de: 'Wertstoffe', nl: 'Recyclebaar', it: 'Riciclabili', es: 'Reciclables', pl: 'Surowce wtórne' },
   'Verre': { en: 'Glass', de: 'Glas', nl: 'Glas', it: 'Vetro', es: 'Vidrio', pl: 'Szkło' },
@@ -285,6 +288,10 @@ const APPAREILS = {
 /** Le nom d'un appareil, sinon d'un lieu, dans la langue de la demonstration. */
 const etiquette = (fr) => (APPAREILS[fr] && APPAREILS[fr][LANGUE_DEMO]) || lieu(fr);
 
+/* Quelle piece a quel etage (05/10). Le garage n'y figure pas : une zone sans
+ * etage reste visible quel que soit le filtre. */
+const ETAGE_DE = { salon: 'rdc', cuisine: 'rdc', entree: 'rdc', chambre: 'etage', bureau: 'etage', salle_de_bain: 'etage' };
+
 const PIECES = [
   ['salon', 'Salon', 21.4, 47, 612],
   ['cuisine', 'Cuisine', 22.8, 51, null],
@@ -388,6 +395,10 @@ function etatsInitiaux() {
     'sensor.injection_jour': s(0.96, { friendly_name: 'Injection du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
     'sensor.conso_jour_hc': s(3.90, { friendly_name: 'Consommation heures creuses', unit_of_measurement: 'kWh', device_class: 'energy' }),
     'sensor.conso_jour_hp': s(2.26, { friendly_name: 'Consommation heures pleines', unit_of_measurement: 'kWh', device_class: 'energy' }),
+    /* Le cout du jour : Home Assistant le calcule lui-meme a partir du tarif
+     * declare dans son tableau de bord Energie (`stat_cost`). La devise se lit
+     * sur l'entite, jamais supposee en euros. */
+    'sensor.cout_du_jour': s(1.84, { friendly_name: etiquette('Coût du jour'), unit_of_measurement: '€', device_class: 'monetary' }),
     'sensor.part_fossile_reseau': s(38, { friendly_name: 'Part fossile du réseau', unit_of_measurement: '%' }),
     // De quoi remplir les cartes de la vue Meteo : indice d'air et vigilance.
     'sensor.qualite_air_exterieur': s(62, { friendly_name: "Qualité de l'air", device_class: 'aqi' }),
@@ -540,7 +551,7 @@ function configDemo() {
     // sert ailleurs. Sans `haid`, la tuile prend son rendu de repli : degrade,
     // halo et badge « Direct », au lieu d'attendre un flux qui n'existe pas ici.
     loggia_cameras: CAMERAS(),
-    loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp',
+    loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp', coutJour: 'sensor.cout_du_jour',
       evNow: 'sensor.borne_recharge', batNow: 'sensor.batterie_maison', batSoc: 'sensor.batterie_niveau' },
     loggia_entities: {
       weather: ['weather.maison', 'sun.sun'],
@@ -548,7 +559,7 @@ function configDemo() {
       cameras: CAMERAS(),
       people: [{ name: 'Camille', haid: 'person.camille' }, { name: 'Alex', haid: 'person.alex' },
         { name: 'Léa', haid: 'person.lea' }],
-      energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp',
+      energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp', coutJour: 'sensor.cout_du_jour',
         evNow: 'sensor.borne_recharge', batNow: 'sensor.batterie_maison', batSoc: 'sensor.batterie_niveau' },
     },
     // Deux profils : la demo doit exercer les DEUX branches, admin comprise.
@@ -1162,7 +1173,11 @@ function indexDemo(states) {
   });
   return {
     version: 1,
-    areas: ZONES.map(([id, name]) => ({ id, name, floor: null, icon: null })),
+    /* Deux etages, pour que le filtre des pieces ait de quoi se montrer : sans
+     * DEUX niveaux habites, l'en-tete n'affiche aucune puce — « Tous » et
+     * l'unique etage diraient la meme chose. Le garage n'en a aucun : il reste
+     * visible quel que soit le filtre. */
+    areas: ZONES.map(([id, name]) => ({ id, name, floor: ETAGE_DE[id] || null, icon: null })),
     /* Le nom d'un APPAREIL passe par la même table que ceux de ses entités
      * (audit du 03/10) : `cameraModes` et `decrireSoeurs` le retirent en tête
      * du nom de chaque entité. Resté « Tondeuse » devant « Mower Zone Front
@@ -1177,7 +1192,10 @@ function indexDemo(states) {
       ...distribs.map(id => ({ id, name: etiquette('Distributeur de croquettes'), area: 'cuisine', manufacturer: APPAREIL_DIST[id].fabricant,
         model: APPAREIL_DIST[id].modele, firmware: null, via: null, entry_type: null, integration: DISTRIBUTEURS_DEMO[id][0] }))],
     entities,
-    floors: [],
+    floors: [
+      { id: 'rdc', name: etiquette('Rez-de-chaussée'), level: 0 },
+      { id: 'etage', name: etiquette('Étage'), level: 1 },
+    ],
     services: {},
     component_version: null,
   };

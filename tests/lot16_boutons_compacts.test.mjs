@@ -216,7 +216,7 @@ test('sous 200 px de contenu, la carte ne montre que l’icône — pastille et 
     '.o-cvcarte .o-cvact-mot': { display: 'none' },
     '.o-cvcarte .o-cvact-ico': { display: 'inline-flex' },
     '.o-cvcarte > .o-cvrow': { gap: '9px' },
-    '.o-cvcarte .o-cvpastille': { width: '34px', height: '34px' },
+    '.o-cvcarte:not(.o-cvdense) .o-cvpastille': { width: '34px', height: '34px' },
   };
   for (const [sel, d] of Object.entries(attendu)) {
     const r = dans(sel, R);
@@ -229,9 +229,10 @@ test('sous 200 px de contenu, la carte ne montre que l’icône — pastille et 
   assert.equal(hors('.o-cvact', 'padding'), '7px 12px');
   assert.equal(hors('.o-cvact', 'display'), 'inline-flex', 'le bouton ne centre plus son icône');
   assert.equal(hors('.o-cvpastille', 'width'), '40px');
-  assert.equal(hors('.o-cvdense .o-cvpastille', 'width'), '34px', 'la compacte garde sa pastille');
+  assert.equal(hors('.o-cvdense .o-cvpastille, .o-cvico', 'width'), '26px', 'la compacte a SA pastille : deux rangees dans 88 px');
   assert.equal(hors('.o-cvcarte > .o-cvrow', 'gap'), '11px');
   assert.equal(hors('.o-cvcarte.o-cvdense > .o-cvrow', 'gap'), '9px');
+  assert.equal(hors('.o-cvcarte.o-cvdense > .o-cvrow', 'row-gap'), '4px', 'sinon le gap de 9 px rouvre les 88 px de la compacte');
   // La compacte reste un conteneur pour la règle du climat.
   assert.equal(hors('.o-cvdense', 'container-type'), 'inline-size');
   assert.ok(!blanc.slice(bloc.de, bloc.a).includes('!important'), 'pas de !important dans le bloc');

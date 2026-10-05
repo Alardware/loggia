@@ -1496,7 +1496,7 @@ export function ViewEntSheet({ view, hass, onClose }) {
   );
 }
 
-export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin: profilAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews, onNav = null, droits = [] }) {
+export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, retourAcc = 0, onRetourAcc, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin: profilAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews, onNav = null, droits = [] }) {
   /* La section ouverte survit au rechargement, comme la vue elle-meme.
    *
    * Changer de langue recharge la page : on revenait au sommaire des sections,
@@ -2162,6 +2162,14 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </OptRow>
             <OptRow retrait eteint={!veille} title={tr('Réveil par la caméra')} desc={tr("Tout reste local. Nécessite un accès HTTPS et l'autorisation caméra.")}>
               <Tgl on={ambMotion} cb={toggleAmbMotion} label={tr('Réveil par la caméra')} />
+            </OptRow>
+            {/* Même famille que la veille — c'est le même écran de couloir —,
+              * mais réglage à part, et NON grisé par elle : la veille masque,
+              * celui-ci range. On peut vouloir l'un sans l'autre. */}
+            <OptRow title={tr('Retour à l’accueil')} desc={tr('Après ce délai sans toucher, les fenêtres se ferment et Loggia revient à l’accueil.')}>
+              <Seg label={tr('Retour à l’accueil')} value={String(retourAcc || 0)}
+                opts={[['0', tr('Off')], ['1', '1 min'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min'], ['30', '30 min']]}
+                onPick={v => onRetourAcc && onRetourAcc(parseInt(v, 10) || 0)} />
             </OptRow>
           </AppCard>
 

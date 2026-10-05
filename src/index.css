@@ -278,12 +278,19 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 .grid-custom { grid-auto-flow: row dense; grid-auto-rows: 88px; }
 @media (max-width: 640px) { .grid-custom { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
 /* Compacte : la carte S'ADAPTE à sa largeur (container query), comme les
- * tuiles Home Assistant. Sur une carte climat étroite, le nom s'efface —
- * l'icône porte l'identité, la place revient au « − consigne + ». */
+ * tuiles Home Assistant.
+ * LE CLIMAT NE CACHE PLUS RIEN. Sous 270 px, son NOM s'effaçait au profit du
+ * « − consigne + », l'icône portant l'identité seule — d'où « pour le
+ * thermostat il y a aucun changement » : cette règle avait survécu au gabarit
+ * à deux rangées et le masquait toujours. Le gabarit rend sa ligne au nom, et
+ * c'est le GROUPE DE CONSIGNE qui se resserre pour loger à côté de l'icône
+ * (`miniClim`, dans App.jsx) — « il manque l'icône ». Ni le nom, ni l'icône :
+ * c'est la mise en page qui cède, comme pour le bouton de geste du lot 16. */
 .o-cvdense { container-type: inline-size; }
-@container (max-width: 270px) {
-  .o-cvclim .o-cvtxt { display: none; }
-}
+/* Le corps de texte prend la place qui reste. Ici et NON EN LIGNE : un style
+ * en ligne bat toute règle de feuille, et la requête de conteneur plus bas
+ * n'aurait pas pu le renvoyer à la ligne. */
+.o-cvtxt { flex: 1; min-width: 0; }
 /* Le geste d'une carte d'appareil — Exécuter, la serrure, l'alarme (lot 16,
  * 05/10). Le bouton avait un rembourrage fixe et ne rétrécissait pas : au
  * téléphone, « Déverrouiller », « Zamknij na klucz » ou « Unscharf schalten »
@@ -308,18 +315,74 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
  * Ces sélecteurs ne vivent QUE dans ce bloc (épinglé) : une règle de même
  * poids posée plus loin annulerait la requête sans bruit. */
 .o-cvcarte { container-type: inline-size; }
+/* L'écart et la pastille des trois cartes qui ne passent pas par `CvCard`
+ * (distributeur, plante, appareil) : ils vivaient EN LIGNE, et un style en
+ * ligne bat toute règle de feuille — la requête plus bas ne pouvait ni
+ * resserrer l'un ni rapetisser l'autre. */
+.o-cvrow { gap: 8px; }
+/* Le gabarit de la carte PIÈCE compacte, étendu à toutes les compactes
+ * (05/10). Sur une seule rangée, le nom se partageait la ligne avec l'icône,
+ * la valeur et le bouton : au téléphone il ne lui restait que 19 px. La carte
+ * de pièce avait déjà renoncé à cette ligne unique — l'icône et la commande en
+ * haut, le nom et son détail dessous, sur toute la largeur (maquette 1b,
+ * 03/10). Fait ici plutôt que dans chacun des composants : quatre cartes
+ * portent la même structure (`o-cvrow` + `o-cvtxt`), et la suivante en
+ * héritera sans rien demander. `order` fait passer le texte après ses voisins,
+ * `flex-basis: 100%` le renvoie à la ligne. Mesuré à 176 px : le nom et son
+ * détail passent de 19 à 148 px.
+ *
+ * SEULE L'ICÔNE EST POUSSÉE, par `margin-right: auto` — pas les commandes
+ * entre elles. Un `justify-content: space-between` les répartissait sur toute
+ * la ligne : les deux flèches du volet se retrouvaient aux deux bouts de la
+ * carte, « bien trop espacé », et la vitesse du robot loin de son bouton. Avec
+ * la marge automatique, l'icône tient la gauche et tout le reste reste groupé
+ * à droite, à l'écart de la rangée — comme sur la carte de pièce, où
+ * l'interrupteur est seul et où la différence ne se voyait pas.
+ *
+ * SANS SEUIL, comme la carte de pièce — et c'est mesuré aussi. Un premier
+ * essai l'avait rangé sous les 200 px du geste : une carte de 240 px montrait
+ * alors MOINS qu'une de 176 (86 px de texte contre 148), parce qu'au-dessus du
+ * seuil la ligne unique revenait et que l'icône, la valeur et le bouton
+ * reprenaient leurs 126 px. Sur une ligne, le texte n'a jamais que la largeur
+ * MOINS ces 126 px ; sur deux, il a tout. Il n'existe donc aucune largeur où
+ * une seule ligne en dise plus.
+ *
+ * DEUX RANGÉES TIENNENT DANS 88 PX, soit 64 px de contenu : la ligne du haut
+ * fait 26 px — non à cause de l'icône, mais des commandes (38 × 26) ; l'écart
+ * vertical tombe de 8 à 4 ; le texte fait 36 px, ramenés à 30 par un interligne
+ * de 1,15. 26 + 4 + 30 = 60. Le PIRE CAS est le bouton de geste (`o-cvact`,
+ * 7 px de rembourrage autour d'une icône de 14), haut de 28 : 62, il reste 2 px
+ * — c'est lui qu'il faut remesurer si ces valeurs bougent. Avec les valeurs
+ * d'avant (pastille 34, écart 8, interligne normal) la rangée faisait 78 px et
+ * débordait de 14 sur la carte voisine.
+ * La pastille perd donc 8 px sur la COMPACTE, et nulle part ailleurs : la
+ * standard garde ses 34 px, elle a 184 px de haut et n'a rien à rendre. Le
+ * climat n'a pas besoin d'exception : sous 270 px son nom est déjà
+ * `display: none`, il ne participe plus à la rangée. */
+.o-cvdense > .o-cvrow { flex-wrap: wrap; row-gap: 4px; }
+.o-cvdense > .o-cvrow > :first-child { margin-right: auto; }
+.o-cvdense > .o-cvrow > .o-cvtxt { order: 9; flex: 1 0 100%; min-width: 100%; line-height: 1.15; }
+/* `o-cvico` ne vit QUE dans une compacte (les trois cartes hors `CvCard` n'ont
+ * cette rangée que sous `if (chip)`) : elle n'a pas de taille plus grande
+ * ailleurs. */
+.o-cvdense .o-cvpastille, .o-cvico { width: 26px; height: 26px; border-radius: 9px; }
 .o-cvcarte > .o-cvrow { gap: 11px; }
-.o-cvcarte.o-cvdense > .o-cvrow { gap: 9px; }
-.o-cvpastille { width: 40px; height: 40px; border-radius: 12px; }
-.o-cvdense .o-cvpastille { width: 34px; height: 34px; border-radius: 10px; }
+.o-cvcarte.o-cvdense > .o-cvrow { gap: 9px; row-gap: 4px; }
+/* Le `display` vient d'ici lui aussi : en ligne, il empêchait le climat étroit
+ * d'escamoter sa pastille (`display: none` ne gagne jamais contre un style en
+ * ligne). Comme la taille, il appartient à la feuille. */
+.o-cvpastille { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .o-cvact { padding: 7px 12px; display: inline-flex; align-items: center; justify-content: center; }
 .o-cvact-ico { display: none; }
 @container (max-width: 200px) {
   .o-cvcarte .o-cvact { padding: 7px 9px; }
   .o-cvcarte .o-cvact-mot { display: none; }
   .o-cvcarte .o-cvact-ico { display: inline-flex; }
-  .o-cvcarte > .o-cvrow { gap: 9px; }
-  .o-cvcarte .o-cvpastille { width: 34px; height: 34px; border-radius: 10px; }
+  .o-cvcarte > .o-cvrow { gap: 9px; row-gap: 4px; }
+  /* `:not(.o-cvdense)` : la COMPACTE a désormais sa pastille à elle (26 px,
+   * plus haut) et deux rangées à loger dans 88 px. Sans cette exclusion, cette
+   * ligne — déclarée après — la lui reprendrait à 34. */
+  .o-cvcarte:not(.o-cvdense) .o-cvpastille { width: 34px; height: 34px; border-radius: 10px; }
 }
 /* Favoris : une rangée qui défile, barre discrète (elle ne doit pas manger la
  * carte suivante ni sauter aux yeux).
