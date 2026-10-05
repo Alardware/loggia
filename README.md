@@ -152,7 +152,15 @@ Sécurité) :
 - les radiateurs **fil pilote** — un `switch` entouré d'aides (consigne, mode,
   automatique) qu'aucune convention ne permet de deviner ;
 - le **planning des volets** (mode d'automatisme, jours) ;
-- un **distributeur de croquettes** piloté par automations ;
+- un **distributeur de croquettes** : son appareil, ou son réservoir, sa
+  portion et, si besoin, le script qui distribue. Sa fiche — Accueil,
+  Planning, Historique, Entretien — lit les repas dans le **programme de
+  l'appareil** quand il se lit (Petlibro, PetKit, Aqara, Tuya), et dans les
+  **automatisations** de Home Assistant qui le commandent, reconnues à ce
+  qu'elles font, jamais à leur nom. Sans l'un ni l'autre, et si Loggia sait
+  le commander, un **planning de Loggia** se règle dans la fiche : Home
+  Assistant distribue à l'heure, écran fermé, et retient le repas si une
+  autre source distribue déjà ;
 - les **capteurs de consommable** (filtre, brosse, réservoir) que la veille
   surveille : Home Assistant n'a pas de classe pour eux, on les désigne dans
   Règles › Veilles, et un message part quand il faut remplacer ;
@@ -193,7 +201,7 @@ seuils que la barre de confort des pièces.
   retire aucun. Un compte ne peut donc rien faire ici qu'il ne puisse déjà
   faire ailleurs dans Home Assistant.
 - Les commandes qui écrivent la configuration de la maison sont **réservées
-  aux administrateurs** (`require_admin`, sur les onze commandes WebSocket
+  aux administrateurs** (`require_admin`, sur les douze commandes WebSocket
   concernées — un test verrouille la liste). L'identité vient de la
   connexion authentifiée, jamais d'un champ envoyé par le navigateur.
 - Les règles n'appellent que des services **écrits en dur** dans le composant

@@ -239,12 +239,17 @@ test('les verdicts d’une plante : des reperes generaux, mesure par mesure', ()
 });
 
 test('la fiche du distributeur et la fiche de la plante : le squelette commun, et rien d’invente', () => {
-  const d = src.indexOf('function FicheDistributeur(');
-  const fd = src.slice(d, src.indexOf(String.fromCharCode(10) + '}', d));
-  assert.ok(fd.includes('<FicheEntete ') && fd.includes("<FicheRangee premiere titre={tr('Réservoir')}"), 'la fiche commune, le bac en premier');
-  ['Dernier repas', 'Repas par jour', 'Taille de la portion', 'Distribuer une portion', 'Réservoir rempli'].forEach(k => assert.ok(fd.includes("tr('" + k + "')"), k));
-  assert.ok(fd.includes("call('number', 'set_value', { entity_id: portion.id, value: nv })"), 'la portion est le nombre de l’appareil');
+  /* 05/10 (ADR 0155) : la fiche du distributeur est une feuille à onglets sur
+   * le socle commun (fichedistributeur.jsx) ; App.jsx n'en garde que la coquille. */
+  const fd = readFileSync(join(RACINE, 'src', 'fichedistributeur.jsx'), 'utf8');
+  const accueil = fd.slice(fd.indexOf('function OngletAccueil('), fd.indexOf('function OngletAccueil(') > 0 ? fd.indexOf('\n}\n', fd.indexOf('function OngletAccueil(')) : 0);
+  assert.ok(fd.includes('<EnteteFiche ') && fd.includes('<FicheOnglets '), 'le socle commun des fiches à onglets');
+  assert.ok(accueil.indexOf("tr('Réservoir')") > 0 && accueil.indexOf("tr('Réservoir')") < accueil.indexOf("tr('Taille de la portion')"), 'le bac en premier');
+  ['Dernier repas', 'Prochain repas', 'Taille de la portion', 'Distribuer', 'Réservoir rempli'].forEach(k => assert.ok(fd.includes("tr('" + k + "')"), k));
+  assert.ok(fd.includes("commanderService(hass, p.entity_id, 'number', 'set_value', { entity_id: p.entity_id, value: borne });"), 'la portion est le nombre de l’appareil');
+  assert.ok(fd.includes("reservoir.indexOf('input_number.') === 0 && !reservoirMort"), 'Rempli n’existe que si le bac est un input_number vivant');
   assert.ok(!fd.includes('Seuil d’alerte') && !fd.includes('Rappel de remplissage') && !fd.includes('repas est sauté'), 'pas de bascule sans regle derriere');
+  assert.ok(!src.includes("<FicheRangee premiere titre={tr('Réservoir')}"), 'l’ancienne fiche du distributeur est restée dans App.jsx');
   const p = src.indexOf('function FichePlante(');
   const fp = src.slice(p, src.indexOf(String.fromCharCode(10) + '}', p));
   assert.ok(fp.includes('verdictsPlante(pl)') && fp.includes("tr('Lumière reçue')") && fp.includes("tr('Pile du capteur')"), 'chaque mesure avec son mot');
@@ -261,8 +266,95 @@ test('les cartes du distributeur et de la plante : la maquette, au gabarit', () 
   // Depuis le composeur (15/09), c'est la fabrique commune qui dessine ces cartes, pour toute vue.
   const v = src.indexOf('function useDomainCards(');
   const vue = src.slice(v, src.indexOf(String.fromCharCode(10) + '}', v));
-  assert.ok(vue.includes('sub={d.sous}') && vue.includes('onRempli={d.onRempli}'), 'le bac et le dernier repas en sous-titre, Rempli branche');
+  // La carte du distributeur passe par CarteDistributeur, abonnée à l'état du serveur (ADR 0155).
+  const c = src.indexOf('function CarteDistributeur(');
+  const cd = src.slice(c, src.indexOf(String.fromCharCode(10) + '}', c));
+  assert.ok(cd.includes('sub={d.sous}') && cd.includes('onRempli={d.onRempli}') && vue.includes('lire={distributeur}'), 'le bac et le dernier repas en sous-titre, Rempli branche');
   assert.ok(vue.includes('rgb={v.rgb}') && vue.includes('verdictCartePlante(pl)'), 'la plante prend la couleur de son verdict');
   assert.ok(vue.includes("String(croq.reservoir).indexOf('input_number.') === 0"), 'Rempli n’existe que si le bac est un input_number');
 });
 
+/* 05/10 (ADR 0155). « Actif » au sens d'objets.js : l'appareil FAIT quelque
+ * chose. Le distributeur l'était dès qu'il restait un repas dans la journée —
+ * actif tout l'après-midi, sans rien faire. Et une fois son APPAREIL connu,
+ * ses entités faisaient une seconde carte à côté de la sienne (un voyant, un
+ * capteur). On le mesure sur `objetsDeLaMaison` elle-même, chargée depuis
+ * App.jsx par un crochet de chargement (comme lot16_fiches_panne). */
+test('Objets : le distributeur est actif quand il distribue, et son appareil ne fait pas une seconde carte', async () => {
+  const { register } = await import('node:module');
+  if (typeof globalThis.requestAnimationFrame !== 'function') {
+    globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
+    globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
+  }
+  register('./jsx-hooks.mjs', import.meta.url);
+  register('data:text/javascript,' + encodeURIComponent([
+    'export async function load(url, ctx, next) {',
+    "  if (!url.endsWith('/src/App.jsx?objets')) return next(url, ctx);",
+    '  const r = await next(url.slice(0, -7), ctx);',
+    "  return { ...r, source: String(r.source) + ';export { objetsDeLaMaison, croqKeys };' };",
+    '}',
+  ].join('\n')));
+  const { setLoggiaState } = await import('../src/state.js');
+  const { objetsDeLaMaison, croqKeys } = await import(new URL('../src/App.jsx?objets', import.meta.url).href);
+  const meta = (deviceId, platform, translationKey = null, category = null) => ({ deviceId, platform, translationKey, category });
+  const entityMeta = new Map([
+    ['select.distributeur_feed', meta('dev1', 'tuya')],
+    ['binary_sensor.distributeur_feeding', meta('dev1', 'tuya', 'feeding')],
+    ['switch.distributeur_voyant', meta('dev1', 'tuya')],
+    ['switch.prise_salon', meta('dev2', 'tplink')],
+    ['sensor.distributeur_last_feed_time', meta('dev1', 'tuya')],
+    ['sensor.distributeur_next_feed', meta('dev1', 'tuya')],
+    ['binary_sensor.distributeur_en_ligne', meta('dev1', 'tuya', 'Online', 'diagnostic')],
+  ]);
+  const index = { entityMeta, deviceMeta: new Map(), areaNameOf: () => null, areaList: [] };
+  const st = (state, attributes = {}) => ({ state, attributes, last_changed: '2026-10-05T08:00:00Z' });
+  const states = (feeding) => ({
+    'select.distributeur_feed': st('STOP', { options: ['STOP', 'START'] }),
+    'binary_sensor.distributeur_feeding': st(feeding),
+    'switch.distributeur_voyant': st('on'),
+    'switch.prise_salon': st('off'),
+    'sensor.distributeur_last_feed_time': st('2026-10-05T07:30:00Z', { device_class: 'timestamp' }),
+    'sensor.distributeur_next_feed': st('2026-10-05T19:00:00Z', { device_class: 'timestamp' }),
+    'binary_sensor.distributeur_en_ligne': st('on'),
+  });
+  const objets = (feeder, feeding = 'off') => {
+    setLoggiaState({ index, cfg: { loggia_feeder: feeder } });
+    return objetsDeLaMaison({ states: states(feeding) }, [], new Set());
+  };
+  try {
+    // L'appareil seul suffit à faire exister la carte, et ses entités la rejoignent.
+    const repos = objets({ appareil: 'dev1' });
+    assert.deepEqual(repos.map(o => o.cle).sort(), ['obj:feeder', 'switch.prise_salon'], 'le voyant du distributeur fait une seconde carte');
+    assert.equal(repos.find(o => o.cle === 'obj:feeder').actif, false, 'au repos, il ne fait rien');
+    assert.equal(objets({ appareil: 'dev1' }, 'on').find(o => o.cle === 'obj:feeder').actif, true, 'une distribution en cours le rend actif');
+    // Désigné par sa commande : l'appareil se retrouve par elle.
+    assert.deepEqual(objets({ haid: 'select.distributeur_feed' }).map(o => o.cle).sort(), ['obj:feeder', 'switch.prise_salon']);
+    /* Contradicteur du 05/10 : ses entités sortent des CANDIDATS, pas de ce
+     * qu'on ajoute À LA MAIN — un voyant ajouté dans l'éditeur n'apparaissait
+     * jamais, sans un mot. */
+    setLoggiaState({ index, cfg: { loggia_feeder: { appareil: 'dev1' } } });
+    const ajoute = objetsDeLaMaison({ states: states('off') }, ['switch.distributeur_voyant'], new Set());
+    assert.deepEqual(ajoute.map(o => o.cle).sort(), ['obj:feeder', 'switch.distributeur_voyant', 'switch.prise_salon'], 'un voyant ajouté à la main reste invisible');
+    /* Ce que la carte LIT est surveillé par le poll des vues (croqKeys) : son
+     * dernier et son prochain repas, la connectivité reconnue comme `enLigne`
+     * la reconnaît (une clé `Online` en majuscules) — sinon la carte
+     * attendait qu'une autre entité bouge. */
+    // getHass() lit l'élément <home-assistant> de la page : on le double, le temps de l'appel.
+    const avant = ['window', 'document'].map(k => [k, Object.getOwnPropertyDescriptor(globalThis, k)]);
+    Object.defineProperty(globalThis, 'window', { value: {}, configurable: true, writable: true });
+    Object.defineProperty(globalThis, 'document', { value: { querySelector: () => ({ hass: { states: states('off') } }) }, configurable: true, writable: true });
+    try {
+      const cles = croqKeys();
+      for (const id of ['select.distributeur_feed', 'binary_sensor.distributeur_feeding', 'sensor.distributeur_last_feed_time', 'sensor.distributeur_next_feed', 'binary_sensor.distributeur_en_ligne']) {
+        assert.ok(cles.includes(id), id + ' : la carte le lit, le poll ne le surveille pas');
+      }
+      assert.ok(!cles.includes('switch.distributeur_voyant'), 'un réglage que la carte ne lit pas élargit le poll');
+    } finally {
+      avant.forEach(([k, d]) => { if (d) Object.defineProperty(globalThis, k, d); else delete globalThis[k]; });
+    }
+    // Rien de désigné : pas de carte du distributeur, et ses entités restent des appareils.
+    assert.deepEqual(objets(null).map(o => o.cle).sort(), ['switch.distributeur_voyant', 'switch.prise_salon']);
+  } finally {
+    setLoggiaState({ index: null, cfg: {} });
+  }
+});

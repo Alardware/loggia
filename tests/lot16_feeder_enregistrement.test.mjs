@@ -18,6 +18,13 @@
 // (des tranches de `useEntConfig`), pas une copie : il échoue sur le code
 // d'avant pour ce qu'il perd, pas pour un nom qui manque.
 // Une configuration valide sans `haid` s'écrit exactement comme avant.
+//
+// 05/10, ADR 0155 : la liste de repas n'a plus d'éditeur. `saveEnt` la
+// RECOPIE telle que le magasin la tient, relue au moment d'écrire, au lieu de
+// la réécrire depuis le formulaire (renumérotée, « réparée ») ; l'appareil
+// désigné voyage comme `haid`. Les garanties ci-dessous sont les mêmes, sur
+// cette écriture-là ; tests/distributeur_migration.test.mjs y ajoute
+// l'appareil, les associées et l'encart.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from 'node:test';
@@ -27,7 +34,7 @@ import { readFileSync } from 'node:fs';
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 await import('./rendu.mjs');   // les crochets `.jsx`, avant le premier import d'une vue
 const { setLoggiaState, cfgVal, loggiaEnt } = await import('../src/state.js');
-const { croqRepasEdition, croqHaids, croqMeals } = await import('../src/lectures.js');
+const { croqHaids, croqAncienneListe } = await import('../src/lectures.js');
 const P = await import('../src/views/parametres.jsx');
 
 const PARAM = readFileSync(new URL('../src/views/parametres.jsx', import.meta.url), 'utf8');
@@ -41,8 +48,8 @@ const tranche = (debut, fin) => {
 
 /* La lecture de `readEnt` et l'écriture de `saveEnt`, mot pour mot. */
 const lire = new Function('cfgVal', 'loggiaEnt', 'feederEdition',
-  'return ({' + tranche('    feeder: ', '\n    /* Par le lecteur') + '}).feeder;');
-const ecrire = new Function('ent', 'repasAEcrire', 'feederAEcrire',
+  'return ({' + tranche('    feeder: ', '\n    /* Plus de `repas`') + '}).feeder;');
+const ecrire = new Function('ent', 'feederAEcrire', 'cfgVal', 'loggiaEnt',
   'return ({' + tranche('        loggia_feeder: ', '\n      });') + '}).loggia_feeder;');
 /* Les aides de `useEntConfig` (`avecCle`… jusqu'à `readEnt`), puis les deux
  * lignes qui écrivent les personnes et les lecteurs. */
@@ -53,19 +60,28 @@ const ecrireListes = new Function('ent', tranche('  const avecCle = ', '  const 
 const etat = (cfg = {}) => setLoggiaState({ cfg, ent: {}, server: true });
 
 /** Un aller-retour par l'éditeur, depuis n'importe quelle vue : ce que
- * `readEnt` lit du distributeur, puis ce que `saveEnt` en écrit. */
+ * `readEnt` lit du distributeur, puis ce que `saveEnt` en écrit — la clé
+ * relue au moment d'écrire, comme dans `saveEnt`. */
 const lu = (feeder) => { etat({ loggia_feeder: feeder }); return lire(cfgVal, loggiaEnt, P.feederEdition); };
-const tour = (feeder) => ecrire({ feeder: lu(feeder), repas: croqRepasEdition() }, P.repasAEcrire, P.feederAEcrire);
+const enregistrer = (ent) => ecrire(ent, P.feederAEcrire, cfgVal, loggiaEnt);
+const tour = (feeder) => enregistrer({ feeder: lu(feeder) });
 
-/** L'ancienne lecture et l'ancienne écriture, mot pour mot (lot 16). */
+/** L'ancienne lecture et l'ancienne écriture, mot pour mot (lot 16), pour
+ * tout ce qui n'est pas l'ancienne liste. Celle-ci, depuis le 05/10, se
+ * recopie TELLE QU'ELLE EST : plus d'identifiant renuméroté ni de champ
+ * reconstruit (le lot 16 écrivait `{ id: 'repas0', … }` à la place de
+ * `{ id: 'matin', … }`). */
 const avantLu = (f) => { const h = f.haids || {}; return { reservoir: h.reservoir || '', portionWeight: h.portionWeight || '', distribuees: h.distribuees || '', script: f.script || '' }; };
-const avantEcrit = (ent) => (ent.feeder.reservoir || ent.feeder.portionWeight || P.repasAEcrire(ent.repas).length)
-  ? {
-    haids: { reservoir: ent.feeder.reservoir || null, portionWeight: ent.feeder.portionWeight || null, distribuees: ent.feeder.distribuees || null },
-    ...(ent.feeder.script ? { script: ent.feeder.script } : {}),
-    meals: P.repasAEcrire(ent.repas),
-  }
-  : null;
+const avantEcrit = (feeder) => {
+  const l = avantLu(feeder);
+  return (l.reservoir || l.portionWeight || (feeder.meals || []).length)
+    ? {
+      haids: { reservoir: l.reservoir || null, portionWeight: l.portionWeight || null, distribuees: l.distribuees || null },
+      ...(l.script ? { script: l.script } : {}),
+      meals: feeder.meals,
+    }
+    : null;
+};
 
 const HAIDS = { reservoir: 'input_number.croquettes_reservoir', portionWeight: 'number.distributeur_portion', distribuees: 'sensor.croquettes_du_jour' };
 const MEALS = [
@@ -95,18 +111,19 @@ test('un distributeur désigné par son script ou son compteur survit à « Enre
     etat({ loggia_feeder: ecrit });
     assert.equal(loggiaEnt('feeder', null).script, feeder.script);
     assert.equal(croqHaids().distribuees, feeder.haids && feeder.haids.distribuees);
-    assert.deepEqual(croqMeals(), []);
+    assert.deepEqual(croqAncienneListe(), []);
   }
 });
 
 test('rien de désigné : la clé s’efface, comme avant', () => {
   for (const feeder of [null, 42, 'abc', true, [], {}, { haids: {}, meals: [] },
-    { haids: { reservoir: '', portionWeight: '', distribuees: '' }, script: '', haid: '', meals: [null, { time: '', label: '' }] }]) {
+    { haids: { reservoir: '', portionWeight: '', distribuees: '' }, script: '', haid: '', appareil: '', meals: [null, { time: '', label: '' }] }]) {
     assert.equal(tour(feeder), null, JSON.stringify(feeder));
   }
-  // Tout vidé dans l'éditeur, une ligne « + Ajouter » restée blanche.
-  assert.equal(ecrire({ feeder: { reservoir: '', portionWeight: '', distribuees: '', script: '', haid: '' }, repas: [{ time: '', label: '', g: '', auto: '', _k: 'r1' }] },
-    P.repasAEcrire, P.feederAEcrire), null);
+  // Tout vidé dans l'éditeur, une ligne restée blanche dans l'ancienne liste
+  // (un « + Ajouter » sans suite, du temps de l'éditeur).
+  etat({ loggia_feeder: { haids: HAIDS, meals: [{ id: 'repas0', time: '', label: '', g: 0, auto: null }] } });
+  assert.equal(enregistrer({ feeder: { reservoir: '', portionWeight: '', distribuees: '', script: '', haid: '', appareil: '' } }), null);
 });
 
 /* ── 2. `haid` de premier niveau ──────────────────────────────────────────── */
@@ -120,27 +137,28 @@ test('une configuration VALIDE garde son `haid` de premier niveau', () => {
   assert.equal((loggiaEnt('feeder', null) || {}).haid, 'number.distributeur_portion');
 });
 
-test('l’éditeur porte `haid`, et ne lève sur aucune forme reçue', () => {
+test('l’éditeur porte `haid` et `appareil`, et ne lève sur aucune forme reçue', () => {
   assert.deepEqual(lu({ haid: 'number.distributeur_portion', haids: HAIDS, script: 'script.distribuer' }),
-    { ...HAIDS, script: 'script.distribuer', haid: 'number.distributeur_portion' });
-  for (const v of [null, 42, 'abc', true, [], { haids: 'x' }, { haids: null }, { haids: [1] }]) {
+    { ...HAIDS, script: 'script.distribuer', haid: 'number.distributeur_portion', appareil: '' });
+  assert.equal(lu({ appareil: 'dist_cuisine' }).appareil, 'dist_cuisine');
+  for (const v of [null, 42, 'abc', true, [], { haids: 'x' }, { haids: null }, { haids: [1] }, { appareil: 5 }, { meals: 7, associees: 'x' }]) {
     assert.doesNotThrow(() => tour(v), JSON.stringify(v));
   }
 });
 
 /* ── 3. Une configuration valide s'écrit comme avant ──────────────────────── */
 
-test('sans `haid`, une configuration valide se lit et s’écrit exactement comme avant', () => {
+test('sans `haid`, une configuration valide se lit comme avant et s’écrit comme avant, ses repas intacts', () => {
   for (const feeder of [
     { haids: HAIDS, meals: [{ id: 'matin', time: '07:30', label: 'Repas du matin', g: 45, auto: 'input_boolean.repas_matin' }, { id: 'soir', time: '19:00', label: 'Repas du soir', g: 45, auto: 'input_boolean.repas_soir' }] },
     { haids: { reservoir: 'input_number.r' }, script: 'script.distribuer', meals: MEALS },
     { haids: { portionWeight: 'number.p' }, meals: [] },
     { haids: { reservoir: 'input_number.r', portionWeight: null, distribuees: null }, meals: [{ id: 'repas0', time: '08:00', label: '', g: 0, auto: null }] },
   ]) {
-    const { haid, ...l } = lu(feeder);
-    assert.ok(!haid);
+    const { haid, appareil, ...l } = lu(feeder);
+    assert.ok(!haid && !appareil);
     assert.deepEqual(l, avantLu(feeder), JSON.stringify(feeder));
-    assert.deepEqual(tour(feeder), avantEcrit({ feeder: avantLu(feeder), repas: croqRepasEdition() }), JSON.stringify(feeder));
+    assert.deepEqual(tour(feeder), avantEcrit(feeder), JSON.stringify(feeder));
   }
 });
 

@@ -87,3 +87,15 @@ test('la configuration de l’utilisateur atteint bien les resolveurs', () => {
   assert.equal(rt.resolved.rooms.source, 'utilisateur');
   assert.equal(rt.views.pieces.ok, true);
 });
+
+test('un distributeur désigné par son seul appareil ouvre Objets, jusqu’au bout de l’assemblage', () => {
+  // 05/10 (ADR 0155) : la clé telle que Paramètres l'écrit, une maison sans autre appareil.
+  const fx = simpleHome();
+  const rt = buildRuntime({
+    discovery: { ...discoveryOf(fx), caps: { ...capsOf(fx, indexOf(fx)), has: {} } },
+    userCfg: { loggia_feeder: { appareil: '0123456789abcdef0123456789abcdef' } },
+    states: {},
+  });
+  assert.equal(rt.views.objets.ok, true, 'le distributeur de l’utilisateur, désigné par son appareil, n’ouvre pas Objets');
+  assert.equal(rt.views.croquettes, undefined);
+});

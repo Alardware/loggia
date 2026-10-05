@@ -16,9 +16,11 @@ const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, d
 
 test('la fabrique rend toute cle : entite, zone, distributeur, plante — et porte leurs fiches', () => {
   const dc = bloc('function useDomainCards(', NL + '}');
-  assert.ok(dc.includes("if (zone || k.indexOf('zone:') === 0) {") && dc.includes("if (k === 'obj:feeder') {") && dc.includes("if (k.indexOf('plant:') === 0) {"), 'les trois cles composees');
-  assert.ok(dc.includes("<RoomFeederCard chip={chip} mort={d.mort} nom={label || tr('Distributeur')}") && dc.includes('<RoomPlantCard chip={chip} mort={pl.mort} nom={label || pl.name}'), 'les cartes du distributeur et de la plante, compactes ou non');
-  assert.ok(dc.includes('{feederPop && (() => { const d = distributeur(); return <FicheDistributeur') && dc.includes('{plantPop && <FichePlante pl={plantPop}'), 'leurs fiches voyagent avec la fabrique');
+  assert.ok(dc.includes("if (zone || k.indexOf('zone:') === 0) {") && dc.includes("if (k === 'obj:feeder') return <CarteDistributeur ") && dc.includes("if (k.indexOf('plant:') === 0) {"), 'les trois cles composees');
+  // Le distributeur passe par sa carte abonnée (ADR 0155, 05/10), qui rend RoomFeederCard telle quelle.
+  assert.ok(dc.includes("<CarteDistributeur chip={chip} lire={distributeur} nom={label || tr('Distributeur')}") && dc.includes('<RoomPlantCard chip={chip} mort={pl.mort} nom={label || pl.name}'), 'les cartes du distributeur et de la plante, compactes ou non');
+  assert.ok(bloc('function CarteDistributeur(', NL + '}').includes('<RoomFeederCard chip={chip} mort={d.mort} nom={nom} pct={d.pct} sub={d.sous} onFeed={d.feed} onRempli={d.onRempli} onOpen={onOpen} />'), 'la carte du distributeur, compacte ou non');
+  assert.ok(dc.includes('{feederPop && <FicheDistributeur hass={hass} onClose={() => setFeederPop(false)} />}') && dc.includes('{plantPop && <FichePlante pl={plantPop}'), 'leurs fiches voyagent avec la fabrique');
   assert.ok(dc.includes('setFeederPop(false); setPlantPop(null); };'), 'fermer les ferme aussi');
   assert.ok(dc.includes('const nom = (k) => nomDeCle(S, k);'), 'et elle sait nommer une cle');
   const n = bloc('function nomDeCle(', NL + '}');
@@ -34,7 +36,7 @@ test('Objets ne compose plus rien : il demande ses cartes a la fabrique', () => 
 test('le composeur : cartes de Loggia d’abord, appareils par piece, puces, recherche qui cherche tout', () => {
   assert.ok(!src.includes('function RoomAddSheet(') && !src.includes('<RoomAddSheet'), 'plus de feuille « Ajouter une entite »');
   const c = bloc('function ComposeurCartes(', NL + '}');
-  assert.ok(c.includes("out.push({ cle: 'obj:feeder',") && c.includes("out.push({ cle: 'plant:' + p.base,") && c.includes("out.push({ cle: 'zone:' + z.id,") && c.includes('if (!composites) return [];'), 'distributeur, plantes, zones fil pilote — quand la vue les accepte');
+  assert.ok(c.includes("if (distributeurConfigure()) out.push({ cle: 'obj:feeder',") && c.includes("out.push({ cle: 'plant:' + p.base,") && c.includes("out.push({ cle: 'zone:' + z.id,") && c.includes('if (!composites) return [];'), 'distributeur, plantes, zones fil pilote — quand la vue les accepte');
   assert.ok(c.includes('climateZones(S).filter(z => !estClimate(z))'), 'un thermostat reste un appareil');
   assert.ok(c.includes('filtres: filtresObjet({ domaine: dom, estLumiere: cvEstLumiere(id), classe })') && c.includes('const puces = OBJ_FILTRES().filter('), 'les puces d’Objets, avec les memes regles');
   assert.ok(c.includes('const cherche = (...champs) =>') && c.includes('cherche(c.nom, c.sous, c.cle, c.piece)') && c.includes('cherche(a.id, a.nom, a.piece)'), 'nom, sous-titre, cle, piece, identifiant');
@@ -56,4 +58,27 @@ test('les cles composees posees dans une piece sont surveillees', () => {
   const k = bloc('  const cvAggKeys = (x) => {', NL + '  };');
   assert.ok(k.includes("if (x === 'obj:feeder') return croqKeys();") && k.includes("x.indexOf('plant:') === 0) return plantKeys();") && k.includes("x.indexOf('zone:') === 0) return climateKeys();"), 'distributeur, plante, zone');
   assert.ok(src.includes('activeRoom ? [...roomKeys, ...(layoutOf(ROOM_LAYOUT_KEY, activeRoom).added || []).flatMap(cvAggKeys)]'), 'les ajouts de la piece courante');
+});
+
+/* 05/10 (ADR 0155) : le distributeur peut se désigner par son APPAREIL, sa
+ * commande ou son script — un Petlibro n'a pas de réservoir en grammes. Sa
+ * carte existait seulement avec un réservoir ou une portion : désigné
+ * autrement, il n'apparaissait nulle part. La même règle, une fois, pour
+ * Objets et pour le composeur. */
+test('le distributeur existe dès qu’un champ le désigne, partout pareil', () => {
+  const f = bloc('function distributeurConfigure(', NL + '}');
+  const configure = (feeder) => new Function('loggiaEnt', 'croqHaids', f + NL + '}' + NL + 'return distributeurConfigure();')(
+    () => feeder, () => Object.fromEntries(Object.entries((feeder && feeder.haids) || {}).filter(([, v]) => typeof v === 'string' && v)));
+  assert.equal(configure(null), false, 'rien de configuré');
+  assert.equal(configure({ meals: [{ time: '07:30', auto: 'automation.matin' }] }), false, 'l’ancienne liste seule ne fait pas un distributeur');
+  assert.equal(configure({ haids: { reservoir: 'input_number.bac' } }), true, 'le réservoir, comme avant');
+  assert.equal(configure({ haids: { portionWeight: 'number.portion' } }), true, 'la portion, comme avant');
+  assert.equal(configure({ appareil: '0123456789abcdef0123456789abcdef' }), true, 'l’appareil seul');
+  assert.equal(configure({ appareil: '   ' }), false, 'un appareil fait de blancs ne désigne rien');
+  assert.equal(configure({ haid: 'button.granary_manual_feed' }), true, 'la commande seule');
+  assert.equal(configure({ script: 'script.nourrir' }), true, 'le script seul');
+  const objets = bloc('function objetsDeLaMaison(', NL + '}');
+  assert.ok(objets.includes("const feeder = distributeurConfigure() ? lireDistributeur(LOGGIA_INDEX, S, loggiaEnt('feeder', null)) : null;")
+    && objets.includes("if (feeder) entree('obj:feeder',"), 'Objets suit la même règle');
+  assert.ok(!src.includes('if (croq.reservoir || croq.portionWeight)'), 'une ancienne condition d’existence est restée');
 });

@@ -247,7 +247,7 @@ def test_un_module_qui_rate_son_demarrage_le_dit_et_le_retient(caplog):
 def test_chaque_module_passe_par_le_demarrage_garde():
     """Neuf modules posaient la tache eux-memes, sans filet."""
     dossier = RACINE / "custom_components" / "loggia"
-    for f in ("fenetres", "interrupteurs", "minuteurs", "nuit", "presence",
+    for f in ("distributeurs", "fenetres", "interrupteurs", "minuteurs", "nuit", "presence",
               "robots", "scenarios", "sirene", "veilles", "volets"):
         src = (dossier / (f + ".py")).read_text(encoding="utf-8")
         assert "hass.async_create_task(self._async_demarrer())" not in src, f
@@ -268,8 +268,9 @@ def test_chaque_module_vivant_sait_s_arreter():
     bloc = init.split("MODULES_VIVANTS = (")[1].split(")")[0]
     noms = re.findall(r'"([a-z_]+)"', bloc)
     # Treize depuis le 03/10 : `rechargement` ecoute la configuration, il doit
-    # se taire aussi.
-    assert len(noms) == 13, noms
+    # se taire aussi. Quatorze depuis le 05/10 (ADR 0155) : `distributeurs`
+    # tient le planning de Loggia et son tic de minute.
+    assert len(noms) == 14, noms
     for nom in noms:
         src = (dossier / (nom + ".py")).read_text(encoding="utf-8")
         assert "def async_arreter" in src or "def arreter" in src, nom

@@ -112,13 +112,26 @@ test('le thème est posé AVANT la première peinture', () => {
     'App.jsx ne lit plus `loggia-mode` de la même façon : le script d’amorce dirait autre chose');
 });
 
-test('« ne répond plus » se dit d’une seule façon : le liseré', () => {
+test('« ne répond plus » se dit d’une seule façon : le liseré', async () => {
   assert.ok(app.includes("function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onOpen, extra = null, chip = false, mort = false })"));
   assert.ok(app.includes("function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol,"));
   assert.equal(compter(app, "className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')}"), 2, 'distributeur et plante, compacts');
   assert.equal(compter(app, "className={'o-rmcard' + (mort ? ' o-panne' : '')}"), 8, 'toutes les cartes de pièce (la lampe porte aussi o-light-card)');
   assert.ok(app.includes("const mort = !!(estClimate(zone) && (!S || !S[zone.haid] || S[zone.haid].state === 'unavailable'));"), 'la zone de chauffage');
-  assert.ok(app.includes("mort: muet(croq.reservoir) };") && app.includes("mort={d.mort}"), 'le distributeur');
+  /* Le distributeur (05/10, ADR 0155) : le réservoir muet ne suffisait pas —
+   * chez l'utilisateur, c'est une aide `input_number` qui ne tombe jamais, et
+   * son distributeur débranché n'aurait jamais eu de liseré. `enLigne` y ajoute
+   * la commande muette et la connectivité de l'appareil. */
+  assert.ok(app.includes("mort: lu.enLigne.mort };") && app.includes("mort={d.mort}"), 'le distributeur');
+  const { enLigne } = await import('../src/distributeur.js');
+  const RES = 'input_number.bac', FEED = 'select.distributeur_feed';
+  const commande = { domaine: 'select', entity_id: FEED };
+  const cfg = { haids: { reservoir: RES } };
+  const vivant = { [RES]: { state: '700' }, [FEED]: { state: 'unknown' } };
+  assert.equal(enLigne([], vivant, cfg, commande).mort, false, 'un select feed `unknown` est son état normal sous Zigbee2MQTT');
+  assert.equal(enLigne([], { ...vivant, [RES]: { state: 'unavailable' } }, cfg, commande).mort, true, 'le réservoir muet');
+  assert.equal(enLigne([], { ...vivant, [FEED]: { state: 'unavailable' } }, cfg, commande).mort, true, 'la commande muette, réservoir vivant');
+  assert.equal(enLigne([{ domaine: 'binary_sensor', classe: 'connectivity', etat: 'off' }], vivant, cfg, commande).mort, true, 'l’appareil hors ligne');
   assert.ok(app.includes("mort: muet(plantCapteur(S, p.base, 'moisture'))") && app.includes("mort={pl.mort}"), 'la plante');
   assert.ok(app.includes("<div className={mort ? 'o-panne' : undefined} style={{ ...CV_CADRE, opacity: mort ? .55 : 1 }}>"), 'le hero d’une machine');
   // La croix, en dernier sur la ligne (19/09) : le rembourrage passe à gauche.

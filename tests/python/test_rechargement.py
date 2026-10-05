@@ -47,6 +47,15 @@ def test_seuls_les_modules_touches_se_rechargent(rechargement):
     assert rechargement.modules_a_recharger(None) == []
 
 
+def test_le_planning_du_distributeur_se_recharge(rechargement):
+    """05/10 (ADR 0155) : un import remplace `loggia_distributeurs` ; le
+    module reprend son planning tout de suite. `loggia_feeder` (Parametres),
+    lui, est relu a chaque depart : rien a recharger pour lui."""
+    assert rechargement.CLES_DES_MODULES["loggia_distributeurs"] == "distributeurs"
+    assert rechargement.modules_a_recharger(["loggia_distributeurs", "loggia_feeder"]) == ["distributeurs"]
+    assert "loggia_feeder" not in rechargement.CLES_DES_MODULES
+
+
 def test_chaque_cle_nommee_est_bien_celle_de_son_module(rechargement):
     """La table ne vaut que si elle dit vrai : la cle d'un module, c'est sa
     constante `CLE`. Un renommage d'un cote seul couperait le rechargement."""

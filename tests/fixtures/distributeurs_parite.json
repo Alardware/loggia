@@ -1,0 +1,142 @@
+{
+  "_lisezmoi": [
+    "Parité JS / Python AU-DELÀ de tests/fixtures/distributeurs.json (ADR 0155, 05/10). Lue par tests/distributeur.test.mjs (src/distributeur.js) ET par tests/python/test_distributeur_parite.py (distributeur_appareil.decrire_appareil) : si l'un des deux bouge, l'autre rougit.",
+    "Pourquoi un fichier à part : ces neuf cas étaient écrits en dur dans le seul test JS, « relevés » sur le Python le 05/10 — le Python ne les rejouait pas, et le cas « start » en minuscules y disait le contraire de test_distributeur_appareil.py (relecture « tests », 05/10). Ils ne remplissent pas tout `attendu` de la grande fixture : chacun n'épingle que le point où le JS avait dérivé.",
+    "ENTITÉ : même forme que la grande fixture ({entity_id, device_id, plateforme, cle, etat, attributs}) ; etat null = pas d'état (encore au registre).",
+    "ATTENDU, chaque clé facultative : appareil ; notes (comme la grande fixture) ; commande_id (entity_id de la commande, null sans commande) ; donnees (la part fixe de la commande) ; portion_id (entity_id de la portion, null sans portion) ; cibles_de_commande ; consommables ; une_portion ; envoi_2_portions (l'appel complet pour 2 portions, null sans commande)."
+  ],
+  "cas": [
+    {
+      "id": "start_en_minuscules",
+      "description": "Un select feed dont l'option s'écrit « start » : la casse est ignorée des deux côtés, et l'option envoyée est celle de l'ENTITÉ (select_option refuse une option qu'elle ne propose pas).",
+      "config": { "appareil": "dA", "haids": {} },
+      "entites": [
+        { "entity_id": "select.a_feed", "device_id": "dA", "plateforme": "mqtt", "etat": "unknown", "attributs": { "options": ["stop", "start"] } }
+      ],
+      "attendu": {
+        "commande_id": "select.a_feed",
+        "donnees": { "option": "start" },
+        "cibles_de_commande": ["select.a_feed"],
+        "envoi_2_portions": { "domaine": "select", "service": "select_option", "data": { "entity_id": "select.a_feed", "option": "start" } }
+      }
+    },
+    {
+      "id": "start_en_majuscules_tel_quel",
+      "description": "Le cas courant de Zigbee2MQTT : « START » part tel quel.",
+      "config": { "appareil": "dA", "haids": {} },
+      "entites": [
+        { "entity_id": "select.a_feed", "device_id": "dA", "plateforme": "mqtt", "etat": "unknown", "attributs": { "options": ["STOP", "START"] } }
+      ],
+      "attendu": {
+        "commande_id": "select.a_feed",
+        "donnees": { "option": "START" },
+        "envoi_2_portions": { "domaine": "select", "service": "select_option", "data": { "entity_id": "select.a_feed", "option": "START" } }
+      }
+    },
+    {
+      "id": "select_feed_sans_start",
+      "description": "Des options qui ne disent pas START (ni en chaîne) : pas de commande.",
+      "config": { "appareil": "dA", "haids": {} },
+      "entites": [
+        { "entity_id": "select.a_feed", "device_id": "dA", "plateforme": "mqtt", "etat": "unknown", "attributs": { "options": ["stop", 3, null] } }
+      ],
+      "attendu": { "commande_id": null, "cibles_de_commande": [], "envoi_2_portions": null }
+    },
+    {
+      "id": "portion_designee_sur_un_autre_appareil",
+      "description": "La portion désignée est posée sur un AUTRE appareil : ignorée et signalée ; la portion de l'appareil la remplace.",
+      "config": { "appareil": "dA", "haids": { "portionWeight": "number.b_serving_size" } },
+      "entites": [
+        { "entity_id": "select.a_feed", "device_id": "dA", "plateforme": "mqtt", "etat": "unknown", "attributs": { "options": ["STOP", "START"] } },
+        { "entity_id": "number.a_serving_size", "device_id": "dA", "plateforme": "mqtt", "etat": "2", "attributs": { "min": 1, "max": 10, "step": 1 } },
+        { "entity_id": "number.b_serving_size", "device_id": "dB", "plateforme": "mqtt", "etat": "3", "attributs": { "min": 1, "max": 10, "step": 1 } }
+      ],
+      "attendu": {
+        "portion_id": "number.a_serving_size",
+        "cibles_de_commande": ["number.a_serving_size", "select.a_feed"],
+        "notes": [{ "code": "appareil_divergent", "entity_id": "number.b_serving_size" }]
+      }
+    },
+    {
+      "id": "portion_designee_soeur_sans_etat",
+      "description": "Une sœur désignée comme portion, sans état : elle reste la portion.",
+      "config": { "appareil": "dA", "haids": { "portionWeight": "number.a_portion_x" } },
+      "entites": [
+        { "entity_id": "button.a_feed", "device_id": "dA", "plateforme": "zha", "cle": "feed", "etat": "unknown" },
+        { "entity_id": "number.a_portion_x", "device_id": "dA", "plateforme": "zha", "etat": null },
+        { "entity_id": "number.a_serving_size", "device_id": "dA", "plateforme": "zha", "etat": "2", "attributs": { "min": 1 } }
+      ],
+      "attendu": { "portion_id": "number.a_portion_x" }
+    },
+    {
+      "id": "mode_a_une_option_de_plus",
+      "description": "Un select de mode aux deux options attendues et une de plus : c'est le mode, une cible de commande.",
+      "config": { "appareil": "dA", "haids": {} },
+      "entites": [
+        { "entity_id": "select.a_feed", "device_id": "dA", "plateforme": "mqtt", "etat": "unknown", "attributs": { "options": ["STOP", "START"] } },
+        { "entity_id": "select.a_mode", "device_id": "dA", "plateforme": "mqtt", "etat": "manual", "attributs": { "options": ["schedule", "manual", "off"] } }
+      ],
+      "attendu": { "cibles_de_commande": ["select.a_feed", "select.a_mode"] }
+    },
+    {
+      "id": "consommable_par_cle_en_pourcentage",
+      "description": "Reconnu par sa CLÉ, un consommable en % se lit en %, sans troncature.",
+      "config": { "appareil": "dA", "haids": {} },
+      "entites": [
+        { "entity_id": "button.a_manual_feed", "device_id": "dA", "plateforme": "x", "cle": "manual_feed", "etat": "unknown" },
+        { "entity_id": "sensor.a_desiccant", "device_id": "dA", "plateforme": "x", "cle": "remaining_desiccant", "etat": "62.5", "attributs": { "unit_of_measurement": "%" } },
+        { "entity_id": "sensor.a_filter_days", "device_id": "dA", "plateforme": "x", "cle": "remaining_filter_days", "etat": "12.5", "attributs": { "unit_of_measurement": "d" } }
+      ],
+      "attendu": {
+        "consommables": [
+          { "entity_id": "sensor.a_desiccant", "role": "deshydratant", "jours": null, "pct": 62.5, "reset": null },
+          { "entity_id": "sensor.a_filter_days", "role": "filtre", "jours": 12.5, "pct": null, "reset": null }
+        ]
+      }
+    },
+    {
+      "id": "designee_deux_fois_sur_un_autre_appareil",
+      "description": "La même entité désignée deux fois, sur un autre appareil : UNE note, pas deux.",
+      "config": { "appareil": "dA", "haid": "number.b_x", "haids": { "portionWeight": "number.b_x" } },
+      "entites": [
+        { "entity_id": "button.a_feed", "device_id": "dA", "plateforme": "x", "cle": "feed", "etat": "unknown" },
+        { "entity_id": "number.b_x", "device_id": "dB", "plateforme": "x", "etat": "1" }
+      ],
+      "attendu": {
+        "notes": [{ "code": "appareil_divergent", "entity_id": "number.b_x" }],
+        "portion_id": null,
+        "cibles_de_commande": ["button.a_feed"]
+      }
+    },
+    {
+      "id": "appareil_fait_de_blancs",
+      "description": "Un `appareil` fait de blancs n'en désigne aucun : l'appareil vient de l'entité désignée.",
+      "config": { "appareil": "  ", "haid": "button.a_feed", "haids": {} },
+      "entites": [
+        { "entity_id": "button.a_feed", "device_id": "dA", "plateforme": "x", "cle": "feed", "etat": "unknown" }
+      ],
+      "attendu": { "appareil": "dA", "notes": [], "commande_id": "button.a_feed" }
+    },
+    {
+      "id": "cle_en_majuscules",
+      "description": "Les clés de traduction se comparent en minuscules.",
+      "config": { "appareil": "dA", "haids": {} },
+      "entites": [
+        { "entity_id": "button.a_go", "device_id": "dA", "plateforme": "x", "cle": "Manual_Feed", "etat": "unknown" }
+      ],
+      "attendu": { "commande_id": "button.a_go" }
+    },
+    {
+      "id": "pas_nul",
+      "description": "Un pas nul vaut 1 : « 0 » n'écrirait que le plancher.",
+      "config": { "appareil": "dA", "haids": {} },
+      "entites": [
+        { "entity_id": "number.a_feed", "device_id": "dA", "plateforme": "tuya", "cle": "feed", "etat": "1", "attributs": { "min": 0, "max": 10, "step": 0 } }
+      ],
+      "attendu": {
+        "une_portion": 1,
+        "envoi_2_portions": { "domaine": "number", "service": "set_value", "data": { "entity_id": "number.a_feed", "value": 2 } }
+      }
+    }
+  ]
+}

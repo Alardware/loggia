@@ -58,6 +58,7 @@ const SOURCES = parcourir(join(RACINE, 'src'))
 const source = (c) => (SOURCES.find(([x]) => x === c) || [])[1] || '';
 const APP = source('src/App.jsx');
 const PAR = source('src/views/parametres.jsx');
+const DIST = source('src/fichedistributeur.jsx');
 const compter = (s, motif) => s.split(motif).length - 1;
 
 // Une ligne qui COMMANDE la maison : c'est là qu'un état optimiste se pose.
@@ -68,7 +69,9 @@ test('le filet commun vit dans un module que tout src/ peut importer', () => {
   assert.ok(opt.includes('export function useOptimiste(reel, delai = OPTIMISTE_MS) {'),
     'useOptimiste n’est pas exporté : Paramètres, chargé à part, ne peut que recopier son propre état optimiste');
   assert.ok(!APP.includes('function useOptimiste('), 'App.jsx garde sa propre copie du hook : deux filets divergeront');
-  assert.match(APP, /import \{ useOptimiste, useDemandes, enVol \} from '\.\/optimiste\.js';/, 'App.jsx n’importe plus le filet commun');
+  // 05/10 : App.jsx n'a plus de demande par entité à lui — les repas sont partis dans la fiche du distributeur.
+  assert.match(APP, /import \{ useOptimiste[\w, ]*\} from '\.\/optimiste\.js';/, 'App.jsx n’importe plus le filet commun');
+  assert.match(DIST, /import \{ useOptimiste, useDemandes, enVol \} from '\.\/optimiste\.js';/, 'la fiche du distributeur n’importe plus le filet commun');
   assert.match(PAR, /import \{ use(Optimiste|Demandes)[\w, ]*\} from '\.\.\/optimiste\.js';/, 'Paramètres n’importe pas le filet commun');
 });
 
@@ -122,10 +125,14 @@ test('les constats passent par le filet commun', () => {
   assert.match(PAR, /import \{ useDemandes, enVol \} from '\.\.\/optimiste\.js';/);
   // Les repas passent dans la fiche du distributeur le 04/10, avec la vue
   // Croquettes (et son réservoir optimiste) partie : une demande par repas.
-  assert.ok(APP.includes('const [ovRepas, demanderRepas] = useDemandes();'), 'les repas');
-  assert.ok(APP.includes('demanderRepas(m.id, !m.on, S && S[m.auto], autoOn(m.auto));'), 'la bascule d’un repas');
-  assert.ok(APP.includes('on: enVol(ovRepas, m.id, S && S[m.auto], autoOn(m.auto))'), 'un repas se lit sans la réponse des autres');
-  assert.ok(!APP.includes('useOptimiste(msig)') && !APP.includes('poserRepas('), 'les repas sur une signature commune : la réponse d’un repas jetait la demande de l’autre');
+  // Le 05/10 (ADR 0155), ce sont les AUTOMATISATIONS qui commandent le
+  // distributeur, dans sa fiche à onglets : une demande par automatisation.
+  assert.ok(DIST.includes('const [demandes, demander] = useDemandes();'), 'les automatisations du distributeur');
+  assert.ok(DIST.includes("demander(a.entity_id, !on, S[a.entity_id], (S[a.entity_id] ? S[a.entity_id].state : a.etat) === 'on');"), 'la bascule d’une automatisation');
+  assert.ok(DIST.includes("const allumee = (a) => enVol(demandes, a.entity_id, S[a.entity_id], etatAuto(a) === 'on');"), 'une automatisation se lit sans la réponse des autres');
+  // Aucune signature COMMUNE des automatisations : seuls la portion (une entité) et le planning de Loggia (une écriture au serveur) ont la leur.
+  assert.deepEqual([...DIST.matchAll(/useOptimiste\((\w+)\)/g)].map(m => m[1]).sort(), ['reel', 'sigPlanning'], 'les automatisations sur une signature commune : la réponse de l’une jetterait la demande de l’autre');
+  assert.ok(!APP.includes('useDemandes(') && !APP.includes('demanderRepas('), 'App.jsx tient encore des repas à lui');
   assert.ok(APP.includes('const [ovPos, poserPos] = useOptimiste(csig);'), 'tout ouvrir / tout fermer');
   assert.ok(APP.includes('const [ovModeHa, setModeLocal] = useOptimiste(haMode);'), 'le mode de l’installation');
 });

@@ -5,7 +5,7 @@
  * que volontairement. Le module ne remonte jamais vers App.jsx — un cycle
  * ramenerait le monolithe entier dans ce morceau et annulerait le decoupage.
  */
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useId } from 'react';
 import {
   Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, ListeChoix, ChampSuggere, CroixFeuille, NomFeuille
 } from '../ui.jsx';
@@ -26,7 +26,9 @@ import { viewReason } from '../views.js';
 import { detecterCapteursPieces } from '../resolve.js';
 import { autoFamille, FAMILLES_AUTO } from '../autos.js';
 import { sansAccents } from '../outils.js';
-import { croqRepasEdition } from '../lectures.js';
+import { croqAncienneListe } from '../lectures.js';
+import { soeursDistributeur, commandeDistribuer, lireDistributeur, mesurePortion, niveauDuBac, scriptsCandidats } from '../distributeur.js';
+import { BoutonConfirme } from '../fichecommune.jsx';
 import { reposerFocus } from '../focus.js';
 import { useDemandes, enVol } from '../optimiste.js';
 import { InterrupteursSection, gestesRegles, appareilsVisibles } from './interrupteurs.jsx';
@@ -973,51 +975,223 @@ function EntSection({ title, desc, cols, rows, onRows, addable = true, check = n
  * MAISON passe donc par le composant, code administrateur et profil actif
  * compris depuis le 03/09. Ne restent locales que les marges d'ecran. */
 
-/* Les repas que « Enregistrer » écrit (05/10, suite du point 10b). Une ligne
- * vide part — un « + Ajouter » resté sans suite. Une ligne sans heure mais
- * avec un libellé, des grammes ou un interrupteur RESTE, l'heure à `null` :
- * la fiche et l'Accueil l'ignorent (`croqMeals`), l'éditeur la remontre vide
- * pour qu'on la complète. Elle s'effaçait au premier enregistrement, sans un
- * mot. Une configuration valide s'écrit exactement comme avant. */
-export function repasAEcrire(lignes) {
-  return lignes.filter(r => r.time || r.label || r.auto || Number(r.g))
-    .map((r, i) => ({ id: 'repas' + i, time: r.time || null, label: r.label || '', g: Number(r.g) || 0, auto: r.auto || null }));
+/* ── Le distributeur dans l'éditeur (ADR 0155, 05/10) ─────────────────────
+ * La liste de repas saisie ici a cessé d'être un planning : le planning vient
+ * du programme de l'appareil, des automatisations qui le COMMANDENT, ou du
+ * planning de Loggia — tous lus dans la fiche du distributeur. Elle perd donc
+ * son éditeur (« Repas de la journée »), mais rien ne se perd en silence :
+ * « Enregistrer » la RECOPIE telle que le magasin la tient, relue au moment
+ * d'écrire, depuis TOUTES les vues (toutes réécrivent `loggia_feeder`) ; le
+ * serveur y lit ses `automation.*` comme des indices ; l'encart « Ancienne
+ * liste de repas » la montre jusqu'au geste « Oublier l'ancienne liste ». */
+
+const estObjet = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+const idEntite = (v) => typeof v === 'string' && v !== '';
+
+/** Un repas de l'ancienne liste qui PORTE quelque chose : une heure, un
+ * libellé, un interrupteur ou des grammes (non nuls), sous n'importe quelle
+ * forme — un repas abîmé reste. Seuls `null`, un nombre, une liste ou une
+ * ligne blanche (un « + Ajouter » resté sans suite, écrit `g: 0`) ne portent
+ * rien : ils partaient déjà. */
+const porte = (v) => v != null && v !== '' && v !== false;
+function ancienRepas(m) {
+  return estObjet(m) && ([m.time, m.label, m.auto].some(porte) || (porte(m.g) && Number(m.g) !== 0));
 }
 
-/* Le distributeur tel que l'éditeur le tient : ses quatre champs, plus `haid`
- * (05/10, relecture du lot 16). `haid` est l'entité qu'ouvre la fiche du
- * distributeur (App.jsx) ; il n'a pas de champ ici, il ne se lisait donc pas,
- * et « Enregistrer » réécrivait la clé sans lui — même une configuration
- * valide. Il voyage maintenant, invisible, comme il est venu. */
+/** L'ancienne liste TELLE QUELLE : ses repas sont recopiés sans être réécrits
+ * (ni identifiant renuméroté, ni champ « réparé »). */
+function ancienneListeBrute(brut) {
+  return estObjet(brut) && Array.isArray(brut.meals) ? brut.meals.filter(ancienRepas) : [];
+}
+
+/* Les grammes d'un repas de l'ancienne liste, s'il en porte (un nombre > 0,
+ * ou son écriture en chaîne) ; `null` sinon — un `g: { n: 3 }` abîmé ne
+ * s'invente pas un poids. */
+function grammesDe(m) {
+  const v = estObjet(m) ? m.g : null;
+  const n = typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** La liste du champ « Script de distribution » : les scripts CANDIDATS
+ * (`scriptsCandidats`, d'après leur nom) en tête, sous un mot qui dit ce
+ * qu'ils sont — une proposition, jamais un choix (05/10, relecture
+ * « données ») ; les autres ensuite, dans leur ordre. */
+export function suggestionsScript(suggestions, candidats) {
+  const tous = Array.isArray(suggestions) ? suggestions : [];
+  const c = new Set(Array.isArray(candidats) ? candidats : []);
+  return [
+    ...tous.filter(x => c.has(x.id)).map(x => ({ ...x, sub: tr('{id} · peut-être celui qui distribue', { id: x.id }) })),
+    ...tous.filter(x => !c.has(x.id)),
+  ];
+}
+
+/** Les automatisations associées au distributeur (« Associer » de la fiche,
+ * « Oublier l'ancienne liste » ici) : des identifiants, sans doublon. */
+function associeesDe(brut) {
+  return estObjet(brut) && Array.isArray(brut.associees) ? [...new Set(brut.associees.filter(idEntite))] : [];
+}
+
+/* Le distributeur tel que l'éditeur le tient : ses quatre champs, `haid`
+ * (05/10, relecture du lot 16 — l'entité qu'ouvre la fiche, sans champ ici,
+ * qui voyage invisible comme elle est venue) et `appareil` (05/10, ADR 0155 :
+ * l'appareil choisi dans la liste ; un Petlibro n'a pas de réservoir en
+ * grammes, le désigner par son appareil suffit). */
 export function feederEdition(f) {
   const h = (f && f.haids) || {};
-  return { reservoir: h.reservoir || '', portionWeight: h.portionWeight || '', distribuees: h.distribuees || '', script: (f && f.script) || '', haid: (f && f.haid) || '' };
+  return { reservoir: h.reservoir || '', portionWeight: h.portionWeight || '', distribuees: h.distribuees || '', script: (f && f.script) || '', haid: (f && f.haid) || '',
+    appareil: (f && typeof f.appareil === 'string' && f.appareil.trim()) || '' };
 }
 
-/* Ce que « Enregistrer » écrit du distributeur. `null` quand rien n'est
- * désigné : la carte se tait au lieu de montrer un réservoir vide, et `cfgSet`
- * efface la clé. Mais la clé vit tant qu'UN champ désigne quelque chose
- * (05/10, relecture du lot 16) : elle ne tenait qu'au réservoir, à la portion
- * ou à un repas, et un distributeur désigné par son script ou son compteur,
- * sans repas lisible, perdait TOUT au premier « Enregistrer » d'une autre vue —
- * la Sécurité, qui ne le montre même pas. */
-export function feederAEcrire(ent) {
-  return (ent.feeder.distribuees || ent.feeder.script || ent.feeder.haid || ent.feeder.reservoir || ent.feeder.portionWeight || repasAEcrire(ent.repas).length)
+/* Ce que « Enregistrer » écrit du distributeur. `brut` : `loggia_feeder` relu
+ * AU MOMENT d'écrire, d'où viennent l'ancienne liste et les associées — le
+ * formulaire ne les porte pas, et un état capturé à l'ouverture de la feuille
+ * écraserait un « Associer » fait entre-temps dans la fiche. `null` quand rien
+ * n'est désigné : la carte se tait au lieu de montrer un réservoir vide, et
+ * `cfgSet` efface la clé. Mais la clé vit tant qu'UN champ désigne quelque
+ * chose (05/10, relecture du lot 16 : un distributeur désigné par son script
+ * ou son compteur perdait TOUT au premier « Enregistrer » de la Sécurité) —
+ * l'appareil, l'ancienne liste et les associées compris (ADR 0155). */
+export function feederAEcrire(ent, brut = null) {
+  const f = ent.feeder;
+  const meals = ancienneListeBrute(brut);
+  const associees = associeesDe(brut);
+  return (f.distribuees || f.script || f.haid || f.reservoir || f.portionWeight || f.appareil || meals.length || associees.length)
     ? {
       haids: {
-        reservoir: ent.feeder.reservoir || null,
-        portionWeight: ent.feeder.portionWeight || null,
-        distribuees: ent.feeder.distribuees || null,
+        reservoir: f.reservoir || null,
+        portionWeight: f.portionWeight || null,
+        distribuees: f.distribuees || null,
       },
-      ...(ent.feeder.script ? { script: ent.feeder.script } : {}),
-      ...(ent.feeder.haid ? { haid: ent.feeder.haid } : {}),
-      meals: repasAEcrire(ent.repas),
+      ...(f.script ? { script: f.script } : {}),
+      ...(f.haid ? { haid: f.haid } : {}),
+      ...(f.appareil ? { appareil: f.appareil } : {}),
+      meals,
+      ...(associees.length ? { associees } : {}),
     }
     : null;
 }
 
+/** « Oublier l'ancienne liste » (admin) : la liste se vide, ses repas reliés
+ * à une automatisation la laissent ASSOCIÉE au distributeur — la fiche la
+ * montre encore, et le serveur la compte toujours parmi ses sources. Le reste
+ * de la clé ne bouge pas. Jamais `null` : une liste vidée volontairement reste
+ * vide, l'ancienne description de `loggia_entities` ne revient pas. */
+export function oublierAncienneListe(brut) {
+  const b = estObjet(brut) ? brut : {};
+  const relies = ancienneListeBrute(b).map(m => m.auto).filter(a => idEntite(a) && a.indexOf('automation.') === 0);
+  return { ...b, meals: [], associees: [...new Set([...associeesDe(b), ...relies])] };
+}
+
+/** Les appareils qu'on peut désigner comme distributeur : ceux dont une sœur
+ * DISTRIBUE (la règle R1 de `distributeur.js`, la même que le serveur) en
+ * tête, puis les autres, par nom. Les entités se rangent par appareil en UNE
+ * passe : chercher les sœurs de chaque appareil dans tout l'index coûterait
+ * appareils × entités à chaque état de la maison. Et seules les sœurs des
+ * domaines qu'elle lit sans configuration (bouton, nombre, texte, liste) se
+ * DÉCRIVENT (05/10, contradicteur) : décrire toutes les autres coûtait ~11 ms
+ * à chaque état de la maison sur 400 appareils, feuille ouverte — pour la
+ * même réponse, `commandeDistribuer(…, null)` ne regardant qu'elles. */
+const DOMAINES_COMMANDE = ['button', 'number', 'text', 'select'];
+export function appareilsDistributeur(index, states) {
+  const meta = index && index.entityMeta;
+  if (!meta || typeof meta.forEach !== 'function') return [];
+  const parAppareil = new Map();
+  const nomVu = new Map();
+  meta.forEach((m, id) => {
+    if (!m || !m.deviceId || m.disabled) return;
+    if (!parAppareil.has(m.deviceId)) parAppareil.set(m.deviceId, new Map());
+    if (m.device && !nomVu.has(m.deviceId)) nomVu.set(m.deviceId, m.device);
+    if (typeof id === 'string' && DOMAINES_COMMANDE.indexOf(id.slice(0, id.indexOf('.'))) >= 0) parAppareil.get(m.deviceId).set(id, m);
+  });
+  const infos = (index.deviceMeta && typeof index.deviceMeta.get === 'function') ? index.deviceMeta : new Map();
+  const out = [];
+  parAppareil.forEach((entites, deviceId) => {
+    const d = infos.get(deviceId) || {};
+    const commande = entites.size ? commandeDistribuer(soeursDistributeur({ entityMeta: entites }, states || {}, deviceId), states || {}, null) : null;
+    const nom = d.name || nomVu.get(deviceId) || deviceId;
+    out.push({ id: deviceId, label: String(nom), sub: commande ? commande.entity_id : ([d.manufacturer, d.model].filter(Boolean).join(' · ') || undefined), reconnu: !!commande });
+  });
+  return out.sort((a, b) => (b.reconnu - a.reconnu) || comparerTextes(a.label, b.label));
+}
+
+/* L'encart « Ancienne liste de repas » (05/10, ADR 0155) : seulement quand
+ * une ancienne liste existe. Il dit ce qu'elle devient, compte ses repas
+ * reliés à une automatisation et ceux qui ne l'étaient pas (un `input_boolean`
+ * ne distribuait rien par lui-même), avec leurs heures et leurs libellés. Les
+ * repas se lisent par `croqAncienneListe`, alignés sur ceux que « Enregistrer »
+ * recopie (`ancienRepas`) : l'encart ne montre rien qui partirait en silence,
+ * et ne cache rien qui resterait. « Oublier » est réservé aux administrateurs
+ * (ADR 0144) et relit la clé au moment du geste. La phrase dit que les
+ * automatisations distribuent toujours (05/10, contradicteur des textes) :
+ * « Ils ne servent plus » se lisait « le repas ne part plus ». */
+function AncienneListeRepas({ hass }) {
+  const [err, setErr] = useState('');
+  const [, relire] = useState(0);
+  const titreId = useId();
+  const brut = loggiaEnt('feeder', null);
+  const objets = estObjet(brut) && Array.isArray(brut.meals) ? brut.meals.filter(estObjet) : [];
+  const liste = croqAncienneListe().filter((_, i) => ancienRepas(objets[i]));
+  if (!liste.length) return null;
+  // Les grammes de chaque repas, alignés sur `liste` (le même filtre, dans le même ordre).
+  const grammes = objets.filter(ancienRepas).map(grammesDe);
+  const S = (hass && hass.states) || {};
+  /* Les grammes saisis par repas comptaient les jours de réserve ; ils ne
+   * servent plus (05/10, relecture « données ») : la réserve demande le poids
+   * d'une portion en grammes. Sans lui, la fiche dit « Ce qu'il reste dans le
+   * bac » — l'encart dit pourquoi, au lieu de laisser la donnée partir sans un mot.
+   * Seulement si le bac se lit en GRAMMES : avec un réservoir en % (ou sans
+   * réservoir), la réserve ne se comptait déjà pas — la phrase dirait une perte
+   * qui n'en est pas une (05/10, contradicteur de C3). */
+  const lu = lireDistributeur(LOGGIA_INDEX, S, brut);
+  const reservoir = estObjet(brut) && estObjet(brut.haids) ? brut.haids.reservoir : null;
+  const reserveSansMesure = grammes.some(g => g != null) && niveauDuBac(S, reservoir).grammes != null && !mesurePortion(S, lu.portion, lu.poidsPortion);
+  const nomAuto = (id) => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id;
+  const avecGrammes = liste.map((r, i) => ({ ...r, g: grammes[i] }));
+  const relies = avecGrammes.filter(r => r.relie);
+  const autres = avecGrammes.filter(r => !r.relie);
+  // Une heure, un libellé, ses grammes ; à défaut, l'interrupteur du repas : jamais une ligne vide.
+  const texte = (r, avecAuto) => [r.heure, r.label, avecAuto && r.auto ? nomAuto(r.auto) : null].filter(Boolean).join(' · ') || r.auto || '—';
+  // …et ses grammes à la suite, à part (05/10, relecture « données ») : saisis
+  // par repas, ils ne se montraient plus nulle part.
+  const poids = (r) => (r.g != null ? ' · ' + r.g.toLocaleString(locale()) + ' g' : null);
+  const groupe = (titre, items, avecAuto) => (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--o-text2)' }}>{titre}</div>
+      <ul style={{ margin: '4px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {items.map((r, i) => <li key={i} style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>{texte(r, avecAuto)}{poids(r) && <span>{poids(r)}</span>}</li>)}
+      </ul>
+    </div>
+  );
+  const oublier = () => {
+    cfgSet({ loggia_feeder: oublierAncienneListe(cfgVal('loggia_feeder', null) || loggiaEnt('feeder', null)) })
+      .then(ok => {
+        if (ok === false) { setErr(tr('Réservé aux administrateurs.')); return; }
+        setErr(''); relire(n => n + 1);
+      })
+      .catch(() => setErr(tr('Enregistrement impossible — la configuration n’a pas été appliquée.')));
+  };
+  return (
+    <div role="group" aria-labelledby={titreId} style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', marginTop: 16, padding: '14px 0 4px' }}>
+      <div id={titreId} style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Ancienne liste de repas')}</div>
+      <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Ces repas venaient d’une liste saisie dans Loggia. Cette liste ne sert plus de planning : la fiche du distributeur lit celui de l’appareil, vos automatisations ou le planning de Loggia. Rien ne change pour vos automatisations : celles qui distribuaient distribuent toujours.')}</div>
+      {relies.length > 0 && groupe(trN(relies.length, '{n} repas relié à une automatisation', '{n} repas reliés à une automatisation'), relies, true)}
+      {autres.length > 0 && groupe(trN(autres.length, '{n} repas non relié : il ne distribuait rien par lui-même', '{n} repas non reliés : ils ne distribuaient rien par eux-mêmes'), autres, false)}
+      {reserveSansMesure && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Les grammes de cette liste ne servent plus : sans poids de portion en grammes, la fiche ne compte plus les jours de réserve.')}</div>}
+      {!compteOrdinaire(hass) && (
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
+          <BoutonConfirme libelle={tr('Oublier l’ancienne liste')} onConfirme={oublier} />
+          {relies.length > 0 && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', flex: '1 1 200px', minWidth: 0 }}>{tr('Les automatisations reliées restent associées au distributeur.')}</span>}
+        </div>
+      )}
+      {err && <div role="alert" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)', marginTop: 8 }}>{err}</div>}
+    </div>
+  );
+}
+
 // Hook partagé : état + persistance de la config d'entités, pour la fiche « Entités de la vue » de chaque page.
-function useEntConfig(hass) {
+// Exporté pour tests/distributeur_migration.test.mjs, qui l'exécute tel quel.
+export function useEntConfig(hass) {
   // Cle de rendu stable, posee DES la lecture : sans elle, les lignes se
   // reperaient par leur rang et une suppression deplacait le curseur de saisie.
   const avecCle = (a) => a.map((r, i) => ({ ...r, _k: r._k || 'k' + i + '_' + Math.random().toString(36).slice(2, 6) }));
@@ -1063,11 +1237,9 @@ function useEntConfig(hass) {
      * n'apparaissaient jamais sur une vraie installation, pendant que le README
      * promettait cette designation (plan du 22/09, points S1 et M4). */
     feeder: feederEdition(cfgVal('loggia_feeder', null) || loggiaEnt('feeder', null)),
-    /* Par le lecteur de l'éditeur (05/10, point 10b et sa suite) : un repas
-     * `null` faisait tomber toute la vue Paramètres, et `croqMeals` — celui de
-     * la fiche — écarte un repas dont seul l'interrupteur est abîmé, que le
-     * prochain « Enregistrer » effaçait. Ici il reste, réparable. */
-    repas: avecCle(croqRepasEdition()),
+    /* Plus de `repas` (05/10, ADR 0155) : l'ancienne liste n'a plus d'éditeur.
+     * « Enregistrer » la recopie depuis le magasin (`feederAEcrire`), et
+     * l'encart « Ancienne liste de repas » la lit par `croqAncienneListe`. */
   });
   const [ent, setEnt] = useState(readEnt);
   // La configuration serveur arrive APRES le premier rendu. Sans cette
@@ -1106,8 +1278,9 @@ function useEntConfig(hass) {
           autoEnt: z.autoEnt || null, hasAuto: !!z.autoEnt,
           tempSensor: z.tempSensor || null,
         })),
-        // Toutes les vues réécrivent le distributeur, même sans le montrer.
-        loggia_feeder: feederAEcrire(ent),
+        // Toutes les vues réécrivent le distributeur, même sans le montrer :
+        // l'ancienne liste et les associées, relues ICI, voyagent avec lui.
+        loggia_feeder: feederAEcrire(ent, cfgVal('loggia_feeder', null) || loggiaEnt('feeder', null)),
       });
     } catch { alert(tr('Enregistrement impossible — la configuration n’a pas été appliquée.')); return; }
     // L'écriture serveur part en arrière-plan : on lui laisse le temps d'aboutir
@@ -1136,6 +1309,27 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
   const facultatif = (x) => tr('{x} (optionnel)', { x });
   // Les suggestions d'un domaine, sous chaque champ : le nom lu, l'identifiant dessous.
   const sugg = (d) => (dlists[d] || []).map(id => ({ id, label: (hass && hass.states && hass.states[id] && hass.states[id].attributes && hass.states[id].attributes.friendly_name) || id, sub: id }));
+  // Les appareils du distributeur, relus quand la maison change, et seulement
+  // dans une vue qui montre le distributeur.
+  const avecDistributeur = has('feeder');
+  /* Un champ du distributeur MARQUE le formulaire touché (05/10) : « Oublier
+   * l'ancienne liste » change la configuration pendant l'édition, et la
+   * resynchronisation de `useEntConfig` effaçait l'appareil choisi (vu dans
+   * la démo). Par `entSet`, comme les listes. */
+  const majFeeder = (k, val) => entSet('feeder')({ ...ent.feeder, [k]: val });
+  const appareils = useMemo(() => (avecDistributeur ? appareilsDistributeur(LOGGIA_INDEX, hass && hass.states) : []), [hass, avecDistributeur]);
+  /* « Distribuer » sans commande (05/10, relecture « données ») : avant le
+   * 05/10, un script se devinait à son nom ; depuis, seul le script DÉSIGNÉ
+   * commande, et celui qui ne l'avait jamais désigné perdait « Distribuer »
+   * sans un mot. La phrase le dit, d'après ce que le FORMULAIRE désigne (elle
+   * suit la saisie), et nomme les scripts candidats — proposés en tête de la
+   * liste du champ, jamais choisis à la place de l'utilisateur. Seulement si un
+   * distributeur est décrit : une maison sans distributeur ne lit rien. */
+  const etatsMaison = (hass && hass.states) || {};
+  const feederForm = avecDistributeur ? feederAEcrire(ent, cfgVal('loggia_feeder', null) || loggiaEnt('feeder', null)) : null;
+  const sansCommande = !!feederForm && !lireDistributeur(LOGGIA_INDEX, etatsMaison, feederForm).commande;
+  const candidats = avecDistributeur ? scriptsCandidats(etatsMaison) : [];
+  const nomsCandidats = candidats.map(id => ((etatsMaison[id].attributes || {}).friendly_name || id) + ' (' + id + ')').join(', ');
   const detecter = () => {
     const r0 = LOGGIA_RESOLVED && LOGGIA_RESOLVED.rooms;
     const r = detecterCapteursPieces(ent.rooms, {
@@ -1204,30 +1398,38 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
           { k: 'tempSensor', label: tr('Température'), ph: 'sensor.…', domain: 'sensor', flex: 1.1 },
         ]}
         rows={ent.climate} onRows={entSet('climate')} check={check} />}
-      {has('feeder') && (
+      {avecDistributeur && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Distributeur de croquettes')}</div>
-          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr('Piloté par automatisations : rien ne se devine. Le réservoir suffit à faire apparaître sa carte dans Objets.')}</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr('Désignez l’appareil, ou le réservoir, la portion et, si besoin, le script qui distribue. Le planning se lit dans la fiche du distributeur.')}</div>
           <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
+            {/* L'appareil (05/10, ADR 0155) : par la liste de Loggia, jamais un
+              * <select> natif ; ceux qui savent distribuer en tête. Un appareil
+              * qui n'est plus dans l'index reste choisi, sous son identifiant. */}
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)', marginBottom: 4 }}>{tr('Appareil').toUpperCase()}</div>
+              <ListeChoix label={tr('Appareil')} value={ent.feeder.appareil || ''} onChange={val => majFeeder('appareil', val)}
+                options={[{ id: '', label: tr('Aucun') }, ...(ent.feeder.appareil && !appareils.some(a => a.id === ent.feeder.appareil) ? [{ id: ent.feeder.appareil, label: ent.feeder.appareil }] : []), ...appareils]}
+                style={{ ...entInp, minHeight: 37 }} />
+            </div>
             {[['reservoir', tr('Réservoir'), 'input_number.…', 'input_number'],
               ['portionWeight', tr('Poids d’une portion'), 'number.…', 'number'],
               ['distribuees', tr('Distribué aujourd’hui'), facultatif('sensor.…'), 'sensor'],
               ['script', tr('Script de distribution'), facultatif('script.…'), 'script']].map(([k, l, ph, d]) => (
               <div key={k}>
                 <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: 'var(--o-text3)', marginBottom: 4 }}>{l.toUpperCase()}</div>
-                <ChampSuggere label={l} value={ent.feeder[k] || ''} onChange={val => setEnt(o => ({ ...o, feeder: { ...o.feeder, [k]: val } }))} placeholder={ph} suggestions={sugg(d)} style={entInp} />
+                <ChampSuggere label={l} value={ent.feeder[k] || ''} onChange={val => majFeeder(k, val)} placeholder={ph} suggestions={k === 'script' ? suggestionsScript(sugg(d), candidats) : sugg(d)} style={entInp} />
               </div>
             ))}
           </div>
-          <EntSection sugg={sugg} title={tr('Repas de la journée')}
-            desc={tr('Chaque ligne est un repas programmé. « Interrupteur » est ce que la carte allume ou éteint pour activer ce repas : l’automatisation, ou son aide.')}
-            cols={[
-              { k: 'time', label: tr('Heure'), ph: '07:30', flex: .6 },
-              { k: 'label', label: tr('Libellé'), ph: tr('Matin'), flex: .8 },
-              { k: 'g', label: tr('Grammes'), ph: '45', flex: .5 },
-              { k: 'auto', label: tr('Interrupteur'), ph: 'automation.… / input_boolean.…', domain: 'automation', flex: 1.2 },
-            ]}
-            rows={ent.repas} onRows={entSet('repas')} check={check} />
+          {sansCommande && (
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>
+              {candidats.length
+                ? tr('« Distribuer » demande l’appareil, ou le script qui distribue : désignez-le ci-dessus. Proposés d’après leur nom : {s}.', { s: nomsCandidats })
+                : tr('« Distribuer » demande l’appareil, ou le script qui distribue : désignez-le ci-dessus.')}
+            </div>
+          )}
+          <AncienneListeRepas hass={hass} />
         </div>
       )}
     </>

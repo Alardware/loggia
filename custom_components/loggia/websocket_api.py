@@ -6,7 +6,7 @@ Assistant. Le client ne peut pas designer un autre utilisateur — aucune comman
 n'accepte de champ `user_id`. Un utilisateur ne lit et n'ecrit donc que sa propre
 configuration, et les permissions Home Assistant restent celles de sa session.
 
-Les 32 commandes, toutes prefixees `loggia/`. Le compte et la repartition
+Les 34 commandes, toutes prefixees `loggia/`. Le compte et la repartition
 entre ouvertes et reservees sont verrouilles par `test_websocket_api.py` :
 une commande nouvelle doit y etre rangee d'un cote ou de l'autre.
 
@@ -23,7 +23,8 @@ une commande nouvelle doit y etre rangee d'un cote ou de l'autre.
     regles/degeler  -> rendre la main aux regles sur une entite (admin)
   Les modules de regles — `etat` se lit de tout compte, `config` est reservee
   aux administrateurs : volets, fenetres, presence, nuit, veilles, scenarios,
-  robots.
+  robots, distributeurs (ADR 0155 : `etat` rend un RESUME filtre par les
+  droits du compte, jamais la configuration brute d'une automatisation).
   Les gestes, ouverts a tout compte mais bornes a ce qu'il a le droit de
   piloter
     scenarios/lancer        -> lancer un scenario
@@ -94,6 +95,8 @@ WS_SCN_LANCER = "loggia/scenarios/lancer"
 WS_SCN_ORDRE = "loggia/scenarios/ordre"
 WS_ROB_ETAT = "loggia/robots/etat"
 WS_ROB_CONFIG = "loggia/robots/config"
+WS_DIS_ETAT = "loggia/distributeurs/etat"
+WS_DIS_CONFIG = "loggia/distributeurs/config"
 WS_MIN_ETAT = "loggia/minuteurs/etat"
 WS_MIN_POSER = "loggia/minuteurs/poser"
 WS_MIN_ANNULER = "loggia/minuteurs/annuler"
@@ -150,7 +153,8 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                    acces_interrupteurs=None, acces_volets=None, acces_fenetres=None,
                    acces_presence=None, acces_nuit=None,
                    acces_veilles=None, acces_regles=None, acces_scenarios=None,
-                   acces_robots=None, acces_minuteurs=None, acces_sirene=None) -> None:
+                   acces_robots=None, acces_minuteurs=None, acces_sirene=None,
+                   acces_distributeurs=None) -> None:
     """Declare les commandes aupres du serveur WebSocket.
 
     `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
@@ -660,6 +664,49 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             return
         connection.send_result(msg["id"], {"config": config})
 
+    # ── Le distributeur de croquettes (05/10, ADR 0155) ────────────────────
+    # `etat` est ouverte a tout compte connecte, comme celui des robots, mais
+    # ce n'est pas `automation/config` (reserve aux administrateurs par Home
+    # Assistant) par un detour : un RESUME des automatisations qui commandent
+    # le distributeur, filtre par ce que CE compte peut lire et piloter.
+    # `detail` : la fiche ouverte — la Tuya officielle n'est interrogee que la.
+    # `config` ecrit le planning de la maison : administrateurs seulement.
+    def _distributeurs(connection, msg):
+        distributeurs = acces_distributeurs() if acces_distributeurs else None
+        if distributeurs is None:
+            connection.send_error(msg["id"], "not_available", "distributeur indisponible")
+        return distributeurs
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_DIS_ETAT, vol.Optional("detail", default=False): bool}
+    )
+    @websocket_api.async_response
+    async def handle_dis_etat(hass, connection, msg):
+        distributeurs = _distributeurs(connection, msg)
+        if distributeurs is None:
+            return
+        connection.send_result(msg["id"], await distributeurs.async_etat(
+            connection.user, detail=bool(msg.get("detail"))))
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_DIS_CONFIG, vol.Required("patch"): dict}
+    )
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_dis_config(hass, connection, msg):
+        distributeurs = _distributeurs(connection, msg)
+        if distributeurs is None:
+            return
+        try:
+            config = await distributeurs.async_enregistrer(msg["patch"])
+        except ValueError as err:
+            # Douze repas au plus : le refus nomme sa limite, l'ecran la dit.
+            _relayer(connection, msg, err)
+            return
+        # L'etat avec : l'ecran redessine sans attendre son sondage.
+        connection.send_result(msg["id"], {"config": config,
+                                           "etat": await distributeurs.async_etat(connection.user)})
+
     # ── Suivre la configuration (22/09, ADR 0067) ──────────────────────────
     # Un ecran s'abonne une fois ; a chaque ecriture du magasin il apprend
     # QUI a change (le compte) et QUELLES cles — jamais les valeurs : il relit
@@ -810,6 +857,8 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_scn_ordre)
     websocket_api.async_register_command(hass, handle_rob_etat)
     websocket_api.async_register_command(hass, handle_rob_config)
+    websocket_api.async_register_command(hass, handle_dis_etat)
+    websocket_api.async_register_command(hass, handle_dis_config)
     websocket_api.async_register_command(hass, handle_min_etat)
     websocket_api.async_register_command(hass, handle_min_poser)
     websocket_api.async_register_command(hass, handle_min_annuler)

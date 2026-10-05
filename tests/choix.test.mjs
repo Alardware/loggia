@@ -151,13 +151,15 @@ test('seules les feuilles à onglets gardent une hauteur fixe', () => {
   const avecOnglets = {
     FicheRobot: '<BottomSheet onClose={onClose} onglets>',
     CarteAjoutSheet: '<BottomSheet onClose={onClose} onglets>',
+    // La fiche du distributeur, à onglets comme le robot (ADR 0155, 05/10).
+    FicheDistributeur: '<BottomSheet onClose={onClose} onglets>',
   };
   for (const [nom, feuille] of Object.entries(avecOnglets)) {
     const i = APP.indexOf('\nfunction ' + nom + '(');
     const j = APP.indexOf('\nfunction ', i + 1);
     assert.ok(i >= 0 && APP.slice(i, j < 0 ? undefined : j).includes(feuille), nom + ' : changer d’onglet changerait la hauteur de la feuille');
   }
-  assert.equal((APP.match(/<BottomSheet[^>]* onglets/g) || []).length, 2, 'une feuille sans onglets a pris une hauteur fixe');
+  assert.equal((APP.match(/<BottomSheet[^>]* onglets/g) || []).length, 3, 'une feuille sans onglets a pris une hauteur fixe');
   // La lampe blancs + couleurs : ses deux palettes partagent la même case — la
   // fiche prend la hauteur de la plus grande, sans les 760 px (19/09 : « pourquoi
   // cette différence entre ces deux lumières »).

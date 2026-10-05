@@ -16,7 +16,9 @@
  *  - lecteur : « Rien en lecture », volume 0 %, neuf commandes ;
  *  - capteur : « unavailable » écrit en 44 px, en anglais ;
  *  - zone de chauffage : « AU REPOS » en ambre, puces de mode et préréglage ;
- *  - distributeur (réservoir muet) : « Réservoir 0 % » en rouge, et « Rempli » ;
+ *  - distributeur (réservoir muet) : « Réservoir 0 % » en rouge, et « Rempli »
+ *    (le 05/10, ADR 0155 : la fiche à onglets, fichedistributeur.jsx, rendue
+ *    directement — la coquille d'App.jsx ne fait que la charger) ;
  *  - plante (humidité muette), robot `unavailable` et alarme (le bloc de
  *    FicheAppareil, « Armée » en ambre) : pas de liseré.
  * Relecture (contradicteur) : la lumière et la prise mortes proposaient encore
@@ -41,7 +43,7 @@ if (typeof globalThis.requestAnimationFrame !== 'function') {
 }
 
 const NOMS = ['RoomLightSheet', 'RoomCoverSheet', 'RoomSwitchSheet', 'RoomBinarySheet', 'RoomLockSheet', 'RoomMediaSheet',
-  'SensorSheet', 'RoomPilotSheet', 'FicheDistributeur', 'FichePlante', 'FicheAppareil', 'CvAlarm'];
+  'SensorSheet', 'RoomPilotSheet', 'FichePlante', 'FicheAppareil', 'CvAlarm'];
 const EXPOSE = 'data:text/javascript,' + encodeURIComponent([
   'export async function load(url, ctx, next) {',
   "  if (!url.endsWith('/src/App.jsx?lot16f')) return next(url, ctx);",
@@ -53,6 +55,7 @@ register('./jsx-hooks.mjs', import.meta.url);
 register(EXPOSE);
 const F = await import(new URL('../src/App.jsx?lot16f', import.meta.url).href);
 const FicheRobot = (await import(new URL('../src/ficherobot.jsx', import.meta.url).href)).default;
+const FicheDistributeurContent = (await import(new URL('../src/fichedistributeur.jsx', import.meta.url).href)).default;
 
 const QUAND = '2026-10-05T08:00:00Z';
 const etat = (id, state, attributes = {}) => ({ entity_id: id, state, last_changed: QUAND, attributes });
@@ -192,13 +195,23 @@ test('zone de chauffage : thermostat mort, ni « AU REPOS », ni puces, ni prér
 });
 
 test('distributeur : réservoir muet, ni « 0 % » rouge ni « Rempli »', () => {
-  const base = { hass: hassDe(), nom: 'Distributeur', dernier: null, ration: null, repas: [], portion: null, feed: () => {}, onRempli: () => {}, ficheId: null };
-  const vif = rendre(F.FicheDistributeur, { ...base, pct: 60, grammes: 600 });
+  /* La fiche à onglets (ADR 0155) : le réservoir est une aide `input_number`,
+   * la commande le `select` feed de l'appareil — une AUTRE entité. Le liseré
+   * passe sur l'en-tête (« Ce distributeur ne répond plus. »), le réservoir dit
+   * « Indisponible », et « Rempli » (l'onglet Entretien) disparaît. */
+  const RES = 'input_number.croquettes_reservoir', FEED = 'select.distributeur_feed';
+  const cfg = { haid: FEED, haids: { reservoir: RES } };
+  const index = { entityMeta: new Map(), deviceMeta: new Map() };
+  const feed = etat(FEED, 'STOP', { options: ['STOP', 'START'] });
+  const vif = rendre(FicheDistributeurContent, { cfg, index, etat: null, hass: hassDe(feed, etat(RES, '600', { max: 1500, unit_of_measurement: 'g' })), ongletDepart: 'entretien' });
   assert.ok(vif.includes('Rempli') && panne(vif) === 0, 'témoin');
-  const html = rendre(F.FicheDistributeur, { ...base, pct: 0, grammes: null, mort: true });
-  // « Distribuer » passe par le `select` de l'appareil, une autre entité.
-  morte('distributeur', html, { marque: 'Ce qu’il reste dans le bac', permis: ['Distribuer'] });
-  assert.ok(!html.includes('0 %') && !html.includes('Rempli'), 'ni « Réservoir 0 % » ni « Rempli »');
+  for (const onglet of ['accueil', 'entretien']) {
+    const html = rendre(FicheDistributeurContent, { cfg, index, etat: null, hass: hassDe(feed, mort(RES)), ongletDepart: onglet });
+    // Les onglets ne parlent pas à l'appareil ; « Distribuer » passe par le select, vivant.
+    morte('distributeur', html, { marque: 'Ce distributeur ne répond plus.', permis: ['role="tab"', 'Distribuer'] });
+    assert.ok(html.includes('>Distribuer<'), 'la vis répond : « Distribuer » reste');
+    assert.ok(!html.includes('0 %') && !html.includes('Rempli') && !html.includes('>Entretien<'), 'ni « Réservoir 0 % » ni « Rempli »');
+  }
 });
 
 test('plante : capteur d’humidité muet, le liseré sur sa ligne', () => {

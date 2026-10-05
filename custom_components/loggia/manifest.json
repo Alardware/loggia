@@ -2,7 +2,9 @@
   "domain": "loggia",
   "name": "Loggia Dashboard",
   "after_dependencies": [
-    "mqtt"
+    "automation",
+    "mqtt",
+    "script"
   ],
   "codeowners": [
     "@Alardware"
@@ -17,5 +19,5 @@
   "integration_type": "service",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/Alardware/loggia/issues",
-  "version": "3.85.0"
+  "version": "3.86.0"
 }
