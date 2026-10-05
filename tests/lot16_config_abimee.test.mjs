@@ -119,7 +119,7 @@ test('medPlayers : un identifiant qui n’est pas une chaîne ne fait plus lever
 /* ── 2. Paramètres : la vue d'où l'on répare se rend ──────────────────────── */
 
 const ViewEntSheet = await composant('views/parametres.jsx', 'ViewEntSheet');
-const valeurs = (html) => [...html.matchAll(/<input\b[^>]*\bvalue="([^"]*)"/g)].map(m => m[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;/g, "'"));
+const valeurs = (html) => [...html.matchAll(/<input\b[^>]*\bvalue="([^"]*)"/g)].map(m => m[1].replace(/&(amp|quot|#x27);/g, (_, e) => ({ amp: '&', quot: '"', '#x27': "'" })[e]));
 const fiche = (view) => rendre(ViewEntSheet, { view, hass: null, onClose: () => {} });
 
 const REPAS_VALIDES = [

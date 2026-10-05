@@ -68,7 +68,9 @@ const panne = (html) => (html.match(/\bo-panne\b/g) || []).length;
  * glissière — hors l'épingle et la croix de la feuille, qui ne lui parlent pas. */
 const commandes = (html) => [
   // Le bouton ET son texte : « Distribuer » ne se nomme que par lui.
-  ...(html.match(/<button\b[^>]*>.*?<\/button>/g) || []).map(b => b.replace(/<(?!button\b)[^>]+>/g, ''))
+  // La balise ouvrante, puis le texte entre les balises — lu, pas nettoyé par
+  // remplacement (CodeQL, 05/10).
+  ...(html.match(/<button\b[^>]*>.*?<\/button>/g) || []).map(b => b.match(/^<button\b[^>]*>/)[0] + [...b.matchAll(/>([^<]*)</g)].map(m => m[1]).join(''))
     .filter(b => !/^<button\b[^>]*disabled=""/.test(b) && !/^<button\b[^>]*(title|aria-label)="(Épingler sur la carte|Désépingler|Fermer)"/.test(b)),
   ...(html.match(/role="(switch|slider)"/g) || []),
 ];

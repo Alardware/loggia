@@ -92,7 +92,7 @@ const DYNAMIQUES = {
 /** Les classes de `feuille` que rien ne lit dans `code`. */
 function sansLecteur(feuille, code, dynamiques = DYNAMIQUES) {
   const net = sansCommentaires(code);
-  const lue = (nom) => new RegExp('(^|[^\\w-])' + nom.replace(/-/g, '\\-') + '(?![\\w-])').test(net);
+  const lue = (nom) => new RegExp('(^|[^\\w-])' + nom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w-])').test(net);
   const construite = (nom) => Object.entries(dynamiques).some(([p, d]) => nom.startsWith(p) && d.suffixes.includes(nom.slice(p.length)));
   return classesDe(feuille).filter((nom) => !lue(nom) && !construite(nom)).sort();
 }

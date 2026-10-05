@@ -285,7 +285,7 @@ function porteur(s, i) {
  *  imbriquées sont comptées. `null` si elle manque. */
 function contenu(s, b) {
   if (b.seule) return '';
-  const re = new RegExp('<(/?)' + b.nom.replace(/\./g, '\\.') + '(?=[\\s>/])', 'g');
+  const re = new RegExp('<(/?)' + b.nom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=[\\s>/])', 'g');
   re.lastIndex = b.fin + 1;
   let prof = 1;
   for (let m; (m = re.exec(s)); ) {

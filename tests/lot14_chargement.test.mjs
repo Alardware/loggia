@@ -33,7 +33,9 @@ const DIST = join(RACINE, 'dist');
 
 /** Les balises <link> d'une page, hors commentaires, attributs lus un à un. */
 function liens(html) {
-  return [...html.replace(/<!--[\s\S]*?-->/g, '').matchAll(/<link\b([^>]*)>/g)].map(([, a]) => {
+  // Commentaires et balises lus d'une seule passe : un commentaire est sauté,
+  // pas retiré par remplacement (CodeQL, 05/10).
+  return [...html.matchAll(/<!--[\s\S]*?-->|<link\b([^>]*)>/g)].filter(([t]) => !t.startsWith('<!--')).map(([, a]) => {
     const attrs = {};
     for (const m of a.matchAll(/([a-z-]+)(?:="([^"]*)")?/g)) attrs[m[1]] = m[2] ?? true;
     return attrs;
