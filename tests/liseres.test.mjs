@@ -28,6 +28,9 @@ const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g,
 const APP = lire('src', 'App.jsx');
 const SYSTEME = lire('src', 'views', 'systeme.jsx');
 const ROBOT = lire('src', 'ficherobot.jsx');
+// La fiche du distributeur et son socle (ADR 0155, 05/10) : les mêmes panneaux que le robot.
+const COMMUNE = lire('src', 'fichecommune.jsx');
+const DISTRIBUTEUR = lire('src', 'fichedistributeur.jsx');
 
 /** Le corps d'une fonction de premier niveau d'App.jsx. */
 const corps = (nom) => {
@@ -90,6 +93,10 @@ test('les panneaux de Système et de la fiche du robot aussi', () => {
   assert.ok(constante(SYSTEME, 'SYS_PANNEAU').includes('border: LISERE'), 'Système : Charge, Versions, Journal, Réseau');
   assert.ok(constante(SYSTEME, 'SYS_CARTE').includes('...CARTE_MAISON'), 'Système : les tuiles partent du gabarit commun');
   assert.ok(constante(ROBOT, 'PANNEAU').includes('border: LISERE'), 'la fiche du robot');
+  // Le distributeur : ses panneaux viennent du socle commun, qui porte le trait.
+  assert.ok(constante(COMMUNE, 'PANNEAU').includes('border: LISERE'), 'le socle des fiches à onglets');
+  assert.ok(/^import \{[^}]*\bPANNEAU\b[^}]*\} from '\.\/fichecommune\.jsx';$/m.test(DISTRIBUTEUR), 'la fiche du distributeur prend le panneau du socle');
+  assert.ok(!/const PANNEAU = \{/.test(DISTRIBUTEUR), 'pas de panneau à elle, qui pourrait perdre le trait');
 });
 
 test('plus aucune surface de carte avec `border: \'none\'` en dur', () => {
@@ -97,7 +104,7 @@ test('plus aucune surface de carte avec `border: \'none\'` en dur', () => {
   // le même objet de style ne doit pas être effacé. Les boutons et puces
   // posés SUR une carte ont leur propre fond : ils ne sont pas concernés.
   const motif = /linear-gradient\(180deg,var\(--o-surfA\),var\(--o-surfB\)\)[`']?,?\s*(?:\n\s*)?border: 'none'/g;
-  for (const [f, src] of [['App.jsx', APP], ['systeme.jsx', SYSTEME], ['ficherobot.jsx', ROBOT], ['styles.js', lire('src', 'styles.js')]]) {
+  for (const [f, src] of [['App.jsx', APP], ['systeme.jsx', SYSTEME], ['ficherobot.jsx', ROBOT], ['fichecommune.jsx', COMMUNE], ['fichedistributeur.jsx', DISTRIBUTEUR], ['styles.js', lire('src', 'styles.js')]]) {
     const vus = [...src.matchAll(motif)].map(m => src.slice(0, m.index).split('\n').length);
     assert.deepEqual(vus, [], f + ' : une surface de carte efface encore son liseré, ligne(s) ' + vus.join(', '));
   }

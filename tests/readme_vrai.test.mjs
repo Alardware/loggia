@@ -97,6 +97,52 @@ test('ce que le README dit se désigner « sur la page concernée » a bien un �
   assert.match(presence, /input_boolean/, 'Règles › Présence ne désigne plus le mode invité');
 });
 
+test('le distributeur : le README dit d’où vient son planning, dans l’ordre où le serveur le lit', () => {
+  /* « Piloté par automations » est resté vrai jusqu'au 05/10 (ADR 0155) : le
+   * planning était une liste SAISIE dans Paramètres. Il se lit maintenant dans
+   * le programme de l'appareil, puis dans les automatisations qui le
+   * commandent, sinon dans le planning de Loggia — l'ordre de `source_active`.
+   * Le README le dit, et ce test tient la phrase contre le code. */
+  const debut = README.indexOf('- un **distributeur de croquettes**');
+  assert.ok(debut >= 0, 'le README ne présente plus le distributeur dans « Ce qui demande une configuration »');
+  const fin = README.indexOf('\n- ', debut + 3);
+  const ligne = README.slice(debut, fin < 0 ? undefined : fin).replace(/\s+/g, ' ');
+  assert.ok(!/piloté par automations/.test(ligne), 'le README dit encore « piloté par automations » : le planning ne se saisit plus');
+  const ordre = ["**programme de l'appareil**", '**automatisations**', '**planning de Loggia**']
+    .map(m => ligne.indexOf(m));
+  assert.ok(ordre.every(i => i >= 0), 'la ligne du distributeur ne nomme plus ses trois sources : ' + ligne);
+  assert.ok(ordre[0] < ordre[1] && ordre[1] < ordre[2], 'les sources ne sont plus dans l’ordre du serveur : ' + ligne);
+  assert.match(ligne, /jamais à leur nom/, 'le README ne dit plus comment une automatisation se reconnaît');
+  // Le code dit la même chose : l'appareil, puis les automatisations, puis Loggia.
+  const py = lire('custom_components', 'loggia', 'distributeurs.py');
+  const corps = py.slice(py.indexOf('def source_active('), py.indexOf('\ndef ', py.indexOf('def source_active(') + 5));
+  const rangs = ['"appareil"', '"automatisations"', '"loggia"'].map(m => corps.indexOf('return ' + m));
+  assert.ok(rangs.every(i => i >= 0) && rangs[0] < rangs[1] && rangs[1] < rangs[2],
+    'source_active ne lit plus les sources dans l’ordre que le README annonce');
+  /* Les trois promesses du planning de Loggia, tenues par le serveur (05/10,
+   * contradicteur) : proposé seulement s'il sait commander (`refus_ajout`),
+   * distribué par un tic de Home Assistant, écran fermé, et retenu au départ
+   * quand une source supérieure distribue (`async_lancer`). */
+  assert.match(ligne, /si Loggia sait le commander/, 'le README promet le planning de Loggia même sans commande');
+  assert.match(py.slice(py.indexOf('def refus_ajout('), py.indexOf('def peut_planifier(')), /REFUS_COMMANDE if commande is None/,
+    'le planning de Loggia ne dépend plus d’une commande : le README dit faux');
+  assert.match(ligne, /écran fermé/, 'le README ne dit plus que Home Assistant distribue seul');
+  assert.match(py, /async_track_time_change\(/, 'plus aucun tic côté serveur : le planning de Loggia dépendrait de l’écran');
+  const lancer = py.slice(py.indexOf('async def async_lancer('), py.indexOf('async def async_config('));
+  assert.ok(lancer.length > 0 && lancer.indexOf('superieure_active(') >= 0
+    && lancer.indexOf('superieure_active(') < lancer.indexOf('da.envoi('),
+    'async_lancer n’écarte plus le repas avant l’envoi quand une autre source distribue : le README dit faux');
+  // Les onglets que le README promet sont ceux de la fiche.
+  const fiche = lire('src', 'fichedistributeur.jsx');
+  for (const o of ['Accueil', 'Planning', 'Historique', 'Entretien']) {
+    assert.ok(ligne.includes(o), `le README ne nomme plus l’onglet ${o}`);
+    assert.ok(fiche.includes(`tr('${o}')`), `la fiche du distributeur n’a plus d’onglet ${o}`);
+  }
+  // Plus rien à saisir : Paramètres n'offre plus la liste de repas.
+  assert.ok(!lire('src', 'views', 'parametres.jsx').includes("tr('Repas de la journée')"),
+    'Paramètres offre de nouveau une liste de repas : le README dirait faux');
+});
+
 test('les paramètres d’aperçu de la démo existent, et « lang » couvre toutes les langues', async () => {
   /* Le README annonçait `lang=fr|en` bien après l'arrivée des cinq autres :
    * la démo en accepte sept, et son texte en promettait deux. Un paramètre

@@ -109,7 +109,8 @@ def banc(creer_store):
 # ── Le schema : ce que Home Assistant accepte vraiment ──────────────────────
 
 def test_toutes_les_commandes_sont_enregistrees(banc):
-    assert len(banc.hass.commandes) == 32, sorted(banc.hass.commandes)
+    # 34 depuis le 05/10 : l'etat et le planning du distributeur (ADR 0155).
+    assert len(banc.hass.commandes) == 34, sorted(banc.hass.commandes)
 
 
 def test_aucune_commande_ne_declare_id(banc):
@@ -401,3 +402,83 @@ def test_un_planning_de_trop_se_refuse_par_son_code(creer_store):
     cx = Connexion(uid="u-papa", admin=True)
     lancer(envoyer(hass, cx, {"id": 76, "type": "loggia/robots/config", "patch": {"plannings": []}}))
     assert cx.erreurs == [(76, "trop_de_plannings", "trop de plannings, au plus : 24")], cx.erreurs
+
+
+# ── Le distributeur (05/10, ADR 0155) ───────────────────────────────────────
+#
+# `etat` est ouverte a tout compte, mais rend ce que CE compte a le droit de
+# lire : c'est la session qui le dit (`connection.user`), jamais le message.
+# `config` ecrit le planning de la maison : administrateurs seulement, et
+# « trop de repas » se dit par son code.
+
+class Distributeurs:
+    def __init__(self):
+        self.lus = []
+        self.ecrits = []
+
+    async def async_etat(self, user=None, detail=False):
+        self.lus.append((user.id, user.is_admin, detail))
+        return {"source": None, "vu_par": user.id}
+
+    async def async_enregistrer(self, patch):
+        refus = charger("refus")
+        if len(patch.get("repas") or []) > 12:
+            raise refus.RefusNomme("trop_de_repas", "trop de repas, au plus", 12)
+        self.ecrits.append(patch)
+        return {"appareil": None, "repas": patch.get("repas") or []}
+
+
+@pytest.fixture
+def banc_distributeurs(creer_store):
+    module = charger("websocket_api")
+    hass = Hass()
+    dis = Distributeurs()
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}),
+                          acces_distributeurs=lambda: dis)
+    return types.SimpleNamespace(hass=hass, dis=dis)
+
+
+def test_l_etat_du_distributeur_se_lit_de_tout_compte_sous_ses_droits(banc_distributeurs):
+    b = banc_distributeurs
+    ordinaire, admin = Connexion(admin=False), Connexion(uid="u-papa", admin=True)
+    lancer(envoyer(b.hass, ordinaire, {"id": 80, "type": "loggia/distributeurs/etat"}))
+    lancer(envoyer(b.hass, admin, {"id": 81, "type": "loggia/distributeurs/etat", "detail": True}))
+    assert ordinaire.erreurs == [] and admin.erreurs == []
+    assert b.dis.lus == [("u-lea", False, False), ("u-papa", True, True)], "le compte ou le detail se perdent"
+    assert ordinaire.resultats == [(80, {"source": None, "vu_par": "u-lea"})]
+    # Le compte vient de la session : un champ du client est refuse.
+    lancer(envoyer(b.hass, ordinaire, {"id": 82, "type": "loggia/distributeurs/etat", "user_id": "u-papa"}))
+    assert [e[1] for e in ordinaire.erreurs] == ["invalid_format"]
+
+
+def test_le_planning_du_distributeur_reste_aux_administrateurs(banc_distributeurs):
+    b = banc_distributeurs
+    patch = {"repas": [{"id": "r1", "heure": "07:30", "jours": [0], "portions": 1, "actif": True}]}
+    ordinaire = Connexion(admin=False)
+    lancer(envoyer(b.hass, ordinaire, {"id": 83, "type": "loggia/distributeurs/config", "patch": patch}))
+    assert [e[1] for e in ordinaire.erreurs] == ["unauthorized"] and b.dis.ecrits == []
+    admin = Connexion(uid="u-papa", admin=True)
+    lancer(envoyer(b.hass, admin, {"id": 84, "type": "loggia/distributeurs/config", "patch": patch}))
+    assert admin.erreurs == [] and b.dis.ecrits == [patch]
+    mid, reponse = admin.resultats[-1]
+    # L'etat avec, sous les droits de l'administrateur : l'ecran redessine.
+    assert mid == 84 and reponse["config"]["repas"] == patch["repas"] and reponse["etat"]["vu_par"] == "u-papa"
+
+
+def test_trop_de_repas_se_refuse_par_son_code(banc_distributeurs):
+    b = banc_distributeurs
+    admin = Connexion(uid="u-papa", admin=True)
+    trop = [{"id": "r%d" % i, "heure": "07:00", "jours": [0]} for i in range(13)]
+    lancer(envoyer(b.hass, admin, {"id": 85, "type": "loggia/distributeurs/config", "patch": {"repas": trop}}))
+    assert [e[1] for e in admin.erreurs] == ["trop_de_repas"], admin.erreurs
+    assert _nomme(admin.erreurs[0][2]) == "12"
+
+
+def test_sans_module_le_distributeur_le_dit(creer_store):
+    module = charger("websocket_api")
+    hass = Hass()
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}))
+    cx = Connexion(uid="u-papa", admin=True)
+    lancer(envoyer(hass, cx, {"id": 86, "type": "loggia/distributeurs/etat"}))
+    lancer(envoyer(hass, cx, {"id": 87, "type": "loggia/distributeurs/config", "patch": {}}))
+    assert [e[1] for e in cx.erreurs] == ["not_available", "not_available"], cx.erreurs

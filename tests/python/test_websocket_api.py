@@ -17,6 +17,9 @@ ADMIN_SEULEMENT = [
     "WS_INT_AFFECTER", "WS_INT_ECOUTER", "WS_VOL_CONFIG", "WS_FEN_CONFIG", "WS_PRE_CONFIG",
     "WS_NUI_CONFIG", "WS_VEI_CONFIG", "WS_SCN_CONFIG", "WS_ROB_CONFIG", "WS_REG_DEGELER",
     "WS_PIN_DEFINIR",
+    # Le planning de Loggia pour le distributeur (05/10, ADR 0155) : celui de
+    # la maison, comme celui des robots.
+    "WS_DIS_CONFIG",
 ]
 # Ce qui se LIT, ou se fait, depuis tout compte connecte — a dessein.
 OUVERTES = [
@@ -33,6 +36,9 @@ OUVERTES = [
     # Ranger les scenarios (audit du 03/10) : de l'agencement (ADR 0125),
     # comme ranger ses cartes — l'ordre seul, de scenarios que la maison a.
     "WS_SCN_ORDRE",
+    # L'etat du distributeur (05/10, ADR 0155) : un RESUME des automatisations
+    # qui le commandent, filtre par les droits du compte — jamais raw_config.
+    "WS_DIS_ETAT",
 ]
 
 
@@ -98,3 +104,16 @@ def test_ranger_les_scenarios_ne_mene_qu_a_l_ordre():
     assert "async_enregistrer" not in corps, "la porte ouverte mene a la configuration des scenarios"
     # Relecture du 03/10 : un plafond du magasin y repartait en `invalid_format`.
     assert "_relayer(connection, msg, err)" in corps, "un refus nomme du magasin perd son code en rangeant"
+
+
+def test_l_etat_du_distributeur_passe_le_compte_et_le_detail():
+    """05/10 (ADR 0155) : `etat` est ouverte, mais ce qu'elle rend est filtre
+    par les droits du compte — c'est `connection.user` qui le porte, jamais un
+    champ du client. `detail` (la fiche ouverte) est le seul cas ou la Tuya
+    officielle est interrogee."""
+    corps = SOURCE[SOURCE.index("async def handle_dis_etat"):SOURCE.index("async def handle_dis_config")]
+    assert re.search(r"distributeurs\.async_etat\(\s*connection\.user, detail=bool\(msg\.get\(\"detail\"\)\)\)", corps)
+    assert 'vol.Optional("detail", default=False): bool' in _bloc("WS_DIS_ETAT")
+    config = SOURCE[SOURCE.index("async def handle_dis_config"):SOURCE.index("# ── Suivre la configuration")]
+    assert "_relayer(connection, msg, err)" in config, "trop de repas perd son code"
+    assert 'await distributeurs.async_enregistrer(msg["patch"])' in config

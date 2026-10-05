@@ -60,8 +60,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # autres, il doit se taire avant qu'ils ne s'arretent.
 MODULES_VIVANTS = (
     "rechargement",
-    "alertes", "fenetres", "interrupteurs", "minuteurs", "nuit", "presence",
-    "robots", "scenarios", "sirene", "veilles", "volets", "regles",
+    "alertes", "distributeurs", "fenetres", "interrupteurs", "minuteurs", "nuit",
+    "presence", "robots", "scenarios", "sirene", "veilles", "volets", "regles",
 )
 
 
@@ -138,7 +138,8 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                               acces_scenarios=lambda: hass.data.get(DOMAIN, {}).get("scenarios"),
                               acces_robots=lambda: hass.data.get(DOMAIN, {}).get("robots"),
                               acces_minuteurs=lambda: hass.data.get(DOMAIN, {}).get("minuteurs"),
-                              acces_sirene=lambda: hass.data.get(DOMAIN, {}).get("sirene"))
+                              acces_sirene=lambda: hass.data.get(DOMAIN, {}).get("sirene"),
+                              acces_distributeurs=lambda: hass.data.get(DOMAIN, {}).get("distributeurs"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
@@ -234,6 +235,18 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["robots"] = LoggiaRobots(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : planning des robots indisponible")
+
+    # Le distributeur de croquettes (05/10, ADR 0155) : ses sources de repas
+    # (programme de l'appareil, automatisations qui le commandent) et le
+    # planning de Loggia, qui part meme ecran ferme. Apres les robots, dont il
+    # reprend le format. Meme regime que les regles ci-dessus.
+    if not data.get("distributeurs") and data.get("store") and data.get("regles"):
+        try:
+            from .distributeurs import LoggiaDistributeurs
+
+            data["distributeurs"] = LoggiaDistributeurs(hass, data["store"], data.get("regles"))
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : distributeur de croquettes indisponible")
 
     # Les minuteurs d'extinction : « eteindre dans 30 min », tenus ICI et non
     # plus dans l'onglet du navigateur (21/09). Meme regime que les regles.

@@ -126,6 +126,19 @@ const REFUS = {
   trop_de_scenarios: (k, n) => (typeof n === 'number' ? tr('Scénario non enregistré — {n} scénarios personnels au plus', { n }) : null),
   trop_d_actions: (k, n) => (typeof n === 'number' ? tr('Scénario non enregistré — {n} actions au plus', { n }) : null),
   trop_de_plannings: (k, n) => (typeof n === 'number' ? tr('Planning non enregistré — {n} plannings au plus', { n }) : null),
+  /* Le planning de Loggia du distributeur (ADR 0155, 05/10). `trop_de_repas`
+   * nomme sa limite (MAX_REPAS, distributeurs.py), comme les plannings du robot. */
+  trop_de_repas: (k, n) => (typeof n === 'number' ? tr('Planning non enregistré — {n} repas au plus', { n }) : null),
+  /* `ajout_refuse` nomme sa RAISON : `commande` (Loggia ne sait pas commander
+   * ce distributeur) ou `source` (le programme de l'appareil ou une
+   * automatisation distribue déjà). Le geste ordinaire qui le provoque : une
+   * automatisation créée depuis le dernier sondage de la fiche. Toute autre
+   * raison se lit comme `source`, la raison par défaut du serveur
+   * (`async_enregistrer` part de REFUS_SOURCE) — et celle qui ne promet rien
+   * de faux : « déjà programmés » n'invite pas à réessayer (05/10). */
+  ajout_refuse: (k) => (k === 'commande'
+    ? tr('Repas non ajouté — Loggia ne sait pas commander ce distributeur')
+    : tr('Repas non ajouté — l’appareil ou vos automatisations programment déjà les repas')),
 };
 
 /**

@@ -53,7 +53,7 @@ import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
   BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere, CroixFeuille, TitreFeuille,
-  useIdTitreFeuille, NomFeuille, Barriere, Surface, nomCarte, Bascule
+  useIdTitreFeuille, NomFeuille, Barriere, Surface, nomCarte
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
@@ -77,7 +77,7 @@ import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure,
 import { pilesMaison } from './piles.js';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
 import { armerReleve } from './releve.js';
-import { useOptimiste, useDemandes, enVol } from './optimiste.js';
+import { useOptimiste } from './optimiste.js';
 import { sysKeys } from './sysconf.js';
 import { consoJourKwh, autosuffisance, resumeEnergie } from './bilan.js';
 import { useAssistant } from './assistant.js';
@@ -85,11 +85,13 @@ import { CamLive } from './camera.jsx';
 import { colonnesCam, camDispoDe, poserCamDispo, camDisposDe, camSerre, CAM_AUTO } from './camdispo.js';
 import { decalageServeur, resteMinuteur, decompte } from './minuteur.js';
 import { disposer, poser, premiereLibre, hauteur as hauteurCarte, cellulePointee, colonnesPour, nettoyer } from './placement.js';
-import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
+import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, verdictsPlante } from './objets.js';
 import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { CARTE_RAIL, CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE, LISERE } from './styles.js';
 import { fmtWatts, relTime, minutesDepuisHeure, nombre } from './format.js';
-import { voletMode, voletDays, croqHaids, croqMeals, hueScripts, notifIds, roomHidden, plantsCfg } from './lectures.js';
+import { voletMode, voletDays, croqHaids, hueScripts, notifIds, roomHidden, plantsCfg } from './lectures.js';
+import { lireDistributeur, envoiDistribuer, niveauDuBac, prochainRepas, dernierRepas, TABLES as TABLES_DISTRIBUTEUR } from './distributeur.js';
+import { useEtatDistributeur, lireEtatDistributeur, poserEtatDistributeur } from './distributeuretat.js';
 import { PinModal } from './pinmodal.jsx';
 import { reposerFocus, titreDeVue } from './focus.js';
 import { AmbientOverlay } from './ecranveille.jsx';
@@ -104,6 +106,9 @@ import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as POR
 // La fiche d'un robot — aspirateur ou tondeuse (ADR 0042, en feuille depuis le
 // 18/09) : une seule, chargee a la demande par `FicheRobot`.
 const FicheRobotContent = lazyRecharge(() => import('./ficherobot.jsx'));
+// La fiche du distributeur, à onglets comme celle du robot (ADR 0155, 05/10) :
+// chargée à la demande par `FicheDistributeur`, la coquille posée ici.
+const FicheDistributeurContent = lazyRecharge(() => import('./fichedistributeur.jsx'));
 /* L'assistant : sa popup tire l'orbe, qui tire Three.js. Rien de tout cela
  * ne se telecharge tant qu'on ne lui a pas parle. */
 const AssistantSheet = lazyRecharge(() => import('./views/assistant.jsx'));
@@ -115,7 +120,7 @@ const AssistantSheet = lazyRecharge(() => import('./views/assistant.jsx'));
 const OrbeMini = lazyRecharge(() => import('./orbe.jsx'), { decor: true });
 import {
   LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle,
-  feederScript, enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, droitsDe, usersSig,
+  enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, droitsDe, usersSig,
   vacSensors, iconesCfg, compteOrdinaire
 } from './state.js';
 // L'accueil de premiere installation ne sert qu'une fois : son code n'a pas a
@@ -5306,8 +5311,7 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
   const cartes = useMemo(() => {
     if (!composites) return [];
     const out = [];
-    const croq = croqHaids();
-    if (croq.reservoir || croq.portionWeight) out.push({ cle: 'obj:feeder', nom: tr('Distributeur de croquettes'), sous: dc ? dc.distributeur().sous : tr('Distributeur'), fi: 'paw', rgb: 'var(--o-orange-rgb)', piece: null });
+    if (distributeurConfigure()) out.push({ cle: 'obj:feeder', nom: tr('Distributeur de croquettes'), sous: dc ? dc.distributeur().sous : tr('Distributeur'), fi: 'paw', rgb: 'var(--o-orange-rgb)', piece: null });
     plantsCfg().forEach(p => {
       const pl = dc ? dc.plante(p.base) : null;
       const v = pl ? verdictCartePlante(pl) : null;
@@ -6075,34 +6079,61 @@ function useDomainCards(hass, { onNav = null } = {}) {
   const [plantPop, setPlantPop] = useState(null);
   const numDe = (id, d = null) => { const e = id && S[id]; if (!e) return d; const n = parseFloat(e.state); return isNaN(n) ? d : n; };
   const appel = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  /* Le distributeur : reservoir, prochaine ration, et le « distribuer » de
-   * l'APPAREIL (un select `feed` dont START lance une ration) — le script
-   * maison ne reste qu'en repli. Le bac en grammes et les repas du jour (les
-   * jours de reserve, c'est la fiche qui les divise) ; le dernier repas
-   * d'apres le compteur du jour ; la portion, un nombre de l'appareil. */
+  /* Le distributeur (ADR 0155, 05/10) : ce que la carte montre, lu sur
+   * l'APPAREIL désigné (`lireDistributeur`, distributeur.js). « Distribuer »
+   * prend la commande de CET appareil — plus le premier `select.*feed` de la
+   * maison, plus un script deviné à son nom : un aquarium à côté, et c'est lui
+   * qu'on nourrissait. Une commande qui ÉCRIT une quantité part pour UNE
+   * portion (un pas de l'entité), comme avant ; la fiche, elle, en règle le
+   * nombre. Muette (commande `unavailable`, appareil hors ligne), elle
+   * disparaît : on ne dessine pas un bouton qui ne ferait rien.
+   * Le prochain repas vient du SERVEUR (`loggia/distributeurs/etat`, lu dans
+   * le cache que la carte tient ouvert) : programme de l'appareil,
+   * automatisations qui le commandent, planning de Loggia — l'ancienne liste
+   * de Paramètres n'est plus un planning. Une heure qu'on ne peut pas déduire
+   * ne s'affiche pas.
+   * `mort` (ADR 0048) : le réservoir muet, OU la commande muette, OU l'appareil
+   * hors ligne — chez l'utilisateur, le réservoir est une aide qui ne tombe
+   * jamais : son distributeur débranché n'aurait jamais eu de liseré. */
   const muet = (id) => !!id && (!S[id] || S[id].state === 'unavailable');
   const distributeur = () => {
     const croq = croqHaids();
-    const pct = Math.max(0, Math.min(100, Math.round((numDe(croq.reservoir, 0) || 0) / croqMax(S) * 100)));
-    const ration = prochaineRation(S);
-    const feed = (() => {
-      const fid = Object.keys(S).find(x => x.indexOf('select.') === 0 && /feed$/.test(x) && S[x].attributes && Array.isArray(S[x].attributes.options) && S[x].attributes.options.some(o => /^(start|feed)$/i.test(o)));
-      if (fid) return () => appel('select', 'select_option', { entity_id: fid, option: S[fid].attributes.options.find(o => /^(start|feed)$/i.test(o)) });
-      const sc = feederScript(hass, loggiaEnt('feeder', null));
-      return sc ? () => appel('script', 'turn_on', { entity_id: sc }) : null;
+    const lu = lireDistributeur(LOGGIA_INDEX, S, loggiaEnt('feeder', null));
+    const niveau = niveauDuBac(S, croq.reservoir, croqMax(S));
+    const pct = niveau.pct;
+    const etatSrv = lireEtatDistributeur().etat;
+    const capteur = lu.prochainCapteur && S[lu.prochainCapteur] ? S[lu.prochainCapteur].state : null;
+    // L'état VIVANT d'une automatisation reconnue, sinon celui de la réponse.
+    const allumee = (a) => (S[a.entity_id] ? S[a.entity_id].state === 'on' : a.etat === 'on');
+    const pr = prochainRepas(etatSrv, Date.now(), { capteur, allumee });
+    const ration = pr ? { time: pr.heure } : null;
+    const vis = lu.commande && !(lu.enLigne.mort && (lu.enLigne.raison === 'commande' || lu.enLigne.raison === 'connectivite'));
+    const envoi = vis ? envoiDistribuer(lu.commande, 1) : null;
+    const feed = envoi ? () => appel(envoi.domaine, envoi.service, envoi.data) : null;
+    const conf = loggiaEnt('feeder', null) || {};
+    const ficheId = (typeof conf.haid === 'string' && conf.haid) || (lu.commande && lu.commande.entity_id) || (lu.portion && lu.portion.entity_id) || null;
+    /* Le dernier repas : le compteur désigné, sinon ce que l'appareil en dit (ou
+     * la dernière automatisation reconnue). Un compteur du JOUR à zéro n'a rien
+     * distribué aujourd'hui (05/10, contradicteur) : sa remise à zéro de minuit
+     * affichait « dernier repas 00:00 » jusqu'au premier repas. Un compteur
+     * qui ne dit RIEN non plus (05/10) : `unavailable`, `unknown` donnent
+     * `null`, qui passait le `!== 0` — l'heure où l'appareil était tombé
+     * devenait « dernier repas » sur la carte, quand la fiche disait 07:30. */
+    const dernier = (() => {
+      const e = croq.distribuees && S[croq.distribuees];
+      const n = numDe(croq.distribuees, null);
+      if (e && e.last_changed && n != null && n !== 0) return heureDe(e.last_changed);
+      const dr = dernierRepas(lu, S, etatSrv);
+      return dr ? heureDe(new Date(dr.t).toISOString()) : null;
     })();
-    const ficheId = (loggiaEnt('feeder', null) || {}).haid || Object.keys(S).find(id => id.indexOf('number.') === 0 && /serving_size$/.test(id)) || null;
-    const repas = croqMeals();
-    /* Le bac en grammes, pas ses jours (relecture du 04/10) : divisés ici par
-     * TOUS les repas de la configuration, ils comptaient les repas coupés —
-     * « Environ 8 jours de réserve » au-dessus de « 0 actifs », dans la même
-     * fiche. C'est elle qui divise, par les repas qu'elle montre allumés. */
-    const grammes = numDe(croq.reservoir, null);
-    const dernier = (() => { const e = croq.distribuees && S[croq.distribuees]; return e && e.last_changed ? heureDe(e.last_changed) : null; })();
-    const portion = (() => { const id = croq.portionWeight; const e = id && S[id]; if (!e) return null; const a = e.attributes || {}; return { id, valeur: numDe(id, 0), min: Number(a.min) || 0, max: Number(a.max) || 100, pas: Number(a.step) || 1 }; })();
-    const onRempli = (croq.reservoir && String(croq.reservoir).indexOf('input_number.') === 0) ? () => appel('input_number', 'set_value', { entity_id: croq.reservoir, value: croqMax(S) }) : null;
-    const sous = [tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
-    return { pct, ration, feed, ficheId, repas, grammes, dernier, portion, onRempli, sous, mort: muet(croq.reservoir) };
+    const onRempli = (croq.reservoir && String(croq.reservoir).indexOf('input_number.') === 0 && !muet(croq.reservoir)) ? () => appel('input_number', 'set_value', { entity_id: croq.reservoir, value: croqMax(S) }) : null;
+    /* Une anomalie ACTIVE passe en tête, sous le mot de la fiche (05/10,
+     * relecture « écran ») : un Petlibro n'a pas de réservoir en %, rien ne
+     * passait au rouge, et « Bac presque vide » ne se lisait qu'en ouvrant la
+     * fiche. « Distribuer » reste : un bac presque vide distribue encore. */
+    const alerte = lu.alerte ? lu.alerte.mot : null;
+    const sous = [alerte, pct == null ? null : tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
+    return { pct, ration, feed, ficheId, grammes: niveau.grammes, dernier, onRempli, sous, alerte, mort: lu.enLigne.mort };
   };
   // Les plantes : leurs capteurs, reconnus a leur classe, et leur verdict.
   const plante = (base) => {
@@ -6124,10 +6155,7 @@ function useDomainCards(hass, { onNav = null } = {}) {
       const z = zone || climateZones(S).find(x => x.id === k.slice(5));
       return z ? <RoomPilotCard zone={z} hass={hass} onOpen={setPilotPop} titre={label} /> : null;
     }
-    if (k === 'obj:feeder') {
-      const d = distributeur();
-      return <RoomFeederCard chip={chip} mort={d.mort} nom={label || tr('Distributeur')} pct={d.pct} sub={d.sous} onFeed={d.feed} onRempli={d.onRempli} onOpen={() => setFeederPop(true)} />;
-    }
+    if (k === 'obj:feeder') return <CarteDistributeur chip={chip} lire={distributeur} nom={label || tr('Distributeur')} onOpen={() => setFeederPop(true)} />;
     if (k.indexOf('plant:') === 0) {
       const pl = plante(k.slice(6));
       if (!pl) return null;
@@ -6162,7 +6190,7 @@ function useDomainCards(hass, { onNav = null } = {}) {
       {lockPop && <RoomLockSheet id={lockPop} hass={hass} onClose={() => setLockPop(null)} />}
       {binPop && <RoomBinarySheet id={binPop} hass={hass} onClose={() => setBinPop(null)} />}
       {robotPop && <FicheRobot id={robotPop} hass={hass} onClose={() => setRobotPop(null)} />}
-      {feederPop && (() => { const d = distributeur(); return <FicheDistributeur hass={hass} nom={tr('Distributeur de croquettes')} pct={d.pct} grammes={d.grammes} dernier={d.dernier} ration={d.ration} repas={d.repas} portion={d.portion} feed={d.feed} onRempli={d.onRempli} ficheId={d.ficheId} mort={d.mort} onClose={() => setFeederPop(false)} />; })()}
+      {feederPop && <FicheDistributeur hass={hass} onClose={() => setFeederPop(false)} />}
       {plantPop && <FichePlante pl={plantPop} onClose={() => setPlantPop(null)} />}
     </>
   );
@@ -6819,80 +6847,62 @@ function FichePlante({ pl, onClose }) {
   );
 }
 
-/* Fiche du distributeur (maquettes du 14/09) : le bac et ses jours de
- * reserve, le dernier repas, les repas du jour, la portion (le nombre que le
- * distributeur expose), une ration hors programme, « bac rempli », et
- * l'appareil entier. Pas de seuil d'alerte ni de rappel dans la fiche : le
- * capteur du reservoir se DESIGNE dans Regles > Veilles > Consommables (ADR
- * 0006), et c'est la veille qui previent — on ne dessine pas ici une bascule
- * qui ne ferait rien.
- *
- * Les repas s'activent ICI depuis le 04/10 : la vue Croquettes est partie
- * (« il n'y a plus de vue speciale pour un appareil, c'est la carte plus sa
- * popup ») et c'etait le seul endroit qui les basculait. Une ligne par repas,
- * son interrupteur sur l'automatisation ou l'`input_boolean` qui le porte, par
- * `homeassistant.turn_on/off` — le service du domaine `automation` echouait
- * en silence sur un `input_boolean`. L'interrupteur montre tout de suite ce
- * qu'on demande (`useDemandes`) : une demande par repas, lue sur la reponse de
- * SA propre entite, qui expire si HA ne repond pas. Entite absente ou
- * indisponible : pas d'interrupteur, on ne dessine pas une bascule qui ne
- * ferait rien. « Distribuer » reste UNE portion. Les jours de réserve se
- * comptent ICI, sur les repas allumés : la fabrique ne passe que le bac en
- * grammes (relecture du 04/10). */
-/* `mort` (05/10) : le réservoir muet, la définition de la carte. Il disait
- * « Réservoir 0 % » en rouge — un bac vide — et proposait « Rempli » sur
- * l'entité morte. */
-function FicheDistributeur({ hass, nom, pct, grammes, dernier, ration, repas, portion, feed, onRempli, ficheId, onClose, mort = false }) {
-  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const valeurPortion = portion ? portion.valeur : null;
-  const [ovPortion, setOvPortion] = useOptimiste(valeurPortion);
-  const pv = ovPortion != null ? ovPortion : valeurPortion;
-  const poserPortion = (v) => { if (!portion) return; const nv = Math.max(portion.min, Math.min(portion.max, v)); setOvPortion(nv); call('number', 'set_value', { entity_id: portion.id, value: nv }); };
-  const [appareil, setAppareil] = useState(false);
-  const S = (hass && hass.states) || {};
-  const [ovRepas, demanderRepas] = useDemandes();
-  const autoOn = (id) => { const e = S[id]; return e ? e.state === 'on' : true; };
-  const lignesRepas = repas.map(m => ({ ...m, mort: !!m.auto && (!S[m.auto] || S[m.auto].state === 'unavailable'),
-    on: enVol(ovRepas, m.id, S && S[m.auto], autoOn(m.auto)) }));
-  const actifs = lignesRepas.filter(m => m.on && !m.mort).length;
-  /* Les jours de réserve, sur les SEULS repas allumés (relecture du 04/10) :
-   * 760 g et deux repas de 45 g donnaient 8 jours avec les deux coupés, et 8
-   * encore avec un seul (il en reste 16). `m.on` suit la demande en vol, comme
-   * l'interrupteur, et c'est la règle de `prochaineRation` : une entité ABSENTE
-   * compte encore — mieux vaut sous-estimer la réserve que la gonfler. */
-  const jours = joursDeReserve(grammes, lignesRepas.filter(m => m.on));
-  const basculerRepas = (m) => {
-    demanderRepas(m.id, !m.on, S && S[m.auto], autoOn(m.auto));
-    call('homeassistant', m.on ? 'turn_off' : 'turn_on', { entity_id: m.auto });
-  };
-  const sous = [mort ? null : tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
-  const orange = 'var(--o-orange)';
+/* Le distributeur existe dès qu'un champ de Paramètres désigne quelque chose
+ * (ADR 0155, 05/10) : le réservoir ou la portion comme avant, et désormais son
+ * APPAREIL, sa commande (`haid`) ou son script — un Petlibro n'a pas de
+ * réservoir en grammes (« adapté à tous », ADR 0133). La même règle fait
+ * exister sa carte dans Objets et dans la bibliothèque du composeur. */
+function distributeurConfigure() {
+  const c = loggiaEnt('feeder', null);
+  if (!c || typeof c !== 'object') return false;
+  const id = (v) => typeof v === 'string' && v.trim().indexOf('.') > 0;
+  const croq = croqHaids();
+  return !!(croq.reservoir || croq.portionWeight) || id(c.haid) || id(c.script) || (typeof c.appareil === 'string' && c.appareil.trim() !== '');
+}
+
+/* La carte du distributeur : `RoomFeederCard` telle quelle, plus l'abonnement
+ * au cache de l'état serveur (distributeuretat.js) tant qu'elle est montée —
+ * c'est lui qui donne son prochain repas, relu toutes les 60 s, et rien ne
+ * l'interroge quand aucune carte n'est à l'écran. */
+function CarteDistributeur({ chip, lire, nom, onOpen }) {
+  useEtatDistributeur(distributeurConfigure());
+  const d = lire();
+  return <RoomFeederCard chip={chip} mort={d.mort} nom={nom} pct={d.pct} sub={d.sous} onFeed={d.feed} onRempli={d.onRempli} onOpen={onOpen} />;
+}
+
+/* La fiche du distributeur — une feuille à onglets comme celle du robot
+ * (ADR 0155, 05/10) : Accueil, Planning, Historique, Entretien, et la roue
+ * Réglages. Le contenu (fichedistributeur.jsx) se charge à la demande, DANS une
+ * frontière Suspense ; ici ne reste que la coquille, sur le patron de
+ * `FicheRobot` :
+ *  - la réponse du serveur, demandée AVEC le détail tant que la fiche est
+ *    ouverte (15 s), par le cache partagé avec la carte ;
+ *  - un abonnement à ses entités ET aux automatisations reconnues : le poll de
+ *    la vue derrière ne les connaît pas, et sans lui une bascule resterait
+ *    figée (régression du 01/10 : 6 007 ms) ;
+ *  - l'épingle de l'ENTITÉ principale (la commande désignée, sinon celle de
+ *    l'appareil, sinon la portion) : `BoutonEpingle` épingle une entité sur la
+ *    carte de son appareil, `obj:feeder` n'en a pas ;
+ *  - la fiche universelle de l'appareil, par-dessus, depuis ses réglages.
+ * Plus de liste de repas ici : l'ancienne liste de Paramètres a cessé d'être
+ * un planning (elle ne sert plus que d'indice, côté serveur). */
+function FicheDistributeur({ hass, onClose }) {
+  const conf = loggiaEnt('feeder', null);
+  const lu = lireDistributeur(LOGGIA_INDEX, (hass && hass.states) || {}, conf);
+  const { etat, erreur } = useEtatDistributeur(distributeurConfigure(), { detail: true });
+  const autos = etat && Array.isArray(etat.automatisations) ? etat.automatisations.map(a => a && a.entity_id).filter(x => typeof x === 'string') : [];
+  const hassLive = useHass([...croqKeys(), ...lu.soeurs.map(x => x.id), ...autos]);
+  const H = hassLive || hass;
+  const [fiche, setFiche] = useState(null);
+  const ficheId = (conf && typeof conf.haid === 'string' && conf.haid) || (lu.commande && lu.commande.entity_id) || (lu.portion && lu.portion.entity_id) || null;
   return (
-    <BottomSheet onClose={onClose}>
+    <BottomSheet onClose={onClose} onglets>
       {() => (<>
-        <FicheEntete titre={nom} sous={sous} id={ficheId || null} />
-        <div style={{ marginTop: 4 }}>
-          <FicheRangee premiere titre={tr('Réservoir')} panne={mort} desc={jours == null ? tr('Ce qu’il reste dans le bac') : jours > 1 ? tr('Environ {n} jours de réserve', { n: jours }) : tr('Moins de deux jours de réserve')}
-            droite={mort ? <FicheIndispo /> : <FicheValeur couleur={pct < 25 ? 'var(--o-bad)' : orange}>{pct} %</FicheValeur>} />
-          {dernier && <FicheRangee titre={tr('Dernier repas')} desc={tr('D’après le compteur du jour')} droite={<FicheValeur>{dernier}</FicheValeur>} />}
-          {ration && <FicheRangee titre={tr('Prochaine ration')} desc={tr('Programmée')} droite={<FicheValeur>{ration.time}</FicheValeur>} />}
-          <FicheRangee titre={tr('Repas par jour')} desc={repas.length ? trN(actifs, '{n} actif', '{n} actifs') : tr('Aucun repas programmé')} droite={<FicheValeur>{repas.length}</FicheValeur>} />
-          {lignesRepas.map(m => (
-            <FicheRangee key={m.id} titre={m.time} desc={[m.label, m.g > 0 ? m.g + ' g' : null].filter(Boolean).join(' · ')}
-              droite={!m.auto ? null : m.mort ? <FicheValeur couleur="var(--o-text3)">{tr('Indisponible')}</FicheValeur>
-                : <Bascule on={m.on} nom={tr('Repas de {h}', { h: m.time })} cb={() => basculerRepas(m)} />} />
-          ))}
-          {portion && <FicheRangee titre={tr('Taille de la portion')} desc={tr('Ce que la vis distribue à chaque repas.')}
-            droite={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FicheBouton title={tr('Moins')} onClick={() => poserPortion(pv - portion.pas)}>−</FicheBouton>
-              <FicheValeur couleur={orange}>{pv} g</FicheValeur>
-              <FicheBouton title={tr('Plus')} onClick={() => poserPortion(pv + portion.pas)}>+</FicheBouton>
-            </div>} />}
-          {feed && <FicheRangee titre={tr('Distribuer une portion')} desc={tr('Un repas en plus, hors programmation.')} droite={<FicheBouton icone="paw" onClick={feed}>{tr('Distribuer')}</FicheBouton>} />}
-          {onRempli && !mort && <FicheRangee titre={tr('Réservoir rempli')} desc={tr('Remet le niveau du bac à 100 %.')} droite={<FicheBouton icone="refresh" onClick={onRempli}>{tr('Rempli')}</FicheBouton>} />}
-          {ficheId && <FicheRangee titre={tr('L’appareil')} desc={tr('Tout ce que le distributeur expose.')} droite={<FicheBouton icone="apps" onClick={() => setAppareil(true)}>{tr('Ouvrir')}</FicheBouton>} />}
-        </div>
-        {appareil && <FicheAppareil id={ficheId} hass={hass} onClose={() => setAppareil(false)} />}
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FicheDistributeurContent hass={H} etat={etat} erreur={erreur} cfg={conf} onFiche={setFiche} onEtat={poserEtatDistributeur}
+            epingle={ficheId ? <BoutonEpingle id={ficheId} /> : null} />
+        </Suspense>
+        {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
       </>)}
     </BottomSheet>
   );
@@ -6926,13 +6936,6 @@ const OBJ_FILTRES = () => [
 const OBJ_DOMAINES = ['light', 'cover', 'climate', 'water_heater', 'media_player', 'vacuum', 'lawn_mower', 'lock', 'camera', 'switch', 'fan', 'humidifier', 'valve', 'siren', 'binary_sensor', 'sensor'];
 // L'agencement de la vue : ordre, retraits, ajouts, noms — la meme cle qu'avant la refonte.
 const OBJ_LAYOUT_KEY = 'loggia_objlayout';
-
-/* La prochaine ration du distributeur, d'apres ses repas programmes. */
-function prochaineRation(S) {
-  const d = new Date(); const nowMin = d.getHours() * 60 + d.getMinutes();
-  const mealMin = (t) => { const p = String(t || '').split(':'); return (+p[0]) * 60 + (+p[1] || 0); };
-  return croqMeals().filter(m => !S[m.auto] || S[m.auto].state === 'on').filter(m => mealMin(m.time) > nowMin).sort((a, b) => mealMin(a.time) - mealMin(b.time))[0] || null;
-}
 
 /* Tout ce que la maison pilote, une entree par carte : les zones de chauffage
  * (le fil pilote n'a pas d'entite unique), les lumieres decouvertes, les volets
@@ -6981,12 +6984,21 @@ function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
   //    represente (sa lumiere, son volet, son lecteur) ne revient pas.
   const parAppareil = new Set();
   out.forEach(o => { const a = o.id ? meta(o.id).deviceId : null; if (a) parAppareil.add(a); });
+  /* Le distributeur a SA carte (étape 5) : une fois son appareil connu, ses
+   * entités ne font pas une seconde carte — un capteur, un verrou, une
+   * anomalie de l'appareil (ADR 0155, 05/10). Ses entités désignées non plus. */
+  /* Elles sortent des CANDIDATS seulement (05/10, contradicteur) : posées dans
+   * `pris`, elles bloquaient aussi l'étape 6 — un voyant du distributeur ajouté
+   * À LA MAIN dans l'éditeur n'apparaissait jamais, sans un mot. */
+  const feeder = distributeurConfigure() ? lireDistributeur(LOGGIA_INDEX, S, loggiaEnt('feeder', null)) : null;
+  const duDistributeur = new Set(feeder ? feeder.soeurs.map(x => x.id) : []);
+  if (feeder && feeder.appareil) parAppareil.add(feeder.appareil);
   // Les capteurs d'une plante sont a la plante : ils ne font pas une carte de plus.
   const basesPlantes = plantsCfg().map(p => String(p.base));
   const dUnePlante = (id) => basesPlantes.some(b => id === b || id.indexOf(b + '_') === 0);
   const candidats = [];
   Object.keys(S).forEach(id => {
-    if (pris.has(id) || dUnePlante(id)) return;
+    if (pris.has(id) || duDistributeur.has(id) || dUnePlante(id)) return;
     const d = cvDomain(id); const rang = OBJ_DOMAINES.indexOf(d); if (rang < 0) return;
     const m = meta(id); if (m.hidden || m.disabled || m.category) return;
     const dc = (S[id].attributes || {}).device_class || '';
@@ -6998,9 +7010,10 @@ function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
     if (c.appareil) { if (parAppareil.has(c.appareil)) return; parAppareil.add(c.appareil); }
     entree(c.id, { id: c.id, estLumiere: c.id.indexOf('switch.') === 0 && cvEstLumiere(c.id) });
   });
-  // 5) le distributeur et les plantes : la configuration les nomme.
-  const croq = croqHaids();
-  if (croq.reservoir || croq.portionWeight) entree('obj:feeder', { type: 'feeder', domaine: 'feeder', nom: tr('Distributeur'), actif: !!prochaineRation(S) });
+  // 5) le distributeur et les plantes : la configuration les nomme. « Actif »
+  //    au sens d'objets.js — il FAIT quelque chose : une distribution en cours
+  //    (le capteur de l'appareil), plus « il reste un repas aujourd'hui ».
+  if (feeder) entree('obj:feeder', { type: 'feeder', domaine: 'feeder', nom: tr('Distributeur'), actif: !!feeder.distribue });
   plantsCfg().forEach(p => entree('plant:' + p.base, { type: 'plant', domaine: 'plant', nom: p.name || p.base, piece: plantPiece(S, p.base, p.room) || null }));
   // 6) ce que l'editeur a ajoute a la main : une entite hors des regles ci-dessus.
   (ajoutes || []).forEach(id => { if (S[id]) entree(id, { id, estLumiere: id.indexOf('switch.') === 0 && cvEstLumiere(id) }); });
@@ -11337,7 +11350,26 @@ function croqMax(S) {
   const m = e && e.attributes && Number(e.attributes.max);
   return (m > 0) ? m : CROQ_MAX_DEFAUT;
 }
-const croqKeys = () => [...Object.values(croqHaids()), ...croqMeals().map(m => m.auto)].filter(Boolean);
+/* Ce que la carte du distributeur lit, pour le poll des vues (ADR 0155, 05/10) :
+ * les entités désignées (réservoir, portion, compteur, commande, script), puis
+ * celles de l'appareil qui changent la carte — sa commande (« Distribuer »,
+ * le liseré), sa connectivité, « en cours » (Objets.actif), ses compteurs et
+ * son capteur du dernier repas (le dernier repas), son capteur du prochain (la
+ * prochaine ration). Les automatisations n'y entrent PAS : la fiche les
+ * surveille elle-même, l'Accueil n'a pas à les sonder.
+ * La connectivité se reconnaît par la règle d'`enLigne` (TABLES), pas une
+ * copie : la clé `online` d'une intégration en majuscules lui échappait, et le
+ * liseré n'arrivait qu'au tic suivant d'une autre entité (contradicteur, 05/10). */
+const croqKeys = () => {
+  const conf = loggiaEnt('feeder', null);
+  const c = conf && typeof conf === 'object' ? conf : {};
+  const base = [...Object.values(croqHaids()), c.haid, c.script];
+  if (!distributeurConfigure()) return base.filter(x => typeof x === 'string' && x !== '');
+  const lu = lireDistributeur(LOGGIA_INDEX, (getHass() || {}).states || {}, conf);
+  const connectivite = lu.soeurs.filter(x => x.domaine === 'binary_sensor' && (x.classe === 'connectivity' || TABLES_DISTRIBUTEUR.CLES_CONNECTIVITE.indexOf(String(x.cle || '').toLowerCase()) >= 0)).map(x => x.id);
+  return [...base, lu.commande && lu.commande.entity_id, lu.enCours, lu.prochainCapteur, lu.historique.dernier, ...lu.historique.compteurs, ...connectivite]
+    .filter((x, i, t) => typeof x === 'string' && x !== '' && t.indexOf(x) === i);
+};
 
 /* ════════════ VUE MÉDIAS (reproduction fidèle de "Loggia Médias.dc.html") ════════════ */
 // Vrais media_player (Apple TV + Echos Alexa + Soundbar).
@@ -14554,16 +14586,6 @@ function deriveAccueil(hass, cfg, resolved) {
   const camOnline = cams.filter(c => c.online).length, camTotal = cams.length;
   const ssA = S['sun.sun'] && S['sun.sun'].attributes ? S['sun.sun'].attributes.next_setting : null;
   let sunsetHM = null; if (ssA) { const d = new Date(ssA); if (!isNaN(d.getTime())) sunsetHM = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); }
-  // Prochain repas = automations du distributeur configuré, repas désactivés exclus.
-  const now = new Date(), nowM = now.getHours() * 60 + now.getMinutes();
-  let nm = null, nd = Infinity;
-  for (const m of croqMeals()) {
-    const autoS = S[m.auto]; if (autoS && autoS.state !== 'on') continue; // repas désactivé (entité absente = on par défaut)
-    const p = m.time.split(':'); let d = (+p[0] * 60 + +p[1]) - nowM; if (d < 0) d += 1440; if (d < nd) { nd = d; nm = m; }
-  }
-  // Dans la langue de l'écran (audit du 03/10) — rien ne l'affiche encore, mais « DANS 2H05 » restait en français.
-  const repasIn = nm ? (nd >= 60 ? tr('dans {h} h {m}', { h: Math.floor(nd / 60), m: String(nd % 60).padStart(2, '0') }) : tr('dans {n} min', { n: nd })).toUpperCase() : null;
-  const repasLabel = nm ? `${nm.label} · ${nm.g}g` : null;
   // ── Machines À venir ──
   const machines = {};
   { const low = (vacEtat || '').toLowerCase(); const bat = vacBattery; // null si capteur indispo → « — », pas un faux 0 %
@@ -14656,7 +14678,7 @@ function deriveAccueil(hass, cfg, resolved) {
     metricExport: gridVal == null ? null : { sign: exporting ? '↑ ' : '↓ ', val: fmtW(gridVal), raw: gridVal, label: exporting ? tr('EXPORT RÉSEAU') : tr('IMPORT RÉSEAU'), color: exporting ? 'var(--o-ok)' : 'var(--o-warn)' },
     rooms, inTemp, inTempUnite, inHum, maxCo2, lightsOn, lightsTotal: lightIds.length,
     people, cams, hass,
-    vacLabel, vacBattery, alarmArmed, camOnline, camTotal, sunsetHM, repasIn, repasLabel, machines, plants,
+    vacLabel, vacBattery, alarmArmed, camOnline, camTotal, sunsetHM, machines, plants,
   };
 }
 

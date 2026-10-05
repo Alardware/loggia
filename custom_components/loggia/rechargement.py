@@ -1,7 +1,8 @@
 """Une configuration ecrite par l'ecran est reprise tout de suite (03/10).
 
-Six modules gardent leur configuration en memoire : la nuit, les volets, la
-presence, les fenetres, les veilles et les robots. Ils la relisent a leur
+Sept modules gardent leur configuration en memoire : la nuit, les volets, la
+presence, les fenetres, les veilles, les robots et le planning du distributeur
+(05/10, ADR 0155). Ils la relisent a leur
 demarrage, et quand l'ecran l'enregistre par LEUR commande — qui les
 reabonne et repose leurs rendez-vous.
 
@@ -42,6 +43,9 @@ CLES_DES_MODULES: dict[str, str] = {
     "loggia_fenetres": "fenetres",
     "loggia_veilles": "veilles",
     "loggia_robots": "robots",
+    # Le planning de Loggia seulement : `loggia_feeder` (Parametres) est relu
+    # a chaque depart et a chaque etat, rien a recharger pour lui.
+    "loggia_distributeurs": "distributeurs",
 }
 
 

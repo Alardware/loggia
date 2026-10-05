@@ -1,0 +1,1520 @@
+{
+  "_lisezmoi": [
+    "Fixture PARTAGÉE du distributeur de croquettes (ADR 0155, 05/10) : lue par tests/python (distributeur_appareil.py, automatisations.py, distributeurs.py) ET par tests/*.test.mjs (src/distributeur.js). Une seule table pour les deux langages : si le Python et le JS divergent, l'un des deux rougit ici.",
+    "Rien ne vient d'une vraie maison : identifiants, noms et appareils sont fabriqués d'après le code des intégrations relu le 05/10 (étude « integrations »). Les identifiants d'entité ne servent qu'aux attendus : les règles lisent la CLÉ de traduction d'abord, l'identifiant court (« suffixe », la partie après le point) ensuite.",
+    "ENTITÉ : {entity_id, device_id, plateforme, cle (translation_key), categorie (entity_category), classe (device_class), masquee (hidden_by), desactivee (disabled_by), etat (state), attributs}. Champ absent = null ; masquee et desactivee absents = false ; attributs absent = {}. La doublure Python pose classe dans le registre (original_device_class) ET dans les attributs (device_class) ; l'index JS la met dans entityMeta.deviceClass. Une entité desactivee n'a PAS d'état (etat null) : elle n'existe que dans le registre.",
+    "SŒURS : les entités du même appareil, sans les DÉSACTIVÉES (elles n'ont pas d'état). Une entité MASQUÉE reste une sœur : tuya-local masque son text meal_plan, l'écarter ferait croire à un appareil sans programme (correction du plan, 05/10). Sans appareil, les sœurs sont les seules entités désignées dans la configuration.",
+    "DÉPARTAGE : quand deux sœurs répondent à la même règle, la première par entity_id dans l'ordre des points de code. La fixture n'a aucun cas où cet ordre diffère de l'ordre local du JS.",
+    "MOTIFS : expressions régulières testées sur le SUFFIXE en minuscules (partie de l'entity_id après le point), jamais sur le nom affiché. Elles s'écrivent à l'identique en Python (re.search) et en JS (new RegExp(m).test).",
+    "COMMANDE : attendu.commande = ce que commande_distribuer() / commandeDistribuer() rendent, {domaine, service, entity_id, donnees, quantite, min, max, pas}. `donnees` est la part FIXE (rien pour un bouton, {option} pour un select) ; la quantité s'ajoute à l'envoi. attendu.envoi_2_portions = l'appel complet pour un repas de 2 portions {domaine, service, data}.",
+    "QUANTITÉ ÉCRITE : une portion = UN PAS de l'entité. valeur(n) = min(max, max(min, n × pas)) ; pas absent = 1, min absent = 1, max absent = pas de plafond. Écrire « 2 » dans un number en grammes au pas de 20 (PetKit) serait refusé ou distribuerait 2 g. attendu.une_portion = valeur(1), ce qu'envoie le bouton de la carte. Un text reçoit la valeur en chaîne, sans bornes connues. Un bouton, un select START ou un script : quantite = false ; un bouton ou un select partent UNE fois, quelle que soit n ; le script reçoit variables {portions: n}.",
+    "PROGRAMME : {source, connu, presente, active, lisible, mode, note, repas}. source ∈ petlibro | petkit | aqara | tuya | tuya_local | petsafe | null. connu = false quand on ne PEUT pas savoir si l'appareil distribue seul (le formulaire du planning Loggia porte alors sa mise en garde fixe). presente = la source existe ; active = elle distribue (voir ADR 0155). Un programme ILLISIBLE est presente et NON active : il bloque l'ajout d'un repas Loggia, il n'allume pas « deux sources », il ne retient pas un repas Loggia déjà là. mode ∈ manuel | programme | null. note ∈ capteur_diagnostic | mode_manuel | tenu_par_appareil | a_lire | non_lisible | null.",
+    "REPAS d'un programme : {heure 'HH:MM', jours [0 = lundi … 6], portions (valeur de l'appareil, telle quelle), actif, etat_jour (Petlibro seulement, sinon null)}, triés par heure puis par premier jour.",
+    "ANOMALIES : binary_sensor seulement. Type par la clé (CLES_ANOMALIE_BAS, CLES_ANOMALIE_BLOQUE) quelle que soit la classe ; sinon, classe problem exigée : MOTIF_BAS, puis MOTIF_BLOQUE, puis « autre ». {entity_id, type: bas | bloque | autre, actif: etat == 'on'}, triées par entity_id.",
+    "CONSOMMABLES : sensor seulement. Par la clé (CLES_CONSOMMABLE), sinon unité 'd' + MOTIF_CONSOMMABLE (jours), sinon unité '%' + MOTIF_CONSOMMABLE_PCT (pourcentage). Le bouton de remise à zéro du même rôle (CLES_RESET, MOTIF_RESET). {entity_id, role: deshydratant | filtre | nettoyage, jours, pct, reset}, triés par entity_id.",
+    "EN LIGNE : {mort, raison}, raison dans cet ordre : 'commande' (entité de commande unavailable ou absente — 'unknown' est l'état normal d'un select feed de Z2M, pas une panne), 'connectivite' (binary_sensor de classe connectivity ou de clé online à 'off'), 'reservoir' (réservoir désigné unavailable ou absent ; 'unknown' est un réservoir SANS VALEUR, pas une panne : health.js sépare les deux, et la carte d'avant le 05/10 ne mettait le liseré qu'à unavailable ou absent). Sans commande, le premier critère ne s'applique pas.",
+    "AUTOMATISATIONS : le bloc `automatisations` sert à automatisations.py (T1) et aux réponses fabriquées des tests d'écran. `references` = ce que HA range dans referenced_entities / referenced_devices de l'AUTOMATISATION (déclencheurs + conditions + actions) : c'est ce que voient automations_with_entity / automations_with_device. `action_script` = la même chose pour les seules ACTIONS (null : UnavailableAutomationEntity, repli sur raw_config). Un appareil trouvé dans action_script.referenced_devices ne suffit pas : une device action de lumière l'y met aussi ; on le confirme par les actions : la device action se résout par le registre et vise une cible de REPAS, ou, non résolue, porte un domaine de DOMAINES_ACTION_APPAREIL (et l'option START pour un select). Viser la portion ou le mode est un réglage, pas un repas (contradicteur, 05/10 ; règle complète dans automatisations._lisezmoi).",
+    "PORTION : le number désigné (config.haids.portionWeight) s'il existe, sinon la sœur number de clé CLES_PORTION, sinon de suffixe MOTIF_SUFFIXE_PORTION ; {entity_id, unite (unit_of_measurement, null sinon — jamais un « g » en dur), min, max, pas}. POIDS D'UNE PORTION : la sœur number CLES_POIDS_PORTION / MOTIF_SUFFIXE_POIDS_PORTION, {entity_id, unite}. CIBLES DE COMMANDE : la commande, la portion, le select de mode (aqara) et le script désigné, triés ; jamais un sensor, un binary_sensor ni le réservoir.",
+    "PROGRAMME, CAS PAR CAS : Petlibro = binary_sensor de clé feeding_schedule, attribut schedule (repeat_days 1 = lundi) ; active = état 'on' ET un repas enabled. PetKit = sensor de clé raw_distribution_data, attribut feed_daily_list ; absent (désactivé) avec une commande PetKit trouvée → note capteur_diagnostic, connu false. Aqara = mode lu sur le select de clé feeding_mode (ZHA) ou le select mqtt de suffixe MOTIF_MODE_Z2M aux options OPTIONS_MODE_Z2M (Z2M), casse ignorée ; un mode illisible (unavailable, unknown, autre valeur — un Z2M hors ligne) → source aqara, connu false, rien d'autre : on ne sait pas, on ne dit ni « manuel » ni « tenu par l'appareil » ; manuel → pas de source (note mode_manuel) ; programmé + sensor mqtt MOTIF_SCHEDULE_Z2M en JSON complet → lisible (JOURS_Z2M ; une valeur de jours inconnue rend toute la liste illisible ; une liste au format Python, guillemets simples — ce que HA affiche d'un gabarit qui rend une liste —, reste ILLISIBLE en v1 même complète : jamais de guillemets remplacés) ; programmé sans liste lisible → présent, illisible, non actif. PetSafe = un service SERVICES_PETSAFE + plateforme petsafe → présent illisible. tuya-local = text de clé CLES_PROGRAMME.tuya_local non vide → présent illisible ; vide → connu, non présent ; JAMAIS de décodage. Tuya officielle = plateforme tuya + number de clé feed : sans le service, connu false ; avec, rien au sondage (note a_lire), la réponse lue seulement en détail (reponse_tuya, jours JOURS_TUYA) — la fiche ouverte, ET le départ d'un repas Loggia, qui recalcule les sources comme en détail (délai 5 s, cache 10 min) : le sondage de la carte est le seul exclu —, une erreur → note non_lisible. Tout le reste : source null, connu false.",
+    "EN COURS : binary_sensor de clé CLES_EN_COURS (Tuya). PROCHAIN : sensor de clé CLES_PROCHAIN ou de suffixe MOTIF_PROCHAIN. HISTORIQUE : {dernier : sensor CLES_DERNIER / MOTIF_DERNIER ; compteurs : sensors CLES_COMPTEUR / MOTIF_COMPTEUR_Z2M, triés ; evenements : sensors CLES_SOURCE_REPAS / MOTIF_SOURCE_REPAS, triés (plus les entités event de l'appareil, absentes de la fixture)}.",
+    "APPAREIL : config.appareil s'il est donné ; sinon le device_id de la première entité désignée qui en a un, dans l'ordre haid > portionWeight > distribuees > reservoir. Une autre entité désignée posée sur un AUTRE appareil est ignorée et signalée : notes [{code: 'appareil_divergent', entity_id}]. Une entité sans appareil (un helper) n'est pas une divergence.",
+    "TABLES : les constantes de distributeur_appareil.py et de src/distributeur.js sont ÉGALES à `tables`, clé par clé (un test de chaque côté). Les cas ne suffisent pas à les figer : une vingtaine d'entrées (tank_empty, rotor_stuck, door_blocked, filter_percent, reset_filter, pet_last_meal_date, today_feeding_times…) ne décident d'aucun attendu.",
+    "DÉCALAGES : en minutes entières signées. Un décalage s'écrit '[-]HH:MM[:SS]', {hours, minutes, seconds} ou un nombre de secondes. Heures 'HH:MM' (les secondes tombent). Le fuseau de la maison est contexte.fuseau ; les horodatages de la fixture portent déjà son décalage, si bien qu'un lecteur qui l'ignore lit la même heure."
+  ],
+  "version": 1,
+
+  "tables": {
+    "CLES_BOUTON": ["feed", "manual_feed"],
+    "MOTIF_SUFFIXE_FEED": "(^|_)(manual_)?feed(_now)?$|food_out$",
+    "MOTIF_EXCLU_BOUTON": "plan|schedule|reset|cancel|enable|disable",
+    "CLES_NUMBER_ECRIT": ["feed", "manual_feed"],
+    "PLATEFORMES_NUMBER_ECRIT": ["petkit", "tuya", "tuya_local"],
+    "MOTIF_NUMBER_REGLAGE": "quantity|size|portion|weight",
+    "PREFIXE_TEXT_ECRIT": "manual_feed",
+    "PLATEFORMES_TEXT_ECRIT": ["petkit"],
+    "MOTIF_SELECT_FEED": "_feed$",
+    "OPTION_START": "START",
+    "DOMAINES_ACTION_APPAREIL": ["button", "number", "select", "text"],
+    "CLES_PORTION": ["manual_feed_quantity", "manual_portions", "portions", "serving_size"],
+    "MOTIF_SUFFIXE_PORTION": "(^|_)(serving_size|portions|manual_portions)$",
+    "CLES_POIDS_PORTION": ["portion_weight"],
+    "MOTIF_SUFFIXE_POIDS_PORTION": "(^|_)portion_weight$",
+    "CLES_PROGRAMME": {
+      "petlibro": ["feeding_schedule"],
+      "petkit": ["raw_distribution_data"],
+      "aqara_mode": ["feeding_mode"],
+      "tuya_local": ["meal_plan", "schedule"]
+    },
+    "MOTIF_MODE_Z2M": "_mode$",
+    "OPTIONS_MODE_Z2M": ["manual", "schedule"],
+    "MOTIF_SCHEDULE_Z2M": "_schedule$",
+    "MODES": {"manual": "manuel", "schedule": "programme"},
+    "JOURS_Z2M": {
+      "everyday": [0, 1, 2, 3, 4, 5, 6], "workdays": [0, 1, 2, 3, 4], "weekend": [5, 6],
+      "mon": [0], "tue": [1], "wed": [2], "thu": [3], "fri": [4], "sat": [5], "sun": [6],
+      "mon-wed-fri-sun": [0, 2, 4, 6], "tue-thu-sat": [1, 3, 5]
+    },
+    "JOURS_TUYA": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+    "SERVICES_PETSAFE": ["petsafe.add_schedule"],
+    "SERVICE_TUYA_PROGRAMME": "tuya.get_feeder_meal_plan",
+    "CLES_ANOMALIE_BAS": ["food_level", "food_level_1", "food_level_2", "food_low", "left_food_low", "right_food_low", "tank_empty"],
+    "CLES_ANOMALIE_BLOQUE": ["barn_door_error", "door_blocked", "error_detected", "food_dispenser_state", "food_outlet_state", "rotor_stuck"],
+    "MOTIF_BAS": "food_(low|shortage|empty|level)|hopper_low|not_enough_food|pet_food_left_level",
+    "MOTIF_BLOQUE": "block|jam|stuck|clog",
+    "CLES_CONSOMMABLE": {
+      "deshydratant": ["desiccant_left_days", "remaining_desiccant"],
+      "filtre": ["remaining_filter_days"],
+      "nettoyage": ["remaining_cleaning_days"]
+    },
+    "UNITES_JOURS": ["d"],
+    "MOTIF_CONSOMMABLE": {"deshydratant": "desiccant", "filtre": "filter", "nettoyage": "clean"},
+    "MOTIF_CONSOMMABLE_PCT": {"deshydratant": "desiccant.*level", "filtre": "filter_percent"},
+    "CLES_RESET": {
+      "deshydratant": ["desiccant_reset", "reset_desiccant"],
+      "filtre": ["filter_reset", "reset_filter"],
+      "nettoyage": ["cleaning_reset"]
+    },
+    "MOTIF_RESET": {"deshydratant": "reset.*desiccant|desiccant.*reset"},
+    "CLES_CONNECTIVITE": ["online"],
+    "CLES_EN_COURS": ["feeding"],
+    "CLES_PROCHAIN": ["next_feed_time"],
+    "MOTIF_PROCHAIN": "(^|_)next_feed(ing|_time)?$",
+    "CLES_DERNIER": ["last_feed_time", "pet_last_meal_date"],
+    "MOTIF_DERNIER": "(^|_)last_feed(ing|_time)?$",
+    "CLES_COMPTEUR": ["manual_dispensed", "planned_dispensed", "portions_dispensed_today", "times_dispensed", "today_feeding_quantity_weight", "today_feeding_times", "total_dispensed", "weight_dispensed_today"],
+    "MOTIF_COMPTEUR_Z2M": "(^|_)(portions_per_day|weight_per_day)$",
+    "CLES_SOURCE_REPAS": ["last_amount", "last_feeding_size", "last_feeding_source"],
+    "MOTIF_SOURCE_REPAS": "(^|_)feeding_(source|size)$"
+  },
+
+  "cas": [
+    {
+      "id": "petlibro",
+      "description": "Petlibro Granary (HACS jjjonesjr33/petlibro) : bouton, programme entièrement lisible, déshydratant.",
+      "appareils": [{"device_id": "dev_petlibro", "nom": "Granary", "fabricant": "PETLIBRO", "modele": "PLAF103"}],
+      "config": {"appareil": "dev_petlibro", "haids": {"reservoir": null, "portionWeight": null, "distribuees": null}},
+      "services": ["petlibro.add_feeding_plan", "petlibro.toggle_feeding_plan"],
+      "entites": [
+        {"entity_id": "button.granary_manual_feed", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "manual_feed", "etat": "unknown"},
+        {"entity_id": "button.granary_enable_feeding_plan", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "enable_feeding_plan", "etat": "unknown"},
+        {"entity_id": "button.granary_desiccant_reset", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "desiccant_reset", "categorie": "config", "etat": "unknown"},
+        {"entity_id": "number.granary_manual_feed_quantity", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "manual_feed_quantity", "etat": "1", "attributs": {"min": 1, "max": 24, "step": 1}},
+        {"entity_id": "number.granary_desiccant_frequency", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "desiccant_frequency", "categorie": "config", "etat": "30", "attributs": {"min": 1, "max": 60, "step": 1, "unit_of_measurement": "d"}},
+        {"entity_id": "binary_sensor.granary_feeding_schedule", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "feeding_schedule", "etat": "on", "attributs": {"schedule": [
+          {"id": 101, "label": "Matin", "time": "07:00", "amount_raw": 2, "enabled": true, "recurring": true, "repeat_days": [1, 2, 3, 4, 5, 6, 7], "state": "dispensed"},
+          {"id": 102, "label": "Midi", "time": "12:00", "amount_raw": 1, "enabled": false, "recurring": true, "repeat_days": [1, 2, 3, 4, 5], "state": "pending"},
+          {"id": 103, "label": "Soir", "time": "19:30", "amount_raw": 2, "enabled": true, "recurring": true, "repeat_days": [1, 2, 3, 4, 5, 6, 7], "state": "pending"}
+        ]}},
+        {"entity_id": "binary_sensor.granary_food_low", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "food_low", "classe": "problem", "etat": "off"},
+        {"entity_id": "binary_sensor.granary_food_dispenser_state", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "food_dispenser_state", "classe": "problem", "etat": "off"},
+        {"entity_id": "binary_sensor.granary_online", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "online", "classe": "connectivity", "categorie": "diagnostic", "etat": "on"},
+        {"entity_id": "sensor.granary_remaining_desiccant", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "remaining_desiccant", "classe": "duration", "etat": "12", "attributs": {"unit_of_measurement": "d"}},
+        {"entity_id": "sensor.granary_last_feed_time", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "last_feed_time", "classe": "timestamp", "etat": "2026-10-05T07:00:04+02:00"},
+        {"entity_id": "sensor.granary_next_feed_time", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "next_feed_time", "classe": "timestamp", "etat": "2026-10-05T19:30:00+02:00"},
+        {"entity_id": "sensor.granary_today_feeding_quantity_weight", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "today_feeding_quantity_weight", "etat": "24", "attributs": {"unit_of_measurement": "g", "state_class": "total_increasing"}}
+      ],
+      "attendu": {
+        "appareil": "dev_petlibro",
+        "notes": [],
+        "commande": {"domaine": "button", "service": "press", "entity_id": "button.granary_manual_feed", "donnees": {}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "button", "service": "press", "data": {"entity_id": "button.granary_manual_feed"}},
+        "portion": {"entity_id": "number.granary_manual_feed_quantity", "unite": null, "min": 1, "max": 24, "pas": 1},
+        "poids_portion": null,
+        "cibles_de_commande": ["button.granary_manual_feed", "number.granary_manual_feed_quantity"],
+        "programme": {"source": "petlibro", "connu": true, "presente": true, "active": true, "lisible": true, "mode": null, "note": null, "repas": [
+          {"heure": "07:00", "jours": [0, 1, 2, 3, 4, 5, 6], "portions": 2, "actif": true, "etat_jour": "dispensed"},
+          {"heure": "12:00", "jours": [0, 1, 2, 3, 4], "portions": 1, "actif": false, "etat_jour": "pending"},
+          {"heure": "19:30", "jours": [0, 1, 2, 3, 4, 5, 6], "portions": 2, "actif": true, "etat_jour": "pending"}
+        ]},
+        "anomalies": [
+          {"entity_id": "binary_sensor.granary_food_dispenser_state", "type": "bloque", "actif": false},
+          {"entity_id": "binary_sensor.granary_food_low", "type": "bas", "actif": false}
+        ],
+        "consommables": [
+          {"entity_id": "sensor.granary_remaining_desiccant", "role": "deshydratant", "jours": 12, "pct": null, "reset": "button.granary_desiccant_reset"}
+        ],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": "sensor.granary_next_feed_time",
+        "historique": {"dernier": "sensor.granary_last_feed_time", "compteurs": ["sensor.granary_today_feeding_quantity_weight"], "evenements": []}
+      }
+    },
+
+    {
+      "id": "petlibro_deconnecte",
+      "description": "Le même Petlibro, déconnecté du nuage : son bouton reste « unknown », seule l'entité online le dit.",
+      "appareils": [{"device_id": "dev_petlibro", "nom": "Granary", "fabricant": "PETLIBRO", "modele": "PLAF103"}],
+      "config": {"appareil": "dev_petlibro", "haids": {}},
+      "entites": [
+        {"entity_id": "button.granary_manual_feed", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "manual_feed", "etat": "unknown"},
+        {"entity_id": "binary_sensor.granary_online", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "online", "classe": "connectivity", "categorie": "diagnostic", "etat": "off"}
+      ],
+      "attendu": {
+        "appareil": "dev_petlibro",
+        "notes": [],
+        "commande": {"domaine": "button", "service": "press", "entity_id": "button.granary_manual_feed", "donnees": {}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "button", "service": "press", "data": {"entity_id": "button.granary_manual_feed"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["button.granary_manual_feed"],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": true, "raison": "connectivite"},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "petkit_diagnostic",
+      "description": "PetKit D4 (HACS Jezza34000) : pas de bouton, ÉCRIRE le number manual_feed (g, pas de 20) distribue ; programme lu sur le capteur de diagnostic raw_distribution_data (dimanche suspendu).",
+      "appareils": [{"device_id": "dev_petkit_d4", "nom": "D4", "fabricant": "PetKit", "modele": "Fresh Element Solo"}],
+      "config": {"appareil": "dev_petkit_d4", "haids": {}},
+      "services": ["petkit.set_feeding_schedule"],
+      "entites": [
+        {"entity_id": "number.d4_manual_feed", "device_id": "dev_petkit_d4", "plateforme": "petkit", "cle": "manual_feed", "categorie": "config", "etat": "0", "attributs": {"min": 0, "max": 400, "step": 20, "unit_of_measurement": "g"}},
+        {"entity_id": "button.d4_cancel_manual_feed", "device_id": "dev_petkit_d4", "plateforme": "petkit", "cle": "cancel_manual_feed", "etat": "unknown"},
+        {"entity_id": "button.d4_food_replenished", "device_id": "dev_petkit_d4", "plateforme": "petkit", "cle": "food_replenished", "etat": "unknown"},
+        {"entity_id": "button.d4_reset_desiccant", "device_id": "dev_petkit_d4", "plateforme": "petkit", "cle": "reset_desiccant", "categorie": "config", "etat": "unknown"},
+        {"entity_id": "sensor.d4_raw_distribution_data", "device_id": "dev_petkit_d4", "plateforme": "petkit", "cle": "raw_distribution_data", "categorie": "diagnostic", "etat": "ok", "attributs": {"device_id": "10000123", "feed_daily_list": [
+          {"repeats": 1, "suspended": 0, "items": [{"time": 28800, "name": "Matin", "amount": 20, "id": "s1"}, {"time": 64800, "name": "Soir", "amount": 30, "id": "s2"}]},
+          {"repeats": 2, "suspended": 0, "items": [{"time": 28800, "name": "Matin", "amount": 20, "id": "s1"}, {"time": 64800, "name": "Soir", "amount": 30, "id": "s2"}]},
+          {"repeats": 3, "suspended": 0, "items": [{"time": 28800, "name": "Matin", "amount": 20, "id": "s1"}, {"time": 64800, "name": "Soir", "amount": 30, "id": "s2"}]},
+          {"repeats": 4, "suspended": 0, "items": [{"time": 28800, "name": "Matin", "amount": 20, "id": "s1"}, {"time": 64800, "name": "Soir", "amount": 30, "id": "s2"}]},
+          {"repeats": 5, "suspended": 0, "items": [{"time": 28800, "name": "Matin", "amount": 20, "id": "s1"}, {"time": 64800, "name": "Soir", "amount": 30, "id": "s2"}]},
+          {"repeats": 6, "suspended": 0, "items": [{"time": 28800, "name": "Matin", "amount": 20, "id": "s1"}, {"time": 64800, "name": "Soir", "amount": 30, "id": "s2"}]},
+          {"repeats": 7, "suspended": 1, "items": [{"time": 28800, "name": "Matin", "amount": 20, "id": "s1"}, {"time": 64800, "name": "Soir", "amount": 30, "id": "s2"}]}
+        ]}},
+        {"entity_id": "binary_sensor.d4_food_level", "device_id": "dev_petkit_d4", "plateforme": "petkit", "cle": "food_level", "classe": "problem", "etat": "on"},
+        {"entity_id": "sensor.d4_desiccant_left_days", "device_id": "dev_petkit_d4", "plateforme": "petkit", "cle": "desiccant_left_days", "etat": "25", "attributs": {"unit_of_measurement": "d"}},
+        {"entity_id": "sensor.d4_times_dispensed", "device_id": "dev_petkit_d4", "plateforme": "petkit", "cle": "times_dispensed", "etat": "2", "attributs": {"state_class": "total_increasing"}}
+      ],
+      "attendu": {
+        "appareil": "dev_petkit_d4",
+        "notes": [],
+        "commande": {"domaine": "number", "service": "set_value", "entity_id": "number.d4_manual_feed", "donnees": {}, "quantite": true, "min": 0, "max": 400, "pas": 20},
+        "une_portion": 20,
+        "envoi_2_portions": {"domaine": "number", "service": "set_value", "data": {"entity_id": "number.d4_manual_feed", "value": 40}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["number.d4_manual_feed"],
+        "programme": {"source": "petkit", "connu": true, "presente": true, "active": true, "lisible": true, "mode": null, "note": null, "repas": [
+          {"heure": "08:00", "jours": [0, 1, 2, 3, 4, 5], "portions": 20, "actif": true, "etat_jour": null},
+          {"heure": "18:00", "jours": [0, 1, 2, 3, 4, 5], "portions": 30, "actif": true, "etat_jour": null}
+        ]},
+        "_note_programme": "PetKit : un élément de feed_daily_list par jour (repeats 1 = lundi … 7 = dimanche). Les créneaux se regroupent par (heure, portions) ; jours = les jours NON suspendus où ils figurent ; un créneau dont tous les jours sont suspendus garde ses jours et passe actif:false.",
+        "anomalies": [
+          {"entity_id": "binary_sensor.d4_food_level", "type": "bas", "actif": true}
+        ],
+        "consommables": [
+          {"entity_id": "sensor.d4_desiccant_left_days", "role": "deshydratant", "jours": 25, "pct": null, "reset": "button.d4_reset_desiccant"}
+        ],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": ["sensor.d4_times_dispensed"], "evenements": []}
+      }
+    },
+
+    {
+      "id": "petkit_sans_diagnostic",
+      "description": "PetKit D4H à deux bacs : distribution par le text manual_feed_dual_h1 ; capteur raw_distribution_data DÉSACTIVÉ (réglage par défaut) : programme non lisible, on le dit.",
+      "appareils": [{"device_id": "dev_petkit_d4h", "nom": "D4H", "fabricant": "PetKit", "modele": "Fresh Element Gemini"}],
+      "config": {"appareil": null, "haids": {"reservoir": null, "portionWeight": null, "distribuees": "sensor.d4h_total_dispensed"}},
+      "entites": [
+        {"entity_id": "text.d4h_manual_feed_dual_h1", "device_id": "dev_petkit_d4h", "plateforme": "petkit", "cle": "manual_feed_dual_h1", "categorie": "config", "etat": "", "attributs": {"min": 0, "max": 255, "mode": "text"}},
+        {"entity_id": "text.d4h_manual_feed_dual_h2", "device_id": "dev_petkit_d4h", "plateforme": "petkit", "cle": "manual_feed_dual_h2", "categorie": "config", "etat": "", "attributs": {"min": 0, "max": 255, "mode": "text"}},
+        {"entity_id": "sensor.d4h_raw_distribution_data", "device_id": "dev_petkit_d4h", "plateforme": "petkit", "cle": "raw_distribution_data", "categorie": "diagnostic", "desactivee": true, "etat": null},
+        {"entity_id": "binary_sensor.d4h_food_level_1", "device_id": "dev_petkit_d4h", "plateforme": "petkit", "cle": "food_level_1", "classe": "problem", "etat": "off"},
+        {"entity_id": "binary_sensor.d4h_food_level_2", "device_id": "dev_petkit_d4h", "plateforme": "petkit", "cle": "food_level_2", "classe": "problem", "etat": "on"},
+        {"entity_id": "sensor.d4h_total_dispensed", "device_id": "dev_petkit_d4h", "plateforme": "petkit", "cle": "total_dispensed", "etat": "3", "attributs": {"state_class": "total_increasing"}}
+      ],
+      "attendu": {
+        "appareil": "dev_petkit_d4h",
+        "notes": [],
+        "commande": {"domaine": "text", "service": "set_value", "entity_id": "text.d4h_manual_feed_dual_h1", "donnees": {}, "quantite": true, "min": null, "max": null, "pas": null},
+        "une_portion": 1,
+        "envoi_2_portions": {"domaine": "text", "service": "set_value", "data": {"entity_id": "text.d4h_manual_feed_dual_h1", "value": "2"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["text.d4h_manual_feed_dual_h1"],
+        "programme": {"source": "petkit", "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": "capteur_diagnostic", "repas": []},
+        "anomalies": [
+          {"entity_id": "binary_sensor.d4h_food_level_1", "type": "bas", "actif": false},
+          {"entity_id": "binary_sensor.d4h_food_level_2", "type": "bas", "actif": true}
+        ],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": ["sensor.d4h_total_dispensed"], "evenements": []}
+      }
+    },
+
+    {
+      "id": "tuya_cwwsq",
+      "description": "Tuya officielle (cœur, catégorie cwwsq), SANS le service tuya.get_feeder_meal_plan (absent en 2024.7) : on ne peut pas savoir si l'application programme des repas.",
+      "appareils": [{"device_id": "dev_tuya", "nom": "Distributeur Tuya", "fabricant": "Tuya", "modele": "cwwsq"}],
+      "config": {"appareil": "dev_tuya", "haids": {}},
+      "services": [],
+      "entites": [
+        {"entity_id": "number.distributeur_tuya_feed", "device_id": "dev_tuya", "plateforme": "tuya", "cle": "feed", "etat": "1", "attributs": {"min": 1, "max": 20, "step": 1}},
+        {"entity_id": "binary_sensor.distributeur_tuya_feeding", "device_id": "dev_tuya", "plateforme": "tuya", "cle": "feeding", "etat": "off"},
+        {"entity_id": "sensor.distributeur_tuya_last_amount", "device_id": "dev_tuya", "plateforme": "tuya", "cle": "last_amount", "etat": "2"},
+        {"entity_id": "switch.distributeur_tuya_slow_feed", "device_id": "dev_tuya", "plateforme": "tuya", "cle": "slow_feed", "categorie": "config", "etat": "off"}
+      ],
+      "attendu": {
+        "appareil": "dev_tuya",
+        "notes": [],
+        "commande": {"domaine": "number", "service": "set_value", "entity_id": "number.distributeur_tuya_feed", "donnees": {}, "quantite": true, "min": 1, "max": 20, "pas": 1},
+        "une_portion": 1,
+        "envoi_2_portions": {"domaine": "number", "service": "set_value", "data": {"entity_id": "number.distributeur_tuya_feed", "value": 2}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["number.distributeur_tuya_feed"],
+        "programme": {"source": "tuya", "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": "binary_sensor.distributeur_tuya_feeding",
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": ["sensor.distributeur_tuya_last_amount"]}
+      }
+    },
+
+    {
+      "id": "tuya_cwwsq_service",
+      "description": "Tuya officielle AVEC le service : au sondage de la carte, rien n'est appelé (programme « à lire ») ; à l'ouverture de la fiche (detail), la réponse se lit ; une erreur n'est jamais une panne.",
+      "appareils": [{"device_id": "dev_tuya", "nom": "Distributeur Tuya", "fabricant": "Tuya", "modele": "cwwsq"}],
+      "config": {"appareil": "dev_tuya", "haids": {}},
+      "services": ["tuya.get_feeder_meal_plan", "tuya.set_feeder_meal_plan"],
+      "reponse_tuya": {"meal_plan": [
+        {"days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "time": "07:00", "portion": 2, "enabled": true},
+        {"days": ["saturday", "sunday"], "time": "10:00", "portion": 1, "enabled": false}
+      ]},
+      "_note_reponse": "Forme SUPPOSÉE de la réponse (services.yaml de set_feeder_meal_plan, non vérifiée sur un appareil) : toute autre forme se lit « non_lisible », jamais une panne.",
+      "entites": [
+        {"entity_id": "number.distributeur_tuya_feed", "device_id": "dev_tuya", "plateforme": "tuya", "cle": "feed", "etat": "1", "attributs": {"min": 1, "max": 20, "step": 1}}
+      ],
+      "attendu": {
+        "appareil": "dev_tuya",
+        "notes": [],
+        "commande": {"domaine": "number", "service": "set_value", "entity_id": "number.distributeur_tuya_feed", "donnees": {}, "quantite": true, "min": 1, "max": 20, "pas": 1},
+        "une_portion": 1,
+        "envoi_2_portions": {"domaine": "number", "service": "set_value", "data": {"entity_id": "number.distributeur_tuya_feed", "value": 2}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["number.distributeur_tuya_feed"],
+        "programme": {"source": "tuya", "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": "a_lire", "repas": []},
+        "programme_detail": {"source": "tuya", "connu": true, "presente": true, "active": true, "lisible": true, "mode": null, "note": null, "repas": [
+          {"heure": "07:00", "jours": [0, 1, 2, 3, 4, 5, 6], "portions": 2, "actif": true, "etat_jour": null},
+          {"heure": "10:00", "jours": [5, 6], "portions": 1, "actif": false, "etat_jour": null}
+        ]},
+        "programme_detail_erreur": {"source": "tuya", "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": "non_lisible", "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "tuya_local_vide",
+      "description": "tuya-local (Catit) : number manual_feed, text meal_plan MASQUÉ et vide = pas de programme. Anomalies sans clé, reconnues au suffixe sous classe problem.",
+      "appareils": [{"device_id": "dev_tuya_local", "nom": "Catit", "fabricant": "Tuya", "modele": "catit_pixi_feeder"}],
+      "config": {"appareil": "dev_tuya_local", "haids": {}},
+      "entites": [
+        {"entity_id": "number.catit_manual_feed", "device_id": "dev_tuya_local", "plateforme": "tuya_local", "cle": "manual_feed", "etat": "1", "attributs": {"min": 1, "max": 12, "step": 1}},
+        {"entity_id": "text.catit_meal_plan", "device_id": "dev_tuya_local", "plateforme": "tuya_local", "cle": "meal_plan", "masquee": true, "etat": ""},
+        {"entity_id": "binary_sensor.catit_food_shortage", "device_id": "dev_tuya_local", "plateforme": "tuya_local", "classe": "problem", "etat": "off"},
+        {"entity_id": "binary_sensor.catit_food_blockage", "device_id": "dev_tuya_local", "plateforme": "tuya_local", "classe": "problem", "etat": "on"},
+        {"entity_id": "binary_sensor.catit_low_battery", "device_id": "dev_tuya_local", "plateforme": "tuya_local", "classe": "battery", "etat": "off"}
+      ],
+      "attendu": {
+        "appareil": "dev_tuya_local",
+        "notes": [],
+        "commande": {"domaine": "number", "service": "set_value", "entity_id": "number.catit_manual_feed", "donnees": {}, "quantite": true, "min": 1, "max": 12, "pas": 1},
+        "une_portion": 1,
+        "envoi_2_portions": {"domaine": "number", "service": "set_value", "data": {"entity_id": "number.catit_manual_feed", "value": 2}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["number.catit_manual_feed"],
+        "programme": {"source": "tuya_local", "connu": true, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [
+          {"entity_id": "binary_sensor.catit_food_blockage", "type": "bloque", "actif": true},
+          {"entity_id": "binary_sensor.catit_food_shortage", "type": "bas", "actif": false}
+        ],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "tuya_local_plein",
+      "description": "tuya-local : meal_plan NON vide = programme dans l'appareil, illisible. Aucun décodage base64 (format propre à chaque produit) : présent, non actif, aucun repas inventé.",
+      "appareils": [{"device_id": "dev_tuya_local", "nom": "Catit", "fabricant": "Tuya", "modele": "catit_pixi_feeder"}],
+      "config": {"appareil": "dev_tuya_local", "haids": {}},
+      "entites": [
+        {"entity_id": "number.catit_manual_feed", "device_id": "dev_tuya_local", "plateforme": "tuya_local", "cle": "manual_feed", "etat": "1", "attributs": {"min": 1, "max": 12, "step": 1}},
+        {"entity_id": "text.catit_meal_plan", "device_id": "dev_tuya_local", "plateforme": "tuya_local", "cle": "meal_plan", "masquee": true, "etat": "fwcAAgF/EwABAQ=="}
+      ],
+      "attendu": {
+        "appareil": "dev_tuya_local",
+        "notes": [],
+        "commande": {"domaine": "number", "service": "set_value", "entity_id": "number.catit_manual_feed", "donnees": {}, "quantite": true, "min": 1, "max": 12, "pas": 1},
+        "une_portion": 1,
+        "envoi_2_portions": {"domaine": "number", "service": "set_value", "data": {"entity_id": "number.catit_manual_feed", "value": 2}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["number.catit_manual_feed"],
+        "programme": {"source": "tuya_local", "connu": true, "presente": true, "active": false, "lisible": false, "mode": null, "note": "tenu_par_appareil", "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "aqara_zha_manuel",
+      "description": "Aqara C1 sous ZHA, mode manuel : les créneaux de l'appareil ne partent pas, ce n'est PAS une source. Appareil trouvé par l'entité principale (haid) ; le réservoir est un input_number sans appareil.",
+      "appareils": [{"device_id": "dev_aqara_zha", "nom": "Aqara C1", "fabricant": "LUMI", "modele": "aqara.feeder.acn001"}],
+      "config": {"appareil": null, "haid": "button.aqara_c1_feed", "haids": {"reservoir": "input_number.croquettes_reservoir", "portionWeight": null, "distribuees": null}},
+      "entites": [
+        {"entity_id": "button.aqara_c1_feed", "device_id": "dev_aqara_zha", "plateforme": "zha", "cle": "feed", "etat": "unknown"},
+        {"entity_id": "number.aqara_c1_serving_size", "device_id": "dev_aqara_zha", "plateforme": "zha", "cle": "serving_size", "categorie": "config", "etat": "2", "attributs": {"min": 1, "max": 10, "step": 1}},
+        {"entity_id": "number.aqara_c1_portion_weight", "device_id": "dev_aqara_zha", "plateforme": "zha", "cle": "portion_weight", "categorie": "config", "etat": "8", "attributs": {"min": 1, "max": 20, "step": 1, "unit_of_measurement": "g"}},
+        {"entity_id": "select.aqara_c1_feeding_mode", "device_id": "dev_aqara_zha", "plateforme": "zha", "cle": "feeding_mode", "categorie": "config", "etat": "Manual", "attributs": {"options": ["Manual", "Schedule"]}},
+        {"entity_id": "binary_sensor.aqara_c1_error_detected", "device_id": "dev_aqara_zha", "plateforme": "zha", "cle": "error_detected", "classe": "problem", "etat": "off"},
+        {"entity_id": "sensor.aqara_c1_last_feeding_source", "device_id": "dev_aqara_zha", "plateforme": "zha", "cle": "last_feeding_source", "etat": "manual"},
+        {"entity_id": "sensor.aqara_c1_portions_dispensed_today", "device_id": "dev_aqara_zha", "plateforme": "zha", "cle": "portions_dispensed_today", "etat": "4", "attributs": {"state_class": "total_increasing"}},
+        {"entity_id": "switch.aqara_c1_child_lock", "device_id": "dev_aqara_zha", "plateforme": "zha", "cle": "child_lock", "categorie": "config", "etat": "off"},
+        {"entity_id": "input_number.croquettes_reservoir", "plateforme": "input_number", "etat": "62", "attributs": {"min": 0, "max": 100, "step": 1, "unit_of_measurement": "%"}}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_zha",
+        "notes": [],
+        "commande": {"domaine": "button", "service": "press", "entity_id": "button.aqara_c1_feed", "donnees": {}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "button", "service": "press", "data": {"entity_id": "button.aqara_c1_feed"}},
+        "portion": {"entity_id": "number.aqara_c1_serving_size", "unite": null, "min": 1, "max": 10, "pas": 1},
+        "poids_portion": {"entity_id": "number.aqara_c1_portion_weight", "unite": "g"},
+        "cibles_de_commande": ["button.aqara_c1_feed", "number.aqara_c1_serving_size", "select.aqara_c1_feeding_mode"],
+        "programme": {"source": "aqara", "connu": true, "presente": false, "active": false, "lisible": false, "mode": "manuel", "note": "mode_manuel", "repas": []},
+        "anomalies": [
+          {"entity_id": "binary_sensor.aqara_c1_error_detected", "type": "bloque", "actif": false}
+        ],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": ["sensor.aqara_c1_portions_dispensed_today"], "evenements": ["sensor.aqara_c1_last_feeding_source"]}
+      }
+    },
+
+    {
+      "id": "aqara_zha_programme",
+      "description": "Aqara C1 sous ZHA, mode « programmé » : ZHA n'expose pas la liste (PR non fusionnées au 05/10) : présent, illisible, non actif.",
+      "appareils": [{"device_id": "dev_aqara_zha", "nom": "Aqara C1", "fabricant": "LUMI", "modele": "aqara.feeder.acn001"}],
+      "config": {"appareil": "dev_aqara_zha", "haids": {}},
+      "entites": [
+        {"entity_id": "button.aqara_c1_feed", "device_id": "dev_aqara_zha", "plateforme": "zha", "cle": "feed", "etat": "unknown"},
+        {"entity_id": "select.aqara_c1_feeding_mode", "device_id": "dev_aqara_zha", "plateforme": "zha", "cle": "feeding_mode", "categorie": "config", "etat": "Schedule", "attributs": {"options": ["Manual", "Schedule"]}}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_zha",
+        "notes": [],
+        "commande": {"domaine": "button", "service": "press", "entity_id": "button.aqara_c1_feed", "donnees": {}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "button", "service": "press", "data": {"entity_id": "button.aqara_c1_feed"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["button.aqara_c1_feed", "select.aqara_c1_feeding_mode"],
+        "programme": {"source": "aqara", "connu": true, "presente": true, "active": false, "lisible": false, "mode": "programme", "note": "tenu_par_appareil", "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "aqara_z2m_manuel",
+      "description": "Aqara C1 sous Zigbee2MQTT, mode manuel, commandé par des automatisations : le cas qui ressemble à l'installation d'origine (et à la démo par défaut). Pas de clé de traduction (mqtt) : tout se lit au suffixe anglais. Appareil trouvé par la portion désignée.",
+      "appareils": [{"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": null, "haid": null, "haids": {"reservoir": "input_number.croquettes_reservoir", "portionWeight": "number.distributeur_cuisine_serving_size", "distribuees": "sensor.distributeur_cuisine_portions_per_day"}},
+      "entites": [
+        {"entity_id": "select.distributeur_cuisine_feed", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START"]}},
+        {"entity_id": "select.distributeur_cuisine_mode", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "manual", "attributs": {"options": ["schedule", "manual"]}},
+        {"entity_id": "number.distributeur_cuisine_serving_size", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "2", "attributs": {"min": 1, "max": 10, "step": 1}},
+        {"entity_id": "number.distributeur_cuisine_portion_weight", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "8", "attributs": {"min": 1, "max": 20, "step": 1, "unit_of_measurement": "g"}},
+        {"entity_id": "sensor.distributeur_cuisine_schedule", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "[]"},
+        {"entity_id": "sensor.distributeur_cuisine_feeding_source", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "remote"},
+        {"entity_id": "sensor.distributeur_cuisine_portions_per_day", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "4", "attributs": {"state_class": "total_increasing"}},
+        {"entity_id": "sensor.distributeur_cuisine_weight_per_day", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "32", "attributs": {"unit_of_measurement": "g", "state_class": "total_increasing"}},
+        {"entity_id": "binary_sensor.distributeur_cuisine_error", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "classe": "problem", "etat": "off"},
+        {"entity_id": "switch.distributeur_cuisine_child_lock", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "categorie": "config", "etat": "off"},
+        {"entity_id": "light.distributeur_cuisine_led", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "categorie": "config", "etat": "on"},
+        {"entity_id": "input_number.croquettes_reservoir", "plateforme": "input_number", "etat": "62", "attributs": {"min": 0, "max": 100, "step": 1, "unit_of_measurement": "%"}}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_z2m",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.distributeur_cuisine_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}},
+        "portion": {"entity_id": "number.distributeur_cuisine_serving_size", "unite": null, "min": 1, "max": 10, "pas": 1},
+        "poids_portion": {"entity_id": "number.distributeur_cuisine_portion_weight", "unite": "g"},
+        "cibles_de_commande": ["number.distributeur_cuisine_serving_size", "select.distributeur_cuisine_feed", "select.distributeur_cuisine_mode"],
+        "programme": {"source": "aqara", "connu": true, "presente": false, "active": false, "lisible": false, "mode": "manuel", "note": "mode_manuel", "repas": []},
+        "anomalies": [
+          {"entity_id": "binary_sensor.distributeur_cuisine_error", "type": "autre", "actif": false}
+        ],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": ["sensor.distributeur_cuisine_portions_per_day", "sensor.distributeur_cuisine_weight_per_day"], "evenements": ["sensor.distributeur_cuisine_feeding_source"]}
+      }
+    },
+
+    {
+      "id": "aqara_z2m_liste",
+      "description": "Aqara C1 sous Zigbee2MQTT, mode « programmé », liste lisible (JSON complet) : lue en lecture seule.",
+      "appareils": [{"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": "dev_aqara_z2m", "haids": {}},
+      "entites": [
+        {"entity_id": "select.distributeur_cuisine_feed", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START"]}},
+        {"entity_id": "select.distributeur_cuisine_mode", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "schedule", "attributs": {"options": ["schedule", "manual"]}},
+        {"entity_id": "sensor.distributeur_cuisine_schedule", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "[{\"days\":\"everyday\",\"hour\":7,\"minute\":30,\"size\":2},{\"days\":\"workdays\",\"hour\":12,\"minute\":0,\"size\":1}]"}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_z2m",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.distributeur_cuisine_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["select.distributeur_cuisine_feed", "select.distributeur_cuisine_mode"],
+        "programme": {"source": "aqara", "connu": true, "presente": true, "active": true, "lisible": true, "mode": "programme", "note": null, "repas": [
+          {"heure": "07:30", "jours": [0, 1, 2, 3, 4, 5, 6], "portions": 2, "actif": true, "etat_jour": null},
+          {"heure": "12:00", "jours": [0, 1, 2, 3, 4], "portions": 1, "actif": true, "etat_jour": null}
+        ]},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "aqara_z2m_liste_vide",
+      "description": "Aqara C1 sous Zigbee2MQTT, mode « programmé » mais liste lisible VIDE : rien ne part de l'appareil, pas de source.",
+      "appareils": [{"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": "dev_aqara_z2m", "haids": {}},
+      "entites": [
+        {"entity_id": "select.distributeur_cuisine_feed", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START"]}},
+        {"entity_id": "select.distributeur_cuisine_mode", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "schedule", "attributs": {"options": ["schedule", "manual"]}},
+        {"entity_id": "sensor.distributeur_cuisine_schedule", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "[]"}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_z2m",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.distributeur_cuisine_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["select.distributeur_cuisine_feed", "select.distributeur_cuisine_mode"],
+        "programme": {"source": "aqara", "connu": true, "presente": false, "active": false, "lisible": true, "mode": "programme", "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "aqara_z2m_sans_liste",
+      "description": "Aqara C1 sous Zigbee2MQTT, mode « programmé », liste TRONQUÉE à 254 caractères au format Python : illisible. Présent (bloque l'ajout d'un repas Loggia), non actif (pas d'avertissement « deux sources »).",
+      "appareils": [{"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": "dev_aqara_z2m", "haids": {}},
+      "entites": [
+        {"entity_id": "select.distributeur_cuisine_feed", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START"]}},
+        {"entity_id": "select.distributeur_cuisine_mode", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "schedule", "attributs": {"options": ["schedule", "manual"]}},
+        {"entity_id": "sensor.distributeur_cuisine_schedule", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "[{'days': 'everyday', 'hour': 7, 'minute': 30, 'size': 2}, {'days': 'workdays', 'hour': 12, 'minute': 0, 'size': 1}, {'days': 'weekend', 'hour': 9, 'minute': 0, 'size': 2}, {'days': 'everyday', 'hour': 19, 'minute': 0, 'si"}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_z2m",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.distributeur_cuisine_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["select.distributeur_cuisine_feed", "select.distributeur_cuisine_mode"],
+        "programme": {"source": "aqara", "connu": true, "presente": true, "active": false, "lisible": false, "mode": "programme", "note": "tenu_par_appareil", "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "aqara_z2m_hors_ligne",
+      "description": "Le select feed d'un Z2M muet (unavailable) : reconnu quand même (ses options sont des attributs de capacité, HA les garde), d'où « ne répond plus » et non « ne sait pas commander ».",
+      "appareils": [{"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": "dev_aqara_z2m", "haids": {"reservoir": "input_number.croquettes_reservoir"}},
+      "entites": [
+        {"entity_id": "select.distributeur_cuisine_feed", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unavailable", "attributs": {"options": ["START"]}},
+        {"entity_id": "input_number.croquettes_reservoir", "plateforme": "input_number", "etat": "62", "attributs": {"min": 0, "max": 100, "step": 1, "unit_of_measurement": "%"}}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_z2m",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.distributeur_cuisine_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["select.distributeur_cuisine_feed"],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": true, "raison": "commande"},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "reservoir_muet",
+      "description": "Le réservoir désigné ne répond plus (helper ou capteur) : la commande va bien, mais la carte porte le liseré, comme avant (ADR 0048).",
+      "appareils": [{"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": "dev_aqara_z2m", "haids": {"reservoir": "sensor.croquettes_niveau"}},
+      "entites": [
+        {"entity_id": "select.distributeur_cuisine_feed", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START"]}},
+        {"entity_id": "sensor.croquettes_niveau", "plateforme": "template", "etat": "unavailable", "attributs": {"unit_of_measurement": "%"}}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_z2m",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.distributeur_cuisine_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["select.distributeur_cuisine_feed"],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": true, "raison": "reservoir"},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "catlink",
+      "description": "Catlink (HACS hasscc) : bouton au suffixe feed, portion au suffixe portions ; aucun programme exposé : inconnu.",
+      "appareils": [{"device_id": "dev_catlink", "nom": "Catlink", "fabricant": "CATLINK", "modele": "CATLINK-FEEDER"}],
+      "config": {"appareil": "dev_catlink", "haids": {}},
+      "entites": [
+        {"entity_id": "button.catlink_young_feed", "device_id": "dev_catlink", "plateforme": "catlink", "etat": "unknown"},
+        {"entity_id": "number.catlink_young_portions", "device_id": "dev_catlink", "plateforme": "catlink", "etat": "2", "attributs": {"min": 1, "max": 10, "step": 1}},
+        {"entity_id": "sensor.catlink_young_weight", "device_id": "dev_catlink", "plateforme": "catlink", "etat": "180", "attributs": {"unit_of_measurement": "g"}},
+        {"entity_id": "sensor.catlink_young_error", "device_id": "dev_catlink", "plateforme": "catlink", "etat": "normal"}
+      ],
+      "attendu": {
+        "appareil": "dev_catlink",
+        "notes": [],
+        "commande": {"domaine": "button", "service": "press", "entity_id": "button.catlink_young_feed", "donnees": {}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "button", "service": "press", "data": {"entity_id": "button.catlink_young_feed"}},
+        "portion": {"entity_id": "number.catlink_young_portions", "unite": null, "min": 1, "max": 10, "pas": 1},
+        "poids_portion": null,
+        "cibles_de_commande": ["button.catlink_young_feed", "number.catlink_young_portions"],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "petsafe",
+      "description": "PetSafe Smart Feed (HACS dcmeglio) : bouton sans clé ; le programme existe (services add_schedule) mais la liste n'est pas lisible ; seul le prochain repas l'est.",
+      "appareils": [{"device_id": "dev_petsafe", "nom": "Smart Feed", "fabricant": "PetSafe", "modele": "SMART-FEED 2.0"}],
+      "config": {"appareil": "dev_petsafe", "haids": {}},
+      "services": ["petsafe.add_schedule", "petsafe.delete_schedule", "petsafe.feed", "petsafe.modify_schedule"],
+      "entites": [
+        {"entity_id": "button.smart_feed_feed", "device_id": "dev_petsafe", "plateforme": "petsafe", "etat": "unknown"},
+        {"entity_id": "sensor.smart_feed_next_feeding", "device_id": "dev_petsafe", "plateforme": "petsafe", "classe": "timestamp", "etat": "2026-10-05T18:00:00+02:00"},
+        {"entity_id": "sensor.smart_feed_last_feeding", "device_id": "dev_petsafe", "plateforme": "petsafe", "classe": "timestamp", "etat": "2026-10-05T08:00:00+02:00"},
+        {"entity_id": "sensor.smart_feed_food_level", "device_id": "dev_petsafe", "plateforme": "petsafe", "etat": "full"},
+        {"entity_id": "switch.smart_feed_slow_feed", "device_id": "dev_petsafe", "plateforme": "petsafe", "etat": "off"},
+        {"entity_id": "switch.smart_feed_feeding_paused", "device_id": "dev_petsafe", "plateforme": "petsafe", "etat": "off"}
+      ],
+      "attendu": {
+        "appareil": "dev_petsafe",
+        "notes": [],
+        "commande": {"domaine": "button", "service": "press", "entity_id": "button.smart_feed_feed", "donnees": {}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "button", "service": "press", "data": {"entity_id": "button.smart_feed_feed"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["button.smart_feed_feed"],
+        "programme": {"source": "petsafe", "connu": true, "presente": true, "active": false, "lisible": false, "mode": null, "note": "tenu_par_appareil", "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": "sensor.smart_feed_next_feeding",
+        "historique": {"dernier": "sensor.smart_feed_last_feeding", "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "xiaomi_miot",
+      "description": "Xiaomi (HACS xiaomi_miot) : bouton pet_food_out, déshydratant en pourcentage ; programme propriétaire hors v1 : inconnu.",
+      "appareils": [{"device_id": "dev_xiaomi", "nom": "Pet Feeder", "fabricant": "Xiaomi", "modele": "xiaomi.feeder.pi2001"}],
+      "config": {"appareil": "dev_xiaomi", "haids": {}},
+      "entites": [
+        {"entity_id": "button.pet_feeder_pet_food_out", "device_id": "dev_xiaomi", "plateforme": "xiaomi_miot", "etat": "unknown"},
+        {"entity_id": "sensor.pet_feeder_desiccant_level", "device_id": "dev_xiaomi", "plateforme": "xiaomi_miot", "etat": "40", "attributs": {"unit_of_measurement": "%"}},
+        {"entity_id": "button.pet_feeder_reset_desiccant_life", "device_id": "dev_xiaomi", "plateforme": "xiaomi_miot", "etat": "unknown"}
+      ],
+      "attendu": {
+        "appareil": "dev_xiaomi",
+        "notes": [],
+        "commande": {"domaine": "button", "service": "press", "entity_id": "button.pet_feeder_pet_food_out", "donnees": {}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "button", "service": "press", "data": {"entity_id": "button.pet_feeder_pet_food_out"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["button.pet_feeder_pet_food_out"],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [
+          {"entity_id": "sensor.pet_feeder_desiccant_level", "role": "deshydratant", "jours": null, "pct": 40, "reset": "button.pet_feeder_reset_desiccant_life"}
+        ],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "localtuya_sans_cle",
+      "description": "LocalTuya : entités créées à la main, numéros de DP, ni clé ni classe fiables. On ne devine RIEN.",
+      "appareils": [{"device_id": "dev_localtuya", "nom": "Distributeur", "fabricant": "Tuya", "modele": "localtuya"}],
+      "config": {"appareil": "dev_localtuya", "haids": {}},
+      "entites": [
+        {"entity_id": "switch.distributeur_dp_1", "device_id": "dev_localtuya", "plateforme": "localtuya", "etat": "off"},
+        {"entity_id": "number.distributeur_dp_3", "device_id": "dev_localtuya", "plateforme": "localtuya", "etat": "1", "attributs": {"min": 1, "max": 12, "step": 1}},
+        {"entity_id": "sensor.distributeur_dp_15", "device_id": "dev_localtuya", "plateforme": "localtuya", "etat": "2"}
+      ],
+      "attendu": {
+        "appareil": "dev_localtuya",
+        "notes": [],
+        "commande": null,
+        "une_portion": null,
+        "envoi_2_portions": null,
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": [],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "esphome",
+      "description": "ESPHome fait maison : tout est libre ; un bouton « dispense_portion » ne répond à aucune règle. (Un bouton au suffixe _feed SERAIT reconnu : c'est voulu, la règle lit le suffixe.)",
+      "appareils": [{"device_id": "dev_esphome", "nom": "Chat feeder", "fabricant": "Espressif", "modele": "esp32dev"}],
+      "config": {"appareil": "dev_esphome", "haids": {}},
+      "entites": [
+        {"entity_id": "button.chat_feeder_dispense_portion", "device_id": "dev_esphome", "plateforme": "esphome", "etat": "unknown"},
+        {"entity_id": "switch.chat_feeder_meal_1_enabled", "device_id": "dev_esphome", "plateforme": "esphome", "etat": "on"},
+        {"entity_id": "time.chat_feeder_meal_1", "device_id": "dev_esphome", "plateforme": "esphome", "etat": "07:30:00"}
+      ],
+      "attendu": {
+        "appareil": "dev_esphome",
+        "notes": [],
+        "commande": null,
+        "une_portion": null,
+        "envoi_2_portions": null,
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": [],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "fontaine",
+      "description": "Fontaine Petlibro (même intégration qu'un distributeur) : aucune commande de distribution ; son filtre reste un consommable.",
+      "appareils": [{"device_id": "dev_fontaine", "nom": "Dockstream", "fabricant": "PETLIBRO", "modele": "PLWF105"}],
+      "config": {"appareil": "dev_fontaine", "haids": {}},
+      "entites": [
+        {"entity_id": "switch.dockstream_pump", "device_id": "dev_fontaine", "plateforme": "petlibro", "cle": "pump", "etat": "on"},
+        {"entity_id": "sensor.dockstream_remaining_filter_days", "device_id": "dev_fontaine", "plateforme": "petlibro", "cle": "remaining_filter_days", "etat": "9", "attributs": {"unit_of_measurement": "d"}},
+        {"entity_id": "button.dockstream_filter_reset", "device_id": "dev_fontaine", "plateforme": "petlibro", "cle": "filter_reset", "etat": "unknown"},
+        {"entity_id": "binary_sensor.dockstream_water_low", "device_id": "dev_fontaine", "plateforme": "petlibro", "cle": "water_low", "classe": "problem", "etat": "off"}
+      ],
+      "attendu": {
+        "appareil": "dev_fontaine",
+        "notes": [],
+        "commande": null,
+        "une_portion": null,
+        "envoi_2_portions": null,
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": [],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [
+          {"entity_id": "binary_sensor.dockstream_water_low", "type": "autre", "actif": false}
+        ],
+        "consommables": [
+          {"entity_id": "sensor.dockstream_remaining_filter_days", "role": "filtre", "jours": 9, "pct": null, "reset": "button.dockstream_filter_reset"}
+        ],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "litiere",
+      "description": "Litière PetKit (même intégration qu'un distributeur) : ni commande, ni programme ; son bac plein reste une anomalie « autre ».",
+      "appareils": [{"device_id": "dev_litiere", "nom": "Pura Max", "fabricant": "PetKit", "modele": "T4"}],
+      "config": {"appareil": "dev_litiere", "haids": {}},
+      "entites": [
+        {"entity_id": "button.pura_max_start_cleaning", "device_id": "dev_litiere", "plateforme": "petkit", "cle": "start_cleaning", "etat": "unknown"},
+        {"entity_id": "sensor.pura_max_deodorant_left_days", "device_id": "dev_litiere", "plateforme": "petkit", "cle": "deodorant_left_days", "etat": "14", "attributs": {"unit_of_measurement": "d"}},
+        {"entity_id": "binary_sensor.pura_max_waste_bin_full", "device_id": "dev_litiere", "plateforme": "petkit", "cle": "waste_bin", "classe": "problem", "etat": "off"}
+      ],
+      "attendu": {
+        "appareil": "dev_litiere",
+        "notes": [],
+        "commande": null,
+        "une_portion": null,
+        "envoi_2_portions": null,
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": [],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "_note_programme": "PetKit sans raw_distribution_data ET sans commande de distribution : ce n'est pas un distributeur qu'on saurait lire, on ne lui demande pas d'activer un capteur de diagnostic qu'il n'a pas.",
+        "anomalies": [
+          {"entity_id": "binary_sensor.pura_max_waste_bin_full", "type": "autre", "actif": false}
+        ],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "deux_distributeurs_et_un_select_feed_etranger",
+      "description": "Deux Aqara Z2M et l'aquarium dont le select « feed » propose START : la commande ne sort JAMAIS de l'appareil désigné (fin du « premier select.*feed de la maison »). Une entité désignée sur un autre appareil est ignorée et signalée.",
+      "appareils": [
+        {"device_id": "dev_salon", "nom": "Distributeur salon", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"},
+        {"device_id": "dev_entree", "nom": "Distributeur entrée", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"},
+        {"device_id": "dev_aquarium", "nom": "Aquarium", "fabricant": "Fabrication maison", "modele": "esp8266"}
+      ],
+      "config": {"appareil": null, "haid": null, "haids": {"reservoir": null, "portionWeight": "number.salon_serving_size", "distribuees": "sensor.entree_portions_per_day"}},
+      "entites": [
+        {"entity_id": "select.aquarium_feed", "device_id": "dev_aquarium", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START", "STOP"]}},
+        {"entity_id": "select.entree_feed", "device_id": "dev_entree", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START"]}},
+        {"entity_id": "sensor.entree_portions_per_day", "device_id": "dev_entree", "plateforme": "mqtt", "etat": "3", "attributs": {"state_class": "total_increasing"}},
+        {"entity_id": "select.salon_feed", "device_id": "dev_salon", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START"]}},
+        {"entity_id": "number.salon_serving_size", "device_id": "dev_salon", "plateforme": "mqtt", "etat": "1", "attributs": {"min": 1, "max": 10, "step": 1}}
+      ],
+      "attendu": {
+        "appareil": "dev_salon",
+        "notes": [{"code": "appareil_divergent", "entity_id": "sensor.entree_portions_per_day"}],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.salon_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.salon_feed", "option": "START"}},
+        "portion": {"entity_id": "number.salon_serving_size", "unite": null, "min": 1, "max": 10, "pas": 1},
+        "poids_portion": null,
+        "cibles_de_commande": ["number.salon_serving_size", "select.salon_feed"],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "script_seul",
+      "description": "Aucun appareil : un réservoir en helper et le script DÉSIGNÉ dans Paramètres. Le script est la commande (règle 5), il reçoit le nombre de portions en variable.",
+      "appareils": [],
+      "config": {"appareil": null, "haid": null, "script": "script.nourrir_le_chat", "haids": {"reservoir": "input_number.croquettes_reservoir", "portionWeight": null, "distribuees": null}},
+      "entites": [
+        {"entity_id": "script.nourrir_le_chat", "plateforme": "script", "etat": "off", "attributs": {"friendly_name": "Nourrir le chat"}},
+        {"entity_id": "script.donner_des_croquettes", "plateforme": "script", "etat": "off", "attributs": {"friendly_name": "Donner des croquettes"}},
+        {"entity_id": "input_number.croquettes_reservoir", "plateforme": "input_number", "etat": "62", "attributs": {"min": 0, "max": 100, "step": 1, "unit_of_measurement": "%"}}
+      ],
+      "attendu": {
+        "appareil": null,
+        "notes": [],
+        "commande": {"domaine": "script", "service": "turn_on", "entity_id": "script.nourrir_le_chat", "donnees": {}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "script", "service": "turn_on", "data": {"entity_id": "script.nourrir_le_chat", "variables": {"portions": 2}}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["script.nourrir_le_chat"],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "script_devine_jamais",
+      "description": "Un script au nom évocateur, NON désigné : jamais une commande (fin de feederScript comme commande). Le distributeur se voit, Loggia dit qu'il ne sait pas le commander.",
+      "appareils": [],
+      "config": {"appareil": null, "haid": null, "script": null, "haids": {"reservoir": "input_number.croquettes_reservoir", "portionWeight": null, "distribuees": null}},
+      "entites": [
+        {"entity_id": "script.croquettes_du_chat", "plateforme": "script", "etat": "off", "attributs": {"friendly_name": "Croquettes du chat"}},
+        {"entity_id": "input_number.croquettes_reservoir", "plateforme": "input_number", "etat": "62", "attributs": {"min": 0, "max": 100, "step": 1, "unit_of_measurement": "%"}}
+      ],
+      "attendu": {
+        "appareil": null,
+        "notes": [],
+        "commande": null,
+        "une_portion": null,
+        "envoi_2_portions": null,
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": [],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+    {
+      "id": "appareil_et_script_designes",
+      "description": "L'appareil a sa commande ET un script est désigné dans Paramètres : la commande de l'appareil passe d'abord (règle R1, comme le « Distribuer » d'avant le 05/10, qui ne prenait le script qu'en repli). Le script reste une cible : ses automatisations sont reconnues.",
+      "appareils": [{"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": "dev_aqara_z2m", "script": "script.nourrir_le_chat", "haids": {}},
+      "entites": [
+        {"entity_id": "select.distributeur_cuisine_feed", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START"]}},
+        {"entity_id": "script.nourrir_le_chat", "plateforme": "script", "etat": "off", "attributs": {"friendly_name": "Nourrir le chat"}}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_z2m",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.distributeur_cuisine_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["script.nourrir_le_chat", "select.distributeur_cuisine_feed"],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "appareil_sans_commande_et_commandes_etrangeres",
+      "description": "L'appareil désigné n'a AUCUNE commande, et la maison en a deux ailleurs (le select feed d'un aquarium, le bouton d'un Petlibro) : rien n'est pris hors de l'appareil, même faute de mieux. Loggia dit qu'il ne sait pas le commander.",
+      "appareils": [{"device_id": "dev_esphome", "nom": "Chat feeder", "fabricant": "Espressif", "modele": "esp32"}, {"device_id": "dev_aquarium", "nom": "Aquarium", "fabricant": "Fabrication maison", "modele": "esp8266"}, {"device_id": "dev_petlibro", "nom": "Granary", "fabricant": "PETLIBRO", "modele": "PLAF103"}],
+      "config": {"appareil": "dev_esphome", "haids": {}},
+      "entites": [
+        {"entity_id": "button.chat_feeder_dispense_portion", "device_id": "dev_esphome", "plateforme": "esphome", "etat": "unknown"},
+        {"entity_id": "select.aquarium_feed", "device_id": "dev_aquarium", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START", "STOP"]}},
+        {"entity_id": "button.granary_manual_feed", "device_id": "dev_petlibro", "plateforme": "petlibro", "cle": "manual_feed", "etat": "unknown"}
+      ],
+      "attendu": {
+        "appareil": "dev_esphome",
+        "notes": [],
+        "commande": null,
+        "une_portion": null,
+        "envoi_2_portions": null,
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": [],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "reservoir_sans_valeur",
+      "description": "Le réservoir désigné répond mais n'a pas encore de valeur (unknown, un capteur de gabarit au démarrage) : ce n'est PAS une panne, pas de liseré (health.js sépare muette et sans valeur ; la carte d'avant le 05/10 ne le mettait qu'à unavailable ou absent).",
+      "appareils": [{"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": "dev_aqara_z2m", "haids": {"reservoir": "sensor.croquettes_niveau"}},
+      "entites": [
+        {"entity_id": "select.distributeur_cuisine_feed", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START"]}},
+        {"entity_id": "sensor.croquettes_niveau", "plateforme": "template", "etat": "unknown", "attributs": {"unit_of_measurement": "%"}}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_z2m",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.distributeur_cuisine_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["select.distributeur_cuisine_feed"],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "aqara_z2m_tout_muet",
+      "description": "Un Aqara Z2M hors ligne pour de vrai : TOUTES ses entités tombent, le mode et la liste aussi. La commande est reconnue (options gardées), la fiche dit « ne répond plus » ; le mode illisible ne se lit ni « manuel » ni « tenu par l'appareil » : on ne sait pas (connu false).",
+      "appareils": [{"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": "dev_aqara_z2m", "haids": {"reservoir": "input_number.croquettes_reservoir"}},
+      "entites": [
+        {"entity_id": "select.distributeur_cuisine_feed", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unavailable", "attributs": {"options": ["START"]}},
+        {"entity_id": "select.distributeur_cuisine_mode", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unavailable", "attributs": {"options": ["schedule", "manual"]}},
+        {"entity_id": "sensor.distributeur_cuisine_schedule", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unavailable"},
+        {"entity_id": "input_number.croquettes_reservoir", "plateforme": "input_number", "etat": "62", "attributs": {"min": 0, "max": 100, "step": 1, "unit_of_measurement": "%"}}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_z2m",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.distributeur_cuisine_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["select.distributeur_cuisine_feed", "select.distributeur_cuisine_mode"],
+        "programme": {"source": "aqara", "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": true, "raison": "commande"},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "aqara_z2m_liste_format_python",
+      "description": "Aqara C1 sous Zigbee2MQTT, mode « programmé », liste COMPLÈTE mais au format Python (guillemets simples, ce que HA affiche d'une liste rendue par un gabarit) : illisible en v1, comme une liste tronquée. Remplacer les guillemets serait deviner.",
+      "appareils": [{"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": "dev_aqara_z2m", "haids": {}},
+      "entites": [
+        {"entity_id": "select.distributeur_cuisine_feed", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START"]}},
+        {"entity_id": "select.distributeur_cuisine_mode", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "schedule", "attributs": {"options": ["schedule", "manual"]}},
+        {"entity_id": "sensor.distributeur_cuisine_schedule", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "[{'days': 'everyday', 'hour': 7, 'minute': 30, 'size': 2}]"}
+      ],
+      "attendu": {
+        "appareil": "dev_aqara_z2m",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.distributeur_cuisine_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["select.distributeur_cuisine_feed", "select.distributeur_cuisine_mode"],
+        "programme": {"source": "aqara", "connu": true, "presente": true, "active": false, "lisible": false, "mode": "programme", "note": "tenu_par_appareil", "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    }
+  ],
+
+  "automatisations": {
+    "_lisezmoi": "Le distributeur de référence est celui du cas aqara_z2m_manuel, plus le script désigné script.nourrir_le_chat. declencheurs_bruts = la sortie de la fonction PURE declencheurs(raw_config) ; attendu = l'élément résumé après résolution par hass.states (entite_heure devient heure, ou autre si l'entité ne donne pas d'heure). « commande » dit si l'automatisation est gardée par le filtre des ACTIONS : une action COMMANDE quand elle vise une cible de REPAS (contexte.cibles_repas = la commande et le script désigné) ou un script qui commande ; viser seulement la portion ou le mode (les autres cibles) est un RÉGLAGE, pas un repas — l'automatisation est écartée, sinon une « portion d'hiver » à 06:00 passerait pour un repas, compterait dans le prochain repas et les jours de réserve, et retiendrait le planning Loggia (repas sauté). Les cibles servent à TROUVER les candidates (automations_with_entity), les cibles de repas à les GARDER. Une device action se résout par le registre (son entity_id est un identifiant de registre, contexte.registre_ids) et commande si l'entité résolue est une cible de repas ; non résolue, elle commande si l'appareil est le distributeur, le domaine dans DOMAINES_ACTION_APPAREIL et, pour un select, l'option START ; une automatisation écartée sans indice n'apparaît pas dans la réponse ; indice n'est posé QUE sur une automatisation NON reconnue par ses actions (null sinon, même si l'ancienne liste la nomme) : l'écran dit « Reconnue par votre ancienne liste » à cause de lui. Un appel DIRECT « action: script.x » n'est pas dans references (HA ne relève que target et data) : on le trouve en parcourant toutes les automatisations par scripts_appeles(raw_config). Un script COMMANDE s'il vise une cible de repas, directement ou par un script qu'il appelle (3 niveaux au plus, garde anti-cycle) ; il devient alors une cible à son tour. Portions : lues seulement sur l'action qui vise la COMMANDE ou un script qui commande (value, portions, amount, quantity, grams numériques), ou le count numérique d'un repeat autour d'un appui (button.press ou select_option START) ; un gabarit, ou deux valeurs différentes → null. Jours : weekday du déclencheur, ou condition time à weekday (seule ou dans un and) ; null = tous les jours. conditionnel : toute autre condition de niveau haut (or, not, template, state, numeric_state…) ; une branche choose / if n'est pas suivie en v1. Un déclencheur ou une condition enabled:false est ignoré. time_pattern : hours '/N' (minutes absentes = 0) → periodique avec ses heures, qui n'entrent PAS dans heures (pas de « prochain repas » ni de jours de réserve dessus).",
+    "contexte": {
+      "fuseau": "Europe/Paris",
+      "cibles": ["number.distributeur_cuisine_serving_size", "script.nourrir_le_chat", "select.distributeur_cuisine_feed", "select.distributeur_cuisine_mode"],
+      "commande": "select.distributeur_cuisine_feed",
+      "cibles_repas": ["script.nourrir_le_chat", "select.distributeur_cuisine_feed"],
+      "registre_ids": {"1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d": "select.distributeur_cuisine_feed", "3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f": "number.distributeur_cuisine_serving_size"},
+      "appareils": ["dev_aqara_z2m"],
+      "reservoir": "input_number.croquettes_reservoir",
+      "indices": {"ancienne_liste": ["automation.croquettes_matin_et_soir", "automation.croquettes_par_mqtt"], "associee": ["automation.croquettes_par_zone"]},
+      "etats": {
+        "input_datetime.heure_repas_soir": {"etat": "18:45:00", "attributs": {"has_date": false, "has_time": true, "hour": 18, "minute": 45, "second": 0}},
+        "sensor.reveil_suivant": {"etat": "2026-10-06T06:10:00+02:00", "attributs": {"device_class": "timestamp"}},
+        "input_datetime.heure_vide": {"etat": "unknown", "attributs": {"has_date": false, "has_time": true}}
+      },
+      "scripts": {
+        "script.nourrir_le_chat": {
+          "raw_config": {"alias": "Nourrir le chat", "sequence": [{"action": "select.select_option", "target": {"entity_id": "select.distributeur_cuisine_feed"}, "data": {"option": "START"}}]},
+          "action_script": {"referenced_entities": ["select.distributeur_cuisine_feed"], "referenced_devices": []}
+        },
+        "script.routine_du_matin": {
+          "raw_config": {"alias": "Routine du matin", "sequence": [{"action": "light.turn_on", "target": {"entity_id": "light.cuisine"}}, {"action": "script.nourrir_le_chat"}]},
+          "action_script": {"referenced_entities": ["light.cuisine"], "referenced_devices": []}
+        },
+        "script.boucle_a": {
+          "raw_config": {"alias": "Boucle A", "sequence": [{"action": "script.boucle_b"}]},
+          "action_script": {"referenced_entities": [], "referenced_devices": []}
+        },
+        "script.boucle_b": {
+          "raw_config": {"alias": "Boucle B", "sequence": [{"action": "script.boucle_a"}]},
+          "action_script": {"referenced_entities": [], "referenced_devices": []}
+        }
+      }
+    },
+    "cas": [
+      {
+        "id": "matin_et_soir_pluriel",
+        "entity_id": "automation.croquettes_matin_et_soir",
+        "etat": "on",
+        "attributs": {"friendly_name": "Croquettes matin et soir", "id": "1728000000001", "last_triggered": "2026-10-05T07:30:00+02:00"},
+        "raw_config": {"id": "1728000000001", "alias": "Croquettes matin et soir",
+          "triggers": [{"trigger": "time", "at": ["07:30:00", "19:00"]}],
+          "actions": [{"action": "select.select_option", "target": {"entity_id": "select.distributeur_cuisine_feed"}, "data": {"option": "START"}}]},
+        "references": {"entities": ["select.distributeur_cuisine_feed"], "devices": []},
+        "action_script": {"referenced_entities": ["select.distributeur_cuisine_feed"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "heure", "heure": "07:30"}, {"type": "heure", "heure": "19:00"}],
+        "attendu": {"commande": true, "indice": null, "nom": "Croquettes matin et soir", "etat": "on", "dernier": "2026-10-05T07:30:00+02:00",
+          "declencheurs": [{"type": "heure", "heure": "07:30"}, {"type": "heure", "heure": "19:00"}],
+          "heures": ["07:30", "19:00"], "jours": null, "conditionnel": false, "portions": null, "modifiable_si_admin": true}
+      },
+      {
+        "id": "midi_singulier_semaine",
+        "entity_id": "automation.croquettes_du_midi",
+        "etat": "off",
+        "attributs": {"friendly_name": "Croquettes du midi", "id": "1728000000002", "last_triggered": null},
+        "raw_config": {"id": "1728000000002", "alias": "Croquettes du midi",
+          "trigger": {"platform": "time", "at": "12:30", "weekday": ["mon", "tue", "wed", "thu", "fri"]},
+          "action": [{"service": "select.select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}}]},
+        "references": {"entities": ["select.distributeur_cuisine_feed"], "devices": []},
+        "action_script": {"referenced_entities": ["select.distributeur_cuisine_feed"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "heure", "heure": "12:30"}],
+        "attendu": {"commande": true, "indice": null, "nom": "Croquettes du midi", "etat": "off", "dernier": null,
+          "declencheurs": [{"type": "heure", "heure": "12:30"}],
+          "heures": ["12:30"], "jours": [0, 1, 2, 3, 4], "conditionnel": false, "portions": null, "modifiable_si_admin": true}
+      },
+      {
+        "id": "alerte_bac_lit_seulement",
+        "entity_id": "automation.alerte_bac_presque_vide",
+        "etat": "on",
+        "attributs": {"friendly_name": "Alerte bac presque vide", "id": "1728000000003", "last_triggered": "2026-10-04T21:00:00+02:00"},
+        "raw_config": {"id": "1728000000003", "alias": "Alerte bac presque vide",
+          "triggers": [{"trigger": "numeric_state", "entity_id": "input_number.croquettes_reservoir", "below": 15}],
+          "conditions": [{"condition": "state", "entity_id": "select.distributeur_cuisine_mode", "state": "manual"}],
+          "actions": [{"action": "notify.notify", "data": {"message": "Le bac est presque vide"}}]},
+        "references": {"entities": ["input_number.croquettes_reservoir", "select.distributeur_cuisine_mode"], "devices": []},
+        "action_script": {"referenced_entities": [], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "autre"}],
+        "attendu": {"commande": false, "indice": null}
+      },
+      {
+        "id": "decremente_le_reservoir",
+        "entity_id": "automation.croquettes_decompte",
+        "etat": "on",
+        "attributs": {"friendly_name": "Décompte du réservoir", "id": "1728000000004", "last_triggered": null},
+        "raw_config": {"id": "1728000000004", "alias": "Décompte du réservoir",
+          "triggers": [{"trigger": "state", "entity_id": "sensor.distributeur_cuisine_portions_per_day"}],
+          "actions": [{"action": "input_number.decrement", "target": {"entity_id": "input_number.croquettes_reservoir"}}]},
+        "references": {"entities": ["input_number.croquettes_reservoir", "sensor.distributeur_cuisine_portions_per_day"], "devices": []},
+        "action_script": {"referenced_entities": ["input_number.croquettes_reservoir"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "autre"}],
+        "attendu": {"commande": false, "indice": null}
+      },
+      {
+        "id": "lumiere_de_l_appareil_par_device_action",
+        "entity_id": "automation.voyant_du_distributeur",
+        "etat": "on",
+        "attributs": {"friendly_name": "Voyant du distributeur", "id": "1728000000005", "last_triggered": null},
+        "raw_config": {"id": "1728000000005", "alias": "Voyant du distributeur",
+          "triggers": [{"trigger": "time", "at": "20:00"}],
+          "actions": [{"device_id": "dev_aqara_z2m", "domain": "light", "type": "turn_off", "entity_id": "0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e"}]},
+        "references": {"entities": [], "devices": ["dev_aqara_z2m"]},
+        "action_script": {"referenced_entities": [], "referenced_devices": ["dev_aqara_z2m"]},
+        "declencheurs_bruts": [{"type": "heure", "heure": "20:00"}],
+        "attendu": {"commande": false, "indice": null}
+      },
+      {
+        "id": "device_action_qui_distribue",
+        "entity_id": "automation.croquettes_par_l_appareil",
+        "etat": "on",
+        "attributs": {"friendly_name": "Croquettes par l'appareil", "id": "1728000000006", "last_triggered": null},
+        "raw_config": {"id": "1728000000006", "alias": "Croquettes par l'appareil",
+          "triggers": [{"trigger": "time", "at": "06:45"}],
+          "actions": [{"device_id": "dev_aqara_z2m", "domain": "select", "type": "select_option", "entity_id": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d", "option": "START"}]},
+        "references": {"entities": [], "devices": ["dev_aqara_z2m"]},
+        "action_script": {"referenced_entities": [], "referenced_devices": ["dev_aqara_z2m"]},
+        "declencheurs_bruts": [{"type": "heure", "heure": "06:45"}],
+        "attendu": {"commande": true, "indice": null, "nom": "Croquettes par l'appareil", "etat": "on", "dernier": null,
+          "declencheurs": [{"type": "heure", "heure": "06:45"}],
+          "heures": ["06:45"], "jours": null, "conditionnel": false, "portions": null, "modifiable_si_admin": true}
+      },
+      {
+        "id": "script_appele_directement",
+        "entity_id": "automation.croquettes_par_script",
+        "etat": "on",
+        "attributs": {"friendly_name": "Croquettes par script", "id": "1728000000007", "last_triggered": null},
+        "raw_config": {"id": "1728000000007", "alias": "Croquettes par script",
+          "triggers": [{"trigger": "time", "at": {"entity_id": "input_datetime.heure_repas_soir", "offset": "-00:15:00"}}],
+          "actions": [{"action": "script.nourrir_le_chat", "data": {"portions": 2}}]},
+        "references": {"entities": ["input_datetime.heure_repas_soir"], "devices": []},
+        "action_script": {"referenced_entities": [], "referenced_devices": []},
+        "scripts_appeles": ["script.nourrir_le_chat"],
+        "declencheurs_bruts": [{"type": "entite_heure", "entite": "input_datetime.heure_repas_soir", "decalage": -15}],
+        "attendu": {"commande": true, "indice": null, "nom": "Croquettes par script", "etat": "on", "dernier": null,
+          "declencheurs": [{"type": "heure", "heure": "18:30"}],
+          "heures": ["18:30"], "jours": null, "conditionnel": false, "portions": 2, "modifiable_si_admin": true}
+      },
+      {
+        "id": "script_dans_un_script",
+        "entity_id": "automation.routine_du_matin",
+        "etat": "on",
+        "attributs": {"friendly_name": "Routine du matin", "id": "1728000000008", "last_triggered": null},
+        "raw_config": {"id": "1728000000008", "alias": "Routine du matin",
+          "triggers": [{"trigger": "time", "at": {"entity_id": "sensor.reveil_suivant", "offset": {"minutes": 10}}}],
+          "actions": [{"action": "script.turn_on", "target": {"entity_id": "script.routine_du_matin"}}]},
+        "references": {"entities": ["script.routine_du_matin", "sensor.reveil_suivant"], "devices": []},
+        "action_script": {"referenced_entities": ["script.routine_du_matin"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "entite_heure", "entite": "sensor.reveil_suivant", "decalage": 10}],
+        "attendu": {"commande": true, "indice": null, "nom": "Routine du matin", "etat": "on", "dernier": null,
+          "declencheurs": [{"type": "heure", "heure": "06:20"}],
+          "heures": ["06:20"], "jours": null, "conditionnel": false, "portions": null, "modifiable_si_admin": true}
+      },
+      {
+        "id": "scripts_en_boucle",
+        "entity_id": "automation.boucle",
+        "etat": "on",
+        "attributs": {"friendly_name": "Boucle", "id": "1728000000009", "last_triggered": null},
+        "raw_config": {"id": "1728000000009", "alias": "Boucle",
+          "triggers": [{"trigger": "time", "at": "05:00"}],
+          "actions": [{"action": "script.boucle_a"}]},
+        "references": {"entities": [], "devices": []},
+        "action_script": {"referenced_entities": [], "referenced_devices": []},
+        "scripts_appeles": ["script.boucle_a"],
+        "declencheurs_bruts": [{"type": "heure", "heure": "05:00"}],
+        "attendu": {"commande": false, "indice": null}
+      },
+      {
+        "id": "indisponible_repli_raw_config",
+        "entity_id": "automation.croquettes_cassee",
+        "etat": "unavailable",
+        "attributs": {"friendly_name": "Croquettes cassée", "id": "1728000000010"},
+        "raw_config": {"id": "1728000000010", "alias": "Croquettes cassée",
+          "triggers": [{"trigger": "time", "at": "08:15"}],
+          "actions": [{"choose": [{"conditions": [{"condition": "state", "entity_id": "input_boolean.vacances", "state": "on"}], "sequence": [{"action": "notify.notify", "data": {"message": "rien"}}]}],
+                       "default": [{"if": [{"condition": "template", "value_template": "{{ true }}"}], "then": [{"parallel": [{"action": "select.select_option", "target": {"entity_id": ["select.distributeur_cuisine_feed"]}, "data": {"option": "START"}}]}], "else": []}]}]},
+        "references": {"entities": ["select.distributeur_cuisine_feed", "input_boolean.vacances"], "devices": []},
+        "action_script": null,
+        "declencheurs_bruts": [{"type": "heure", "heure": "08:15"}],
+        "attendu": {"commande": true, "indice": null, "nom": "Croquettes cassée", "etat": "unavailable", "dernier": null,
+          "declencheurs": [{"type": "heure", "heure": "08:15"}],
+          "heures": ["08:15"], "jours": null, "conditionnel": false, "portions": null, "modifiable_si_admin": true}
+      },
+      {
+        "id": "repetition_et_gabarit",
+        "entity_id": "automation.double_ration",
+        "etat": "on",
+        "attributs": {"friendly_name": "Double ration", "id": "1728000000011", "last_triggered": null},
+        "raw_config": {"id": "1728000000011", "alias": "Double ration",
+          "triggers": [{"trigger": "time", "at": "21:00", "enabled": true}, {"trigger": "time", "at": "03:00", "enabled": false}],
+          "actions": [{"repeat": {"count": 2, "sequence": [{"action": "select.select_option", "target": {"entity_id": "select.distributeur_cuisine_feed"}, "data": {"option": "START"}}, {"delay": "00:00:05"}]}}]},
+        "references": {"entities": ["select.distributeur_cuisine_feed"], "devices": []},
+        "action_script": {"referenced_entities": ["select.distributeur_cuisine_feed"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "heure", "heure": "21:00"}],
+        "attendu": {"commande": true, "indice": null, "nom": "Double ration", "etat": "on", "dernier": null,
+          "declencheurs": [{"type": "heure", "heure": "21:00"}],
+          "heures": ["21:00"], "jours": null, "conditionnel": false, "portions": 2, "modifiable_si_admin": true}
+      },
+      {
+        "id": "repetition_en_gabarit",
+        "entity_id": "automation.ration_variable",
+        "etat": "on",
+        "attributs": {"friendly_name": "Ration variable", "id": "1728000000012", "last_triggered": null},
+        "raw_config": {"id": "1728000000012", "alias": "Ration variable",
+          "triggers": [{"trigger": "time", "at": "13:00"}],
+          "conditions": [{"condition": "and", "conditions": [{"condition": "time", "weekday": ["sat", "sun"]}]}],
+          "actions": [{"repeat": {"count": "{{ states('input_number.ration') | int }}", "sequence": [{"action": "select.select_option", "target": {"entity_id": "select.distributeur_cuisine_feed"}, "data": {"option": "START"}}]}}]},
+        "references": {"entities": ["select.distributeur_cuisine_feed"], "devices": []},
+        "action_script": {"referenced_entities": ["select.distributeur_cuisine_feed"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "heure", "heure": "13:00"}],
+        "attendu": {"commande": true, "indice": null, "nom": "Ration variable", "etat": "on", "dernier": null,
+          "declencheurs": [{"type": "heure", "heure": "13:00"}],
+          "heures": ["13:00"], "jours": [5, 6], "conditionnel": false, "portions": null, "modifiable_si_admin": true}
+      },
+      {
+        "id": "soleil_et_condition_ou",
+        "entity_id": "automation.croquettes_au_lever",
+        "etat": "on",
+        "attributs": {"friendly_name": "Croquettes au lever", "id": "1728000000013", "last_triggered": null},
+        "raw_config": {"id": "1728000000013", "alias": "Croquettes au lever",
+          "triggers": [{"trigger": "sun", "event": "sunrise", "offset": "-00:30:00"}],
+          "conditions": [{"condition": "or", "conditions": [{"condition": "state", "entity_id": "person.quelqu_un", "state": "home"}, {"condition": "template", "value_template": "{{ is_state('input_boolean.chat_dehors', 'off') }}"}]}],
+          "actions": [{"action": "script.nourrir_le_chat"}]},
+        "references": {"entities": ["person.quelqu_un"], "devices": []},
+        "action_script": {"referenced_entities": [], "referenced_devices": []},
+        "scripts_appeles": ["script.nourrir_le_chat"],
+        "declencheurs_bruts": [{"type": "soleil", "evenement": "sunrise", "decalage": -30}],
+        "attendu": {"commande": true, "indice": null, "nom": "Croquettes au lever", "etat": "on", "dernier": null,
+          "declencheurs": [{"type": "soleil", "evenement": "sunrise", "decalage": -30}],
+          "heures": [], "jours": null, "conditionnel": true, "portions": null, "modifiable_si_admin": true}
+      },
+      {
+        "id": "periodique_sans_identifiant",
+        "entity_id": "automation.croquettes_toutes_les_8_h",
+        "etat": "on",
+        "attributs": {"friendly_name": "Croquettes toutes les 8 h", "last_triggered": null},
+        "raw_config": {"alias": "Croquettes toutes les 8 h",
+          "trigger": [{"platform": "time_pattern", "hours": "/8"}],
+          "action": {"service": "select.select_option", "entity_id": "select.distributeur_cuisine_feed", "data": {"option": "START"}}},
+        "references": {"entities": ["select.distributeur_cuisine_feed"], "devices": []},
+        "action_script": {"referenced_entities": ["select.distributeur_cuisine_feed"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "periodique", "toutes": 8, "heures": ["00:00", "08:00", "16:00"]}],
+        "attendu": {"commande": true, "indice": null, "nom": "Croquettes toutes les 8 h", "etat": "on", "dernier": null,
+          "declencheurs": [{"type": "periodique", "toutes": 8, "heures": ["00:00", "08:00", "16:00"]}],
+          "heures": [], "jours": null, "conditionnel": false, "portions": null, "modifiable_si_admin": false}
+      },
+      {
+        "id": "heure_d_un_helper_vide",
+        "entity_id": "automation.croquettes_heure_vide",
+        "etat": "on",
+        "attributs": {"friendly_name": "Croquettes heure vide", "id": "1728000000015", "last_triggered": null},
+        "raw_config": {"id": "1728000000015", "alias": "Croquettes heure vide",
+          "triggers": [{"trigger": "time", "at": "input_datetime.heure_vide"}],
+          "actions": [{"action": "select.select_option", "target": {"entity_id": "select.distributeur_cuisine_feed"}, "data": {"option": "START"}}]},
+        "references": {"entities": ["input_datetime.heure_vide", "select.distributeur_cuisine_feed"], "devices": []},
+        "action_script": {"referenced_entities": ["select.distributeur_cuisine_feed"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "entite_heure", "entite": "input_datetime.heure_vide", "decalage": 0}],
+        "attendu": {"commande": true, "indice": null, "nom": "Croquettes heure vide", "etat": "on", "dernier": null,
+          "declencheurs": [{"type": "autre"}],
+          "heures": [], "jours": null, "conditionnel": false, "portions": null, "modifiable_si_admin": true}
+      },
+      {
+        "id": "indice_ancienne_liste_par_mqtt",
+        "entity_id": "automation.croquettes_par_mqtt",
+        "etat": "on",
+        "attributs": {"friendly_name": "Croquettes par MQTT", "id": "1728000000016", "last_triggered": null},
+        "raw_config": {"id": "1728000000016", "alias": "Croquettes par MQTT",
+          "triggers": [{"trigger": "time", "at": "17:00"}],
+          "actions": [{"action": "mqtt.publish", "data": {"topic": "zigbee2mqtt/Distributeur de croquettes/set", "payload": "{\"feed\": \"START\"}"}}]},
+        "references": {"entities": [], "devices": []},
+        "action_script": {"referenced_entities": [], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "heure", "heure": "17:00"}],
+        "attendu": {"commande": false, "indice": "ancienne_liste", "nom": "Croquettes par MQTT", "etat": "on", "dernier": null,
+          "declencheurs": [{"type": "heure", "heure": "17:00"}],
+          "heures": ["17:00"], "jours": null, "conditionnel": false, "portions": null, "modifiable_si_admin": true}
+      },
+      {
+        "id": "indice_associee_par_zone",
+        "entity_id": "automation.croquettes_par_zone",
+        "etat": "off",
+        "attributs": {"friendly_name": "Croquettes par zone", "id": "1728000000017", "last_triggered": null},
+        "raw_config": {"id": "1728000000017", "alias": "Croquettes par zone",
+          "triggers": [{"trigger": "time", "at": "16:00"}],
+          "actions": [{"action": "select.select_option", "target": {"area_id": "cuisine"}, "data": {"option": "START"}}]},
+        "references": {"entities": [], "devices": []},
+        "action_script": {"referenced_entities": [], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "heure", "heure": "16:00"}],
+        "attendu": {"commande": false, "indice": "associee", "nom": "Croquettes par zone", "etat": "off", "dernier": null,
+          "declencheurs": [{"type": "heure", "heure": "16:00"}],
+          "heures": ["16:00"], "jours": null, "conditionnel": false, "portions": null, "modifiable_si_admin": true}
+      },
+      {
+        "id": "reglage_de_la_portion_seulement",
+        "entity_id": "automation.portion_d_hiver",
+        "etat": "on",
+        "attributs": {"friendly_name": "Portion d'hiver", "id": "1728000000018", "last_triggered": null},
+        "raw_config": {"id": "1728000000018", "alias": "Portion d'hiver",
+          "triggers": [{"trigger": "time", "at": "06:00"}],
+          "actions": [{"action": "number.set_value", "target": {"entity_id": "number.distributeur_cuisine_serving_size"}, "data": {"value": 3}}]},
+        "references": {"entities": ["number.distributeur_cuisine_serving_size"], "devices": []},
+        "action_script": {"referenced_entities": ["number.distributeur_cuisine_serving_size"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "heure", "heure": "06:00"}],
+        "attendu": {"commande": false, "indice": null}
+      },
+      {
+        "id": "mode_programme_le_soir",
+        "entity_id": "automation.distributeur_en_mode_programme",
+        "etat": "on",
+        "attributs": {"friendly_name": "Distributeur en mode programmé", "id": "1728000000019", "last_triggered": null},
+        "raw_config": {"id": "1728000000019", "alias": "Distributeur en mode programmé",
+          "triggers": [{"trigger": "time", "at": "22:00"}],
+          "actions": [{"action": "select.select_option", "target": {"entity_id": "select.distributeur_cuisine_mode"}, "data": {"option": "schedule"}}]},
+        "references": {"entities": ["select.distributeur_cuisine_mode"], "devices": []},
+        "action_script": {"referenced_entities": ["select.distributeur_cuisine_mode"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "heure", "heure": "22:00"}],
+        "attendu": {"commande": false, "indice": null}
+      },
+      {
+        "id": "device_action_sur_le_mode",
+        "entity_id": "automation.mode_manuel_le_matin",
+        "etat": "on",
+        "attributs": {"friendly_name": "Mode manuel le matin", "id": "1728000000020", "last_triggered": null},
+        "raw_config": {"id": "1728000000020", "alias": "Mode manuel le matin",
+          "triggers": [{"trigger": "time", "at": "06:30"}],
+          "actions": [{"device_id": "dev_aqara_z2m", "domain": "select", "type": "select_option", "entity_id": "2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e", "option": "manual"}]},
+        "references": {"entities": [], "devices": ["dev_aqara_z2m"]},
+        "action_script": {"referenced_entities": [], "referenced_devices": ["dev_aqara_z2m"]},
+        "declencheurs_bruts": [{"type": "heure", "heure": "06:30"}],
+        "attendu": {"commande": false, "indice": null}
+      },
+      {
+        "id": "device_action_sur_la_portion",
+        "entity_id": "automation.grosse_portion_le_dimanche",
+        "etat": "on",
+        "attributs": {"friendly_name": "Grosse portion le dimanche", "id": "1728000000021", "last_triggered": null},
+        "raw_config": {"id": "1728000000021", "alias": "Grosse portion le dimanche",
+          "triggers": [{"trigger": "time", "at": "07:00", "weekday": "sun"}],
+          "actions": [{"device_id": "dev_aqara_z2m", "domain": "number", "type": "set_value", "entity_id": "3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f", "value": 4}]},
+        "references": {"entities": [], "devices": ["dev_aqara_z2m"]},
+        "action_script": {"referenced_entities": [], "referenced_devices": ["dev_aqara_z2m"]},
+        "declencheurs_bruts": [{"type": "heure", "heure": "07:00"}],
+        "attendu": {"commande": false, "indice": null}
+      },
+      {
+        "id": "journal_de_bord_qui_nomme_la_commande",
+        "_pourquoi": "Relecture du 05/10 : logbook.log porte l'entity_id de la commande dans data — HA le relève dans references et action_script, mais écrire au journal de bord ne distribue rien. Les services qui nomment sans commander (journal de bord, notification, update_entity…) forment une liste FERMÉE : un service d'intégration qui vise la commande compte toujours.",
+        "entity_id": "automation.trace_du_distributeur",
+        "etat": "on",
+        "attributs": {"friendly_name": "Trace du distributeur", "id": "1728000000022", "last_triggered": null},
+        "raw_config": {"id": "1728000000022", "alias": "Trace du distributeur",
+          "triggers": [{"trigger": "state", "entity_id": "input_number.croquettes_reservoir"}],
+          "actions": [{"action": "logbook.log", "data": {"name": "Bac", "message": "niveau changé", "entity_id": "select.distributeur_cuisine_feed"}}]},
+        "references": {"entities": ["input_number.croquettes_reservoir", "select.distributeur_cuisine_feed"], "devices": []},
+        "action_script": {"referenced_entities": ["select.distributeur_cuisine_feed"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "autre"}],
+        "attendu": {"commande": false, "indice": null}
+      },
+      {
+        "id": "commande_lue_dans_une_condition_de_choose",
+        "_pourquoi": "Relecture du 05/10 : HA met dans action_script.referenced_entities les entités des CONDITIONS d'un choose. Tester l'état de la commande n'est pas la commander : une entité que les actions seulement TESTENT tombe des références de HA ; le reste de ce que HA relève compte encore (contradicteur de C2).",
+        "entity_id": "automation.lumiere_si_le_distributeur_repose",
+        "etat": "on",
+        "attributs": {"friendly_name": "Lumière si le distributeur repose", "id": "1728000000023", "last_triggered": null},
+        "raw_config": {"id": "1728000000023", "alias": "Lumière si le distributeur repose",
+          "triggers": [{"trigger": "time", "at": "07:30"}],
+          "actions": [{"choose": [{"conditions": [{"condition": "state", "entity_id": "select.distributeur_cuisine_feed", "state": "STOP"}],
+            "sequence": [{"action": "light.turn_on", "target": {"entity_id": "light.cuisine"}}]}]}]},
+        "references": {"entities": ["select.distributeur_cuisine_feed", "light.cuisine"], "devices": []},
+        "action_script": {"referenced_entities": ["select.distributeur_cuisine_feed", "light.cuisine"], "referenced_devices": []},
+        "declencheurs_bruts": [{"type": "heure", "heure": "07:30"}],
+        "attendu": {"commande": false, "indice": null}
+      }
+    ]
+  },
+
+  "contrat": {
+    "_lisezmoi": "Formes figées par l'ADR 0155 : la configuration de la maison (loggia_feeder), le magasin du planning (loggia_distributeurs), la réponse de loggia/distributeurs/etat et un patch de loggia/distributeurs/config. Les tests d'écran fabriquent leurs réponses à partir de etat_exemple ; la démo (distributeursDemo) rend la même forme.",
+    "loggia_feeder": {
+      "haids": {"reservoir": "input_number.croquettes_reservoir", "portionWeight": "number.distributeur_cuisine_serving_size", "distribuees": "sensor.distributeur_cuisine_portions_per_day"},
+      "haid": "select.distributeur_cuisine_feed",
+      "script": null,
+      "appareil": "dev_aqara_z2m",
+      "associees": ["automation.croquettes_par_zone"],
+      "meals": [
+        {"id": "m1", "time": "07:30", "label": "Matin", "g": 40, "auto": "automation.croquettes_matin_et_soir"},
+        {"id": "m2", "time": "12:00", "label": "Midi", "g": 20, "auto": "input_boolean.repas_matin"}
+      ]
+    },
+    "loggia_distributeurs": {
+      "appareil": "dev_aqara_z2m",
+      "repas": [
+        {"id": "r1", "heure": "07:30", "jours": [0, 1, 2, 3, 4, 5, 6], "portions": 1, "actif": true},
+        {"id": "r2", "heure": "19:00", "jours": [0, 1, 2, 3, 4, 5, 6], "portions": 2, "actif": false}
+      ]
+    },
+    "config_patch_exemple": {"type": "loggia/distributeurs/config", "patch": {"repas": [{"id": "r1", "heure": "07:45", "jours": [0, 1, 2, 3, 4], "portions": 1, "actif": true}]}},
+    "etat_exemple": {
+      "source": "automatisations",
+      "sources": {
+        "programme": {"presente": false, "active": false},
+        "automatisations": {"presente": true, "active": true},
+        "loggia": {"presente": false, "active": false}
+      },
+      "appareil": {"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"},
+      "programme": {"source": "aqara", "connu": true, "presente": false, "active": false, "lisible": false, "mode": "manuel", "note": "mode_manuel", "repas": []},
+      "automatisations": [
+        {"entity_id": "automation.croquettes_matin_et_soir", "nom": "Croquettes matin et soir", "etat": "on", "dernier": "2026-10-05T07:30:00+02:00",
+         "declencheurs": [{"type": "heure", "heure": "07:30"}, {"type": "heure", "heure": "19:00"}],
+         "heures": ["07:30", "19:00"], "jours": null, "conditionnel": false, "portions": null,
+         "pilotable": true, "modifiable": false, "indice": null},
+        {"entity_id": "automation.croquettes_du_midi", "nom": "Croquettes du midi", "etat": "off", "dernier": null,
+         "declencheurs": [{"type": "heure", "heure": "12:30"}],
+         "heures": ["12:30"], "jours": [0, 1, 2, 3, 4], "conditionnel": false, "portions": null,
+         "pilotable": true, "modifiable": false, "indice": null}
+      ],
+      "planning": {"appareil": null, "repas": []},
+      "peutPlanifier": false,
+      "commande": {"domaine": "select", "quantite": false, "min": null, "max": null, "pas": null},
+      "ancienne_liste": {"n": 2, "relies": 1, "non_relies": [{"heure": "12:00", "label": "Midi"}]},
+      "notes": [],
+      "journal": [
+        {"ts": 1728106200.0, "module": "distributeurs", "regle": "repas", "quoi": "retenu", "cibles": [], "n": 0, "motif": "repas 07:30", "detail": "autre source", "simule": false,
+         "g": {"motif": [["repas {heure}", {"heure": "07:30"}]]}}
+      ],
+      "_note": "Un élément d'automatisation porte id_config SEULEMENT si modifiable (is_admin de HA ET attributs.id présent) ; jamais raw_config, message ni data. indice seulement pour une automatisation NON reconnue par ses actions (ancienne liste ou associée à la main). Le compte qui ne peut pas commander l'automatisation reçoit pilotable:false ; celui qui ne peut pas la LIRE ne la reçoit pas. peutPlanifier = aucune source PRÉSENTE et une commande trouvée."
+    }
+  }
+}

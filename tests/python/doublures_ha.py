@@ -104,6 +104,129 @@ def poser_demarrage() -> None:
     _composants().http = module("homeassistant.components.http", StaticPathConfig=StaticPathConfig)
 
 
+# ── Automatisations et scripts (05/10, ADR 0155) ────────────────────────────
+# `automatisations.py` lit les automatisations par ce que Home Assistant en a
+# DEJA releve, comme le vrai : `automations_with_entity` / `_device` parcourent
+# `hass.data["automation"].entities` (un EntityComponent) et testent
+# `referenced_entities` / `referenced_devices` de chacune — l'UNION des
+# declencheurs, des conditions et des actions. `action_script` porte la meme
+# chose pour les seules ACTIONS (helpers/script.py). Une automatisation
+# INDISPONIBLE (UnavailableAutomationEntity) n'a pas d'`action_script`, et ses
+# `referenced_*` sont VIDES : `automations_with_entity` ne la trouve jamais.
+# La doublure fait pareil, sinon le repli sur `raw_config` ne serait pas prouve.
+
+
+class FauxScriptHA:
+    """`helpers/script.py > Script` : ce que HA releve dans les seules actions."""
+
+    def __init__(self, entites=(), appareils=()):
+        self.referenced_entities = set(entites or ())
+        self.referenced_devices = set(appareils or ())
+
+
+class FausseAutomatisation:
+    """Une entite d'automatisation, telle que le composant `automation` la tient.
+
+    `action_script` None = UnavailableAutomationEntity : PAS d'attribut du tout
+    (le code de production le lit par `getattr`), references vides.
+    """
+
+    def __init__(self, entity_id, raw_config=None, references=None, action_script=None,
+                 unique_id=None):
+        self.entity_id = entity_id
+        self.raw_config = raw_config
+        self.unique_id = unique_id
+        refs = references or {}
+        if action_script is None:
+            self.referenced_entities, self.referenced_devices = set(), set()
+        else:
+            self.referenced_entities = set(refs.get("entities") or ())
+            self.referenced_devices = set(refs.get("devices") or ())
+            self.action_script = FauxScriptHA(action_script.get("referenced_entities"),
+                                              action_script.get("referenced_devices"))
+
+
+class FauxScriptEntite:
+    """Une entite `script.*` : `raw_config`, et `script` (le Script de HA).
+
+    Sans `script` (UnavailableScriptEntity), ses references sont vides.
+    """
+
+    def __init__(self, entity_id, raw_config=None, action_script=None):
+        self.entity_id = entity_id
+        self.raw_config = raw_config
+        if action_script is None:
+            self.referenced_entities, self.referenced_devices = set(), set()
+        else:
+            self.script = FauxScriptHA(action_script.get("referenced_entities"),
+                                       action_script.get("referenced_devices"))
+            self.referenced_entities = set(self.script.referenced_entities)
+            self.referenced_devices = set(self.script.referenced_devices)
+
+
+class FauxComposant:
+    """`EntityComponent` : `entities` et `get_entity(entity_id)`, rien de plus."""
+
+    def __init__(self, entites=()):
+        self._par_id = {e.entity_id: e for e in entites}
+
+    @property
+    def entities(self):
+        return list(self._par_id.values())
+
+    def get_entity(self, entity_id):
+        return self._par_id.get(entity_id)
+
+
+def _avec(hass, cle, attribut, valeur):
+    composant = (getattr(hass, "data", None) or {}).get(cle)
+    if composant is None:
+        return []
+    return [e.entity_id for e in composant.entities if valeur in getattr(e, attribut, ())]
+
+
+def poser_automatisations(hass, automatisations=(), scripts=()) -> None:
+    """Les composants `automation` et `script`, et leurs entites dans `hass.data`.
+
+    Les modules sont poses une fois (comme `poser_websocket_api`) : leurs
+    fonctions relisent `hass.data` a chaque appel, chaque test pose ses entites.
+    Un test qui veut le composant ABSENT pose `None` dans `sys.modules` par
+    `monkeypatch.setitem` : l'import leve alors `ImportError`, comme sans lui.
+    """
+    if "homeassistant.components.automation" not in sys.modules:
+        auto = types.ModuleType("homeassistant.components.automation")
+        auto.automations_with_entity = lambda h, eid: _avec(h, "automation", "referenced_entities", eid)
+        auto.automations_with_device = lambda h, did: _avec(h, "automation", "referenced_devices", did)
+        sys.modules["homeassistant.components.automation"] = auto
+        _composants().automation = auto
+    if "homeassistant.components.script" not in sys.modules:
+        scr = types.ModuleType("homeassistant.components.script")
+        scr.scripts_with_entity = lambda h, eid: _avec(h, "script", "referenced_entities", eid)
+        scr.scripts_with_device = lambda h, did: _avec(h, "script", "referenced_devices", did)
+        sys.modules["homeassistant.components.script"] = scr
+        _composants().script = scr
+    if getattr(hass, "data", None) is None:
+        hass.data = {}
+    hass.data["automation"] = FauxComposant(automatisations)
+    hass.data["script"] = FauxComposant(scripts)
+
+
+def automatisations_depuis_fixture(bloc):
+    """(automatisations, scripts, etats) depuis le bloc `automatisations` de
+    tests/fixtures/distributeurs.json. `etats` : {entity_id: (etat, attributs)},
+    les automatisations ET les entites d'heure du contexte."""
+    ctx = bloc["contexte"]
+    autos = [FausseAutomatisation(c["entity_id"], c.get("raw_config"), c.get("references"),
+                                  c.get("action_script"), unique_id=(c.get("attributs") or {}).get("id"))
+             for c in bloc["cas"]]
+    scripts = [FauxScriptEntite(eid, s.get("raw_config"), s.get("action_script"))
+               for eid, s in (ctx.get("scripts") or {}).items()]
+    etats = {c["entity_id"]: (c["etat"], dict(c.get("attributs") or {})) for c in bloc["cas"]}
+    for eid, e in (ctx.get("etats") or {}).items():
+        etats[eid] = (e["etat"], dict(e.get("attributs") or {}))
+    return autos, scripts, etats
+
+
 def _composants():
     if "homeassistant.components" not in sys.modules:
         sys.modules["homeassistant.components"] = types.ModuleType("homeassistant.components")

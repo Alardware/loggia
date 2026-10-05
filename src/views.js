@@ -81,6 +81,12 @@ function configLive(userCfg, domain, states) {
   const ent = (alias && userCfg && userCfg[alias])
     || (userCfg && userCfg.loggia_entities && userCfg.loggia_entities[domain]);
   if (!ent) return false;
+  /* Un distributeur peut se désigner par son seul APPAREIL (ADR 0155, 05/10) :
+   * un Petlibro n'a ni réservoir en grammes ni portion à désigner. Un
+   * identifiant d'appareil n'est pas un entity_id — le motif plus bas ne le
+   * voit pas — et l'état des appareils ne vit pas dans `states` : désigné,
+   * il compte. */
+  if (domain === 'feeder' && typeof ent.appareil === 'string' && ent.appareil.trim()) return true;
   const ids = JSON.stringify(ent).match(/[a-z_]+\.[a-z0-9_]+/g);
   if (!ids || !ids.length) return false;
   if (!states) return true;

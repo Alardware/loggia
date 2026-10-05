@@ -118,6 +118,8 @@ const APPAREILS = {
   'Ordures ménagères': { en: 'Household waste', de: 'Restmüll', nl: 'Restafval', it: 'Rifiuti indifferenziati', es: 'Basura doméstica', pl: 'Odpady zmieszane' },
   'Repas du matin': { en: 'Morning meal', de: 'Morgenmahlzeit', nl: 'Ochtendmaaltijd', it: 'Pasto del mattino', es: 'Comida de la mañana', pl: 'Poranny posiłek' },
   'Repas du soir': { en: 'Evening meal', de: 'Abendmahlzeit', nl: 'Avondmaaltijd', it: 'Pasto della sera', es: 'Comida de la noche', pl: 'Wieczorny posiłek' },
+  'Activer le programme': { en: 'Enable feeding plan', de: 'Fütterungsplan aktivieren', nl: 'Voerschema inschakelen', it: 'Attiva il programma', es: 'Activar el programa', pl: 'Włącz harmonogram karmienia' },
+  'Alerte bac presque vide': { en: 'Low hopper alert', de: 'Warnung Futterbehälter fast leer', nl: 'Melding voerbak bijna leeg', it: 'Avviso serbatoio quasi vuoto', es: 'Aviso de depósito casi vacío', pl: 'Alert: zbiornik prawie pusty' },
   'Alarme : armement en partant': { en: 'Alarm: arm on leaving', de: 'Alarm: beim Verlassen scharf', nl: 'Alarm: inschakelen bij vertrek', it: 'Allarme: attiva quando esci', es: 'Alarma: armar al salir', pl: 'Alarm: uzbrojenie przy wyjściu' },
   'Ampoules': { en: 'Light bulbs', de: 'Glühbirnen', nl: 'Lampen', it: 'Lampadine', es: 'Bombillas', pl: 'Żarówki' },
   'Apéro': { en: 'Drinks', de: 'Aperitif', nl: 'Borrel', it: 'Aperitivo', es: 'Aperitivo', pl: 'Aperitif' },
@@ -172,7 +174,14 @@ const APPAREILS = {
   'Courses': { en: 'Shopping', de: 'Einkäufe', nl: 'Boodschappen', it: 'Spesa', es: 'Compras', pl: 'Zakupy' },
   'Croquettes distribuées aujourd’hui': { en: 'Kibble served today', de: 'Heute ausgegebenes Futter', nl: 'Vandaag gegeven brokken', it: 'Crocchette erogate oggi', es: 'Pienso servido hoy', pl: 'Karma wydana dzisiaj' },
   'Croquettes du chat': { en: 'Cat food', de: 'Katzenfutter', nl: 'Kattenbrokjes', it: 'Crocchette del gatto', es: 'Pienso del gato', pl: 'Karma dla kota' },
+  'Croquettes du midi': { en: 'Midday kibble', de: 'Mittagsfutter', nl: 'Middagbrokjes', it: 'Crocchette di mezzogiorno', es: 'Pienso del mediodía', pl: 'Karma w południe' },
+  'Croquettes matin et soir': { en: 'Kibble morning and evening', de: 'Futter morgens und abends', nl: 'Brokjes ’s ochtends en ’s avonds', it: 'Crocchette mattina e sera', es: 'Pienso mañana y noche', pl: 'Karma rano i wieczorem' },
+  'Croquettes presque épuisées': { en: 'Food low', de: 'Futter fast leer', nl: 'Voer bijna op', it: 'Crocchette quasi finite', es: 'Pienso casi agotado', pl: 'Mało karmy' },
+  'Dernier repas': { en: 'Last feed', de: 'Letzte Fütterung', nl: 'Laatste voerbeurt', it: 'Ultimo pasto', es: 'Última comida', pl: 'Ostatni posiłek' },
   'Distribuer': { en: 'Serve', de: 'Ausgeben', nl: 'Geven', it: 'Eroga', es: 'Servir', pl: 'Wydaj' },
+  'Distributeur de croquettes': { en: 'Pet feeder', de: 'Futterautomat', nl: 'Voerautomaat', it: 'Distributore di crocchette', es: 'Comedero automático', pl: 'Podajnik karmy' },
+  'Distribution manuelle': { en: 'Manual feed', de: 'Manuelle Fütterung', nl: 'Handmatig voeren', it: 'Erogazione manuale', es: 'Dispensación manual', pl: 'Karmienie ręczne' },
+  'Déshydratant': { en: 'Desiccant', de: 'Trockenmittel', nl: 'Droogmiddel', it: 'Essiccante', es: 'Desecante', pl: 'Pochłaniacz wilgoci' },
   'Délestage du chauffe-eau': { en: 'Water heater load shedding', de: 'Lastabwurf Warmwasserspeicher', nl: 'Afschakeling boiler', it: 'Distacco dello scaldacqua', es: 'Deslastre del calentador', pl: 'Odłączanie bojlera' },
   'Détecteur de fumée cuisine': { en: 'Kitchen smoke detector', de: 'Rauchmelder Küche', nl: 'Rookmelder keuken', it: 'Rilevatore di fumo cucina', es: 'Detector de humo cocina', pl: 'Czujnik dymu kuchnia' },
   'Détecteur de fumée entrée': { en: 'Entrance smoke detector', de: 'Rauchmelder Eingang', nl: 'Rookmelder entree', it: 'Rilevatore di fumo ingresso', es: 'Detector de humo entrada', pl: 'Czujnik dymu wejście' },
@@ -180,9 +189,13 @@ const APPAREILS = {
   'Echo de la cuisine': { en: 'Kitchen Echo', de: 'Echo Küche', nl: 'Echo keuken', it: 'Echo cucina', es: 'Echo cocina', pl: 'Echo kuchnia' },
   'Enceinte': { en: 'Speaker', de: 'Lautsprecher', nl: 'Speaker', it: 'Diffusore', es: 'Altavoz', pl: 'Głośnik' },
   'Enceinte salon': { en: 'Living room speaker', de: 'Lautsprecher Wohnzimmer', nl: 'Speaker woonkamer', it: 'Diffusore soggiorno', es: 'Altavoz salón', pl: 'Głośnik salon' },
+  'En ligne': { en: 'Online', de: 'Online', nl: 'Online', it: 'Online', es: 'En línea', pl: 'Online' },
+  'Erreur du distributeur': { en: 'Feeder error', de: 'Fehler des Futterautomaten', nl: 'Fout voerautomaat', it: 'Errore del distributore', es: 'Error del comedero', pl: 'Błąd podajnika' },
+  'État de la distribution': { en: 'Dispenser state', de: 'Ausgabestatus', nl: 'Status van de uitgifte', it: 'Stato dell’erogazione', es: 'Estado de la dispensación', pl: 'Stan wydawania' },
   'Fenêtre chambre': { en: 'Bedroom window', de: 'Fenster Schlafzimmer', nl: 'Raam slaapkamer', it: 'Finestra camera', es: 'Ventana dormitorio', pl: 'Okno sypialnia' },
   'Fenêtre salon': { en: 'Living room window', de: 'Fenster Wohnzimmer', nl: 'Raam woonkamer', it: 'Finestra soggiorno', es: 'Ventana salón', pl: 'Okno salon' },
   'Fermer les volets du bureau': { en: 'Close the office blinds', de: 'Rollläden im Büro schließen', nl: 'Rolluiken in het kantoor sluiten', it: 'Chiudere le tapparelle dello studio', es: 'Cerrar las persianas del despacho', pl: 'Zamknąć rolety w biurze' },
+  'Fréquence du déshydratant': { en: 'Desiccant frequency', de: 'Wechselintervall Trockenmittel', nl: 'Vervangfrequentie droogmiddel', it: 'Frequenza dell’essiccante', es: 'Frecuencia del desecante', pl: 'Częstotliwość wymiany pochłaniacza' },
   'Fuite sous l’évier': { en: 'Leak under the sink', de: 'Leck unter der Spüle', nl: 'Lekkage onder de gootsteen', it: 'Perdita sotto il lavello', es: 'Fuga bajo el fregadero', pl: 'Wyciek pod zlewem' },
   'Injection du jour': { en: 'Today’s export', de: 'Einspeisung heute', nl: 'Teruglevering vandaag', it: 'Immissione di oggi', es: 'Inyección de hoy', pl: 'Oddanie dzisiaj' },
   'Interrupteur Chambre': { en: 'Bedroom switch', de: 'Schalter Schlafzimmer', nl: 'Schakelaar slaapkamer', it: 'Interruttore camera', es: 'Interruptor dormitorio', pl: 'Włącznik sypialnia' },
@@ -195,6 +208,7 @@ const APPAREILS = {
   'Livraison colis': { en: 'Parcel delivery', de: 'Paketzustellung', nl: 'Pakketbezorging', it: 'Consegna pacco', es: 'Entrega de paquete', pl: 'Dostawa paczki' },
   'Lumière couloir la nuit': { en: 'Hallway light at night', de: 'Flurlicht bei Nacht', nl: 'Ganglicht ’s nachts', it: 'Luce corridoio di notte', es: 'Luz del pasillo de noche', pl: 'Światło korytarza w nocy' },
   'Maison': { en: 'Home', de: 'Zu Hause', nl: 'Huis', it: 'Casa', es: 'Casa', pl: 'Dom' },
+  'Mode de distribution': { en: 'Feeding mode', de: 'Fütterungsmodus', nl: 'Voermodus', it: 'Modalità di erogazione', es: 'Modo de dispensación', pl: 'Tryb karmienia' },
   'Mouvement entrée': { en: 'Entrance motion', de: 'Bewegung Eingang', nl: 'Beweging entree', it: 'Movimento ingresso', es: 'Movimiento entrada', pl: 'Ruch wejście' },
   'Météo': { en: 'Weather', de: 'Wetter', nl: 'Weer', it: 'Meteo', es: 'Tiempo', pl: 'Pogoda' },
   'Nuit': { en: 'Night', de: 'Nacht', nl: 'Nacht', it: 'Notte', es: 'Noche', pl: 'Noc' },
@@ -210,19 +224,25 @@ const APPAREILS = {
   'Porte d’entrée': { en: 'Front door', de: 'Eingangstür', nl: 'Voordeur', it: 'Porta d’ingresso', es: 'Puerta de entrada', pl: 'Drzwi wejściowe' },
   'Portion du distributeur': { en: 'Feeder portion', de: 'Portion des Futterautomaten', nl: 'Portie voederautomaat', it: 'Porzione del distributore', es: 'Ración del dispensador', pl: 'Porcja podajnika' },
   'Prendre les médicaments': { en: 'Take the medication', de: 'Medikamente nehmen', nl: 'Medicijnen innemen', it: 'Prendere le medicine', es: 'Tomar los medicamentos', pl: 'Wziąć leki' },
+  'Prochain repas': { en: 'Next feed', de: 'Nächste Fütterung', nl: 'Volgende voerbeurt', it: 'Prossimo pasto', es: 'Próxima comida', pl: 'Następny posiłek' },
   'Production du jour': { en: 'Today’s production', de: 'Erzeugung heute', nl: 'Productie vandaag', it: 'Produzione di oggi', es: 'Producción de hoy', pl: 'Produkcja dzisiaj' },
   'Production solaire': { en: 'Solar production', de: 'Solarerzeugung', nl: 'Zonneproductie', it: 'Produzione solare', es: 'Producción solar', pl: 'Produkcja słoneczna' },
+  'Programme des repas': { en: 'Feeding schedule', de: 'Fütterungsplan', nl: 'Voerschema', it: 'Programma dei pasti', es: 'Programa de comidas', pl: 'Harmonogram posiłków' },
+  'Quantité de la distribution manuelle': { en: 'Manual feed quantity', de: 'Menge der manuellen Fütterung', nl: 'Hoeveelheid handmatig voeren', it: 'Quantità dell’erogazione manuale', es: 'Cantidad de la dispensación manual', pl: 'Ilość karmienia ręcznego' },
+  'Quantité distribuée aujourd’hui': { en: 'Amount fed today', de: 'Heute ausgegebene Menge', nl: 'Vandaag gegeven hoeveelheid', it: 'Quantità erogata oggi', es: 'Cantidad servida hoy', pl: 'Ilość wydana dzisiaj' },
   "Qualité de l'air": { en: 'Air quality', de: 'Luftqualität', nl: 'Luchtkwaliteit', it: 'Qualità dell’aria', es: 'Calidad del aire', pl: 'Jakość powietrza' },
   'Radiateur bureau hors gel': { en: 'Office radiator frost protection', de: 'Heizkörper Büro Frostschutz', nl: 'Radiator kantoor vorstbeveiliging', it: 'Radiatore studio antigelo', es: 'Radiador despacho antihielo', pl: 'Grzejnik biuro ochrona przed mrozem' },
   'Radiateur chambre': { en: 'Bedroom radiator', de: 'Heizkörper Schlafzimmer', nl: 'Radiator slaapkamer', it: 'Radiatore camera', es: 'Radiador dormitorio', pl: 'Grzejnik sypialnia' },
   'Radiateur salon': { en: 'Living room radiator', de: 'Heizkörper Wohnzimmer', nl: 'Radiator woonkamer', it: 'Radiatore soggiorno', es: 'Radiador salón', pl: 'Grzejnik salon' },
   'Ramassage des poubelles': { en: 'Bin collection', de: 'Müllabfuhr', nl: 'Afvalophaling', it: 'Ritiro dei rifiuti', es: 'Recogida de basura', pl: 'Wywóz śmieci' },
+  'Réinitialiser le déshydratant': { en: 'Reset desiccant', de: 'Trockenmittel zurücksetzen', nl: 'Droogmiddel resetten', it: 'Reimposta l’essiccante', es: 'Reiniciar el desecante', pl: 'Zresetuj pochłaniacz wilgoci' },
   'Réseau': { en: 'Grid', de: 'Netz', nl: 'Net', it: 'Rete', es: 'Red', pl: 'Sieć' },
   'Réservoir de croquettes': { en: 'Kibble tank', de: 'Futterbehälter', nl: 'Brokkenreservoir', it: 'Serbatoio crocchette', es: 'Depósito de pienso', pl: 'Zbiornik karmy' },
   'Réveil': { en: 'Wake up', de: 'Aufwachen', nl: 'Opstaan', it: 'Sveglia', es: 'Despertar', pl: 'Pobudka' },
   'Salon Bruit': { en: 'Living room Noise', de: 'Wohnzimmer Lärm', nl: 'Woonkamer Geluid', it: 'Soggiorno Rumore', es: 'Salón Ruido', pl: 'Salon Hałas' },
   'Sauvegarde automatique': { en: 'Automatic backup', de: 'Automatische Sicherung', nl: 'Automatische back-up', it: 'Backup automatico', es: 'Copia automática', pl: 'Kopia automatyczna' },
   'Sirène intérieure': { en: 'Indoor siren', de: 'Innensirene', nl: 'Binnensirene', it: 'Sirena interna', es: 'Sirena interior', pl: 'Syrena wewnętrzna' },
+  'Source du dernier repas': { en: 'Last meal source', de: 'Quelle der letzten Mahlzeit', nl: 'Bron laatste maaltijd', it: 'Origine dell’ultimo pasto', es: 'Origen de la última comida', pl: 'Źródło ostatniego posiłku' },
   'Soleil': { en: 'Sun', de: 'Sonne', nl: 'Zon', it: 'Sole', es: 'Sol', pl: 'Słońce' },
   'Sonnette vers le téléphone': { en: 'Doorbell to phone', de: 'Türklingel aufs Handy', nl: 'Deurbel naar telefoon', it: 'Campanello al telefono', es: 'Timbre al teléfono', pl: 'Dzwonek na telefon' },
   'Sortir le linge': { en: 'Take out the laundry', de: 'Wäsche herausnehmen', nl: 'Was uit de machine halen', it: 'Tirare fuori il bucato', es: 'Sacar la ropa', pl: 'Wyjąć pranie' },
@@ -251,6 +271,7 @@ const APPAREILS = {
   'Téléphone de Camille': { en: 'Camille’s phone', de: 'Camilles Telefon', nl: 'Telefoon van Camille', it: 'Telefono di Camille', es: 'Teléfono de Camille', pl: 'Telefon Camille' },
   'Variateur Salon': { en: 'Living room dimmer', de: 'Dimmer Wohnzimmer', nl: 'Dimmer woonkamer', it: 'Dimmer soggiorno', es: 'Regulador salón', pl: 'Ściemniacz salon' },
   'Veilleuse chambre au coucher': { en: 'Bedroom night light at bedtime', de: 'Nachtlicht Schlafzimmer zur Schlafenszeit', nl: 'Nachtlampje slaapkamer bij bedtijd', it: 'Luce notturna camera all’ora di dormire', es: 'Luz nocturna dormitorio al acostarse', pl: 'Lampka nocna sypialnia przed snem' },
+  'Verrouillage enfant': { en: 'Child lock', de: 'Kindersicherung', nl: 'Kinderslot', it: 'Blocco bambini', es: 'Bloqueo infantil', pl: 'Blokada rodzicielska' },
   'Vigilance météo': { en: 'Weather warning', de: 'Wetterwarnung', nl: 'Weerwaarschuwing', it: 'Allerta meteo', es: 'Aviso meteorológico', pl: 'Ostrzeżenie pogodowe' },
   'Visite du ramoneur': { en: 'Chimney sweep visit', de: 'Besuch des Schornsteinfegers', nl: 'Bezoek van de schoorsteenveger', it: 'Visita dello spazzacamino', es: 'Visita del deshollinador', pl: 'Wizyta kominiarza' },
   'Volet chambre': { en: 'Bedroom blind', de: 'Rollladen Schlafzimmer', nl: 'Rolluik slaapkamer', it: 'Tapparella camera', es: 'Persiana dormitorio', pl: 'Roleta sypialnia' },
@@ -345,14 +366,14 @@ function etatsInitiaux() {
     'automation.delestage_du_chauffe_eau': s('on', { friendly_name: 'Délestage du chauffe-eau', last_triggered: ilYaMin(1300) }),
     'automation.arrosage_du_potager': s('on', { friendly_name: 'Arrosage du potager', last_triggered: ilYaMin(700) }),
     'automation.lave_linge_termine': s('on', { friendly_name: 'Lave-linge terminé', last_triggered: ilYaMin(1500) }),
-    // Le distributeur de croquettes et une plante : ce que la vue Objets et
-    // leurs fiches ont a montrer.
+    // Le réservoir du distributeur et une plante : ce que la vue Objets et
+    // leurs fiches ont a montrer. Le réservoir est un helper SANS appareil,
+    // comme chez l'utilisateur ; le distributeur lui-même et ses
+    // automatisations viennent de `etatsDistributeur()`, selon la variante.
     'input_number.croquettes_reservoir': s(760, { friendly_name: 'Réservoir de croquettes', min: 0, max: 2000, step: 10, unit_of_measurement: 'g' }),
-    'number.distributeur_portion': s(45, { friendly_name: 'Portion du distributeur', min: 5, max: 100, step: 5, unit_of_measurement: 'g' }),
-    'sensor.croquettes_du_jour': s(90, { friendly_name: 'Croquettes distribuées aujourd’hui', unit_of_measurement: 'g' }),
-    'select.distributeur_feed': s('STOP', { friendly_name: 'Distribuer', options: ['STOP', 'START'] }),
+    // Un repas de l'ANCIENNE liste qui ne distribuait rien : l'encart de
+    // migration le compte « non relié » (ADR 0155).
     'input_boolean.repas_matin': s('on', { friendly_name: 'Repas du matin' }),
-    'input_boolean.repas_soir': s('on', { friendly_name: 'Repas du soir' }),
     'sensor.basilic_moisture': s(62, { friendly_name: 'Basilic humidité du sol', device_class: 'moisture', unit_of_measurement: '%' }),
     'sensor.basilic_temperature': s(21.4, { friendly_name: 'Basilic température', device_class: 'temperature', unit_of_measurement: '°C' }),
     'sensor.basilic_illuminance': s(1800, { friendly_name: 'Basilic lumière', device_class: 'illuminance', unit_of_measurement: 'lx' }),
@@ -486,7 +507,7 @@ function etatsInitiaux() {
           min_color_temp_kelvin: 2000, max_color_temp_kelvin: 6535, supported_color_modes: ['color_temp', 'rgb'] }
       : { friendly_name: etiquette('Plafonnier') + ' ' + lieu(nom), brightness: 180, supported_color_modes: ['brightness'] });
   });
-  return states;
+  return Object.assign(states, etatsDistributeur());
 }
 
 /* La configuration de la maison, servie par le magasin mémoire : le dashboard
@@ -534,12 +555,8 @@ function configDemo() {
     loggia_users: [{ name: 'Démo', role: 'Admin', c: 'var(--o-accent)' }, { name: etiquette('Invité'), role: 'Famille', c: 'var(--o-purple)' }],
     loggia_plants: [{ base: 'sensor.basilic', name: etiquette('Basilic'), room: lieu('Cuisine') }],
     // Le distributeur a sa cle (alias `feeder` → `loggia_feeder`) : `loggia_entities`
-    // ne se lit qu'avec un serveur, que la demo n'a pas.
-    loggia_feeder: { haids: { reservoir: 'input_number.croquettes_reservoir', portionWeight: 'number.distributeur_portion', distribuees: 'sensor.croquettes_du_jour' },
-      /* Le libelle fait partie d'un repas (`lectures.js` : `{ id, time, label, g, auto }`) ;
-       * sans lui la carte Rappels ecrivait « undefined · 45g ». */
-      meals: [{ id: 'matin', time: '07:30', label: etiquette('Repas du matin'), g: 45, auto: 'input_boolean.repas_matin' },
-        { id: 'soir', time: '19:00', label: etiquette('Repas du soir'), g: 45, auto: 'input_boolean.repas_soir' }] },
+    // ne se lit qu'avec un serveur, que la demo n'a pas. Sa forme suit la variante.
+    loggia_feeder: feederDemo(),
     /* La mosaique des pieces sur TABLETTE et TELEPHONE (02/10).
      *
      * « Dispose les cartes pieces comme ceci, je trouve plus joli » : des
@@ -741,6 +758,7 @@ function historiqueDemo(chemin, states) {
   const m = String(chemin).match(/filter_entity_id=([^&]+)/);
   const plusieurs = m ? decodeURIComponent(m[1]).split(',') : [];
   if (plusieurs.some(x => /^(vacuum|lawn_mower)\./.test(x))) return historiqueRobotDemo(plusieurs, states);
+  if (plusieurs.some(x => SERIES_DIST.has(x))) return historiqueDistributeurDemo(plusieurs, String(chemin), states);
   const id = m ? decodeURIComponent(m[1]) : null;
   const cur = id && states[id] ? parseFloat(states[id].state) : NaN;
   if (!id || isNaN(cur)) return [];
@@ -1111,6 +1129,20 @@ function indexDemo(states) {
         device_class: at.device_class || null, unit: at.unit_of_measurement || null, hidden: false });
     });
   });
+  /* Le distributeur (ADR 0155) : un appareil aussi, sur le même patron. Sous
+   * Zigbee2MQTT (`mqtt`), aucune clé de traduction : Loggia le lit aux
+   * suffixes anglais, comme chez l'utilisateur. La pièce est celle de
+   * l'APPAREIL ; l'entité n'en porte pas. */
+  Object.keys(DISTRIBUTEURS_DEMO).forEach(appareil => {
+    const [plateforme, liste] = DISTRIBUTEURS_DEMO[appareil];
+    Object.keys(liste).forEach(id => {
+      if (!states[id]) return;
+      const at = states[id].attributes || {};
+      entities.push({ id, name: at.friendly_name || id, device: appareil, area: null, platform: plateforme, key: liste[id][0], category: liste[id][1],
+        device_class: at.device_class || null, unit: at.unit_of_measurement || null, hidden: false });
+    });
+  });
+  const distribs = Object.keys(DISTRIBUTEURS_DEMO).filter(d => Object.keys(DISTRIBUTEURS_DEMO[d][1]).some(id => states[id]));
   // La machine : un appareil sans piece. C'est par lui que la vue Systeme
   // retrouve, autour de la charge processeur, la memoire, le swap et les debits.
   Object.keys(states).filter(id => id.indexOf('sensor.system_monitor_') === 0).forEach(id => {
@@ -1141,7 +1173,9 @@ function indexDemo(states) {
       { id: 'cam_entree', name: etiquette('Caméra entrée'), area: 'entree', manufacturer: 'Démo', model: etiquette('Caméra'), firmware: null, via: null, entry_type: null, integration: 'demo' },
       { id: 'sysmon', name: 'System Monitor', area: null, manufacturer: 'Démo', model: 'System Monitor', firmware: null, via: null, entry_type: 'service', integration: 'systemmonitor' },
       { id: 'robot_aspirateur', name: etiquette('Aspirateur'), area: null, manufacturer: 'Démo', model: 'Orbit V3', firmware: null, via: null, entry_type: null, integration: 'ecovacs' },
-      { id: 'robot_tondeuse', name: etiquette('Tondeuse'), area: null, manufacturer: 'Démo', model: 'Meadow M2', firmware: null, via: null, entry_type: null, integration: 'mammotion' }],
+      { id: 'robot_tondeuse', name: etiquette('Tondeuse'), area: null, manufacturer: 'Démo', model: 'Meadow M2', firmware: null, via: null, entry_type: null, integration: 'mammotion' },
+      ...distribs.map(id => ({ id, name: etiquette('Distributeur de croquettes'), area: 'cuisine', manufacturer: APPAREIL_DIST[id].fabricant,
+        model: APPAREIL_DIST[id].modele, firmware: null, via: null, entry_type: null, integration: DISTRIBUTEURS_DEMO[id][0] }))],
     entities,
     floors: [],
     services: {},
@@ -1347,6 +1381,469 @@ function robotsPatch(patch) {
     ROB_CFG().robots[id] = { calme: { ...actuel.calme, ...(p.robots[id].calme || {}) }, pluie: { ...actuel.pluie, ...(p.robots[id].pluie || {}) } };
   });
   return copieRobots();
+}
+
+/* ── Le distributeur de croquettes (ADR 0155, 05/10) ─────────────────────────
+ *
+ * La fiche devient une feuille à onglets que remplit le SERVEUR
+ * (`loggia/distributeurs/etat`) : sans réponse ici, la démo ne montrerait que
+ * « Planning indisponible pour l'instant ». Ce faux serveur rend la forme du
+ * contrat (fixture partagée, `contrat.etat_exemple`), calculée sur les états
+ * de la maison factice : couper une automatisation dans la fiche change la
+ * source, passer l'appareil en mode programmé change son programme.
+ *
+ * VARIANTES, par l'URL (`?demo&distributeur=…`), lue par `installerDemo` :
+ * - aucune : un Aqara sous Zigbee2MQTT en mode manuel, commandé par deux
+ *   automatisations — l'installation de l'utilisateur ;
+ * - `loggia` : aucune automatisation de repas, le planning de Loggia (deux
+ *   repas, modifiables en mémoire) ;
+ * - `petlibro` : un Petlibro au programme lisible ET une automatisation
+ *   active — l'avertissement « deux sources », l'onglet Entretien rempli ;
+ * - `rien` : le réservoir seul, aucune commande — « Loggia ne sait pas
+ *   commander ce distributeur » ;
+ * - `horsligne` : l'Aqara tombé (un Zigbee2MQTT hors ligne fait tomber toutes
+ *   ses entités) — le liseré, et plus de « Distribuer ».
+ * Chaque variante est une maison cohérente, pas un état bricolé : la fiche y
+ * montre ce qu'elle montrerait chez quelqu'un. */
+const VARIANTES_DIST = ['loggia', 'petlibro', 'rien', 'horsligne'];
+let VARIANTE_DIST = 'aqara';
+const estAqara = () => VARIANTE_DIST === 'aqara' || VARIANTE_DIST === 'loggia' || VARIANTE_DIST === 'horsligne';
+
+/* Les appareils et leurs entités : [plateforme, { entity_id: [clé, catégorie] }],
+ * le patron des ROBOTS d'`indexDemo`. Les références de modèle se lisent
+ * pareil partout : ce ne sont pas des mots.
+ *
+ * Le compteur du jour porte le suffixe que Zigbee2MQTT publie pour un Aqara
+ * (`weight_per_day`) : sous l'ancien nom (`sensor.croquettes_du_jour`), la
+ * table partagée (`MOTIF_COMPTEUR_Z2M`, fixture T0) ne le reconnaissait pas,
+ * et la fiche par défaut n'aurait eu ni « Aujourd'hui : … g » ni hausses dans
+ * son Historique (contradicteur, 05/10). */
+const DISTRIBUTEURS_DEMO = {
+  dist_cuisine: ['mqtt', {
+    'select.distributeur_feed': [null, null], 'number.distributeur_portion': [null, 'config'],
+    'sensor.distributeur_weight_per_day': [null, null], 'select.distributeur_mode': [null, 'config'],
+    'sensor.distributeur_feeding_source': [null, 'diagnostic'], 'binary_sensor.distributeur_error': [null, 'diagnostic'],
+    'switch.distributeur_child_lock': [null, 'config'],
+  }],
+  dist_petlibro: ['petlibro', {
+    'button.granary_manual_feed': ['manual_feed', null], 'button.granary_enable_feeding_plan': ['enable_feeding_plan', null],
+    'button.granary_desiccant_reset': ['desiccant_reset', 'config'], 'number.granary_manual_feed_quantity': ['manual_feed_quantity', null],
+    'number.granary_desiccant_frequency': ['desiccant_frequency', 'config'], 'binary_sensor.granary_feeding_schedule': ['feeding_schedule', null],
+    'binary_sensor.granary_food_low': ['food_low', null], 'binary_sensor.granary_food_dispenser_state': ['food_dispenser_state', null],
+    'binary_sensor.granary_online': ['online', 'diagnostic'], 'sensor.granary_remaining_desiccant': ['remaining_desiccant', null],
+    'sensor.granary_last_feed_time': ['last_feed_time', null], 'sensor.granary_next_feed_time': ['next_feed_time', null],
+    'sensor.granary_today_feeding_quantity_weight': ['today_feeding_quantity_weight', null],
+  }],
+};
+const APPAREIL_DIST = {
+  dist_cuisine: { fabricant: 'Aqara', modele: 'ZNCWWSQ01LM' },
+  dist_petlibro: { fabricant: 'PETLIBRO', modele: 'PLAF103' },
+};
+const appareilDist = () => (VARIANTE_DIST === 'rien' ? null : VARIANTE_DIST === 'petlibro' ? 'dist_petlibro' : 'dist_cuisine');
+
+/* Les automatisations de la maison qui touchent au distributeur, telles que
+ * `automatisations.py` les résumerait. `commande` dit si une ACTION commande
+ * l'appareil : l'alerte du bac ne fait que LIRE le réservoir, elle reste dans
+ * la maison et n'entre jamais dans la réponse. Ni `raw_config` ni lien vers
+ * Home Assistant : la démo n'en a pas (`modifiable` faux, pas d'`id_config`). */
+const AUTOS_DIST = {
+  'automation.croquettes_matin_et_soir': { commande: true, heures: ['07:30', '19:00'], jours: null },
+  'automation.croquettes_du_midi': { commande: true, heures: ['12:30'], jours: [0, 1, 2, 3, 4] },
+  'automation.alerte_bac_presque_vide': { commande: false, heures: [], jours: null },
+};
+
+/* Ce qui est parti, variante par variante : [heure, portions, source]. La
+ * source est celle que l'appareil publie (`feeding_source` d'un Aqara :
+ * schedule, manual, remote) ; une automatisation qui commande passe par le
+ * réseau, donc « remote ». Le Petlibro distribue DEUX fois par repas — son
+ * programme et l'automatisation : c'est ce que l'avertissement dit. */
+const PASSAGES_DIST = {
+  aqara: [['07:30', 1, 'remote'], ['19:00', 1, 'remote']],
+  horsligne: [['07:30', 1, 'remote'], ['19:00', 1, 'remote']],
+  loggia: [['08:00', 1, 'remote'], ['18:30', 1, 'remote']],
+  petlibro: [['07:00', 2, 'schedule'], ['07:30', 1, 'remote'], ['19:00', 1, 'remote'], ['19:30', 2, 'schedule']],
+  rien: [],
+};
+// Les grammes d'une portion : la portion de l'Aqara (45 g), un pas de Petlibro.
+const G_PORTION_DIST = { aqara: 45, horsligne: 45, loggia: 45, petlibro: 12, rien: 0 };
+const JOUR_MS = 86400000;
+// Le Zigbee2MQTT de la variante `horsligne` est tombé il y a trois heures.
+const TOMBE_DIST = Date.now() - 3 * 3600000;
+// Ce que la démo a distribué depuis son ouverture (« Distribuer », planning).
+const DIST_LIVE = [];
+
+/** `HH:MM` il y a `n` jours (0 = aujourd'hui), en millisecondes, heure locale. */
+const aHeureDist = (hhmm, n = 0) => {
+  const [h, m] = String(hhmm).split(':').map(Number);
+  const d = new Date(); d.setDate(d.getDate() - n); d.setHours(h, m, 0, 0);
+  return d.getTime();
+};
+const minuitDist = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const isoDist = (t) => new Date(t).toISOString();
+
+/** Les repas partis entre `t0` et `t1`, du plus ancien au plus récent : `{ t, portions, g, source }`. */
+function passagesDistributeur(t0, t1) {
+  const v = VARIANTE_DIST, g = G_PORTION_DIST[v] || 0, out = [];
+  const fin = v === 'horsligne' ? Math.min(t1, TOMBE_DIST) : t1;
+  const pousser = (t, portions, source) => { if (t >= t0 && t <= fin) out.push({ t, portions, g: portions * g, source }); };
+  for (let n = Math.ceil((Date.now() - t0) / JOUR_MS) + 1; n >= 0; n--) {
+    (PASSAGES_DIST[v] || []).forEach(([h, portions, source]) => {
+      // Le repas de 18:30 d'avant-hier tombait pendant un redémarrage : RIEN,
+      // noté « manqué » au journal (décision 4 de l'ADR 0155).
+      if (v === 'loggia' && n === 2 && h === '18:30') return;
+      pousser(aHeureDist(h, n), portions, source);
+    });
+    // Une ration donnée au bouton de l'appareil : « Manuel » dans l'historique.
+    if ((v === 'aqara' || v === 'horsligne') && n === 2) pousser(aHeureDist('16:10', 2), 1, 'manual');
+  }
+  DIST_LIVE.forEach(e => { if (e.t >= t0 && e.t <= t1) out.push(e); });
+  return out.sort((a, b) => a.t - b.t);
+}
+
+/** Le dernier déclenchement d'une automatisation à heures fixes, en ISO. */
+const dernierDeclenchement = (heures) => {
+  const t = Math.max(...heures.map(h => (aHeureDist(h, 0) <= Date.now() ? aHeureDist(h, 0) : aHeureDist(h, 1))));
+  return isoDist(t);
+};
+
+/* Les états du distributeur, selon la variante. Bâtis à l'installation : la
+ * langue est connue (`s()` traduit), le compteur du jour est la somme des
+ * repas déjà partis aujourd'hui, et la source du dernier repas la sienne. */
+function etatsDistributeur() {
+  const v = VARIANTE_DIST, out = {};
+  const maintenant = Date.now();
+  const jour = passagesDistributeur(minuitDist(maintenant), maintenant);
+  const gJour = jour.reduce((a, e) => a + e.g, 0);
+  const tous = passagesDistributeur(maintenant - 3 * JOUR_MS, maintenant);
+  const dernier = tous.length ? tous[tous.length - 1] : null;
+  if (estAqara()) {
+    // Un Zigbee2MQTT hors ligne fait tomber TOUTES les entités de l'appareil ;
+    // Home Assistant garde leurs attributs de capacité (les options du select).
+    const e = (etat) => (v === 'horsligne' ? 'unavailable' : etat);
+    Object.assign(out, {
+      'select.distributeur_feed': s(e('STOP'), { friendly_name: 'Distribuer', options: ['STOP', 'START'] }),
+      'number.distributeur_portion': s(e(45), { friendly_name: 'Portion du distributeur', min: 5, max: 100, step: 5, unit_of_measurement: 'g' }),
+      'sensor.distributeur_weight_per_day': s(e(gJour), { friendly_name: 'Croquettes distribuées aujourd’hui', unit_of_measurement: 'g', state_class: 'total_increasing' }),
+      // Mode manuel : les créneaux de l'appareil ne partent pas, ce sont ses automatisations qui distribuent.
+      'select.distributeur_mode': s(e('manual'), { friendly_name: 'Mode de distribution', options: ['schedule', 'manual'] }),
+      'sensor.distributeur_feeding_source': s(e(dernier ? dernier.source : 'remote'), { friendly_name: 'Source du dernier repas' }),
+      'binary_sensor.distributeur_error': s(e('off'), { friendly_name: 'Erreur du distributeur', device_class: 'problem' }),
+      'switch.distributeur_child_lock': s(e('off'), { friendly_name: 'Verrouillage enfant' }),
+    });
+  }
+  if (v === 'petlibro') {
+    const prochain = ['07:00', '19:30'].map(h => aHeureDist(h, 0)).find(t => t > maintenant) || aHeureDist('07:00', -1);
+    // L'état du jour de chaque créneau : servi s'il est passé, en attente sinon.
+    const etatJour = (h) => (aHeureDist(h, 0) <= maintenant ? 'dispensed' : 'pending');
+    Object.assign(out, {
+      'button.granary_manual_feed': s('unknown', { friendly_name: 'Distribution manuelle' }),
+      'button.granary_enable_feeding_plan': s('unknown', { friendly_name: 'Activer le programme' }),
+      'button.granary_desiccant_reset': s('unknown', { friendly_name: 'Réinitialiser le déshydratant' }),
+      'number.granary_manual_feed_quantity': s(1, { friendly_name: 'Quantité de la distribution manuelle', min: 1, max: 24, step: 1 }),
+      'number.granary_desiccant_frequency': s(30, { friendly_name: 'Fréquence du déshydratant', min: 1, max: 60, step: 1, unit_of_measurement: 'd' }),
+      'binary_sensor.granary_feeding_schedule': s('on', { friendly_name: 'Programme des repas', schedule: [
+        { id: 101, time: '07:00', amount_raw: 2, enabled: true, recurring: true, repeat_days: [1, 2, 3, 4, 5, 6, 7], state: etatJour('07:00') },
+        { id: 102, time: '12:00', amount_raw: 1, enabled: false, recurring: true, repeat_days: [1, 2, 3, 4, 5], state: 'pending' },
+        { id: 103, time: '19:30', amount_raw: 2, enabled: true, recurring: true, repeat_days: [1, 2, 3, 4, 5, 6, 7], state: etatJour('19:30') },
+      ] }),
+      // Le bac presque vide : une anomalie à montrer, sur l'Accueil et dans Entretien.
+      'binary_sensor.granary_food_low': s('on', { friendly_name: 'Croquettes presque épuisées', device_class: 'problem' }),
+      'binary_sensor.granary_food_dispenser_state': s('off', { friendly_name: 'État de la distribution', device_class: 'problem' }),
+      'binary_sensor.granary_online': s('on', { friendly_name: 'En ligne', device_class: 'connectivity' }),
+      'sensor.granary_remaining_desiccant': s(12, { friendly_name: 'Déshydratant', device_class: 'duration', unit_of_measurement: 'd' }),
+      'sensor.granary_last_feed_time': s(dernier ? isoDist(dernier.t) : 'unknown', { friendly_name: 'Dernier repas', device_class: 'timestamp' }),
+      'sensor.granary_next_feed_time': s(isoDist(prochain), { friendly_name: 'Prochain repas', device_class: 'timestamp' }),
+      'sensor.granary_today_feeding_quantity_weight': s(gJour, { friendly_name: 'Quantité distribuée aujourd’hui', unit_of_measurement: 'g', state_class: 'total_increasing' }),
+    });
+  }
+  /* Les automatisations, avec leur `id` de configuration et leur dernier
+   * déclenchement, comme Home Assistant les publie. Le planning de Loggia
+   * (variante `loggia`) n'existe que faute d'automatisation de repas ; sans
+   * commande (variante `rien`), une automatisation n'aurait rien à commander. */
+  if (v !== 'loggia' && v !== 'rien') {
+    out['automation.croquettes_matin_et_soir'] = s('on', { friendly_name: 'Croquettes matin et soir', id: '1728000000001', last_triggered: dernierDeclenchement(['07:30', '19:00']) });
+  }
+  if (v === 'aqara' || v === 'horsligne') {
+    out['automation.croquettes_du_midi'] = s('off', { friendly_name: 'Croquettes du midi', id: '1728000000002', last_triggered: null });
+  }
+  out['automation.alerte_bac_presque_vide'] = s('on', { friendly_name: 'Alerte bac presque vide', id: '1728000000003', last_triggered: ilYaMin(2 * 1440 + 300) });
+  /* Les dates, comme Home Assistant les tient (contradicteur, 05/10). `s()`
+   * date tout de l'ouverture de la page : la fiche, qui lit le dernier repas
+   * sur la dernière hausse du compteur (`dernierRepas`), aurait annoncé un
+   * repas « à l'instant » à chaque ouverture. Le compteur change au dernier
+   * repas du jour (à minuit s'il n'y en a pas eu), la source quand elle
+   * CHANGE, et un appareil tombé l'est depuis sa chute. */
+  const dater = (id, t) => { if (out[id] && t != null) out[id] = { ...out[id], last_changed: isoDist(t), last_updated: isoDist(t) }; };
+  const finJour = jour.length ? jour[jour.length - 1].t : minuitDist(maintenant);
+  let depuis = null;
+  for (let i = tous.length - 1; i >= 0 && tous[i].source === (dernier && dernier.source); i--) depuis = tous[i].t;
+  if (v === 'horsligne') Object.keys(DISTRIBUTEURS_DEMO.dist_cuisine[1]).forEach(id => dater(id, TOMBE_DIST));
+  else {
+    ['sensor.distributeur_weight_per_day', 'sensor.granary_today_feeding_quantity_weight'].forEach(id => dater(id, finJour));
+    dater('sensor.distributeur_feeding_source', depuis);
+    dater('sensor.granary_last_feed_time', dernier ? dernier.t : null);
+  }
+  return out;
+}
+
+/* `loggia_feeder`, la configuration de la maison. L'ANCIENNE liste de repas
+ * garde un repas relié à une automatisation et un repas qui ne l'est pas :
+ * l'encart de migration de Paramètres a de quoi compter (ADR 0155). Le libellé
+ * fait partie d'un repas (`{ id, time, label, g, auto }`). */
+function feederDemo() {
+  const v = VARIANTE_DIST;
+  const matin = { id: 'matin', time: '07:30', label: etiquette('Repas du matin'), g: 45, auto: 'input_boolean.repas_matin' };
+  const soir = { id: 'soir', time: '19:00', label: etiquette('Repas du soir'), g: 45, auto: 'automation.croquettes_matin_et_soir' };
+  const haids = { reservoir: 'input_number.croquettes_reservoir', portionWeight: 'number.distributeur_portion', distribuees: 'sensor.distributeur_weight_per_day' };
+  // Rien à commander : le réservoir seul.
+  if (v === 'rien') return { haids: { reservoir: 'input_number.croquettes_reservoir' }, meals: [] };
+  // Un Petlibro n'a pas de réservoir en grammes : on le désigne par son appareil.
+  if (v === 'petlibro') return { appareil: 'dist_petlibro', haid: 'button.granary_manual_feed', haids: {}, meals: [] };
+  // Sans automatisation de repas, il ne reste de l'ancienne liste que ce qui ne distribuait rien.
+  if (v === 'loggia') return { haids, haid: 'select.distributeur_feed', meals: [matin] };
+  return { haids, haid: 'select.distributeur_feed', meals: [matin, soir] };
+}
+
+/* Le planning de Loggia, en mémoire : `{ appareil, repas: [{ id, heure,
+ * jours, portions, actif }] }`, lundi = 0 — le format de `robots.py`.
+ * Paresseux : il dépend de la variante, connue à `installerDemo`. */
+let DIS_CFG_ = null;
+const DIS_CFG = () => (DIS_CFG_ || (DIS_CFG_ = VARIANTE_DIST === 'loggia'
+  ? { appareil: 'dist_cuisine', repas: [
+    { id: 'r1', heure: '08:00', jours: [0, 1, 2, 3, 4, 5, 6], portions: 1, actif: true },
+    { id: 'r2', heure: '18:30', jours: [0, 1, 2, 3, 4, 5, 6], portions: 1, actif: true },
+  ] }
+  : { appareil: null, repas: [] }));
+const DIS_MAX_REPAS = 12;
+const copieDistributeurs = () => JSON.parse(JSON.stringify(DIS_CFG()));
+
+/** Le programme de l'appareil, lu comme `distributeur_appareil.py` le lirait. */
+function programmeDemo(states) {
+  const rien = { source: null, connu: false, presente: false, active: false, lisible: false, mode: null, note: null, repas: [] };
+  if (VARIANTE_DIST === 'petlibro') {
+    const st = states['binary_sensor.granary_feeding_schedule'];
+    const liste = (st && Array.isArray(st.attributes.schedule)) ? st.attributes.schedule : [];
+    const repas = liste.map(r => ({ heure: r.time, jours: (r.repeat_days || []).map(j => j - 1), portions: r.amount_raw, actif: !!r.enabled, etat_jour: r.state || null }))
+      .sort((a, b) => (a.heure < b.heure ? -1 : a.heure > b.heure ? 1 : a.jours[0] - b.jours[0]));
+    return { source: 'petlibro', connu: true, presente: repas.length > 0, active: !!st && st.state === 'on' && repas.some(r => r.actif),
+      lisible: true, mode: null, note: null, repas };
+  }
+  if (!estAqara()) return rien;
+  // Aqara sous Zigbee2MQTT : le MODE dit tout, la liste de créneaux n'est pas publiée ici.
+  const mode = ((states['select.distributeur_mode'] || {}).state || '').toLowerCase();
+  if (mode === 'manual') return { ...rien, source: 'aqara', connu: true, mode: 'manuel', note: 'mode_manuel' };
+  if (mode === 'schedule') return { ...rien, source: 'aqara', connu: true, presente: true, mode: 'programme', note: 'tenu_par_appareil' };
+  // Mode illisible (hors ligne) : on ne sait pas, on ne dit ni « manuel » ni « tenu par l'appareil ».
+  return { ...rien, source: 'aqara' };
+}
+
+/** Un élément d'automatisation, la forme du contrat (jamais de `raw_config`). */
+function resumeAutoDemo(states, id, indice) {
+  const st = states[id], a = AUTOS_DIST[id] || { heures: [], jours: null };
+  const at = st.attributes || {};
+  return {
+    entity_id: id, nom: at.friendly_name || id, etat: st.state, dernier: at.last_triggered || null,
+    declencheurs: a.heures.length ? a.heures.map(heure => ({ type: 'heure', heure })) : [{ type: 'autre' }],
+    heures: a.heures.slice(), jours: a.jours ? a.jours.slice() : null, conditionnel: false, portions: null,
+    pilotable: true, modifiable: false, indice,
+  };
+}
+
+/* Le journal du module, tel que `regles.noter` / `regles.agir` l'écrivent :
+ * le motif par ses PARTIES (« repas {heure} »), les détails par leurs clés. */
+function journalDistributeurDemo() {
+  const v = VARIANTE_DIST;
+  const ligne = (n, heure, quoi, detail, decale = 0) => ligneJournal({
+    module: 'distributeurs', regle: 'repas', quoi, cibles: quoi === 'distribuer' ? ['select.distributeur_feed'] : [], n: quoi === 'distribuer' ? 1 : 0,
+    motif: [['repas {heure}', { heure }]], detail, simule: false, ts: (aHeureDist(heure, n) + decale) / 1000 });
+  let lignes = [];
+  if (v === 'loggia') {
+    for (let n = 0; n <= 3; n++) {
+      ['08:00', '18:30'].forEach(h => {
+        if (aHeureDist(h, n) > Date.now()) return;
+        // Le redémarrage d'avant-hier : noté au démarrage du module, rien n'est parti.
+        lignes.push(n === 2 && h === '18:30' ? ligne(n, h, 'retenu', 'manque au redemarrage', 12 * 60000) : ligne(n, h, 'distribuer', ''));
+      });
+    }
+  } else if (v === 'aqara' || v === 'horsligne') {
+    // L'histoire de l'installation : le planning de Loggia distribuait, puis
+    // les automatisations sont arrivées — et le serveur a retenu son repas.
+    lignes = [ligne(5, '07:30', 'distribuer', ''), ligne(5, '19:00', 'distribuer', ''), ligne(4, '07:30', 'retenu', 'autre source')];
+  }
+  return lignes.sort((a, b) => b.ts - a.ts).slice(0, 20);
+}
+
+/**
+ * La réponse de `loggia/distributeurs/etat`, la forme du contrat (ADR 0155).
+ * `feeder` est la configuration du moment (le magasin mémoire) : « Oublier
+ * l'ancienne liste » et « Associer une automatisation » s'y voient aussitôt.
+ * `detail` ne change rien ici : seule la Tuya officielle s'y lit.
+ * Interne : les tests la lisent par `maisonDistributeurDemo` (05/10).
+ */
+function distributeursDemo(states, feeder) {
+  const f = feeder || {};
+  const appareil = appareilDist();
+  const programme = programmeDemo(states);
+  const commande = appareil == null ? null
+    : { domaine: VARIANTE_DIST === 'petlibro' ? 'button' : 'select', quantite: false, min: null, max: null, pas: null };
+  // Reconnues par ce qu'elles FONT ; puis les indices, montrés même non reconnus.
+  const automatisations = Object.keys(AUTOS_DIST).filter(id => AUTOS_DIST[id].commande && states[id]).map(id => resumeAutoDemo(states, id, null));
+  const meals = Array.isArray(f.meals) ? f.meals.filter(m => m && typeof m === 'object') : [];
+  const indices = [
+    ...meals.map(m => [m.auto, 'ancienne_liste']),
+    ...(Array.isArray(f.associees) ? f.associees : []).map(id => [id, 'associee']),
+  ];
+  indices.forEach(([id, indice]) => {
+    if (typeof id !== 'string' || id.indexOf('automation.') !== 0 || !states[id]) return;
+    if (!automatisations.some(a => a.entity_id === id)) automatisations.push(resumeAutoDemo(states, id, indice));
+  });
+  const repas = DIS_CFG().repas;
+  const sources = {
+    programme: { presente: programme.presente, active: programme.active },
+    automatisations: { presente: automatisations.length > 0, active: automatisations.some(a => a.etat === 'on') },
+    loggia: { presente: repas.length > 0, active: repas.some(r => r.actif) },
+  };
+  const relies = meals.filter(m => typeof m.auto === 'string' && m.auto.indexOf('automation.') === 0);
+  return {
+    source: sources.programme.active ? 'appareil' : sources.automatisations.active ? 'automatisations' : sources.loggia.active ? 'loggia' : null,
+    sources,
+    appareil: appareil ? { device_id: appareil, nom: etiquette('Distributeur de croquettes'), fabricant: APPAREIL_DIST[appareil].fabricant, modele: APPAREIL_DIST[appareil].modele } : null,
+    programme,
+    automatisations,
+    planning: copieDistributeurs(),
+    // « Ajouter un repas » : ni programme ni automatisation PRÉSENTS, et une commande.
+    peutPlanifier: !programme.presente && !sources.automatisations.presente && commande != null,
+    commande,
+    ancienne_liste: { n: meals.length, relies: relies.length,
+      non_relies: meals.filter(m => relies.indexOf(m) < 0).map(m => ({ heure: m.time || null, label: m.label || null })) },
+    notes: [],
+    journal: journalDistributeurDemo(),
+  };
+}
+
+/* `loggia/distributeurs/config` : `repas` REMPLACE la liste. Ce qui est
+ * illisible est REFUSÉ, comme côté serveur, avec le code que l'écran traduit. */
+const refusDemo = (code, message) => Object.assign(new Error(message), { code });
+function distributeursPatch(patch) {
+  const p = patch || {};
+  if (Array.isArray(p.repas)) {
+    if (p.repas.length > DIS_MAX_REPAS) throw refusDemo('trop_de_repas', 'trop de repas : ' + DIS_MAX_REPAS);
+    const repas = p.repas.map((r, i) => {
+      const heure = String((r && r.heure) || '');
+      const hm = heure.match(/^(\d{2}):(\d{2})$/);
+      const portions = Number(r && r.portions != null ? r.portions : 1);
+      /* Des jours illisibles sont REFUSÉS, pas filtrés en silence : c'est ce
+       * que fait `robots.py`, dont le planning reprend le format (contradicteur,
+       * 05/10) — sinon la démo acceptait ce que le serveur refuse. */
+      const joursLisibles = Array.isArray(r && r.jours) && r.jours.every(j => Number.isInteger(j) && j >= 0 && j <= 6);
+      if (!hm || Number(hm[1]) > 23 || Number(hm[2]) > 59 || !Number.isInteger(portions) || portions < 1 || portions > 20 || !joursLisibles) {
+        throw refusDemo('invalid_format', 'repas illisible');
+      }
+      const jours = [...new Set(r.jours)].sort((a, b) => a - b);
+      return { id: String(r.id || 'r' + Date.now().toString(36) + i), heure, jours, portions, actif: r.actif !== false };
+    });
+    DIS_CFG().repas = repas;
+    DIS_CFG().appareil = appareilDist();
+  }
+  return copieDistributeurs();
+}
+
+/* La maison d'une variante, bâtie comme `installerDemo` la bâtit — sans
+ * document ni magasin. Exporté pour `tests/distributeur_finition.test.mjs`,
+ * qui rejoue la carte sur la variante `horsligne` (05/10). */
+export function maisonDistributeurDemo(variante) {
+  VARIANTE_DIST = VARIANTES_DIST.indexOf(variante) >= 0 ? variante : 'aqara';
+  DIS_CFG_ = null;
+  const states = etatsInitiaux();
+  return {
+    states, feeder: feederDemo(), index: indexDemo(states),
+    etat: (feeder) => distributeursDemo(states, feeder === undefined ? feederDemo() : feeder),
+    historique: (chemin) => historiqueDemo(chemin, states),
+    patch: distributeursPatch,
+  };
+}
+
+/* L'historique du distributeur (onglet Historique), au format de l'API REST :
+ * une liste par entité, l'`entity_id` sur le premier point. Le compteur du
+ * jour monte d'une portion à chaque repas et retombe à zéro à minuit ; la
+ * source du dernier repas ne s'écrit que quand elle CHANGE (Home Assistant
+ * n'enregistre pas un état identique) ; un horodatage de dernier repas change
+ * à chaque repas ; une automatisation porte son `last_triggered` quand on
+ * demande les attributs. Dix jours au plus : la purge par défaut de HA. */
+const SERIES_DIST = new Map([
+  ['sensor.distributeur_weight_per_day', 'compteur'], ['sensor.granary_today_feeding_quantity_weight', 'compteur'],
+  ['sensor.distributeur_feeding_source', 'source'], ['sensor.granary_last_feed_time', 'dernier'],
+  ['automation.croquettes_matin_et_soir', 'auto'], ['automation.croquettes_du_midi', 'auto'],
+  ['input_number.croquettes_reservoir', 'reservoir'],
+]);
+// Le bac a été rempli il y a six jours, à 10 h ; il était presque vide.
+const REMPLI_DIST = () => aHeureDist('10:00', 6);
+function historiqueDistributeurDemo(ids, chemin, states) {
+  const d = chemin.match(/history\/period\/([^?]+)/);
+  const f = chemin.match(/end_time=([^&]+)/);
+  const t1 = Math.min(Date.now(), f ? Date.parse(decodeURIComponent(f[1])) || Date.now() : Date.now());
+  const t0 = Math.max(d ? Date.parse(decodeURIComponent(d[1])) || 0 : 0, Date.now() - 10 * JOUR_MS);
+  const attributs = chemin.indexOf('no_attributes') < 0;
+  const avant = passagesDistributeur(minuitDist(t0) - 3 * JOUR_MS, t0 - 1);
+  const dedans = passagesDistributeur(t0, t1);
+  const tombe = VARIANTE_DIST === 'horsligne' && TOMBE_DIST >= t0 && TOMBE_DIST <= t1 ? TOMBE_DIST : null;
+  const listes = [];
+  ids.forEach(id => {
+    const genre = SERIES_DIST.get(id);
+    if (!states[id]) return;
+    // Une entité qui n'est pas du distributeur : la courbe générique, une par une.
+    if (!genre) { const [l] = historiqueDemo('history/period/' + isoDist(t0) + '?filter_entity_id=' + encodeURIComponent(id), states); if (l && l.length) { l[0].entity_id = id; listes.push(l); } return; }
+    const pts = [];
+    const point = (state, t, extra) => pts.push({ state: String(state), last_changed: isoDist(t), ...(extra || {}) });
+    if (genre === 'compteur') {
+      let v = avant.filter(e => e.t >= minuitDist(t0)).reduce((a, e) => a + e.g, 0);
+      point(v, t0);
+      let jour = minuitDist(t0);
+      dedans.forEach(e => {
+        // La remise à zéro de minuit, avant le premier repas du jour.
+        if (minuitDist(e.t) !== jour) { jour = minuitDist(e.t); if (v !== 0) { v = 0; point(0, jour); } }
+        v += e.g; point(v, e.t);
+      });
+      // Minuit d'aujourd'hui, avant le premier repas — sauf sur un appareil déjà tombé.
+      if (!tombe && minuitDist(t1) !== jour && v !== 0 && minuitDist(t1) >= t0) point(0, minuitDist(t1));
+    } else if (genre === 'source') {
+      let src = avant.length ? avant[avant.length - 1].source : 'remote';
+      point(src, t0);
+      dedans.forEach(e => { if (e.source !== src) { src = e.source; point(src, e.t); } });
+    } else if (genre === 'reservoir') {
+      /* Le réservoir est un helper que les automatisations de la maison
+       * font baisser à chaque repas : il finit sur sa valeur du moment, et
+       * remonte d'un coup le jour où on l'a rempli. */
+      const rempli = REMPLI_DIST(), dansFenetre = rempli >= t0 && rempli <= t1;
+      const somme = (l) => l.reduce((a, e) => a + e.g, 0);
+      const plein = (Number(states[id].state) || 0) + somme(dedans.filter(e => e.t >= rempli));
+      let v = dansFenetre ? 150 + somme(dedans.filter(e => e.t < rempli)) : plein;
+      const marches = dedans.map(e => [e.t, -e.g]);
+      if (dansFenetre) marches.push([rempli, null]);
+      marches.sort((a, b) => a[0] - b[0]);
+      point(v, t0);
+      marches.forEach(([t, d]) => { v = d == null ? plein : v + d; point(v, t); });
+    } else if (genre === 'dernier') {
+      point(avant.length ? isoDist(avant[avant.length - 1].t) : 'unknown', t0);
+      dedans.forEach(e => point(isoDist(e.t), e.t));
+    } else {
+      // Une automatisation coupée ne s'est pas déclenchée dans la fenêtre.
+      const a = AUTOS_DIST[id], st = states[id];
+      const fois = [];
+      if (st.state === 'on') for (let n = Math.ceil((Date.now() - t0) / JOUR_MS) + 2; n >= 0; n--) a.heures.forEach(h => { const t = aHeureDist(h, n); if (t <= t1) fois.push(t); });
+      fois.sort((x, y) => x - y);
+      const avantT0 = fois.filter(t => t0 > t).pop();
+      const lt = (t) => (attributs ? { attributes: { last_triggered: t != null ? isoDist(t) : null } } : null);
+      point(st.state, t0, lt(avantT0 != null ? avantT0 : null));
+      if (attributs) fois.filter(t => t >= t0).forEach(t => point(st.state, t, lt(t)));
+    }
+    // L'appareil tombé ; ni une automatisation ni le helper du réservoir ne tombent avec lui.
+    if (tombe && genre !== 'auto' && genre !== 'reservoir') point('unavailable', tombe);
+    pts.sort((x, y) => Date.parse(x.last_changed) - Date.parse(y.last_changed));
+    pts[0].entity_id = id;
+    listes.push(pts);
+  });
+  return listes;
 }
 
 /* Deux agendas, pas un : le choix des agendas et la mention du calendrier
@@ -1582,6 +2079,18 @@ export function installerDemo(langue) {
    * ecrit qu'ensuite, et serait donc invisible d'ici. Sans elle, la maison
    * garde ses noms francais. */
   if (langue && LIEUX.Salon[langue]) LANGUE_DEMO = langue;
+  /* Deux réglages d'aperçu lus dans l'URL, comme `?lang=` (05/10) :
+   * `distributeur=loggia|petlibro|rien|horsligne`, la variante du distributeur
+   * (ADR 0155), et `compte=ordinaire`, un compte Home Assistant sans droits
+   * d'administration — ce qu'il ne peut pas faire doit disparaître de l'écran
+   * (ADR 0144), et le faux serveur le refuse comme `require_admin`. Lus AVANT
+   * la maison : ses états et sa configuration en dépendent. */
+  let ordinaire = false;
+  try {
+    const q = new URLSearchParams(window.location.search);
+    if (VARIANTES_DIST.indexOf(q.get('distributeur')) >= 0) VARIANTE_DIST = q.get('distributeur');
+    ordinaire = q.get('compte') === 'ordinaire';
+  } catch { /* rien : la maison par défaut */ }
 
   // ── 1. Magasin mémoire à la place du localStorage ─────────────────────────
   const mem = new Map();
@@ -1596,6 +2105,8 @@ export function installerDemo(langue) {
     get length() { return mem.size; },
   };
   try { Object.defineProperty(window, 'localStorage', { value: faux, configurable: true }); } catch { /* repli : la demo ecrira le vrai stockage */ }
+  // Une clé de la maison telle que l'écran l'a écrite (`cfgSet` : du JSON).
+  const lireCfgDemo = (k) => { try { return JSON.parse(faux.getItem(k)); } catch { return null; } };
 
   // ── 2. La maison ──────────────────────────────────────────────────────────
   const states = etatsInitiaux();
@@ -1686,8 +2197,34 @@ export function installerDemo(langue) {
       setTimeout(() => toucher(lid, vise), 2000);
     } else if (domaine === 'media_player' && service === 'media_play_pause') {
       toucher(id, states[id] && states[id].state === 'playing' ? 'paused' : 'playing');
+    } else if (domaine === 'select' && service === 'select_option' && /^select\.distributeur_/.test(String(id))) {
+      /* Le distributeur (ADR 0155). START sur le select feed d'un Aqara
+       * distribue sans que le select change d'état — Zigbee2MQTT le laisse
+       * vide ; le mode, lui, change, et le programme de la fiche avec. Un
+       * appareil tombé ne répond pas. */
+      const opt = (data || {}).option;
+      if (!states[id] || states[id].state === 'unavailable') return Promise.resolve();
+      if (id === 'select.distributeur_feed') { if (opt === 'START') distribuerDemo(1); }
+      else if (opt != null) toucher(id, opt);
+    } else if (domaine === 'button' && service === 'press' && /^button\.granary_/.test(String(id))) {
+      // L'état d'un bouton est l'heure du dernier appui, comme dans Home Assistant.
+      toucher(id, maintenant());
+      if (id === 'button.granary_manual_feed') distribuerDemo(Number((states['number.granary_manual_feed_quantity'] || {}).state) || 1);
+      if (id === 'button.granary_desiccant_reset') toucher('sensor.granary_remaining_desiccant', 30);
     }
     return Promise.resolve();
+  };
+  /* Une ration partie de l'écran : le compteur du jour monte, l'historique la
+   * garde (`DIST_LIVE`), et l'appareil dit d'où elle vient. */
+  const distribuerDemo = (portions) => {
+    const petlibro = VARIANTE_DIST === 'petlibro';
+    const g1 = petlibro ? G_PORTION_DIST.petlibro : (Number((states['number.distributeur_portion'] || {}).state) || G_PORTION_DIST.aqara);
+    const e = { t: Date.now(), portions, g: portions * g1, source: 'remote' };
+    DIST_LIVE.push(e);
+    const compteur = petlibro ? 'sensor.granary_today_feeding_quantity_weight' : 'sensor.distributeur_weight_per_day';
+    if (states[compteur]) toucher(compteur, (Number(states[compteur].state) || 0) + e.g);
+    if (petlibro) toucher('sensor.granary_last_feed_time', isoDist(e.t));
+    else toucher('sensor.distributeur_feeding_source', 'remote');
   };
 
   const el = document.createElement('home-assistant');
@@ -1703,7 +2240,7 @@ export function installerDemo(langue) {
      * Paris, parce qu'il faut bien un point et que celui-la n'appartient a
      * personne. La maison de demonstration est inventee ; sa position aussi. */
     config: { latitude: 48.8566, longitude: 2.3522, time_zone: 'Europe/Paris' },
-    user: { id: 'demo', name: 'Démo', is_admin: true },
+    user: { id: 'demo', name: 'Démo', is_admin: !ordinaire },
     /* Le websocket n'existe pas ici — sauf pour les PRÉVISIONS météo, que la
      * vue Météo demande par service. Sans elles, sa bannière n'aurait ni
      * heures ni semaine, et la démonstration montrerait une vue à moitié
@@ -1792,6 +2329,15 @@ export function installerDemo(langue) {
       }
       if (msg && msg.type === 'loggia/robots/etat') return Promise.resolve(robotsDemo(states));
       if (msg && msg.type === 'loggia/robots/config') return Promise.resolve({ config: robotsPatch(msg.patch) });
+      /* Le distributeur (ADR 0155) : l'état, ouvert à tout compte, et le
+       * planning de Loggia, réservé aux administrateurs (`require_admin`). La
+       * configuration est relue au magasin mémoire à chaque appel. */
+      if (msg && msg.type === 'loggia/distributeurs/etat') return Promise.resolve(distributeursDemo(states, lireCfgDemo('loggia_feeder')));
+      if (msg && msg.type === 'loggia/distributeurs/config') {
+        if (ordinaire) return Promise.reject({ code: 'unauthorized', message: 'Unauthorized' });
+        try { return Promise.resolve({ config: distributeursPatch(msg.patch), etat: distributeursDemo(states, lireCfgDemo('loggia_feeder')) }); }
+        catch (e) { return Promise.reject(e); }
+      }
       if (msg && msg.type === 'loggia/veilles/etat') return Promise.resolve(veillesDemo(states));
       if (msg && msg.type === 'loggia/regles/etat') return Promise.resolve(reglesDemo(states));
       if (msg && msg.type === 'loggia/regles/degeler') {

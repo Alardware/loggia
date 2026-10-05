@@ -190,6 +190,7 @@ test('les modules à la demande : chacun derrière le rechargement, les décors 
     ['ParametresContent', './views/parametres.jsx', false],
     ['ViewEntSheet', './views/parametres.jsx', false],
     ['FicheRobotContent', './ficherobot.jsx', false],
+    ['FicheDistributeurContent', './fichedistributeur.jsx', false],
     ['AssistantSheet', './views/assistant.jsx', false],
     ['OrbeMini', './orbe.jsx', true],
     ['Onboarding', './Onboarding.jsx', false],

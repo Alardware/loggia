@@ -48,30 +48,32 @@ export function croqHaids() {
   return ids(c && c.haids);
 }
 
-/** Les repas programmés : `[{ id, time, label, g, auto }]`, vide par défaut.
- * Un repas sans heure lisible, ou dont l'interrupteur n'est pas une entité,
- * ne passe pas : `deriveAccueil` fait `m.time.split(':')`. */
-export function croqMeals() {
-  const c = loggiaEnt('feeder', null);
-  return (c && Array.isArray(c.meals) && c.meals.length)
-    ? c.meals.filter(m => m && typeof m.time === 'string' && (!m.auto || estId(m.auto))) : [];
-}
-
-/** Les repas tels que Paramètres les ÉDITE : `[{ time, label, g, auto }]`, en
- * texte, comme le formulaire (05/10, suite du point 10b).
- * `croqMeals` écarte ce que la fiche et l'Accueil ne savent pas programmer ;
- * l'éditeur, lui, le garde pour qu'on le répare — sinon le prochain
- * « Enregistrer » effaçait le repas, libellé et grammes compris, sans rien
- * dire. Seul ce qui n'est pas un repas (`null`, un nombre, une liste) part.
- * Une heure illisible se montre vide, un interrupteur qui n'est pas une entité
- * aussi : deux champs à remplir, pas un repas perdu. */
-export function croqRepasEdition() {
+/** L'ANCIENNE liste de repas, pour la migration seulement (ADR 0155, 05/10) :
+ * `[{ heure, label, auto, relie }]`.
+ * La liste saisie dans Paramètres a cessé d'être un planning — le planning
+ * vient de l'appareil, des automatisations qui le commandent, ou du planning
+ * de Loggia. Elle n'est pas effacée pour autant : l'encart « Ancienne liste de
+ * repas » la compte et la montre, et ses `automation.*` servent d'indices.
+ * Rien ne se perd en silence, rien ne resert en silence : on lit TOUT ce qui
+ * ressemble à un repas — un repas abîmé se compte aussi, il ne disparaît pas
+ * de l'encart. `croqMeals` (la liste prise pour un planning) et
+ * `croqRepasEdition` (son éditeur dans Paramètres) sont partis le 05/10 avec
+ * leurs derniers lecteurs : la liste n'a plus d'éditeur, « Enregistrer » la
+ * recopie telle quelle (`feederAEcrire`, views/parametres.jsx).
+ * `relie` : l'interrupteur du repas est une automatisation (un
+ * `input_boolean` ne distribuait rien par lui-même). Une heure illisible se
+ * rend vide. */
+export function croqAncienneListe() {
   const c = loggiaEnt('feeder', null);
   const texte = (v) => (typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v)) ? String(v) : '');
   return (c && Array.isArray(c.meals))
-    ? c.meals.filter(m => m && typeof m === 'object' && !Array.isArray(m)).map(m => ({
-      time: typeof m.time === 'string' ? m.time : '', label: texte(m.label), g: texte(m.g), auto: estId(m.auto) ? m.auto : '',
-    })) : [];
+    ? c.meals.filter(m => m && typeof m === 'object' && !Array.isArray(m)).map(m => {
+      const auto = estId(m.auto) ? m.auto : null;
+      return {
+        heure: typeof m.time === 'string' && /^([01]?\d|2[0-3]):[0-5]\d$/.test(m.time) ? m.time : '',
+        label: texte(m.label), auto, relie: !!auto && auto.indexOf('automation.') === 0,
+      };
+    }) : [];
 }
 
 /* ── Le reste ─────────────────────────────────────────────────────────────── */

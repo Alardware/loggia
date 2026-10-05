@@ -181,12 +181,46 @@ def test_deux_reglages_envoyes_ensemble_restent_tous_les_deux(store_module, nom,
     assert garde(ecrit), f"{nom} : un des deux reglages a ete perdu ({ecrit!r})"
 
 
+def test_le_planning_du_distributeur_s_ecrit_d_un_seul_tenant(store_module):
+    """05/10 (ADR 0155) : `repas` REMPLACE la liste, et l'appareil du moment
+    est retenu avec elle. Un rechargement (un import, patch vide) parti en meme
+    temps qu'un enregistrement ne doit pas l'effacer ; deux enregistrements
+    ensemble laissent l'une des deux listes ENTIERE, jamais un melange ni un
+    planning vide."""
+    feeder = {"script": "script.nourrir_le_chat"}  # une commande : l'ajout est permis
+
+    def un(ident, heure):
+        return {"id": ident, "heure": heure, "jours": [0, 1, 2, 3, 4, 5, 6], "portions": 1, "actif": True}
+
+    m = magasin_sur(store_module, {"loggia_feeder": feeder})
+    obj = module_sur("distributeurs", "LoggiaDistributeurs", m)
+
+    async def avec_rechargement():
+        await asyncio.gather(obj.async_enregistrer({"repas": [un("r1", "07:30")]}), obj.async_enregistrer({}))
+        return await m.async_get_shared("loggia_distributeurs")
+
+    assert [r["id"] for r in lancer(avec_rechargement())["repas"]] == ["r1"], "le rechargement a efface le repas"
+
+    m = magasin_sur(store_module, {"loggia_feeder": feeder})
+    obj = module_sur("distributeurs", "LoggiaDistributeurs", m)
+    a, b = [un("r1", "07:30"), un("r2", "19:00")], [un("r3", "12:00")]
+
+    async def deux():
+        await asyncio.gather(obj.async_enregistrer({"repas": a}), obj.async_enregistrer({"repas": b}))
+        return await m.async_get_shared("loggia_distributeurs")
+
+    ecrit = lancer(deux())
+    assert ecrit["repas"] in (a, b), "deux plannings se sont melanges : %r" % (ecrit,)
+    assert obj.cfg == ecrit, "le module tient un autre planning que celui ecrit"
+
+
 def test_aucun_module_ne_relit_puis_ecrit_hors_du_verrou():
     """Les huit modules qui lisaient puis ecrivaient leur configuration passent
     par `async_modifier_shared`. Minuteurs et sirene tiennent leur table en
     memoire et ne relisent pas le magasin. Les scenarios en etaient ecartes
     pour leur verrou, qui ne voyait pas un import (relecture du lot 15)."""
-    for nom in ("interrupteurs", "fenetres", "nuit", "presence", "robots", "scenarios",
+    # Le planning du distributeur aussi, des sa naissance (05/10, ADR 0155).
+    for nom in ("distributeurs", "interrupteurs", "fenetres", "nuit", "presence", "robots", "scenarios",
                 "veilles", "volets"):
         texte = (COMPOSANT / f"{nom}.py").read_text(encoding="utf-8")
         assert "async_set_shared" not in texte, f"{nom} ecrit encore hors de la primitive"

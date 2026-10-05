@@ -17,6 +17,9 @@
 //     est abîmé. L'éditeur lisait par lui : le repas disparaissait du
 //     formulaire, et le prochain « Enregistrer » l'effaçait — libellé et
 //     grammes perdus sans un mot. Un repas sans heure aussi.
+//     (05/10, ADR 0155 : l'éditeur de repas est parti avec la liste, qui n'est
+//     plus un planning. La garantie reste : l'encart « Ancienne liste de
+//     repas » montre le repas abîmé, et « Enregistrer » le RECOPIE tel quel.)
 //
 // Une configuration VALIDE rend et écrit exactement ce qu'elle rendait.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -120,6 +123,9 @@ test('medPlayers : un identifiant qui n’est pas une chaîne ne fait plus lever
 
 const ViewEntSheet = await composant('views/parametres.jsx', 'ViewEntSheet');
 const valeurs = (html) => [...html.matchAll(/<input\b[^>]*\bvalue="([^"]*)"/g)].map(m => m[1].replace(/&(amp|quot|#x27);/g, (_, e) => ({ amp: '&', quot: '"', '#x27': "'" })[e]));
+/** Les textes affichés, un par ligne : l'encart de l'ancienne liste n'a pas de champ. */
+// Découpé aux balises, entités décodées en une passe (CodeQL, 05/10).
+const textes = (html) => html.split(/<[^>]*>|\n/).map(s => s.replace(/&(amp|quot|#x27);/g, (_, e) => ({ amp: '&', quot: '"', '#x27': "'" })[e]).trim()).filter(Boolean);
 const fiche = (view) => rendre(ViewEntSheet, { view, hass: null, onClose: () => {} });
 
 const REPAS_VALIDES = [
@@ -158,12 +164,19 @@ test('Paramètres → Entités se rend avec des listes abîmées, et montre ce q
 test('Paramètres → Entités : une configuration valide se lit comme avant', () => {
   etat(VALIDE);
   assert.deepEqual(valeurs(fiche('accueil')).filter(v => /Camille|person\.|Entrée|camera\./.test(v)), ['Camille', 'person.camille', 'Entrée', 'camera.entree']);
-  const objets = valeurs(fiche('objets'));
-  for (const v of ['switch.guirlande', 'Sonos', 'media_player.salon_sonos', 'Salon', 'climate.salon', 'input_number.croquettes_reservoir',
-    '07:30', 'Repas du matin', '45', 'input_boolean.repas_matin', '19:00', 'Repas du soir']) assert.ok(objets.includes(v), v);
+  const html = fiche('objets');
+  const objets = valeurs(html);
+  for (const v of ['switch.guirlande', 'Sonos', 'media_player.salon_sonos', 'Salon', 'climate.salon', 'input_number.croquettes_reservoir']) assert.ok(objets.includes(v), v);
+  // Les repas ne sont plus des champs (ADR 0155) : l'encart les montre, heure et libellé.
+  for (const v of ['07:30 · Repas du matin', '19:00 · Repas du soir']) assert.ok(textes(html).includes(v), v);
 });
 
-/* ── 3. Un repas abîmé reste réparable ────────────────────────────────────── */
+/* ── 3. Un repas abîmé ne se perd pas ─────────────────────────────────────── */
+/* 05/10, ADR 0155 : l'ancienne liste n'a plus d'éditeur. Les garanties qui
+ * portaient sur `croqRepasEdition` et `repasAEcrire` portent maintenant sur
+ * son lecteur (`croqAncienneListe`, l'encart) et sur sa recopie
+ * (`feederAEcrire`) : le repas abîmé se MONTRE, et « Enregistrer » le garde
+ * tel quel — plus fort qu'avant, où il était réécrit champs vidés. */
 
 const ABIMES = [
   ...REPAS_VALIDES,
@@ -173,68 +186,65 @@ const ABIMES = [
   null, 3, 'soir', [],
 ];
 
-test('croqRepasEdition : un repas valide se lit comme l’éditeur le lisait', () => {
+/** Ce que « Enregistrer » écrit du distributeur, la clé relue comme dans `saveEnt`. */
+const ecrireFeeder = (feeder) => { etat({ loggia_feeder: feeder }); return P.feederAEcrire({ feeder: P.feederEdition(feeder) }, feeder); };
+
+test('croqAncienneListe : un repas valide se lit tel qu’il est écrit', () => {
   etat({ loggia_feeder: { meals: REPAS_VALIDES } });
-  // L'ancienne lecture de `useEntConfig`, mot pour mot.
-  const avant = L.croqMeals().map(m => ({ time: m.time || '', label: m.label || '', g: m.g != null ? String(m.g) : '', auto: m.auto || '' }));
-  assert.deepEqual(L.croqRepasEdition(), avant);
+  assert.deepEqual(L.croqAncienneListe(), REPAS_VALIDES.map(m => ({ heure: m.time, label: m.label, auto: m.auto, relie: false })));
 });
 
-test('croqRepasEdition : le repas abîmé reste, ses champs illisibles vides ; la fiche l’ignore toujours', () => {
+test('croqAncienneListe : le repas abîmé reste, ses champs illisibles vides ; ce qui n’est pas un repas part', () => {
   etat({ loggia_feeder: { meals: ABIMES } });
-  assert.deepEqual(L.croqRepasEdition(), [
-    { time: '07:30', label: 'Repas du matin', g: '45', auto: 'input_boolean.repas_matin' },
-    { time: '19:00', label: 'Repas du soir', g: '45', auto: '' },
-    { time: '12:00', label: 'Midi', g: '30', auto: '' },
-    { time: '', label: 'Goûter', g: '15', auto: 'input_boolean.gouter' },
-    { time: '', label: '', g: '', auto: '' },
+  assert.deepEqual(L.croqAncienneListe(), [
+    { heure: '07:30', label: 'Repas du matin', auto: 'input_boolean.repas_matin', relie: false },
+    { heure: '19:00', label: 'Repas du soir', auto: null, relie: false },
+    { heure: '12:00', label: 'Midi', auto: null, relie: false },
+    { heure: '', label: 'Goûter', auto: 'input_boolean.gouter', relie: false },
+    { heure: '', label: '', auto: null, relie: false },
   ]);
-  // La fiche et l'Accueil ne programment que ce qu'ils savent lire : inchangé.
-  assert.deepEqual(L.croqMeals().map(m => m.id), ['matin', 'soir']);
   for (const v of [null, 42, 'x', {}, { meals: 'x' }, { meals: { 0: {} } }]) {
     etat({ loggia_feeder: v });
-    assert.deepEqual(L.croqRepasEdition(), [], JSON.stringify(v));
+    assert.deepEqual(L.croqAncienneListe(), [], JSON.stringify(v));
   }
 });
 
-test('l’éditeur montre le repas abîmé, à réparer', () => {
+test('l’encart montre le repas abîmé : il ne disparaît pas de Paramètres', () => {
   etat({ loggia_feeder: { haids: { reservoir: 'input_number.r' }, meals: ABIMES } });
-  const v = valeurs(fiche('objets'));
-  for (const x of ['Midi', '12:00', '30', 'Goûter', '15', 'input_boolean.gouter']) assert.ok(v.includes(x), x + ' : le repas abîmé a disparu de l’éditeur');
+  const t = textes(fiche('objets'));
+  for (const x of ['12:00 · Midi', 'Goûter', '5 repas non reliés : ils ne distribuaient rien par eux-mêmes']) assert.ok(t.includes(x), x + ' : le repas abîmé a disparu de Paramètres');
+  // La ligne d'un repas illisible n'est jamais vide, ni « [object Object] ».
+  assert.ok(t.includes('—') && !t.some(s => s.includes('[object Object]')));
 });
 
-test('repasAEcrire : une configuration valide s’écrit exactement comme avant', () => {
-  // L'ancienne écriture de `saveEnt`, mot pour mot.
-  const avant = (rows) => rows.filter(r => r.time).map((r, i) => ({ id: 'repas' + i, time: r.time, label: r.label || '', g: Number(r.g) || 0, auto: r.auto || null }));
-  const lignes = [
-    { time: '07:30', label: 'Repas du matin', g: '45', auto: 'input_boolean.repas_matin', _k: 'a' },
-    { time: '19:00', label: '', g: '', auto: '', _k: 'b' },
-  ];
-  assert.deepEqual(P.repasAEcrire(lignes), avant(lignes));
+test('feederAEcrire : une configuration valide garde ses repas EXACTEMENT', () => {
+  const ecrit = ecrireFeeder({ haids: { reservoir: 'input_number.r' }, meals: REPAS_VALIDES });
+  assert.deepEqual(ecrit.meals, REPAS_VALIDES);
+  assert.equal(ecrit.meals[0], REPAS_VALIDES[0], 'le repas est recopié, pas reconstruit');
 });
 
-test('repasAEcrire : un repas sans heure n’est plus effacé, une ligne vide part', () => {
-  const ecrits = P.repasAEcrire([
-    { time: '07:30', label: 'Matin', g: '45', auto: '' },
-    { time: '', label: '', g: '', auto: '' },
-    { time: '', label: 'Goûter', g: '15', auto: 'input_boolean.gouter' },
-    { time: '', label: '', g: '0', auto: '' },
-  ]);
-  assert.deepEqual(ecrits, [
+test('feederAEcrire : un repas sans heure ou abîmé n’est plus effacé, une ligne vide part', () => {
+  const brut = [
     { id: 'repas0', time: '07:30', label: 'Matin', g: 45, auto: null },
-    { id: 'repas1', time: null, label: 'Goûter', g: 15, auto: 'input_boolean.gouter' },
-  ]);
-  // Relu : la fiche l'ignore, l'éditeur le remontre à compléter. Rien de perdu.
-  etat({ loggia_feeder: { meals: ecrits } });
-  assert.deepEqual(L.croqMeals().map(m => m.id), ['repas0']);
-  assert.deepEqual(L.croqRepasEdition()[1], { time: '', label: 'Goûter', g: '15', auto: 'input_boolean.gouter' });
+    { id: 'repas1', time: '', label: '', g: 0, auto: null },
+    { id: 'repas2', time: null, label: 'Goûter', g: 15, auto: 'input_boolean.gouter' },
+    { id: 'repas3', time: '', label: '', g: '0', auto: '' },
+  ];
+  // Des grammes à zéro, en nombre ou en texte, ne portent rien : la ligne blanche part.
+  assert.deepEqual(ecrireFeeder({ haids: { reservoir: 'input_number.r' }, meals: brut }).meals, [brut[0], brut[2]]);
+  const ecrit = ecrireFeeder({ haids: { reservoir: 'input_number.r' }, meals: ABIMES });
+  assert.deepEqual(ecrit.meals, ABIMES.slice(0, 5), 'un repas abîmé s’efface au premier « Enregistrer »');
+  // Relu : l'encart le remontre. Rien de perdu.
+  etat({ loggia_feeder: ecrit });
+  assert.deepEqual(L.croqAncienneListe()[3], { heure: '', label: 'Goûter', auto: 'input_boolean.gouter', relie: false });
 });
 
-test('« Enregistrer » passe par repasAEcrire, pour les repas comme pour la présence du distributeur', () => {
+test('« Enregistrer » recopie l’ancienne liste du magasin, plus rien ne la réécrit depuis un formulaire', () => {
   const src = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
-  assert.match(src, /meals: repasAEcrire\(ent\.repas\),/);
-  assert.match(src, /ent\.feeder\.portionWeight \|\| repasAEcrire\(ent\.repas\)\.length\)/);
+  assert.match(src, /const meals = ancienneListeBrute\(brut\);/);
+  assert.match(src, /f\.portionWeight \|\| f\.appareil \|\| meals\.length \|\| associees\.length\)/);
   assert.doesNotMatch(src, /ent\.repas\.filter\(r => r\.time\)/, 'l’écriture qui effaçait un repas sans heure est revenue');
+  assert.doesNotMatch(src, /repasAEcrire|ent\.repas\b/, 'l’ancienne liste se réécrit encore depuis le formulaire');
 });
 
 /* ── Contradicteur (05/10) : trois trous de plus ──────────────────────────── */

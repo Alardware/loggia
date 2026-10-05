@@ -9,7 +9,10 @@
 //  1. un repas ou un jour du planning abîmé (`null`, un nombre, un repas sans
 //     heure) passait tel quel. `prochaineRation` et `croqKeys` lisent `m.auto`,
 //     `deriveAccueil` fait `m.time.split(':')` : l'erreur part du corps d'App,
-//     au-dessus de la barrière par vue — tout l'écran passe en page de secours ;
+//     au-dessus de la barrière par vue — tout l'écran passe en page de secours
+//     (05/10, ADR 0155 : `croqMeals` et `croqRepasEdition` sont partis avec
+//     l'ancienne liste ; `croqAncienneListe`, qui la lit pour l'encart de
+//     migration, tient la même promesse) ;
 //  2. un identifiant d'entité qui n'est pas une chaîne (un nombre, un objet)
 //     finissait dans les clés surveillées, où `useHass` fait `k.charAt(...)`
 //     sur chacune : même chute, pour le distributeur, les scripts Hue, les
@@ -43,18 +46,18 @@ const tousChaines = (v) => Object.values(v).every(x => typeof x === 'string' && 
 test('tous les lecteurs sont couverts ici', () => {
   // Un lecteur ajouté à lectures.js sans cas dans ce fichier fait échouer ce test.
   assert.deepEqual(Object.keys(L).sort(),
-    ['croqHaids', 'croqMeals', 'croqRepasEdition', 'hueScripts', 'notifIds', 'plantsCfg', 'roomHidden', 'voletDays', 'voletMode']);
+    ['croqAncienneListe', 'croqHaids', 'hueScripts', 'notifIds', 'plantsCfg', 'roomHidden', 'voletDays', 'voletMode']);
 });
 
 test('configuration absente : chaque lecteur rend son défaut', () => {
   etat();
   assert.equal(L.voletMode(), null);
-  for (const f of ['voletDays', 'croqMeals', 'croqRepasEdition', 'roomHidden', 'plantsCfg']) assert.deepEqual(L[f](), [], f);
+  for (const f of ['voletDays', 'croqAncienneListe', 'roomHidden', 'plantsCfg']) assert.deepEqual(L[f](), [], f);
   for (const f of ['croqHaids', 'hueScripts', 'notifIds']) assert.deepEqual(L[f](), {}, f);
   // Sans serveur ni navigateur non plus.
   setLoggiaState({ cfg: {}, ent: {}, server: false });
   assert.equal(L.voletMode(), null);
-  assert.deepEqual(L.croqMeals(), []);
+  assert.deepEqual(L.croqAncienneListe(), []);
   assert.deepEqual(L.plantsCfg(), []);
 });
 
@@ -97,22 +100,33 @@ test('volets : un jour abîmé ne passe pas, les bons restent dans l’ordre', (
 const HAIDS = { reservoir: 'input_number.croquettes_reservoir', portionWeight: 'number.distributeur_portion', distribuees: 'sensor.croquettes_du_jour' };
 const MEALS = [
   { id: 'matin', time: '07:30', label: 'Repas du matin', g: 45, auto: 'input_boolean.repas_matin' },
-  { id: 'soir', time: '19:00', label: 'Repas du soir', g: 45, auto: 'input_boolean.repas_soir' },
+  { id: 'soir', time: '19:00', label: 'Repas du soir', g: 45, auto: 'automation.croquettes_soir' },
+];
+/* Ce que l'encart de migration en lit : l'heure, le libellé, l'interrupteur,
+ * et s'il est une automatisation (un `input_boolean` ne distribuait rien). */
+const LUS = [
+  { heure: '07:30', label: 'Repas du matin', auto: 'input_boolean.repas_matin', relie: false },
+  { heure: '19:00', label: 'Repas du soir', auto: 'automation.croquettes_soir', relie: true },
 ];
 
 test('distributeur : une configuration valide rend ce qu’elle rendait', () => {
   etat({ cfg: { loggia_feeder: { haids: HAIDS, meals: MEALS } } });
   assert.deepEqual(L.croqHaids(), HAIDS);
-  assert.deepEqual(L.croqMeals(), MEALS);
+  assert.deepEqual(L.croqAncienneListe(), LUS);
   // La clé éditée prime sur `loggia_entities`, qui reste le repli.
   etat({ ent: { feeder: { haids: HAIDS, meals: MEALS } } });
   assert.deepEqual(L.croqHaids(), HAIDS);
-  assert.deepEqual(L.croqMeals(), MEALS);
+  assert.deepEqual(L.croqAncienneListe(), LUS);
+  // Une liste vidée dans la clé éditée (« Oublier l'ancienne liste ») ne
+  // ressuscite pas celle de `loggia_entities`.
+  etat({ cfg: { loggia_feeder: { haids: HAIDS, meals: [] } }, ent: { feeder: { haids: HAIDS, meals: MEALS } } });
+  assert.deepEqual(L.croqAncienneListe(), []);
 });
 
-test('distributeur : la forme qu’écrit Paramètres → Entités (nulls, repas sans interrupteur) passe', () => {
-  // views/parametres.jsx : un champ vide s'écrit `null`, un repas sans
-  // automatisation porte `auto: null`.
+test('distributeur : la forme qu’écrivait Paramètres → Entités (nulls, repas sans interrupteur) passe', () => {
+  // views/parametres.jsx, jusqu'au 05/10 : un champ vide s'écrit `null`, un
+  // repas sans automatisation porte `auto: null`. Ces listes restent dans les
+  // magasins : l'encart de migration les lit.
   // Un `auto` vide (une version d'avant n'écrivait pas `null`) reste un repas
   // sans interrupteur, pas un repas abîmé.
   const meals = [{ id: 'repas0', time: '08:00', label: '', g: 0, auto: null }, { id: 'repas1', time: '18:30', label: 'Soir', g: 40, auto: 'input_boolean.soir' },
@@ -124,14 +138,17 @@ test('distributeur : la forme qu’écrit Paramètres → Entités (nulls, repas
   assert.equal(h.distribuees ?? null, null);
   // Ce que `croqKeys` en tire est inchangé.
   assert.deepEqual(Object.values(h).filter(Boolean), ['input_number.r']);
-  assert.deepEqual(L.croqMeals(), meals);
+  assert.deepEqual(L.croqAncienneListe(), [
+    { heure: '08:00', label: '', auto: null, relie: false }, { heure: '18:30', label: 'Soir', auto: 'input_boolean.soir', relie: false },
+    { heure: '12:00', label: 'Midi', auto: null, relie: false }, { heure: '15:00', label: 'Goûter', auto: null, relie: false },
+  ]);
 });
 
 test('distributeur : un domaine ou des entités abîmés rendent {}', () => {
   for (const feeder of ABIMES) {
     etat({ cfg: { loggia_feeder: feeder } });
     assert.deepEqual(L.croqHaids(), {}, 'feeder ' + JSON.stringify(feeder));
-    assert.deepEqual(L.croqMeals(), [], 'feeder ' + JSON.stringify(feeder));
+    assert.deepEqual(L.croqAncienneListe(), [], 'feeder ' + JSON.stringify(feeder));
   }
   for (const haids of ABIMES_OBJ) {
     etat({ cfg: { loggia_feeder: { haids } } });
@@ -150,11 +167,14 @@ test('distributeur : une entité qui n’est pas une chaîne ne finit pas dans l
 test('distributeur : des repas abîmés rendent []', () => {
   for (const meals of ABIMES) {
     etat({ cfg: { loggia_feeder: { haids: HAIDS, meals } } });
-    assert.deepEqual(L.croqMeals(), [], 'meals ' + JSON.stringify(meals));
+    assert.deepEqual(L.croqAncienneListe(), [], 'meals ' + JSON.stringify(meals));
   }
 });
 
-test('distributeur : un repas abîmé ne passe pas, les bons restent dans l’ordre', () => {
+/* L'ancienne liste se lit TOUTE (ADR 0155) : un repas abîmé reste dans
+ * l'encart — il ne doit pas se perdre en silence —, mais en champs SÛRS. Ce
+ * qui n'est pas un repas (`null`, un nombre, une chaîne, une liste) part. */
+test('distributeur : un repas abîmé se lit en champs sûrs, ce qui n’en est pas un part, l’ordre reste', () => {
   etat({ cfg: { loggia_feeder: { meals: [
     null, 3, 'matin', [], {},
     { id: 'sans_heure', auto: 'input_boolean.x' },
@@ -163,11 +183,21 @@ test('distributeur : un repas abîmé ne passe pas, les bons restent dans l’or
     { id: 'auto_objet', time: '10:00', auto: { id: 'input_boolean.y' } },
     MEALS[0], MEALS[1],
   ] } } });
-  assert.deepEqual(L.croqMeals(), MEALS);
-  // Ce que lisent prochaineRation, croqKeys et deriveAccueil ne lève plus.
-  for (const m of L.croqMeals()) {
-    assert.equal(typeof m.time, 'string');
-    assert.ok(!m.auto || typeof m.auto === 'string');
+  const vide = { heure: '', label: '', auto: null, relie: false };
+  assert.deepEqual(L.croqAncienneListe(), [
+    vide,
+    { ...vide, auto: 'input_boolean.x' },
+    vide,
+    { ...vide, heure: '09:00' },
+    { ...vide, heure: '10:00' },
+    ...LUS,
+  ]);
+  // Ce que lit l'encart ne lève pas, et n'affiche jamais « [object Object] ».
+  for (const m of L.croqAncienneListe()) {
+    assert.equal(typeof m.heure, 'string');
+    assert.equal(typeof m.label, 'string');
+    assert.ok(m.auto === null || (typeof m.auto === 'string' && m.auto !== ''));
+    assert.equal(typeof m.relie, 'boolean');
   }
 });
 
@@ -242,17 +272,24 @@ test('plantes : une liste abîmée rend [], une ligne sans base ne passe pas', (
 
 /* ── L'éditeur du distributeur ────────────────────────────────────────────── */
 
-test('Paramètres lit les repas par le lecteur, pas la clé brute', () => {
+test('Paramètres lit l’ancienne liste par le lecteur, pas la clé brute', () => {
   // Contre-relecture du 05/10 : le lecteur gardé, l'Accueil se rendait, mais
   // `useEntConfig` relisait `loggia_feeder.meals` à la main et faisait
   // `m.time` sur un repas `null`. Toute la vue Paramètres tombait (barrière
   // par vue, vérifié dans la démo), et c'est d'elle qu'on répare.
   const src = readFileSync(new URL('../src/views/parametres.jsx', import.meta.url), 'utf8');
-  // Suite du 05/10 : par le lecteur DE L'ÉDITEUR, qui garde aussi le repas
-  // abîmé pour qu'on le répare (tests/lot16_config_abimee.test.mjs).
-  assert.match(src, /import \{ croqRepasEdition \} from '\.\.\/lectures\.js';/);
-  assert.match(src, /repas: avecCle\(croqRepasEdition\(\)\),/);
+  // Suite du 05/10 : par le lecteur DE L'ÉDITEUR, qui gardait aussi le repas
+  // abîmé pour qu'on le répare. Puis l'éditeur est parti (ADR 0155) : l'encart
+  // « Ancienne liste de repas » lit par `croqAncienneListe`, qui garde le repas
+  // abîmé en champs sûrs (tests/distributeur_migration.test.mjs).
+  assert.match(src, /import \{ croqAncienneListe \} from '\.\.\/lectures\.js';/);
+  assert.match(src, /const liste = croqAncienneListe\(\)\.filter\(/);
+  assert.doesNotMatch(src, /croqRepasEdition|croqMeals|repas: avecCle\(/, 'l’éditeur de l’ancienne liste est revenu');
   assert.doesNotMatch(src, /\.meals\) \|\| \[\]\)\.map/, 'une relecture brute des repas est revenue');
+  // Le seul accès direct aux repas est gardé : une liste, des objets.
+  const acces = src.split('\n').filter(l => /\w\.meals\b/.test(l) && !/^\s*(\*|\/\/)/.test(l));
+  assert.ok(acces.length >= 1);
+  for (const l of acces) assert.match(l, /Array\.isArray\((\w+)\.meals\) \? \1\.meals\.filter\(/, l);
 });
 
 /* ── La règle commune ─────────────────────────────────────────────────────── */
@@ -267,8 +304,8 @@ const FORMES = {
   voletMode: (r) => r === null || (typeof r === 'string' && r !== ''),
   voletDays: (r) => objets(r) && r.every(d => typeof d.haid === 'string' && d.haid !== ''),
   croqHaids: (r) => objet(r) && tousChaines(r),
-  croqMeals: (r) => objets(r) && r.every(m => typeof m.time === 'string' && (!m.auto || typeof m.auto === 'string')),
-  croqRepasEdition: (r) => objets(r) && r.every(m => ['time', 'label', 'g', 'auto'].every(k => typeof m[k] === 'string')),
+  croqAncienneListe: (r) => objets(r) && r.every(m => typeof m.heure === 'string' && typeof m.label === 'string'
+    && (m.auto === null || (typeof m.auto === 'string' && m.auto !== '')) && typeof m.relie === 'boolean'),
   hueScripts: (r) => objet(r) && tousChaines(r),
   notifIds: (r) => objet(r) && tousChaines(r),
   roomHidden: (r) => Array.isArray(r),

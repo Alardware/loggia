@@ -14,8 +14,11 @@ html, body { overflow-x: clip; max-width: 100%; }
  * carte de scénario de l'Accueil portent toujours leur teinte, la tuile d'alarme
  * de la bannière aussi (celle de son état). Et toute pastille dont le FOND est
  * une teinte du thème (`background: rgba(var(--o-…-rgb), α)`) : « 4 MISES À JOUR »
- * en ambre sur sa pastille ambre. */
-[style*="transparent 28%"], [style*="transparent 62%"], [style*="background: rgba(var(--o-"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {
+ * en ambre sur sa pastille ambre. Et le lavis des fiches à onglets (robot,
+ * distributeur : `rgba(var(--rb-rgb), α)`), que le sélecteur des teintes du
+ * thème ne voyait pas — « CETTE SEMAINE » de l'Historique à 3,41:1 en clair
+ * (05/10). */
+[style*="background: rgba(var(--rb-"], [style*="transparent 28%"], [style*="transparent 62%"], [style*="background: rgba(var(--o-"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {
   --o-text: var(--o-text-lavis); --o-text1: var(--o-text1-lavis);
   --o-text2: var(--o-text2-lavis); --o-text3: var(--o-text3-lavis); --o-text3-rgb: var(--o-text3-lavis-rgb);
   /* Les teintes qui ÉCRIVENT, elles aussi — pas leur compagnon « r,g,b », qui
@@ -1372,13 +1375,46 @@ html.loggia-light .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 
   .rb-tondeuse { --rb-fond: color-mix(in srgb, var(--o-ok) 62%, #000); }
 }
 .rb-tondeuse [role="switch"][aria-checked="true"] { background: var(--rb-fond) !important; }
+/* Le distributeur (ADR 0155, 05/10) : l'orange que sa fiche portait déjà.
+ * `--o-orange` passe par la garde de contraste (contraste.js) comme texte ;
+ * `--rb-fond` porte du texte blanc, assombri comme la tondeuse — et, sans
+ * `color-mix`, le fond de l'accent, qui tient déjà le blanc. */
+.rb-distributeur { --rb-rgb: var(--o-orange-rgb); --rb-doux: var(--o-orange); --rb-fond: var(--o-accent-fond); }
+@supports (color: color-mix(in srgb, red 50%, black)) {
+  .rb-distributeur { --rb-fond: color-mix(in srgb, var(--o-orange) 62%, #000); }
+}
+/* En clair, `--o-orange` est DÉJÀ assombri par la garde pour s'écrire sur une
+ * surface claire (#9e350a sous iOS) : il porte le blanc (7:1). Le mélanger
+ * encore au noir donnait un brun presque noir, loin du bouton de la carte
+ * (05/10). Le mélange ne sert qu'en sombre, où l'orange est vif. */
+html.loggia-light .rb-distributeur { --rb-fond: var(--o-orange); }
+/* Le champ d'heure natif dessine son horloge selon le schéma de couleurs :
+ * sans lui, noire sur la fiche sombre (05/10). */
+.rb-fiche { color-scheme: dark; }
+html.loggia-light .rb-fiche { color-scheme: light; }
 /* Les onglets : UNE ligne, l'icone au-dessus du mot, les onglets se partagent
  * la largeur — l'agencement du telephone, partout : la fiche est une feuille
  * de 480 px au plus (ajustement du 18/09). */
 .rb-onglets { display: flex; gap: 4px; padding: 5px; border-radius: 16px; background: var(--o-s2); max-width: 100%; box-sizing: border-box; }
 .rb-onglet { flex: 1 1 0; min-width: 0; flex-direction: column; display: inline-flex; align-items: center; gap: 4px; padding: 8px 2px; border: none; border-radius: 12px; cursor: pointer; font: inherit; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+/* Un mot plus long que sa part (« Harmonogram », « Geschiedenis » à 320 px)
+ * élargit SON onglet au lieu de sortir de la pastille bleue : les onglets
+ * restent égaux tant que les mots tiennent, et cèdent ensuite — la mise en
+ * page cède, pas les mots (05/10). Le robot en profite : ses cinq onglets en
+ * polonais tiennent à 320 px sans les 2 px de côté, que le mot centré n'utilise pas. */
+.rb-onglets > .rb-onglet { min-width: min-content; padding-left: 0; padding-right: 0; }
+/* Cinq onglets (le robot) sur un écran étroit : les mots entiers ne tiennent plus
+ * toujours — « Panoramica Zone Programma Cronologia Manutenzione » faisait 295 px
+ * dans une barre de 274 à 320 px, « Manutenzione » sortait de la barre jusqu'au
+ * bord de la feuille. Les corps se réduisent et la barre resserre ses marges, sur
+ * UNE ligne, comme toute rangée au téléphone ; les mots, eux, ne bougent pas
+ * (05/10, contre-relecture). Au-delà de 359 px, les cinq tiennent à 10,5 px. */
+@media (max-width: 359px) {
+  .rb-onglets:has(> .rb-onglet:nth-child(5)) { gap: 2px; padding: 4px; }
+  .rb-onglets:has(> .rb-onglet:nth-child(5)) > .rb-onglet { font-size: 9.5px; }
+}
 .rb-accueil, .rb-zones, .rb-histo, .rb-planning { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-.rb-pieces { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.rb-pieces { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 14px; }
 
 /* ── La prise dit ce qu'elle alimente (26/09) ────────────────────────────────
  *

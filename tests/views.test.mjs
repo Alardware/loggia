@@ -173,3 +173,17 @@ test('energie configuree mais entites disparues : la vue reste masquee', () => {
   }));
   ko(r, 'energie');
 });
+
+/* 05/10 (ADR 0155) : un distributeur désigné par son seul APPAREIL (un
+ * Petlibro n'a ni réservoir en grammes ni portion à désigner). Un identifiant
+ * d'appareil n'est pas un entity_id : le motif de `configLive` ne le voyait
+ * pas, et Objets restait cachée pour lui. */
+test('distributeur désigné par son seul appareil : Objets apparait', () => {
+  const r = viewAvailability(ctx({
+    entities: { feeder: { appareil: '0123456789abcdef0123456789abcdef' } },
+    states: {},
+  }));
+  ok(r, 'objets');
+  const vide = viewAvailability(ctx({ entities: { feeder: { appareil: '  ' } }, states: {} }));
+  ko(vide, 'objets'); // un appareil fait de blancs ne désigne rien
+});

@@ -60,7 +60,7 @@ test('chaque feuille porte la croix sur sa ligne d’en-tête', () => {
       const fin = s.indexOf('</BottomSheet>', i);
       const bloc = s.slice(i, fin < 0 ? undefined : fin);
       const ouverture = s.slice(i, s.indexOf('\n', i));
-      if (!/<CroixFeuille|<TitreFeuille|<FicheEntete|<FicheRobotContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
+      if (!/<CroixFeuille|<TitreFeuille|<FicheEntete|<FicheRobotContent|<FicheDistributeurContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
       i = s.indexOf('<BottomSheet', i + 1);
     }
   }
@@ -72,6 +72,12 @@ test('chaque feuille porte la croix sur sa ligne d’en-tête', () => {
   const robot = lire('src', 'ficherobot.jsx');
   const r = robot.slice(robot.indexOf("onClick={() => setOnglet('reglages')} aria-label={tr('Réglages')}"));
   assert.ok(r.indexOf('<CroixFeuille />') > 0 && r.indexOf('<CroixFeuille />') < r.indexOf('\n      </div>'), 'la croix du robot a quitté la ligne de la roue');
+  // La fiche du distributeur (ADR 0155, 05/10) : son en-tête vient du socle commun — l'épingle, la roue, puis la croix.
+  const commune = lire('src', 'fichecommune.jsx');
+  const t = commune.slice(commune.indexOf('export function EnteteFiche('), commune.indexOf('\n}\n', commune.indexOf('export function EnteteFiche(')));
+  assert.ok(t.indexOf('{!enReglages && epingle}') > 0 && t.indexOf("aria-label={tr('Réglages')}") > t.indexOf('{!enReglages && epingle}')
+    && t.indexOf('<CroixFeuille />') > t.indexOf("aria-label={tr('Réglages')}"), 'la croix du distributeur a quitté la fin de sa ligne');
+  assert.ok(lire('src', 'fichedistributeur.jsx').includes('<EnteteFiche nom={nom}'), 'la fiche du distributeur a perdu l’en-tête commun');
 });
 
 test('aucune autre croix : la commune, la commande d’un volet, le formulaire d’événement', () => {
@@ -177,7 +183,7 @@ test('chaque feuille dit son nom : sa ligne de titre, ou NomFeuille posé sur le
       const fin = s.indexOf('</BottomSheet>', i);
       const bloc = s.slice(i, fin < 0 ? undefined : fin);
       const ouverture = s.slice(i, s.indexOf('\n', i));
-      if (!/<TitreFeuille|<FicheEntete|<NomFeuille|<FicheRobotContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
+      if (!/<TitreFeuille|<FicheEntete|<NomFeuille|<FicheRobotContent|<FicheDistributeurContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
       i = s.indexOf('<BottomSheet', i + 1);
     }
   }
@@ -187,6 +193,12 @@ test('chaque feuille dit son nom : sa ligne de titre, ou NomFeuille posé sur le
   const robot = lire('src', 'ficherobot.jsx');
   const contenu = robot.slice(robot.indexOf('export default function FicheRobotContent('));
   assert.equal((contenu.match(/<NomFeuille>/g) || []).length, 2, 'un en-tête de la fiche du robot ne nomme plus sa feuille');
+  /* La fiche du distributeur aussi (ADR 0155, 05/10) : son seul en-tête,
+   * EnteteFiche, porte le nom — réglages compris, et en panne. */
+  const commune = lire('src', 'fichecommune.jsx');
+  const t = commune.slice(commune.indexOf('export function EnteteFiche('), commune.indexOf('\n}\n', commune.indexOf('export function EnteteFiche(')));
+  assert.equal((t.match(/<NomFeuille>/g) || []).length, 1, 'l’en-tête de la fiche du distributeur ne nomme plus sa feuille');
+  assert.equal((lire('src', 'fichedistributeur.jsx').match(/<EnteteFiche /g) || []).length, 1, 'un second en-tête, sans nom, dans la fiche du distributeur');
 });
 
 test('NomFeuille pose l’id sur le titre existant, et ne dessine rien', async () => {

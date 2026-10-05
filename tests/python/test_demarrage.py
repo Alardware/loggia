@@ -4,7 +4,7 @@
 qui s'y casse — un nom mal ecrit, un module qui ne sait pas se taire, un
 enregistrement fait deux fois au rechargement — ne se voyait qu'au demarrage
 de Home Assistant, chez quelqu'un. Ici on le fait tourner pour de vrai : les
-treize modules naissent, le service et le panneau s'enregistrent, le
+quatorze modules naissent, le service et le panneau s'enregistrent, le
 dechargement les arrete tous, et un rechargement les rebatit sans rien
 reenregistrer de ce qui vit jusqu'a l'arret du process.
 """
@@ -106,7 +106,7 @@ def composant(monkeypatch, store_module):
     return charger("__init__")
 
 
-def test_le_demarrage_cree_les_treize_modules_le_service_et_le_panneau(composant, caplog):
+def test_le_demarrage_cree_les_quatorze_modules_le_service_et_le_panneau(composant, caplog):
     hass = FauxHass()
     caplog.set_level(logging.WARNING)
     assert lancer(composant.async_setup_entry(hass, object())) is True
@@ -118,7 +118,9 @@ def test_le_demarrage_cree_les_treize_modules_le_service_et_le_panneau(composant
     data = hass.data[composant.DOMAIN]
     manquants = [nom for nom in composant.MODULES_VIVANTS if data.get(nom) is None]
     assert manquants == [], "modules absents apres le demarrage : %s" % manquants
-    assert data.get("ws") is True and len(hass.commandes) == 32
+    # 34 depuis le 05/10 (ADR 0155) : `loggia/distributeurs/etat` et
+    # `loggia/distributeurs/config` s'ajoutent aux 32.
+    assert data.get("ws") is True and len(hass.commandes) == 34
     assert hass.services.has_service(composant.DOMAIN, "scenario")
     assert "loggia" in hass.data.get("frontend_panels", {}), "le panneau n'est pas dans le menu"
     hass.executer()
@@ -163,7 +165,7 @@ def test_un_rechargement_rebatit_les_modules_sans_rien_reenregistrer(composant, 
     for nom in composant.MODULES_VIVANTS:
         assert data.get(nom) is not None, nom + " n'a pas ete rebati"
         assert data[nom] is not avant[nom], nom + " est l'ancienne instance"
-    assert len(hass.commandes) == 32
+    assert len(hass.commandes) == 34
     assert "loggia" in hass.data.get("frontend_panels", {})
     hass.executer()
     erreurs = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
